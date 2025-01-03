@@ -103,6 +103,7 @@ fn test_add_ne() {
         adapter,
         config,
         Rv32WeierstrassOpcode::default_offset(),
+        tester.range_checker(),
         tester.offline_memory_mutex_arc(),
     );
     assert_eq!(chip.0.core.expr().builder.num_variables, 3); // lambda, x3, y3

@@ -7,7 +7,7 @@ use std::{
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip, SymbolicExpr,
@@ -35,9 +35,9 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         config: ExprBuilderConfig,
         offset: usize,
+        range_checker: Arc<VariableRangeCheckerChip>,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let range_checker = offline_memory.lock().unwrap().range_checker();
         let (expr, is_mul_flag, is_div_flag) = fp2_muldiv_expr(config, range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
@@ -48,7 +48,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
                 Fp2Opcode::SETUP_MULDIV as usize,
             ],
             vec![is_mul_flag, is_div_flag],
-            range_checker.clone(),
+            range_checker,
             "Fp2MulDiv",
             false,
         );
@@ -173,6 +173,7 @@ mod tests {
             adapter,
             config,
             Fp2Opcode::default_offset(),
+            tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );
         assert_eq!(

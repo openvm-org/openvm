@@ -41,9 +41,9 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         config: ExprBuilderConfig,
         offset: usize,
+        range_checker: Arc<VariableRangeCheckerChip>,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let range_checker = offline_memory.lock().unwrap().range_checker();
         let expr = ec_add_ne_expr(config, range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,

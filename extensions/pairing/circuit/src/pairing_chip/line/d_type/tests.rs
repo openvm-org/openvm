@@ -158,6 +158,7 @@ fn test_mul_by_01234() {
         },
         BN254_XI_ISIZE,
         PairingOpcode::default_offset(),
+        tester.range_checker(),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -247,6 +248,7 @@ fn test_evaluate_line() {
         adapter,
         config,
         PairingOpcode::default_offset(),
+        tester.range_checker(),
         tester.offline_memory_mutex_arc(),
     );
 

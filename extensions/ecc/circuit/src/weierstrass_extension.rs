@@ -129,6 +129,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     ),
                     config32.clone(),
                     class_offset,
+                    range_checker.clone(),
                     offline_memory.clone(),
                 );
                 inventory.add_executor(
@@ -168,6 +169,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     ),
                     config48.clone(),
                     class_offset,
+                    range_checker.clone(),
                     offline_memory.clone(),
                 );
                 inventory.add_executor(

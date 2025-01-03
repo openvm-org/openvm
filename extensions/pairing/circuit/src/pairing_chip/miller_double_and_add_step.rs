@@ -7,7 +7,7 @@ use std::{
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
@@ -43,9 +43,9 @@ impl<
         adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         config: ExprBuilderConfig,
         offset: usize,
+        range_checker: Arc<VariableRangeCheckerChip>,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let range_checker = offline_memory.lock().unwrap().range_checker();
         let expr = miller_double_and_add_step_expr(config, range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
@@ -152,6 +152,7 @@ mod tests {
                 num_limbs: NUM_LIMBS,
             },
             PairingOpcode::default_offset(),
+            tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );
 

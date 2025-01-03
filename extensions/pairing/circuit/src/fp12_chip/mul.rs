@@ -6,7 +6,7 @@ use std::{
 
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
@@ -35,9 +35,9 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         config: ExprBuilderConfig,
         xi: [isize; 2],
         offset: usize,
+        range_checker: Arc<VariableRangeCheckerChip>,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let range_checker = offline_memory.lock().unwrap().range_checker();
         let expr = fp12_mul_expr(config, range_checker.bus(), xi);
         let core = FieldExpressionCoreChip::new(
             expr,
@@ -125,6 +125,7 @@ mod tests {
             config,
             BN254_XI_ISIZE,
             Fp12Opcode::default_offset(),
+            tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );
 

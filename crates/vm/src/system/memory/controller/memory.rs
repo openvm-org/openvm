@@ -149,10 +149,6 @@ impl<F: PrimeField32> OfflineMemory<F> {
         )
     }
 
-    pub fn range_checker(&self) -> Arc<VariableRangeCheckerChip> {
-        self.range_checker.clone()
-    }
-
     pub fn timestamp(&self) -> u32 {
         self.timestamp
     }

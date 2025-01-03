@@ -140,6 +140,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         ),
                         bn_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
                         offline_memory.clone(),
                     );
                     inventory.add_executor(
@@ -158,6 +159,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         ),
                         bn_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
                         offline_memory.clone(),
                     );
                     inventory.add_executor(
@@ -179,6 +181,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         ),
                         bn_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
                         offline_memory.clone(),
                     );
                     inventory.add_executor(
@@ -218,6 +221,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         bn_config.clone(),
                         curve.xi(),
                         pairing_class_offset,
+                        range_checker.clone(),
                         offline_memory.clone(),
                     );
                     inventory.add_executor(
@@ -237,6 +241,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         bn_config.clone(),
                         curve.xi(),
                         fp12_class_offset,
+                        range_checker.clone(),
                         offline_memory.clone(),
                     );
                     inventory.add_executor(
@@ -262,6 +267,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         ),
                         bls_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
                         offline_memory.clone(),
                     );
                     inventory.add_executor(
@@ -280,6 +286,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         ),
                         bls_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
                         offline_memory.clone(),
                     );
                     inventory.add_executor(
@@ -301,6 +308,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         ),
                         bls_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
                         offline_memory.clone(),
                     );
                     inventory.add_executor(
@@ -360,6 +368,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         bls_config.clone(),
                         curve.xi(),
                         fp12_class_offset,
+                        range_checker.clone(),
                         offline_memory.clone(),
                     );
                     inventory.add_executor(

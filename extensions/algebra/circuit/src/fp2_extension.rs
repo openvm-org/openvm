@@ -72,6 +72,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
             chip
         };
         let offline_memory = builder.system_base().offline_memory();
+        let range_checker = builder.system_base().range_checker_chip.clone();
         let address_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let addsub_opcodes = (Fp2Opcode::ADD as usize)..=(Fp2Opcode::SETUP_ADDSUB as usize);
@@ -112,6 +113,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     adapter_chip_32.clone(),
                     config32.clone(),
                     class_offset,
+                    range_checker.clone(),
                     offline_memory.clone(),
                 );
                 inventory.add_executor(
@@ -124,6 +126,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     adapter_chip_32.clone(),
                     config32.clone(),
                     class_offset,
+                    range_checker.clone(),
                     offline_memory.clone(),
                 );
                 inventory.add_executor(
@@ -137,6 +140,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     adapter_chip_48.clone(),
                     config48.clone(),
                     class_offset,
+                    range_checker.clone(),
                     offline_memory.clone(),
                 );
                 inventory.add_executor(
@@ -149,6 +153,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     adapter_chip_48.clone(),
                     config48.clone(),
                     class_offset,
+                    range_checker.clone(),
                     offline_memory.clone(),
                 );
                 inventory.add_executor(
