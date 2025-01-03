@@ -232,12 +232,12 @@ impl AggregateMetrics {
             }
             if !group_name.contains("keygen") {
                 // Proving time in keygen group is dummy and not part of total.
-                total_proof_time.val += stats.sum.val;
-                *total_proof_time.diff.as_mut().unwrap() += stats.sum.diff.unwrap_or(0.0);
-                total_par_proof_time.val += stats.max.val;
-                *total_par_proof_time.diff.as_mut().unwrap() += stats.max.diff.unwrap_or(0.0);
+                total_proof_time.val += sum.val;
+                *total_proof_time.diff.as_mut().unwrap() += sum.diff.unwrap_or(0.0);
+                total_par_proof_time.val += max.val;
+                *total_par_proof_time.diff.as_mut().unwrap() += max.diff.unwrap_or(0.0);
             }
-            rows.push((group_name, stats.sum, stats.max));
+            rows.push((group_name, sum, max));
         }
         writeln!(
             writer,
