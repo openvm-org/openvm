@@ -9,10 +9,11 @@ use openvm_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use std::sync::Mutex;
 use rand::{seq::SliceRandom, Rng};
 
-use crate::system::memory::{offline_checker::{MemoryBus}, MemoryAddress, MemoryControllerRef, OfflineMemory, RecordId};
+use crate::system::memory::{
+    offline_checker::MemoryBus, MemoryAddress, MemoryControllerRef, RecordId,
+};
 
 pub mod air;
 
@@ -28,18 +29,15 @@ pub struct MemoryTester<F> {
     pub controller: MemoryControllerRef<F>,
     /// Log of record ids
     pub records: Vec<RecordId>,
-    pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
     pub fn new(controller: MemoryControllerRef<F>) -> Self {
         let bus = controller.borrow().memory_bus;
-        let offline_memory = controller.borrow().offline_memory();
         Self {
             bus,
             controller,
             records: Vec::new(),
-            offline_memory,
         }
     }
 
@@ -47,14 +45,16 @@ impl<F: PrimeField32> MemoryTester<F> {
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
-        let (record_id, [value]) = RefCell::borrow_mut(&self.controller).read_cell(addr_space, pointer);
+        let (record_id, [value]) =
+            RefCell::borrow_mut(&self.controller).read_cell(addr_space, pointer);
         self.records.push(record_id);
         value
     }
 
     pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        let (record_id, _) = RefCell::borrow_mut(&self.controller).write_cell(addr_space, pointer, value);
+        let (record_id, _) =
+            RefCell::borrow_mut(&self.controller).write_cell(addr_space, pointer, value);
         self.records.push(record_id);
     }
 
@@ -84,28 +84,38 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let memory = self.offline_memory.lock().unwrap();
+        let offline_memory = self.controller.borrow().offline_memory();
+        let offline_memory = offline_memory.lock().unwrap();
 
         let air = self.air();
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
-        let mut values = Val::<SC>::zero_vec(height * width);
+        let mut values = Val::<SC>::zero_vec(2 * height * width);
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
-        for (row, id) in values.chunks_mut(width).zip(self.records) {
-            // FIXME[zach]: need two rows for each record
-            let row: &mut DummyMemoryInteractionCols<Val<SC>, WORD_SIZE> = row.borrow_mut();
-            let record = memory.record_by_id(id);
+        for (row, id) in values.chunks_mut(2 * width).zip(self.records) {
+            let (first, second) = row.split_at_mut(width);
+            let row: &mut DummyMemoryInteractionCols<Val<SC>, WORD_SIZE> = first.borrow_mut();
+            let record = offline_memory.record_by_id(id);
+            row.address = MemoryAddress {
+                address_space: record.address_space,
+                pointer: record.pointer,
+            };
+            row.data = match &record.prev_data {
+                Some(prev_data) => prev_data.clone().try_into().unwrap(),
+                None => record.data.clone().try_into().unwrap(),
+            };
+            row.timestamp = Val::<SC>::from_canonical_u32(record.prev_timestamp);
+            row.count = -Val::<SC>::ONE;
+
+            let row: &mut DummyMemoryInteractionCols<Val<SC>, WORD_SIZE> = second.borrow_mut();
             row.address = MemoryAddress {
                 address_space: record.address_space,
                 pointer: record.pointer,
             };
             row.data = record.data.clone().try_into().unwrap();
             row.timestamp = Val::<SC>::from_canonical_u32(record.timestamp);
-            // row.count = match record.interaction_type {
-            //     InteractionType::Send => Val::<SC>::ONE,
-            //     InteractionType::Receive => -Val::<SC>::ONE,
-            // };
+            row.count = Val::<SC>::ONE;
         }
         AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
     }

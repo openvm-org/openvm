@@ -1,4 +1,9 @@
-use std::{array, borrow::{Borrow, BorrowMut}, iter, sync::Arc};
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+    iter,
+    sync::Arc,
+};
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 #[allow(unused_imports)]
@@ -21,10 +26,9 @@ use crate::{
     arch::hasher::HasherChip,
     system::memory::{
         dimensions::MemoryDimensions, manager::memory::INITIAL_TIMESTAMP, merkle::MemoryMerkleBus,
-        offline_checker::MemoryBus, MemoryAddress, TimestampedEquipartition,
+        offline_checker::MemoryBus, MemoryAddress, MemoryImage, TimestampedEquipartition,
     },
 };
-use crate::system::memory::MemoryImage;
 
 /// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last
 /// accessed timestamp---in either the initial or final memory state.
@@ -205,7 +209,11 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                     .iter()
                     .map(|&(address_space, label)| {
                         let pointer = label * CHUNK as u32;
-                        let init_values = array::from_fn(|i| *initial_memory.get(&(address_space, pointer + i as u32)).unwrap_or(&F::ZERO));
+                        let init_values = array::from_fn(|i| {
+                            *initial_memory
+                                .get(&(address_space, pointer + i as u32))
+                                .unwrap_or(&F::ZERO)
+                        });
                         let initial_hash = hasher.hash_and_record(&init_values);
                         let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
                         let final_hash = hasher.hash_and_record(&timestamped_values.values);

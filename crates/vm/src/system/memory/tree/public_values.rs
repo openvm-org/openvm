@@ -1,15 +1,14 @@
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::hasher::Hasher,
-    system::memory::{dimensions::MemoryDimensions, tree::MemoryNode},
+    system::memory::{
+        dimensions::MemoryDimensions, manager::memory::Address, tree::MemoryNode, MemoryImage,
+    },
 };
-use crate::system::memory::manager::memory::Address;
-use crate::system::memory::MemoryImage;
 
 pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = 2;
 
@@ -141,7 +140,6 @@ pub fn extract_public_values<F: PrimeField32>(
 #[cfg(test)]
 mod tests {
     use openvm_stark_backend::p3_field::AbstractField;
-    use crate::system::memory::MemoryImage;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::{UserPublicValuesProof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET};
@@ -150,7 +148,7 @@ mod tests {
             hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
             SystemConfig,
         },
-        system::memory::{tree::MemoryNode, CHUNK},
+        system::memory::{tree::MemoryNode, MemoryImage, CHUNK},
     };
 
     type F = BabyBear;
@@ -174,8 +172,7 @@ mod tests {
             &memory,
         );
         assert_eq!(pv_proof.public_values, expected_pvs);
-        let final_memory_root =
-            MemoryNode::tree_from_memory(memory_dimensions, &memory, &hasher);
+        let final_memory_root = MemoryNode::tree_from_memory(memory_dimensions, &memory, &hasher);
         let mut curr_root = pv_proof.public_values_commit;
         for (is_right, sibling_hash) in &pv_proof.proof {
             curr_root = if *is_right {

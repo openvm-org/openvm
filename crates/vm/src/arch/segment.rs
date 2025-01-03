@@ -9,6 +9,7 @@ use openvm_stark_backend::{
     prover::types::{CommittedTraceData, ProofInput},
     Chip,
 };
+
 use super::{
     AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
@@ -17,11 +18,8 @@ use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
     metrics::cycle_tracker::CycleTracker,
-    system::{
-        poseidon2::Poseidon2PeripheryChip,
-    },
+    system::{memory::MemoryImage, poseidon2::Poseidon2PeripheryChip},
 };
-use crate::system::memory::MemoryImage;
 
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;

@@ -1,4 +1,10 @@
-use std::{any::Any, cell::RefCell, iter::once, rc::Rc, sync::Arc};
+use std::{
+    any::Any,
+    cell::RefCell,
+    iter::once,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use derive_more::derive::From;
 use getset::Getters;
@@ -20,9 +26,9 @@ use openvm_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
+
 use super::{
     vm_poseidon2_config, ExecutionBus, InstructionExecutor, PhantomSubExecutor, Streams,
     SystemConfig, SystemTraceHeights,
@@ -31,8 +37,8 @@ use crate::system::{
     connector::VmConnectorChip,
     memory::{
         merkle::{DirectCompressionBus, MemoryMerkleBus},
-        offline_checker::MemoryBus,
-        MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET,
+        offline_checker::{MemoryBridge, MemoryBus},
+        MemoryController, MemoryControllerRef, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET,
         MERKLE_AIR_OFFSET,
     },
     native_adapter::NativeAdapterChip,
@@ -41,7 +47,6 @@ use crate::system::{
     program::{ProgramBus, ProgramChip},
     public_values::{core::PublicValuesCoreChip, PublicValuesChip},
 };
-use crate::system::memory::MemoryImage;
 
 /// Global AIR ID in the VM circuit verifying key.
 pub const PROGRAM_AIR_ID: usize = 0;
@@ -85,10 +90,10 @@ pub trait VmExtension<F: PrimeField32> {
 
 /// SystemPort combines system resources needed by most extensions
 #[derive(Clone)]
-pub struct SystemPort<F> {
+pub struct SystemPort {
     pub execution_bus: ExecutionBus,
     pub program_bus: ProgramBus,
-    pub memory_controller: MemoryControllerRef<F>,
+    pub memory_bridge: MemoryBridge,
 }
 
 /// Builder for processing unit. Processing units extend an existing system unit.
@@ -132,11 +137,11 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
         self.system
     }
 
-    pub fn system_port(&self) -> SystemPort<F> {
+    pub fn system_port(&self) -> SystemPort {
         SystemPort {
             execution_bus: self.system_base().execution_bus(),
             program_bus: self.system_base().program_bus(),
-            memory_controller: self.memory_controller().clone(),
+            memory_bridge: self.system_base().memory_bridge(),
         }
     }
 
@@ -457,6 +462,14 @@ impl<F: PrimeField32> SystemBase<F> {
         PROGRAM_BUS
     }
 
+    pub fn memory_bridge(&self) -> MemoryBridge {
+        self.memory_controller.borrow().memory_bridge()
+    }
+
+    pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
+        self.memory_controller.borrow().offline_memory().clone()
+    }
+
     pub fn execution_bus(&self) -> ExecutionBus {
         EXECUTION_BUS
     }
@@ -517,6 +530,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 range_checker.clone(),
             )
         };
+        let memory_bridge = memory_controller.memory_bridge();
         let memory_controller = Rc::new(RefCell::new(memory_controller));
         let program_chip = ProgramChip::new(PROGRAM_BUS);
         let connector_chip = VmConnectorChip::new(EXECUTION_BUS, PROGRAM_BUS);
@@ -527,7 +541,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         if config.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
             let chip = PublicValuesChip::new(
-                NativeAdapterChip::new(EXECUTION_BUS, PROGRAM_BUS, memory_controller.clone()),
+                NativeAdapterChip::new(EXECUTION_BUS, PROGRAM_BUS, memory_bridge),
                 PublicValuesCoreChip::new(
                     config.num_public_values,
                     PublishOpcode::default_offset(),
@@ -717,12 +731,12 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
 
     /// Warning: this sets the stream in all chips which have a shared mutable reference to the streams.
     pub(crate) fn set_streams(&mut self, streams: Streams<F>) {
-        *self.streams.lock() = streams;
+        *self.streams.lock().unwrap() = streams;
     }
 
     /// This should **only** be called after segment execution has finished.
     pub(super) fn take_streams(&mut self) -> Streams<F> {
-        std::mem::take(&mut self.streams.lock())
+        std::mem::take(&mut self.streams.lock().unwrap())
     }
 
     // This is O(1).

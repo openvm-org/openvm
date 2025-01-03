@@ -1,7 +1,6 @@
 use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     iter::{once, zip},
     marker::PhantomData,
 };
@@ -15,8 +14,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            OfflineMemory, RecordId,
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -61,12 +59,10 @@ impl<
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
+        address_bits: usize,
     ) -> Self {
         assert!(R <= 2);
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
-        let address_bits = memory_controller.mem_config().pointer_max_bits;
         Self {
             air: NativeVecHeapAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),

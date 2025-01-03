@@ -1,10 +1,11 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use openvm_algebra_circuit::Fp2;
-use openvm_circuit::{
-    arch::VmChipWrapper,
-    system::memory::{OfflineMemory},
-};
+use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
@@ -14,7 +15,6 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use std::sync::Mutex;
 
 // Input: two AffinePoint<Fp2>: 4 field elements each
 // Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
@@ -46,8 +46,7 @@ impl<
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let range_checker = offline_memory.lock().unwrap().range_checker();
-        let expr =
-            miller_double_and_add_step_expr(config, range_checker.bus());
+        let expr = miller_double_and_add_step_expr(config, range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
@@ -57,11 +56,7 @@ impl<
             "MillerDoubleAndAddStep",
             false,
         );
-        Self(VmChipWrapper::new(
-            adapter,
-            core,
-            offline_memory,
-        ))
+        Self(VmChipWrapper::new(adapter, core, offline_memory))
     }
 }
 
@@ -145,12 +140,12 @@ mod tests {
         let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
+            tester.address_bits(),
             bitwise_chip.clone(),
         );
         let mut chip = MillerDoubleAndAddStepChip::new(
             adapter,
-            tester.memory_controller(),
             ExprBuilderConfig {
                 modulus: BN254_MODULUS.clone(),
                 limb_bits: LIMB_BITS,

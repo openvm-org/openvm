@@ -1,12 +1,13 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use openvm_algebra_circuit::Fp2;
-use openvm_circuit::{
-    arch::VmChipWrapper,
-    system::memory::{MemoryControllerRef, OfflineMemory},
-};
+use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
@@ -14,7 +15,6 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapTwoReadsAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use std::sync::Mutex;
 
 use crate::Fp12;
 
@@ -59,7 +59,7 @@ impl<
             BLOCK_SIZE,
             BLOCK_SIZE,
         >,
-        memory_controller: MemoryControllerRef<F>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         config: ExprBuilderConfig,
         xi: [isize; 2],
         offset: usize,
@@ -73,21 +73,17 @@ impl<
             xi[1].unsigned_abs() < 1 << config.limb_bits,
             "expect xi to be small"
         );
-        let expr = mul_by_02345_expr(config, memory_controller.borrow().range_checker.bus(), xi);
+        let expr = mul_by_02345_expr(config, range_checker.bus(), xi);
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
             vec![PairingOpcode::MUL_BY_02345 as usize],
             vec![],
-            memory_controller.borrow().range_checker.clone(),
+            range_checker,
             "MulBy02345",
             false,
         );
-        Self(VmChipWrapper::new(
-            adapter,
-            core,
-            offline_memory,
-        ))
+        Self(VmChipWrapper::new(adapter, core, offline_memory))
     }
 }
 

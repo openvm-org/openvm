@@ -64,7 +64,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
         let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
@@ -78,7 +78,8 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let offline_memory = memory_controller.borrow().offline_memory();
+        let offline_memory = builder.system_base().offline_memory();
+        let address_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let addsub_opcodes = (Rv32ModularArithmeticOpcode::ADD as usize)
             ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize);
@@ -106,13 +107,15 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
             let adapter_chip_32 = Rv32VecHeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             );
             let adapter_chip_48 = Rv32VecHeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             );
 
@@ -151,7 +154,8 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     Rv32IsEqualModAdapterChip::new(
                         execution_bus,
                         program_bus,
-                        memory_controller.clone(),
+                        memory_bridge,
+                        address_bits,
                         bitwise_lu_chip.clone(),
                     ),
                     ModularIsEqualCoreChip::new(
@@ -202,7 +206,8 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     Rv32IsEqualModAdapterChip::new(
                         execution_bus,
                         program_bus,
-                        memory_controller.clone(),
+                        memory_bridge,
+                        address_bits,
                         bitwise_lu_chip.clone(),
                     ),
                     ModularIsEqualCoreChip::new(

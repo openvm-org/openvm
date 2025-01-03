@@ -9,18 +9,17 @@ pub use double::*;
 #[cfg(test)]
 mod tests;
 
+use std::sync::Mutex;
+
 use num_bigint_dig::BigUint;
-use openvm_circuit::{
-    arch::VmChipWrapper,
-    system::memory::{MemoryControllerRef, OfflineMemory},
-};
+use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use std::sync::Mutex;
 
 /// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
 /// BLOCKS: how many blocks do we need to represent one input or output
@@ -58,11 +57,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             "EcAddNe",
             false,
         );
-        Self(VmChipWrapper::new(
-            adapter,
-            core,
-            offline_memory,
-        ))
+        Self(VmChipWrapper::new(adapter, core, offline_memory))
     }
 }
 
@@ -80,13 +75,13 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        memory_controller: MemoryControllerRef<F>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         config: ExprBuilderConfig,
         offset: usize,
         a: BigUint,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let expr = ec_double_expr(config, memory_controller.borrow().range_checker.bus(), a);
+        let expr = ec_double_expr(config, range_checker.bus(), a);
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
@@ -95,14 +90,10 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
                 Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
             ],
             vec![],
-            memory_controller.borrow().range_checker.clone(),
+            range_checker,
             "EcDouble",
             false,
         );
-        Self(VmChipWrapper::new(
-            adapter,
-            core,
-            offline_memory,
-        ))
+        Self(VmChipWrapper::new(adapter, core, offline_memory))
     }
 }

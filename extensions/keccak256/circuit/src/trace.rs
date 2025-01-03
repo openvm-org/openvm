@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::system::memory::{RecordId};
+use openvm_circuit::system::memory::RecordId;
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -145,7 +145,8 @@ where
         // Resize with dummy `is_enabled = 0`
         instruction_blocks.resize(num_blocks, Default::default());
 
-        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
+        let offline_memory = self.offline_memory.lock().unwrap();
+        let aux_cols_factory = offline_memory.aux_cols_factory();
 
         // Use unsafe alignment so we can parallely write to the matrix
         let mut trace =
@@ -222,14 +223,14 @@ where
                     }
                     for (i, id) in register_reads.into_iter().enumerate() {
                         // TODO[jpw] make_read_aux_cols should directly write into slice
-                        first_row.mem_oc.register_aux[i] = aux_cols_factory
-                            .make_read_aux_cols(memory.record_by_id(id));
+                        first_row.mem_oc.register_aux[i] =
+                            aux_cols_factory.make_read_aux_cols(memory.record_by_id(id));
                     }
                 }
                 for (i, id) in block.reads.into_iter().enumerate() {
                     // TODO[jpw] make_read_aux_cols should directly write into slice
-                    first_row.mem_oc.absorb_reads[i] = aux_cols_factory
-                        .make_read_aux_cols(memory.record_by_id(id));
+                    first_row.mem_oc.absorb_reads[i] =
+                        aux_cols_factory.make_read_aux_cols(memory.record_by_id(id));
                 }
 
                 let last_row: &mut KeccakVmCols<Val<SC>> =

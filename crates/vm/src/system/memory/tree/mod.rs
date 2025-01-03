@@ -1,14 +1,15 @@
 pub mod public_values;
 
 use std::{collections::BTreeMap, sync::Arc};
+
 use openvm_stark_backend::p3_field::PrimeField32;
 use MemoryNode::*;
 
 use super::manager::dimensions::MemoryDimensions;
 use crate::{
     arch::hasher::{Hasher, HasherChip},
+    system::memory::MemoryImage,
 };
-use crate::system::memory::MemoryImage;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemoryNode<const CHUNK: usize, F: PrimeField32> {
@@ -100,7 +101,9 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         for (&(address_space, pointer), value) in memory {
             let label = (address_space, pointer / CHUNK as u32);
             let index = memory_dimensions.label_to_index(label);
-            let chunk = memory_partition.entry(index).or_insert_with(|| [F::ZERO; CHUNK]);
+            let chunk = memory_partition
+                .entry(index)
+                .or_insert_with(|| [F::ZERO; CHUNK]);
             chunk[(pointer % CHUNK as u32) as usize] = *value;
         }
         Self::from_memory(

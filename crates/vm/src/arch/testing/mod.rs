@@ -1,5 +1,8 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
-use std::sync::Mutex;
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_instructions::instruction::Instruction;
@@ -42,7 +45,10 @@ pub use memory::MemoryTester;
 pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
-use crate::system::{memory::MemoryControllerRef, poseidon2::Poseidon2PeripheryChip};
+use crate::system::{
+    memory::{offline_checker::MemoryBridge, MemoryControllerRef},
+    poseidon2::Poseidon2PeripheryChip,
+};
 
 pub const EXECUTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
@@ -165,8 +171,20 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.controller.clone()
     }
 
+    pub fn range_checker(&self) -> Arc<VariableRangeCheckerChip> {
+        self.memory.controller.borrow().range_checker.clone()
+    }
+
+    pub fn memory_bridge(&self) -> MemoryBridge {
+        self.memory.controller.borrow().memory_bridge()
+    }
+
+    pub fn address_bits(&self) -> usize {
+        self.memory.controller.borrow().mem_config.pointer_max_bits
+    }
+
     pub fn offline_memory_mutex_arc(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory.offline_memory.clone()
+        self.memory_controller().borrow().offline_memory().clone()
     }
 
     pub fn get_default_register(&mut self, increment: usize) -> usize {

@@ -1,11 +1,12 @@
 use openvm_stark_backend::p3_field::PrimeField32;
+
 use crate::system::memory::{
+    manager::memory::MemoryImage,
     merkle::{DirectCompressionBus, MemoryMerkleChip},
     persistent::PersistentBoundaryChip,
     volatile::VolatileBoundaryChip,
     CHUNK,
 };
-use crate::system::memory::manager::memory::MemoryImage;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]

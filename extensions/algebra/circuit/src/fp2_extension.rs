@@ -58,7 +58,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -71,7 +71,8 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let offline_memory = memory_controller.borrow().offline_memory();
+        let offline_memory = builder.system_base().offline_memory();
+        let address_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let addsub_opcodes = (Fp2Opcode::ADD as usize)..=(Fp2Opcode::SETUP_ADDSUB as usize);
         let muldiv_opcodes = (Fp2Opcode::MUL as usize)..=(Fp2Opcode::SETUP_MULDIV as usize);
@@ -94,13 +95,15 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
             let adapter_chip_32 = Rv32VecHeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             );
             let adapter_chip_48 = Rv32VecHeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             );
 

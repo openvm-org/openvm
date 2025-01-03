@@ -1,4 +1,3 @@
-use crate::system::memory::MemoryImage;
 use std::{
     array,
     borrow::BorrowMut,
@@ -26,7 +25,7 @@ use crate::{
             MemoryMerkleBus, MemoryMerkleChip,
         },
         tree::MemoryNode,
-        Equipartition,
+        Equipartition, MemoryImage,
     },
 };
 
@@ -79,7 +78,7 @@ fn test<const CHUNK: usize>(
         }
     }
 
-    let final_partition = memory_to_partition(&final_memory);
+    let final_partition = memory_to_partition(final_memory);
     println!("trace height = {}", chip.current_trace_height());
     chip.finalize(&initial_tree, &final_partition, &mut hash_test_chip);
     assert_eq!(
@@ -115,7 +114,12 @@ fn test<const CHUNK: usize>(
     };
 
     for (address_space, address_label) in touched_labels {
-        let initial_values = array::from_fn(|i| initial_memory.get(&(address_space, address_label * CHUNK as u32 + i as u32)).copied().unwrap_or_default());
+        let initial_values = array::from_fn(|i| {
+            initial_memory
+                .get(&(address_space, address_label * CHUNK as u32 + i as u32))
+                .copied()
+                .unwrap_or_default()
+        });
         let as_label = address_space - as_offset;
         interaction(
             InteractionType::Send,
@@ -125,7 +129,9 @@ fn test<const CHUNK: usize>(
             address_label,
             initial_values,
         );
-        let final_values = *final_partition.get(&(address_space, address_label)).unwrap();
+        let final_values = *final_partition
+            .get(&(address_space, address_label))
+            .unwrap();
         interaction(
             InteractionType::Send,
             true,
@@ -156,11 +162,15 @@ fn test<const CHUNK: usize>(
     .expect("Verification failed");
 }
 
-fn memory_to_partition<F: Default + Copy, const N: usize>(memory: &MemoryImage<F>) -> Equipartition<F, N> {
+fn memory_to_partition<F: Default + Copy, const N: usize>(
+    memory: &MemoryImage<F>,
+) -> Equipartition<F, N> {
     let mut memory_partition = Equipartition::new();
     for (&(address_space, pointer), value) in memory {
         let label = (address_space, pointer / N as u32);
-        let chunk = memory_partition.entry(label).or_insert_with(|| [F::default(); N]);
+        let chunk = memory_partition
+            .entry(label)
+            .or_insert_with(|| [F::default(); N]);
         chunk[(pointer % N as u32) as usize] = *value;
     }
     memory_partition

@@ -1,4 +1,9 @@
-use std::{array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
+use std::{
+    array::from_fn,
+    borrow::Borrow,
+    marker::PhantomData,
+    sync::{Arc, Mutex},
+};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -16,12 +21,9 @@ use openvm_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use std::sync::Mutex;
 
 use super::{ExecutionState, InstructionExecutor, Result};
-use crate::system::memory::{
-    MemoryAuxColsFactory, MemoryController, OfflineMemory,
-};
+use crate::system::memory::{MemoryAuxColsFactory, MemoryController, OfflineMemory};
 
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
@@ -196,11 +198,7 @@ where
     A: VmAdapterChip<F>,
     C: VmCoreChip<F, A::Interface>,
 {
-    pub fn new(
-        adapter: A,
-        core: C,
-        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-    ) -> Self {
+    pub fn new(adapter: A, core: C, offline_memory: Arc<Mutex<OfflineMemory<F>>>) -> Self {
         Self {
             adapter,
             core,

@@ -1,6 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -19,7 +19,6 @@ use openvm_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
 use super::memory::MemoryController;
@@ -144,7 +143,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                     pc: from_state.pc,
                     discriminant,
                 })?;
-            let mut streams = self.streams.get().unwrap().lock();
+            let mut streams = self.streams.get().unwrap().lock().unwrap();
             sub_executor
                 .as_mut()
                 .phantom_execute(

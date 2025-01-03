@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     marker::PhantomData,
 };
 
@@ -13,8 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            OfflineMemory,
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -27,7 +25,7 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
 };
-use openvm_circuit::system::memory::RecordId;
+
 use super::RV32_REGISTER_NUM_LIMBS;
 
 /// This adapter doesn't read anything, and writes to [a:4]_d, where d == 1
@@ -49,10 +47,8 @@ impl<F: PrimeField32> Rv32RdWriteAdapterChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
     ) -> Self {
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
         Self {
             air: Rv32RdWriteAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -67,9 +63,9 @@ impl<F: PrimeField32> Rv32CondRdWriteAdapterChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
     ) -> Self {
-        let inner = Rv32RdWriteAdapterChip::new(execution_bus, program_bus, memory_controller);
+        let inner = Rv32RdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge);
         let air = Rv32CondRdWriteAdapterAir { inner: inner.air };
         Self { inner, air }
     }

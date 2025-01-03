@@ -22,8 +22,11 @@ pub use air::*;
 mod chip;
 pub use chip::*;
 mod columns;
-pub use columns::*;
 use std::sync::Mutex;
+
+pub use columns::*;
+use openvm_circuit::system::memory::offline_checker::MemoryBridge;
+
 mod trace;
 
 #[cfg(test)]
@@ -41,6 +44,7 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
+        memory_bridge: MemoryBridge,
         poseidon2_config: Poseidon2Config<F>,
         offset: usize,
         max_constraint_degree: usize,
@@ -50,6 +54,7 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
             Self::Register0(NativePoseidon2BaseChip::new(
                 execution_bus,
                 program_bus,
+                memory_bridge,
                 poseidon2_config,
                 offset,
                 offline_memory,
@@ -58,6 +63,7 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
             Self::Register1(NativePoseidon2BaseChip::new(
                 execution_bus,
                 program_bus,
+                memory_bridge,
                 poseidon2_config,
                 offset,
                 offline_memory,

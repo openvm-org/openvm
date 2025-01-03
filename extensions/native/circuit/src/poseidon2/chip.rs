@@ -1,12 +1,14 @@
-use std::{array::from_fn, sync::Arc};
+use std::{
+    array::from_fn,
+    sync::{Arc, Mutex},
+};
 
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{
         memory::{
-            offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAuxColsFactory, MemoryController, 
-            OfflineMemory, RecordId,
+            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+            MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -16,7 +18,6 @@ use openvm_instructions::{
 };
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
-use std::sync::Mutex;
 
 use super::{
     NativePoseidon2Air, NativePoseidon2MemoryCols, NATIVE_POSEIDON2_CHUNK_SIZE,
@@ -52,11 +53,11 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2BaseChip<F, SB
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
+        memory_bridge: MemoryBridge,
         poseidon2_config: Poseidon2Config<F>,
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let memory_bridge = offline_memory.lock().unwrap().memory_bridge();
         let subchip = Poseidon2SubChip::new(poseidon2_config);
         Self {
             air: Arc::new(NativePoseidon2Air::new(
@@ -123,11 +124,15 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 
         let (write1, _) = memory.write::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, rd.1[0], output1);
         let write2 = match local_opcode {
-            Poseidon2Opcode::PERM_POS2 => Some(memory.write::<NATIVE_POSEIDON2_CHUNK_SIZE>(
-                e,
-                rd.1[0] + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
-                output2,
-            ).0),
+            Poseidon2Opcode::PERM_POS2 => Some(
+                memory
+                    .write::<NATIVE_POSEIDON2_CHUNK_SIZE>(
+                        e,
+                        rd.1[0] + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
+                        output2,
+                    )
+                    .0,
+            ),
             Poseidon2Opcode::COMP_POS2 => {
                 memory.increment_timestamp();
                 None

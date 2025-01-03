@@ -1,5 +1,3 @@
-use crate::system::memory::MemoryImage;
-use crate::system::memory::{OfflineMemory, RecordId};
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
@@ -28,9 +26,7 @@ use rand::{
     Rng,
 };
 
-use super::{
-    merkle::DirectCompressionBus, MemoryController,
-};
+use super::{merkle::DirectCompressionBus, MemoryController};
 use crate::{
     arch::{
         testing::memory::gen_pointer, MemoryConfig, MEMORY_BUS, MEMORY_MERKLE_BUS,
@@ -40,7 +36,7 @@ use crate::{
         memory::{
             merkle::MemoryMerkleBus,
             offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress,
+            MemoryAddress, MemoryImage, OfflineMemory, RecordId,
         },
         poseidon2::Poseidon2PeripheryChip,
     },

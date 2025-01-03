@@ -6,10 +6,7 @@ use openvm_circuit::{
         instructions::exe::VmExe,
         VmConfig,
     },
-    system::{
-        memory::{memory_image_to_memory, tree::MemoryNode},
-        program::trace::VmCommittedExe,
-    },
+    system::{memory::tree::MemoryNode, program::trace::VmCommittedExe},
 };
 use openvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
 use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};

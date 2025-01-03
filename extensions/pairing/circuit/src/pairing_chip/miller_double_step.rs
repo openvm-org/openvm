@@ -1,10 +1,11 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use openvm_algebra_circuit::Fp2;
-use openvm_circuit::{
-    arch::VmChipWrapper,
-    system::memory::{OfflineMemory},
-};
+use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
@@ -14,7 +15,6 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use std::sync::Mutex;
 
 // Input: AffinePoint<Fp2>: 4 field elements
 // Output: (AffinePoint<Fp2>, Fp2, Fp2) -> 8 field elements
@@ -56,11 +56,7 @@ impl<
             "MillerDoubleStep",
             false,
         );
-        Self(VmChipWrapper::new(
-            adapter,
-            core,
-            offline_memory,
-        ))
+        Self(VmChipWrapper::new(adapter, core, offline_memory))
     }
 }
 
@@ -142,12 +138,12 @@ mod tests {
         let adapter = Rv32VecHeapAdapterChip::<F, 1, 4, 8, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
+            tester.address_bits(),
             bitwise_chip.clone(),
         );
         let mut chip = MillerDoubleStepChip::new(
             adapter,
-            tester.memory_controller(),
             config,
             PairingOpcode::default_offset(),
             tester.offline_memory_mutex_arc(),
@@ -210,12 +206,12 @@ mod tests {
         let adapter = Rv32VecHeapAdapterChip::<F, 1, 12, 24, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
+            tester.address_bits(),
             bitwise_chip.clone(),
         );
         let mut chip = MillerDoubleStepChip::new(
             adapter,
-            tester.memory_controller(),
             config,
             PairingOpcode::default_offset(),
             tester.offline_memory_mutex_arc(),

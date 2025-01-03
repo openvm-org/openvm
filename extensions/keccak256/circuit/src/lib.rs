@@ -1,10 +1,13 @@
 //! Stateful keccak256 hasher. Handles full keccak sponge (padding, absorb, keccak-f) on
 //! variable length inputs read from VM memory.
-use std::{array::from_fn, cmp::min, sync::Arc};
+use std::{
+    array::from_fn,
+    cmp::min,
+    sync::{Arc, Mutex},
+};
 
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use std::sync::Mutex;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
 
@@ -23,9 +26,7 @@ pub use air::KeccakVmAir;
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{
-        memory::{
-            MemoryController, MemoryControllerRef, OfflineMemory, RecordId,
-        },
+        memory::{offline_checker::MemoryBridge, MemoryController, OfflineMemory, RecordId},
         program::ProgramBus,
     },
 };
@@ -71,7 +72,6 @@ pub struct KeccakVmChip<F: PrimeField32> {
     pub air: KeccakVmAir,
     /// IO and memory data necessary for each opcode call
     pub records: Vec<KeccakRecord<F>>,
-    pub memory_controller: MemoryControllerRef<F>,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
 
     offset: usize,
@@ -106,22 +106,20 @@ impl<F: PrimeField32> KeccakVmChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
+        address_bits: usize,
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let ptr_max_bits = memory_controller.borrow().mem_config().pointer_max_bits;
-        let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             air: KeccakVmAir::new(
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bitwise_lookup_chip.bus(),
-                ptr_max_bits,
+                address_bits,
                 offset,
             ),
-            memory_controller,
             bitwise_lookup_chip,
             records: Vec::new(),
             offset,
@@ -225,11 +223,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         hasher.finalize(&mut output);
         let dst = dst as usize;
         let digest_writes: [_; KECCAK_DIGEST_WRITES] = from_fn(|i| {
-            memory.write::<KECCAK_WORD_SIZE>(
-                e,
-                F::from_canonical_usize(dst + i * KECCAK_WORD_SIZE),
-                from_fn(|j| F::from_canonical_u8(output[i * KECCAK_WORD_SIZE + j])),
-            ).0
+            memory
+                .write::<KECCAK_WORD_SIZE>(
+                    e,
+                    F::from_canonical_usize(dst + i * KECCAK_WORD_SIZE),
+                    from_fn(|j| F::from_canonical_u8(output[i * KECCAK_WORD_SIZE + j])),
+                )
+                .0
         });
         tracing::trace!("[runtime] keccak256 output: {:?}", output);
 

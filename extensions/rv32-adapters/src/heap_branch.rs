@@ -1,7 +1,6 @@
 use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     iter::once,
     marker::PhantomData,
     sync::Arc,
@@ -17,8 +16,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            OfflineMemory, RecordId,
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -180,12 +178,11 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
+        address_bits: usize,
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     ) -> Self {
         assert!(NUM_READS <= 2);
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let address_bits = memory_controller.mem_config().pointer_max_bits;
         assert!(
             RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
             "address_bits={address_bits} needs to be large enough for high limb range check"
@@ -193,7 +190,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
         Self {
             air: Rv32HeapBranchAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge: memory_controller.memory_bridge(),
+                memory_bridge,
                 bus: bitwise_lookup_chip.bus(),
                 address_bits,
             },

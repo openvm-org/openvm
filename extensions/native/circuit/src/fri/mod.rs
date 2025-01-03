@@ -1,7 +1,7 @@
 use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use openvm_circuit::{
@@ -11,8 +11,7 @@ use openvm_circuit::{
             offline_checker::{
                 MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
             },
-            MemoryAddress, MemoryAuxColsFactory, MemoryController,
-            OfflineMemory, RecordId,
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -36,7 +35,6 @@ use openvm_stark_backend::{
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use std::sync::Mutex;
 
 use super::field_extension::{FieldExtension, EXT_DEG};
 
@@ -322,10 +320,10 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
+        memory_bridge: MemoryBridge,
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let memory_bridge = offline_memory.lock().unwrap().memory_bridge();
         let air = FriReducedOpeningAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
@@ -486,7 +484,8 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
         let alpha_pow_aux = aux_cols_factory
             .make_write_aux_cols::<EXT_DEG>(memory.record_by_id(record.alpha_pow_write))
             .get_base();
-        let result_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(record.result_write));
+        let result_aux =
+            aux_cols_factory.make_write_aux_cols(memory.record_by_id(record.result_write));
 
         for i in 0..length {
             let a_read = memory.record_by_id(record.a_reads[i]);

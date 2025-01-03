@@ -59,15 +59,13 @@ fn prepare_castf_rand_write_execute(
 fn castf_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
     let mut chip = CastFChip::<F>::new(
         ConvertAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
-        CastFCoreChip::new(range_checker_chip, 0),
-        tester.memory_controller(),
+        CastFCoreChip::new(tester.range_checker(), 0),
         tester.offline_memory_mutex_arc(),
     );
     let num_tests: usize = 1;
@@ -84,15 +82,14 @@ fn castf_rand_test() {
 #[test]
 fn negative_castf_overflow_test() {
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let range_checker_chip = tester.range_checker();
     let mut chip = CastFChip::<F>::new(
         ConvertAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
-        tester.memory_controller(),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -128,10 +125,9 @@ fn negative_castf_memread_test() {
         ConvertAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
-        tester.memory_controller(),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -167,10 +163,9 @@ fn negative_castf_memwrite_test() {
         ConvertAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
-        tester.memory_controller(),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -206,10 +201,9 @@ fn negative_castf_as_test() {
         ConvertAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
-        tester.memory_controller(),
         tester.offline_memory_mutex_arc(),
     );
 

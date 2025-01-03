@@ -102,7 +102,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
         let range_checker_chip = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
@@ -116,7 +116,8 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let offline_memory = memory_controller.borrow().offline_memory();
+        let offline_memory = builder.system_base().offline_memory();
+        let address_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let range_tuple_chip = if let Some(chip) = builder
             .find_chip::<Arc<RangeTupleCheckerChip<2>>>()
@@ -138,7 +139,8 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             Rv32HeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             ),
             BaseAluCoreChip::new(
@@ -156,7 +158,8 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             Rv32HeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             ),
             LessThanCoreChip::new(
@@ -174,7 +177,8 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             Rv32HeapBranchAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             ),
             BranchEqualCoreChip::new(Rv32BranchEqual256Opcode::default_offset(), DEFAULT_PC_STEP),
@@ -189,7 +193,8 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             Rv32HeapBranchAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             ),
             BranchLessThanCoreChip::new(
@@ -207,7 +212,8 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             Rv32HeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             ),
             MultiplicationCoreChip::new(range_tuple_chip, Rv32Mul256Opcode::default_offset()),
@@ -222,7 +228,8 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             Rv32HeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             ),
             ShiftCoreChip::new(

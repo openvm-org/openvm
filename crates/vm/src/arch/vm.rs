@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
 
-use openvm_instructions::exe::{VmExe};
+use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
@@ -18,11 +18,10 @@ use crate::{
     arch::segment::ExecutionSegment,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{merkle::MemoryMerklePvs, CHUNK},
+        memory::{merkle::MemoryMerklePvs, MemoryImage, CHUNK},
         program::trace::VmCommittedExe,
     },
 };
-use crate::system::memory::MemoryImage;
 
 /// VM memory state for continuations.
 pub type VmMemoryState<F> = MemoryImage<F>;

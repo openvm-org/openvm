@@ -1,5 +1,14 @@
-use std::{array, cell::RefCell, collections::BTreeMap, iter, marker::PhantomData, mem, rc::Rc, sync::Arc};
-use std::sync::Mutex;
+use std::{
+    array,
+    cell::RefCell,
+    collections::BTreeMap,
+    iter,
+    marker::PhantomData,
+    mem,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
+
 use getset::Getters;
 use memory::MemoryRecord;
 use openvm_circuit_primitives::{
@@ -25,28 +34,26 @@ use self::interface::MemoryInterface;
 use super::{merkle::DirectCompressionBus, volatile::VolatileBoundaryChip};
 use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
-    system::memory::offline_checker::{
-        MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
-        MemoryWriteAuxCols, AUX_LEN,
+    system::memory::{
+        adapter::AccessAdapterInventory,
+        dimensions::MemoryDimensions,
+        manager::memory::{MemoryLogEntry, INITIAL_TIMESTAMP},
+        merkle::{MemoryMerkleBus, MemoryMerkleChip},
+        offline_checker::{
+            MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
+            MemoryWriteAuxCols, AUX_LEN,
+        },
+        persistent::PersistentBoundaryChip,
+        tree::MemoryNode,
     },
 };
-use crate::system::memory::{
-    adapter::AccessAdapterInventory,
-    dimensions::MemoryDimensions,
-    manager::memory::INITIAL_TIMESTAMP,
-    merkle::{MemoryMerkleBus, MemoryMerkleChip},
-    persistent::PersistentBoundaryChip,
-    tree::MemoryNode,
-};
-use crate::system::memory::manager::memory::{MemoryLogEntry};
 
 pub mod dimensions;
 mod interface;
 pub(super) mod memory;
+pub use memory::{MemoryImage, MemoryReadRecord, MemoryWriteRecord, OfflineMemory, RecordId};
+
 pub(crate) use crate::system::memory::manager::memory::Memory;
-pub use memory::MemoryImage;
-pub use memory::OfflineMemory;
-pub use memory::{MemoryReadRecord, MemoryWriteRecord, RecordId};
 
 pub const CHUNK: usize = 8;
 /// The offset of the Merkle AIR in AIRs of MemoryController.
@@ -237,7 +244,13 @@ impl<F: PrimeField32> MemoryController<F> {
                 ),
             },
             memory: Memory::new(),
-            offline_memory: Arc::new(Mutex::new(OfflineMemory::new(initial_memory, 1, memory_bus, range_checker.clone(), mem_config.clk_max_bits))),
+            offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
+                initial_memory,
+                1,
+                memory_bus,
+                range_checker.clone(),
+                mem_config.clk_max_bits,
+            ))),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -281,7 +294,13 @@ impl<F: PrimeField32> MemoryController<F> {
             mem_config,
             interface_chip,
             memory,
-            offline_memory: Arc::new(Mutex::new(OfflineMemory::new(initial_memory, CHUNK, memory_bus, range_checker.clone(), mem_config.clk_max_bits))),
+            offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
+                initial_memory,
+                CHUNK,
+                memory_bus,
+                range_checker.clone(),
+                mem_config.clk_max_bits,
+            ))),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -330,7 +349,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
         let mut offline_memory = self.offline_memory.lock().unwrap();
         offline_memory.set_initial_memory(memory.clone());
-        
+
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
                 if !memory.is_empty() {
@@ -365,8 +384,7 @@ impl<F: PrimeField32> MemoryController<F> {
             "memory out of bounds: {ptr_u32:?}",
         );
 
-        let (record_id, values) =
-            self.memory.read::<N>(address_space_u32, ptr_u32);
+        let (record_id, values) = self.memory.read::<N>(address_space_u32, ptr_u32);
 
         (record_id, values)
     }
@@ -445,7 +463,9 @@ impl<F: PrimeField32> MemoryController<F> {
         for entry in log {
             match entry {
                 MemoryLogEntry::Read {
-                    address_space, pointer, len
+                    address_space,
+                    pointer,
+                    len,
                 } => {
                     if address_space != 0 {
                         for i in 0..len as u32 {
@@ -457,7 +477,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     for record in adapter_records {
                         self.access_adapters.add_record(record);
                     }
-                },
+                }
                 MemoryLogEntry::Write {
                     address_space,
                     pointer,
@@ -473,17 +493,16 @@ impl<F: PrimeField32> MemoryController<F> {
                     for record in adapter_records {
                         self.access_adapters.add_record(record);
                     }
-                },
-                MemoryLogEntry::IncrementTimestampBy(amount) => offline_memory.increment_timestamp_by(amount),
+                }
+                MemoryLogEntry::IncrementTimestampBy(amount) => {
+                    offline_memory.increment_timestamp_by(amount)
+                }
             };
         }
     }
 
     /// Returns the final memory state if persistent.
-    pub fn finalize(
-        &mut self,
-        hasher: Option<&mut impl HasherChip<CHUNK, F>>,
-    ) {
+    pub fn finalize(&mut self, hasher: Option<&mut impl HasherChip<CHUNK, F>>) {
         if self.final_state.is_some() {
             panic!("Cannot finalize more than once");
         }
@@ -743,9 +762,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
     }
 }
 
-pub fn memory_image_to_memory<F: PrimeField32>(
-    memory_image: MemoryImage<F>,
-) -> Memory<F> {
+pub fn memory_image_to_memory<F: PrimeField32>(memory_image: MemoryImage<F>) -> Memory<F> {
     Memory::from_image(memory_image.into_iter().collect())
 }
 

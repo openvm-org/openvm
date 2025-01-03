@@ -43,9 +43,9 @@ fn fri_mat_opening_air_test() {
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = FriReducedOpeningChip::new(
-        tester.memory_controller(),
         tester.execution_bus(),
         tester.program_bus(),
+        tester.memory_bridge(),
         offset,
         tester.offline_memory_mutex_arc(),
     );

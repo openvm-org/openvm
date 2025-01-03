@@ -81,10 +81,9 @@ fn run_rv32_branch_eq_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         Rv32BranchAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         BranchEqualCoreChip::new(0, 4),
-        tester.memory_controller(),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -141,7 +140,6 @@ fn run_rv32_beq_negative_test(
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
         BranchEqualCoreChip::new(0, 4),
-        tester.memory_controller(),
         tester.offline_memory_mutex_arc(),
     );
 

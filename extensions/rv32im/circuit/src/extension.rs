@@ -218,10 +218,13 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
-        let offline_memory = memory_controller.borrow().offline_memory();
+
         let range_checker = builder.system_base().range_checker_chip.clone();
+        let offline_memory = builder.system_base().offline_memory();
+        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
+
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
             .first()
@@ -235,7 +238,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         };
 
         let base_alu_chip = Rv32BaseAluChip::new(
-            Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_bridge),
             BaseAluCoreChip::new(bitwise_lu_chip.clone(), BaseAluOpcode::default_offset()),
             offline_memory.clone(),
         );
@@ -245,7 +248,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         let lt_chip = Rv32LessThanChip::new(
-            Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_bridge),
             LessThanCoreChip::new(bitwise_lu_chip.clone(), LessThanOpcode::default_offset()),
             offline_memory.clone(),
         );
@@ -255,7 +258,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         let shift_chip = Rv32ShiftChip::new(
-            Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_bridge),
             ShiftCoreChip::new(
                 bitwise_lu_chip.clone(),
                 range_checker.clone(),
@@ -272,7 +275,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             Rv32LoadStoreAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                pointer_max_bits,
                 range_checker.clone(),
                 Rv32LoadStoreOpcode::default_offset(),
             ),
@@ -290,7 +294,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             Rv32LoadStoreAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                pointer_max_bits,
                 range_checker.clone(),
                 Rv32LoadStoreOpcode::default_offset(),
             ),
@@ -307,7 +312,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         let beq_chip = Rv32BranchEqualChip::new(
-            Rv32BranchAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            Rv32BranchAdapterChip::new(execution_bus, program_bus, memory_bridge),
             BranchEqualCoreChip::new(BranchEqualOpcode::default_offset(), DEFAULT_PC_STEP),
             offline_memory.clone(),
         );
@@ -317,7 +322,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         let blt_chip = Rv32BranchLessThanChip::new(
-            Rv32BranchAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            Rv32BranchAdapterChip::new(execution_bus, program_bus, memory_bridge),
             BranchLessThanCoreChip::new(
                 bitwise_lu_chip.clone(),
                 BranchLessThanOpcode::default_offset(),
@@ -330,7 +335,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         let jal_lui_chip = Rv32JalLuiChip::new(
-            Rv32CondRdWriteAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            Rv32CondRdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
             Rv32JalLuiCoreChip::new(bitwise_lu_chip.clone(), Rv32JalLuiOpcode::default_offset()),
             offline_memory.clone(),
         );
@@ -340,7 +345,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         let jalr_chip = Rv32JalrChip::new(
-            Rv32JalrAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            Rv32JalrAdapterChip::new(execution_bus, program_bus, memory_bridge),
             Rv32JalrCoreChip::new(
                 bitwise_lu_chip.clone(),
                 range_checker.clone(),
@@ -354,7 +359,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         let auipc_chip = Rv32AuipcChip::new(
-            Rv32RdWriteAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            Rv32RdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
             Rv32AuipcCoreChip::new(bitwise_lu_chip.clone(), Rv32AuipcOpcode::default_offset()),
             offline_memory.clone(),
         );
@@ -389,9 +394,9 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
-        let offline_memory = memory_controller.borrow().offline_memory();
+        let offline_memory = builder.system_base().offline_memory();
 
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -422,7 +427,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
         };
 
         let mul_chip = Rv32MultiplicationChip::new(
-            Rv32MultAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
             MultiplicationCoreChip::new(range_tuple_checker.clone(), MulOpcode::default_offset()),
             offline_memory.clone(),
         );
@@ -432,7 +437,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
         )?;
 
         let mul_h_chip = Rv32MulHChip::new(
-            Rv32MultAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
             MulHCoreChip::new(
                 bitwise_lu_chip.clone(),
                 range_tuple_checker.clone(),
@@ -446,7 +451,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
         )?;
 
         let div_rem_chip = Rv32DivRemChip::new(
-            Rv32MultAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
             DivRemCoreChip::new(
                 bitwise_lu_chip.clone(),
                 range_tuple_checker.clone(),
@@ -475,9 +480,10 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
-        let offline_memory = memory_controller.borrow().offline_memory();
+        let offline_memory = builder.system_base().offline_memory();
+        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
@@ -496,7 +502,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             Rv32HintStoreAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                pointer_max_bits,
                 range_checker.clone(),
             ),
             Rv32HintStoreCoreChip::new(
