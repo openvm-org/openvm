@@ -1505,7 +1505,7 @@
           "ecrecover_program"
         ]
       ],
-      "metric": "total_cells_used",
+      "metric": "main_cells_used",
       "value": "15230037"
     },
     {
@@ -5317,7 +5317,7 @@
           "leaf"
         ]
       ],
-      "metric": "total_cells_used",
+      "metric": "main_cells_used",
       "value": "445730025"
     },
     {

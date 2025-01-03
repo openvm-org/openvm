@@ -202,7 +202,7 @@ impl AggregateMetrics {
 }
 
 pub const PROOF_TIME_LABEL: &str = "total_proof_time_ms";
-pub const CELLS_USED_LABEL: &str = "total_cells_used";
+pub const CELLS_USED_LABEL: &str = "main_cells_used";
 pub const CYCLES_LABEL: &str = "total_cycles";
 pub const EXECUTE_TIME_LABEL: &str = "execute_time_ms";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";

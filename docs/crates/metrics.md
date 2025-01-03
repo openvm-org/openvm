@@ -16,7 +16,7 @@ For a single segment proof, the following metrics are collected:
 - All metrics collected by [`openvm-stark-backend`](https://github.com/openvm-org/stark-backend/blob/main/docs/metrics.md), in particular `stark_prove_excluding_trace_time_ms` (gauge).
   - The total proving time of the proof is the sum of `execute_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms`.
 - `total_cycles` (counter): The total number of cycles in the segment.
-- `total_cells_used` (counter): The total number of main trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights. Only main trace cells, not preprocessed or permutation trace cells, are counted.
+- `main_cells_used` (counter): The total number of main trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights. Only main trace cells, not preprocessed or permutation trace cells, are counted.
 
 ## Scoping
 

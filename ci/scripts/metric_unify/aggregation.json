@@ -11,8 +11,8 @@
     },
     {
       "group_by": ["group"],
-      "name": "total_cells_used",
-      "metrics": ["total_cells_used"],
+      "name": "main_cells_used",
+      "metrics": ["main_cells_used"],
       "operation": "sum"
     },
     {
