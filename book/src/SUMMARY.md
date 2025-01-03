@@ -28,5 +28,7 @@
 
 # Advanced Usage
 
-- [SDK](./advanced-usage/sdk.md)
+- [SDK](./advanced-usage/sdk/index.md)
+  - [App Proof Generation and Verification](./advanced-usage/sdk/app-proof.md)
+  - [EVM Proof Generation and Verification](./advanced-usage/sdk/evm-proof.md)
 - [Creating a New Extension](./advanced-usage/new-extension.md)
