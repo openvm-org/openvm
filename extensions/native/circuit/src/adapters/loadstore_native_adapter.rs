@@ -33,9 +33,7 @@ pub struct NativeLoadStoreInstruction<T> {
     // Absolute opcode number
     pub opcode: T,
     pub is_loadw: T,
-    pub is_loadw2: T,
     pub is_storew: T,
-    pub is_storew2: T,
     pub is_shintw: T,
 }
 
@@ -45,7 +43,7 @@ impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     for NativeLoadStoreAdapterInterface<T, NUM_CELLS>
 {
     // TODO[yi]: Fix when vectorizing
-    type Reads = ([T; 2], T);
+    type Reads = (T, T);
     type Writes = [T; NUM_CELLS];
     type ProcessedInstruction = NativeLoadStoreInstruction<T>;
 }
@@ -79,8 +77,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> NativeLoadStoreAdapterChip<F, NUM_
 
 #[derive(Clone, Debug)]
 pub struct NativeLoadStoreReadRecord<F: Field, const NUM_CELLS: usize> {
-    pub pointer1_read: MemoryReadRecord<F, 1>,
-    pub pointer2_read: Option<MemoryReadRecord<F, 1>>,
+    pub pointer_read: MemoryReadRecord<F, 1>,
     pub data_read: Option<MemoryReadRecord<F, NUM_CELLS>>,
     pub write_as: F,
     pub write_ptr: F,
@@ -90,8 +87,6 @@ pub struct NativeLoadStoreReadRecord<F: Field, const NUM_CELLS: usize> {
     pub c: F,
     pub d: F,
     pub e: F,
-    pub f: F,
-    pub g: F,
 }
 
 #[derive(Clone, Debug)]
@@ -109,8 +104,6 @@ pub struct NativeLoadStoreAdapterCols<T, const NUM_CELLS: usize> {
     pub c: T,
     pub d: T,
     pub e: T,
-    pub f: T,
-    pub g: T,
 
     pub data_read_as: T,
     pub data_read_pointer: T,
@@ -118,7 +111,7 @@ pub struct NativeLoadStoreAdapterCols<T, const NUM_CELLS: usize> {
     pub data_write_as: T,
     pub data_write_pointer: T,
 
-    pub pointer_read_aux_cols: [MemoryReadOrImmediateAuxCols<T>; 2],
+    pub pointer_read_aux_cols: MemoryReadOrImmediateAuxCols<T>,
     pub data_read_aux_cols: MemoryReadOrImmediateAuxCols<T>,
     // TODO[yi]: Fix when vectorizing
     // pub data_read_aux_cols: MemoryReadAuxCols<T, NUM_CELLS>,
@@ -158,35 +151,18 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         let is_valid = ctx.instruction.is_valid;
         let is_loadw = ctx.instruction.is_loadw;
         let is_storew = ctx.instruction.is_storew;
-        let is_loadw2 = ctx.instruction.is_loadw2;
-        let is_storew2 = ctx.instruction.is_storew2;
         let is_shintw = ctx.instruction.is_shintw;
 
         // first pointer read is always [c]_d
         self.memory_bridge
             .read_or_immediate(
                 MemoryAddress::new(cols.d, cols.c),
-                ctx.reads.0[0].clone(),
+                ctx.reads.0.clone(),
                 timestamp + timestamp_delta.clone(),
-                &cols.pointer_read_aux_cols[0],
+                &cols.pointer_read_aux_cols,
             )
             .eval(builder, is_valid.clone());
         timestamp_delta += is_valid.clone();
-
-        // second pointer read is [f]_d if loadw2 or storew2, otherwise disabled
-        self.memory_bridge
-            .read_or_immediate(
-                MemoryAddress::new(cols.d, cols.f),
-                ctx.reads.0[1].clone(),
-                timestamp + timestamp_delta.clone(),
-                &cols.pointer_read_aux_cols[1],
-            )
-            .eval(
-                builder,
-                is_valid.clone() - is_shintw.clone() - is_loadw.clone() - is_storew.clone(),
-            );
-        timestamp_delta +=
-            is_valid.clone() - is_shintw.clone() - is_loadw.clone() - is_storew.clone();
 
         // TODO[yi]: Remove when vectorizing
         // read data, disabled if SHINTW
@@ -195,14 +171,12 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
             .when(is_valid.clone() - is_shintw.clone())
             .assert_eq(
                 cols.data_read_as,
-                utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.e, cols.d),
+                utils::select::<AB::Expr>(is_loadw.clone(), cols.e, cols.d),
             );
         // TODO[yi]: Do we need to check for overflow?
         builder.assert_eq(
             (is_valid.clone() - is_shintw.clone()) * cols.data_read_pointer,
-            (is_storew.clone() + is_storew2.clone()) * cols.a
-                + (is_loadw.clone() + is_loadw2.clone())
-                    * (ctx.reads.0[0].clone() + cols.b + ctx.reads.0[1].clone() * cols.g),
+            is_storew.clone() * cols.a + is_loadw.clone() * (ctx.reads.0.clone() + cols.b),
         );
         self.memory_bridge
             .read_or_immediate(
@@ -217,14 +191,13 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         // data write
         builder.when(is_valid.clone()).assert_eq(
             cols.data_write_as,
-            utils::select::<AB::Expr>(is_loadw.clone() + is_loadw2.clone(), cols.d, cols.e),
+            utils::select::<AB::Expr>(is_loadw.clone(), cols.d, cols.e),
         );
         // TODO[yi]: Do we need to check for overflow?
         builder.assert_eq(
             is_valid.clone() * cols.data_write_pointer,
-            (is_loadw.clone() + is_loadw2.clone()) * cols.a
-                + (is_storew.clone() + is_storew2.clone() + is_shintw.clone())
-                    * (ctx.reads.0[0].clone() + cols.b + ctx.reads.0[1].clone() * cols.g),
+            is_loadw.clone() * cols.a
+                + (is_storew.clone() + is_shintw.clone()) * (ctx.reads.0.clone() + cols.b),
         );
         self.memory_bridge
             .write(
@@ -239,7 +212,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         self.execution_bridge
             .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
-                [cols.a, cols.b, cols.c, cols.d, cols.e, cols.f, cols.g],
+                [cols.a, cols.b, cols.c, cols.d, cols.e],
                 cols.from_state,
                 timestamp_delta.clone(),
                 (DEFAULT_PC_STEP, ctx.to_pc),
@@ -277,36 +250,25 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             c,
             d,
             e,
-            f,
-            g,
             ..
         } = *instruction;
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let read1_as = d;
-        let read1_ptr = c;
-        let read2_as = d;
-        let read2_ptr = f;
-
-        let read1_cell = memory.read_cell(read1_as, read1_ptr);
-        let read2_cell = match local_opcode {
-            LOADW2 | STOREW2 => Some(memory.read_cell(read2_as, read2_ptr)),
-            _ => None,
-        };
+        let read_as = d;
+        let read_ptr = c;
+        let read_cell = memory.read_cell(read_as, read_ptr);
 
         let (data_read_as, data_write_as) = {
             match local_opcode {
-                LOADW | LOADW2 => (e, d),
-                STOREW | STOREW2 | SHINTW => (d, e),
+                LOADW => (e, d),
+                STOREW | SHINTW => (d, e),
             }
         };
         let (data_read_ptr, data_write_ptr) = {
             match local_opcode {
-                LOADW => (read1_cell.data[0] + b, a),
-                LOADW2 => (read1_cell.data[0] + b + read2_cell.unwrap().data[0] * g, a),
-                STOREW => (a, read1_cell.data[0] + b),
-                STOREW2 => (a, read1_cell.data[0] + b + read2_cell.unwrap().data[0] * g),
-                SHINTW => (a, read1_cell.data[0] + b),
+                LOADW => (read_cell.data[0] + b, a),
+                STOREW => (a, read_cell.data[0] + b),
+                SHINTW => (a, read_cell.data[0] + b),
             }
         };
 
@@ -316,8 +278,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             _ => Some(memory.read::<1>(data_read_as, data_read_ptr)),
         };
         let record = NativeLoadStoreReadRecord {
-            pointer1_read: read1_cell,
-            pointer2_read: read2_cell,
+            pointer_read: read_cell,
             data_read,
             write_as: data_write_as,
             write_ptr: data_write_ptr,
@@ -326,18 +287,10 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             c,
             d,
             e,
-            f,
-            g,
         };
 
         Ok((
-            (
-                [
-                    read1_cell.data[0],
-                    read2_cell.map_or(F::ZERO, |x| x.data[0]),
-                ],
-                data_read.map_or(F::ZERO, |x| x.data[0]),
-            ),
+            (read_cell.data[0], data_read.map_or(F::ZERO, |x| x.data[0])),
             record,
         ))
     }
@@ -378,8 +331,6 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         cols.c = read_record.c;
         cols.d = read_record.d;
         cols.e = read_record.e;
-        cols.f = read_record.f;
-        cols.g = read_record.g;
 
         cols.data_read_as = read_record
             .data_read
@@ -389,13 +340,8 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         cols.data_write_as = write_record.write.address_space;
         cols.data_write_pointer = write_record.write.pointer;
 
-        cols.pointer_read_aux_cols[0] =
-            aux_cols_factory.make_read_or_immediate_aux_cols(read_record.pointer1_read);
-        cols.pointer_read_aux_cols[1] = read_record
-            .pointer2_read
-            .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
-                aux_cols_factory.make_read_or_immediate_aux_cols(read)
-            });
+        cols.pointer_read_aux_cols =
+            aux_cols_factory.make_read_or_immediate_aux_cols(read_record.pointer_read);
         cols.data_read_aux_cols = read_record
             .data_read
             .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
