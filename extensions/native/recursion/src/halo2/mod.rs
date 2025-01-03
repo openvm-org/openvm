@@ -213,7 +213,7 @@ impl Halo2Prover {
             let total_advices: usize = stats.gate.total_advice_per_phase.into_iter().sum();
             let total_lookups: usize = stats.total_lookup_advice_per_phase.into_iter().sum();
             let total_cell = total_advices + total_lookups + stats.gate.total_fixed;
-            metrics::gauge!("main_cells_used").set(total_cell as f64);
+            metrics::counter!("main_cells_used").absolute(total_cell as u64);
         }
         let snark = gen_snark_shplonk(params, pk, builder, None::<&str>);
 

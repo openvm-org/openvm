@@ -34,3 +34,7 @@ The `openvm-sdk` crate applies the following additional labeling conventions:
   - Internal proofs (each without continuations) are distinguished by the `idx` label, which is set to the internal node index. The internal node index is not reset across internal layers, but it is separate from the leaf node index.
 - The root aggregation layer has `group = root`.
   - There is only a single root proof, but we add `idx = 0` for uniformity.
+- The STARK-to-SNARK outer aggregation proof has `group = halo2_outer`.
+  - The halo2 metrics are different. Only `total_proof_time_ms` (gauge) and `main_cells_used` (counter) are collected, where `main_cells_used` is the trace cells from advice columns and constants, excluding lookup table fixed cells, and virtual columns from permutation or lookup arguments.
+- The final SNARK-to-SNARK wrapper proof has `group = halo2_wrapper`.
+  - The only metric collected is `total_proof_time_ms` (gauge).
