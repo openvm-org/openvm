@@ -60,7 +60,14 @@ fn test<const CHUNK: usize>(
         assert!(final_memory.contains_key(key));
     }
     for &(address_space, label) in touched_labels.iter() {
-        assert!(final_memory.contains_key(&(address_space, label * CHUNK as u32)));
+        let mut contains_some_key = false;
+        for i in 0..CHUNK {
+            if final_memory.contains_key(&(address_space, label * CHUNK as u32 + i as u32)) {
+                contains_some_key = true;
+                break;
+            }
+        }
+        assert!(contains_some_key);
     }
 
     let mut hash_test_chip = HashTestChip::new();
@@ -187,36 +194,31 @@ fn random_test<const CHUNK: usize>(
 
     let mut initial_memory = MemoryImage::default();
     let mut final_memory = MemoryImage::default();
-    let mut seen_labels = HashSet::new();
+    let mut seen = HashSet::new();
     let mut touched_labels = BTreeSet::new();
 
     while num_initial_addresses != 0 || num_touched_addresses != 0 {
         let address_space = (next_u32() & 1) + 1;
         let label = next_u32() % (1 << height);
+        let pointer = label * CHUNK as u32 + (next_u32() % CHUNK as u32);
 
-        if seen_labels.insert(label) {
+        if seen.insert(pointer) {
             let is_initial = next_u32() & 1 == 0;
             let is_touched = next_u32() & 1 == 0;
             let value_changes = next_u32() & 1 == 0;
 
-            let base_ptr = label * CHUNK as u32;
-
             if is_initial && num_initial_addresses != 0 {
                 num_initial_addresses -= 1;
-                for i in 0..CHUNK {
-                    let value = BabyBear::from_canonical_u32(next_u32() % max_value);
-                    initial_memory.insert((address_space, base_ptr + i as u32), value);
-                    final_memory.insert((address_space, base_ptr + i as u32), value);
-                }
+                let value = BabyBear::from_canonical_u32(next_u32() % max_value);
+                initial_memory.insert((address_space, pointer), value);
+                final_memory.insert((address_space, pointer), value);
             }
             if is_touched && num_touched_addresses != 0 {
                 num_touched_addresses -= 1;
                 touched_labels.insert((address_space, label));
                 if value_changes || !is_initial {
-                    for i in 0..CHUNK {
-                        let value = BabyBear::from_canonical_u32(next_u32() % max_value);
-                        final_memory.insert((address_space, base_ptr + i as u32), value);
-                    }
+                    let value = BabyBear::from_canonical_u32(next_u32() % max_value);
+                    final_memory.insert((address_space, pointer), value);
                 }
             }
         }
@@ -236,7 +238,7 @@ fn random_test<const CHUNK: usize>(
 
 #[test]
 fn expand_test_0() {
-    random_test::<DEFAULT_CHUNK>(3, 3000, 2, 3);
+    random_test::<DEFAULT_CHUNK>(2, 3000, 2, 3);
 }
 
 #[test]
