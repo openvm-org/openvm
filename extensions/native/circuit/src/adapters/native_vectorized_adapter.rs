@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     marker::PhantomData,
 };
 
@@ -13,8 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -38,10 +36,8 @@ impl<F: PrimeField32, const N: usize> NativeVectorizedAdapterChip<F, N> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
     ) -> Self {
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
         Self {
             air: NativeVectorizedAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -53,15 +49,15 @@ impl<F: PrimeField32, const N: usize> NativeVectorizedAdapterChip<F, N> {
 }
 
 #[derive(Debug)]
-pub struct NativeVectorizedReadRecord<F: Field, const N: usize> {
-    pub b: MemoryReadRecord<F, N>,
-    pub c: MemoryReadRecord<F, N>,
+pub struct NativeVectorizedReadRecord<const N: usize> {
+    pub b: RecordId,
+    pub c: RecordId,
 }
 
 #[derive(Debug)]
-pub struct NativeVectorizedWriteRecord<F: Field, const N: usize> {
+pub struct NativeVectorizedWriteRecord<const N: usize> {
     pub from_state: ExecutionState<u32>,
-    pub a: MemoryWriteRecord<F, N>,
+    pub a: RecordId,
 }
 
 #[repr(C)]
@@ -157,8 +153,8 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
 }
 
 impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapterChip<F, N> {
-    type ReadRecord = NativeVectorizedReadRecord<F, N>;
-    type WriteRecord = NativeVectorizedWriteRecord<F, N>;
+    type ReadRecord = NativeVectorizedReadRecord<N>;
+    type WriteRecord = NativeVectorizedWriteRecord<N>;
     type Air = NativeVectorizedAdapterAir<N>;
     type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 1, N, N>;
 
@@ -176,8 +172,11 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         let z_val = memory.read::<N>(e, c);
 
         Ok((
-            [y_val.data, z_val.data],
-            Self::ReadRecord { b: y_val, c: z_val },
+            [y_val.1, z_val.1],
+            Self::ReadRecord {
+                b: y_val.0,
+                c: z_val.0,
+            },
         ))
     }
 
@@ -190,7 +189,7 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let a_val = memory.write(d, a, output.writes[0]);
+        let (a_val, _) = memory.write(d, a, output.writes[0]);
 
         Ok((
             ExecutionState {
@@ -209,22 +208,26 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
+        let aux_cols_factory = memory.aux_cols_factory();
         let row_slice: &mut NativeVectorizedAdapterCols<_, N> = row_slice.borrow_mut();
 
+        let b_record = memory.record_by_id(read_record.b);
+        let c_record = memory.record_by_id(read_record.c);
+        let a_record = memory.record_by_id(write_record.a);
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.a_pointer = write_record.a.pointer;
-        row_slice.ab_as = write_record.a.address_space;
-        row_slice.b_pointer = read_record.b.pointer;
-        row_slice.c_pointer = read_record.c.pointer;
-        row_slice.c_as = read_record.c.address_space;
+        row_slice.a_pointer = a_record.pointer;
+        row_slice.ab_as = a_record.address_space;
+        row_slice.b_pointer = b_record.pointer;
+        row_slice.c_pointer = c_record.pointer;
+        row_slice.c_as = c_record.address_space;
 
         row_slice.reads_aux = [
-            aux_cols_factory.make_read_aux_cols(read_record.b),
-            aux_cols_factory.make_read_aux_cols(read_record.c),
+            aux_cols_factory.make_read_aux_cols(b_record),
+            aux_cols_factory.make_read_aux_cols(c_record),
         ];
-        row_slice.writes_aux = [aux_cols_factory.make_write_aux_cols(write_record.a)];
+        row_slice.writes_aux = [aux_cols_factory.make_write_aux_cols(a_record)];
     }
 
     fn air(&self) -> &Self::Air {

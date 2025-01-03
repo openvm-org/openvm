@@ -1,7 +1,7 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use openvm_circuit::arch::{
@@ -17,7 +17,6 @@ use openvm_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use parking_lot::Mutex;
 use strum::IntoEnumIterator;
 
 use super::super::adapters::loadstore_native_adapter::NativeLoadStoreInstruction;
@@ -153,7 +152,7 @@ where
         let (pointer_reads, data_read) = reads.into();
 
         let data_write = if local_opcode == NativeLoadStoreOpcode::SHINTW {
-            let mut streams = self.streams.get().unwrap().lock();
+            let mut streams = self.streams.get().unwrap().lock().unwrap();
             if streams.hint_stream.len() < NUM_CELLS {
                 return Err(ExecutionError::HintOutOfBounds { pc: from_pc });
             }

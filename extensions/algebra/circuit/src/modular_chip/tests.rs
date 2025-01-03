@@ -73,10 +73,11 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
+        tester.address_bits(),
         bitwise_chip.clone(),
     );
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+    let mut chip = VmChipWrapper::new(adapter, core, tester.offline_memory_mutex_arc());
     let mut rng = create_seeded_rng();
     let num_tests = 50;
     let mut all_ops = vec![ADD_LOCAL + 2]; // setup
@@ -201,10 +202,11 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
+        tester.address_bits(),
         bitwise_chip.clone(),
     );
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+    let mut chip = VmChipWrapper::new(adapter, core, tester.offline_memory_mutex_arc());
     let mut rng = create_seeded_rng();
     let num_tests = 50;
     let mut all_ops = vec![MUL_LOCAL + 2];
@@ -310,11 +312,12 @@ fn test_is_equal<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIM
         Rv32IsEqualModAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
+            tester.address_bits(),
             bitwise_chip.clone(),
         ),
         ModularIsEqualCoreChip::new(modulus.clone(), bitwise_chip.clone(), opcode_offset),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     {

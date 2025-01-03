@@ -50,10 +50,11 @@ fn tester_with_random_poseidon2_ops(
     let mut chip = NativePoseidon2Chip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
         Poseidon2Config::default(),
         0,
         max_constraint_degree,
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();

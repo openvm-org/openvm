@@ -1,11 +1,13 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::hasher::Hasher,
-    system::memory::{dimensions::MemoryDimensions, tree::MemoryNode, Equipartition},
+    system::memory::{
+        controller::memory::Address, dimensions::MemoryDimensions, tree::MemoryNode, MemoryImage,
+    },
 };
 
 pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = 2;
@@ -37,7 +39,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
         memory_dimensions: MemoryDimensions,
         num_public_values: usize,
         hasher: &impl Hasher<CHUNK, F>,
-        final_memory: &Equipartition<F, CHUNK>,
+        final_memory: &MemoryImage<F>,
     ) -> Self {
         let proof = compute_merkle_proof_to_user_public_values_root(
             memory_dimensions,
@@ -60,7 +62,7 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
     memory_dimensions: MemoryDimensions,
     num_public_values: usize,
     hasher: &impl Hasher<CHUNK, F>,
-    final_memory: &Equipartition<F, CHUNK>,
+    final_memory: &MemoryImage<F>,
 ) -> Vec<(bool, [F; CHUNK])> {
     assert_eq!(
         num_public_values % CHUNK,
@@ -105,25 +107,24 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
     proof
 }
 
-pub fn extract_public_values<const CHUNK: usize, F: PrimeField32>(
+pub fn extract_public_values<F: PrimeField32>(
     memory_dimensions: &MemoryDimensions,
     num_public_values: usize,
-    final_memory: &Equipartition<F, CHUNK>,
+    final_memory: &MemoryImage<F>,
 ) -> Vec<F> {
     // All (addr, value) pairs in the public value address space.
     let f_as_start = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
     let f_as_end = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset + 1;
 
+    // TODO: This clones the entire memory. Ideally this should run in time proportional to
+    // the size of the PV address space, not entire memory.
+    let final_memory: BTreeMap<Address, F> = final_memory.clone().into_iter().collect();
+
     let used_pvs: Vec<_> = final_memory
         .range((f_as_start, 0)..(f_as_end, 0))
-        .flat_map(|((_, block_id), value)| {
-            value
-                .iter()
-                .enumerate()
-                .map(|(i, &v)| (*block_id as usize * CHUNK + i, v))
-        })
+        .map(|(&(_, pointer), &value)| (pointer as usize, value))
         .collect();
-    if let Some(last_pv) = used_pvs.last() {
+    if let Some(&last_pv) = used_pvs.last() {
         assert!(
             last_pv.0 < num_public_values,
             "Last public value is out of bounds"
@@ -138,7 +139,6 @@ pub fn extract_public_values<const CHUNK: usize, F: PrimeField32>(
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::exe::MemoryImage;
     use openvm_stark_backend::p3_field::AbstractField;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -148,7 +148,7 @@ mod tests {
             hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
             SystemConfig,
         },
-        system::memory::{memory_image_to_equipartition, tree::MemoryNode, CHUNK},
+        system::memory::{tree::MemoryNode, MemoryImage, CHUNK},
     };
 
     type F = BabyBear;
@@ -164,17 +164,15 @@ mod tests {
         let mut expected_pvs = F::zero_vec(num_public_values);
         expected_pvs[15] = F::ONE;
 
-        let final_memory = memory_image_to_equipartition(memory);
         let hasher = vm_poseidon2_hasher();
         let pv_proof = UserPublicValuesProof::<{ CHUNK }, F>::compute(
             memory_dimensions,
             num_public_values,
             &hasher,
-            &final_memory,
+            &memory,
         );
         assert_eq!(pv_proof.public_values, expected_pvs);
-        let final_memory_root =
-            MemoryNode::tree_from_memory(memory_dimensions, &final_memory, &hasher);
+        let final_memory_root = MemoryNode::tree_from_memory(memory_dimensions, &memory, &hasher);
         let mut curr_root = pv_proof.public_values_commit;
         for (is_right, sibling_hash) in &pv_proof.proof {
             curr_root = if *is_right {

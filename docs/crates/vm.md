@@ -307,7 +307,7 @@ pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A>> {
     pub core: C,
     pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
     // For accessing memory
-    memory: MemoryControllerRef<F>,
+    offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
 pub struct VmAirWrapper<A, C> {

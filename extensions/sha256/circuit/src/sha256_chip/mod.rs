@@ -3,18 +3,17 @@
 use std::{
     array,
     cmp::{max, min},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
-use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, SystemPort},
-    system::memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
+use openvm_circuit::arch::{
+    ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, SystemPort,
 };
 use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupChip, encoder::Encoder};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
     UsizeOpcode,
 };
 use openvm_rv32im_circuit::adapters::read_rv32_register;
@@ -29,6 +28,8 @@ mod trace;
 
 pub use air::*;
 pub use columns::*;
+use openvm_circuit::system::memory::{MemoryController, OfflineMemory, RecordId};
+
 #[cfg(test)]
 mod tests;
 
@@ -48,7 +49,7 @@ pub struct Sha256VmChip<F: PrimeField32> {
     pub air: Sha256VmAir,
     /// IO and memory data necessary for each opcode call
     pub records: Vec<Sha256Record<F>>,
-    pub memory_controller: MemoryControllerRef<F>,
+    pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
 
     offset: usize,
@@ -57,12 +58,12 @@ pub struct Sha256VmChip<F: PrimeField32> {
 #[derive(Clone, Debug)]
 pub struct Sha256Record<F> {
     pub from_state: ExecutionState<F>,
-    pub dst_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
-    pub src_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
-    pub len_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
-    pub input_records: Vec<[MemoryReadRecord<F, SHA256_READ_SIZE>; SHA256_NUM_READ_ROWS]>,
+    pub dst_read: RecordId,
+    pub src_read: RecordId,
+    pub len_read: RecordId,
+    pub input_records: Vec<[RecordId; SHA256_NUM_READ_ROWS]>,
     pub input_message: Vec<[[u8; SHA256_READ_SIZE]; SHA256_NUM_READ_ROWS]>,
-    pub digest_write: MemoryWriteRecord<F, SHA256_WRITE_SIZE>,
+    pub digest_write: RecordId,
 }
 
 impl<F: PrimeField32> Sha256VmChip<F> {
@@ -70,28 +71,28 @@ impl<F: PrimeField32> Sha256VmChip<F> {
         SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
-        }: SystemPort<F>,
+            memory_bridge,
+        }: SystemPort,
+        address_bits: usize,
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
         self_bus_idx: usize,
         offset: usize,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let ptr_max_bits = memory_controller.borrow().mem_config().pointer_max_bits;
-        let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             air: Sha256VmAir::new(
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bitwise_lookup_chip.bus(),
-                ptr_max_bits,
+                address_bits,
                 offset,
                 Sha256Air::new(bitwise_lookup_chip.bus(), self_bus_idx),
                 Encoder::new(PaddingFlags::COUNT, 2, false),
             ),
-            memory_controller,
             bitwise_lookup_chip,
             records: Vec::new(),
             offset,
+            offline_memory,
         }
     }
 }
@@ -99,6 +100,7 @@ impl<F: PrimeField32> Sha256VmChip<F> {
 impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
@@ -116,12 +118,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
         debug_assert_eq!(d, F::from_canonical_u32(RV32_REGISTER_AS));
         debug_assert_eq!(e, F::from_canonical_u32(RV32_MEMORY_AS));
 
-        let mut memory = self.memory_controller.borrow_mut();
         debug_assert_eq!(from_state.timestamp, memory.timestamp());
 
-        let (dst_read, dst) = read_rv32_register(&mut memory, d, a);
-        let (src_read, src) = read_rv32_register(&mut memory, d, b);
-        let (len_read, len) = read_rv32_register(&mut memory, d, c);
+        let (dst_read, dst) = read_rv32_register(memory, d, a);
+        let (src_read, src) = read_rv32_register(memory, d, b);
+        let (len_read, len) = read_rv32_register(memory, d, c);
 
         #[cfg(debug_assertions)]
         {
@@ -155,19 +156,19 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
                     (max(read_ptr, src + len) - read_ptr) as usize,
                 );
                 let row_input = block_reads_records[i]
-                    .data
+                    .1
                     .map(|x| x.as_canonical_u32().try_into().unwrap());
                 hasher.update(&row_input[..num_reads]);
                 read_ptr += SHA256_READ_SIZE as u32;
                 row_input
             });
-            input_records.push(block_reads_records);
+            input_records.push(block_reads_records.map(|x| x.0));
             input_message.push(block_reads_bytes);
         }
 
         let mut digest = [0u8; SHA256_WRITE_SIZE];
         digest.copy_from_slice(hasher.finalize().as_ref());
-        let digest_write = memory.write(
+        let (digest_write, _) = memory.write(
             e,
             F::from_canonical_u32(dst),
             digest.map(|b| F::from_canonical_u8(b)),
@@ -191,16 +192,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
 
     fn get_opcode_name(&self, _: usize) -> String {
         "SHA256".to_string()
-    }
-}
-
-impl<F: Copy> Sha256Record<F> {
-    pub fn digest_addr_space(&self) -> F {
-        self.digest_write.address_space
-    }
-
-    pub fn start_timestamp(&self) -> u32 {
-        self.dst_read.timestamp
     }
 }
 

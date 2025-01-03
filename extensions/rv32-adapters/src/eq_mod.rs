@@ -1,7 +1,6 @@
 use std::{
-    array::from_fn,
+    array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     marker::PhantomData,
     sync::Arc,
 };
@@ -16,8 +15,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -252,14 +250,12 @@ impl<
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
+        address_bits: usize,
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     ) -> Self {
         assert!(NUM_READS <= 2);
         assert_eq!(TOTAL_READ_SIZE, BLOCKS_PER_READ * BLOCK_SIZE);
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
-        let address_bits = memory_controller.mem_config().pointer_max_bits;
         assert!(
             RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
             "address_bits={address_bits} needs to be large enough for high limb range check"
@@ -279,19 +275,18 @@ impl<
 
 #[derive(Clone, Debug)]
 pub struct Rv32IsEqualModReadRecord<
-    F: Field,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
 > {
-    pub rs: [MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>; NUM_READS],
-    pub reads: [[MemoryReadRecord<F, BLOCK_SIZE>; BLOCKS_PER_READ]; NUM_READS],
+    pub rs: [RecordId; NUM_READS],
+    pub reads: [[RecordId; BLOCKS_PER_READ]; NUM_READS],
 }
 
 #[derive(Clone, Debug)]
-pub struct Rv32IsEqualModWriteRecord<F: Field> {
+pub struct Rv32IsEqualModWriteRecord {
     pub from_state: ExecutionState<u32>,
-    pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rd_id: RecordId,
 }
 
 impl<
@@ -303,8 +298,8 @@ impl<
     > VmAdapterChip<F>
     for Rv32IsEqualModAdapterChip<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
-    type ReadRecord = Rv32IsEqualModReadRecord<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>;
-    type WriteRecord = Rv32IsEqualModWriteRecord<F>;
+    type ReadRecord = Rv32IsEqualModReadRecord<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>;
+    type WriteRecord = Rv32IsEqualModWriteRecord;
     type Air = Rv32IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>;
     type Interface = BasicAdapterInterface<
         F,
@@ -345,13 +340,13 @@ impl<
         });
 
         let read_data = read_records.map(|r| {
-            let read = r.map(|x| x.data);
+            let read = r.map(|x| x.1);
             let mut read_it = read.iter().flatten();
             from_fn(|_| *(read_it.next().unwrap()))
         });
         let record = Rv32IsEqualModReadRecord {
             rs: rs_records,
-            reads: read_records,
+            reads: read_records.map(|r| r.map(|x| x.0)),
         };
 
         Ok((read_data, record))
@@ -366,7 +361,7 @@ impl<
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let rd = memory.write(d, a, output.writes[0]);
+        let (rd_id, _) = memory.write(d, a, output.writes[0]);
 
         debug_assert!(
             memory.timestamp() - from_state.timestamp
@@ -381,7 +376,7 @@ impl<
                 pc: from_state.pc + DEFAULT_PC_STEP,
                 timestamp: memory.timestamp(),
             },
-            Self::WriteRecord { from_state, rd },
+            Self::WriteRecord { from_state, rd_id },
         ))
     }
 
@@ -390,31 +385,29 @@ impl<
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
+        let aux_cols_factory = memory.aux_cols_factory();
         let row_slice: &mut Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
             row_slice.borrow_mut();
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
-        row_slice.rs_ptr = read_record.rs.map(|r| r.pointer);
-        row_slice.rs_val = read_record.rs.map(|r| r.data);
-        row_slice.rs_read_aux = read_record
-            .rs
-            .map(|r| aux_cols_factory.make_read_aux_cols(r));
-        row_slice.heap_read_aux =
-            read_record
-                .reads
-                .map(|r: [MemoryReadRecord<F, BLOCK_SIZE>; BLOCKS_PER_READ]| {
-                    r.map(|x| aux_cols_factory.make_read_aux_cols(x))
-                });
+        let rs = read_record.rs.map(|r| memory.record_by_id(r));
+        row_slice.rs_ptr = array::from_fn(|i| rs[i].pointer);
+        row_slice.rs_val = array::from_fn(|i| rs[i].data.clone().try_into().unwrap());
+        row_slice.rs_read_aux = array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs[i]));
+        row_slice.heap_read_aux = read_record
+            .reads
+            .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(memory.record_by_id(x))));
 
-        row_slice.rd_ptr = write_record.rd.pointer;
-        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
+        let rd = memory.record_by_id(write_record.rd_id);
+        row_slice.rd_ptr = rd.pointer;
+        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(rd);
 
         // Range checks
         let need_range_check: [u32; 2] = from_fn(|i| {
             if i < NUM_READS {
-                read_record.rs[i].data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
+                rs[i].data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
             } else {
                 0
             }

@@ -26,10 +26,7 @@ use rand::{
     Rng,
 };
 
-use super::{
-    merkle::DirectCompressionBus, Equipartition, MemoryAuxColsFactory, MemoryController,
-    MemoryReadRecord,
-};
+use super::{merkle::DirectCompressionBus, MemoryController};
 use crate::{
     arch::{
         testing::memory::gen_pointer, MemoryConfig, MEMORY_BUS, MEMORY_MERKLE_BUS,
@@ -39,7 +36,7 @@ use crate::{
         memory::{
             merkle::MemoryMerkleBus,
             offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryWriteRecord,
+            MemoryAddress, MemoryImage, OfflineMemory, RecordId,
         },
         poseidon2::Poseidon2PeripheryChip,
     },
@@ -149,71 +146,51 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryRequesterAir {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
-enum Record<F> {
-    Write(MemoryWriteRecord<F, 1>),
-    Read(MemoryReadRecord<F, 1>),
-    Read4(MemoryReadRecord<F, 4>),
-    Write4(MemoryWriteRecord<F, 4>),
-    ReadMax(MemoryReadRecord<F, MAX>),
-}
-
 fn generate_trace<F: PrimeField32>(
-    records: Vec<Record<F>>,
-    aux_factory: MemoryAuxColsFactory<F>,
+    records: Vec<RecordId>,
+    offline_memory: &OfflineMemory<F>,
 ) -> RowMajorMatrix<F> {
     let height = records.len().next_power_of_two();
     let width = MemoryRequesterCols::<F>::width();
     let mut values = F::zero_vec(height * width);
 
-    for (row, record) in values.chunks_mut(width).zip(records) {
+    let aux_factory = offline_memory.aux_cols_factory();
+
+    for (row, record_id) in values.chunks_mut(width).zip(records) {
+        let record = offline_memory.record_by_id(record_id).clone();
+
         let row: &mut MemoryRequesterCols<F> = row.borrow_mut();
-        match record {
-            Record::Write(record) => {
-                row.address_space = record.address_space;
-                row.pointer = record.pointer;
-                row.timestamp = F::from_canonical_u32(record.timestamp);
+        row.address_space = record.address_space;
+        row.pointer = record.pointer;
+        row.timestamp = F::from_canonical_u32(record.timestamp);
 
-                row.data_1 = record.data;
-                row.write_1_aux = aux_factory.make_write_aux_cols(record);
-                row.is_write_1 = F::ONE;
-            }
-            Record::Read(record) => {
-                row.address_space = record.address_space;
-                row.pointer = record.pointer;
-                row.timestamp = F::from_canonical_u32(record.timestamp);
-
-                row.data_1 = record.data;
-                row.read_1_aux = aux_factory.make_read_aux_cols(record);
+        match (record.data.len(), &record.prev_data) {
+            (1, &None) => {
+                row.read_1_aux = aux_factory.make_read_aux_cols(&record);
+                row.data_1 = record.data.try_into().unwrap();
                 row.is_read_1 = F::ONE;
             }
-            Record::Read4(record) => {
-                row.address_space = record.address_space;
-                row.pointer = record.pointer;
-                row.timestamp = F::from_canonical_u32(record.timestamp);
-
-                row.data_4 = record.data;
-                row.read_4_aux = aux_factory.make_read_aux_cols(record);
+            (1, &Some(_)) => {
+                row.write_1_aux = aux_factory.make_write_aux_cols(&record);
+                row.data_1 = record.data.try_into().unwrap();
+                row.is_write_1 = F::ONE;
+            }
+            (4, &None) => {
+                row.read_4_aux = aux_factory.make_read_aux_cols(&record);
+                row.data_4 = record.data.try_into().unwrap();
                 row.is_read_4 = F::ONE;
             }
-            Record::Write4(record) => {
-                row.address_space = record.address_space;
-                row.pointer = record.pointer;
-                row.timestamp = F::from_canonical_u32(record.timestamp);
-
-                row.data_4 = record.data;
-                row.write_4_aux = aux_factory.make_write_aux_cols(record);
+            (4, &Some(_)) => {
+                row.write_4_aux = aux_factory.make_write_aux_cols(&record);
+                row.data_4 = record.data.try_into().unwrap();
                 row.is_write_4 = F::ONE;
             }
-            Record::ReadMax(record) => {
-                row.address_space = record.address_space;
-                row.pointer = record.pointer;
-                row.timestamp = F::from_canonical_u32(record.timestamp);
-
-                row.data_max = record.data;
-                row.read_max_aux = aux_factory.make_read_aux_cols(record);
+            (MAX, &None) => {
+                row.read_max_aux = aux_factory.make_read_aux_cols(&record);
+                row.data_max = record.data.try_into().unwrap();
                 row.is_read_max = F::ONE;
             }
+            _ => panic!("unexpected pattern"),
         }
     }
     RowMajorMatrix::new(values, width)
@@ -232,16 +209,20 @@ fn test_memory_controller() {
 
     let mut memory_controller =
         MemoryController::with_volatile_memory(memory_bus, memory_config, range_checker.clone());
-    let aux_factory = memory_controller.aux_cols_factory();
 
     let mut rng = create_seeded_rng();
     let records = make_random_accesses(&mut memory_controller, &mut rng);
     let memory_requester_air = Arc::new(MemoryRequesterAir {
         memory_bridge: memory_controller.memory_bridge(),
     });
-    let memory_requester_trace = generate_trace(records, aux_factory);
 
     memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<BabyBear>>);
+
+    let memory_requester_trace = {
+        let offline_memory = memory_controller.offline_memory();
+        let trace = generate_trace(records, &offline_memory.lock().unwrap());
+        trace
+    };
 
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
     air_proof_inputs.push(AirProofInput::simple_no_pis(
@@ -268,13 +249,11 @@ fn test_memory_controller_persistent() {
         range_checker.clone(),
         merkle_bus,
         compression_bus,
-        Equipartition::new(),
+        MemoryImage::default(),
     );
-    let aux_factory = memory_controller.aux_cols_factory();
 
     let mut rng = create_seeded_rng();
     let records = make_random_accesses(&mut memory_controller, &mut rng);
-    let memory_requester_trace = generate_trace(records, aux_factory);
 
     let memory_requester_air = MemoryRequesterAir {
         memory_bridge: memory_controller.memory_bridge(),
@@ -284,6 +263,13 @@ fn test_memory_controller_persistent() {
         Poseidon2PeripheryChip::new(Poseidon2Config::default(), POSEIDON2_DIRECT_BUS, 3);
 
     memory_controller.finalize(Some(&mut poseidon_chip));
+
+    let memory_requester_trace = {
+        let offline_memory = memory_controller.offline_memory();
+        let trace = generate_trace(records, &offline_memory.lock().unwrap());
+        trace
+    };
+
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
     air_proof_inputs.push(AirProofInput::simple_no_pis(
         Arc::new(memory_requester_air),
@@ -298,7 +284,7 @@ fn test_memory_controller_persistent() {
 fn make_random_accesses<F: PrimeField32>(
     memory_controller: &mut MemoryController<F>,
     mut rng: &mut StdRng,
-) -> Vec<Record<F>> {
+) -> Vec<RecordId> {
     (0..1024)
         .map(|_| {
             let address_space = F::from_canonical_u32(*[1, 2].choose(&mut rng).unwrap());
@@ -307,24 +293,29 @@ fn make_random_accesses<F: PrimeField32>(
                 0 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 1));
                     let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                    Record::Write(memory_controller.write(address_space, pointer, [data]))
+                    let (record_id, _) = memory_controller.write(address_space, pointer, [data]);
+                    record_id
                 }
                 1 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 1));
-                    Record::Read(memory_controller.read::<1>(address_space, pointer))
+                    let (record_id, _) = memory_controller.read::<1>(address_space, pointer);
+                    record_id
                 }
                 2 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 4));
-                    Record::Read4(memory_controller.read::<4>(address_space, pointer))
+                    let (record_id, _) = memory_controller.read::<4>(address_space, pointer);
+                    record_id
                 }
                 3 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 4));
                     let data = array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..1 << 30)));
-                    Record::Write4(memory_controller.write::<4>(address_space, pointer, data))
+                    let (record_id, _) = memory_controller.write::<4>(address_space, pointer, data);
+                    record_id
                 }
                 4 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, MAX));
-                    Record::ReadMax(memory_controller.read::<MAX>(address_space, pointer))
+                    let (record_id, _) = memory_controller.read::<MAX>(address_space, pointer);
+                    record_id
                 }
                 _ => unreachable!(),
             }

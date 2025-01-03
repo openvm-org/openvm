@@ -60,10 +60,10 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeJalChip<F>) {
     let adapter = JalNativeAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
     );
     let inner = JalCoreChip::new(NativeJalOpcode::default_offset());
-    let chip = NativeJalChip::<F>::new(adapter, inner, tester.memory_controller());
+    let chip = NativeJalChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
     (rng, tester, chip)
 }
 
@@ -85,6 +85,8 @@ fn negative_jal_test() {
     let adapter_width = BaseAir::<F>::width(chip.adapter.air());
     set_and_execute(&mut tester, &mut chip, &mut rng, None, None);
 
+    let tester = tester.build();
+
     let jal_trace_width = chip.trace_width();
     let mut chip_input = chip.generate_air_proof_input();
     let jal_trace = chip_input.raw.common_main.as_mut().unwrap();
@@ -96,7 +98,7 @@ fn negative_jal_test() {
         *jal_trace = RowMajorMatrix::new(trace_row, jal_trace_width);
     }
     disable_debug_builder();
-    let tester = tester.build().load_air_proof_input(chip_input).finalize();
+    let tester = tester.load_air_proof_input(chip_input).finalize();
     let msg = format!(
         "Expected verification to fail with {:?}, but it didn't",
         VerificationError::ChallengePhaseError

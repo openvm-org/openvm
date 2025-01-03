@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     marker::PhantomData,
 };
 
@@ -13,8 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -43,10 +41,8 @@ impl<F: PrimeField32> Rv32JalrAdapterChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
     ) -> Self {
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
         Self {
             air: Rv32JalrAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -57,14 +53,14 @@ impl<F: PrimeField32> Rv32JalrAdapterChip<F> {
     }
 }
 #[derive(Debug, Clone)]
-pub struct Rv32JalrReadRecord<F: Field> {
-    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+pub struct Rv32JalrReadRecord {
+    pub rs1: RecordId,
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalrWriteRecord<F: Field> {
+pub struct Rv32JalrWriteRecord {
     pub from_state: ExecutionState<u32>,
-    pub rd: Option<MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>>,
+    pub rd_id: Option<RecordId>,
 }
 
 #[repr(C)]
@@ -178,8 +174,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
 }
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
-    type ReadRecord = Rv32JalrReadRecord<F>;
-    type WriteRecord = Rv32JalrWriteRecord<F>;
+    type ReadRecord = Rv32JalrReadRecord;
+    type WriteRecord = Rv32JalrWriteRecord;
     type Air = Rv32JalrAdapterAir;
     type Interface = BasicAdapterInterface<
         F,
@@ -202,7 +198,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
 
         let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
 
-        Ok(([rs1.data], Rv32JalrReadRecord { rs1 }))
+        Ok(([rs1.1], Rv32JalrReadRecord { rs1: rs1.0 }))
     }
 
     fn postprocess(
@@ -216,8 +212,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         let Instruction {
             a, d, f: enabled, ..
         } = *instruction;
-        let rd = if enabled != F::ZERO {
-            Some(memory.write(d, a, output.writes[0]))
+        let rd_id = if enabled != F::ZERO {
+            let (record_id, _) = memory.write(d, a, output.writes[0]);
+            Some(record_id)
         } else {
             memory.increment_timestamp();
             None
@@ -228,7 +225,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
                 pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
-            Self::WriteRecord { from_state, rd },
+            Self::WriteRecord { from_state, rd_id },
         ))
     }
 
@@ -237,18 +234,23 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
+        let aux_cols_factory = memory.aux_cols_factory();
         let adapter_cols: &mut Rv32JalrAdapterCols<_> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
-        adapter_cols.rs1_ptr = read_record.rs1.pointer;
-        adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(read_record.rs1);
+        let rs1 = memory.record_by_id(read_record.rs1);
+        adapter_cols.rs1_ptr = rs1.pointer;
+        adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(rs1);
         (
             adapter_cols.rd_ptr,
             adapter_cols.rd_aux_cols,
             adapter_cols.needs_write,
-        ) = match write_record.rd {
-            Some(rd) => (rd.pointer, aux_cols_factory.make_write_aux_cols(rd), F::ONE),
+        ) = match write_record.rd_id {
+            Some(id) => {
+                let rd = memory.record_by_id(id);
+                (rd.pointer, aux_cols_factory.make_write_aux_cols(rd), F::ONE)
+            }
             None => (F::ZERO, MemoryWriteAuxCols::disabled(), F::ZERO),
         };
     }

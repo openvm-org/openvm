@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
-    system::{memory::MemoryControllerRef, program::ProgramBus},
+    system::{
+        memory::{MemoryController, OfflineMemory},
+        program::ProgramBus,
+    },
 };
 use openvm_instructions::instruction::Instruction;
 use openvm_poseidon2_air::Poseidon2Config;
@@ -19,7 +22,11 @@ pub use air::*;
 mod chip;
 pub use chip::*;
 mod columns;
+use std::sync::Mutex;
+
 pub use columns::*;
+use openvm_circuit::system::memory::offline_checker::MemoryBridge;
+
 mod trace;
 
 #[cfg(test)]
@@ -37,26 +44,29 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
         poseidon2_config: Poseidon2Config<F>,
         offset: usize,
         max_constraint_degree: usize,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         if max_constraint_degree >= 7 {
             Self::Register0(NativePoseidon2BaseChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller,
+                memory_bridge,
                 poseidon2_config,
                 offset,
+                offline_memory,
             ))
         } else {
             Self::Register1(NativePoseidon2BaseChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller,
+                memory_bridge,
                 poseidon2_config,
                 offset,
+                offline_memory,
             ))
         }
     }
@@ -65,12 +75,13 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
 impl<F: PrimeField32> InstructionExecutor<F> for NativePoseidon2Chip<F> {
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         match self {
-            NativePoseidon2Chip::Register0(chip) => chip.execute(instruction, from_state),
-            NativePoseidon2Chip::Register1(chip) => chip.execute(instruction, from_state),
+            NativePoseidon2Chip::Register0(chip) => chip.execute(memory, instruction, from_state),
+            NativePoseidon2Chip::Register1(chip) => chip.execute(memory, instruction, from_state),
         }
     }
 

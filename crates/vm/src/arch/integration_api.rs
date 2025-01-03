@@ -1,4 +1,9 @@
-use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
+use std::{
+    array::from_fn,
+    borrow::Borrow,
+    marker::PhantomData,
+    sync::{Arc, Mutex},
+};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -18,7 +23,7 @@ use openvm_stark_backend::{
 };
 
 use super::{ExecutionState, InstructionExecutor, Result};
-use crate::system::memory::{MemoryAuxColsFactory, MemoryController, MemoryControllerRef};
+use crate::system::memory::{MemoryController, OfflineMemory};
 
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
@@ -80,7 +85,7 @@ pub trait VmAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     );
 
     fn air(&self) -> &Self::Air;
@@ -184,7 +189,7 @@ pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>>
     pub adapter: A,
     pub core: C,
     pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
-    memory: MemoryControllerRef<F>,
+    offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
 impl<F, A, C> VmChipWrapper<F, A, C>
@@ -192,12 +197,12 @@ where
     A: VmAdapterChip<F>,
     C: VmCoreChip<F, A::Interface>,
 {
-    pub fn new(adapter: A, core: C, memory: MemoryControllerRef<F>) -> Self {
+    pub fn new(adapter: A, core: C, offline_memory: Arc<Mutex<OfflineMemory<F>>>) -> Self {
         Self {
             adapter,
             core,
             records: vec![],
-            memory,
+            offline_memory,
         }
     }
 }
@@ -210,21 +215,17 @@ where
 {
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
-        let mut memory = self.memory.borrow_mut();
-        let (reads, read_record) = self.adapter.preprocess(&mut memory, &instruction)?;
+        let (reads, read_record) = self.adapter.preprocess(memory, &instruction)?;
         let (output, core_record) =
             self.core
                 .execute_instruction(&instruction, from_state.pc, reads)?;
-        let (to_state, write_record) = self.adapter.postprocess(
-            &mut memory,
-            &instruction,
-            from_state,
-            output,
-            &read_record,
-        )?;
+        let (to_state, write_record) =
+            self.adapter
+                .postprocess(memory, &instruction, from_state, output, &read_record)?;
         self.records.push((read_record, write_record, core_record));
         Ok(to_state)
     }
@@ -281,7 +282,8 @@ where
         let width = core_width + adapter_width;
         let mut values = Val::<SC>::zero_vec(height * width);
 
-        let memory_aux_cols_factory = RefCell::borrow(&self.memory).aux_cols_factory();
+        let memory = self.offline_memory.lock().unwrap();
+
         // This zip only goes through records.
         // The padding rows between records.len()..height are filled with zeros.
         values
@@ -289,12 +291,8 @@ where
             .zip(self.records.into_par_iter())
             .for_each(|(row_slice, record)| {
                 let (adapter_row, core_row) = row_slice.split_at_mut(adapter_width);
-                self.adapter.generate_trace_row(
-                    adapter_row,
-                    record.0,
-                    record.1,
-                    &memory_aux_cols_factory,
-                );
+                self.adapter
+                    .generate_trace_row(adapter_row, record.0, record.1, &memory);
                 self.core.generate_trace_row(core_row, record.2);
             });
 

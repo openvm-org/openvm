@@ -1,4 +1,8 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::{
+    array,
+    borrow::BorrowMut,
+    sync::{Arc, Mutex},
+};
 
 use openvm_circuit::{
     arch::{
@@ -23,7 +27,6 @@ use openvm_stark_backend::{
     verifier::VerificationError,
 };
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use parking_lot::Mutex;
 use rand::{rngs::StdRng, Rng};
 
 use super::{Rv32HintStoreChip, Rv32HintStoreCoreChip};
@@ -73,6 +76,7 @@ fn set_and_execute(
             .get()
             .unwrap()
             .lock()
+            .unwrap()
             .hint_stream
             .push_back(data);
     }
@@ -110,14 +114,15 @@ fn rand_hintstore_test() {
     let adapter = Rv32HintStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
+        tester.address_bits(),
         range_checker_chip.clone(),
     );
 
     let mut core =
         Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
     core.set_streams(Arc::new(Mutex::new(Streams::default())));
-    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
@@ -155,14 +160,15 @@ fn run_negative_hintstore_test(
     let adapter = Rv32HintStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
+        tester.address_bits(),
         range_checker_chip.clone(),
     );
     let mut core =
         Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
     core.set_streams(Arc::new(Mutex::new(Streams::default())));
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
 
@@ -213,13 +219,14 @@ fn execute_roundtrip_sanity_test() {
     let adapter = Rv32HintStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
+        tester.address_bits(),
         range_checker_chip.clone(),
     );
     let mut core =
         Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
     core.set_streams(Arc::new(Mutex::new(Streams::default())));
-    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {

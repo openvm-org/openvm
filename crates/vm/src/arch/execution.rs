@@ -65,6 +65,7 @@ pub trait InstructionExecutor<F> {
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>>;
@@ -77,10 +78,11 @@ pub trait InstructionExecutor<F> {
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         prev_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut().execute(instruction, prev_state)
+        self.borrow_mut().execute(memory, instruction, prev_state)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -91,10 +93,11 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         prev_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut().execute(instruction, prev_state)
+        self.borrow_mut().execute(memory, instruction, prev_state)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     marker::PhantomData,
 };
 
@@ -13,7 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
+            MemoryAddress, MemoryController, OfflineMemory,
         },
         native_adapter::NativeWriteRecord,
         program::ProgramBus,
@@ -37,10 +36,8 @@ impl<F: PrimeField32> JalNativeAdapterChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
     ) -> Self {
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
         Self {
             air: JalNativeAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -165,14 +162,16 @@ impl<F: PrimeField32> VmAdapterChip<F> for JalNativeAdapterChip<F> {
         row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
+        let aux_cols_factory = memory.aux_cols_factory();
         let row_slice: &mut JalNativeAdapterCols<_> = row_slice.borrow_mut();
 
+        let write = memory.record_by_id(write_record.writes[0].0);
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.a_pointer = write_record.writes[0].pointer;
-        row_slice.a_as = write_record.writes[0].address_space;
-        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.writes[0]);
+        row_slice.a_pointer = write.pointer;
+        row_slice.a_as = write.address_space;
+        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write);
     }
 
     fn air(&self) -> &Self::Air {

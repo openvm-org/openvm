@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     marker::PhantomData,
 };
 
@@ -13,8 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryAddress, MemoryController,
         },
         program::ProgramBus,
     },
@@ -27,57 +25,57 @@ use openvm_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
 };
 
+use super::memory::{OfflineMemory, RecordId};
+
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.
 /// If an operand is not used, its address space and pointer should be all 0.
 #[derive(Debug)]
 pub struct NativeAdapterChip<F, const R: usize, const W: usize> {
     pub air: NativeAdapterAir<R, W>,
-    _marker: PhantomData<F>,
+    _phantom: PhantomData<F>,
 }
 
 impl<F: PrimeField32, const R: usize, const W: usize> NativeAdapterChip<F, R, W> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
     ) -> Self {
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
         Self {
             air: NativeAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             },
-            _marker: PhantomData,
+            _phantom: PhantomData,
         }
     }
 }
 
 #[derive(Debug)]
 pub struct NativeReadRecord<F: Field, const R: usize> {
-    pub reads: [MemoryReadRecord<F, 1>; R],
+    pub reads: [(RecordId, [F; 1]); R],
 }
 
 impl<F: Field, const R: usize> NativeReadRecord<F, R> {
-    pub fn b(&self) -> &MemoryReadRecord<F, 1> {
-        &self.reads[0]
+    pub fn b(&self) -> &[F; 1] {
+        &self.reads[0].1
     }
 
-    pub fn c(&self) -> &MemoryReadRecord<F, 1> {
-        &self.reads[1]
+    pub fn c(&self) -> &[F; 1] {
+        &self.reads[1].1
     }
 }
 
 #[derive(Debug)]
 pub struct NativeWriteRecord<F: Field, const W: usize> {
     pub from_state: ExecutionState<u32>,
-    pub writes: [MemoryWriteRecord<F, 1>; W],
+    pub writes: [(RecordId, [F; 1]); W],
 }
 
 impl<F: Field, const W: usize> NativeWriteRecord<F, W> {
-    pub fn a(&self) -> &MemoryWriteRecord<F, 1> {
-        &self.writes[0]
+    pub fn a(&self) -> &[F; 1] {
+        &self.writes[0].1
     }
 }
 
@@ -226,7 +224,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         if R >= 2 {
             reads.push(memory.read::<1>(f, c));
         }
-        let i_reads: [_; R] = std::array::from_fn(|i| reads[i].data);
+        let i_reads: [_; R] = std::array::from_fn(|i| reads[i].1);
 
         Ok((
             i_reads,
@@ -248,7 +246,8 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         let Instruction { a, d, .. } = *instruction;
         let mut writes = Vec::with_capacity(W);
         if W >= 1 {
-            writes.push(memory.write(d, a, output.writes[0]));
+            let (record_id, _) = memory.write(d, a, output.writes[0]);
+            writes.push((record_id, output.writes[0]));
         }
 
         Ok((
@@ -268,24 +267,27 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let row_slice: &mut NativeAdapterCols<_, R, W> = row_slice.borrow_mut();
+        let aux_cols_factory = memory.aux_cols_factory();
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
-        row_slice.reads_aux = read_record.reads.map(|x| {
-            let address = MemoryAddress::new(x.address_space, x.pointer);
+        row_slice.reads_aux = read_record.reads.map(|(id, _)| {
+            let record = memory.record_by_id(id);
+            let address = MemoryAddress::new(record.address_space, record.pointer);
             NativeAdapterReadCols {
                 address,
-                read_aux: aux_cols_factory.make_read_or_immediate_aux_cols(x),
+                read_aux: aux_cols_factory.make_read_or_immediate_aux_cols(record),
             }
         });
-        row_slice.writes_aux = write_record.writes.map(|x| {
-            let address = MemoryAddress::new(x.address_space, x.pointer);
+        row_slice.writes_aux = write_record.writes.map(|(id, _)| {
+            let record = memory.record_by_id(id);
+            let address = MemoryAddress::new(record.address_space, record.pointer);
             NativeAdapterWriteCols {
                 address,
-                write_aux: aux_cols_factory.make_write_aux_cols(x),
+                write_aux: aux_cols_factory.make_write_aux_cols(record),
             }
         });
     }

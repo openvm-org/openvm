@@ -1,4 +1,9 @@
-use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
+use std::{
+    array::{self, from_fn},
+    borrow::Borrow,
+    marker::PhantomData,
+    sync::Arc,
+};
 
 use openvm_circuit::{
     arch::{
@@ -7,10 +12,7 @@ use openvm_circuit::{
         VmAdapterInterface,
     },
     system::{
-        memory::{
-            offline_checker::MemoryBridge, MemoryAuxColsFactory, MemoryController,
-            MemoryControllerRef,
-        },
+        memory::{offline_checker::MemoryBridge, MemoryController, OfflineMemory},
         program::ProgramBus,
     },
 };
@@ -118,13 +120,11 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
+        address_bits: usize,
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     ) -> Self {
         assert!(NUM_READS <= 2);
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
-        let address_bits = memory_controller.mem_config().pointer_max_bits;
         assert!(
             RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
             "address_bits={address_bits} needs to be large enough for high limb range check"
@@ -146,7 +146,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
     VmAdapterChip<F> for Rv32HeapAdapterChip<F, NUM_READS, READ_SIZE, WRITE_SIZE>
 {
     type ReadRecord = Rv32VecHeapReadRecord<F, NUM_READS, 1, READ_SIZE>;
-    type WriteRecord = Rv32VecHeapWriteRecord<F, 1, WRITE_SIZE>;
+    type WriteRecord = Rv32VecHeapWriteRecord<1, WRITE_SIZE>;
     type Air = Rv32HeapAdapterAir<NUM_READS, READ_SIZE, WRITE_SIZE>;
     type Interface =
         BasicAdapterInterface<F, MinimalInstruction<F>, NUM_READS, 1, READ_SIZE, WRITE_SIZE>;
@@ -177,13 +177,13 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
             debug_assert!(address < (1 << self.air.address_bits));
             [memory.read::<READ_SIZE>(e, F::from_canonical_u32(address))]
         });
-        let read_data = read_records.map(|r| r[0].data);
+        let read_data = read_records.map(|r| r[0].1);
 
         let record = Rv32VecHeapReadRecord {
             rs: rs_records,
             rd: rd_record,
             rd_val: F::from_canonical_u32(rd_val),
-            reads: read_records,
+            reads: read_records.map(|r| array::from_fn(|i| r[i].0)),
         };
 
         Ok((read_data, record))
@@ -198,7 +198,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let e = instruction.e;
-        let writes = [memory.write(e, read_record.rd_val, output.writes[0])];
+        let writes = [memory.write(e, read_record.rd_val, output.writes[0]).0];
 
         let timestamp_delta = memory.timestamp() - from_state.timestamp;
         debug_assert!(
@@ -221,15 +221,15 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         vec_heap_generate_trace_row_impl(
             row_slice,
             &read_record,
             &write_record,
-            aux_cols_factory,
             &self.bitwise_lookup_chip,
             self.air.address_bits,
+            memory,
         );
     }
 

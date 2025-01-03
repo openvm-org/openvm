@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     marker::PhantomData,
 };
 
@@ -13,8 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -47,10 +45,8 @@ impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
     ) -> Self {
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
         Self {
             air: Rv32BaseAluAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -64,11 +60,11 @@ impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
 #[derive(Clone, Debug)]
 pub struct Rv32BaseAluReadRecord<F: Field> {
     /// Read register value from address space d=1
-    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1: RecordId,
     /// Either
     /// - read rs2 register value or
     /// - if `rs2_is_imm` is true, this is None
-    pub rs2: Option<MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>>,
+    pub rs2: Option<RecordId>,
     /// immediate value of rs2 or 0
     pub rs2_imm: F,
 }
@@ -77,7 +73,7 @@ pub struct Rv32BaseAluReadRecord<F: Field> {
 pub struct Rv32BaseAluWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     /// Write to destination register
-    pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rd: (RecordId, [F; 4]),
 }
 
 #[repr(C)]
@@ -242,10 +238,17 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
             )
         } else {
             let rs2_read = memory.read::<RV32_REGISTER_NUM_LIMBS>(e, c);
-            (Some(rs2_read), rs2_read.data, F::ZERO)
+            (Some(rs2_read.0), rs2_read.1, F::ZERO)
         };
 
-        Ok(([rs1.data, rs2_data], Self::ReadRecord { rs1, rs2, rs2_imm }))
+        Ok((
+            [rs1.1, rs2_data],
+            Self::ReadRecord {
+                rs1: rs1.0,
+                rs2,
+                rs2_imm,
+            },
+        ))
     }
 
     fn postprocess(
@@ -280,28 +283,35 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let row_slice: &mut Rv32BaseAluAdapterCols<_> = row_slice.borrow_mut();
+        let aux_cols_factory = memory.aux_cols_factory();
+
+        let rd = memory.record_by_id(write_record.rd.0);
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.rd_ptr = write_record.rd.pointer;
-        row_slice.rs1_ptr = read_record.rs1.pointer;
-        row_slice.rs2 = read_record
-            .rs2
-            .map(|rs2| rs2.pointer)
-            .unwrap_or(read_record.rs2_imm);
-        row_slice.rs2_as = read_record
-            .rs2
-            .map(|rs2| rs2.address_space)
-            .unwrap_or(F::ZERO);
-        row_slice.reads_aux = [
-            aux_cols_factory.make_read_aux_cols(read_record.rs1),
-            match read_record.rs2 {
-                Some(rs2_record) => aux_cols_factory.make_read_aux_cols(rs2_record),
-                None => MemoryReadAuxCols::<F, RV32_REGISTER_NUM_LIMBS>::disabled(),
-            },
-        ];
-        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
+        row_slice.rd_ptr = rd.pointer;
+
+        let rs1 = memory.record_by_id(read_record.rs1);
+        let rs2 = read_record.rs2.map(|rs2| memory.record_by_id(rs2));
+        row_slice.rs1_ptr = rs1.pointer;
+
+        if let Some(rs2) = rs2 {
+            row_slice.rs2 = rs2.pointer;
+            row_slice.rs2_as = rs2.address_space;
+            row_slice.reads_aux = [
+                aux_cols_factory.make_read_aux_cols(rs1),
+                aux_cols_factory.make_read_aux_cols(rs2),
+            ];
+        } else {
+            row_slice.rs2 = read_record.rs2_imm;
+            row_slice.rs2_as = F::ZERO;
+            row_slice.reads_aux = [
+                aux_cols_factory.make_read_aux_cols(rs1),
+                MemoryReadAuxCols::<F, RV32_REGISTER_NUM_LIMBS>::disabled(),
+            ];
+        }
+        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(rd);
     }
 
     fn air(&self) -> &Self::Air {

@@ -54,14 +54,14 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         Rv32BaseAluAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         ShiftCoreChip::new(
             bitwise_chip.clone(),
             tester.memory_controller().borrow().range_checker.clone(),
             0,
         ),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     for _ in 0..num_ops {
@@ -150,7 +150,7 @@ fn run_rv32_shift_negative_test(
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
         ShiftCoreChip::new(bitwise_chip.clone(), range_checker_chip.clone(), 0),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(

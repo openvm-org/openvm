@@ -41,12 +41,13 @@ fn test_mul_023_by_023() {
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 30, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
+        tester.address_bits(),
         bitwise_chip.clone(),
     );
     let mut chip = EcLineMul023By023Chip::new(
         adapter,
-        tester.memory_controller(),
+        tester.memory_controller().borrow().range_checker.clone(),
         ExprBuilderConfig {
             modulus: BLS12_381_MODULUS.clone(),
             num_limbs: BLS12_381_NUM_LIMBS,
@@ -54,6 +55,7 @@ fn test_mul_023_by_023() {
         },
         BLS12_381_XI_ISIZE,
         PairingOpcode::default_offset(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng0 = StdRng::seed_from_u64(15);
@@ -140,12 +142,13 @@ fn test_mul_by_02345() {
     let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 36, 30, 36, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
+        tester.address_bits(),
         bitwise_chip.clone(),
     );
     let mut chip = EcLineMulBy02345Chip::new(
         adapter,
-        tester.memory_controller(),
+        tester.memory_controller().borrow().range_checker.clone(),
         ExprBuilderConfig {
             modulus: BLS12_381_MODULUS.clone(),
             num_limbs: BLS12_381_NUM_LIMBS,
@@ -153,6 +156,7 @@ fn test_mul_by_02345() {
         },
         BLS12_381_XI_ISIZE,
         PairingOpcode::default_offset(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = StdRng::seed_from_u64(19);

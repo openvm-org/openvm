@@ -62,7 +62,8 @@ fn test_fp12_fn<
         Rv32VecHeapAdapterChip::<F, 2, INPUT_SIZE, INPUT_SIZE, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
+            tester.address_bits(),
             bitwise_chip.clone(),
         );
 
@@ -78,7 +79,7 @@ fn test_fp12_fn<
             biguint_to_limbs::<NUM_LIMBS>(y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
         })
         .collect::<Vec<[BabyBear; NUM_LIMBS]>>();
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+    let mut chip = VmChipWrapper::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let res = chip.core.air.expr.execute([x, y].concat(), vec![]);
     assert_eq!(res.len(), var_len);

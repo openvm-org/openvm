@@ -1,6 +1,6 @@
 use std::ops::Mul;
 
-use openvm_circuit::system::memory::{MemoryController, MemoryReadRecord};
+use openvm_circuit::system::memory::{MemoryController, RecordId};
 use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
 
 mod alu;
@@ -48,11 +48,11 @@ pub fn read_rv32_register<F: PrimeField32>(
     memory: &mut MemoryController<F>,
     address_space: F,
     pointer: F,
-) -> (MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>, u32) {
+) -> (RecordId, u32) {
     debug_assert_eq!(address_space, F::ONE);
     let record = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
-    let val = compose(record.data);
-    (record, val)
+    let val = compose(record.1);
+    (record.0, val)
 }
 
 /// Peeks at the value of a register without updating the memory state or incrementing the timestamp.

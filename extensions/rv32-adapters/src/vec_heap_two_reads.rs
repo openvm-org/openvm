@@ -1,7 +1,6 @@
 use std::{
-    array::from_fn,
+    array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     iter::zip,
     marker::PhantomData,
     sync::Arc,
@@ -16,8 +15,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -88,12 +86,10 @@ impl<
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
+        address_bits: usize,
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     ) -> Self {
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
-        let address_bits = memory_controller.mem_config().pointer_max_bits;
         assert!(
             RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
             "address_bits={address_bits} needs to be large enough for high limb range check"
@@ -119,26 +115,22 @@ pub struct Rv32VecHeapTwoReadsReadRecord<
     const READ_SIZE: usize,
 > {
     /// Read register value from address space e=1
-    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
-    pub rs2: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1: RecordId,
+    pub rs2: RecordId,
     /// Read register value from address space d=1
-    pub rd: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rd: RecordId,
 
     pub rd_val: F,
 
-    pub reads1: [MemoryReadRecord<F, READ_SIZE>; BLOCKS_PER_READ1],
-    pub reads2: [MemoryReadRecord<F, READ_SIZE>; BLOCKS_PER_READ2],
+    pub reads1: [RecordId; BLOCKS_PER_READ1],
+    pub reads2: [RecordId; BLOCKS_PER_READ2],
 }
 
 #[derive(Clone, Debug)]
-pub struct Rv32VecHeapTwoReadsWriteRecord<
-    F: Field,
-    const BLOCKS_PER_WRITE: usize,
-    const WRITE_SIZE: usize,
-> {
+pub struct Rv32VecHeapTwoReadsWriteRecord<const BLOCKS_PER_WRITE: usize, const WRITE_SIZE: usize> {
     pub from_state: ExecutionState<u32>,
 
-    pub writes: [MemoryWriteRecord<F, WRITE_SIZE>; BLOCKS_PER_WRITE],
+    pub writes: [RecordId; BLOCKS_PER_WRITE],
 }
 
 #[repr(C)]
@@ -391,7 +383,7 @@ impl<
 {
     type ReadRecord =
         Rv32VecHeapTwoReadsReadRecord<F, BLOCKS_PER_READ1, BLOCKS_PER_READ2, READ_SIZE>;
-    type WriteRecord = Rv32VecHeapTwoReadsWriteRecord<F, BLOCKS_PER_WRITE, WRITE_SIZE>;
+    type WriteRecord = Rv32VecHeapTwoReadsWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>;
     type Air = Rv32VecHeapTwoReadsAdapterAir<
         BLOCKS_PER_READ1,
         BLOCKS_PER_READ2,
@@ -429,12 +421,12 @@ impl<
         let read1_records = from_fn(|i| {
             memory.read::<READ_SIZE>(e, F::from_canonical_u32(rs1_val + (i * READ_SIZE) as u32))
         });
-        let read1_data = read1_records.map(|r| r.data);
+        let read1_data = read1_records.map(|r| r.1);
         assert!(rs2_val as usize + READ_SIZE * BLOCKS_PER_READ2 - 1 < (1 << self.air.address_bits));
         let read2_records = from_fn(|i| {
             memory.read::<READ_SIZE>(e, F::from_canonical_u32(rs2_val + (i * READ_SIZE) as u32))
         });
-        let read2_data = read2_records.map(|r| r.data);
+        let read2_data = read2_records.map(|r| r.1);
         assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.air.address_bits));
 
         let record = Rv32VecHeapTwoReadsReadRecord {
@@ -442,8 +434,8 @@ impl<
             rs2: rs2_record,
             rd: rd_record,
             rd_val: F::from_canonical_u32(rd_val),
-            reads1: read1_records,
-            reads2: read2_records,
+            reads1: read1_records.map(|r| r.0),
+            reads2: read2_records.map(|r| r.0),
         };
 
         Ok(((read1_data, read2_data), record))
@@ -460,13 +452,13 @@ impl<
         let e = instruction.e;
         let mut i = 0;
         let writes = output.writes.map(|write| {
-            let record = memory.write(
+            let (record_id, _) = memory.write(
                 e,
                 read_record.rd_val + F::from_canonical_u32((i * WRITE_SIZE) as u32),
                 write,
             );
             i += 1;
-            record
+            record_id
         });
 
         Ok((
@@ -483,15 +475,15 @@ impl<
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         vec_heap_two_reads_generate_trace_row_impl(
             row_slice,
             &read_record,
             &write_record,
-            aux_cols_factory,
             &self.bitwise_lookup_chip,
             self.air.address_bits,
+            memory,
         )
     }
 
@@ -510,11 +502,12 @@ pub(super) fn vec_heap_two_reads_generate_trace_row_impl<
 >(
     row_slice: &mut [F],
     read_record: &Rv32VecHeapTwoReadsReadRecord<F, BLOCKS_PER_READ1, BLOCKS_PER_READ2, READ_SIZE>,
-    write_record: &Rv32VecHeapTwoReadsWriteRecord<F, BLOCKS_PER_WRITE, WRITE_SIZE>,
-    aux_cols_factory: &MemoryAuxColsFactory<F>,
+    write_record: &Rv32VecHeapTwoReadsWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>,
     bitwise_lookup_chip: &BitwiseOperationLookupChip<RV32_CELL_BITS>,
     address_bits: usize,
+    memory: &OfflineMemory<F>,
 ) {
+    let aux_cols_factory = memory.aux_cols_factory();
     let row_slice: &mut Rv32VecHeapTwoReadsAdapterCols<
         F,
         BLOCKS_PER_READ1,
@@ -525,26 +518,30 @@ pub(super) fn vec_heap_two_reads_generate_trace_row_impl<
     > = row_slice.borrow_mut();
     row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
-    row_slice.rd_ptr = read_record.rd.pointer;
-    row_slice.rs1_ptr = read_record.rs1.pointer;
-    row_slice.rs2_ptr = read_record.rs2.pointer;
+    let rd = memory.record_by_id(read_record.rd);
+    let rs1 = memory.record_by_id(read_record.rs1);
+    let rs2 = memory.record_by_id(read_record.rs2);
 
-    row_slice.rd_val = read_record.rd.data;
-    row_slice.rs1_val = read_record.rs1.data;
-    row_slice.rs2_val = read_record.rs2.data;
+    row_slice.rd_ptr = rd.pointer;
+    row_slice.rs1_ptr = rs1.pointer;
+    row_slice.rs2_ptr = rs2.pointer;
 
-    row_slice.rs1_read_aux = aux_cols_factory.make_read_aux_cols(read_record.rs1);
-    row_slice.rs2_read_aux = aux_cols_factory.make_read_aux_cols(read_record.rs2);
-    row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(read_record.rd);
+    row_slice.rd_val = array::from_fn(|i| rd.data[i]);
+    row_slice.rs1_val = array::from_fn(|i| rs1.data[i]);
+    row_slice.rs2_val = array::from_fn(|i| rs2.data[i]);
+
+    row_slice.rs1_read_aux = aux_cols_factory.make_read_aux_cols(rs1);
+    row_slice.rs2_read_aux = aux_cols_factory.make_read_aux_cols(rs2);
+    row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(rd);
     row_slice.reads1_aux = read_record
         .reads1
-        .map(|r| aux_cols_factory.make_read_aux_cols(r));
+        .map(|r| aux_cols_factory.make_read_aux_cols(memory.record_by_id(r)));
     row_slice.reads2_aux = read_record
         .reads2
-        .map(|r| aux_cols_factory.make_read_aux_cols(r));
+        .map(|r| aux_cols_factory.make_read_aux_cols(memory.record_by_id(r)));
     row_slice.writes_aux = write_record
         .writes
-        .map(|w| aux_cols_factory.make_write_aux_cols(w));
+        .map(|w| aux_cols_factory.make_write_aux_cols(memory.record_by_id(w)));
 
     // Range checks:
     let need_range_check = [
@@ -553,7 +550,9 @@ pub(super) fn vec_heap_two_reads_generate_trace_row_impl<
         &read_record.rd,
         &read_record.rd,
     ]
-    .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
+    .map(|record| {
+        memory.record_by_id(*record).data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
+    });
     debug_assert!(address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
     let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits;
     for pair in need_range_check.chunks_exact(2) {

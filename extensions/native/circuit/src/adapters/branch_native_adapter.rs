@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     marker::PhantomData,
 };
 
@@ -13,7 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
+            MemoryAddress, MemoryController, OfflineMemory,
         },
         native_adapter::NativeReadRecord,
         program::ProgramBus,
@@ -37,10 +36,8 @@ impl<F: PrimeField32> BranchNativeAdapterChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
     ) -> Self {
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
         Self {
             air: BranchNativeAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -152,7 +149,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for BranchNativeAdapterChip<F> {
         let Instruction { a, b, d, e, .. } = *instruction;
 
         let reads = vec![memory.read::<1>(d, a), memory.read::<1>(e, b)];
-        let i_reads: [_; 2] = std::array::from_fn(|i| reads[i].data);
+        let i_reads: [_; 2] = std::array::from_fn(|i| reads[i].1);
 
         Ok((
             i_reads,
@@ -184,16 +181,18 @@ impl<F: PrimeField32> VmAdapterChip<F> for BranchNativeAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let row_slice: &mut BranchNativeAdapterCols<_> = row_slice.borrow_mut();
+        let aux_cols_factory = memory.aux_cols_factory();
 
         row_slice.from_state = write_record.map(F::from_canonical_u32);
         row_slice.reads_aux = read_record.reads.map(|x| {
-            let address = MemoryAddress::new(x.address_space, x.pointer);
+            let read = memory.record_by_id(x.0);
+            let address = MemoryAddress::new(read.address_space, read.pointer);
             BranchNativeAdapterReadCols {
                 address,
-                read_aux: aux_cols_factory.make_read_or_immediate_aux_cols(x),
+                read_aux: aux_cols_factory.make_read_or_immediate_aux_cols(read),
             }
         });
     }

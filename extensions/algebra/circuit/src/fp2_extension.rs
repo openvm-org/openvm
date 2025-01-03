@@ -58,7 +58,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -71,6 +71,9 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
+        let offline_memory = builder.system_base().offline_memory();
+        let range_checker = builder.system_base().range_checker_chip.clone();
+        let address_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let addsub_opcodes = (Fp2Opcode::ADD as usize)..=(Fp2Opcode::SETUP_ADDSUB as usize);
         let muldiv_opcodes = (Fp2Opcode::MUL as usize)..=(Fp2Opcode::SETUP_MULDIV as usize);
@@ -93,22 +96,25 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
             let adapter_chip_32 = Rv32VecHeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             );
             let adapter_chip_48 = Rv32VecHeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
+                address_bits,
                 bitwise_lu_chip.clone(),
             );
 
             if bytes <= 32 {
                 let addsub_chip = Fp2AddSubChip::new(
                     adapter_chip_32.clone(),
-                    memory_controller.clone(),
                     config32.clone(),
                     class_offset,
+                    range_checker.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv32_32(addsub_chip),
@@ -118,9 +124,10 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
                     adapter_chip_32.clone(),
-                    memory_controller.clone(),
                     config32.clone(),
                     class_offset,
+                    range_checker.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv32_32(muldiv_chip),
@@ -131,9 +138,10 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
             } else if bytes <= 48 {
                 let addsub_chip = Fp2AddSubChip::new(
                     adapter_chip_48.clone(),
-                    memory_controller.clone(),
                     config48.clone(),
                     class_offset,
+                    range_checker.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv32_48(addsub_chip),
@@ -143,9 +151,10 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
                     adapter_chip_48.clone(),
-                    memory_controller.clone(),
                     config48.clone(),
                     class_offset,
+                    range_checker.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv32_48(muldiv_chip),

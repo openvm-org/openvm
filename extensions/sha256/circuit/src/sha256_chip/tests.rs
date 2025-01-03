@@ -85,11 +85,13 @@ fn rand_sha256_test() {
         SystemPort {
             execution_bus: tester.execution_bus(),
             program_bus: tester.program_bus(),
-            memory_controller: tester.memory_controller(),
+            memory_bridge: tester.memory_bridge(),
         },
+        tester.address_bits(),
         bitwise_chip.clone(),
         BUS_IDX,
         Rv32Sha256Opcode::default_offset(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let num_tests: usize = 3;
@@ -118,11 +120,13 @@ fn execute_roundtrip_sanity_test() {
         SystemPort {
             execution_bus: tester.execution_bus(),
             program_bus: tester.program_bus(),
-            memory_controller: tester.memory_controller(),
+            memory_bridge: tester.memory_bridge(),
         },
+        tester.address_bits(),
         bitwise_chip.clone(),
         BUS_IDX,
         Rv32Sha256Opcode::default_offset(),
+        tester.offline_memory_mutex_arc(),
     );
 
     println!(

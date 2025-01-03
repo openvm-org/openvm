@@ -1,7 +1,6 @@
 use std::{
-    array::from_fn,
+    array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     iter::once,
     marker::PhantomData,
     sync::Arc,
@@ -17,8 +16,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord,
+            MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -181,12 +179,11 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
+        address_bits: usize,
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     ) -> Self {
         assert!(NUM_READS <= 2);
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let address_bits = memory_controller.mem_config().pointer_max_bits;
         assert!(
             RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
             "address_bits={address_bits} needs to be large enough for high limb range check"
@@ -194,7 +191,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
         Self {
             air: Rv32HeapBranchAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge: memory_controller.memory_bridge(),
+                memory_bridge,
                 bus: bitwise_lookup_chip.bus(),
                 address_bits,
             },
@@ -205,15 +202,15 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
 }
 
 #[derive(Clone, Debug)]
-pub struct Rv32HeapBranchReadRecord<F: Field, const NUM_READS: usize, const READ_SIZE: usize> {
-    pub rs_reads: [MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>; NUM_READS],
-    pub heap_reads: [MemoryReadRecord<F, READ_SIZE>; NUM_READS],
+pub struct Rv32HeapBranchReadRecord<const NUM_READS: usize, const READ_SIZE: usize> {
+    pub rs_reads: [RecordId; NUM_READS],
+    pub heap_reads: [RecordId; NUM_READS],
 }
 
 impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterChip<F>
     for Rv32HeapBranchAdapterChip<F, NUM_READS, READ_SIZE>
 {
-    type ReadRecord = Rv32HeapBranchReadRecord<F, NUM_READS, READ_SIZE>;
+    type ReadRecord = Rv32HeapBranchReadRecord<NUM_READS, READ_SIZE>;
     type WriteRecord = ExecutionState<u32>;
     type Air = Rv32HeapBranchAdapterAir<NUM_READS, READ_SIZE>;
     type Interface = BasicAdapterInterface<F, ImmInstruction<F>, NUM_READS, 0, READ_SIZE, 0>;
@@ -246,9 +243,9 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
 
         let record = Rv32HeapBranchReadRecord {
             rs_reads: rs_records,
-            heap_reads: heap_records,
+            heap_reads: heap_records.map(|r| r.0),
         };
-        Ok((heap_records.map(|r| r.data), record))
+        Ok((heap_records.map(|r| r.1), record))
     }
 
     fn postprocess(
@@ -280,23 +277,23 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
+        let aux_cols_factory = memory.aux_cols_factory();
         let row_slice: &mut Rv32HeapBranchAdapterCols<_, NUM_READS, READ_SIZE> =
             row_slice.borrow_mut();
         row_slice.from_state = write_record.map(F::from_canonical_u32);
-        row_slice.rs_ptr = read_record.rs_reads.map(|r| r.pointer);
-        row_slice.rs_val = read_record.rs_reads.map(|r| r.data);
-        row_slice.rs_read_aux = read_record
-            .rs_reads
-            .map(|r| aux_cols_factory.make_read_aux_cols(r));
+        let rs_reads = read_record.rs_reads.map(|r| memory.record_by_id(r));
+        row_slice.rs_ptr = array::from_fn(|i| rs_reads[i].pointer);
+        row_slice.rs_val = array::from_fn(|i| rs_reads[i].data.clone().try_into().unwrap());
+        row_slice.rs_read_aux =
+            array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs_reads[i]));
         row_slice.heap_read_aux = read_record
             .heap_reads
-            .map(|r| aux_cols_factory.make_read_aux_cols(r));
+            .map(|r| aux_cols_factory.make_read_aux_cols(memory.record_by_id(r)));
 
         // Range checks:
-        let need_range_check: Vec<u32> = read_record
-            .rs_reads
+        let need_range_check: Vec<u32> = rs_reads
             .iter()
             .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
             .chain(once(0)) // in case NUM_READS is odd

@@ -1,4 +1,4 @@
-use std::{array, borrow::BorrowMut, cell::RefCell, sync::Arc};
+use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
@@ -47,7 +47,8 @@ where
             return AirProofInput::simple(air, RowMajorMatrix::new(values, width), vec![]);
         }
         let records = self.records;
-        let memory_aux_cols_factory = RefCell::borrow(&self.memory_controller).aux_cols_factory();
+        let offline_memory = self.offline_memory.lock().unwrap();
+        let memory_aux_cols_factory = offline_memory.aux_cols_factory();
 
         let mem_ptr_shift: u32 =
             1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.air.ptr_max_bits);
@@ -55,13 +56,15 @@ where
         let mut states = Vec::with_capacity(height.div_ceil(SHA256_ROWS_PER_BLOCK));
         let mut global_block_idx = 0;
         for (record_idx, record) in records.iter().enumerate() {
+            let dst_read = offline_memory.record_by_id(record.dst_read);
+            let src_read = offline_memory.record_by_id(record.src_read);
+            let len_read = offline_memory.record_by_id(record.len_read);
+
             self.bitwise_lookup_chip.request_range(
-                record.dst_read.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
-                    * mem_ptr_shift,
-                record.src_read.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
-                    * mem_ptr_shift,
+                dst_read.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() * mem_ptr_shift,
+                src_read.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() * mem_ptr_shift,
             );
-            let len = compose(record.len_read.data);
+            let len = compose(len_read.data.clone().try_into().unwrap());
             let mut state = &None;
             for (i, input_message) in record.input_message.iter().enumerate() {
                 let input_message = input_message
@@ -130,8 +133,9 @@ where
                         &buffer,
                     );
 
-                    let block_reads =
-                        &records[state.message_idx].input_records[state.local_block_idx];
+                    let block_reads = records[state.message_idx].input_records
+                        [state.local_block_idx]
+                        .map(|record_id| offline_memory.record_by_id(record_id));
 
                     let mut read_ptr = block_reads[0].pointer;
                     let mut cur_timestamp = Val::<SC>::from_canonical_u32(block_reads[0].timestamp);
@@ -206,20 +210,24 @@ where
                             .map(Val::<SC>::from_canonical_u32);
                             if is_last_block {
                                 let record = &records[state.message_idx];
+                                let dst_read = offline_memory.record_by_id(record.dst_read);
+                                let src_read = offline_memory.record_by_id(record.src_read);
+                                let len_read = offline_memory.record_by_id(record.len_read);
+                                let digest_write = offline_memory.record_by_id(record.digest_write);
                                 cols.from_state = record.from_state;
-                                cols.rd_ptr = record.dst_read.pointer;
-                                cols.rs1_ptr = record.src_read.pointer;
-                                cols.rs2_ptr = record.len_read.pointer;
-                                cols.dst_ptr = record.dst_read.data;
-                                cols.src_ptr = record.src_read.data;
-                                cols.len_data = record.len_read.data;
+                                cols.rd_ptr = dst_read.pointer;
+                                cols.rs1_ptr = src_read.pointer;
+                                cols.rs2_ptr = len_read.pointer;
+                                cols.dst_ptr = dst_read.data.clone().try_into().unwrap();
+                                cols.src_ptr = src_read.data.clone().try_into().unwrap();
+                                cols.len_data = len_read.data.clone().try_into().unwrap();
                                 cols.register_reads_aux = [
-                                    memory_aux_cols_factory.make_read_aux_cols(record.dst_read),
-                                    memory_aux_cols_factory.make_read_aux_cols(record.src_read),
-                                    memory_aux_cols_factory.make_read_aux_cols(record.len_read),
+                                    memory_aux_cols_factory.make_read_aux_cols(dst_read),
+                                    memory_aux_cols_factory.make_read_aux_cols(src_read),
+                                    memory_aux_cols_factory.make_read_aux_cols(len_read),
                                 ];
-                                cols.writes_aux = memory_aux_cols_factory
-                                    .make_write_aux_cols(record.digest_write);
+                                cols.writes_aux =
+                                    memory_aux_cols_factory.make_write_aux_cols(digest_write);
                             }
                             cols.control.padding_occurred =
                                 Val::<SC>::from_bool(has_padding_occurred);

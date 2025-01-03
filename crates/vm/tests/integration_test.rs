@@ -163,11 +163,12 @@ fn test_vm_override_executor_height() {
 
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
     let res = executor.execute(committed_exe.exe.clone(), vec![]).unwrap();
+    // Memory trace heights are not computed during execution.
     assert_eq!(
         res.internal_heights.system,
         SystemTraceHeights {
             memory: MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
-                boundary: 1,
+                boundary: 0,
                 access_adapters: vec![0, 0, 0],
             }),
         }
@@ -680,10 +681,10 @@ fn test_vm_max_access_adapter_8() {
     let mut config = NativeConfig::default();
     {
         let chip_complex1 = config.create_chip_complex().unwrap();
-        let mem_ctrl1 = chip_complex1.base.memory_controller.borrow();
+        let mem_ctrl1 = chip_complex1.base.memory_controller;
         config.system.memory_config.max_access_adapter_n = 8;
         let chip_complex2 = config.create_chip_complex().unwrap();
-        let mem_ctrl2 = chip_complex2.base.memory_controller.borrow();
+        let mem_ctrl2 = chip_complex2.base.memory_controller;
         // AccessAdapterAir with N=16/32/64 are disabled.
         assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 3);
         assert_eq!(

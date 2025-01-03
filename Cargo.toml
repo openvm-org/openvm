@@ -193,7 +193,6 @@ zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9"
 halo2curves-axiom = "0.5.3"
 
 rayon = "1.10"
-parking_lot = "0.12.2"
 tracing = "0.1.40"
 bon = "3.2.0"
 serde_json = "1.0.117"

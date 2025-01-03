@@ -65,7 +65,6 @@ Here is the API of `VmInventoryBuilder`:
 
 ```rust
 impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
-    pub fn memory_controller(&self) -> &MemoryControllerRef<F>;
     pub fn system_base(&self) -> &SystemBase<F>;
     pub fn new_bus_idx(&mut self) -> usize;
     pub fn find_chip<C: 'static>(&self) -> Vec<&C>;

@@ -1,7 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -20,15 +19,15 @@ use openvm_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
+use super::memory::MemoryController;
 use crate::{
     arch::{
         ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
         PcIncOrSet, PhantomSubExecutor, Streams,
     },
-    system::{memory::MemoryControllerRef, program::ProgramBus},
+    system::program::ProgramBus,
 };
 
 #[cfg(test)]
@@ -87,25 +86,18 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
 pub struct PhantomChip<F> {
     pub air: PhantomAir,
     pub rows: Vec<PhantomCols<F>>,
-    memory: MemoryControllerRef<F>,
     streams: OnceLock<Arc<Mutex<Streams<F>>>>,
     phantom_executors: FxHashMap<PhantomDiscriminant, Box<dyn PhantomSubExecutor<F>>>,
 }
 
 impl<F> PhantomChip<F> {
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
-        offset: usize,
-    ) -> Self {
+    pub fn new(execution_bus: ExecutionBus, program_bus: ProgramBus, offset: usize) -> Self {
         Self {
             air: PhantomAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 phantom_opcode: VmOpcode::from_usize(offset + SystemOpcode::PHANTOM.as_usize()),
             },
             rows: vec![],
-            memory: memory_controller,
             streams: OnceLock::new(),
             phantom_executors: FxHashMap::default(),
         }
@@ -130,6 +122,7 @@ impl<F> PhantomChip<F> {
 impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
@@ -150,12 +143,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                     pc: from_state.pc,
                     discriminant,
                 })?;
-            let memory = RefCell::borrow(&self.memory);
-            let mut streams = self.streams.get().unwrap().lock();
+            let mut streams = self.streams.get().unwrap().lock().unwrap();
             sub_executor
                 .as_mut()
                 .phantom_execute(
-                    &memory,
+                    memory,
                     &mut streams,
                     discriminant,
                     a,
@@ -175,7 +167,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
             timestamp: F::from_canonical_u32(from_state.timestamp),
             is_valid: F::ONE,
         });
-        RefCell::borrow_mut(&self.memory).increment_timestamp();
+        memory.increment_timestamp();
         Ok(ExecutionState::new(
             from_state.pc + DEFAULT_PC_STEP,
             from_state.timestamp + 1,

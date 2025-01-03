@@ -1,9 +1,8 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use openvm_instructions::{instruction::Instruction, SystemOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use parking_lot::Mutex;
 
 use super::PhantomChip;
 use crate::arch::{instructions::UsizeOpcode, testing::VmChipTestBuilder, ExecutionState};
@@ -15,7 +14,6 @@ fn test_nops_and_terminate() {
     let mut chip = PhantomChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
         SystemOpcode::default_offset(),
     );
     chip.set_streams(Arc::new(Mutex::new(Default::default())));

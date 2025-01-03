@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     marker::PhantomData,
     sync::Arc,
 };
@@ -15,8 +14,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -50,17 +48,16 @@ impl<F: PrimeField32> Rv32HintStoreAdapterChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        memory_bridge: MemoryBridge,
+        pointer_max_bits: usize,
         range_checker_chip: Arc<VariableRangeCheckerChip>,
     ) -> Self {
-        let memory_controller = RefCell::borrow(&memory_controller);
-        let memory_bridge = memory_controller.memory_bridge();
         Self {
             air: Rv32HintStoreAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 range_bus: range_checker_chip.bus(),
-                pointer_max_bits: memory_controller.mem_config().pointer_max_bits,
+                pointer_max_bits,
             },
             range_checker_chip,
             _marker: PhantomData,
@@ -70,7 +67,7 @@ impl<F: PrimeField32> Rv32HintStoreAdapterChip<F> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32HintStoreReadRecord<F: Field> {
-    pub rs1_record: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1_record: RecordId,
     pub rs1_ptr: F,
 
     pub imm: F,
@@ -79,9 +76,9 @@ pub struct Rv32HintStoreReadRecord<F: Field> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32HintStoreWriteRecord<F: Field> {
+pub struct Rv32HintStoreWriteRecord {
     pub from_state: ExecutionState<u32>,
-    pub write: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub record_id: RecordId,
 }
 
 #[repr(C)]
@@ -229,7 +226,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
     type ReadRecord = Rv32HintStoreReadRecord<F>;
-    type WriteRecord = Rv32HintStoreWriteRecord<F>;
+    type WriteRecord = Rv32HintStoreWriteRecord;
     type Air = Rv32HintStoreAdapterAir;
     type Interface = BasicAdapterInterface<
         F,
@@ -255,7 +252,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         assert!(self.range_checker_chip.range_max_bits() >= 16);
 
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
-        let rs1_val = compose(rs1_record.data);
+        let rs1_val = compose(rs1_record.1);
         let imm = c.as_canonical_u32();
         let imm_sign = (imm & 0x8000) >> 15;
         let imm_extended = imm + imm_sign * 0xffff0000;
@@ -273,7 +270,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         Ok((
             [],
             Self::ReadRecord {
-                rs1_record,
+                rs1_record: rs1_record.0,
                 rs1_ptr: b,
                 imm: c,
                 imm_sign: imm_sign == 1,
@@ -292,7 +289,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let ptr = read_record.mem_ptr_limbs[0]
             + read_record.mem_ptr_limbs[1] * F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
-        let write_record = memory.write(instruction.e, ptr, output.writes[0]);
+        let (write_record_id, _) = memory.write(instruction.e, ptr, output.writes[0]);
 
         Ok((
             ExecutionState {
@@ -301,7 +298,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
             },
             Self::WriteRecord {
                 from_state,
-                write: write_record,
+                record_id: write_record_id,
             },
         ))
     }
@@ -311,17 +308,21 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
+        let aux_cols_factory = memory.aux_cols_factory();
         let adapter_cols: &mut Rv32HintStoreAdapterCols<_> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
-        adapter_cols.rs1_data = read_record.rs1_record.data;
-        adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(read_record.rs1_record);
+        let rs1 = memory.record_by_id(read_record.rs1_record);
+        adapter_cols.rs1_data = rs1.data.clone().try_into().unwrap();
+        adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(rs1);
         adapter_cols.rs1_ptr = read_record.rs1_ptr;
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
         adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs;
-        adapter_cols.write_aux = aux_cols_factory.make_write_aux_cols(write_record.write);
+
+        let rd = memory.record_by_id(write_record.record_id);
+        adapter_cols.write_aux = aux_cols_factory.make_write_aux_cols(rd);
     }
 
     fn air(&self) -> &Self::Air {

@@ -1,9 +1,13 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use openvm_algebra_transpiler::Fp2Opcode;
-use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
@@ -29,12 +33,12 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         offset: usize,
+        range_checker: Arc<VariableRangeCheckerChip>,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let (expr, is_add_flag, is_sub_flag) =
-            fp2_addsub_expr(config, memory_controller.borrow().range_checker.bus());
+        let (expr, is_add_flag, is_sub_flag) = fp2_addsub_expr(config, range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
@@ -44,11 +48,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
                 Fp2Opcode::SETUP_ADDSUB as usize,
             ],
             vec![is_add_flag, is_sub_flag],
-            memory_controller.borrow().range_checker.clone(),
+            range_checker,
             "Fp2AddSub",
             false,
         );
-        Self(VmChipWrapper::new(adapter, core, memory_controller))
+        Self(VmChipWrapper::new(adapter, core, offline_memory))
     }
 }
 
@@ -122,14 +126,16 @@ mod tests {
         let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, NUM_LIMBS, NUM_LIMBS>::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
+            tester.address_bits(),
             bitwise_chip.clone(),
         );
         let mut chip = Fp2AddSubChip::new(
             adapter,
-            tester.memory_controller(),
             config,
             Fp2Opcode::default_offset(),
+            tester.range_checker(),
+            tester.offline_memory_mutex_arc(),
         );
 
         let mut rng = StdRng::seed_from_u64(42);

@@ -72,7 +72,7 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -85,13 +85,17 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
+        let offline_memory = builder.system_base().offline_memory();
+        let address_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let keccak_chip = KeccakVmChip::new(
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
+            address_bits,
             bitwise_lu_chip,
             Rv32KeccakOpcode::default_offset(),
+            offline_memory,
         );
         inventory.add_executor(
             keccak_chip,

@@ -94,14 +94,14 @@ fn rand_jalr_test() {
     let adapter = Rv32JalrAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
     );
     let inner = Rv32JalrCoreChip::new(
         bitwise_chip.clone(),
         range_checker_chip.clone(),
         Rv32JalrOpcode::default_offset(),
     );
-    let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.memory_controller());
+    let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
@@ -145,7 +145,7 @@ fn run_negative_jalr_test(
     let adapter = Rv32JalrAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
     let inner = Rv32JalrCoreChip::new(
@@ -153,7 +153,7 @@ fn run_negative_jalr_test(
         range_checker_chip.clone(),
         Rv32JalrOpcode::default_offset(),
     );
-    let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.memory_controller());
+    let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
 
     set_and_execute(
         &mut tester,
@@ -164,6 +164,8 @@ fn run_negative_jalr_test(
         initial_pc,
         initial_rs1,
     );
+
+    let tester = tester.build();
 
     let jalr_trace_width = chip.trace_width();
     let mut chip_input = chip.generate_air_proof_input();
@@ -201,7 +203,6 @@ fn run_negative_jalr_test(
     drop(range_checker_chip);
     disable_debug_builder();
     let tester = tester
-        .build()
         .load_air_proof_input(chip_input)
         .load(bitwise_chip)
         .finalize();
@@ -286,14 +287,14 @@ fn execute_roundtrip_sanity_test() {
     let adapter = Rv32JalrAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
     );
     let inner = Rv32JalrCoreChip::new(
         bitwise_chip,
         range_checker_chip,
         Rv32JalrOpcode::default_offset(),
     );
-    let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.memory_controller());
+    let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {

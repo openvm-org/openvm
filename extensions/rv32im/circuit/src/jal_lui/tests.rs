@@ -90,10 +90,10 @@ fn rand_jal_lui_test() {
     let adapter = Rv32CondRdWriteAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
     );
     let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone(), Rv32JalLuiOpcode::default_offset());
-    let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
@@ -134,11 +134,11 @@ fn run_negative_jal_lui_test(
     let adapter = Rv32CondRdWriteAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
     let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone(), Rv32JalLuiOpcode::default_offset());
-    let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     set_and_execute(
         &mut tester,
@@ -148,6 +148,8 @@ fn run_negative_jal_lui_test(
         initial_imm,
         initial_pc,
     );
+
+    let tester = tester.build();
 
     let jal_lui_trace_width = chip.trace_width();
     let mut chip_input = chip.generate_air_proof_input();
@@ -187,7 +189,6 @@ fn run_negative_jal_lui_test(
 
     disable_debug_builder();
     let tester = tester
-        .build()
         .load_air_proof_input(chip_input)
         .load(bitwise_chip)
         .finalize();
@@ -318,10 +319,10 @@ fn execute_roundtrip_sanity_test() {
     let adapter = Rv32CondRdWriteAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
     );
     let core = Rv32JalLuiCoreChip::new(bitwise_chip, Rv32JalLuiOpcode::default_offset());
-    let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
     let num_tests: usize = 10;
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, JAL, None, None);

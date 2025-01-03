@@ -1,9 +1,13 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use openvm_algebra_circuit::Fp2;
-use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
@@ -37,22 +41,22 @@ impl<
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         offset: usize,
+        range_checker: Arc<VariableRangeCheckerChip>,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let expr =
-            miller_double_and_add_step_expr(config, memory_controller.borrow().range_checker.bus());
+        let expr = miller_double_and_add_step_expr(config, range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
             vec![PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize],
             vec![],
-            memory_controller.borrow().range_checker.clone(),
+            range_checker,
             "MillerDoubleAndAddStep",
             false,
         );
-        Self(VmChipWrapper::new(adapter, core, memory_controller))
+        Self(VmChipWrapper::new(adapter, core, offline_memory))
     }
 }
 
@@ -136,18 +140,20 @@ mod tests {
         let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
+            tester.address_bits(),
             bitwise_chip.clone(),
         );
         let mut chip = MillerDoubleAndAddStepChip::new(
             adapter,
-            tester.memory_controller(),
             ExprBuilderConfig {
                 modulus: BN254_MODULUS.clone(),
                 limb_bits: LIMB_BITS,
                 num_limbs: NUM_LIMBS,
             },
             PairingOpcode::default_offset(),
+            tester.range_checker(),
+            tester.offline_memory_mutex_arc(),
         );
 
         let mut rng0 = StdRng::seed_from_u64(2);

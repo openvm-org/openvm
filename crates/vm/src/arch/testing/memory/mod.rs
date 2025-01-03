@@ -1,9 +1,9 @@
-use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, sync::Arc};
+use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, rc::Rc, sync::Arc};
 
 use air::{DummyMemoryInteractionCols, MemoryDummyAir};
+use openvm_circuit::system::memory::MemoryController;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    interaction::InteractionType,
     p3_field::{AbstractField, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
@@ -12,10 +12,7 @@ use openvm_stark_backend::{
 };
 use rand::{seq::SliceRandom, Rng};
 
-use crate::system::memory::{
-    offline_checker::{MemoryBus, MemoryBusInteraction},
-    MemoryAddress, MemoryControllerRef,
-};
+use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress, RecordId};
 
 pub mod air;
 
@@ -28,13 +25,13 @@ const WORD_SIZE: usize = 1;
 #[derive(Debug)]
 pub struct MemoryTester<F> {
     pub bus: MemoryBus,
-    pub controller: MemoryControllerRef<F>,
-    /// Log of raw bus messages
-    pub records: Vec<MemoryBusInteraction<F>>,
+    pub controller: Rc<RefCell<MemoryController<F>>>,
+    /// Log of record ids
+    pub records: Vec<RecordId>,
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
-    pub fn new(controller: MemoryControllerRef<F>) -> Self {
+    pub fn new(controller: Rc<RefCell<MemoryController<F>>>) -> Self {
         let bus = controller.borrow().memory_bus;
         Self {
             bus,
@@ -47,35 +44,17 @@ impl<F: PrimeField32> MemoryTester<F> {
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
-        let read = RefCell::borrow_mut(&self.controller).read_cell(addr_space, pointer);
-        let address = MemoryAddress::new(addr_space, pointer);
-        self.records.push(self.bus.receive(
-            address,
-            read.data.to_vec(),
-            F::from_canonical_u32(read.prev_timestamp),
-        ));
-        self.records.push(self.bus.send(
-            address,
-            read.data.to_vec(),
-            F::from_canonical_u32(read.timestamp),
-        ));
-        read.value()
+        let (record_id, value) =
+            RefCell::borrow_mut(&self.controller).read_cell(addr_space, pointer);
+        self.records.push(record_id);
+        value
     }
 
     pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        let write = RefCell::borrow_mut(&self.controller).write_cell(addr_space, pointer, value);
-        let address = MemoryAddress::new(addr_space, pointer);
-        self.records.push(self.bus.receive(
-            address,
-            write.prev_data.to_vec(),
-            F::from_canonical_u32(write.prev_timestamp),
-        ));
-        self.records.push(self.bus.send(
-            address,
-            write.data.to_vec(),
-            F::from_canonical_u32(write.timestamp),
-        ));
+        let (record_id, _) =
+            RefCell::borrow_mut(&self.controller).write_cell(addr_space, pointer, value);
+        self.records.push(record_id);
     }
 
     pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
@@ -104,21 +83,38 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let offline_memory = self.controller.borrow().offline_memory();
+        let offline_memory = offline_memory.lock().unwrap();
+
         let air = self.air();
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
-        let mut values = Val::<SC>::zero_vec(height * width);
+        let mut values = Val::<SC>::zero_vec(2 * height * width);
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
-        for (row, record) in values.chunks_mut(width).zip(self.records) {
-            let row: &mut DummyMemoryInteractionCols<Val<SC>, WORD_SIZE> = row.borrow_mut();
-            row.address = record.address;
-            row.data = record.data.try_into().unwrap();
-            row.timestamp = record.timestamp;
-            row.count = match record.interaction_type {
-                InteractionType::Send => Val::<SC>::ONE,
-                InteractionType::Receive => -Val::<SC>::ONE,
+        for (row, id) in values.chunks_mut(2 * width).zip(self.records) {
+            let (first, second) = row.split_at_mut(width);
+            let row: &mut DummyMemoryInteractionCols<Val<SC>, WORD_SIZE> = first.borrow_mut();
+            let record = offline_memory.record_by_id(id);
+            row.address = MemoryAddress {
+                address_space: record.address_space,
+                pointer: record.pointer,
             };
+            row.data = match &record.prev_data {
+                Some(prev_data) => prev_data.clone().try_into().unwrap(),
+                None => record.data.clone().try_into().unwrap(),
+            };
+            row.timestamp = Val::<SC>::from_canonical_u32(record.prev_timestamp);
+            row.count = -Val::<SC>::ONE;
+
+            let row: &mut DummyMemoryInteractionCols<Val<SC>, WORD_SIZE> = second.borrow_mut();
+            row.address = MemoryAddress {
+                address_space: record.address_space,
+                pointer: record.pointer,
+            };
+            row.data = record.data.clone().try_into().unwrap();
+            row.timestamp = Val::<SC>::from_canonical_u32(record.timestamp);
+            row.count = Val::<SC>::ONE;
         }
         AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
     }

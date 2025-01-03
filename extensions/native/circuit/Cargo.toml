@@ -19,7 +19,6 @@ openvm-instructions = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-native-compiler = { workspace = true }
 
-parking_lot.workspace = true
 strum.workspace = true
 itertools.workspace = true
 tracing.workspace = true
