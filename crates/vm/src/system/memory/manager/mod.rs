@@ -371,9 +371,9 @@ impl<F: PrimeField32> MemoryController<F> {
         )
     }
 
-    pub fn read_cell(&mut self, address_space: F, pointer: F) -> (RecordId, [F; 1]) {
-        // TODO: try to make return (usize, F)?
-        self.read(address_space, pointer)
+    pub fn read_cell(&mut self, address_space: F, pointer: F) -> (RecordId, F) {
+        let (record_id, [data]) = self.read(address_space, pointer);
+        (record_id, data)
     }
 
     pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> (RecordId, [F; N]) {
@@ -412,8 +412,6 @@ impl<F: PrimeField32> MemoryController<F> {
         let (record_id, [data]) = self.write(address_space, pointer, [data]);
         (record_id, data)
     }
-
-    // TODO PLAN: change what read/write return without introducing the offline memory
 
     pub fn write<const N: usize>(
         &mut self,
@@ -461,7 +459,7 @@ impl<F: PrimeField32> MemoryController<F> {
         let mut offline_memory = self.offline_memory.lock().unwrap();
         let log = mem::take(&mut self.memory.log);
         for entry in log {
-            match entry {
+            let records = match entry {
                 MemoryLogEntry::Read {
                     address_space,
                     pointer,
@@ -473,10 +471,7 @@ impl<F: PrimeField32> MemoryController<F> {
                                 .touch_address(address_space, pointer + i);
                         }
                     }
-                    let adapter_records = offline_memory.read(address_space, pointer, len);
-                    for record in adapter_records {
-                        self.access_adapters.add_record(record);
-                    }
+                    offline_memory.read(address_space, pointer, len)
                 }
                 MemoryLogEntry::Write {
                     address_space,
@@ -489,15 +484,16 @@ impl<F: PrimeField32> MemoryController<F> {
                                 .touch_address(address_space, pointer + i);
                         }
                     }
-                    let adapter_records = offline_memory.write(address_space, pointer, data);
-                    for record in adapter_records {
-                        self.access_adapters.add_record(record);
-                    }
+                    offline_memory.write(address_space, pointer, data)
                 }
                 MemoryLogEntry::IncrementTimestampBy(amount) => {
-                    offline_memory.increment_timestamp_by(amount)
+                    offline_memory.increment_timestamp_by(amount);
+                    vec![]
                 }
             };
+            for record in records {
+                self.access_adapters.add_record(record);
+            }
         }
     }
 
@@ -510,15 +506,12 @@ impl<F: PrimeField32> MemoryController<F> {
         self.replay_access_log();
         let mut offline_memory = self.offline_memory.lock().unwrap();
 
-        match &mut self.interface_chip {
+        let records = match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 let (final_memory, records) = offline_memory.finalize::<1>();
-                for record in records {
-                    self.access_adapters.add_record(record);
-                }
                 boundary_chip.finalize(final_memory);
                 self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
-                // None
+                records
             }
             MemoryInterface::Persistent {
                 merkle_chip,
@@ -528,9 +521,6 @@ impl<F: PrimeField32> MemoryController<F> {
                 let hasher = hasher.unwrap();
 
                 let (final_partition, records) = offline_memory.finalize::<CHUNK>();
-                for record in records {
-                    self.access_adapters.add_record(record);
-                }
                 boundary_chip.finalize(initial_memory, &final_partition, hasher);
                 let final_memory_values = final_partition
                     .into_par_iter()
@@ -545,9 +535,11 @@ impl<F: PrimeField32> MemoryController<F> {
                 self.final_state = Some(FinalState::Persistent(PersistentFinalState {
                     final_memory: final_memory_values.clone(),
                 }));
-                // FIXME: avoid clone here.
-                // Some(final_memory_values)
+                records
             }
+        };
+        for record in records {
+            self.access_adapters.add_record(record);
         }
     }
 

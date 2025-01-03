@@ -372,9 +372,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             memory.unsafe_read_cell(addr_space, alpha_pow_ptr + F::from_canonical_usize(i))
         });
         let mut alpha_pow = alpha_pow_original;
-        let length = length_read.1[0].as_canonical_u32() as usize;
-        let a_ptr = a_ptr_read.1[0];
-        let b_ptr = b_ptr_read.1[0];
+        let length = length_read.1.as_canonical_u32() as usize;
+        let a_ptr = a_ptr_read.1;
+        let b_ptr = b_ptr_read.1;
 
         let mut a_reads = Vec::with_capacity(length);
         let mut b_reads = Vec::with_capacity(length);
@@ -385,7 +385,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             let b_read = memory.read(addr_space, b_ptr + F::from_canonical_usize(4 * i));
             a_reads.push(a_read);
             b_reads.push(b_read);
-            let a = a_read.1[0];
+            let a = a_read.1;
             let b = b_read.1;
             result = FieldExtension::add(
                 result,

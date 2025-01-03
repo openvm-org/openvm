@@ -298,17 +298,15 @@ impl<
         let reads = rs_records.map(|record| {
             // TODO: assert address has < 2^address_bits
             from_fn(|i| {
-                memory.read::<READ_SIZE>(
-                    e,
-                    record.1[0] + F::from_canonical_u32((i * READ_SIZE) as u32),
-                )
+                memory
+                    .read::<READ_SIZE>(e, record.1 + F::from_canonical_u32((i * READ_SIZE) as u32))
             })
         });
 
         let record = NativeVecHeapReadRecord {
             rs: rs_records.map(|r| r.0),
             rd: rd_record.0,
-            rd_val: rd_record.1[0],
+            rd_val: rd_record.1,
             ptr_as: d,
             heap_as: e,
             reads: reads.map(|r| r.map(|x| x.0)),

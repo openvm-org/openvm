@@ -103,12 +103,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
             Poseidon2Opcode::COMP_POS2 => Some(memory.read_cell(d, c)),
         };
 
-        let read1 = memory.read::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, rs1.1[0]);
+        let read1 = memory.read::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, rs1.1);
         let read2 = memory.read::<NATIVE_POSEIDON2_CHUNK_SIZE>(
             e,
             match rs2 {
-                Some(rs2) => rs2.1[0],
-                None => rs1.1[0] + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
+                Some(rs2) => rs2.1,
+                None => rs1.1 + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
             },
         );
 
@@ -122,13 +122,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
         let output2: [F; NATIVE_POSEIDON2_CHUNK_SIZE] =
             from_fn(|i| output_state[NATIVE_POSEIDON2_CHUNK_SIZE + i]);
 
-        let (write1, _) = memory.write::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, rd.1[0], output1);
+        let (write1, _) = memory.write::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, rd.1, output1);
         let write2 = match local_opcode {
             Poseidon2Opcode::PERM_POS2 => Some(
                 memory
                     .write::<NATIVE_POSEIDON2_CHUNK_SIZE>(
                         e,
-                        rd.1[0] + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
+                        rd.1 + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
                         output2,
                     )
                     .0,

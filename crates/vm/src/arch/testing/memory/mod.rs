@@ -45,7 +45,7 @@ impl<F: PrimeField32> MemoryTester<F> {
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
-        let (record_id, [value]) =
+        let (record_id, value) =
             RefCell::borrow_mut(&self.controller).read_cell(addr_space, pointer);
         self.records.push(record_id);
         value

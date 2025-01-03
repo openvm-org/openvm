@@ -298,11 +298,11 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         };
         let (data_read_ptr, data_write_ptr) = {
             match local_opcode {
-                LOADW => (read1_cell.1[0] + b, a),
-                LOADW2 => (read1_cell.1[0] + b + read2_cell.unwrap().1[0] * g, a),
-                STOREW => (a, read1_cell.1[0] + b),
-                STOREW2 => (a, read1_cell.1[0] + b + read2_cell.unwrap().1[0] * g),
-                SHINTW => (a, read1_cell.1[0] + b),
+                LOADW => (read1_cell.1 + b, a),
+                LOADW2 => (read1_cell.1 + b + read2_cell.unwrap().1 * g, a),
+                STOREW => (a, read1_cell.1 + b),
+                STOREW2 => (a, read1_cell.1 + b + read2_cell.unwrap().1 * g),
+                SHINTW => (a, read1_cell.1 + b),
             }
         };
 
@@ -328,7 +328,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         Ok((
             (
-                [read1_cell.1[0], read2_cell.map_or(F::ZERO, |x| x.1[0])],
+                [read1_cell.1, read2_cell.map_or(F::ZERO, |x| x.1)],
                 data_read.map_or(F::ZERO, |x| x.1[0]),
             ),
             record,
