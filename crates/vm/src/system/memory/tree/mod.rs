@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use openvm_stark_backend::p3_field::PrimeField32;
 use MemoryNode::*;
 
-use super::manager::dimensions::MemoryDimensions;
+use super::controller::dimensions::MemoryDimensions;
 use crate::{
     arch::hasher::{Hasher, HasherChip},
     system::memory::MemoryImage,

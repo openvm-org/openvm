@@ -13,7 +13,7 @@ use rustc_hash::FxHashSet;
 use crate::{
     arch::hasher::HasherChip,
     system::memory::{
-        manager::dimensions::MemoryDimensions,
+        controller::dimensions::MemoryDimensions,
         merkle::{FinalState, MemoryMerkleChip, MemoryMerkleCols},
         tree::MemoryNode::{self, NonLeaf},
         Equipartition,

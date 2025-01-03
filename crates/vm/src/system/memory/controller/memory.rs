@@ -630,7 +630,7 @@ mod tests {
     use super::{BlockData, Memory};
     use crate::system::memory::{
         adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
-        manager::MemoryRecord,
+        controller::MemoryRecord,
         offline_checker::MemoryBus,
         MemoryImage, OfflineMemory, TimestampedValues,
     };

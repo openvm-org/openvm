@@ -1,7 +1,7 @@
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::system::memory::{
-    manager::memory::MemoryImage,
+    controller::memory::MemoryImage,
     merkle::{DirectCompressionBus, MemoryMerkleChip},
     persistent::PersistentBoundaryChip,
     volatile::VolatileBoundaryChip,

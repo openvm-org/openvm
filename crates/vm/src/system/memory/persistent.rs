@@ -25,8 +25,9 @@ use super::merkle::DirectCompressionBus;
 use crate::{
     arch::hasher::HasherChip,
     system::memory::{
-        dimensions::MemoryDimensions, manager::memory::INITIAL_TIMESTAMP, merkle::MemoryMerkleBus,
-        offline_checker::MemoryBus, MemoryAddress, MemoryImage, TimestampedEquipartition,
+        controller::memory::INITIAL_TIMESTAMP, dimensions::MemoryDimensions,
+        merkle::MemoryMerkleBus, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
+        TimestampedEquipartition,
     },
 };
 

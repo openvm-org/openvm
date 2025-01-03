@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     arch::hasher::Hasher,
     system::memory::{
-        dimensions::MemoryDimensions, manager::memory::Address, tree::MemoryNode, MemoryImage,
+        controller::memory::Address, dimensions::MemoryDimensions, tree::MemoryNode, MemoryImage,
     },
 };
 

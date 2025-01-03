@@ -34,8 +34,8 @@ use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
     system::memory::{
         adapter::AccessAdapterInventory,
+        controller::memory::{MemoryLogEntry, INITIAL_TIMESTAMP},
         dimensions::MemoryDimensions,
-        manager::memory::{MemoryLogEntry, INITIAL_TIMESTAMP},
         merkle::{MemoryMerkleBus, MemoryMerkleChip},
         offline_checker::{
             MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
@@ -51,7 +51,7 @@ mod interface;
 pub(super) mod memory;
 pub use memory::{MemoryImage, MemoryReadRecord, MemoryWriteRecord, OfflineMemory, RecordId};
 
-pub(crate) use crate::system::memory::manager::memory::Memory;
+pub(crate) use crate::system::memory::controller::memory::Memory;
 
 pub const CHUNK: usize = 8;
 /// The offset of the Merkle AIR in AIRs of MemoryController.
