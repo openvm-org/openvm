@@ -2,7 +2,7 @@
 
 While the CLI provides a convenient way to build, prove, and verify programs, you may want more fine-grained control over the process. The OpenVM Rust SDK allows you to customize various aspects of the workflow programmatically.
 
-For more information on the basic CLI flow, see [Overview of Basic Usage](../../writing-apps/overview.md). Writing a guest program is the same as in the CLI.
+For more information on the basic CLI flow, see [Overview of Basic Usage](../writing-apps/overview.md). Writing a guest program is the same as in the CLI.
 
 ## Imports and Setup
 
@@ -50,7 +50,7 @@ The `StdIn` struct allows you to format any serializable type into a VM-readable
 
 There are two types of proofs that you can generate, with the sections below continuing from this point.
 
-- [App Proof](#app-proof): Generates a STARK proof of the guest program
+- [App Proof](#app-proof): Generates a STARK proof(s) of the guest program
 - [EVM Proof](#evm-proof): Generates a halo2 proof that can be posted on-chain
 
 ## App Proof
@@ -88,7 +88,7 @@ cargo openvm setup
 > `cargo openvm setup` requires very large amounts of computation and memory (~200 GB).
 
 <details>
-<summary>Also note that there are additional dependncies for the EVM Proof flow. Click here to show.</summary>
+<summary>Also note that there are additional dependencies for the EVM Proof flow. Click here to view.</summary>
 
 ```rust,no_run,noplayground
 {{ #include ../../../crates/sdk/examples/sdk_app.rs:dependencies }}
