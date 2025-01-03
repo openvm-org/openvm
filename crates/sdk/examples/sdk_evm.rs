@@ -69,36 +69,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let my_input = SomeStruct { a: 1, b: 2 }; // anything that can be serialized
     let mut stdin = StdIn::default();
     stdin.write(&my_input);
-
-    // 5. Run the program
-    let output = sdk.execute(exe.clone(), vm_config.clone(), stdin.clone())?;
-    println!("public values output: {:?}", output);
     // ANCHOR_END: execution
 
-    // ANCHOR: proof_generation
-    // 6. Set app configuration
+    // ANCHOR: keygen
+    // 5. Set app configuration
     let app_log_blowup = 2;
     let app_fri_params = FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup);
     let app_config = AppConfig::new(app_fri_params, vm_config);
 
-    // 7. Commit the exe
+    // 6. Commit the exe
     let app_committed_exe = sdk.commit_app_exe(app_fri_params, exe)?;
 
-    // 8. Generate an AppProvingKey
+    // 7. Generate an AppProvingKey
     let app_pk = Arc::new(sdk.app_keygen(app_config)?);
-    // ANCHOR_END: proof_generation
+    // ANCHOR_END: keygen
 
     // ANCHOR: evm_verification
-    // 9. Generate the aggregation proving key
+    // 8. Generate the aggregation proving key
     const DEFAULT_PARAMS_DIR: &str = concat!(env!("HOME"), "/.openvm/params/");
     let halo2_params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
     let agg_config = AggConfig::default();
     let agg_pk = sdk.agg_keygen(agg_config, &halo2_params_reader)?;
 
-    // 10. Generate the SNARK verifier contract
+    // 9. Generate the SNARK verifier contract
     let verifier = sdk.generate_snark_verifier_contract(&halo2_params_reader, &agg_pk)?;
 
-    // 11. Generate an EVM proof
+    // 10. Generate an EVM proof
     let proof = sdk.generate_evm_proof(
         &halo2_params_reader,
         app_pk,
@@ -107,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         stdin,
     )?;
 
-    // 12. Verify the EVM proof
+    // 11. Verify the EVM proof
     let success = sdk.verify_evm_proof(&verifier, &proof);
     assert!(success);
     // ANCHOR_END: evm_verification
