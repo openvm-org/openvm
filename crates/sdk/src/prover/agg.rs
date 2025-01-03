@@ -126,31 +126,27 @@ impl AggStarkProver {
                 &proofs,
                 self.num_children_internal,
             );
-            proofs = info_span!("agg_layer", group = "internal.{}", internal_node_height).in_scope(
-                || {
-                    #[cfg(feature = "bench-metrics")]
-                    {
-                        metrics::counter!("fri.log_blowup")
-                            .absolute(self.internal_prover.fri_params().log_blowup as u64);
-                        metrics::counter!("num_children")
-                            .absolute(self.num_children_internal as u64);
-                    }
-                    internal_inputs
-                        .into_iter()
-                        .map(|input| {
-                            internal_node_idx += 1;
-                            info_span!("single_internal_agg", idx = internal_node_idx,).in_scope(
-                                || {
-                                    SingleSegmentVmProver::prove(
-                                        &self.internal_prover,
-                                        input.write(),
-                                    )
-                                },
-                            )
+            proofs = info_span!(
+                "agg_layer",
+                group = format!("internal.{internal_node_height}")
+            )
+            .in_scope(|| {
+                #[cfg(feature = "bench-metrics")]
+                {
+                    metrics::counter!("fri.log_blowup")
+                        .absolute(self.internal_prover.fri_params().log_blowup as u64);
+                    metrics::counter!("num_children").absolute(self.num_children_internal as u64);
+                }
+                internal_inputs
+                    .into_iter()
+                    .map(|input| {
+                        internal_node_idx += 1;
+                        info_span!("single_internal_agg", idx = internal_node_idx,).in_scope(|| {
+                            SingleSegmentVmProver::prove(&self.internal_prover, input.write())
                         })
-                        .collect()
-                },
-            );
+                    })
+                    .collect()
+            });
             internal_node_height += 1;
         }
         proofs.pop().unwrap()
