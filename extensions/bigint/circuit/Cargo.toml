@@ -24,7 +24,6 @@ derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 serde.workspace = true
-parking_lot = { workspace = true }
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

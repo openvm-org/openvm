@@ -125,10 +125,6 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
         }
     }
 
-    pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
-        &self.system.memory_controller
-    }
-
     pub fn system_config(&self) -> &SystemConfig {
         self.system_config
     }
