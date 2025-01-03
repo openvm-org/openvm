@@ -96,7 +96,7 @@ fn negative_castf_overflow_test() {
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
-    drop(tester);
+    tester.build();
 
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();
@@ -134,7 +134,7 @@ fn negative_castf_memread_test() {
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
-    drop(tester);
+    tester.build();
 
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();
@@ -172,7 +172,7 @@ fn negative_castf_memwrite_test() {
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
-    drop(tester);
+    tester.build();
 
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();
@@ -210,7 +210,7 @@ fn negative_castf_as_test() {
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
-    drop(tester);
+    tester.build();
 
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();

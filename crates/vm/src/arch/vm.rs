@@ -233,7 +233,6 @@ where
         let mut segments = self.execute_segments(exe, input)?;
         let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
 
-        #[allow(unused_variables)]
         Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()

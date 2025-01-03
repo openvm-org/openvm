@@ -140,6 +140,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
             [5, 6, 7, 1, 1, 1],
         ),
     );
+    tester.build();
 
     let mut chip_input = chip.generate_air_proof_input();
     // set the value of [c]_f to zero, necessary to bypass trace gen checks

@@ -38,6 +38,7 @@ where
         let total_num_blocks: usize = records.iter().map(|r| r.input_blocks.len()).sum();
         let mut states = Vec::with_capacity(total_num_blocks);
         let mut instruction_blocks = Vec::with_capacity(total_num_blocks);
+        let memory = self.offline_memory.lock().unwrap();
 
         #[derive(Clone)]
         struct StateDiff {
@@ -65,7 +66,6 @@ where
         // prepare the states
         let mut state: [u64; 25];
         for record in records {
-            let memory = self.offline_memory.lock().unwrap();
             let dst_read = memory.record_by_id(record.dst_read);
             let src_read = memory.record_by_id(record.src_read);
             let len_read = memory.record_by_id(record.len_read);
@@ -145,15 +145,12 @@ where
         // Resize with dummy `is_enabled = 0`
         instruction_blocks.resize(num_blocks, Default::default());
 
-        let offline_memory = self.offline_memory.lock().unwrap();
-        let aux_cols_factory = offline_memory.aux_cols_factory();
+        let aux_cols_factory = memory.aux_cols_factory();
 
         // Use unsafe alignment so we can parallely write to the matrix
         let mut trace =
             RowMajorMatrix::new(Val::<SC>::zero_vec(num_rows * trace_width), trace_width);
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.ptr_max_bits;
-
-        let memory = self.offline_memory.lock().unwrap();
 
         trace
             .values

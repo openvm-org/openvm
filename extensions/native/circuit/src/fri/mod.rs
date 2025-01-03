@@ -446,7 +446,7 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
         record: FriReducedOpeningRecord<F>,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
         slice: &mut [F],
-        memory: &Arc<Mutex<OfflineMemory<F>>>,
+        memory: &OfflineMemory<F>,
     ) {
         let width = FriReducedOpeningCols::<F>::width();
 
@@ -460,8 +460,6 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
             g: alpha_pow_ptr,
             ..
         } = record.instruction;
-
-        let memory = memory.lock().unwrap();
 
         let length_read = memory.record_by_id(record.length_read);
         let alpha_read = memory.record_by_id(record.alpha_read);
@@ -560,7 +558,7 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
                 record,
                 &aux_cols_factory,
                 &mut flat_trace[idx..idx + (length * width)],
-                &self.offline_memory,
+                &memory,
             );
             idx += length * width;
         }
