@@ -138,7 +138,6 @@ struct FinalTouchedLabel<F, const CHUNK: usize> {
     label: u32,
     init_values: [F; CHUNK],
     final_values: [F; CHUNK],
-    init_exists: bool,
     init_hash: [F; CHUNK],
     final_hash: [F; CHUNK],
     final_timestamp: u32,
@@ -207,15 +206,10 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 let final_touched_labels = touched_labels
                     .iter()
                     .map(|touched_label| {
-                        let (init_exists, initial_hash, init_values) =
-                            match initial_memory.get(touched_label) {
-                                Some(values) => (true, hasher.hash_and_record(values), *values),
-                                None => (
-                                    true,
-                                    hasher.hash_and_record(&[F::ZERO; CHUNK]),
-                                    [F::ZERO; CHUNK],
-                                ),
-                            };
+                        let init_values = *initial_memory
+                            .get(touched_label)
+                            .unwrap_or(&[F::ZERO; CHUNK]);
+                        let initial_hash = hasher.hash_and_record(&init_values);
                         let timestamped_values = final_memory.get(touched_label).unwrap();
                         let final_hash = hasher.hash_and_record(&timestamped_values.values);
                         FinalTouchedLabel {
@@ -223,7 +217,6 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                             label: touched_label.1,
                             init_values,
                             final_values: timestamped_values.values,
-                            init_exists,
                             init_hash: initial_hash,
                             final_hash,
                             final_timestamp: timestamped_values.timestamp,
@@ -276,11 +269,7 @@ where
                         leaf_label: Val::<SC>::from_canonical_u32(touched_label.label),
                         values: touched_label.init_values,
                         hash: touched_label.init_hash,
-                        timestamp: if touched_label.init_exists {
-                            Val::<SC>::from_canonical_u32(INITIAL_TIMESTAMP)
-                        } else {
-                            Val::<SC>::ZERO
-                        },
+                        timestamp: Val::<SC>::from_canonical_u32(INITIAL_TIMESTAMP),
                     };
 
                     *final_row.borrow_mut() = PersistentBoundaryCols {
