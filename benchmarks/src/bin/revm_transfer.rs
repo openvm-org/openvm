@@ -26,7 +26,6 @@ use tracing::info_span;
 fn main() -> Result<()> {
     let cli_args = BenchmarkCli::parse();
     let app_log_blowup = cli_args.app_log_blowup.unwrap_or(2);
-    // let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
 
     let elf = build_bench_program("revm_transfer")?;
     let exe = VmExe::from_elf(

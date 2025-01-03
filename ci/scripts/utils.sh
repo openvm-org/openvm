@@ -25,10 +25,9 @@ add_metadata() {
     local max_segment_length="$2"
     local instance_type="$3"
     local memory_allocator="$4"
-    local repo="$5"
-    local run_id="$6"
+    local commit_url="$5"
+    local benchmark_workflow_url="$6"
 
-    commit_url="https://github.com/${repo}/commit/${current_sha}"
     echo "" >> $result_path
     if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
         echo "<details>" >> $result_path
@@ -51,7 +50,7 @@ add_metadata() {
     echo "" >> $result_path
     echo "Memory Allocator: $memory_allocator" >> $result_path
     echo "" >> $result_path
-    echo "[Benchmark Workflow](https://github.com/${repo}/actions/runs/${run_id})" >> $result_path
+    echo "[Benchmark Workflow](${benchmark_workflow_url})" >> $result_path
 }
 
 commit_and_push_benchmark_results() {

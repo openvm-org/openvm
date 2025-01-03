@@ -39,11 +39,7 @@ async fn main() -> Result<()> {
     let root_fri_params = standard_fri_params_with_100_bits_conjectured_security(
         cli_args.root_log_blowup.unwrap_or(2),
     );
-    let compiler_options = CompilerOptions {
-        // For metric collection
-        enable_cycle_tracker: true,
-        ..Default::default()
-    };
+    let compiler_options = CompilerOptions::default();
 
     // Must be larger than RangeTupleCheckerAir.height == 524288
     let max_segment_length = cli_args.max_segment_length.unwrap_or(1_000_000);
@@ -89,8 +85,7 @@ async fn main() -> Result<()> {
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || {
         let mut e2e_prover =
-            ContinuationProver::new(&halo2_params_reader, app_pk, app_committed_exe, full_agg_pk)
-                .with_profiling();
+            ContinuationProver::new(&halo2_params_reader, app_pk, app_committed_exe, full_agg_pk);
         e2e_prover.set_program_name("fib_e2e");
         let _proof = e2e_prover.generate_proof_for_evm(stdin);
     });

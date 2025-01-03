@@ -10,10 +10,16 @@ on:
       - "crates/circuits/**"
       - "crates/vm/**"
       - "crates/toolchain/**"
-      - "crates/extensions/**"
+      - "extensions/**"
       - "benchmarks/**"
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
+  workflow_dispatch:
+    inputs:
+      run-benchmark-e2e:
+        description: "Run end-to-end benchmarks"
+        required: false
+        default: "false"
 
 concurrency:
   group: benchmark-${{ github.event.pull_request.number || github.sha }}
@@ -25,6 +31,8 @@ env:
   CURRENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
+  S3_MD_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results
 
 permissions:
   contents: write
@@ -40,8 +48,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ CURRENT_SHA }}
-          repository: ${{ REPO }}
+          ref: ${{ env.CURRENT_SHA }}
+          repository: ${{ env.REPO }}
 
       - name: Create benchmark matrix from JSON
         id: create-matrix
@@ -56,7 +64,7 @@ jobs:
             LABELS='${{ toJson(github.event.pull_request.labels) }}'
             RUN_E2E=$(echo "$LABELS" | jq 'any(.name == "run-benchmark-e2e")')
           else
-            RUN_E2E=false
+            RUN_E2E=${{ github.event.inputs.run-benchmark-e2e || 'false' }}
           fi
 
           matrix=$(jq -c --argjson run_e2e $RUN_E2E '
@@ -135,8 +143,17 @@ jobs:
       ##########################################################################
       - uses: actions/checkout@v4
         with:
-          ref: ${{ CURRENT_SHA }}
-          repository: ${{ REPO }}
+          ref: ${{ env.CURRENT_SHA }}
+          repository: ${{ env.REPO }}
+
+      - name: Install openvm-prof
+        working-directory: crates/prof
+        run: cargo install --force --profile=dev --path .
+
+      - name: Set github pages path for dispatch
+        run: |
+          BENCHMARK_RESULTS_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
+          echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
       - name: Set github pages path for PR
         if: github.event_name == 'pull_request'
@@ -150,59 +167,84 @@ jobs:
           BENCHMARK_RESULTS_PATH="benchmarks"
           echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
-      - name: Load all metadata files from S3
+      - name: Download all metric json files from S3
         run: |
-          current_sha=$(git rev-parse HEAD)
-          md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
+          json_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
-            select(.e2e_bench != true) |
-            "\(.id)-"' |
-            sed "s/$/${current_sha}.md/" |
-            sort)
-          md_file_list=$(echo -n "$md_files" | paste -sd "," -)
+            "\(.id)-${{ env.CURRENT_SHA }}.json"')
+          json_file_list=$(echo -n "$json_files" | paste -sd "," -)
+          echo $json_file_list
 
-          e2e_md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
+          prev_json_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
-            select(.e2e_bench == true) |
-            "\(.id)-"' |
-            sed "s/$/${current_sha}.md/" |
-            sort)
-          e2e_md_file_list=$(echo -n "$e2e_md_files" | paste -sd "," -)
+            "main-\(.id).json"')
+          prev_json_file_list=$(echo -n "$prev_json_files" | paste -sd "," -)
+          echo $prev_json_file_list
 
-          while read md_file; do
-            if [ -z "$md_file" ]; then
+          (echo "$json_files"; echo "$prev_json_files") | while read json_file; do
+            if [ -z "$json_file" ]; then
               continue
             fi
-            echo "Downloading results for benchmark: $md_file"
-            s5cmd cp "s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results/${md_file}" "${md_file}"
-          done <<< "$md_files"
+            echo "Downloading metrics for benchmark: $json_file"
+            if ! s5cmd cp "${{ env.S3_METRICS_PATH }}/${json_file}" "${json_file}"; then
+              echo "Warning: Failed to download ${json_file}, skipping..."
+              continue
+            fi
+          done
 
-          E2E_FILE_LIST=""
-          if [[ -n "$e2e_md_files" ]]; then
-            while read e2e_md_file; do
-              echo "Downloading results for benchmark: $e2e_md_file"
-              s5cmd cp "s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results/${e2e_md_file}" "${e2e_md_file}"
-            done <<< "$e2e_md_files"
-            E2E_FILE_LIST="${e2e_md_file_list}"
-          fi
+          openvm-prof --json-paths "${json_file_list}" \
+            --prev-json-paths "${prev_json_file_list}" \
+            summary \
+            --benchmark-results-link "https://github.com/${{ github.repository }}/blob/benchmark-results/${BENCHMARK_RESULTS_PATH}" \
+            --summary-md-path summary.md
 
-          echo "Benchmarks: ${md_file_list}"
-          echo "E2E Benchmarks: ${E2E_FILE_LIST}"
+          COMMIT_URL=https://github.com/${{ github.repository }}/commit/${CURRENT_SHA}
+          BENCHMARK_WORKFLOW_URL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TMP_DIR=/tmp/benchmark-results/${{ env.CURRENT_SHA }}
+          echo "TMP_DIR=${TMP_DIR}" >> $GITHUB_ENV
+          mkdir -p ${TMP_DIR}
 
-          python3 ci/scripts/metric_unify/summarize.py "${md_file_list}" \
-            --e2e-md-files "${E2E_FILE_LIST}" \
-            --aggregation-json ci/scripts/metric_unify/aggregation.json \
-            --benchmark-results-link "https://github.com/${{ github.repository }}/blob/benchmark-results/${BENCHMARK_RESULTS_PATH}"
+          # add metadata to markdown files
+          source ci/scripts/utils.sh
+          # Parse matrix data into associative arrays
+          while IFS= read -r line; do
+            # Convert .json to .md
+            md_file="${line%.json}.md"
+
+            id=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r --arg file "$line" '.[] |
+              select(.id == ($file | split("-")[0])) |
+              {
+                max_segment_length: .max_segment_length,
+                instance_type: .instance_type,
+                memory_allocator: .memory_allocator
+              }')
+
+            if [ ! -z "$id" ]; then
+              max_segment_length=$(echo "$id" | jq -r '.max_segment_length')
+              instance_type=$(echo "$id" | jq -r '.instance_type')
+              memory_allocator=$(echo "$id" | jq -r '.memory_allocator')
+
+              # Call add_metadata for each file with its corresponding data
+              add_metadata \
+                "$md_file" \
+                "$max_segment_length" \
+                "$instance_type" \
+                "$memory_allocator" \
+                "$COMMIT_URL" \
+                "$BENCHMARK_WORKFLOW_URL"
+            fi
+            cp "$md_file" "${TMP_DIR}/"
+          done <<< "$json_files"
 
           echo "" >> summary.md
-          echo "Commit: https://github.com/${{ github.repository }}/commit/${CURRENT_SHA}" >> summary.md
+          echo "Commit: $COMMIT_URL" >> summary.md
           echo "" >> summary.md
-          echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> summary.md
-          mkdir -p /tmp/benchmark-results/
-          cp summary.md /tmp/benchmark-results/
+          echo "[Benchmark Workflow]($BENCHMARK_WORKFLOW_URL)" >> summary.md
+
+          cp summary.md ${TMP_DIR}/
 
       ##########################################################################
-      # Update benchmark-results with summary upon a PR event                           #
+      # Update benchmark-results branch with summary upon a PR event           #
       ##########################################################################
       - uses: actions/checkout@v4
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
@@ -219,14 +261,36 @@ jobs:
         if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
           mkdir -p ${BENCHMARK_RESULTS_PATH}
-          cp /tmp/benchmark-results/summary.md ${BENCHMARK_RESULTS_PATH}/summary.md
-          git add ${BENCHMARK_RESULTS_PATH}/summary.md
+          cp ${TMP_DIR}/*.md ${BENCHMARK_RESULTS_PATH}/
+          git add ${BENCHMARK_RESULTS_PATH}
           if [[ "${{ github.event_name }}" == "push" ]]; then
-            cp /tmp/benchmark-results/summary.md index.md
+            cp ${TMP_DIR}/summary.md index.md
             git add index.md
           fi
-          git commit --allow-empty -m "Update summarized benchmark result at ${BENCHMARK_RESULTS_PATH}/summary.md"
-          git push --force
+          git commit --allow-empty -m "Update benchmark results at ${{ env.CURRENT_SHA }}"
+
+          MAX_RETRIES=10
+          RETRY_DELAY=5
+          ATTEMPT=0
+          SUCCESS=false
+
+          while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+              echo "Attempt $((ATTEMPT + 1)) to push of $MAX_RETRIES..."
+              git fetch origin benchmark-results
+              git merge origin/benchmark-results --no-edit
+              if git push origin benchmark-results; then
+                  SUCCESS=true
+                  break
+              else
+                  echo "Push failed. Retrying in $RETRY_DELAY seconds..."
+                  sleep $RETRY_DELAY
+                  ATTEMPT=$((ATTEMPT + 1))
+              fi
+          done
+          if [ "$SUCCESS" = false ]; then
+              echo "PUSH_FAILED"
+              exit 1
+          fi
 
       ##########################################################################
       # Update PR comment upon a pull request event                            #
@@ -262,7 +326,7 @@ jobs:
         with:
           script: |
             const fs = require('fs')
-            const newBenchmark = fs.readFileSync('/tmp/benchmark-results/summary.md', { encoding: 'utf8', flag: 'r' })
+            const newBenchmark = fs.readFileSync('${{ env.TMP_DIR }}/summary.md', { encoding: 'utf8', flag: 'r' })
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,

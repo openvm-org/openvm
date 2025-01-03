@@ -1,0 +1,39 @@
+[package]
+name = "openvm-snark-verifier"
+description = "OpenVM guest library for SNARK verification"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm = { workspace = true, features = ["std"] }
+openvm-pairing-guest = { workspace = true, features = ["bn254"] }
+openvm-keccak256-guest = { workspace = true, default-features = false }
+openvm-algebra-guest = { workspace = true }
+openvm-ecc-guest = { workspace = true }
+snark-verifier-sdk = { workspace = true, default-features = false, features = [
+    "halo2-axiom",
+    "loader_evm",
+] }
+ff = { workspace = true }
+halo2curves-axiom = { workspace = true }
+itertools.workspace = true
+serde = { workspace = true, features = ["derive", "alloc"] }
+lazy_static.workspace = true
+
+[dev-dependencies]
+# the following are all meant for testing only on host:
+rand.workspace = true
+eyre.workspace = true
+openvm-toolchain-tests = { workspace = true, features = ["parallel"] }
+openvm-build = { workspace = true }
+openvm-sdk = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-algebra-circuit = { workspace = true }
+openvm-ecc-circuit = { workspace = true }
+openvm-pairing-circuit = { workspace = true }
+
+[features]
+default = []

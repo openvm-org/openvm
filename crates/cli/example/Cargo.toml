@@ -1,3 +1,4 @@
+[workspace]
 [package]
 name = "openvm-cli-example-test"
 version = "0.0.0"

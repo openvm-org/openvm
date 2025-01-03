@@ -67,6 +67,19 @@ build with target set to your **host** machine, while running `bench_from_exe` i
 rust-objdump -d target/riscv32im-risc0-zkvm-elf/release/openvm-fibonacci-program
 ```
 
+## Running a Benchmark Locally
+
+Running a benchmark locally is simple. Just run the following command:
+
+```bash
+OUTPUT_PATH="metrics.json" cargo run --release --bin <benchmark_name>
+```
+
+where `<benchmark_name>.rs` is one of the files in [`src/bin`](./src/bin).
+The `OUTPUT_PATH` environmental variable shouuld be set to the file path where you want the collected metrics to be written to. If unset, then metrics are not printed to file.
+
+To run a benchmark with the leaf aggregation, add `--features aggregation` to the above command.
+
 ## Adding a Benchmark to CI
 
 To add the benchmark to CI, update the [ci/benchmark-config.json](../ci/benchmark-config.json) file and set it's configuration parameters. To make the benchmark run on every PR, follow the existing format with `e2e_bench = false`. To make the benchmark run only when label `run_benchmark_e2e` is present, set `e2e_bench = true` and specify values for `root_log_blowup` and `internal_log_blowup`.

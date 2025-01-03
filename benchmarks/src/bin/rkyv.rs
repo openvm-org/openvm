@@ -2,7 +2,6 @@ use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use openvm_circuit::arch::instructions::exe::VmExe;
-use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -23,17 +22,11 @@ fn main() -> Result<()> {
     let leaf_fri_params = standard_fri_params_with_100_bits_conjectured_security(
         cli_args.agg_log_blowup.unwrap_or(2),
     );
-    let compiler_options = CompilerOptions {
-        // For metric collection
-        enable_cycle_tracker: true,
-        ..Default::default()
-    };
-
     let app_config = AppConfig {
         app_fri_params: app_fri_params.into(),
         app_vm_config: Rv32ImConfig::default(),
         leaf_fri_params: leaf_fri_params.into(),
-        compiler_options,
+        compiler_options: Default::default(),
     };
 
     let elf = build_bench_program("rkyv")?;

@@ -173,7 +173,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     {
                         let (c0, c1) = (&self.c0, &self.c1);
                         let (d0, d1) = (&other.c0, &other.c1);
-                        let denom = <#intmod_type as openvm_algebra_guest::IntMod>::ONE.div_unsafe(d0.square() + d1.square());
+                        let denom = openvm_algebra_guest::DivUnsafe::div_unsafe(<#intmod_type as openvm_algebra_guest::IntMod>::ONE, d0.square() + d1.square());
                         *self = Self::new(
                             denom.clone() * (c0.clone() * d0 + c1.clone() * d1),
                             denom * &(c1.clone() * d0 - c0.clone() * d1),
@@ -575,7 +575,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
             externs.push(quote::quote_spanned! { span.into() =>
                 #[no_mangle]
                 extern "C" fn #func_name(rd: usize, rs1: usize, rs2: usize) {
-                    openvm_platform::custom_insn_r!(
+                    openvm::platform::custom_insn_r!(
                         openvm_algebra_guest::OPCODE,
                         openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
                         openvm_algebra_guest::ComplexExtFieldBaseFunct7::#local_opcode as usize
@@ -604,7 +604,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
                     let mut uninit: core::mem::MaybeUninit<[u8; openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1] - openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]]> = core::mem::MaybeUninit::uninit();
-                    openvm_platform::custom_insn_r!(
+                    openvm::platform::custom_insn_r!(
                         ::openvm_algebra_guest::OPCODE,
                         ::openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
                         ::openvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
@@ -614,7 +614,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                         two_modulus_bytes.as_ptr(),
                         "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
                     );
-                    openvm_platform::custom_insn_r!(
+                    openvm::platform::custom_insn_r!(
                         ::openvm_algebra_guest::OPCODE,
                         ::openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
                         ::openvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize

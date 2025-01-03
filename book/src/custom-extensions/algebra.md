@@ -1,6 +1,6 @@
-# OpenVM Algebra
+# Algebra (Modular Arithmetic)
 
-The OpenVM Algebra extension provides tools to create and manipulate modular arithmetic structures and their complex extensions. For example, if \\(p\\) is prime, OpenVM Algebra can handle modular arithmetic in \\(\mathbb{F}_p\\)​ and its quadratic extension fields \\(\mathbb{F}_p[x]/(x^2 + 1)\\).
+The OpenVM Algebra extension provides tools to create and manipulate modular arithmetic structures and their complex extensions. For example, if \\(p\\) is prime, OpenVM Algebra can handle modular arithmetic in \\(\mathbb{F}\_p\\)​ and its quadratic extension fields \\(\mathbb{F}\_p[x]/(x^2 + 1)\\).
 
 The functional part is provided by the `openvm-algebra-guest` crate, which is a guest library that can be used in any OpenVM program. The macros for creating corresponding structs are in the `openvm-algebra-moduli-setup` and `openvm-algebra-complex-macros` crates.
 
@@ -53,7 +53,7 @@ This step enumerates the declared moduli (e.g., `0` for the first one, `1` for t
 
 ## Complex field extension
 
-Complex extensions, such as \\(\mathbb{F}_p[x]/(x^2 + 1)\\), are defined similarly using `complex_declare!` and `complex_init!`:
+Complex extensions, such as \\(\mathbb{F}\_p[x]/(x^2 + 1)\\), are defined similarly using `complex_declare!` and `complex_init!`:
 
 1. **Declare**:
 

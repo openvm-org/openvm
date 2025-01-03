@@ -5,7 +5,7 @@ use openvm::io::read_vec;
 use openvm_ecc_guest::{
     algebra::IntMod,
     k256::{Secp256k1Coord, Secp256k1Point},
-    weierstrass::FromCompressed,
+    weierstrass::{FromCompressed, WeierstrassPoint},
 };
 
 openvm::entry!(main);
@@ -31,6 +31,6 @@ pub fn main() {
     assert_eq!(y, hint_y);
 
     let p = Secp256k1Point::decompress(x.clone(), &rec_id);
-    assert_eq!(p.x, x);
-    assert_eq!(p.y, y);
+    assert_eq!(p.x(), &x);
+    assert_eq!(p.y(), &y);
 }

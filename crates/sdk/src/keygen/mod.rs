@@ -26,6 +26,7 @@ use openvm_stark_sdk::{
     p3_bn254_fr::Bn254Fr,
 };
 use serde::{Deserialize, Serialize};
+use tracing::info_span;
 
 use crate::{
     commit::babybear_digest_to_bn254,
@@ -91,7 +92,6 @@ where
                 vm_pk.max_constraint_degree
                     <= config.app_fri_params.fri_params.max_constraint_degree()
             );
-            assert!(config.app_vm_config.system().continuation_enabled);
             VmProvingKey {
                 fri_params: config.app_fri_params.fri_params,
                 vm_config: config.app_vm_config.clone(),
@@ -122,7 +122,7 @@ where
         self.app_vm_pk.vm_config.system().num_public_values
     }
 
-    pub fn get_vk(&self) -> AppVerifyingKey {
+    pub fn get_app_vk(&self) -> AppVerifyingKey {
         AppVerifyingKey {
             fri_params: self.app_vm_pk.fri_params,
             app_vm_vk: self.app_vm_pk.vm_pk.get_vk(),
@@ -330,7 +330,8 @@ pub fn leaf_keygen(fri_params: FriParameters) -> Arc<VmProvingKey<SC, NativeConf
     };
     let vm_config = agg_config.leaf_vm_config();
     let leaf_engine = BabyBearPoseidon2Engine::new(fri_params);
-    let leaf_vm_pk = VirtualMachine::new(leaf_engine, vm_config.clone()).keygen();
+    let leaf_vm_pk = info_span!("keygen", group = "leaf")
+        .in_scope(|| VirtualMachine::new(leaf_engine, vm_config.clone()).keygen());
     Arc::new(VmProvingKey {
         fri_params,
         vm_config,

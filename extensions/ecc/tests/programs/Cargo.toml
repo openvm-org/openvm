@@ -27,12 +27,7 @@ k256 = { version = "0.13.3", default-features = false, features = [
 
 [features]
 default = []
-std = [
-    "serde/std",
-    "openvm/std",
-    "openvm-ecc-guest/std",
-]
-
+std = ["serde/std", "openvm/std", "openvm-ecc-guest/std"]
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
 
 [profile.release]
@@ -42,4 +37,12 @@ lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes 
 
 [[example]]
 name = "ec"
+required-features = ["k256"]
+
+[[example]]
+name = "decompress"
+required-features = ["k256"]
+
+[[example]]
+name = "ecdsa"
 required-features = ["k256"]

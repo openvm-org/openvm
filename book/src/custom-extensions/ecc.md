@@ -1,4 +1,4 @@
-# OpenVM ECC
+# Elliptic Curve Cryptography
 
 The OpenVM Elliptic Curve Cryptography Extension provides support for elliptic curve operations through the `openvm-ecc-guest` crate.
 

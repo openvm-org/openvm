@@ -3,7 +3,6 @@ import subprocess
 import os
 import shutil
 
-from metric_unify.main import generate_displayable_metrics;
 from metric_unify.utils import get_git_root, create_bench_metrics_dir
 
 def run_cargo_command(
@@ -55,11 +54,6 @@ def run_cargo_command(
     subprocess.run(command, check=True, env=env)
 
     print(f"Output metrics written to {git_root}/{output_path}")
-
-    # Local only: in CI the old file is not present yet and we will generate markdown in a later step.
-    markdown_output = generate_displayable_metrics(output_path, output_path_old)
-    with open(f"{git_root}/.bench_metrics/{bin_name}.md", "w") as f:
-        f.write(markdown_output)
 
 
 def bench():

@@ -24,7 +24,7 @@ openvm-ecc-guest.workspace = true
 openvm-rv32im-transpiler.workspace = true
 openvm-platform = { workspace = true }
 openvm = { workspace = true }
-openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
+openvm-toolchain-tests = { workspace = true }
 eyre.workspace = true
 num-bigint-dig.workspace = true
 rand.workspace = true

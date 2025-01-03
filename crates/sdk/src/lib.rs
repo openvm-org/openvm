@@ -21,7 +21,7 @@ use openvm_native_recursion::{
     },
     types::InnerConfig,
 };
-use openvm_stark_backend::engine::StarkEngine;
+use openvm_stark_backend::{engine::StarkEngine, prover::types::Proof};
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -161,8 +161,17 @@ impl Sdk {
         for seg_proof in &proof.per_segment {
             e.verify(&app_vk.app_vm_vk, seg_proof)?
         }
-        // TODO: verify continuation.
+        // TODO: verify continuation: requires App VC.
         Ok(())
+    }
+
+    pub fn verify_app_proof_without_continuations(
+        &self,
+        app_vk: &AppVerifyingKey,
+        proof: &Proof<SC>,
+    ) -> Result<(), VerificationError> {
+        let e = BabyBearPoseidon2Engine::new(app_vk.fri_params);
+        e.verify(&app_vk.app_vm_vk, proof)
     }
 
     pub fn agg_keygen(
