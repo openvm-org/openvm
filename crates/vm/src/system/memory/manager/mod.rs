@@ -50,7 +50,7 @@ pub mod dimensions;
 mod interface;
 pub(super) mod memory;
 pub use memory::{MemoryImage, MemoryReadRecord, MemoryWriteRecord, OfflineMemory, RecordId};
-use crate::system::memory::adapter::AccessAdapterRecord;
+
 pub(crate) use crate::system::memory::manager::memory::Memory;
 
 pub const CHUNK: usize = 8;
@@ -456,7 +456,12 @@ impl<F: PrimeField32> MemoryController<F> {
         let log = mem::take(&mut self.memory.log);
 
         for entry in log {
-            Self::replay_access(entry, &mut offline_memory, &mut self.interface_chip, &mut self.access_adapters);
+            Self::replay_access(
+                entry,
+                &mut offline_memory,
+                &mut self.interface_chip,
+                &mut self.access_adapters,
+            );
         }
     }
 
@@ -467,13 +472,21 @@ impl<F: PrimeField32> MemoryController<F> {
         access_adapters: &mut AccessAdapterInventory<F>,
     ) {
         let records = match entry {
-            MemoryLogEntry::Read { address_space, pointer, len } => {
+            MemoryLogEntry::Read {
+                address_space,
+                pointer,
+                len,
+            } => {
                 if address_space != 0 {
                     interface_chip.touch_range(address_space, pointer, len as u32);
                 }
                 offline_memory.read(address_space, pointer, len)
             }
-            MemoryLogEntry::Write { address_space, pointer, data } => {
+            MemoryLogEntry::Write {
+                address_space,
+                pointer,
+                data,
+            } => {
                 if address_space != 0 {
                     interface_chip.touch_range(address_space, pointer, data.len() as u32);
                 }
@@ -675,6 +688,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 }
 
+// TODO[zach]: We can probably deprecate this and just provide this interface in `OfflineMemory`.
 #[derive(Clone, Debug)]
 pub struct MemoryAuxColsFactory<T> {
     range_checker: Arc<VariableRangeCheckerChip>,

@@ -11,14 +11,14 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
+    ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
     metrics::cycle_tracker::CycleTracker,
-    system::{memory::MemoryImage, poseidon2::Poseidon2PeripheryChip},
+    system::memory::MemoryImage,
 };
 
 /// Check segment every 100 instructions.
@@ -279,7 +279,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
 
     /// Generate ProofInput to prove the segment. Should be called after ::execute
     pub fn generate_proof_input<SC: StarkGenericConfig>(
-        mut self,
+        self,
         cached_program: Option<CommittedTraceData<SC>>,
     ) -> ProofInput<SC>
     where
@@ -289,30 +289,6 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
-
-        if self.system_config().continuation_enabled {
-            let chip = self
-                .chip_complex
-                .inventory
-                .periphery
-                .get_mut(
-                    VmChipComplex::<F, VC::Executor, VC::Periphery>::POSEIDON2_PERIPHERY_IDX,
-                )
-                .expect("Poseidon2 chip required for persistent memory");
-            let hasher: &mut Poseidon2PeripheryChip<F> = chip
-                .as_any_kind_mut()
-                .downcast_mut()
-                .expect("Poseidon2 chip required for persistent memory");
-            self.chip_complex
-                .base
-                .memory_controller
-                .finalize(Some(hasher))
-        } else {
-            self.chip_complex
-                .base
-                .memory_controller
-                .finalize(None::<&mut Poseidon2PeripheryChip<F>>)
-        };
 
         let proof_input = self.chip_complex.generate_proof_input(cached_program);
 

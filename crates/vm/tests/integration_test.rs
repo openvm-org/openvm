@@ -163,6 +163,7 @@ fn test_vm_override_executor_height() {
 
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
     let res = executor.execute(committed_exe.exe.clone(), vec![]).unwrap();
+    // Memory trace heights are not computed during execution.
     assert_eq!(
         res.internal_heights.system,
         SystemTraceHeights {
