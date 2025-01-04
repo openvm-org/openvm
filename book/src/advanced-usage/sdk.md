@@ -43,14 +43,14 @@ To run your program and see the public value output, you can do the following:
 
 The `StdIn` struct allows you to format any serializable type into a VM-readable format by passing in a reference to your struct into `StdIn::write` as above. You also have the option to pass in a `&[u8]` into `StdIn::write_bytes`, or a `&[F]` into `StdIn::write_field` where `F` is the `openvm_stark_sdk::p3_baby_bear::BabyBear` field type.
 
-> **Generating CLI Bytes**  
+> **Generating CLI Bytes**
 > To get the VM byte representation of a serializable struct `data` (i.e. for use in the CLI), you can print out the result of `openvm::serde::to_vec(data).unwrap()` in a Rust host program.
 
 ## Generating and Verifying Proofs
 
 There are two types of proofs that you can generate, with the sections below continuing from this point.
 
-- [App Proof](#app-proof): Generates a STARK proof(s) of the guest program
+- [App Proof](#app-proof): Generates STARK proof(s) of the guest program
 - [EVM Proof](#evm-proof): Generates a halo2 proof that can be posted on-chain
 
 ## App Proof
@@ -62,6 +62,8 @@ After building and transpiling a program, you can then generate a proof. To do s
 ```rust,no_run,noplayground
 {{ #include ../../../crates/sdk/examples/sdk_app.rs:proof_generation }}
 ```
+
+For large guest programs, the program will be proved in multiple continuation segments and the returned `proof: ContinuationVmProof` object consists of multiple STARK proofs, one for each segment.
 
 ### Verifying App Proofs
 
@@ -81,10 +83,8 @@ To generate an EVM proof, you'll first need to ensure that you have followed the
 cargo openvm setup
 ```
 
-> ⚠️ **WARNING**  
-> Generating an EVM proof will require a substantial amount of computation and memory. If you have run `cargo openvm setup` and don't need a specialized aggregation configuration, consider deserializing the proving key from the file `~/.openvm/agg.pk` instead of generating it.
-
-> ⚠️ **WARNING**  
+> ⚠️ **WARNING**
+>
 > `cargo openvm setup` requires very large amounts of computation and memory (~200 GB).
 
 <details>
@@ -98,21 +98,27 @@ cargo openvm setup
 
 ### Keygen
 
-Now, you'll still need to generate the app proving key for the next step.
+Now, you'll need to generate the app proving key for the next step.
 
 ```rust,no_run,noplayground
 {{ #include ../../../crates/sdk/examples/sdk_evm.rs:keygen }}
 ```
 
+> ⚠️ **WARNING**
+>
+> If you have run `cargo openvm setup` and don't need a specialized aggregation configuration, consider deserializing the proving key from the file `~/.openvm/agg.pk` instead of generating it, to save computation.
+
 ### EVM Proof Generation and Verification
 
-You can now run the aggregation keygen, proof, and verification functions for the EVM proof. Note, you **do not** need to generate the app proof `generate_app_proof` with, as the EVM proof function will handle this automatically.
+You can now run the aggregation keygen, proof, and verification functions for the EVM proof.
+
+**Note**: you **do not** need to generate the app proof with the `generate_app_proof` function, as the EVM proof function will handle this automatically.
 
 ```rust,no_run,noplayground
 {{ #include ../../../crates/sdk/examples/sdk_evm.rs:evm_verification }}
 ```
 
-> ⚠️ **WARNING**  
+> ⚠️ **WARNING**
 > The aggregation proving key `agg_pk` above is large. Avoid cloning it if possible.
 
 Note that `DEFAULT_PARAMS_DIR` is the directory where Halo2 parameters are stored by the `cargo openvm setup` CLI command. For more information on the setup process, see the `EVM Level` section of the [verify](../../writing-apps/verify.md) doc.

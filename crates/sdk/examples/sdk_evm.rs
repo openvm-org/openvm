@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agg_config = AggConfig::default();
     let agg_pk = sdk.agg_keygen(agg_config, &halo2_params_reader)?;
 
-    // 9. Generate the SNARK verifier contract
+    // 9. Generate the SNARK verifier smart contract
     let verifier = sdk.generate_snark_verifier_contract(&halo2_params_reader, &agg_pk)?;
 
     // 10. Generate an EVM proof
