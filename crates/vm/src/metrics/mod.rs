@@ -14,6 +14,7 @@ pub mod cycle_tracker;
 
 #[derive(Clone, Debug, Default)]
 pub struct VmMetrics {
+    pub cycle_count: usize,
     pub chip_heights: Vec<(String, usize)>,
     /// Maps (dsl_ir, opcode) to number of times opcode was executed
     pub counts: BTreeMap<(Option<String>, String), usize>,
@@ -42,7 +43,7 @@ where
         opcode: VmOpcode,
         dsl_instr: Option<String>,
     ) {
-        counter!("total_cycles").increment(1u64);
+        self.metrics.cycle_count += 1;
 
         if self.system_config().profiling {
             let executor = self.chip_complex.inventory.get_executor(opcode).unwrap();
@@ -60,6 +61,7 @@ where
     }
 
     pub fn finalize_metrics(&mut self) {
+        counter!("total_cycles").absolute(self.metrics.cycle_count as u64);
         counter!("main_cells_used")
             .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
 
