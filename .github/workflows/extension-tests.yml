@@ -52,8 +52,7 @@ jobs:
           cargo nextest run --cargo-profile=fast
 
       - name: Run ${{ matrix.extension.name }} integration tests
-        if: matrix.extension.name != 'native' # Native doesn't have integration tests
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2024-10-30
-          cargo nextest run --cargo-profile=fast 
+          cargo nextest run --cargo-profile=fast --no-tests=pass 
