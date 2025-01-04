@@ -26,8 +26,10 @@ jobs:
         extension:
           - {name: 'algebra', path: 'algebra'}
           - {name: 'bigint', path: 'bigint'}
+          - {name: 'ecc', path: 'ecc'}
           - {name: 'keccak256', path: 'keccak256'}
           - {name: 'native', path: 'native'}
+          - {name: 'pairing', path: 'pairing'}
           - {name: 'sha256', path: 'sha256'}
       # Ensure tests run in parallel even if one fails
       fail-fast: false
