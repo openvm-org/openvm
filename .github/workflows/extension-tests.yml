@@ -8,8 +8,6 @@ on:
     paths:
       - "extensions/**"
       - ".github/workflows/extension-tests.yml"
-      # Exclude RISC-V test vectors
-      - "!extensions/rv32im/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -31,6 +29,7 @@ jobs:
           - {name: 'native', path: 'native'}
           - {name: 'pairing', path: 'pairing'}
           - {name: 'sha256', path: 'sha256'}
+          - {name: 'rv32im', path: 'rv32im'}
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     
