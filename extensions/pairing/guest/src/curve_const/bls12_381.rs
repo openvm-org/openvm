@@ -1,12 +1,18 @@
-use halo2curves_axiom::bls12_381::{Fq, Fq2};
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use num_traits::Num;
-use openvm_ecc_guest::algebra::{field::FieldExtension, Field};
+#[cfg(feature = "halo2curves")]
+use {
+    halo2curves_axiom::bls12_381::{Fq, Fq2},
+    openvm_ecc_guest::algebra::{field::FieldExtension, Field},
+};
 
+#[cfg(feature = "halo2curves")]
 lazy_static! {
     pub static ref BLS12_381_XI: Fq2 = Fq2::from_coeffs([Fq::ONE, Fq::ONE]);
+}
 
+lazy_static! {
     // polyFactor = (1-x)/3
     pub static ref POLY_FACTOR: BigUint = BigUint::from_str_radix("5044125407647214251", 10).unwrap();
 
@@ -19,5 +25,3 @@ lazy_static! {
     // t = -x = 15132376222941642752
     pub static ref SEED_NEG: BigUint = BigUint::from_str_radix("15132376222941642752", 10).unwrap();
 }
-
-pub struct Bls12_381;

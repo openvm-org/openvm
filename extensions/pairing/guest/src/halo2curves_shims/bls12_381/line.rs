@@ -8,8 +8,11 @@ use openvm_ecc_guest::{
     AffinePoint,
 };
 
-use super::{Bls12_381, BLS12_381_XI};
-use crate::pairing::{EvaluatedLine, LineMulMType};
+use super::Bls12_381;
+use crate::{
+    curve_const::bls12_381::BLS12_381_XI,
+    pairing::{EvaluatedLine, LineMulMType},
+};
 
 impl LineMulMType<Fq2, Fq12> for Bls12_381 {
     fn mul_023_by_023(l0: &EvaluatedLine<Fq2>, l1: &EvaluatedLine<Fq2>) -> [Fq2; 5] {

@@ -12,7 +12,8 @@ use super::{Fp, Fp12, Fp2};
 use crate::{
     bls12_381::{Bls12_381, G2Affine as OpenVmG2Affine},
     pairing::{
-        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, MultiMillerLoop, PairingIntrinsics,
+        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, FinalExp, MultiMillerLoop,
+        PairingCheck, PairingIntrinsics,
     },
 };
 
@@ -299,4 +300,40 @@ fn test_bls12381_g2_affine() {
             assert_eq!(convert_g2_affine_halo2_to_openvm(expected), actual);
         }
     }
+}
+
+#[test]
+fn test_bls12381_pairing_check_hint_host() {
+    let mut rng = StdRng::seed_from_u64(83);
+    let h2c_p = G1Affine::random(&mut rng);
+    let h2c_q = G2Affine::random(&mut rng);
+
+    let p = AffinePoint {
+        x: convert_bls12381_halo2_fq_to_fp(h2c_p.x),
+        y: convert_bls12381_halo2_fq_to_fp(h2c_p.y),
+    };
+    let q = AffinePoint {
+        x: convert_bls12381_halo2_fq2_to_fp2(h2c_q.x),
+        y: convert_bls12381_halo2_fq2_to_fp2(h2c_q.y),
+    };
+
+    let (c, s) = Bls12_381::pairing_check_hint(&[p], &[q]);
+
+    let p_cmp = AffinePoint {
+        x: h2c_p.x,
+        y: h2c_p.y,
+    };
+    let q_cmp = AffinePoint {
+        x: h2c_q.x,
+        y: h2c_q.y,
+    };
+
+    let f_cmp =
+        crate::halo2curves_shims::bls12_381::Bls12_381::multi_miller_loop(&[p_cmp], &[q_cmp]);
+    let (c_cmp, s_cmp) = crate::halo2curves_shims::bls12_381::Bls12_381::final_exp_hint(&f_cmp);
+    let c_cmp = convert_bls12381_halo2_fq12_to_fp12(c_cmp);
+    let s_cmp = convert_bls12381_halo2_fq12_to_fp12(s_cmp);
+
+    assert_eq!(c, c_cmp);
+    assert_eq!(s, s_cmp);
 }

@@ -7,7 +7,8 @@ use num_traits::Num;
 use openvm_ecc_guest::{algebra::ExpBytes, AffinePoint};
 
 use crate::{
-    halo2curves_shims::bls12_381::{Bls12_381, SEED_NEG},
+    curve_const::bls12_381::SEED_NEG,
+    halo2curves_shims::bls12_381::Bls12_381,
     pairing::{FinalExp, MultiMillerLoop},
 };
 

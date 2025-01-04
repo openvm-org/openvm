@@ -4,8 +4,11 @@ use halo2curves_axiom::{
 };
 use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
 
-use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
-use crate::pairing::{FinalExp, MultiMillerLoop};
+use super::Bn254;
+use crate::{
+    curve_const::bn254::{EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1},
+    pairing::{FinalExp, MultiMillerLoop},
+};
 
 #[allow(non_snake_case)]
 impl FinalExp for Bn254 {

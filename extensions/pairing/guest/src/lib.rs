@@ -38,8 +38,16 @@ pub mod affine_point;
 /// These should **only** be importable on a host machine.
 #[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
 pub mod halo2curves_shims;
+
 /// Traits for optimal Ate pairing check using intrinsic functions.
 pub mod pairing;
+
+/// Pairing curve constants. Only importable on a host machine.
+#[cfg(all(
+    any(feature = "bls12_381", feature = "bn254", feature = "halo2curves"),
+    not(target_os = "zkvm")
+))]
+pub mod curve_const;
 
 /// Types for BLS12-381 curve with intrinsic functions.
 #[cfg(feature = "bls12_381")]

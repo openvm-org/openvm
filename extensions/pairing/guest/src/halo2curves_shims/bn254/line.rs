@@ -8,8 +8,11 @@ use openvm_ecc_guest::{
     AffinePoint,
 };
 
-use super::{Bn254, BN254_XI};
-use crate::pairing::{EvaluatedLine, LineMulDType};
+use super::Bn254;
+use crate::{
+    curve_const::bn254::BN254_XI,
+    pairing::{EvaluatedLine, LineMulDType},
+};
 
 impl LineMulDType<Fq2, Fq12> for Bn254 {
     /// Multiplies two lines in 013-form to get an element in 01234-form

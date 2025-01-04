@@ -5,8 +5,11 @@ use openvm_ecc_guest::{
     AffinePoint,
 };
 
-use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
-use crate::pairing::{FinalExp, MultiMillerLoop};
+use super::Bls12_381;
+use crate::{
+    curve_const::bls12_381::{FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR},
+    pairing::{FinalExp, MultiMillerLoop},
+};
 
 #[allow(non_snake_case)]
 impl FinalExp for Bls12_381 {

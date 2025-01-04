@@ -1,9 +1,7 @@
-mod curve;
 mod final_exp;
 mod line;
 mod miller_loop;
 
-pub use curve::*;
 pub use line::*;
 
 #[cfg(test)]
@@ -17,6 +15,8 @@ use crate::{
     affine_point::AffineCoords,
     pairing::{Evaluatable, EvaluatedLine, FromLineDType, UnevaluatedLine},
 };
+
+pub struct Bn254;
 
 impl FromLineDType<Fq2> for Fq12 {
     fn from_evaluated_line_d_type(line: EvaluatedLine<Fq2>) -> Fq12 {

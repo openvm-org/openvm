@@ -3,6 +3,11 @@ use alloc::vec::Vec;
 use itertools::izip;
 use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
 use openvm_ecc_guest::AffinePoint;
+#[cfg(not(target_os = "zkvm"))]
+use {
+    crate::curve_const::bn254::{EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1},
+    openvm_algebra_guest::{ExpBytes, IntMod},
+};
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
@@ -307,7 +312,101 @@ impl PairingCheck for Bn254 {
     ) -> (Self::Fp12, Self::Fp12) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            todo!()
+            let f = Self::multi_miller_loop(P, Q);
+
+            // Residue witness
+            let mut c;
+            // Cubic nonresidue power
+            let u;
+
+            // get the 27th root of unity
+            let u0 = U27_COEFF_0.to_bytes_be();
+            let u1 = U27_COEFF_1.to_bytes_be();
+            let u_coeffs = Fp2::from_coeffs([Fp::from_be_bytes(&u0), Fp::from_be_bytes(&u1)]);
+
+            let mut unity_root_27 = Fp12::from_coeffs([
+                Fp2::ZERO,
+                Fp2::ZERO,
+                u_coeffs,
+                Fp2::ZERO,
+                Fp2::ZERO,
+                Fp2::ZERO,
+            ]);
+            debug_assert_eq!(
+                unity_root_27.exp_bytes(true, &27u32.to_be_bytes()),
+                Fp12::ONE
+            );
+
+            if f.exp_bytes(true, &EXP1.to_bytes_be()) == Fp12::ONE {
+                c = f;
+                u = Fp12::ONE;
+            } else {
+                let f_mul_unity_root_27 = f * unity_root_27.clone();
+                if f_mul_unity_root_27.exp_bytes(true, &EXP1.to_bytes_be()) == Fp12::ONE {
+                    c = f_mul_unity_root_27;
+                    u = unity_root_27.clone();
+                } else {
+                    c = f_mul_unity_root_27 * unity_root_27.clone();
+                    unity_root_27.square_assign();
+                    u = unity_root_27.clone();
+                }
+            }
+
+            // 1. Compute r-th root and exponentiate to rInv where
+            //   rInv = 1/r mod (p^12-1)/r
+            c = c.exp_bytes(true, &R_INV.to_bytes_be());
+
+            // 2. Compute m-th root where
+            //   m = (6x + 2 + q^3 - q^2 +q)/3r
+            // Exponentiate to mInv where
+            //   mInv = 1/m mod p^12-1
+            c = c.exp_bytes(true, &M_INV.to_bytes_be());
+
+            // 3. Compute cube root
+            // since gcd(3, (p^12-1)/r) != 1, we use a modified Tonelli-Shanks algorithm
+            // see Alg.4 of https://eprint.iacr.org/2024/640.pdf
+            // Typo in the paper: p^k-1 = 3^n * s instead of p-1 = 3^r * s
+            // where k=12 and n=3 here and exp2 = (s+1)/3
+            let mut x = c.exp_bytes(true, &EXP2.to_bytes_be());
+
+            // 3^t is ord(x^3 / residueWitness)
+            let c_inv = c.invert();
+            let mut x2 = x.clone();
+            x2.square_assign();
+            let mut x3 = x2 * x.clone() * c_inv.clone();
+            let mut t = 0;
+            let mut tmp = x3.clone();
+            tmp.square_assign();
+
+            // Modified Tonelli-Shanks algorithm for computing the cube root
+            fn tonelli_shanks_loop(x3: &mut Fp12, tmp: &mut Fp12, t: &mut i32) {
+                while *x3 != Fp12::ONE {
+                    *tmp = x3.clone();
+                    tmp.square_assign();
+                    *x3 *= tmp.clone();
+                    *t += 1;
+                }
+            }
+
+            tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
+
+            while t != 0 {
+                tmp = unity_root_27.exp_bytes(true, &EXP2.to_bytes_be());
+                x *= tmp.clone();
+
+                let mut x2 = x.clone();
+                x2.square_assign();
+                x3 = x2 * x.clone() * c_inv.clone();
+                t = 0;
+                tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
+            }
+
+            debug_assert_eq!(c, x.clone() * x.clone() * x.clone());
+
+            // x is the cube root of the residue witness c
+            c = x.clone();
+
+            (c, u)
         }
         #[cfg(target_os = "zkvm")]
         {
