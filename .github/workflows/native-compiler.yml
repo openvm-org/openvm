@@ -1,4 +1,4 @@
-name: Toolchain Tests
+name: Native Compiler Tests
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
     branches: ["**"]
     paths:
       - "crates/vm/**"
-      - "extensions/**"
-      - "crates/toolchain/**"
+      - "extensions/native/circuit/**"
+      - "extensions/native/compiler/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -31,3 +31,8 @@ jobs:
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
+
+      - name: Run circuit and compiler tests
+        working-directory: extensions/native/compiler
+        run: |
+          cargo nextest run --cargo-profile=fast --features parallel

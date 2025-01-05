@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: ["**"]
     paths:
+      - "crates/circuits/primitives/**"
+      - "crates/vm/**"
       - "extensions/**"
       - ".github/workflows/extension-tests.yml"
 
@@ -22,23 +24,37 @@ jobs:
     strategy:
       matrix:
         extension:
-          - {name: 'algebra', path: 'algebra'}
-          - {name: 'bigint', path: 'bigint'}
-          - {name: 'ecc', path: 'ecc'}
-          - {name: 'keccak256', path: 'keccak256'}
-          - {name: 'native', path: 'native'}
-          - {name: 'pairing', path: 'pairing'}
-          - {name: 'sha256', path: 'sha256'}
-          - {name: 'rv32im', path: 'rv32im'}
+          - { name: "rv32im", path: "rv32im" }
+          - { name: "native", path: "native" }
+          - { name: "keccak256", path: "keccak256" }
+          - { name: "sha256", path: "sha256" }
+          - { name: "bigint", path: "bigint" }
+          - { name: "algebra", path: "algebra" }
+          - { name: "ecc", path: "ecc" }
+          - { name: "pairing", path: "pairing" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
-    
+
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=64cpu-linux-arm64
       - tag=extension-${{ matrix.extension.name }}
 
     steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            - "crates/circuits/primitives/**"
+            - "crates/vm/**"
+            - "extensions/${{ matrix.extensions.path }}/**"
+            - ".github/workflows/extension-tests.yml"
+      - name: Skip if no changes
+        if: steps.filter.outputs.matched == 'false'
+        run: |
+          echo "No relevant changes, skipping tests."
+          exit 0
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -46,14 +62,23 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run ${{ matrix.extension.name }} extension crate tests
+      - name: Run ${{ matrix.extension.name }} circuit crate tests
         working-directory: extensions/${{ matrix.extension.path }}/circuit
+        run: cargo nextest run --cargo-profile=fast
+
+      - name: Run ${{ matrix.extension.name }} guest crate tests
+        if: hashFiles(format('extensions/{0}/guest', matrix.extension.path)) != ''
+        working-directory: extensions/${{ matrix.extension.path }}/guest
         run: |
-          cargo nextest run --cargo-profile=fast
+          FEATURE_ARGS=""
+          if [[ "${{ matrix.extension.name }}" == "pairing" ]]; then
+            FEATURE_ARGS="--features=bn254,bls12_381,halo2curves"
+          fi
+          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass
 
       - name: Run ${{ matrix.extension.name }} integration tests
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2024-10-30
-          cargo nextest run --cargo-profile=fast --no-tests=pass 
+          cargo nextest run --cargo-profile=fast --no-tests=pass
