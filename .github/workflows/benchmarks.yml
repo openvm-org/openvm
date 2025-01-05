@@ -19,12 +19,13 @@ on:
       flamegraphs:
         type: boolean
         required: false
-        description: Whether to collect profiling metrics and generate flamegraphs
+        description: Collect profiling metrics and generate flamegraphs
         default: false
       run-benchmark-e2e:
+        type: boolean
         description: "Run end-to-end benchmarks"
         required: false
-        default: "false"
+        default: false
 
 concurrency:
   group: benchmark-${{ github.event.pull_request.number || github.sha }}
