@@ -22,7 +22,7 @@ on:
         required: false
         description: Application level log blowup
         default: 2
-      agg_log_blowup:
+      leaf_log_blowup:
         type: number
         required: false
         description: Aggregation (leaf) level log blowup
@@ -75,7 +75,7 @@ on:
         required: false
         description: Application level log blowup
         default: 2
-      agg_log_blowup:
+      leaf_log_blowup:
         type: number
         required: false
         description: Aggregation (leaf) level log blowup
@@ -200,7 +200,7 @@ jobs:
         run: |
           FEATURES="--features $FEATURE_FLAGS"
           APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
-          AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
+          AGG_ARG="--leaf_log_blowup ${{ inputs.leaf_log_blowup }}"
           MAX_SEGMENT_LENGTH="--max_segment_length ${{ inputs.max_segment_length }}"
           OUTPUT_PATH="--output_path $METRIC_PATH"
           echo "INPUT_ARGS=${FEATURES} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
