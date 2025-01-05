@@ -145,16 +145,18 @@ jobs:
         run: echo "${{ toJSON(inputs) }}"
       - name: "Feature flags: memory allocator"
         run: |
-          echo "FEATURE_FLAGS=${FEATURE_FLAGS},${{ github.event.inputs.memory_allocator }}" >> $GITHUB_ENV
+          ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
+          echo "FEATURE_FLAGS=${FEATURE_FLAGS},$ALLOCATOR" >> $GITHUB_ENV
       - name: "Feature flags: aggregation"
         if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
           echo "Adding aggregation feature flag"
           echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
       - name: "Feature flags: workflow"
-        if: github.event.inputs.features
+        if: inputs.features || github.event.inputs.features
         run: |
-          echo "FEATURE_FLAGS=${FEATURE_FLAGS},${{ github.event.inputs.features }}" >> $GITHUB_ENV
+          EXTRA_FEATURES=${{ inputs.features || github.event.inputs.features }}
+          echo "FEATURE_FLAGS=${FEATURE_FLAGS},$EXTRA_FEATURES" >> $GITHUB_ENV
 
       - name: Setup e2e (halo2 and arguments)
         run: |
