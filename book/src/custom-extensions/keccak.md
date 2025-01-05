@@ -10,7 +10,7 @@ The OpenVM Keccak256 Guest extension provides two functions for using in your gu
 - `keccak256(input: &[u8]) -> [u8; 32]`: Computes the Keccak-256 hash of the input data and returns it as an array of 32 bytes.
 - `set_keccak256(input: &[u8], output: &mut [u8; 32])`: Sets the output to the Keccak-256 hash of the input data into the provided output buffer.
 
-See the full example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/keccak.rs).
+See the full example [here](https://github.com/openvm-org/openvm/blob/main/extensions/keccak256/tests/programs/examples/keccak.rs).
 
 ### Example:
 
