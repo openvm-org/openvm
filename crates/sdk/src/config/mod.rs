@@ -37,6 +37,8 @@ pub struct AggStarkConfig {
     pub leaf_fri_params: FriParameters,
     pub internal_fri_params: FriParameters,
     pub root_fri_params: FriParameters,
+    /// Sets the profiling mode of all aggregation VMs
+    pub profiling: bool,
     /// Only for AggVM debugging.
     pub compiler_options: CompilerOptions,
 }
@@ -86,6 +88,7 @@ impl Default for AggStarkConfig {
             root_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
                 DEFAULT_ROOT_LOG_BLOWUP,
             ),
+            profiling: false,
             compiler_options: Default::default(),
         }
     }

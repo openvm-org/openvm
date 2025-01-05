@@ -102,6 +102,7 @@ fn agg_stark_config_for_test() -> AggStarkConfig {
             INTERNAL_LOG_BLOWUP,
         ),
         root_fri_params: standard_fri_params_with_100_bits_conjectured_security(ROOT_LOG_BLOWUP),
+        profiling: false,
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
             compile_prints: true,

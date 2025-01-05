@@ -16,6 +16,11 @@ on:
       - ".github/workflows/benchmarks.yml"
   workflow_dispatch:
     inputs:
+      flamegraphs:
+        type: boolean
+        required: false
+        description: Whether to collect profiling metrics and generate flamegraphs
+        default: false
       run-benchmark-e2e:
         description: "Run end-to-end benchmarks"
         required: false
@@ -33,6 +38,7 @@ env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
   S3_MD_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results
+  S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
 
 permissions:
   contents: write
@@ -66,8 +72,9 @@ jobs:
           else
             RUN_E2E=${{ github.event.inputs.run-benchmark-e2e || 'false' }}
           fi
+          PROFILING=${{ github.event.inputs.flamegraphs || 'false' }}
 
-          matrix=$(jq -c --argjson run_e2e $RUN_E2E '
+          matrix=$(jq -c --argjson run_e2e $RUN_E2E --argjson profiling $PROFILING '
             [
               .benchmarks[] |
               .name as $name |
@@ -78,6 +85,7 @@ jobs:
               {
                 name: $name,
                 e2e_bench: $e2e_bench,
+                profiling: $profiling
                 id: $id,
                 instance_type: .instance_type,
                 memory_allocator: .memory_allocator,
@@ -167,6 +175,10 @@ jobs:
           BENCHMARK_RESULTS_PATH="benchmarks"
           echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
+      - name: Install inferno-flamegraph
+        if: github.event.inputs.flamegraphs
+        run: cargo install inferno
+
       - name: Download all metric json files from S3
         run: |
           json_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
@@ -218,6 +230,12 @@ jobs:
                 instance_type: .instance_type,
                 memory_allocator: .memory_allocator
               }')
+
+            export FLAMEGRAPHS=${{ github.event.inputs.flamegraphs || 'false' }}
+            if [[ "$FLAMEGRAPHS" == 'true' ]]; then
+              python3 ci/scripts/metric_unify/flamegraph.py $line
+              s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${S3_FLAMEGRAPHS_PATH}/${CURRENT_SHA}/"
+            fi
 
             if [ ! -z "$id" ]; then
               max_segment_length=$(echo "$id" | jq -r '.max_segment_length')

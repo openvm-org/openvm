@@ -1,6 +1,6 @@
 use clap::Parser;
 use eyre::Result;
-use openvm_benchmarks::utils::{bench_from_exe, BenchmarkCli};
+use openvm_benchmarks::utils::BenchmarkCli;
 use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
@@ -12,7 +12,6 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
-    let app_config = args.app_config(Rv32ImConfig::default());
 
     let elf = args.build_bench_program("fibonacci")?;
     let exe = VmExe::from_elf(
@@ -27,15 +26,6 @@ fn main() -> Result<()> {
         let n = 100_000u64;
         let mut stdin = StdIn::default();
         stdin.write(&n);
-        bench_from_exe(
-            "fibonacci_program",
-            app_config,
-            exe,
-            stdin,
-            #[cfg(feature = "aggregation")]
-            true,
-            #[cfg(not(feature = "aggregation"))]
-            false,
-        )
+        args.bench_from_exe("fibonacci_program", Rv32ImConfig::default(), exe, stdin)
     })
 }

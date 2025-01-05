@@ -29,13 +29,13 @@ add_metadata() {
     local benchmark_workflow_url="$6"
 
     echo "" >> $result_path
-    if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
+    if [[ "$FLAMEGRAPHS" == 'true' ]]; then
         echo "<details>" >> $result_path
         echo "<summary>Flamegraphs</summary>" >> $result_path
         echo "" >> $result_path
         for file in .bench_metrics/flamegraphs/*.svg; do
         filename=$(basename "$file")
-            flamegraph_url=https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
+            flamegraph_url=${S3_FLAMEGRAPHS_PATH}/${CURRENT_SHA}/${filename}
             echo "[![]($flamegraph_url)]($flamegraph_url)" >> $result_path
         done
         echo "" >> $result_path

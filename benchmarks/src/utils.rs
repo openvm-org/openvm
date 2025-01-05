@@ -7,6 +7,7 @@ use openvm_circuit::arch::{
     instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES},
     VirtualMachine, VmConfig,
 };
+use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
     commit::commit_app_exe,
@@ -109,6 +110,7 @@ impl BenchmarkCli {
                 leaf_fri_params,
                 internal_fri_params,
                 root_fri_params,
+                profiling: self.profiling,
                 compiler_options: CompilerOptions {
                     enable_cycle_tracker: self.profiling,
                     ..Default::default()
@@ -129,6 +131,31 @@ impl BenchmarkCli {
         }
         .to_string();
         build_bench_program(program_name, profile)
+    }
+
+    pub fn bench_from_exe<VC>(
+        &self,
+        bench_name: impl ToString,
+        vm_config: VC,
+        exe: impl Into<VmExe<F>>,
+        input_stream: StdIn,
+    ) -> Result<()>
+    where
+        VC: VmConfig<F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let app_config = self.app_config(vm_config);
+        bench_from_exe(
+            bench_name,
+            app_config,
+            exe,
+            input_stream,
+            #[cfg(not(feature = "aggregation"))]
+            None,
+            #[cfg(feature = "aggregation")]
+            Some(self.agg_config().agg_stark_config.leaf_vm_config()),
+        )
     }
 }
 
@@ -170,7 +197,7 @@ pub fn bench_from_exe<VC>(
     app_config: AppConfig<VC>,
     exe: impl Into<VmExe<F>>,
     input_stream: StdIn,
-    bench_leaf: bool,
+    leaf_vm_config: Option<NativeConfig>,
 ) -> Result<()>
 where
     VC: VmConfig<F>,
@@ -201,8 +228,8 @@ where
     // 6. Verify STARK proofs, including boundary conditions.
     vm.verify(&vk, app_proof.per_segment.clone())
         .expect("Verification failed");
-    if bench_leaf {
-        let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params);
+    if let Some(leaf_vm_config) = leaf_vm_config {
+        let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);
         let leaf_prover = LeafProver::new(leaf_vm_pk, app_pk.leaf_committed_exe);
         leaf_prover.generate_proof(&app_proof);
     }
