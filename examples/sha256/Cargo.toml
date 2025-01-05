@@ -1,0 +1,17 @@
+[package]
+name = "sha256-example"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+members = []
+
+[dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-sha256-guest = { git = "https://github.com/openvm-org/openvm.git" }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+
+[features]
+default = []
+std = ["openvm/std", "openvm-sha256-guest/std"]

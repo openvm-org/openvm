@@ -10,28 +10,13 @@ The OpenVM Keccak256 Guest extension provides two functions for using in your gu
 - `keccak256(input: &[u8]) -> [u8; 32]`: Computes the Keccak-256 hash of the input data and returns it as an array of 32 bytes.
 - `set_keccak256(input: &[u8], output: &mut [u8; 32])`: Sets the output to the Keccak-256 hash of the input data into the provided output buffer.
 
-See the full example [here](https://github.com/openvm-org/openvm/blob/main/extensions/keccak256/tests/programs/examples/keccak.rs).
+See the full example [here](https://github.com/openvm-org/openvm/blob/main/examples/keccak/src/main.rs).
 
-### Example:
+### Example
 
-```rust
-use hex::FromHex;
-use openvm_keccak256_guest::keccak256;
-
-pub fn main() {
-    let test_vectors = [
-        ("", "C5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470"),
-        ("CC", "EEAD6DBFC7340A56CAEDC044696A168870549A6A7F6F56961E84A54BD9970B8A"),
-    ];
-    for (input, expected_output) in test_vectors.iter() {
-        let input = Vec::from_hex(input).unwrap();
-        let expected_output = Vec::from_hex(expected_output).unwrap();
-        let output = keccak256(&black_box(input));
-        if output != *expected_output {
-            panic!();
-        }
-    }
-}
+```rust,no_run,noplayground
+{{ #include ../../../examples/keccak/src/main.rs:imports }}
+{{ #include ../../../examples/keccak/src/main.rs:main }}
 ```
 
 To be able to import the `keccak256` function, add the following to your `Cargo.toml` file:

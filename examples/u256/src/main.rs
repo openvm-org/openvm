@@ -5,13 +5,13 @@
 openvm::entry!(main);
 use core::array;
 
-use openvm_bigint_guest::I256;
+use openvm_bigint_guest::U256;
 
 const N: usize = 16;
-type Matrix = [[I256; N]; N];
+type Matrix = [[U256; N]; N];
 
-pub fn get_matrix(val: i32) -> Matrix {
-    array::from_fn(|_| array::from_fn(|_| I256::from_i32(val)))
+pub fn get_matrix(val: u32) -> Matrix {
+    array::from_fn(|_| array::from_fn(|_| U256::from_u32(val)))
 }
 
 pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
@@ -29,14 +29,14 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
 pub fn get_identity_matrix() -> Matrix {
     let mut res = get_matrix(0);
     for i in 0..N {
-        res[i][i] = I256::from_i32(1);
+        res[i][i] = U256::from_u32(1);
     }
     res
 }
 
 pub fn main() {
     let a: Matrix = get_identity_matrix();
-    let b: Matrix = get_matrix(-28);
+    let b: Matrix = get_matrix(28);
     let c: Matrix = mult(&a, &b);
     assert_eq!(c, b);
 }
