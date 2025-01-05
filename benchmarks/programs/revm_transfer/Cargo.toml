@@ -17,6 +17,7 @@ alloy-primitives = { version = "0.8.10", default-features = false, features = [
 default = []
 std = ["openvm/std", "revm/std"]
 
-[profile.release]
-lto = true
-strip = true
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false

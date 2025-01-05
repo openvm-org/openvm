@@ -13,3 +13,8 @@ serde-json-core = "0.6.0"
 [features]
 default = []
 std = ["openvm/std"]
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false

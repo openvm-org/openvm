@@ -47,6 +47,10 @@ pub struct BenchmarkCli {
     /// Max segment length for continuations
     #[arg(short, long, alias = "max_segment_length")]
     pub max_segment_length: Option<usize>,
+
+    /// Whether to execute with additional profiling metric collection
+    #[arg(long)]
+    pub profiling: bool,
 }
 
 fn get_programs_dir() -> PathBuf {

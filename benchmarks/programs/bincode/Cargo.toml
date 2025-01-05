@@ -17,3 +17,8 @@ rand_pcg = "0.3.1"
 [features]
 default = []
 std = ["openvm/std"]
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false
