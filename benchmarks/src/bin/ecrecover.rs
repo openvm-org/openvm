@@ -104,11 +104,9 @@ impl Rv32ImEcRecoverConfig {
 }
 
 fn main() -> Result<()> {
-    let cli_args = BenchmarkCli::parse();
-    let app_log_blowup = cli_args.app_log_blowup.unwrap_or(2);
-    let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
+    let args = BenchmarkCli::parse();
 
-    let elf = build_bench_program("ecrecover")?;
+    let elf = args.build_bench_program("ecrecover")?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
@@ -120,14 +118,9 @@ fn main() -> Result<()> {
             .with_extension(EccTranspilerExtension),
     )?;
     // TODO: update sw_setup macros and read it from elf.
-    let vm_config = AppConfig {
-        app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup)
-            .into(),
-        app_vm_config: Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]),
-        leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup)
-            .into(),
-        compiler_options: CompilerOptions::default(),
-    };
+    let app_config = args.app_config(Rv32ImEcRecoverConfig::for_curves(vec![
+        SECP256K1_CONFIG.clone()
+    ]));
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         info_span!("ECDSA Recover Program").in_scope(|| {
@@ -156,7 +149,7 @@ fn main() -> Result<()> {
             );
             bench_from_exe(
                 "ecrecover_program",
-                vm_config,
+                app_config,
                 exe,
                 input_stream.into(),
                 #[cfg(feature = "aggregation")]
