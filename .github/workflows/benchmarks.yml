@@ -86,7 +86,7 @@ jobs:
             FEATURE_FLAGS="profiling,${FEATURE_FLAGS}"
           fi
 
-          matrix=$(jq -c --argjson run_e2e $RUN_E2E --arg features $FEATURE_FLAGS '
+          matrix=$(jq -c --argjson run_e2e $RUN_E2E --arg features "$FEATURE_FLAGS" '
             [
               .benchmarks[] |
               .name as $name |
