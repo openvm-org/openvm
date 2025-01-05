@@ -63,7 +63,7 @@ For the basic operations provided by the `WeierstrassPoint` trait, the scalar fi
 
 ## Example program
 
-See a working example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/ec.rs).
+See a working example [here](https://github.com/openvm-org/openvm/blob/main/extensions/ecc/tests/programs/examples/ec.rs).
 
 To use the ECC extension, add the following dependencies to `Cargo.toml`:
 
