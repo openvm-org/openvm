@@ -18,8 +18,13 @@ on:
     inputs:
       flamegraphs:
         type: boolean
-        required: false
         description: Collect profiling metrics and generate flamegraphs
+        required: false
+        default: false
+      aggregation:
+        type: boolean
+        description: "Run leaf aggregation benchmarks"
+        required: false
         default: false
       run-benchmark-e2e:
         type: boolean
@@ -40,6 +45,7 @@ env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
   S3_MD_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results
   S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
+  FEATURE_FLAGS: ""
 
 permissions:
   contents: write
@@ -73,9 +79,14 @@ jobs:
           else
             RUN_E2E=${{ github.event.inputs.run-benchmark-e2e || 'false' }}
           fi
-          PROFILING=${{ github.event.inputs.flamegraphs || 'false' }}
+          if [[ "${{ github.event.inputs.aggregation }}" == "true" ]]; then
+            FEATURE_FLAGS="aggregation,${FEATURE_FLAGS}"
+          fi
+          if [[ "${{ github.event.inputs.flamegraphs }}" == "true" ]]; then
+            FEATURE_FLAGS="profiling,${FEATURE_FLAGS}"
+          fi
 
-          matrix=$(jq -c --argjson run_e2e $RUN_E2E --argjson profiling $PROFILING '
+          matrix=$(jq -c --argjson run_e2e $RUN_E2E --argjson features $FEATURE_FLAGS '
             [
               .benchmarks[] |
               .name as $name |
@@ -86,7 +97,7 @@ jobs:
               {
                 name: $name,
                 e2e_bench: $e2e_bench,
-                profiling: $profiling
+                features: $features,
                 id: $id,
                 instance_type: .instance_type,
                 memory_allocator: .memory_allocator,

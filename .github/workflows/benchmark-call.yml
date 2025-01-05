@@ -46,11 +46,10 @@ on:
         type: boolean
         required: true
         description: Whether to run the e2e benchmark
-      profiling:
-        type: boolean
+      features:
+        type: string
         required: false
-        description: Profiling mode
-        default: false
+        description: Host features, comma separated (aggregation,profiling)
   workflow_call:
     inputs:
       benchmark_name:
@@ -100,11 +99,10 @@ on:
         type: boolean
         required: true
         description: Whether to run the e2e benchmark
-      profiling:
-        type: boolean
+      features:
+        type: string
         required: false
-        description: Profiling mode
-        default: false
+        description: Host features, comma separated (aggregation,profiling)
 
 env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
@@ -153,10 +151,10 @@ jobs:
         run: |
           echo "Adding aggregation feature flag"
           echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
-      - name: "Feature flags: profiling"
-        if: github.event.inputs.profiling
+      - name: "Feature flags: workflow"
+        if: github.event.inputs.features
         run: |
-          echo "FEATURE_FLAGS=${FEATURE_FLAGS},profiling" >> $GITHUB_ENV
+          echo "FEATURE_FLAGS=${FEATURE_FLAGS},${{ github.event.inputs.features }}" >> $GITHUB_ENV
 
       - name: Setup e2e (halo2 and arguments)
         run: |
