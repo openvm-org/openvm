@@ -4,6 +4,7 @@ use aggregate::{
     EXECUTE_TIME_LABEL, PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
 };
 use eyre::Result;
+use itertools::Itertools;
 
 use crate::types::{Labels, Metric, MetricDb, MetricsFile};
 
@@ -136,7 +137,7 @@ impl MetricDb {
             // Fill table rows
             for (label_values, metrics) in metrics_dict {
                 // cycle_tracker_span is a long string, we don't need to display it in markdown
-                let label_values: Vec<&str> = label_values
+                let label_values = label_values
                     .iter()
                     .enumerate()
                     .map(|(i, val)| {
@@ -146,7 +147,7 @@ impl MetricDb {
                             val.as_str()
                         }
                     })
-                    .collect();
+                    .collect_vec();
                 let mut row = String::new();
                 row.push_str("| ");
                 row.push_str(&label_values.join(" | "));
