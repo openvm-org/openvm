@@ -148,7 +148,7 @@ jobs:
       - name: "Feature flags: memory allocator"
         run: |
           ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
-          echo "FEATURE_FLAGS=${FEATURE_FLAGS},$ALLOCATOR" >> $GITHUB_ENV
+          echo "FEATURE_FLAGS=$ALLOCATOR,${FEATURE_FLAGS}" >> $GITHUB_ENV
       - name: "Feature flags: aggregation"
         if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
