@@ -27,7 +27,7 @@ The STARK backend requires the trace height to be a power of 2. Usually we pad t
 However, there are some cases that all-0 row doesn't satisfy the constraints: when the computation involves non-zero constant values:
 
 - Some pairing chips involves adding a small constant value (like `1`). But since pairing chips don't have any flags, we will pad the trace with the last valid row and set `is_valid` to 0.
-- EcDouble for Weierstrass curve (not short Weierstrass ones): `y^2 = x^3 + ax + b` where `a != 0`. Last valid row with `is_valid = 0` won't work as in that case `setup = is_valid - sum(all_flags) = 0 - 1 = -1` is not a bool (0/1). So additionally we need to set the flags to 0.
+- EcDouble for short Weierstrass curve: `y^2 = x^3 + ax + b` where `a != 0`. Last valid row with `is_valid = 0` won't work as in that case `setup = is_valid - sum(all_flags) = 0 - 1 = -1` is not a bool (0/1). So we will pad the trace with the first valid row (which is a setup row) and set `is_valid` to 0.
 
 ## Example usage
 

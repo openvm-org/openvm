@@ -11,7 +11,7 @@ use k256::{
 use openvm::io::read_vec;
 #[allow(unused_imports)]
 use openvm_ecc_guest::{
-    algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Coord, weierstrass::WeierstrassPoint,
+    algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
 };
 #[allow(unused_imports, clippy::single_component_path_imports)]
 use openvm_keccak256_guest; // export native keccak
