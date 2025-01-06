@@ -257,15 +257,13 @@ jobs:
           cp summary.md ${TMP_DIR}/
 
       ##########################################################################
-      # Update benchmark-results branch with summary upon a PR event           #
+      # Update benchmark-results branch with summary                           #
       ##########################################################################
       - uses: actions/checkout@v4
-        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         with:
           ref: benchmark-results
 
       - name: Set up git
-        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
