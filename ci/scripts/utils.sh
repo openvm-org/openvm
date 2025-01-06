@@ -7,7 +7,7 @@ add_metadata_and_flamegraphs() {
     # vars: $FLAMEGRAPHS, $S3_FLAMEGRAPHS_PATH, $CURRENT_SHA
 
     id=${metric_path%%-*} # first part before -
-    echo $id
+    echo "id: $id"
 
     inputs=$(echo "$matrix" | jq -r --arg id "$id" '.[] |
       select(.id == $id) |
@@ -16,6 +16,7 @@ add_metadata_and_flamegraphs() {
         instance_type: .instance_type,
         memory_allocator: .memory_allocator
       }')
+    echo "inputs: $inputs"
 
     if [[ "$FLAMEGRAPHS" == 'true' ]]; then
       repo_root=$(git rev-parse --show-toplevel)
