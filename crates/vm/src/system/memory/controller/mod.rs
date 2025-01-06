@@ -442,10 +442,6 @@ impl<F: PrimeField32> MemoryController<F> {
         self.memory.increment_timestamp_by(change);
     }
 
-    pub fn increase_timestamp_to(&mut self, timestamp: u32) {
-        self.memory.increase_timestamp_to(timestamp);
-    }
-
     pub fn timestamp(&self) -> u32 {
         self.memory.timestamp()
     }

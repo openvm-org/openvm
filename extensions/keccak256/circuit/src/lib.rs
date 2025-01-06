@@ -147,8 +147,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         let local_opcode = Rv32KeccakOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         debug_assert_eq!(local_opcode, Rv32KeccakOpcode::KECCAK256);
 
-        debug_assert_eq!(from_state.timestamp, memory.timestamp());
-
+        let mut timestamp_delta = 3;
         let (dst_read, dst) = read_rv32_register(memory, d, a);
         let (src_read, src) = read_rv32_register(memory, d, b);
         let (len_read, len) = read_rv32_register(memory, d, c);
@@ -168,6 +167,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         for block_idx in 0..num_blocks {
             if block_idx != 0 {
                 memory.increment_timestamp_by(KECCAK_REGISTER_READS as u32);
+                timestamp_delta += KECCAK_REGISTER_READS as u32;
             }
             let mut reads = Vec::with_capacity(KECCAK_RATE_BYTES);
 
@@ -177,6 +177,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
                 if i < remaining_len {
                     let read =
                         memory.read::<RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_usize(src + i));
+
                     let chunk = read.1.map(|x| {
                         x.as_canonical_u32()
                             .try_into()
@@ -191,6 +192,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
                 } else {
                     memory.increment_timestamp();
                 }
+                timestamp_delta += 1;
             }
 
             let mut block = KeccakInputBlock {
@@ -223,6 +225,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         hasher.finalize(&mut output);
         let dst = dst as usize;
         let digest_writes: [_; KECCAK_DIGEST_WRITES] = from_fn(|i| {
+            timestamp_delta += 1;
             memory
                 .write::<KECCAK_WORD_SIZE>(
                     e,
@@ -247,14 +250,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
 
         // NOTE: Check this is consistent with KeccakVmAir::timestamp_change (we don't use it to avoid
         // unnecessary conversions here)
-        let timestamp_change =
+        let total_timestamp_delta =
             len + (KECCAK_REGISTER_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES) as u32;
-        let to_timestamp = from_state.timestamp + timestamp_change;
-        memory.increase_timestamp_to(to_timestamp);
+        memory.increment_timestamp_by(total_timestamp_delta - timestamp_delta);
 
         Ok(ExecutionState {
             pc: from_state.pc + DEFAULT_PC_STEP,
-            timestamp: to_timestamp,
+            timestamp: from_state.timestamp + total_timestamp_delta,
         })
     }
 

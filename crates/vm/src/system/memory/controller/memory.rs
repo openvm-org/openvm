@@ -594,14 +594,6 @@ impl<F: PrimeField32> Memory<F> {
         self.log.push(MemoryLogEntry::IncrementTimestampBy(amount))
     }
 
-    pub fn increase_timestamp_to(&mut self, amount: u32) {
-        if amount == self.timestamp {
-            return;
-        }
-        assert!(amount > self.timestamp);
-        self.increment_timestamp_by(amount - self.timestamp);
-    }
-
     pub fn timestamp(&self) -> u32 {
         self.timestamp
     }
