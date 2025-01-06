@@ -56,6 +56,7 @@ pprof = { version = "0.13", features = [
 [features]
 default = ["parallel", "mimalloc", "bench-metrics"]
 bench-metrics = ["openvm-native-recursion/bench-metrics"]
+profiling = ["openvm-sdk/profiling"]
 aggregation = []
 static-verifier = ["openvm-native-recursion/static-verifier"]
 parallel = ["openvm-native-recursion/parallel"]

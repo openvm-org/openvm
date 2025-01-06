@@ -1,22 +1,42 @@
-generate_markdown() {
+add_metadata_and_flamegraphs() {
     local metric_path="$1"
-    local metric_name="$2"
-    local s3_metrics_path="$3"
-    local openvm_root="$4"
+    local md_path="$2"
+    local matrix="$3"
+    local commit_url="$4"
+    local benchmark_workflow_url="$5"
+    # vars: $FLAMEGRAPHS, $S3_FLAMEGRAPHS_PATH, $CURRENT_SHA
 
-    if [[ -f $metric_path ]]; then
-        prev_path="${s3_metrics_path}/main-${metric_name}.json"
-        count=`s5cmd ls $prev_path | wc -l`
+    id=${metric_path%%-*} # first part before -
+    echo "id: $id"
 
-        if [[ $count -gt 0 ]]; then
-            s5cmd cp $prev_path prev.json
-            python3 ${openvm_root}/ci/scripts/metric_unify/main.py $metric_path --prev prev.json --aggregation-json ${openvm_root}/ci/scripts/metric_unify/aggregation.json > results.md
-        else
-            echo "No previous benchmark on main branch found"
-            python3 ${openvm_root}/ci/scripts/metric_unify/main.py $metric_path --aggregation-json ${openvm_root}/ci/scripts/metric_unify/aggregation.json > results.md
-        fi
-    else
-        echo "No benchmark metrics found at ${metric_path}"
+    inputs=$(echo "$matrix" | jq -r --arg id "$id" '.[] |
+      select(.id == $id) |
+      {
+        max_segment_length: .max_segment_length,
+        instance_type: .instance_type,
+        memory_allocator: .memory_allocator
+      }')
+    echo "inputs: $inputs"
+
+    if [[ "$FLAMEGRAPHS" == 'true' ]]; then
+      repo_root=$(git rev-parse --show-toplevel)
+      python3 ${repo_root}/ci/scripts/metric_unify/flamegraph.py $metric_path
+      s5cmd cp "${repo_root}/.bench_metrics/flamegraphs/*.svg" "${S3_FLAMEGRAPHS_PATH}/${CURRENT_SHA}/"
+    fi
+
+    if [ ! -z "$inputs" ]; then
+      max_segment_length=$(echo "$inputs" | jq -r '.max_segment_length')
+      instance_type=$(echo "$inputs" | jq -r '.instance_type')
+      memory_allocator=$(echo "$inputs" | jq -r '.memory_allocator')
+
+      # Call add_metadata for each file with its corresponding data
+      add_metadata \
+        "$md_path" \
+        "$max_segment_length" \
+        "$instance_type" \
+        "$memory_allocator" \
+        "$commit_url" \
+        "$benchmark_workflow_url"
     fi
 }
 
@@ -27,15 +47,17 @@ add_metadata() {
     local memory_allocator="$4"
     local commit_url="$5"
     local benchmark_workflow_url="$6"
+    # vars: $FLAMEGRAPHS, $S3_FLAMEGRAPHS_PATH, $CURRENT_SHA
 
     echo "" >> $result_path
-    if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
+    if [[ "$FLAMEGRAPHS" == 'true' ]]; then
         echo "<details>" >> $result_path
         echo "<summary>Flamegraphs</summary>" >> $result_path
         echo "" >> $result_path
-        for file in .bench_metrics/flamegraphs/*.svg; do
+        repo_root=$(git rev-parse --show-toplevel)
+        for file in $repo_root/.bench_metrics/flamegraphs/*.svg; do
         filename=$(basename "$file")
-            flamegraph_url=https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
+            flamegraph_url=https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${CURRENT_SHA}/${filename}
             echo "[![]($flamegraph_url)]($flamegraph_url)" >> $result_path
         done
         echo "" >> $result_path

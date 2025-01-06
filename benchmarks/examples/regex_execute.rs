@@ -27,7 +27,9 @@ fn main() {
 
     let data = include_str!("../programs/regex/regex_email.txt");
 
+    let timer = std::time::Instant::now();
     executor
         .execute(exe.clone(), StdIn::from_bytes(data.as_bytes()))
         .unwrap();
+    println!("execute_time: {:?}", timer.elapsed());
 }

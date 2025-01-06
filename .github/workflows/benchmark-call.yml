@@ -22,7 +22,7 @@ on:
         required: false
         description: Application level log blowup
         default: 2
-      agg_log_blowup:
+      leaf_log_blowup:
         type: number
         required: false
         description: Aggregation (leaf) level log blowup
@@ -46,6 +46,10 @@ on:
         type: boolean
         required: true
         description: Whether to run the e2e benchmark
+      features:
+        type: string
+        required: false
+        description: Host features, comma separated (aggregation,profiling)
   workflow_call:
     inputs:
       benchmark_name:
@@ -71,7 +75,7 @@ on:
         required: false
         description: Application level log blowup
         default: 2
-      agg_log_blowup:
+      leaf_log_blowup:
         type: number
         required: false
         description: Aggregation (leaf) level log blowup
@@ -95,11 +99,14 @@ on:
         type: boolean
         required: true
         description: Whether to run the e2e benchmark
+      features:
+        type: string
+        required: false
+        description: Host features, comma separated (aggregation,profiling)
 
 env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
   FEATURE_FLAGS: "bench-metrics,parallel,nightly-features"
-  CMD_ARGS: ""
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
@@ -115,7 +122,9 @@ jobs:
       - run-id=${{ github.run_id }}
       - family=m7
       - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
+      - extras=s3-cache
     steps:
+      - uses: runs-on/action@v1
       ##########################################################################
       # Environment setup                                                      #
       ##########################################################################
@@ -136,11 +145,20 @@ jobs:
 
       - name: Display workflow inputs
         run: echo "${{ toJSON(inputs) }}"
-      - name: Feature flags
+      - name: "Feature flags: memory allocator"
+        run: |
+          ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
+          echo "FEATURE_FLAGS=$ALLOCATOR,${FEATURE_FLAGS}" >> $GITHUB_ENV
+      - name: "Feature flags: aggregation"
         if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
           echo "Adding aggregation feature flag"
           echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
+      - name: "Feature flags: workflow"
+        if: inputs.features || github.event.inputs.features
+        run: |
+          EXTRA_FEATURES=${{ inputs.features || github.event.inputs.features }}
+          echo "FEATURE_FLAGS=${FEATURE_FLAGS},$EXTRA_FEATURES" >> $GITHUB_ENV
 
       - name: Setup e2e (halo2 and arguments)
         run: |
@@ -155,10 +173,8 @@ jobs:
             export PARAMS_DIR=$(pwd)/params
           fi
 
-      - name: Set BIN_NAME and CMD_ARGS
+      - name: Set BIN_NAME
         run: |
-          CMD_ARGS="--features ${FEATURE_FLAGS}"
-          echo "CMD_ARGS=${CMD_ARGS}" >> $GITHUB_ENV
           echo "BIN_NAME=${{ inputs.benchmark_name }}" >> $GITHUB_ENV
 
       - name: Set working directory
@@ -184,13 +200,12 @@ jobs:
 
       - name: Set input args
         run: |
-          INSTANCE_TYPE="--instance_type ${{ inputs.instance_type }}"
-          MEMORY_ALLOCATOR="--memory_allocator ${{ inputs.memory_allocator }}"
+          FEATURES="--features $FEATURE_FLAGS"
           APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
-          AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
+          AGG_ARG="--leaf_log_blowup ${{ inputs.leaf_log_blowup }}"
           MAX_SEGMENT_LENGTH="--max_segment_length ${{ inputs.max_segment_length }}"
-          OUTPUT_PATH="--output_path $METRIC_PATH"
-          echo "INPUT_ARGS=${INSTANCE_TYPE} ${MEMORY_ALLOCATOR} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
+          OUTPUT_PATH="--output_path $(pwd)/$METRIC_PATH"
+          echo "INPUT_ARGS=${FEATURES} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
 
       ##########################################################################
       # Find working directory based on benchmark_name and run the benchmark   #
@@ -198,7 +213,7 @@ jobs:
       - name: Run benchmark
         working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
         run: |
-          python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $CMD_ARGS $INPUT_ARGS
+          python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $INPUT_ARGS
 
       ##########################################################################
       # Store metric json file to S3                                           #

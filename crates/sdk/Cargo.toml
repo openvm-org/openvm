@@ -47,6 +47,10 @@ getset.workspace = true
 
 [features]
 default = ["parallel"]
-bench-metrics = ["openvm-native-recursion/bench-metrics"]
+bench-metrics = [
+    "openvm-circuit/bench-metrics",
+    "openvm-native-recursion/bench-metrics",
+]
+profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]

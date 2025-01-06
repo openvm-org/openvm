@@ -5,7 +5,11 @@ use openvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_native_recursion::testing_utils::inner::build_verification_program;
-use openvm_sdk::{config::AppConfig, prover::AppProver, Sdk};
+use openvm_sdk::{
+    config::{AppConfig, DEFAULT_APP_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP},
+    prover::AppProver,
+    Sdk,
+};
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -19,9 +23,9 @@ use openvm_stark_sdk::{
 /// 1. Prove Fibonacci AIR.
 /// 2. Verify the proof of 1. by execution VM program in STARK VM.
 fn main() -> Result<()> {
-    let cli_args = BenchmarkCli::parse();
-    let app_log_blowup = cli_args.app_log_blowup.unwrap_or(2);
-    let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
+    let args = BenchmarkCli::parse();
+    let app_log_blowup = args.app_log_blowup.unwrap_or(DEFAULT_APP_LOG_BLOWUP);
+    let leaf_log_blowup = args.leaf_log_blowup.unwrap_or(DEFAULT_LEAF_LOG_BLOWUP);
 
     let n = 16; // STARK to calculate 16th Fibonacci number.
     let fib_chip = FibonacciChip::new(0, 1, n);
@@ -36,11 +40,13 @@ fn main() -> Result<()> {
             .unwrap();
         // Unlike other apps, this "app" does not have continuations enabled.
         let app_fri_params =
-            FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup);
-        let app_vm_config = NativeConfig::aggregation(
+            FriParameters::standard_with_100_bits_conjectured_security(leaf_log_blowup);
+        let mut app_vm_config = NativeConfig::aggregation(
             DEFAULT_MAX_NUM_PUBLIC_VALUES,
             app_fri_params.max_constraint_degree().min(7),
         );
+        app_vm_config.system.profiling = args.profiling;
+
         let compiler_options = CompilerOptions::default();
         let app_config = AppConfig {
             app_fri_params: app_fri_params.into(),

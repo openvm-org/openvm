@@ -12,3 +12,8 @@ regex = { version = "1.11.1", default-features = false }
 [features]
 default = []
 std = ["openvm/std"]
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false

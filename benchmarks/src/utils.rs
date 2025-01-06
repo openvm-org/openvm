@@ -3,17 +3,28 @@ use std::{fs::read, path::PathBuf};
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
+use openvm_circuit::arch::{
+    instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES},
+    VirtualMachine, VmConfig,
+};
+use openvm_native_circuit::NativeConfig;
+use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
     commit::commit_app_exe,
-    config::AppConfig,
+    config::{
+        AggConfig, AggStarkConfig, AppConfig, Halo2Config, DEFAULT_APP_LOG_BLOWUP,
+        DEFAULT_INTERNAL_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP, DEFAULT_ROOT_LOG_BLOWUP,
+    },
     keygen::{leaf_keygen, AppProvingKey},
     prover::{AppProver, LeafProver},
     StdIn,
 };
 use openvm_stark_backend::utils::metrics_span;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    config::{
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        FriParameters,
+    },
     engine::StarkFriEngine,
     openvm_stark_backend::Chip,
     p3_baby_bear::BabyBear,
@@ -33,20 +44,119 @@ pub struct BenchmarkCli {
     pub app_log_blowup: Option<usize>,
 
     /// Aggregation (leaf) level log blowup, default set by the benchmark
-    #[arg(short = 'g', long, alias = "agg_log_blowup")]
-    pub agg_log_blowup: Option<usize>,
-
-    /// Root level log blowup, default set by the benchmark
-    #[arg(short, long, alias = "root_log_blowup")]
-    pub root_log_blowup: Option<usize>,
+    #[arg(short = 'g', long, alias = "leaf_log_blowup")]
+    pub leaf_log_blowup: Option<usize>,
 
     /// Internal level log blowup, default set by the benchmark
     #[arg(short, long, alias = "internal_log_blowup")]
     pub internal_log_blowup: Option<usize>,
 
+    /// Root level log blowup, default set by the benchmark
+    #[arg(short, long, alias = "root_log_blowup")]
+    pub root_log_blowup: Option<usize>,
+
+    #[arg(long)]
+    pub halo2_outer_k: Option<usize>,
+
+    #[arg(long)]
+    pub halo2_wrapper_k: Option<usize>,
+
     /// Max segment length for continuations
     #[arg(short, long, alias = "max_segment_length")]
     pub max_segment_length: Option<usize>,
+
+    /// Whether to execute with additional profiling metric collection
+    #[arg(long)]
+    pub profiling: bool,
+}
+
+impl BenchmarkCli {
+    pub fn app_config<VC: VmConfig<BabyBear>>(&self, mut app_vm_config: VC) -> AppConfig<VC> {
+        let app_log_blowup = self.app_log_blowup.unwrap_or(DEFAULT_APP_LOG_BLOWUP);
+        let leaf_log_blowup = self.leaf_log_blowup.unwrap_or(DEFAULT_LEAF_LOG_BLOWUP);
+
+        app_vm_config.system_mut().profiling = self.profiling;
+        AppConfig {
+            app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+                app_log_blowup,
+            )
+            .into(),
+            app_vm_config,
+            leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+                leaf_log_blowup,
+            )
+            .into(),
+            compiler_options: CompilerOptions {
+                enable_cycle_tracker: self.profiling,
+                ..Default::default()
+            },
+        }
+    }
+
+    pub fn agg_config(&self) -> AggConfig {
+        let leaf_log_blowup = self.leaf_log_blowup.unwrap_or(DEFAULT_LEAF_LOG_BLOWUP);
+        let internal_log_blowup = self
+            .internal_log_blowup
+            .unwrap_or(DEFAULT_INTERNAL_LOG_BLOWUP);
+        let root_log_blowup = self.root_log_blowup.unwrap_or(DEFAULT_ROOT_LOG_BLOWUP);
+
+        let [leaf_fri_params, internal_fri_params, root_fri_params] =
+            [leaf_log_blowup, internal_log_blowup, root_log_blowup]
+                .map(FriParameters::standard_with_100_bits_conjectured_security);
+
+        AggConfig {
+            agg_stark_config: AggStarkConfig {
+                max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
+                leaf_fri_params,
+                internal_fri_params,
+                root_fri_params,
+                profiling: self.profiling,
+                compiler_options: CompilerOptions {
+                    enable_cycle_tracker: self.profiling,
+                    ..Default::default()
+                },
+            },
+            halo2_config: Halo2Config {
+                verifier_k: self.halo2_outer_k.unwrap_or(24),
+                wrapper_k: self.halo2_wrapper_k,
+            },
+        }
+    }
+
+    pub fn build_bench_program(&self, program_name: &str) -> Result<Elf> {
+        let profile = if self.profiling {
+            "profiling"
+        } else {
+            "release"
+        }
+        .to_string();
+        build_bench_program(program_name, profile)
+    }
+
+    pub fn bench_from_exe<VC>(
+        &self,
+        bench_name: impl ToString,
+        vm_config: VC,
+        exe: impl Into<VmExe<F>>,
+        input_stream: StdIn,
+    ) -> Result<()>
+    where
+        VC: VmConfig<F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let app_config = self.app_config(vm_config);
+        bench_from_exe(
+            bench_name,
+            app_config,
+            exe,
+            input_stream,
+            #[cfg(not(feature = "aggregation"))]
+            None,
+            #[cfg(feature = "aggregation")]
+            Some(self.agg_config().agg_stark_config.leaf_vm_config()),
+        )
+    }
 }
 
 fn get_programs_dir() -> PathBuf {
@@ -55,12 +165,14 @@ fn get_programs_dir() -> PathBuf {
     dir
 }
 
-pub fn build_bench_program(program_name: &str) -> Result<Elf> {
+pub fn build_bench_program(program_name: &str, profile: impl ToString) -> Result<Elf> {
     let manifest_dir = get_programs_dir().join(program_name);
     let pkg = get_package(manifest_dir);
     let target_dir = tempdir()?;
     // Build guest with default features
-    let guest_opts = GuestOptions::default().with_target_dir(target_dir.path());
+    let guest_opts = GuestOptions::default()
+        .with_target_dir(target_dir.path())
+        .with_profile(profile.to_string());
     if let Err(Some(code)) = build_guest_package(&pkg, &guest_opts, None, &None) {
         std::process::exit(code);
     }
@@ -85,7 +197,7 @@ pub fn bench_from_exe<VC>(
     app_config: AppConfig<VC>,
     exe: impl Into<VmExe<F>>,
     input_stream: StdIn,
-    bench_leaf: bool,
+    leaf_vm_config: Option<NativeConfig>,
 ) -> Result<()>
 where
     VC: VmConfig<F>,
@@ -116,8 +228,8 @@ where
     // 6. Verify STARK proofs, including boundary conditions.
     vm.verify(&vk, app_proof.per_segment.clone())
         .expect("Verification failed");
-    if bench_leaf {
-        let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params);
+    if let Some(leaf_vm_config) = leaf_vm_config {
+        let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);
         let leaf_prover = LeafProver::new(leaf_vm_pk, app_pk.leaf_committed_exe);
         leaf_prover.generate_proof(&app_proof);
     }

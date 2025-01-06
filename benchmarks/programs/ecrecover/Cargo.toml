@@ -26,4 +26,8 @@ std = ["openvm/std", "k256/std", "revm-precompile/std", "alloy-primitives/std"]
 [profile.release]
 panic = "abort"
 lto = "thin"    # faster compile time
-debug = 2       # for flamegraph
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false
