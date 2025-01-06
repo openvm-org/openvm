@@ -20,7 +20,7 @@ openvm_algebra_moduli_setup::moduli_init! {
 }
 
 openvm_ecc_sw_setup::sw_init! {
-    P256Coord,
+    P256Point,
 }
 
 pub fn main() {
@@ -46,12 +46,12 @@ pub fn main() {
     // Add assign and double assign
     let mut sum = P256Point::from_xy(x1, y1).unwrap();
     sum += &p2;
-    if sum.x != p3.x || sum.y != p3.y {
+    if sum.x() != p3.x() || sum.y() != p3.y() {
         panic!();
     }
     let mut double = P256Point::from_xy(x2, y2).unwrap();
     double.double_assign();
-    if double.x != p4.x || double.y != p4.y {
+    if double.x() != p4.x() || double.y() != p4.y() {
         panic!();
     }
 }

@@ -30,6 +30,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
     for item in items.into_iter() {
         let struct_name = item.name.to_string();
         let struct_name = syn::Ident::new(&struct_name, span.into());
+        let struct_path: syn::Path = syn::parse_quote!(#struct_name);
         let mut intmod_type: Option<syn::Path> = None;
         let mut const_a: Option<syn::Expr> = None;
         let mut const_b: Option<syn::Expr> = None;
@@ -70,7 +71,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     &format!(
                         "{}_{}",
                         stringify!($name),
-                        intmod_type
+                        struct_path
                             .segments
                             .iter()
                             .map(|x| x.ident.to_string())
@@ -427,10 +428,12 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                 {
                     // p1 is (x1, y1), and x1 must be the modulus.
                     // y1 can be anything for SetupEcAdd, but must equal `a` for SetupEcDouble
-                    let modulus_bytes = <#item as openvm_algebra_guest::IntMod>::MODULUS;
-                    let one = [0u8; <#item as openvm_algebra_guest::IntMod>::NUM_LIMBS];
+                    let modulus_bytes = <<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
+                    let mut one = [0u8; <<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
                     one[0] = 1;
-                    let p1 = [modulus_bytes.as_ref(), one.as_ref()].concat();
+                    let curve_a_bytes = <#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A.as_le_bytes();
+                    // p1 should be (p, a)
+                    let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
                     let p2 = [one.as_ref(), one.as_ref()].concat();
                     let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();

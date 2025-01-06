@@ -299,12 +299,6 @@ where
             // The same as last row, except "is_valid" (the first element of core part) is zero.
             core_row.copy_from_slice(last_row_core);
             core_row[0] = F::ZERO;
-            if self.air.expr.needs_setup() {
-                // Setup will be derived by `is_valid - sum(all_flags)`, so we need to also set all the flags to 0.
-                for i in 0..self.air.num_flags() {
-                    core_row[core_width - 1 - i] = F::ZERO;
-                }
-            }
         }
     }
 }

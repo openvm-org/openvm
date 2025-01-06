@@ -40,10 +40,10 @@ mod tests {
     }
 
     #[test]
-    fn test_ec_weierstrass_runtime() -> Result<()> {
+    fn test_ec_nonzero_a() -> Result<()> {
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
-            "ec_weierstrass",
+            "ec_nonzero_a",
             ["p256"],
         )?;
         let openvm_exe = VmExe::from_elf(

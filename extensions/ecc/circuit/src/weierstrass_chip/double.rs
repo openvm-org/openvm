@@ -22,6 +22,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::BaseAirWithPublicValues,
 };
 
@@ -173,6 +174,7 @@ impl EcDoubleCoreChip {
     }
 }
 
+#[derive(Clone)]
 pub struct EcDoubleCoreRecord {
     pub x: BigUint,
     pub y: BigUint,
@@ -261,5 +263,24 @@ where
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+
+    // We need finalize for double, as it might have a constant (a of y^2 = x^3 + ax + b)
+    fn finalize(&self, trace: &mut RowMajorMatrix<F>, num_records: usize) {
+        if num_records == 0 {
+            return;
+        }
+        let core_width = <Self::Air as BaseAir<F>>::width(&self.air);
+        let adapter_width = trace.width() - core_width;
+        // We will be setting is_valid = 0. That forces is_double to be 0 (otherwise setup will be -1).
+        // So the computation is like doing setup.
+        // Thus we will copy over the first row (which is a setup row) and set is_valid = 0.
+        let first_row = trace.rows().nth(0).unwrap().collect::<Vec<_>>();
+        let first_row_core = first_row.split_at(adapter_width).1;
+        for row in trace.rows_mut().skip(num_records) {
+            let core_row = row.split_at_mut(adapter_width).1;
+            core_row.copy_from_slice(first_row_core);
+            core_row[0] = F::ZERO; // is_valid = 0
+        }
     }
 }
