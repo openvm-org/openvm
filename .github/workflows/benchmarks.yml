@@ -231,39 +231,20 @@ jobs:
           # add metadata to markdown files
           source ci/scripts/utils.sh
           # Parse matrix data into associative arrays
-          while IFS= read -r line; do
+          while IFS= read -r metric_path; do
+            FLAMEGRAPHS=${{ github.event.inputs.flamegraphs || 'false' }}
             # Convert .json to .md
-            md_file="${line%.json}.md"
+            md_path="${metric_path%.json}.md"
 
-            id=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r --arg file "$line" '.[] |
-              select(.id == ($file | split("-")[0])) |
-              {
-                max_segment_length: .max_segment_length,
-                instance_type: .instance_type,
-                memory_allocator: .memory_allocator
-              }')
+            matrix=${{ needs.create-matrix.outputs.matrix }}
+            add_metadata_and_flamegraphs \
+              "$metric_path" \
+              "$md_path" \
+              "$matrix" \
+              "$COMMIT_URL" \
+              "$BENCHMARK_WORKFLOW_URL"
 
-            export FLAMEGRAPHS=${{ github.event.inputs.flamegraphs || 'false' }}
-            if [[ "$FLAMEGRAPHS" == 'true' ]]; then
-              python3 ci/scripts/metric_unify/flamegraph.py $line
-              s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${S3_FLAMEGRAPHS_PATH}/${CURRENT_SHA}/"
-            fi
-
-            if [ ! -z "$id" ]; then
-              max_segment_length=$(echo "$id" | jq -r '.max_segment_length')
-              instance_type=$(echo "$id" | jq -r '.instance_type')
-              memory_allocator=$(echo "$id" | jq -r '.memory_allocator')
-
-              # Call add_metadata for each file with its corresponding data
-              add_metadata \
-                "$md_file" \
-                "$max_segment_length" \
-                "$instance_type" \
-                "$memory_allocator" \
-                "$COMMIT_URL" \
-                "$BENCHMARK_WORKFLOW_URL"
-            fi
-            cp "$md_file" "${TMP_DIR}/"
+            cp "$md_path" "${TMP_DIR}/"
           done <<< "$json_files"
 
           echo "" >> summary.md
