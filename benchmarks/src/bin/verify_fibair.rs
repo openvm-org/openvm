@@ -41,10 +41,12 @@ fn main() -> Result<()> {
         // Unlike other apps, this "app" does not have continuations enabled.
         let app_fri_params =
             FriParameters::standard_with_100_bits_conjectured_security(leaf_log_blowup);
-        let app_vm_config = NativeConfig::aggregation(
+        let mut app_vm_config = NativeConfig::aggregation(
             DEFAULT_MAX_NUM_PUBLIC_VALUES,
             app_fri_params.max_constraint_degree().min(7),
         );
+        app_vm_config.system.profiling = args.profiling;
+
         let compiler_options = CompilerOptions::default();
         let app_config = AppConfig {
             app_fri_params: app_fri_params.into(),
