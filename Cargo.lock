@@ -4174,7 +4174,6 @@ version = "0.1.1-alpha"
 dependencies = [
  "clap",
  "eyre",
- "itertools 0.13.0",
  "num-format",
  "serde",
  "serde_json",

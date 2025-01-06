@@ -14,5 +14,4 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 eyre.workspace = true
-itertools.workspace = true
 num-format = "0.4"
