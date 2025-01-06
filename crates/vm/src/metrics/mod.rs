@@ -60,6 +60,8 @@ where
     }
 
     pub fn finalize_metrics(&mut self) {
+        self.chip_complex.finalize_memory();
+
         counter!("main_cells_used")
             .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
 

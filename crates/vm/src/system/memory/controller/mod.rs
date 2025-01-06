@@ -502,7 +502,7 @@ impl<F: PrimeField32> MemoryController<F> {
     /// Returns the final memory state if persistent.
     pub fn finalize(&mut self, hasher: Option<&mut impl HasherChip<CHUNK, F>>) {
         if self.final_state.is_some() {
-            panic!("Cannot finalize more than once");
+            return;
         }
 
         self.replay_access_log();
