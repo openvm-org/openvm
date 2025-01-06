@@ -15,17 +15,15 @@ use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
     program::DEFAULT_PC_STEP, PhantomDiscriminant, Poseidon2Opcode, UsizeOpcode, VmOpcode,
 };
-use openvm_native_compiler::{
-    FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
-    NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom,
-};
+use openvm_native_compiler::{CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode, NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom};
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_rv32im_circuit::BranchEqualCoreChip;
+use openvm_rv32im_circuit::{BranchEqualCoreChip, Rv32I, Rv32Io, Rv32M};
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::{adapters::*, phantom::*, *};
+use crate::adapters::convert_adapter::ConvertAdapterChip;
 
 #[derive(Clone, Debug, Serialize, Deserialize, VmConfig, derive_new::new)]
 pub struct NativeConfig {
@@ -286,6 +284,78 @@ pub(crate) mod phantom {
                 val >>= 1;
             }
             Ok(())
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct CastF;
+
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+pub enum CastFExecutor<F: PrimeField32> {
+    CastF(CastFChip<F>),
+}
+
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
+pub enum CastFPeriphery<F: PrimeField32> {
+    Placeholder(CastFChip<F>),
+}
+
+impl<F: PrimeField32> VmExtension<F> for CastF {
+    type Executor = CastFExecutor<F>;
+    type Periphery = CastFPeriphery<F>;
+
+    fn build(
+        &self,
+        builder: &mut VmInventoryBuilder<F>,
+    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
+        let mut inventory = VmInventory::new();
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_controller,
+        } = builder.system_port();
+        let range_checker = builder.system_base().range_checker_chip.clone();
+
+        let castf_chip = CastFChip::new(
+            ConvertAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            CastFCoreChip::new(range_checker.clone(), CastfOpcode::default_offset()),
+            memory_controller.clone(),
+        );
+        inventory.add_executor(
+            castf_chip,
+            [VmOpcode::with_default_offset(CastfOpcode::CASTF)],
+        )?;
+
+        Ok(inventory)
+    }
+}
+
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
+pub struct Rv32WithKernelsConfig {
+    #[system]
+    pub system: SystemConfig,
+    #[extension]
+    pub rv32i: Rv32I,
+    #[extension]
+    pub rv32m: Rv32M,
+    #[extension]
+    pub io: Rv32Io,
+    #[extension]
+    pub native: Native,
+    #[extension]
+    pub castf: CastF,
+}
+
+impl Default for Rv32WithKernelsConfig {
+    fn default() -> Self {
+        Self {
+            system: SystemConfig::default().with_continuations(),
+            rv32i: Rv32I,
+            rv32m: Rv32M::default(),
+            io: Rv32Io,
+            native: Native,
+            castf: CastF,
         }
     }
 }

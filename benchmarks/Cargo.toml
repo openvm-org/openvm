@@ -15,7 +15,7 @@ openvm-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
 openvm-transpiler.workspace = true
-openvm-edsl-deserialize.workspace = true
+openvm-native-transpiler.workspace = true
 
 openvm-algebra-circuit.workspace = true
 openvm-algebra-transpiler.workspace = true

@@ -1,5 +1,5 @@
 [package]
-name = "openvm-edsl-deserialize"
+name = "openvm-native-transpiler"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -20,8 +20,8 @@ members = [
     "crates/toolchain/transpiler",
     "crates/toolchain/openvm",
     "crates/toolchain/build",
-    "crates/toolchain/edsl-deserialize",
-    "crates/toolchain/edsl-kernel",
+    "extensions/native/transpiler",
+    "extensions/native/guest-macro",
     "crates/toolchain/instructions",
     "crates/toolchain/instructions/derive",
     "crates/toolchain/macros",
@@ -128,8 +128,8 @@ openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 openvm-toolchain-tests = { path = "crates/toolchain/tests", default-features = false }
 
 # eDSL Kernel
-openvm-edsl-kernel = { path = "crates/toolchain/edsl-kernel", default-features = false }
-openvm-edsl-deserialize = { path = "crates/toolchain/edsl-deserialize", default-features = false }
+openvm-native-guest-macro = { path = "extensions/native/guest-macro", default-features = false }
+openvm-native-transpiler = { path = "extensions/native/transpiler", default-features = false }
 
 # Extensions
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }

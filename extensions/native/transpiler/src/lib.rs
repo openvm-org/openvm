@@ -1,5 +1,3 @@
-mod castf_extension;
-pub mod config;
 pub mod deserialize_instruction;
 
 const LONG_FORM_INSTRUCTION_INDICATOR: u32 = (1 << 31) + 115115115;

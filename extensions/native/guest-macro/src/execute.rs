@@ -18,7 +18,7 @@ pub fn execute_edsl(source: String, config: String) -> Result<String, Error> {
 
     let src_file = Path::new(SRC_DIR_NAME).join("main.rs");
     std::fs::write(src_file, source)?;
-    let config_file = Path::new(DIR_NAME).join("Cargo.toml");
+    let config_file = Path::new(DIR_NAME).join("../../../../Cargo.toml");
     std::fs::write(config_file, config)?;
 
     let mut cmd = std::process::Command::new("cargo");
