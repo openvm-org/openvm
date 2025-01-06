@@ -140,7 +140,6 @@ struct FinalTouchedLabel<F, const CHUNK: usize> {
     label: u32,
     init_values: [F; CHUNK],
     final_values: [F; CHUNK],
-    init_exists: bool,
     init_hash: [F; CHUNK],
     final_hash: [F; CHUNK],
     final_timestamp: u32,
@@ -223,7 +222,6 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                             label,
                             init_values,
                             final_values: timestamped_values.values,
-                            init_exists: true,
                             init_hash: initial_hash,
                             final_hash,
                             final_timestamp: timestamped_values.timestamp,
@@ -276,11 +274,7 @@ where
                         leaf_label: Val::<SC>::from_canonical_u32(touched_label.label),
                         values: touched_label.init_values,
                         hash: touched_label.init_hash,
-                        timestamp: if touched_label.init_exists {
-                            Val::<SC>::from_canonical_u32(INITIAL_TIMESTAMP)
-                        } else {
-                            Val::<SC>::ZERO
-                        },
+                        timestamp: Val::<SC>::from_canonical_u32(INITIAL_TIMESTAMP),
                     };
 
                     *final_row.borrow_mut() = PersistentBoundaryCols {
