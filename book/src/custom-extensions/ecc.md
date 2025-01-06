@@ -45,7 +45,7 @@ This creates `Bls12_381G1Affine` and `P256Affine` structs which implement the `G
 
 ```rust
 sw_init! {
-    Bls12_381Fp, P256Coord,
+    Bls12_381G1Affine, P256Affine,
 }
 ```
 
