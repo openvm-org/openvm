@@ -196,8 +196,6 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 .memory_image()
                 .clone(),
         );
-        #[cfg(feature = "bench-metrics")]
-        self.finalize_metrics();
 
         Ok(ExecutionSegmentState {
             pc,
