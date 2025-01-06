@@ -5,7 +5,6 @@
 # Getting Started
 
 - [Install](./getting-started/install.md)
-
 - [Quickstart](./getting-started/quickstart.md)
 
 # Writing Apps
@@ -20,6 +19,7 @@
 
 - [Overview](./custom-extensions/overview.md)
 - [Keccak](./custom-extensions/keccak.md)
+- [SHA-256](./custom-extensions/sha256.md)
 - [Big Integer](./custom-extensions/bigint.md)
 - [Algebra (Modular Arithmetic)](./custom-extensions/algebra.md)
 - [Elliptic Curve Cryptography](./custom-extensions/ecc.md)

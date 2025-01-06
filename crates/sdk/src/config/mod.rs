@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 mod global;
 pub use global::*;
 
-const DEFAULT_APP_BLOWUP: usize = 2;
-const DEFAULT_LEAF_BLOWUP: usize = 2;
-const DEFAULT_INTERNAL_BLOWUP: usize = 2;
-const DEFAULT_ROOT_BLOWUP: usize = 3;
+pub const DEFAULT_APP_LOG_BLOWUP: usize = 2;
+pub const DEFAULT_LEAF_LOG_BLOWUP: usize = 2;
+pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
+pub const DEFAULT_ROOT_LOG_BLOWUP: usize = 3;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppConfig<VC> {
@@ -37,6 +37,8 @@ pub struct AggStarkConfig {
     pub leaf_fri_params: FriParameters,
     pub internal_fri_params: FriParameters,
     pub root_fri_params: FriParameters,
+    /// Sets the profiling mode of all aggregation VMs
+    pub profiling: bool,
     /// Only for AggVM debugging.
     pub compiler_options: CompilerOptions,
 }
@@ -78,14 +80,15 @@ impl Default for AggStarkConfig {
         Self {
             max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
             leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_LEAF_BLOWUP,
+                DEFAULT_LEAF_LOG_BLOWUP,
             ),
             internal_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_INTERNAL_BLOWUP,
+                DEFAULT_INTERNAL_LOG_BLOWUP,
             ),
             root_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_ROOT_BLOWUP,
+                DEFAULT_ROOT_LOG_BLOWUP,
             ),
+            profiling: false,
             compiler_options: Default::default(),
         }
     }
@@ -112,7 +115,7 @@ impl Default for AppFriParams {
     fn default() -> Self {
         Self {
             fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_APP_BLOWUP,
+                DEFAULT_APP_LOG_BLOWUP,
             ),
         }
     }
@@ -133,7 +136,7 @@ impl Default for LeafFriParams {
     fn default() -> Self {
         Self {
             fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_LEAF_BLOWUP,
+                DEFAULT_LEAF_LOG_BLOWUP,
             ),
         }
     }

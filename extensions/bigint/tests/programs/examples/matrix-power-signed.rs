@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
-
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::eq_op)]
 use core::array;
 
 use openvm::io::print;
@@ -100,6 +101,7 @@ pub fn main() {
     }
 
     // Or tests
+
     if &one | &one != one {
         print("FAIL: 1 | 1 == 1 test failed");
         panic!();
@@ -116,7 +118,7 @@ pub fn main() {
         panic!();
     }
 
-    if &neg_one >= &zero {
+    if neg_one >= zero {
         print("FAIL: -1 <= 0 test failed");
         panic!();
     }

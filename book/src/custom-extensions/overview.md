@@ -5,12 +5,13 @@ You can seamlessly integrate certain performance-optimized extensions maintained
 In this chapter, we will explain how to use the following existing extensions:
 
 - [`openvm-keccak-guest`](./keccak.md) - Keccak256 hash function.
+- [`openvm-sha256-guest`](./sha256.md) - SHA2-256 hash function.
 - [`openvm-bigint-guest`](./bigint.md) - Big integer arithmetic for 256-bit signed and unsigned integers.
 - [`openvm-algebra-guest`](./algebra.md) - Modular arithmetic and complex field extensions.
 - [`openvm-ecc-guest`](./ecc.md) - Elliptic curve cryptography.
 - [`openvm-pairing-guest`](./pairing.md) - Elliptic curve optimal Ate pairings.
 
-Some extensions such as `openvm-keccak-guest` and `openvm-bigint-guest` can be enabled without specifying any additional configuration.
+Some extensions such as `openvm-keccak-guest`, `openvm-sha256-guest`, and `openvm-bigint-guest` can be enabled without specifying any additional configuration.
 
 On the other hand certain arithmetic operations, particularly modular arithmetic, can be optimized significantly when the modulus is known at compile time. This approach requires a framework to inform the compiler about all the moduli and associated arithmetic structures we intend to use. To achieve this, three steps are involved:
 
@@ -34,6 +35,7 @@ The template `openvm.toml` file is as follows:
 [app_vm_config.rv32m]
 [app_vm_config.io]
 [app_vm_config.keccak]
+[app_vm_config.sha256]
 [app_vm_config.native]
 [app_vm_config.bigint]
 [app_vm_config.modular]
@@ -55,4 +57,4 @@ b = "<b_2>"
 ```
 
 `rv32i`, `io`, and `rv32m` need to be always included if you make an `openvm.toml` file while the rest are optional and should be included if you want to use the corresponding extension.
-All moduli and scalars must be provided in decimal format. Currently  `pairing` supports only pre-defined `Bls12_381` and `Bn254` curves. To add more `ecc` curves you need to add more `[[app_vm_config.ecc.supported_curves]]` entries.
+All moduli and scalars must be provided in decimal format. Currently `pairing` supports only pre-defined `Bls12_381` and `Bn254` curves. To add more `ecc` curves you need to add more `[[app_vm_config.ecc.supported_curves]]` entries.

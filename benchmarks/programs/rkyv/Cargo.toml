@@ -16,3 +16,8 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 [features]
 default = []
 std = ["openvm/std"]
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false

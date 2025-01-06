@@ -9,8 +9,7 @@ use super::{
     types::{
         DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable, TwoAdicPcsRoundVariable,
     },
-    verify_batch, verify_challenges, verify_shape_and_sample_challenges, NestedOpenedValues,
-    TwoAdicMultiplicativeCosetVariable,
+    verify_batch, verify_query, NestedOpenedValues, TwoAdicMultiplicativeCosetVariable,
 };
 use crate::{
     challenger::ChallengerVariable, commit::PcsVariable, digest::DigestVariable,
@@ -29,6 +28,7 @@ use crate::{
 /// Reference:
 /// <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/mmcs.rs#L87>
 /// <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L100>
+/// <https://github.com/Plonky3/Plonky3/blob/784b7dd1fa87c1202e63350cc8182d7c5327a7af/fri/src/verifier.rs#L22>
 pub fn verify_two_adic_pcs<C: Config>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
@@ -45,21 +45,36 @@ pub fn verify_two_adic_pcs<C: Config>(
     let blowup = config.blowup;
     let alpha = challenger.sample_ext(builder);
 
-    builder.cycle_tracker_start("stage-d-1-verify-shape-and-sample-challenges");
-    let fri_challenges = verify_shape_and_sample_challenges(builder, config, &proof, challenger);
-    builder.cycle_tracker_end("stage-d-1-verify-shape-and-sample-challenges");
+    builder.cycle_tracker_start("stage-d-verifier-verify");
+    let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
+    builder
+        .range(0, proof.commit_phase_commits.len())
+        .for_each(|i, builder| {
+            let comm = builder.get(&proof.commit_phase_commits, i);
+            challenger.observe_digest(builder, comm);
+            let sample = challenger.sample_ext(builder);
+            builder.set(&betas, i, sample);
+        });
+    let final_poly_felts = builder.ext2felt(proof.final_poly);
+    challenger.observe_slice(builder, final_poly_felts);
 
-    let log_global_max_height =
+    let num_query_proofs = proof.query_proofs.len().clone();
+    builder
+        .if_ne(num_query_proofs, RVar::from(config.num_queries))
+        .then(|builder| {
+            builder.error();
+        });
+
+    challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
+
+    let log_max_height =
         builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(log_blowup));
 
-    let reduced_openings: Array<_, Array<_, Ext<_, _>>> = builder.array(proof.query_proofs.len());
-
-    builder.cycle_tracker_start("stage-d-2-fri-fold");
     builder
         .range(0, proof.query_proofs.len())
         .for_each(|i, builder| {
             let query_proof = builder.get(&proof.query_proofs, i);
-            let index_bits = builder.get(&fri_challenges.query_indices, i);
+            let index_bits = challenger.sample_bits(builder, log_max_height);
 
             let ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
             let alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(32);
@@ -128,8 +143,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 });
                 let permed_opened_values = NestedOpenedValues::Felt(permed_opened_values);
 
-                let bits_reduced: Usize<_> =
-                    builder.eval(log_global_max_height - log_batch_max_height);
+                let bits_reduced: Usize<_> = builder.eval(log_max_height - log_batch_max_height);
                 let index_bits_shifted_v1 = index_bits.shift(builder, bits_reduced);
 
                 builder.cycle_tracker_start("verify-batch");
@@ -161,8 +175,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                         let cur_ro = builder.get(&ro, log_height);
                         let cur_alpha_pow = builder.get(&alpha_pow, log_height);
 
-                        let bits_reduced: Usize<_> =
-                            builder.eval(log_global_max_height - log_height);
+                        let bits_reduced: Usize<_> = builder.eval(log_max_height - log_height);
                         let index_bits_shifted = index_bits.shift(builder, bits_reduced);
 
                         let two_adic_generator = config.get_two_adic_generator(builder, log_height);
@@ -209,13 +222,20 @@ pub fn verify_two_adic_pcs<C: Config>(
                 builder.cycle_tracker_end("compute-reduced-opening");
             });
 
-            builder.set_value(&reduced_openings, i, ro);
-        });
-    builder.cycle_tracker_end("stage-d-2-fri-fold");
+            let folded_eval = verify_query(
+                builder,
+                config,
+                &proof.commit_phase_commits,
+                &index_bits,
+                &query_proof,
+                &betas,
+                &ro,
+                log_max_height,
+            );
 
-    builder.cycle_tracker_start("stage-d-3-verify-challenges");
-    verify_challenges(builder, config, &proof, &fri_challenges, &reduced_openings);
-    builder.cycle_tracker_end("stage-d-3-verify-challenges");
+            builder.assert_ext_eq(folded_eval, proof.final_poly);
+        });
+    builder.cycle_tracker_end("stage-d-verifier-verify");
 }
 
 impl<C: Config> FromConstant<C> for TwoAdicPcsRoundVariable<C>

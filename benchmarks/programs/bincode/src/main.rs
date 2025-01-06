@@ -31,5 +31,5 @@ fn main() {
 
     let data = openvm::io::read_vec();
 
-    let deser: (Players, usize) = decode_from_slice(&data, config).expect("Failed to deserialize");
+    let _deser: (Players, usize) = decode_from_slice(&data, config).expect("Failed to deserialize");
 }

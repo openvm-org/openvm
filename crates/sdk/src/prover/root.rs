@@ -3,7 +3,7 @@ use openvm_circuit::arch::{SingleSegmentVmExecutor, Streams};
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine,
+    config::{baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine, FriParameters},
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::prover::types::Proof,
 };
@@ -40,12 +40,19 @@ impl RootVerifierLocalProver {
             .unwrap();
         result.air_heights
     }
+    pub fn vm_config(&self) -> &NativeConfig {
+        &self.root_verifier_pk.vm_pk.vm_config
+    }
+    #[allow(dead_code)]
+    pub(crate) fn fri_params(&self) -> &FriParameters {
+        &self.root_verifier_pk.vm_pk.fri_params
+    }
 }
 
 impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
     fn prove(&self, input: impl Into<Streams<F>>) -> Proof<RootSC> {
         let input = input.into();
-        let vm = SingleSegmentVmExecutor::new(self.root_verifier_pk.vm_pk.vm_config.clone());
+        let vm = SingleSegmentVmExecutor::new(self.vm_config().clone());
         let mut proof_input = vm
             .execute_and_generate(self.root_verifier_pk.root_committed_exe.clone(), input)
             .unwrap();
@@ -68,7 +75,7 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
             // Overwrite the AIR ID.
             proof_input.per_air[i].0 = i;
         }
-        let e = BabyBearPoseidon2RootEngine::new(self.root_verifier_pk.vm_pk.fri_params);
+        let e = BabyBearPoseidon2RootEngine::new(*self.fri_params());
         e.prove(&self.root_verifier_pk.vm_pk.vm_pk, proof_input)
     }
 }
