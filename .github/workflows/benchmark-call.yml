@@ -122,7 +122,9 @@ jobs:
       - run-id=${{ github.run_id }}
       - family=m7
       - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
+      - extras=s3-cache
     steps:
+      - uses: runs-on/action@v1
       ##########################################################################
       # Environment setup                                                      #
       ##########################################################################
