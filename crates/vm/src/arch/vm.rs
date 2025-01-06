@@ -129,8 +129,6 @@ where
             // Used to add `segment` label to metrics
             let _span = info_span!("execute_segment", segment = segments.len()).entered();
             let state = metrics_span("execute_time_ms", || segment.execute_from_pc(pc))?;
-            #[cfg(feature = "bench-metrics")]
-            segment.finalize_metrics();
             pc = state.pc;
 
             if state.is_terminated {
@@ -354,8 +352,6 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
         metrics_span("execute_time_ms", || segment.execute_from_pc(pc_start))?;
-        #[cfg(feature = "bench-metrics")]
-        segment.finalize_metrics();
         Ok(segment)
     }
 }

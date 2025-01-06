@@ -205,7 +205,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
 
     /// Generate ProofInput to prove the segment. Should be called after ::execute
     pub fn generate_proof_input<SC: StarkGenericConfig>(
-        self,
+        #[allow(unused_mut)] mut self,
         cached_program: Option<CommittedTraceData<SC>>,
     ) -> ProofInput<SC>
     where
@@ -214,7 +214,11 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         VC::Periphery: Chip<SC>,
     {
         metrics_span("trace_gen_time_ms", || {
-            self.chip_complex.generate_proof_input(cached_program)
+            self.chip_complex.generate_proof_input(
+                cached_program,
+                #[cfg(feature = "bench-metrics")]
+                &mut self.metrics,
+            )
         })
     }
 
