@@ -506,7 +506,9 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
 pub type MemoryImage<F> = FxHashMap<Address, F>;
 
-/// A partition of data into blocks where each block has size a power of two.
+/// A simple data structure to read to/write from memory.
+///
+/// Stores a log of memory accesses to reconstruct aspects of memory state for trace generation.
 #[derive(Debug, Clone)]
 pub struct Memory<F> {
     pub(super) data: FxHashMap<Address, F>,
