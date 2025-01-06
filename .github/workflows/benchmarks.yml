@@ -193,13 +193,14 @@ jobs:
 
       - name: Download all metric json files from S3
         run: |
-          json_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
+          matrix=$(echo '${{ needs.create-matrix.outputs.matrix }}')
+          json_files=$(echo $matrix | jq -r '
             .[] |
             "\(.id)-${{ env.CURRENT_SHA }}.json"')
           json_file_list=$(echo -n "$json_files" | paste -sd "," -)
           echo $json_file_list
 
-          prev_json_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
+          prev_json_files=$(echo $matrix | jq -r '
             .[] |
             "main-\(.id).json"')
           prev_json_file_list=$(echo -n "$prev_json_files" | paste -sd "," -)
@@ -236,13 +237,12 @@ jobs:
             # Convert .json to .md
             md_path="${metric_path%.json}.md"
 
-            matrix=${{ needs.create-matrix.outputs.matrix }}
             add_metadata_and_flamegraphs \
-              "$metric_path" \
-              "$md_path" \
-              "$matrix" \
-              "$COMMIT_URL" \
-              "$BENCHMARK_WORKFLOW_URL"
+              $metric_path \
+              $md_path \
+              $matrix \
+              $COMMIT_URL \
+              $BENCHMARK_WORKFLOW_URL
 
             cp "$md_path" "${TMP_DIR}/"
           done <<< "$json_files"
