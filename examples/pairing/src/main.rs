@@ -1,16 +1,19 @@
+// ANCHOR: pre
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use hex_literal::hex;
+// ANCHOR_END: pre
+// ANCHOR: imports
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::AffinePoint;
 use openvm_pairing_guest::{
     bls12_381::{Bls12_381, Fp, Fp2},
     pairing::PairingCheck,
 };
+// ANCHOR_END: imports
 
-openvm::entry!(main);
-
+// ANCHOR: init
 openvm_algebra_moduli_setup::moduli_init! {
     "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
     "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
@@ -19,10 +22,16 @@ openvm_algebra_moduli_setup::moduli_init! {
 openvm_algebra_complex_macros::complex_init! {
     Bls12_381Fp2 { mod_idx = 0 },
 }
+// ANCHOR_END: init
+
+// ANCHOR: main
+openvm::entry!(main);
 
 pub fn main() {
+    // ANCHOR: setup
     setup_0();
     setup_all_complex_extensions();
+    // ANCHOR_END: setup
 
     let p0 = AffinePoint::new(
         Fp::from_be_bytes(&hex!("17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb")),
@@ -53,6 +62,9 @@ pub fn main() {
         ]),
     );
 
+    // ANCHOR: pairing_check
     let res = Bls12_381::pairing_check(&[p0, -q0], &[p1, q1]);
     assert!(res.is_ok());
+    // ANCHOR_END: pairing_check
 }
+// ANCHOR_END: main

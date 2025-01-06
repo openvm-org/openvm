@@ -1,4 +1,4 @@
-name: Native Extension Tests
+name: Native Compiler Tests
 
 on:
   push:
@@ -6,7 +6,9 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "extensions/native/**"
+      - "crates/vm/**"
+      - "extensions/native/circuit/**"
+      - "extensions/native/compiler/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -24,13 +26,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run native extension crate tests
-        working-directory: extensions/native/circuit
+      - name: Run circuit and compiler tests
+        working-directory: extensions/native/compiler
         run: |
-          cargo nextest run --cargo-profile=fast
+          cargo nextest run --cargo-profile=fast --features parallel

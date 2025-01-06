@@ -5,7 +5,6 @@
 # Getting Started
 
 - [Install](./getting-started/install.md)
-
 - [Quickstart](./getting-started/quickstart.md)
 
 # Writing Apps
