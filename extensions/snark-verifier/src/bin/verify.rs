@@ -1,7 +1,7 @@
 use openvm_algebra_guest::{complex_macros::complex_init, moduli_setup::moduli_init};
 use openvm_ecc_guest::sw_setup::sw_init;
 #[allow(unused_imports)]
-use openvm_pairing_guest::bn254::Bn254Fp;
+use openvm_pairing_guest::bn254::Bn254G1Affine;
 use openvm_snark_verifier::PlonkVerifierContext;
 
 moduli_init! {
@@ -14,7 +14,7 @@ complex_init! {
 }
 
 sw_init! {
-    Bn254Fp
+    Bn254G1Affine
 }
 
 fn main() {

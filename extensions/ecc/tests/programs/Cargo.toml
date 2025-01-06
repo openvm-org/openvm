@@ -41,6 +41,10 @@ name = "ec"
 required-features = ["k256"]
 
 [[example]]
+name = "ec_nonzero_a"
+required-features = ["p256"]
+
+[[example]]
 name = "decompress"
 required-features = ["k256"]
 
