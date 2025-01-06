@@ -78,13 +78,6 @@ fn build_keccak256_test(
                 assert_eq!(tester.read_cell(e, dst + i), F::from_canonical_u8(*byte));
             }
         }
-        // FIXME[zach]
-        // if let Some(output) = prank_output {
-        //     for (i, output_byte) in output.iter().enumerate() {
-        //         chip.records.last_mut().unwrap().digest_writes[i / KECCAK_WORD_SIZE].data
-        //             [i % KECCAK_WORD_SIZE] = F::from_canonical_u8(*output_byte);
-        //     }
-        // }
         // shift dst to not deal with timestamps for pranking
         dst += 32;
     }

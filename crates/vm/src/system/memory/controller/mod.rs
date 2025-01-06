@@ -267,7 +267,6 @@ impl<F: PrimeField32> MemoryController<F> {
         compression_bus: DirectCompressionBus,
         initial_memory: MemoryImage<F>,
     ) -> Self {
-        // TODO[zach]: Avoid cloning initial_memory.
         let memory_dims = MemoryDimensions {
             as_height: mem_config.as_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
@@ -688,7 +687,6 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 }
 
-// TODO[zach]: We can probably deprecate this and just provide this interface in `OfflineMemory`.
 #[derive(Clone, Debug)]
 pub struct MemoryAuxColsFactory<T> {
     range_checker: Arc<VariableRangeCheckerChip>,
