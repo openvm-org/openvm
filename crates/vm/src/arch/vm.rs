@@ -297,8 +297,12 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
+        compute_heights: bool,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
-        let segment = self.execute_impl(exe.into(), input)?;
+        let mut segment = self.execute_impl(exe.into(), input)?;
+        if compute_heights {
+            segment.chip_complex.finalize_memory();
+        }
         let air_heights = segment.chip_complex.current_trace_heights();
         let internal_heights = segment.chip_complex.get_internal_trace_heights();
         let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {

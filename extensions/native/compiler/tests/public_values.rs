@@ -33,7 +33,7 @@ fn test_compiler_public_values() {
         Native,
     ));
 
-    let exe_result = executor.execute(program, vec![]).unwrap();
+    let exe_result = executor.execute(program, vec![], false).unwrap();
     assert_eq!(
         exe_result
             .public_values

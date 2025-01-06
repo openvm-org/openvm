@@ -36,6 +36,7 @@ impl RootVerifierLocalProver {
             .execute(
                 self.root_verifier_pk.root_committed_exe.exe.clone(),
                 input.write(),
+                true,
             )
             .unwrap();
         result.air_heights

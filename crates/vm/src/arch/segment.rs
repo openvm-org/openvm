@@ -189,17 +189,13 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 break;
             }
         }
-        // Finalize memory.
-        {
-            // Need some partial borrows, so code is ugly:
-            self.final_memory = Some(
-                self.chip_complex
-                    .base
-                    .memory_controller
-                    .memory_image()
-                    .clone(),
-            );
-        }
+        self.final_memory = Some(
+            self.chip_complex
+                .base
+                .memory_controller
+                .memory_image()
+                .clone(),
+        );
         #[cfg(feature = "bench-metrics")]
         self.finalize_metrics();
 

@@ -53,6 +53,7 @@ where
     let exe_result = leaf_vm.execute(
         leaf_committed_exe.exe.clone(),
         verifier_input.write_to_stream(),
+        false,
     )?;
     let runtime_pvs: Vec<_> = exe_result
         .public_values

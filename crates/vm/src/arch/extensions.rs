@@ -714,6 +714,22 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         chip.as_any_kind_mut().downcast_mut()
     }
 
+    pub fn finalize_memory(&mut self)
+    where
+        P: AnyEnum,
+    {
+        let chip = self
+            .inventory
+            .periphery
+            .get_mut(VmChipComplex::<F, E, P>::POSEIDON2_PERIPHERY_IDX);
+        let hasher: Option<&mut Poseidon2PeripheryChip<F>> = chip.map(|chip| {
+            chip.as_any_kind_mut()
+                .downcast_mut()
+                .expect("Poseidon2 chip required for persistent memory")
+        });
+        self.base.memory_controller.finalize(hasher);
+    }
+
     pub(crate) fn set_program(&mut self, program: Program<F>) {
         self.base.program_chip.set_program(program);
     }

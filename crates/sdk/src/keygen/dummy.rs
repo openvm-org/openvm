@@ -55,7 +55,7 @@ pub(super) fn compute_root_proof_heights(
         public_values: vec![F::ZERO; num_user_public_values],
     };
     let vm = SingleSegmentVmExecutor::new(root_vm_config);
-    let res = vm.execute(root_exe, root_input.write()).unwrap();
+    let res = vm.execute(root_exe, root_input.write(), true).unwrap();
     let air_heights: Vec<_> = res
         .air_heights
         .into_iter()
@@ -177,12 +177,14 @@ where
     } else {
         // We first execute once to get the trace heights from dummy_exe, then pad to powers of 2 (forcing trace height 0 to 1)
         let executor = VmExecutor::new(app_vm_pk.vm_config.clone());
-        let results = executor
+        let mut results = executor
             .execute_segments(dummy_exe.exe.clone(), vec![])
             .unwrap();
         // ASSUMPTION: the dummy exe has only 1 segment
         assert_eq!(results.len(), 1, "dummy exe should have only 1 segment");
-        let mut internal_heights = results[0].chip_complex.get_internal_trace_heights();
+        let mut result = results.pop().unwrap();
+        result.chip_complex.finalize_memory();
+        let mut internal_heights = result.chip_complex.get_internal_trace_heights();
         internal_heights.round_to_next_power_of_two();
         internal_heights
     };

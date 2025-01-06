@@ -162,13 +162,15 @@ fn test_vm_override_executor_height() {
     let vm_config = NativeConfig::aggregation(8, 3);
 
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
-    let res = executor.execute(committed_exe.exe.clone(), vec![]).unwrap();
+    let res = executor
+        .execute(committed_exe.exe.clone(), vec![], true)
+        .unwrap();
     // Memory trace heights are not computed during execution.
     assert_eq!(
         res.internal_heights.system,
         SystemTraceHeights {
             memory: MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
-                boundary: 0,
+                boundary: 1,
                 access_adapters: vec![0, 0, 0],
             }),
         }
@@ -303,7 +305,7 @@ fn test_vm_public_values() {
             vm.engine.config.pcs(),
         ));
         let single_vm = SingleSegmentVmExecutor::new(config);
-        let exe_result = single_vm.execute(program, vec![]).unwrap();
+        let exe_result = single_vm.execute(program, vec![], false).unwrap();
         assert_eq!(
             exe_result.public_values,
             [
