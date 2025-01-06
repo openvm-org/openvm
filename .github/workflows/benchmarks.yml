@@ -306,7 +306,7 @@ jobs:
       - name: Link to Benchmark Results
         run: |
           echo "Benchmark results are available at:"
-          echo "${{ github.repository }}/blob/benchmark-results/${BENCHMARK_RESULTS_PATH}/summary.md"
+          echo "https://github.com/${{ github.repository }}/blob/benchmark-results/${BENCHMARK_RESULTS_PATH}/summary.md"
 
       ##########################################################################
       # Update PR comment upon a pull request event                            #
