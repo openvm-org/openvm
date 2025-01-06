@@ -4016,6 +4016,7 @@ version = "0.1.1-alpha"
 dependencies = [
  "openvm-instructions",
  "openvm-native-compiler",
+ "openvm-native-serialization",
  "openvm-stark-backend",
  "p3-baby-bear",
  "p3-field",
@@ -4055,6 +4056,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-native-serialization"
+version = "0.1.1-alpha"
+dependencies = [
+ "openvm-instructions",
+ "p3-field",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
 name = "openvm-native-transpiler"
 version = "0.1.1-alpha"
 dependencies = [
@@ -4066,6 +4077,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-native-circuit",
  "openvm-native-compiler",
+ "openvm-native-serialization",
  "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-transpiler",

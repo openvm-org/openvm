@@ -11,7 +11,7 @@ pub struct ParsedKernelArgument {
 pub struct ParsedKernel {
     pub function_name: String,
     pub arguments: Vec<ParsedKernelArgument>,
-    pub body: String,
+    pub file_path: String,
     pub rust_return_type: String,
     pub edsl_return_type: String,
 }
@@ -62,7 +62,7 @@ pub fn parse_raw_kernel(source: TokenStream) -> ParsedKernel {
     let rust_return_type = return_type_string[..bar_index].trim().to_string();
     let edsl_return_type = return_type_string[bar_index + 1..].trim().to_string();
 
-    let body = match token_trees[token_trees.len() - 1].clone() {
+    let file_path = match token_trees[token_trees.len() - 1].clone() {
         TokenTree::Group(group) => group.stream().to_string(),
         _ => panic!("Last token must be the function body"),
     };
@@ -70,7 +70,7 @@ pub fn parse_raw_kernel(source: TokenStream) -> ParsedKernel {
     ParsedKernel {
         function_name,
         arguments,
-        body,
+        file_path,
         rust_return_type,
         edsl_return_type,
     }

@@ -17,7 +17,7 @@ use openvm_instructions::{
 };
 use openvm_native_compiler::{CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode, NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom};
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_rv32im_circuit::{BranchEqualCoreChip, Rv32I, Rv32Io, Rv32M};
+use openvm_rv32im_circuit::{BranchEqualCoreChip, Rv32I, Rv32Io, Rv32M, Rv32IExecutor, Rv32IoExecutor, Rv32MExecutor, Rv32IPeriphery, Rv32IoPeriphery, Rv32MPeriphery};
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;

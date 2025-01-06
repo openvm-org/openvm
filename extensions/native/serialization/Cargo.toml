@@ -1,0 +1,17 @@
+[package]
+name = "openvm-native-serialization"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm-instructions = { workspace = true }
+p3-field = { workspace = true }
+
+[dev-dependencies]
+strum.workspace = true
+strum_macros.workspace = true
+openvm-instructions.workspace = true

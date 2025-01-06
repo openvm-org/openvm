@@ -20,8 +20,6 @@ members = [
     "crates/toolchain/transpiler",
     "crates/toolchain/openvm",
     "crates/toolchain/build",
-    "extensions/native/transpiler",
-    "extensions/native/guest-macro",
     "crates/toolchain/instructions",
     "crates/toolchain/instructions/derive",
     "crates/toolchain/macros",
@@ -37,6 +35,9 @@ members = [
     "extensions/native/compiler",
     "extensions/native/compiler/derive",
     "extensions/native/recursion",
+    "extensions/native/transpiler",
+    "extensions/native/guest-macro",
+    "extensions/native/serialization",
     "extensions/algebra/circuit",
     "extensions/algebra/transpiler",
     "extensions/algebra/guest",
@@ -128,8 +129,6 @@ openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 openvm-toolchain-tests = { path = "crates/toolchain/tests", default-features = false }
 
 # eDSL Kernel
-openvm-native-guest-macro = { path = "extensions/native/guest-macro", default-features = false }
-openvm-native-transpiler = { path = "extensions/native/transpiler", default-features = false }
 
 # Extensions
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
@@ -140,6 +139,9 @@ openvm-native-circuit = { path = "extensions/native/circuit", default-features =
 openvm-native-compiler = { path = "extensions/native/compiler", default-features = false }
 openvm-native-compiler-derive = { path = "extensions/native/compiler/derive", default-features = false }
 openvm-native-recursion = { path = "extensions/native/recursion", default-features = false }
+openvm-native-guest-macro = { path = "extensions/native/guest-macro", default-features = false }
+openvm-native-transpiler = { path = "extensions/native/transpiler", default-features = false }
+openvm-native-serialization = { path = "extensions/native/serialization", default-features = false }
 openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }

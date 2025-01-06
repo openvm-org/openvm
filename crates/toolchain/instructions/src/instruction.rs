@@ -90,6 +90,10 @@ impl<F: Field> Instruction<F> {
             ..Default::default()
         }
     }
+
+    pub fn operands(&self) -> Vec<F> {
+        vec![self.a, self.b, self.c, self.d, self.e, self.f, self.g]
+    }
 }
 
 impl<T: Default> Default for Instruction<T> {

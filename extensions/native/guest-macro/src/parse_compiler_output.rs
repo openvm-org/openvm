@@ -1,6 +1,6 @@
 use openvm_instructions::{instruction::Instruction, VmOpcode};
-use p3_field::Field;
-
+use p3_field::{Field, PrimeField32};
+use openvm_native_serialization::deserialize_instructions;
 use crate::parse_kernel::ParsedKernel;
 
 #[derive(Debug)]
@@ -21,11 +21,14 @@ pub struct CompiledKernel<F: Field> {
     pub return_fp: usize,
 }
 
-pub fn parse_compiled_kernel<F: Field>(
+pub fn parse_compiled_kernel<F: PrimeField32>(
     parsed_kernel: ParsedKernel,
     compiler_output: String,
 ) -> CompiledKernel<F> {
     let mut lines = compiler_output.lines();
+    let words: Vec<u32> = lines.map(|line| line.parse().unwrap()).collect();
+    let mut index = 0;
+
     let arguments = parsed_kernel
         .arguments
         .into_iter()
@@ -33,7 +36,8 @@ pub fn parse_compiled_kernel<F: Field>(
             let name = argument.name;
             let rust_type = argument.rust_type;
             let edsl_type = argument.edsl_type;
-            let fp = lines.next().unwrap().parse::<usize>().unwrap();
+            let fp = words[index] as usize;
+            index += 1;
             CompiledKernelArgument {
                 name,
                 rust_type,
@@ -42,30 +46,10 @@ pub fn parse_compiled_kernel<F: Field>(
             }
         })
         .collect::<Vec<_>>();
-    let return_fp = lines.next().unwrap().parse::<usize>().unwrap();
-    let instructions = lines
-        .filter(|line| !line.is_empty())
-        .map(|line| {
-            let tokens = line.split_whitespace().collect::<Vec<_>>();
-            let opcode = tokens[0][tokens[0].find('(').unwrap() + 1..tokens[0].len() - 1]
-                .parse::<usize>()
-                .unwrap();
-            let operands = tokens[1..]
-                .iter()
-                .map(|token| F::from_canonical_usize(token.parse::<usize>().unwrap()))
-                .collect::<Vec<_>>();
-            Instruction {
-                opcode: VmOpcode::from_usize(opcode),
-                a: operands[0],
-                b: operands[1],
-                c: operands[2],
-                d: operands[3],
-                e: operands[4],
-                f: operands[5],
-                g: operands[6],
-            }
-        })
-        .collect();
+    let return_fp = words[index] as usize;
+    index += 1;
+
+    let instructions = deserialize_instructions(&words[index..]);
 
     CompiledKernel {
         function_name: parsed_kernel.function_name,

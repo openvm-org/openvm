@@ -1,9 +1,9 @@
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_transpiler::{TranspilerExtension, TranspilerOutput};
 use p3_field::PrimeField32;
-
+use openvm_native_serialization::{GAP_INDICATOR, LONG_FORM_INSTRUCTION_INDICATOR, VARIABLE_REGISTER_INDICATOR};
 use crate::{
-    GAP_INDICATOR, LONG_FORM_INSTRUCTION_INDICATOR, REGISTER_LIMBS, VARIABLE_REGISTER_INDICATOR,
+    REGISTER_LIMBS,
 };
 
 pub struct LongFormTranspilerExtension;
@@ -43,7 +43,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for LongFormTranspilerExtension {
                 f: operands[5],
                 g: operands[6],
             };
-            println!("deserialized instruction = {:?}", instruction);
             Some(TranspilerOutput::many_to_one(instruction, j))
         } else if instruction_stream[0] == GAP_INDICATOR {
             Some(TranspilerOutput::gap(instruction_stream[1] as usize, 2))

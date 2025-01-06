@@ -1,13 +1,11 @@
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_native_compiler::{CastfOpcode, FieldArithmeticOpcode, NativeJalOpcode};
 use p3_field::{Field, PrimeField32};
-
+use openvm_native_serialization::{GAP_INDICATOR, IMMEDIATE_ADDRESS_SPACE, KERNEL_ADDRESS_SPACE, LONG_FORM_INSTRUCTION_INDICATOR, RUST_REGISTER_ADDRESS_SPACE, VARIABLE_REGISTER_INDICATOR};
 use crate::{
     parse_compiler_output::CompiledKernel,
     transportation::Operand::{Literal, Variable},
-    GAP_INDICATOR, IMMEDIATE_ADDRESS_SPACE, KERNEL_ADDRESS_SPACE, LONG_FORM_INSTRUCTION_INDICATOR,
-    PC_STEP, REGISTER_LIMBS, REGISTER_LIMB_SIZE, RUST_REGISTER_ADDRESS_SPACE, UTILITY_CELL,
-    VARIABLE_REGISTER_INDICATOR,
+    PC_STEP, REGISTER_LIMBS, REGISTER_LIMB_SIZE, UTILITY_CELL,
 };
 
 #[derive(Clone, Debug)]
@@ -36,15 +34,7 @@ impl<F: Field> MacroInstruction<F> {
     fn literal(instruction: Instruction<F>) -> Self {
         Self {
             opcode: instruction.opcode,
-            operands: vec![
-                Literal(instruction.a),
-                Literal(instruction.b),
-                Literal(instruction.c),
-                Literal(instruction.d),
-                Literal(instruction.e),
-                Literal(instruction.f),
-                Literal(instruction.g),
-            ],
+            operands: instruction.operands().into_iter().map(Literal).collect(),
         }
     }
 
