@@ -21,11 +21,3 @@ def create_bench_metrics_dir():
     # Use os.makedirs to create the folder if it doesn't exist
     # The exist_ok=True argument ensures no error is raised if the directory already exists
     os.makedirs(folder_path, exist_ok=True)
-
-def create_flamegraph_dir():
-    # Define the path to the folder
-    folder_path = FLAMEGRAPHS_DIR
-
-    # Use os.makedirs to create the folder if it doesn't exist
-    # The exist_ok=True argument ensures no error is raised if the directory already exists
-    os.makedirs(folder_path, exist_ok=True)

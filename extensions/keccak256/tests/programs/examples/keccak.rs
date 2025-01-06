@@ -6,8 +6,8 @@ extern crate alloc;
 use alloc::vec::Vec;
 use core::hint::black_box;
 
-use openvm_keccak256_guest::keccak256;
 use hex::FromHex;
+use openvm_keccak256_guest::keccak256;
 
 openvm::entry!(main);
 

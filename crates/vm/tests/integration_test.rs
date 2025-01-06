@@ -284,9 +284,7 @@ fn test_vm_1_optional_air() {
 fn test_vm_public_values() {
     setup_tracing();
     let num_public_values = 100;
-    let config = SystemConfig::default()
-        .with_public_values(num_public_values)
-        .with_metric_collection();
+    let config = SystemConfig::default().with_public_values(num_public_values);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let vm = VirtualMachine::new(engine, config.clone());

@@ -9,12 +9,8 @@ use openvm_native_compiler::{
 use openvm_stark_backend::p3_field::{AbstractField, Field, TwoAdicField};
 pub use two_adic_pcs::*;
 
-use self::types::{
-    DimensionsVariable, FriChallengesVariable, FriConfigVariable, FriProofVariable,
-    FriQueryProofVariable,
-};
+use self::types::{DimensionsVariable, FriConfigVariable, FriQueryProofVariable};
 use crate::{
-    challenger::ChallengerVariable,
     digest::{CanPoseidon2Digest, DigestVariable},
     outer_poseidon2::Poseidon2CircuitBuilder,
     utils::cond_eval,
@@ -26,88 +22,6 @@ pub mod hints;
 pub mod two_adic_pcs;
 pub mod types;
 pub mod witness;
-
-/// Reference: https://github.com/Plonky3/Plonky3/blob/4809fa7bedd9ba8f6f5d3267b1592618e3776c57/fri/src/verifier.rs#L27
-pub fn verify_shape_and_sample_challenges<C: Config>(
-    builder: &mut Builder<C>,
-    config: &FriConfigVariable<C>,
-    proof: &FriProofVariable<C>,
-    challenger: &mut impl ChallengerVariable<C>,
-) -> FriChallengesVariable<C> {
-    let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
-
-    builder
-        .range(0, proof.commit_phase_commits.len())
-        .for_each(|i, builder| {
-            let comm = builder.get(&proof.commit_phase_commits, i);
-            challenger.observe_digest(builder, comm);
-            let sample = challenger.sample_ext(builder);
-            builder.set(&betas, i, sample);
-        });
-
-    let final_poly_felts = builder.ext2felt(proof.final_poly);
-    challenger.observe_slice(builder, final_poly_felts);
-
-    let num_query_proofs = proof.query_proofs.len().clone();
-    builder
-        .if_ne(num_query_proofs, RVar::from(config.num_queries))
-        .then(|builder| {
-            builder.error();
-        });
-
-    challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
-
-    let log_max_height =
-        builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(config.log_blowup));
-    let query_indices = builder.array(config.num_queries);
-    builder.range(0, config.num_queries).for_each(|i, builder| {
-        let index_bits = challenger.sample_bits(builder, log_max_height);
-        builder.set(&query_indices, i, index_bits);
-    });
-
-    FriChallengesVariable {
-        query_indices,
-        betas,
-    }
-}
-
-/// Verifies a set of FRI challenges.
-///
-/// Reference: https://github.com/Plonky3/Plonky3/blob/4809fa7bedd9ba8f6f5d3267b1592618e3776c57/fri/src/verifier.rs#L67
-#[allow(clippy::type_complexity)]
-pub fn verify_challenges<C: Config>(
-    builder: &mut Builder<C>,
-    config: &FriConfigVariable<C>,
-    proof: &FriProofVariable<C>,
-    challenges: &FriChallengesVariable<C>,
-    reduced_openings: &Array<C, Array<C, Ext<C::F, C::EF>>>,
-) where
-    C::F: TwoAdicField,
-    C::EF: TwoAdicField,
-{
-    let log_max_height =
-        builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(config.log_blowup));
-    builder
-        .range(0, challenges.query_indices.len())
-        .for_each(|i, builder| {
-            let index_bits = builder.get(&challenges.query_indices, i);
-            let query_proof = builder.get(&proof.query_proofs, i);
-            let ro = builder.get(reduced_openings, i);
-
-            let folded_eval = verify_query(
-                builder,
-                config,
-                &proof.commit_phase_commits,
-                &index_bits,
-                &query_proof,
-                &challenges.betas,
-                &ro,
-                log_max_height,
-            );
-
-            builder.assert_ext_eq(folded_eval, proof.final_poly);
-        });
-}
 
 /// Verifies a FRI query.
 ///

@@ -1,6 +1,6 @@
 use openvm_instructions::{instruction::Instruction, UsizeOpcode};
 use openvm_instructions_derive::UsizeOpcode;
-use openvm_keccak256_guest::{FUNCT3, OPCODE};
+use openvm_keccak256_guest::{KECCAK256_FUNCT3, KECCAK256_FUNCT7, OPCODE};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
@@ -27,10 +27,13 @@ impl<F: PrimeField32> TranspilerExtension<F> for Keccak256TranspilerExtension {
         let opcode = (instruction_u32 & 0x7f) as u8;
         let funct3 = ((instruction_u32 >> 12) & 0b111) as u8;
 
-        if (opcode, funct3) != (OPCODE, FUNCT3) {
+        if (opcode, funct3) != (OPCODE, KECCAK256_FUNCT3) {
             return None;
         }
         let dec_insn = RType::new(instruction_u32);
+        if dec_insn.funct7 != KECCAK256_FUNCT7 as u32 {
+            return None;
+        }
         let instruction = from_r_type(
             Rv32KeccakOpcode::KECCAK256.with_default_offset(),
             2,

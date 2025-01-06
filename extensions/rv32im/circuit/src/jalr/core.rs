@@ -13,7 +13,11 @@ use openvm_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, PC_BITS},
+    UsizeOpcode,
+};
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -101,7 +105,7 @@ where
                 acc + val * AB::Expr::from_canonical_u32(1 << ((i + 1) * RV32_CELL_BITS))
             });
 
-        let least_sig_limb = from_pc + AB::F::from_canonical_u32(4) - composed;
+        let least_sig_limb = from_pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP) - composed;
 
         // rd_data is the final data needed
         let rd_data = array::from_fn(|i| {
@@ -288,6 +292,6 @@ pub(super) fn run_jalr(
     assert!(to_pc < (1 << PC_BITS));
     (
         to_pc,
-        array::from_fn(|i: usize| ((pc + 4) >> (RV32_CELL_BITS * i)) & RV32_LIMB_MAX),
+        array::from_fn(|i: usize| ((pc + DEFAULT_PC_STEP) >> (RV32_CELL_BITS * i)) & RV32_LIMB_MAX),
     )
 }

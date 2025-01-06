@@ -3,8 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use eyre::Result;
-use openvm_build::{build_guest_package, get_package, is_debug, GuestOptions, TargetFilter};
+use eyre::{Context, Result};
+use openvm_build::{
+    build_guest_package, get_dir_with_profile, get_package, GuestOptions, TargetFilter,
+};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 use tempfile::tempdir;
 
@@ -67,21 +69,18 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
         std::process::exit(code);
     }
     // Assumes the package has a single target binary
-    let profile = if is_debug() { "debug" } else { "release" };
+    let profile = "release";
     let elf_path = pkg
         .targets
         .iter()
         .find(|target| target.name == example_name)
         .map(|target| {
-            target_dir
-                .as_ref()
-                .join("riscv32im-risc0-zkvm-elf")
-                .join(profile)
-                .join("examples")
+            get_dir_with_profile(&target_dir, profile, true)
                 .join(&target.name)
                 .to_path_buf()
         })
         .expect("Could not find target binary");
-    let data = read(elf_path)?;
+    let data = read(&elf_path).with_context(|| format!("Path not found: {:?}", elf_path))?;
+    target_dir.close()?;
     Elf::decode(&data, MEM_SIZE as u32)
 }

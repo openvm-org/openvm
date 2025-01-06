@@ -5,11 +5,10 @@ use loadstore_native_adapter::NativeLoadStoreAdapterChip;
 use native_vectorized_adapter::NativeVectorizedAdapterChip;
 use openvm_circuit::{
     arch::{
-        vm_poseidon2_config, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
-        SystemPort, VmChipComplex, VmConfig, VmExtension, VmInventory, VmInventoryBuilder,
-        VmInventoryError,
+        MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex,
+        VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
-    system::{native_adapter::NativeAdapterChip, phantom::PhantomChip, poseidon2::Poseidon2Chip},
+    system::{native_adapter::NativeAdapterChip, phantom::PhantomChip},
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
@@ -20,7 +19,7 @@ use openvm_native_compiler::{
     FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
     NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom,
 };
-use openvm_poseidon2_air::poseidon2::air::SBOX_DEGREE;
+use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
@@ -77,7 +76,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     Jal(NativeJalChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
-    Poseidon2(Poseidon2Chip<F>),
+    Poseidon2(NativePoseidon2Chip<F>),
     FriReducedOpening(FriReducedOpeningChip<F>),
 }
 
@@ -177,17 +176,13 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             FriOpcode::iter().map(VmOpcode::with_default_offset),
         )?;
 
-        let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
-            vm_poseidon2_config(),
-            builder
-                .system_config()
-                .max_constraint_degree
-                .min(SBOX_DEGREE),
+        let poseidon2_chip = NativePoseidon2Chip::new(
             execution_bus,
             program_bus,
             memory_controller.clone(),
-            builder.new_bus_idx(),
+            Poseidon2Config::default(),
             Poseidon2Opcode::default_offset(),
+            builder.system_config().max_constraint_degree,
         );
         inventory.add_executor(
             poseidon2_chip,

@@ -11,7 +11,7 @@ OpenVM is an open-source zero-knowledge virtual machine (zkVM) framework focused
 - **Extensible Instruction Set**: The instruction set architecture (ISA) is designed to be extended with new custom instructions that integrate directly with the virtual machine. Current extensions available for OpenVM include:
   - RISC-V support via RV32IM
   - A native field arithmetic extension for proof recursion and aggregation
-  - The Keccak-256 hash function
+  - The Keccak-256 and SHA2-256 hash functions
   - Int256 arithmetic
   - Modular arithmetic over arbitrary fields
   - Elliptic curve operations, including multi-scalar multiplication and ECDSA scalar multiplication.

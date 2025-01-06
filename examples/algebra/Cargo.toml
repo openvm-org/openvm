@@ -12,11 +12,10 @@ openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git" }
 serde = { version = "1.0.216", default-features = false }
+num-bigint-dig = { version = "0.8.4", default-features = false, features = [
+    "serde",
+] }
 
 [features]
 default = []
-std = [
-    "serde/std",
-    "openvm/std",
-    "openvm-algebra-guest/std",
-]
+std = ["serde/std", "openvm/std", "openvm-algebra-guest/std"]

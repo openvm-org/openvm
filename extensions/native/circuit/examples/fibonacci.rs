@@ -44,7 +44,6 @@ fn main() {
     let expected_value = F::from_canonical_u32(fibonacci(n_val));
     builder.assert_felt_eq(a, expected_value);
 
-    //builder.print_f(a);
     builder.halt();
 
     let program = builder.compile_isa();

@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, UsizeOpcode};
 use openvm_rv32im_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -157,7 +157,7 @@ where
 
         let to_pc = from_pc
             + cols.cmp_result * cols.imm
-            + not(cols.cmp_result) * AB::Expr::from_canonical_u8(4);
+            + not(cols.cmp_result) * AB::Expr::from_canonical_u32(DEFAULT_PC_STEP);
 
         AdapterAirContext {
             to_pc: Some(to_pc),

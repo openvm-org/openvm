@@ -24,8 +24,10 @@ jobs:
       - runs-on=${{ github.run_id }}
       - family=m7a.48xlarge
       - disk=large
+      - extras=s3-cache
 
     steps:
+      - uses: runs-on/action@v1
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
