@@ -34,7 +34,8 @@ def run_cargo_command(
         command.extend(["--profiling"])
 
     output_path_old = None
-
+    # Create the output directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     # Local only: in CI we will download the old metrics file from S3
     if os.path.exists(output_path):
         output_path_old = f"{output_path}.old"
