@@ -1,7 +1,11 @@
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_native_compiler::{CastfOpcode, FieldArithmeticOpcode, NativeJalOpcode};
+use openvm_native_serialization::{
+    GAP_INDICATOR, IMMEDIATE_ADDRESS_SPACE, KERNEL_ADDRESS_SPACE, LONG_FORM_INSTRUCTION_INDICATOR,
+    RUST_REGISTER_ADDRESS_SPACE, VARIABLE_REGISTER_INDICATOR,
+};
 use p3_field::{Field, PrimeField32};
-use openvm_native_serialization::{GAP_INDICATOR, IMMEDIATE_ADDRESS_SPACE, KERNEL_ADDRESS_SPACE, LONG_FORM_INSTRUCTION_INDICATOR, RUST_REGISTER_ADDRESS_SPACE, VARIABLE_REGISTER_INDICATOR};
+
 use crate::{
     parse_compiler_output::CompiledKernel,
     transportation::Operand::{Literal, Variable},

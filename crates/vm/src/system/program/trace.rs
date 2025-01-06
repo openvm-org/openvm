@@ -62,7 +62,9 @@ impl<F: PrimeField64> ProgramChip<F> {
         let common_trace = RowMajorMatrix::new_col(
             self.execution_frequencies
                 .into_iter()
-                .map(|x| F::from_canonical_usize(x))
+                .enumerate()
+                .filter(|(i, _)| self.program.get_instruction_and_debug_info(*i).is_some())
+                .map(|(_, x)| F::from_canonical_usize(x))
                 .collect::<Vec<F>>(),
         );
         if let Some(cached_trace) = cached_trace {
@@ -118,6 +120,17 @@ pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> Ro
                 g: instruction.g,
             };
         });
+
+    let mut i = 0;
+    while i / 9 < 2048 {
+        print!("row {}: ", i / 9);
+        for j in 0..9 {
+            print!("{} ", rows[i + j]);
+        }
+        println!();
+
+        i += 9;
+    }
 
     RowMajorMatrix::new(rows, width)
 }

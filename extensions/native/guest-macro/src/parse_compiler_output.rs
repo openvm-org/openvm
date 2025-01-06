@@ -1,6 +1,7 @@
 use openvm_instructions::{instruction::Instruction, VmOpcode};
-use p3_field::{Field, PrimeField32};
 use openvm_native_serialization::deserialize_instructions;
+use p3_field::{Field, PrimeField32};
+
 use crate::parse_kernel::ParsedKernel;
 
 #[derive(Debug)]
