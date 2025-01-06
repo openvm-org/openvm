@@ -163,7 +163,7 @@ fn test_vm_override_executor_height() {
 
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
     let res = executor
-        .execute(committed_exe.exe.clone(), vec![], true)
+        .execute_and_compute_heights(committed_exe.exe.clone(), vec![])
         .unwrap();
     // Memory trace heights are not computed during execution.
     assert_eq!(
@@ -305,7 +305,9 @@ fn test_vm_public_values() {
             vm.engine.config.pcs(),
         ));
         let single_vm = SingleSegmentVmExecutor::new(config);
-        let exe_result = single_vm.execute(program, vec![], false).unwrap();
+        let exe_result = single_vm
+            .execute_and_compute_heights(program, vec![])
+            .unwrap();
         assert_eq!(
             exe_result.public_values,
             [

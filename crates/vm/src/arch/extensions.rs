@@ -1027,7 +1027,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     #[cfg(feature = "bench-metrics")]
-    fn finalize_metrics(&mut self, metrics: &mut VmMetrics)
+    fn finalize_metrics(&self, metrics: &mut VmMetrics)
     where
         E: ChipUsageGetter,
         P: ChipUsageGetter,

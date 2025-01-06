@@ -682,6 +682,12 @@ impl<F: PrimeField32> MemoryController<F> {
         ret
     }
 
+    /// Returns a reference to the offline memory.
+    ///
+    /// Until `finalize` is called, the `OfflineMemory` does not contain useful state, and should
+    /// therefore not be used by any chip during execution. However, to obtain a reference to the
+    /// offline memory that will be useful in trace generation, a chip can call `offline_memory()`
+    /// and store the returned reference for later use.
     pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
         self.offline_memory.clone()
     }

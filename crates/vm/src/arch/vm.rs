@@ -292,17 +292,17 @@ where
         self.overridden_heights = Some(overridden_heights);
     }
 
-    /// Executes a program and returns the public values. None means the public value is not set.
-    pub fn execute(
+    /// Executes a program, compute the trace heights, and returns the public values.
+    pub fn execute_and_compute_heights(
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        compute_heights: bool,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
-        let mut segment = self.execute_impl(exe.into(), input)?;
-        if compute_heights {
+        let segment = {
+            let mut segment = self.execute_impl(exe.into(), input)?;
             segment.chip_complex.finalize_memory();
-        }
+            segment
+        };
         let air_heights = segment.chip_complex.current_trace_heights();
         let internal_heights = segment.chip_complex.get_internal_trace_heights();
         let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {

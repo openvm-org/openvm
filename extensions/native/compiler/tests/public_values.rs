@@ -33,7 +33,9 @@ fn test_compiler_public_values() {
         Native,
     ));
 
-    let exe_result = executor.execute(program, vec![], false).unwrap();
+    let exe_result = executor
+        .execute_and_compute_heights(program, vec![])
+        .unwrap();
     assert_eq!(
         exe_result
             .public_values

@@ -55,7 +55,9 @@ pub(super) fn compute_root_proof_heights(
         public_values: vec![F::ZERO; num_user_public_values],
     };
     let vm = SingleSegmentVmExecutor::new(root_vm_config);
-    let res = vm.execute(root_exe, root_input.write(), true).unwrap();
+    let res = vm
+        .execute_and_compute_heights(root_exe, root_input.write())
+        .unwrap();
     let air_heights: Vec<_> = res
         .air_heights
         .into_iter()

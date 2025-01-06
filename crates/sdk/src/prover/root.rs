@@ -33,10 +33,9 @@ impl RootVerifierLocalProver {
     pub fn execute_for_air_heights(&self, input: RootVmVerifierInput<SC>) -> Vec<usize> {
         let result = self
             .executor_for_heights
-            .execute(
+            .execute_and_compute_heights(
                 self.root_verifier_pk.root_committed_exe.exe.clone(),
                 input.write(),
-                true,
             )
             .unwrap();
         result.air_heights
