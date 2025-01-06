@@ -41,6 +41,7 @@ jobs:
       - tag=extension-${{ matrix.extension.name }}
 
     steps:
+      - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -55,7 +56,6 @@ jobs:
           echo "No relevant changes, skipping tests."
           exit 0
 
-      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
