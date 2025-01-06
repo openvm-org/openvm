@@ -172,6 +172,7 @@ jobs:
         run: cargo install --force --profile=dev --path .
 
       - name: Set github pages path for dispatch
+        if: github.event_name == 'workflow_dispatch'
         run: |
           BENCHMARK_RESULTS_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
           echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
@@ -270,7 +271,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
 
       - name: Update github pages with new bench results
-        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch')
         run: |
           mkdir -p ${BENCHMARK_RESULTS_PATH}
           cp ${TMP_DIR}/*.md ${BENCHMARK_RESULTS_PATH}/
@@ -303,6 +304,11 @@ jobs:
               echo "PUSH_FAILED"
               exit 1
           fi
+
+      - name: Link to Benchmark Results
+        run: |
+          echo "Benchmark results are available at:"
+          echo "${{ github.repository }}/blob/benchmark-results/${BENCHMARK_RESULTS_PATH}/summary.md"
 
       ##########################################################################
       # Update PR comment upon a pull request event                            #

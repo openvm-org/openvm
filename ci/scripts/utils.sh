@@ -21,7 +21,7 @@ add_metadata_and_flamegraphs() {
     if [[ "$FLAMEGRAPHS" == 'true' ]]; then
       repo_root=$(git rev-parse --show-toplevel)
       python3 ${repo_root}/ci/scripts/metric_unify/flamegraph.py $metric_path
-      s5cmd cp "'${repo_root}/.bench_metrics/flamegraphs/*.svg'" "${S3_FLAMEGRAPHS_PATH}/${CURRENT_SHA}/"
+      s5cmd cp "${repo_root}/.bench_metrics/flamegraphs/*.svg" "${S3_FLAMEGRAPHS_PATH}/${CURRENT_SHA}/"
     fi
 
     if [ ! -z "$inputs" ]; then
