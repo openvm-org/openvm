@@ -869,6 +869,82 @@ impl<C: Config> IfBuilder<'_, C> {
     }
 }
 
+pub struct ZippedIteratorBuilder<'a, C: Config, V: MemVariable<C>> {
+    starts: Vec<RVar<C::N>>,
+    ends: Vec<RVar<C::N>>,
+    step_sizes: Vec<usize>,
+    builder: &'a mut Builder<C>,
+    arrays: &'a Vec<Array<C, V>>,
+}
+
+impl<C: Config, V: MemVariable<C>> ZippedIteratorBuilder<'_, C, V> {
+    pub fn for_each(&mut self, mut f: impl FnMut(Vec<V>, &mut Builder<C>)) {
+        assert!(self.starts.len() == self.ends.len());
+        assert!(self.starts.len() == self.step_sizes.len());
+        assert!(self.starts.len() == self.arrays.len());
+        assert!(self.starts.len() > 0);
+
+        if self.starts.iter().all(|start| start.is_const())
+            && self.ends.iter().all(|end| end.is_const())
+        {
+            self.for_each_unrolled(|vars, builder| {
+                f(vars, builder);
+                Ok(())
+            });
+            return;
+        }
+
+        let old_disable_break = self.builder.flags.disable_break;
+        self.builder.flags.disable_break = true;
+        self.for_each_dynamic(|vars, builder| {
+            f(vars, builder);
+            Ok(())
+        });
+        self.builder.flags.disable_break = old_disable_break;
+    }
+
+    fn for_each_unrolled(
+        &mut self,
+        mut f: impl FnMut(Vec<V>, &mut Builder<C>) -> Result<(), BreakLoop>,
+    ) {
+        let old_static_loop = self.builder.flags.static_loop;
+        self.builder.flags.static_loop = true;
+
+        let starts: Vec<usize> = self.starts.iter().map(|start| start.value()).collect();
+        let ends: Vec<usize> = self.ends.iter().map(|end| end.value()).collect();
+        // check that the number of iterations is the same for all vectors
+        assert!(starts
+            .windows(2)
+            .zip(ends.windows(2))
+            .zip(self.step_sizes.windows(2))
+            .all(|((s, e), ss)| (e[0] - s[0]) / ss[0] == (e[1] - s[1]) / ss[1]));
+
+        for i in (starts[0]..ends[0]).step_by(self.step_sizes[0]) {
+            let vals = self
+                .arrays
+                .iter()
+                .map(|array| self.builder.get(array, i))
+                .collect();
+            if f(vals, self.builder).is_err() {
+                break;
+            }
+        }
+        self.builder.flags.static_loop = old_static_loop;
+    }
+
+    fn for_each_dynamic(
+        &mut self,
+        mut f: impl FnMut(Vec<V>, &mut Builder<C>) -> Result<(), BreakLoop>,
+    ) {
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic loop in static mode"
+        );
+
+        todo!()
+    }
+}
+
 pub struct IteratorBuilder<'a, C: Config, V: MemVariable<C>> {
     start: RVar<C::N>,
     end: RVar<C::N>,

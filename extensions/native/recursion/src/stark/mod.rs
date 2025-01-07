@@ -254,8 +254,7 @@ where
                             builder.get(&air_advice.num_exposed_values_after_challenge, phase_idx);
                         builder.assert_eq::<Usize<_>>(values_len, values.len());
 
-                        builder.range(0, values.len()).for_each(|k, builder| {
-                            let value = builder.get(&values, k);
+                        builder.iter(&values).for_each(|value, builder| {
                             let felts = builder.ext2felt(value);
                             challenger.observe_slice(builder, felts);
                         });
