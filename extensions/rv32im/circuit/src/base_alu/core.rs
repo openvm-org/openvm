@@ -204,10 +204,6 @@ where
         _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        println!(
-            "rv32im instruction = {:?}, _from_pc = {_from_pc}",
-            instruction
-        );
         let Instruction { opcode, .. } = instruction;
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 

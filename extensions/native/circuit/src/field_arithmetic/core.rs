@@ -145,7 +145,6 @@ where
         let b = data[0][0];
         let c = data[1][0];
         let a = FieldArithmetic::run_field_arithmetic(local_opcode, b, c).unwrap();
-        println!("{b} ({local_opcode:?}) {c} = {a}");
 
         let output: AdapterRuntimeContext<F, I> = AdapterRuntimeContext {
             to_pc: None,

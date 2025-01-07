@@ -144,8 +144,7 @@ where
         let y = reads.into()[0][0];
 
         let x = CastF::solve(y.as_canonical_u32());
-        println!("castf {y} = {x:?}");
-        //panic!("adios");
+
         for (i, limb) in x.iter().enumerate() {
             if i == 3 {
                 self.range_checker_chip.add_count(*limb, FINAL_LIMB_BITS);
