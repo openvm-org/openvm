@@ -9,9 +9,7 @@ use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
-    air_builders::{
-        debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
-    },
+    air_builders::{debug::DebugConstraintBuilder, symbolic::SymbolicRapBuilder},
     config::{StarkGenericConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{FieldAlgebra, PrimeField32},
@@ -249,16 +247,11 @@ where
     C: VmCoreChip<Val<SC>, A::Interface> + Send + Sync,
     A::Air: Send + Sync + 'static,
     A::Air: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>,
-    A::Air: for<'a> VmAdapterAir<ProverConstraintFolder<'a, SC>>,
     A::Air: for<'a> VmAdapterAir<DebugConstraintBuilder<'a, SC>>,
     C::Air: Send + Sync + 'static,
     C::Air: VmCoreAir<
         SymbolicRapBuilder<Val<SC>>,
         <A::Air as VmAdapterAir<SymbolicRapBuilder<Val<SC>>>>::Interface,
-    >,
-    C::Air: for<'a> VmCoreAir<
-        ProverConstraintFolder<'a, SC>,
-        <A::Air as VmAdapterAir<ProverConstraintFolder<'a, SC>>>::Interface,
     >,
     C::Air: for<'a> VmCoreAir<
         DebugConstraintBuilder<'a, SC>,
