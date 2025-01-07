@@ -9,7 +9,7 @@ pub const PERMUTATION_WIDTH: usize = 16;
 impl<C: Config> Builder<C> {
     /// Applies the Poseidon2 permutation to the given array.
     ///
-    /// Reference: [p3_poseidon2::Poseidon2]
+    /// [Reference](https://docs.rs/p3-poseidon2/latest/p3_poseidon2/struct.Poseidon2.html)
     pub fn poseidon2_permute(&mut self, array: &Array<C, Felt<C::F>>) -> Array<C, Felt<C::F>> {
         let output = match array {
             Array::Fixed(values) => {
@@ -27,7 +27,7 @@ impl<C: Config> Builder<C> {
 
     /// Applies the Poseidon2 permutation to the given array.
     ///
-    /// Reference: [p3_poseidon2::Poseidon2]
+    /// [Reference](https://docs.rs/p3-poseidon2/latest/p3_poseidon2/struct.Poseidon2.html)
     pub fn poseidon2_permute_mut(&mut self, array: &Array<C, Felt<C::F>>) {
         if let Array::Fixed(_) = array {
             panic!("Poseidon2 permutation is not allowed on fixed arrays");
@@ -40,7 +40,7 @@ impl<C: Config> Builder<C> {
 
     /// Applies the Poseidon2 compression function to the given array.
     ///
-    /// Reference: [p3_symmetric::TruncatedPermutation]
+    /// [Reference](https://docs.rs/p3-symmetric/latest/p3_symmetric/struct.TruncatedPermutation.html)
     pub fn poseidon2_compress(
         &mut self,
         left: &Array<C, Felt<C::F>>,
@@ -60,7 +60,7 @@ impl<C: Config> Builder<C> {
 
     /// Applies the Poseidon2 compression to the given array.
     ///
-    /// Reference: [p3_symmetric::TruncatedPermutation]
+    /// [Reference](https://docs.rs/p3-symmetric/latest/p3_symmetric/struct.TruncatedPermutation.html)
     pub fn poseidon2_compress_x(
         &mut self,
         result: &Array<C, Felt<C::F>>,
@@ -76,7 +76,7 @@ impl<C: Config> Builder<C> {
 
     /// Applies the Poseidon2 permutation to the given array.
     ///
-    /// Reference: [p3_symmetric::PaddingFreeSponge]
+    /// [Reference](https://docs.rs/p3-symmetric/latest/p3_symmetric/struct.PaddingFreeSponge.html)
     pub fn poseidon2_hash(&mut self, array: &Array<C, Felt<C::F>>) -> Array<C, Felt<C::F>> {
         let perm_width = PERMUTATION_WIDTH;
         let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);

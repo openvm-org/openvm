@@ -2,7 +2,7 @@ use std::{iter, sync::Arc};
 
 use openvm_instructions::{
     instruction::Instruction,
-    program::{Program, DEFAULT_PC_STEP},
+    program::{Program, DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
     VmOpcode,
 };
 use openvm_native_compiler::{
@@ -35,10 +35,9 @@ assert_impl_all!(VmCommittedExe<BabyBearPoseidon2Config>: Serialize, Deserialize
 assert_impl_all!(VmCommittedExe<BabyBearPoseidon2RootConfig>: Serialize, DeserializeOwned);
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
-    let instructions = program.instructions();
     let bus = ProgramBus(READ_INSTRUCTION_BUS);
-    let mut chip = ProgramChip::new_with_program(program, bus);
-    let mut execution_frequencies = vec![0; instructions.len()];
+    let mut chip = ProgramChip::new_with_program(program.clone(), bus);
+    let mut execution_frequencies = vec![0; program.len()];
     for pc_idx in execution {
         execution_frequencies[pc_idx as usize] += 1;
         chip.get_instruction(pc_idx * DEFAULT_PC_STEP).unwrap();
@@ -47,29 +46,33 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
 
     let counter_air = DummyInteractionAir::new(9, true, bus.0);
     let mut program_cells = vec![];
-    for (pc_idx, instruction) in instructions.iter().enumerate() {
-        program_cells.extend(vec![
-            BabyBear::from_canonical_usize(execution_frequencies[pc_idx]), // hacky: we should switch execution_frequencies into hashmap
-            BabyBear::from_canonical_usize(pc_idx * (DEFAULT_PC_STEP as usize)),
-            instruction.opcode.to_field(),
-            instruction.a,
-            instruction.b,
-            instruction.c,
-            instruction.d,
-            instruction.e,
-            instruction.f,
-            instruction.g,
-        ]);
+    for (index, frequency) in execution_frequencies.into_iter().enumerate() {
+        let option = program.get_instruction_and_debug_info(index);
+        if let Some((instruction, _)) = option {
+            program_cells.extend([
+                BabyBear::from_canonical_usize(frequency), // hacky: we should switch execution_frequencies into hashmap
+                BabyBear::from_canonical_usize(index * (DEFAULT_PC_STEP as usize)),
+                instruction.opcode.to_field(),
+                instruction.a,
+                instruction.b,
+                instruction.c,
+                instruction.d,
+                instruction.e,
+                instruction.f,
+                instruction.g,
+            ]);
+        }
     }
 
     // Pad program cells with zeroes to make height a power of two.
     let width = 10;
-    let desired_height = instructions.len().next_power_of_two();
-    let cells_to_add = (desired_height - instructions.len()) * width;
+    let original_height = program.num_defined_instructions();
+    let desired_height = original_height.next_power_of_two();
+    let cells_to_add = (desired_height - original_height) * width;
     program_cells.extend(iter::repeat(BabyBear::ZERO).take(cells_to_add));
 
     let counter_trace = RowMajorMatrix::new(program_cells, 10);
-    println!("trace height = {}", instructions.len());
+    println!("trace height = {}", original_height);
     println!("counter trace height = {}", counter_trace.height());
 
     BabyBearPoseidon2Engine::run_test_fast(vec![
@@ -210,4 +213,64 @@ fn test_program_negative() {
         AirProofInput::simple_no_pis(Arc::new(counter_air), counter_trace),
     ])
     .expect("Verification failed");
+}
+
+#[test]
+fn test_program_with_undefined_instructions() {
+    let n = 2;
+
+    // see core/tests/mod.rs
+    let instructions = vec![
+        // word[0]_1 <- word[n]_0
+        Some(Instruction::large_from_isize(
+            VmOpcode::with_default_offset(STOREW),
+            n,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+        )),
+        // word[1]_1 <- word[1]_1
+        Some(Instruction::large_from_isize(
+            VmOpcode::with_default_offset(STOREW),
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+        )),
+        // if word[0]_1 == n then pc += 3*DEFAULT_PC_STEP
+        Some(Instruction::from_isize(
+            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BEQ)),
+            0,
+            n,
+            3 * DEFAULT_PC_STEP as isize,
+            1,
+            0,
+        )),
+        None,
+        None,
+        // terminate
+        Some(Instruction::from_isize(
+            VmOpcode::with_default_offset(TERMINATE),
+            0,
+            0,
+            0,
+            0,
+            0,
+        )),
+    ];
+
+    let program = Program::new_without_debug_infos_with_option(
+        &instructions,
+        DEFAULT_PC_STEP,
+        0,
+        DEFAULT_MAX_NUM_PUBLIC_VALUES,
+    );
+
+    interaction_test(program, vec![0, 2, 5]);
 }

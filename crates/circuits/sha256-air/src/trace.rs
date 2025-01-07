@@ -42,7 +42,7 @@ impl Sha256Air {
     /// and the buffer values that will be put in rows 0..4.
     /// Will populate the given `trace` with the trace of the block, where the width of the trace is `trace_width`
     /// and the starting column for the `Sha256Air` is `trace_start_col`.
-    /// **Note**: this function only generates some of the required trace. Another pass is required, refer to [`generate_missing_cells`] for details.
+    /// **Note**: this function only generates some of the required trace. Another pass is required, refer to [`Self::generate_missing_cells`] for details.
     #[allow(clippy::too_many_arguments)]
     pub fn generate_block_trace<F: PrimeField32>(
         &self,
@@ -285,7 +285,7 @@ impl Sha256Air {
 
     /// This function will fill in the cells that we couldn't do during the first pass.
     /// This function should be called only after `generate_block_trace` was called for all blocks
-    /// And [`generate_default_row`] is called for all invalid rows
+    /// And [`Self::generate_default_row`] is called for all invalid rows
     /// Will populate the missing values of `trace`, where the width of the trace is `trace_width`
     /// and the starting column for the `Sha256Air` is `trace_start_col`.
     /// Note: `trace` needs to be the rows 1..17 of a block and the first row of the next block

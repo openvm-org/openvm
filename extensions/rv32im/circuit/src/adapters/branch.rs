@@ -29,7 +29,7 @@ use openvm_stark_backend::{
 
 use super::RV32_REGISTER_NUM_LIMBS;
 
-/// Reads instructions of the form OP a, b, c, d, e where if([a:4]_d op [b:4]_e) pc += c.
+/// Reads instructions of the form OP a, b, c, d, e where if(\[a:4\]_d op \[b:4\]_e) pc += c.
 /// Operands d and e can only be 1.
 #[derive(Debug)]
 pub struct Rv32BranchAdapterChip<F: Field> {

@@ -32,7 +32,7 @@ use openvm_stark_backend::{
 
 use super::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
-/// Reads instructions of the form OP a, b, c, d, e where [a:4]_d = [b:4]_d op [c:4]_e.
+/// Reads instructions of the form OP a, b, c, d, e where \[a:4\]_d = \[b:4\]_d op \[c:4\]_e.
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
 /// is an immediate).
 #[derive(Debug)]

@@ -164,7 +164,7 @@ impl KeccakVmAir {
     }
 
     /// Keccak follows the 10*1 padding rule.
-    /// See Section 5.1 of https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
+    /// See Section 5.1 of <https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf>
     /// Note this is the ONLY difference between Keccak and SHA-3
     ///
     /// Constrains padding constraints and length between rounds and

@@ -94,6 +94,24 @@ The `OUTPUT_PATH` environmental variable shouuld be set to the file path where y
 
 To run a benchmark with the leaf aggregation, add `--features aggregation` to the above command.
 
+### Markdown Output
+
+To generate a markdown summary of the collected metrics, first install `openvm-prof`:
+
+```bash
+cd <repo_root>/crates/prof
+cargo install --force --path .
+```
+
+Then run the command:
+
+```bash
+openvm-prof --json-paths $OUTPUT_PATH
+```
+
+This will generate a markdown file to the same path as $OUTPUT_PATH but with a `.md` extension. The `--json-paths` argument can take multiple files, comma separated.
+There is also an optional `--prev-json-paths` argument to compare the metrics with a previous run.
+
 ### Circuit Flamegraphs
 
 While traditional flamegraphs generated from instrumenting a proving binary run on the host machine are useful,
