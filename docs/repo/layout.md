@@ -75,7 +75,7 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 
 ### Extensions
 
-The toolchain, ISA, and VM are simultaenously extendable. All non-system functionality is implemented via extensions, which may be moved to standalone repositories in the future but are presently in this repository for maintainer convenience.
+The toolchain, ISA, and VM are simultaneously extendable. All non-system functionality is implemented via extensions, which may be moved to standalone repositories in the future but are presently in this repository for maintainer convenience.
 
 #### RV32IM
 
