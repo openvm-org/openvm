@@ -5,6 +5,8 @@ use openvm_native_serialization::{
     VARIABLE_REGISTER_INDICATOR,
 };
 use p3_field::{Field, PrimeField32};
+use proc_macro2::TokenStream;
+use quote::{format_ident, quote};
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use openvm_instructions::riscv::{NATIVE_KERNEL_AS, RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 use crate::{
@@ -66,21 +68,24 @@ the body will be converted to MacroInstructions
 MacroInstructions are converted to an asm! call
  */
 
-pub fn compiled_kernel_to_function<F: PrimeField32>(compiled_kernel: CompiledKernel<F>) -> String {
+pub fn compiled_kernel_to_function<F: PrimeField32>(compiled_kernel: CompiledKernel<F>) -> TokenStream {
     let mut instructions = vec![];
     let mut input_vars = vec![];
     let return_name = "result".to_string();
 
-    let mut result = "fn ".to_string();
-    result.push_str(&compiled_kernel.function_name);
-    result.push('(');
+    let function_name_token = format_ident!("{}", compiled_kernel.function_name);
+    let return_type_token = format_ident!("{}", compiled_kernel.rust_return_type);
+    let return_name_token = format_ident!("{}", return_name);
+
+    let mut arguments = vec![];
 
     for argument in compiled_kernel.arguments {
         let var_name = "var_".to_string() + &argument.name;
-        result.push_str(&var_name);
-        result.push_str(": ");
-        result.push_str(&argument.rust_type);
-        result.push_str(", ");
+        let var_name_token = format_ident!("{}", var_name);
+        let rust_type_token = format_ident!("{}", argument.rust_type);
+        arguments.push(quote! {
+            #var_name_token: #rust_type_token
+        });
 
         input_vars.push(var_name);
         instructions.extend(transport_rust_to_edsl(
@@ -90,13 +95,6 @@ pub fn compiled_kernel_to_function<F: PrimeField32>(compiled_kernel: CompiledKer
             argument.fp,
         ));
     }
-    result.push_str(") -> ");
-    result.push_str(&compiled_kernel.rust_return_type);
-    result.push_str(" {\n");
-
-    result.push_str("\tlet result: ");
-    result.push_str(&compiled_kernel.rust_return_type);
-    result.push_str(";\n");
 
     instructions.extend(
         compiled_kernel
@@ -117,14 +115,15 @@ pub fn compiled_kernel_to_function<F: PrimeField32>(compiled_kernel: CompiledKer
     }
     std::fs::write("instructions.txt", instructions_string).expect("Failed to write file");
 
-    let asm_call = instructions_to_asm_call(instructions, input_vars, vec![return_name.clone()]);
-    result.push_str(&asm_call);
-    result.push('\t');
-    result.push_str(&return_name);
-    result.push('\n');
-    result.push_str("}\n");
+    let asm_call: TokenStream = instructions_to_asm_call(instructions, input_vars, vec![return_name.clone()]).parse().unwrap();
 
-    result
+    quote! {
+        fn #function_name_token(#(#arguments),*) -> #return_type_token {
+            let #return_name_token: #return_type_token;
+            #asm_call
+            #return_name_token
+        }
+    }
 }
 
 fn u32_to_directive(x: u32) -> String {
