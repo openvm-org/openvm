@@ -131,7 +131,7 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
 
     pub imm: F,
     pub imm_sign: bool,
-    pub mem_ptr_limbs: [F; 2],
+    pub mem_ptr_limbs: [u32; 2],
     pub mem_as: F,
 }
 
@@ -408,7 +408,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                 read: read_record.0,
                 imm: c,
                 imm_sign: imm_sign == 1,
-                mem_ptr_limbs: mem_ptr_limbs.map(F::from_canonical_u32),
+                mem_ptr_limbs,
                 mem_as: e,
             },
         ))
@@ -431,13 +431,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let (write_id, _) = match local_opcode {
             STOREW | STOREH | STOREB => {
                 let ptr = read_record.mem_ptr_limbs[0]
-                    + read_record.mem_ptr_limbs[1]
-                        * F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
-                memory.write(
-                    e,
-                    F::from_canonical_u32(ptr.as_canonical_u32() & 0xfffffffc),
-                    output.writes[0],
-                )
+                    + read_record.mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
+                memory.write(e, F::from_canonical_u32(ptr & 0xfffffffc), output.writes[0])
             }
             LOADW | LOADB | LOADH | LOADBU | LOADHU => memory.write(d, a, output.writes[0]),
         };
@@ -474,7 +469,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             aux_cols_factory.make_read_aux_cols(memory.record_by_id(read_record.read));
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
-        adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs;
+        adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
         let write = memory.record_by_id(write_record.write_id);
         adapter_cols.write_base_aux = aux_cols_factory
             .make_write_aux_cols::<RV32_REGISTER_NUM_LIMBS>(write)

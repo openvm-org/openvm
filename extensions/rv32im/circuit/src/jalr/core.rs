@@ -51,7 +51,7 @@ pub struct Rv32JalrCoreRecord<F> {
     pub rs1_data: [F; RV32_REGISTER_NUM_LIMBS],
     pub rd_data: [F; RV32_REGISTER_NUM_LIMBS - 1],
     pub to_pc_least_sig_bit: F,
-    pub to_pc_limbs: [F; 2],
+    pub to_pc_limbs: [u32; 2],
     pub imm_sign: F,
 }
 
@@ -234,11 +234,9 @@ where
         let mask = (1 << 15) - 1;
         let to_pc_least_sig_bit = rs1_val.wrapping_add(imm_extended) & 1;
 
-        let to_pc_limbs = array::from_fn(|i| F::from_canonical_u32((to_pc >> (1 + i * 15)) & mask));
-        self.range_checker_chip
-            .add_count(to_pc_limbs[0].as_canonical_u32(), 15);
-        self.range_checker_chip
-            .add_count(to_pc_limbs[1].as_canonical_u32(), 14);
+        let to_pc_limbs = array::from_fn(|i| ((to_pc >> (1 + i * 15)) & mask));
+        self.range_checker_chip.add_count(to_pc_limbs[0], 15);
+        self.range_checker_chip.add_count(to_pc_limbs[1], 14);
 
         let rd_data = rd_data.map(F::from_canonical_u32);
 
@@ -270,7 +268,7 @@ where
         core_cols.rd_data = record.rd_data;
         core_cols.rs1_data = record.rs1_data;
         core_cols.to_pc_least_sig_bit = record.to_pc_least_sig_bit;
-        core_cols.to_pc_limbs = record.to_pc_limbs;
+        core_cols.to_pc_limbs = record.to_pc_limbs.map(F::from_canonical_u32);
         core_cols.imm_sign = record.imm_sign;
         core_cols.is_valid = F::ONE;
     }
