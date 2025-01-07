@@ -8,6 +8,7 @@ use super::{
     Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,
     SymbolicFelt, SymbolicVar, Usize, Var, Variable,
 };
+use crate::ir::Ptr;
 
 /// TracedVec is a Vec wrapper that records a trace whenever an element is pushed. When extending
 /// from another TracedVec, the traces are copied over.
@@ -359,6 +360,34 @@ impl<C: Config> Builder<C> {
             end,
             builder: self,
             step_size: 1,
+        }
+    }
+
+    pub fn iter<'a, V: MemVariable<C>>(
+        &'a mut self,
+        array: &'a Array<C, V>,
+    ) -> IteratorBuilder<'a, C, V> {
+        match array {
+            Array::Fixed(_) => IteratorBuilder {
+                start: RVar::zero(),
+                end: array.len().into(),
+                step_size: 1,
+                builder: self,
+                array,
+            },
+            Array::Dyn(ptr, len) => {
+                let len: RVar<C::N> = len.clone().into();
+                let end: Var<C::N> = self.eval(
+                    ptr.address + len * RVar::from_field(C::N::from_canonical_usize(V::size_of())),
+                );
+                IteratorBuilder {
+                    start: ptr.address.into(),
+                    end: end.into(),
+                    step_size: V::size_of(),
+                    builder: self,
+                    array,
+                }
+            }
         }
     }
 
@@ -837,6 +866,83 @@ impl<C: Config> IfBuilder<'_, C> {
                 IfCondition::Ne(lhs, rhs)
             }
         }
+    }
+}
+
+pub struct IteratorBuilder<'a, C: Config, V: MemVariable<C>> {
+    start: RVar<C::N>,
+    end: RVar<C::N>,
+    step_size: usize,
+    builder: &'a mut Builder<C>,
+    array: &'a Array<C, V>,
+}
+
+impl<'a, C: Config, V: MemVariable<C>> IteratorBuilder<'a, C, V> {
+    pub fn for_each(&mut self, mut f: impl FnMut(V, &mut Builder<C>)) {
+        if self.start.is_const() && self.end.is_const() {
+            self.for_each_unrolled(|var, builder| {
+                f(var, builder);
+                Ok(())
+            });
+            return;
+        }
+        let old_disable_break = self.builder.flags.disable_break;
+        self.builder.flags.disable_break = true;
+        self.for_each_dynamic(|var, builder| {
+            f(var, builder);
+            Ok(())
+        });
+        self.builder.flags.disable_break = old_disable_break;
+    }
+
+    fn for_each_unrolled(
+        &mut self,
+        mut f: impl FnMut(V, &mut Builder<C>) -> Result<(), BreakLoop>,
+    ) {
+        let old_static_loop = self.builder.flags.static_loop;
+        self.builder.flags.static_loop = true;
+        let start = self.start.value();
+        let end = self.end.value();
+        for i in (start..end).step_by(self.step_size) {
+            let val = self.builder.get(self.array, i);
+            if f(val, self.builder).is_err() {
+                break;
+            }
+        }
+        self.builder.flags.static_loop = old_static_loop;
+    }
+
+    fn for_each_dynamic(&mut self, mut f: impl FnMut(V, &mut Builder<C>) -> Result<(), BreakLoop>) {
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic loop in static mode"
+        );
+        let step_size = C::N::from_canonical_usize(self.step_size);
+        let loop_variable: Var<C::N> = self.builder.uninit();
+        let mut loop_body_builder = self.builder.create_sub_builder();
+        let val: V = loop_body_builder.uninit();
+        loop_body_builder.load(
+            val.clone(),
+            Ptr {
+                address: loop_variable,
+            },
+            MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: V::size_of(),
+            },
+        );
+        f(val, &mut loop_body_builder)
+            .expect("BreakLoop should never be returned in a dynamic loop");
+        let loop_instructions = loop_body_builder.operations;
+        let op = DslIr::For(
+            self.start,
+            self.end,
+            step_size,
+            loop_variable,
+            loop_instructions,
+        );
+        self.builder.operations.push(op);
     }
 }
 

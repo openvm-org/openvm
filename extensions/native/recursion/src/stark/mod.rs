@@ -204,11 +204,11 @@ where
 
         // Observe main trace commitments
         builder
-            .range(0, main_trace_commits.len())
-            .for_each(|i, builder| {
-                let main_commit = builder.get(main_trace_commits, i);
+            .iter(main_trace_commits)
+            .for_each(|main_commit, builder| {
                 challenger.observe_digest(builder, main_commit);
             });
+
         builder.range(0, air_proofs.len()).for_each(|i, builder| {
             let air_proof = builder.get(air_proofs, i);
             let log_degree = if builder.flags.static_only {
