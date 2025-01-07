@@ -1,10 +1,9 @@
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, VmOpcode};
 use openvm_native_serialization::{
     GAP_INDICATOR, LONG_FORM_INSTRUCTION_INDICATOR, VARIABLE_REGISTER_INDICATOR,
 };
 use openvm_transpiler::{TranspilerExtension, TranspilerOutput};
 use p3_field::PrimeField32;
-use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 
 pub struct LongFormTranspilerExtension;
 

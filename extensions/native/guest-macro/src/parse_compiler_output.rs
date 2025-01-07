@@ -1,7 +1,6 @@
-use p3_field::{Field, PrimeField32};
-
 use openvm_instructions::instruction::Instruction;
 use openvm_native_serialization::deserialize_instructions;
+use p3_field::{Field, PrimeField32};
 
 use crate::parse_kernel::ParsedKernel;
 
@@ -27,7 +26,10 @@ pub fn parse_compiled_kernel<F: PrimeField32>(
     parsed_kernel: ParsedKernel,
     compiler_output: String,
 ) -> CompiledKernel<F> {
-    let words: Vec<u32> = compiler_output.lines().map(|line| line.parse().unwrap()).collect();
+    let words: Vec<u32> = compiler_output
+        .lines()
+        .map(|line| line.parse().unwrap())
+        .collect();
     let mut index = 0;
 
     let arguments = parsed_kernel

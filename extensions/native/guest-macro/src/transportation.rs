@@ -1,14 +1,19 @@
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{
+        NATIVE_KERNEL_AS, RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
+    },
+    VmOpcode,
+};
 use openvm_native_compiler::{CastfOpcode, FieldArithmeticOpcode, NativeJalOpcode};
 use openvm_native_serialization::{
-    GAP_INDICATOR, LONG_FORM_INSTRUCTION_INDICATOR,
-    VARIABLE_REGISTER_INDICATOR,
+    GAP_INDICATOR, LONG_FORM_INSTRUCTION_INDICATOR, VARIABLE_REGISTER_INDICATOR,
 };
 use p3_field::{Field, PrimeField32};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use openvm_instructions::program::DEFAULT_PC_STEP;
-use openvm_instructions::riscv::{NATIVE_KERNEL_AS, RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
+
 use crate::{
     parse_compiler_output::CompiledKernel,
     transportation::Operand::{Literal, Variable},
@@ -68,7 +73,9 @@ the body will be converted to MacroInstructions
 MacroInstructions are converted to an asm! call
  */
 
-pub fn compiled_kernel_to_function<F: PrimeField32>(compiled_kernel: CompiledKernel<F>) -> TokenStream {
+pub fn compiled_kernel_to_function<F: PrimeField32>(
+    compiled_kernel: CompiledKernel<F>,
+) -> TokenStream {
     let mut instructions = vec![];
     let mut input_vars = vec![];
     let return_name = "result".to_string();
@@ -115,7 +122,10 @@ pub fn compiled_kernel_to_function<F: PrimeField32>(compiled_kernel: CompiledKer
     }
     std::fs::write("instructions.txt", instructions_string).expect("Failed to write file");
 
-    let asm_call: TokenStream = instructions_to_asm_call(instructions, input_vars, vec![return_name.clone()]).parse().unwrap();
+    let asm_call: TokenStream =
+        instructions_to_asm_call(instructions, input_vars, vec![return_name.clone()])
+            .parse()
+            .unwrap();
 
     quote! {
         fn #function_name_token(#(#arguments),*) -> #return_type_token {
@@ -247,7 +257,11 @@ fn transport_usize_to_felt<F: Field>(
             VmOpcode::with_default_offset(FieldArithmeticOpcode::ADD),
             [
                 Operand::usize(edsl_fp),
-                Operand::usize(if i == RV32_REGISTER_NUM_LIMBS - 1 { 0 } else { edsl_fp }),
+                Operand::usize(if i == RV32_REGISTER_NUM_LIMBS - 1 {
+                    0
+                } else {
+                    edsl_fp
+                }),
                 Variable(rust_name.clone(), i),
                 Operand::usize(NATIVE_KERNEL_AS as usize),
                 Operand::u32(if i == RV32_REGISTER_NUM_LIMBS - 1 {
