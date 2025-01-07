@@ -317,14 +317,15 @@ impl<F: PrimeField32> VmExtension<F> for CastF {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
+        let offline_memory = builder.system_base().offline_memory();
         let range_checker = builder.system_base().range_checker_chip.clone();
 
         let castf_chip = CastFChip::new(
-            ConvertAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            ConvertAdapterChip::new(execution_bus, program_bus, memory_bridge.clone()),
             CastFCoreChip::new(range_checker.clone(), CastfOpcode::default_offset()),
-            memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             castf_chip,
