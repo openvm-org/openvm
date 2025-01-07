@@ -28,13 +28,19 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
+use super::{ExecutionBus, InstructionExecutor};
 use crate::{
     arch::{ExecutionState, MemoryConfig},
     system::{
-        memory::{offline_checker::MemoryBus, MemoryController, OfflineMemory},
+        memory::{
+            offline_checker::{MemoryBridge, MemoryBus},
+            MemoryController, OfflineMemory,
+        },
+        poseidon2::Poseidon2PeripheryChip,
         program::ProgramBus,
     },
 };
+
 pub mod execution;
 pub mod memory;
 pub mod program;
@@ -43,9 +49,6 @@ pub mod test_adapter;
 pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
 pub use test_adapter::TestAdapterChip;
-
-use super::{ExecutionBus, InstructionExecutor};
-use crate::system::{memory::offline_checker::MemoryBridge, poseidon2::Poseidon2PeripheryChip};
 
 pub const EXECUTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;

@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
-    system::{
-        memory::{MemoryController, OfflineMemory},
-        program::ProgramBus,
-    },
+    system::{memory::MemoryController, program::ProgramBus},
 };
 use openvm_instructions::instruction::Instruction;
 use openvm_poseidon2_air::Poseidon2Config;
@@ -25,7 +22,7 @@ mod columns;
 use std::sync::Mutex;
 
 pub use columns::*;
-use openvm_circuit::system::memory::offline_checker::MemoryBridge;
+use openvm_circuit::system::memory::{offline_checker::MemoryBridge, OfflineMemory};
 
 mod trace;
 

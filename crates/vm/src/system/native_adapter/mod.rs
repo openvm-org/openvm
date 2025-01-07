@@ -25,7 +25,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use super::memory::{OfflineMemory, RecordId};
+use crate::system::memory::{OfflineMemory, RecordId};
 
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.
