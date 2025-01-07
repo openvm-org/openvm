@@ -49,7 +49,7 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
 }
 
 impl<const N: usize, F: FieldAlgebra> MemoryWriteAuxCols<F, N> {
-    pub fn disabled() -> Self {
+    pub const fn disabled() -> Self {
         Self {
             base: MemoryBaseAuxCols {
                 prev_timestamp: F::ZERO,
@@ -84,7 +84,7 @@ impl<const N: usize, F: PrimeField32> MemoryReadAuxCols<F, N> {
 }
 
 impl<const N: usize, F: FieldAlgebra + Copy> MemoryReadAuxCols<F, N> {
-    pub fn disabled() -> Self {
+    pub const fn disabled() -> Self {
         Self {
             base: MemoryBaseAuxCols {
                 prev_timestamp: F::ZERO,
@@ -123,7 +123,7 @@ impl<T> MemoryReadOrImmediateAuxCols<T> {
 }
 
 impl<F: FieldAlgebra + Copy> MemoryReadOrImmediateAuxCols<F> {
-    pub fn disabled() -> Self {
+    pub const fn disabled() -> Self {
         MemoryReadOrImmediateAuxCols {
             base: MemoryBaseAuxCols {
                 prev_timestamp: F::ZERO,
