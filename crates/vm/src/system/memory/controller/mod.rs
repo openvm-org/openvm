@@ -757,10 +757,6 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
     }
 }
 
-pub fn memory_image_to_memory<F: PrimeField32>(memory_image: MemoryImage<F>) -> Memory<F> {
-    Memory::from_image(memory_image.into_iter().collect())
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
