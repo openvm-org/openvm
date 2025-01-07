@@ -170,7 +170,7 @@ jobs:
             INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
             echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
             bash ./extensions/native/recursion/trusted_setup_s3.sh
-            export PARAMS_DIR=$(pwd)/params
+            echo "PARAMS_DIR=$(pwd)/params" >> $GITHUB_ENV
           fi
 
       - name: Set BIN_NAME
