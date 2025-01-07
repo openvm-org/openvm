@@ -97,7 +97,7 @@ impl Halo2Prover {
         builder: BaseCircuitBuilder<Fr>,
         dsl_operations: DslOperations<C>,
         witness: Witness<C>,
-        #[allow(unused_variables)] collect_metrics: bool,
+        #[allow(unused_variables)] profiling: bool,
     ) -> BaseCircuitBuilder<Fr> {
         let mut state = Halo2State {
             builder,
@@ -107,8 +107,8 @@ impl Halo2Prover {
 
         let backend = Halo2ConstraintCompiler::<C>::new(dsl_operations.num_public_values);
         #[cfg(feature = "bench-metrics")]
-        let backend = if collect_metrics {
-            backend.with_collect_metrics()
+        let backend = if profiling {
+            backend.with_profiling()
         } else {
             backend
         };
@@ -213,12 +213,12 @@ impl Halo2Prover {
             let total_advices: usize = stats.gate.total_advice_per_phase.into_iter().sum();
             let total_lookups: usize = stats.total_lookup_advice_per_phase.into_iter().sum();
             let total_cell = total_advices + total_lookups + stats.gate.total_fixed;
-            metrics::gauge!("halo2_total_cells").set(total_cell as f64);
+            metrics::counter!("main_cells_used").absolute(total_cell as u64);
         }
         let snark = gen_snark_shplonk(params, pk, builder, None::<&str>);
 
         #[cfg(feature = "bench-metrics")]
-        metrics::gauge!("halo2_proof_time_ms").set(start.elapsed().as_millis() as f64);
+        metrics::gauge!("total_proof_time_ms").set(start.elapsed().as_millis() as f64);
 
         snark
     }

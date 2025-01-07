@@ -1,9 +1,13 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use openvm_algebra_circuit::Fp2;
-use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
@@ -37,10 +41,11 @@ impl<
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        memory_controller: MemoryControllerRef<F>,
+        range_checker: Arc<VariableRangeCheckerChip>,
         config: ExprBuilderConfig,
         xi: [isize; 2],
         offset: usize,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         assert!(
             xi[0].unsigned_abs() < 1 << config.limb_bits,
@@ -50,17 +55,17 @@ impl<
             xi[1].unsigned_abs() < 1 << config.limb_bits,
             "expect xi to be small"
         );
-        let expr = mul_013_by_013_expr(config, memory_controller.borrow().range_checker.bus(), xi);
+        let expr = mul_013_by_013_expr(config, range_checker.bus(), xi);
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
             vec![PairingOpcode::MUL_013_BY_013 as usize],
             vec![],
-            memory_controller.borrow().range_checker.clone(),
+            range_checker,
             "Mul013By013",
             true,
         );
-        Self(VmChipWrapper::new(adapter, core, memory_controller))
+        Self(VmChipWrapper::new(adapter, core, offline_memory))
     }
 }
 

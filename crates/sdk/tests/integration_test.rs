@@ -27,7 +27,7 @@ use openvm_stark_sdk::{
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::{StarkEngine, StarkFriEngine},
-    openvm_stark_backend::{p3_field::AbstractField, Chip},
+    openvm_stark_backend::{p3_field::FieldAlgebra, Chip},
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::transpiler::Transpiler;
@@ -50,7 +50,7 @@ where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    let exe_result = leaf_vm.execute(
+    let exe_result = leaf_vm.execute_and_compute_heights(
         leaf_committed_exe.exe.clone(),
         verifier_input.write_to_stream(),
     )?;
@@ -102,6 +102,7 @@ fn agg_stark_config_for_test() -> AggStarkConfig {
             INTERNAL_LOG_BLOWUP,
         ),
         root_fri_params: standard_fri_params_with_100_bits_conjectured_security(ROOT_LOG_BLOWUP),
+        profiling: false,
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
             compile_prints: true,

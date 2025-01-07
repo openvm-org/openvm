@@ -37,10 +37,11 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
+                        memory: &mut ::openvm_circuit::system::memory::MemoryController<F>,
                         instruction: ::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         from_state: ::openvm_circuit::arch::ExecutionState<u32>,
                     ) -> ::openvm_circuit::arch::Result<::openvm_circuit::arch::ExecutionState<u32>> {
-                        self.0.execute(instruction, from_state)
+                        self.0.execute(memory, instruction, from_state)
                     }
 
                     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -78,7 +79,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
                     let execute_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::execute(x, instruction, from_state)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::execute(x, memory, instruction, from_state)
                     };
                     let get_opcode_name_arm = quote! {
                         #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::get_opcode_name(x, opcode)
@@ -90,6 +91,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic> for #name #ty_generics {
                     fn execute(
                         &mut self,
+                        memory: &mut ::openvm_circuit::system::memory::MemoryController<#first_ty_generic>,
                         instruction: ::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                         from_state: ::openvm_circuit::arch::ExecutionState<u32>,
                     ) -> ::openvm_circuit::arch::Result<::openvm_circuit::arch::ExecutionState<u32>> {

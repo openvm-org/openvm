@@ -11,13 +11,21 @@ impl CycleTracker {
 
     /// Starts a new cycle tracker span for the given name.
     /// If a span already exists for the given name, it ends the existing span and pushes a new one to the vec.
-    pub fn start(&mut self, name: String) {
+    pub fn start(&mut self, mut name: String) {
+        // FIXME: hack to remove "CT-" prefix
+        if name.starts_with("CT-") {
+            name = name.split_off(3);
+        }
         self.stack.push(name);
     }
 
     /// Ends the cycle tracker span for the given name.
     /// If no span exists for the given name, it panics.
-    pub fn end(&mut self, name: String) {
+    pub fn end(&mut self, mut name: String) {
+        // FIXME: hack to remove "CT-" prefix
+        if name.starts_with("CT-") {
+            name = name.split_off(3);
+        }
         let stack_top = self.stack.pop();
         assert_eq!(stack_top.unwrap(), name, "Stack top does not match name");
     }

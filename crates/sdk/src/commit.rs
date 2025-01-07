@@ -6,17 +6,14 @@ use openvm_circuit::{
         instructions::exe::VmExe,
         VmConfig,
     },
-    system::{
-        memory::{memory_image_to_equipartition, tree::MemoryNode},
-        program::trace::VmCommittedExe,
-    },
+    system::{memory::tree::MemoryNode, program::trace::VmCommittedExe},
 };
 use openvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
 use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
-    openvm_stark_backend::p3_field::AbstractField,
+    openvm_stark_backend::p3_field::FieldAlgebra,
     p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
 };
@@ -65,7 +62,7 @@ impl AppExecutionCommit<F> {
 
         let init_memory_commit = MemoryNode::tree_from_memory(
             memory_dimensions,
-            &memory_image_to_equipartition(app_exe.exe.init_memory.clone()),
+            &app_exe.exe.init_memory.clone().into_iter().collect(),
             &hasher,
         )
         .hash();

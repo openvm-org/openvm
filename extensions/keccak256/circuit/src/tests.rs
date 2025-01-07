@@ -11,7 +11,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_stark_backend::{
-    p3_field::AbstractField, utils::disable_debug_builder, verifier::VerificationError,
+    p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError,
 };
 use openvm_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Config, p3_baby_bear::BabyBear,
@@ -21,7 +21,7 @@ use p3_keccak_air::NUM_ROUNDS;
 use rand::Rng;
 use tiny_keccak::Hasher;
 
-use super::{columns::KeccakVmCols, utils::num_keccak_f, KeccakVmChip, KECCAK_WORD_SIZE};
+use super::{columns::KeccakVmCols, utils::num_keccak_f, KeccakVmChip};
 
 type F = BabyBear;
 // io is vector of (input, expected_output, prank_output) where prank_output is Some if the trace
@@ -37,15 +37,17 @@ fn build_keccak256_test(
     let mut chip = KeccakVmChip::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
+        tester.address_bits(),
         bitwise_chip.clone(),
         0,
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut dst = 0;
     let src = 0;
 
-    for (input, expected_output, prank_output) in &io {
+    for (input, expected_output, _) in &io {
         let [a, b, c] = [0, 4, 8]; // space apart for register limbs
         let [d, e] = [1, 2];
 
@@ -74,12 +76,6 @@ fn build_keccak256_test(
         if let Some(output) = expected_output {
             for (i, byte) in output.iter().enumerate() {
                 assert_eq!(tester.read_cell(e, dst + i), F::from_canonical_u8(*byte));
-            }
-        }
-        if let Some(output) = prank_output {
-            for (i, output_byte) in output.iter().enumerate() {
-                chip.records.last_mut().unwrap().digest_writes[i / KECCAK_WORD_SIZE].data
-                    [i % KECCAK_WORD_SIZE] = F::from_canonical_u8(*output_byte);
             }
         }
         // shift dst to not deal with timestamps for pranking

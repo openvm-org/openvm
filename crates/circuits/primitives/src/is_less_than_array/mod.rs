@@ -3,7 +3,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::AirBuilder,
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
 };
 
 use crate::{

@@ -4,7 +4,7 @@ import os
 import sys
 import subprocess
 
-from utils import FLAMEGRAPHS_DIR, create_flamegraph_dir, get_git_root, create_bench_metrics_dir
+from utils import FLAMEGRAPHS_DIR, get_git_root
 
 def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name):
     """
@@ -54,10 +54,10 @@ def create_flamegraph(fname, metrics_dict, group_by_kvs, stack_keys, metric_name
     suffixes = [key for key in stack_keys if key != "cycle_tracker_span"]
 
     git_root = get_git_root()
-    os.chdir(git_root)
-    create_flamegraph_dir()
+    flamegraph_dir = os.path.join(git_root, FLAMEGRAPHS_DIR)
+    os.makedirs(flamegraph_dir, exist_ok=True)
 
-    path_prefix = f"{FLAMEGRAPHS_DIR}{fname}.{'.'.join(suffixes)}.{metric_name}{'.reverse' if reverse else ''}"
+    path_prefix = f"{flamegraph_dir}{fname}.{'.'.join(suffixes)}.{metric_name}{'.reverse' if reverse else ''}"
     stacks_path = f"{path_prefix}.stacks"
     flamegraph_path = f"{path_prefix}.svg"
 

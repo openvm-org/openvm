@@ -1,5 +1,5 @@
 use openvm_native_compiler::ir::{Array, Builder, Config, Ext, Felt, RVar, Var};
-use openvm_stark_backend::p3_field::{AbstractField, Field};
+use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
 
 use crate::{
     challenger::{

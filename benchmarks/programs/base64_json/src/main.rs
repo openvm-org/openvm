@@ -3,8 +3,8 @@
 
 use core::result::Result;
 
-use openvm_json_program::UserProfile;
 use base64::engine::{general_purpose, Engine};
+use openvm_json_program::UserProfile;
 use serde_json_core::de::from_str;
 
 openvm::entry!(main);

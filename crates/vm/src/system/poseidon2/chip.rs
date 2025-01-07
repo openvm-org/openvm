@@ -21,7 +21,7 @@ pub struct Poseidon2PeripheryBaseChip<F: PrimeField32, const SBOX_REGISTERS: usi
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS> {
     pub fn new(poseidon2_config: Poseidon2Config<F>, bus_idx: usize) -> Self {
-        let subchip = Poseidon2SubChip::new(poseidon2_config);
+        let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         Self {
             air: Arc::new(Poseidon2PeripheryAir::new(subchip.air.clone(), bus_idx)),
             subchip,

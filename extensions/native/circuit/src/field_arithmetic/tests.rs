@@ -7,7 +7,7 @@ use openvm_circuit::{
 use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_native_compiler::FieldArithmeticOpcode;
 use openvm_stark_backend::{
-    p3_field::{AbstractField, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     prover::USE_DEBUG_BUILDER,
     utils::disable_debug_builder,
     verifier::VerificationError,
@@ -36,10 +36,10 @@ fn new_field_arithmetic_air_test() {
         NativeAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         FieldArithmeticCoreChip::new(0),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();
@@ -125,10 +125,10 @@ fn new_field_arithmetic_air_zero_div_zero() {
         NativeAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         FieldArithmeticCoreChip::new(0),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
     tester.write_cell(1, 6, BabyBear::from_canonical_u32(111));
     tester.write_cell(1, 7, BabyBear::from_canonical_u32(222));
@@ -140,6 +140,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
             [5, 6, 7, 1, 1, 1],
         ),
     );
+    tester.build();
 
     let mut chip_input = chip.generate_air_proof_input();
     // set the value of [c]_f to zero, necessary to bypass trace gen checks
@@ -169,10 +170,10 @@ fn new_field_arithmetic_air_test_panic() {
         NativeAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         FieldArithmeticCoreChip::new(0),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
     tester.write_cell(1, 0, BabyBear::ZERO);
     // should panic

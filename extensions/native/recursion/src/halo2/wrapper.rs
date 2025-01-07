@@ -108,7 +108,7 @@ impl Halo2WrapperProvingKey {
         let pvs = prover_circuit.instances();
         let proof = gen_evm_proof_shplonk(params, &self.pinning.pk, prover_circuit, pvs.clone());
         #[cfg(feature = "bench-metrics")]
-        metrics::gauge!("halo2_proof_time_ms").set(start.elapsed().as_millis() as f64);
+        metrics::gauge!("total_proof_time_ms").set(start.elapsed().as_millis() as f64);
 
         EvmProof {
             instances: pvs,

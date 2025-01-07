@@ -8,23 +8,25 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     prover::types::{CommittedTraceData, Proof, ProofInput},
+    utils::metrics_span,
     verifier::VerificationError,
     Chip,
 };
 use thiserror::Error;
+use tracing::info_span;
 
 use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
     arch::segment::ExecutionSegment,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
+        memory::{merkle::MemoryMerklePvs, MemoryImage, CHUNK},
         program::trace::VmCommittedExe,
     },
 };
 
 /// VM memory state for continuations.
-pub type VmMemoryState<F> = Equipartition<F, CHUNK>;
+pub type VmMemoryState<F> = MemoryImage<F>;
 
 #[derive(Clone, Default, Debug)]
 pub struct Streams<F> {
@@ -108,9 +110,6 @@ where
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
-        #[cfg(feature = "bench-metrics")]
-        let start = std::time::Instant::now();
-
         let exe = exe.into();
         let streams = input.into();
         let mut segments = vec![];
@@ -118,7 +117,7 @@ where
             &self.config,
             exe.program.clone(),
             streams,
-            Some(memory_image_to_equipartition(exe.init_memory)),
+            Some(exe.init_memory.into_iter().collect()),
             exe.fn_bounds.clone(),
         );
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
@@ -127,8 +126,9 @@ where
         let mut pc = exe.pc_start;
 
         loop {
-            let state = tracing::info_span!("execute_segment", segment = segments.len())
-                .in_scope(|| segment.execute_from_pc(pc))?;
+            // Used to add `segment` label to metrics
+            let _span = info_span!("execute_segment", segment = segments.len()).entered();
+            let state = metrics_span("execute_time_ms", || segment.execute_from_pc(pc))?;
             pc = state.pc;
 
             if state.is_terminated {
@@ -147,7 +147,6 @@ where
                     .pc
             );
 
-            let cycle_tracker = mem::take(&mut segment.cycle_tracker);
             let final_memory = mem::take(&mut segment.final_memory)
                 .expect("final memory should be set in continuations segment");
             let streams = segment.chip_complex.take_streams();
@@ -164,14 +163,9 @@ where
             if let Some(overridden_heights) = self.overridden_heights.as_ref() {
                 segment.set_override_trace_heights(overridden_heights.clone());
             }
-            segment.cycle_tracker = cycle_tracker;
         }
         segments.push(segment);
         tracing::debug!("Number of continuation segments: {}", segments.len());
-        #[cfg(feature = "bench-metrics")]
-        metrics::gauge!("execute_time_ms").set(start.elapsed().as_millis() as f64);
-        #[cfg(feature = "bench-metrics")]
-        tracing::info!("execute_time [all segments]: {:?}", start.elapsed());
 
         Ok(segments)
     }
@@ -239,7 +233,6 @@ where
         let mut segments = self.execute_segments(exe, input)?;
         let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
 
-        #[allow(unused_variables)]
         Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
@@ -299,13 +292,17 @@ where
         self.overridden_heights = Some(overridden_heights);
     }
 
-    /// Executes a program and returns the public values. None means the public value is not set.
-    pub fn execute(
+    /// Executes a program, compute the trace heights, and returns the public values.
+    pub fn execute_and_compute_heights(
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
-        let segment = self.execute_impl(exe.into(), input)?;
+        let segment = {
+            let mut segment = self.execute_impl(exe.into(), input)?;
+            segment.chip_complex.finalize_memory();
+            segment
+        };
         let air_heights = segment.chip_complex.current_trace_heights();
         let internal_heights = segment.chip_complex.get_internal_trace_heights();
         let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {
@@ -343,8 +340,6 @@ where
         exe: VmExe<F>,
         input: impl Into<Streams<F>>,
     ) -> Result<ExecutionSegment<F, VC>, ExecutionError> {
-        #[cfg(feature = "bench-metrics")]
-        let start = std::time::Instant::now();
         let pc_start = exe.pc_start;
         let mut segment = ExecutionSegment::new(
             &self.config,
@@ -356,13 +351,7 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        segment.execute_from_pc(pc_start)?;
-
-        #[cfg(feature = "bench-metrics")]
-        metrics::gauge!("execute_time_ms").set(start.elapsed().as_millis() as f64);
-        #[cfg(feature = "bench-metrics")]
-        tracing::info!("execute_time [single]: {:?}", start.elapsed());
-
+        metrics_span("execute_time_ms", || segment.execute_from_pc(pc_start))?;
         Ok(segment)
     }
 }

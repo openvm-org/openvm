@@ -1,5 +1,5 @@
 use openvm_native_compiler::ir::{Builder, Felt, Var, Witness};
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2_root::root_perm, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
 };

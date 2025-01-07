@@ -208,7 +208,7 @@ mod tests {
     use openvm_mod_circuit_builder::{test_utils::*, *};
     use openvm_pairing_guest::bn254::BN254_MODULUS;
     use openvm_stark_backend::{
-        p3_air::BaseAir, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
+        p3_air::BaseAir, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
     };
     use openvm_stark_sdk::{
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,

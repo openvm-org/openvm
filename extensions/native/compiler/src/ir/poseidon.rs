@@ -1,4 +1,4 @@
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 
 use super::{Array, Builder, Config, DslIr, Ext, Felt, Usize, Var};
 

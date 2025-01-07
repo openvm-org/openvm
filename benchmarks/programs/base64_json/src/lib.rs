@@ -1,7 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use serde::Deserialize;
 use core::fmt::Debug;
+
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 #[allow(unused)]

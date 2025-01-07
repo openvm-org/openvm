@@ -1,7 +1,7 @@
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashSet;
 
-use super::manager::dimensions::MemoryDimensions;
+use super::controller::dimensions::MemoryDimensions;
 mod air;
 mod bus;
 mod columns;

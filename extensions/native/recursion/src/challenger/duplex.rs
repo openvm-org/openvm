@@ -2,7 +2,7 @@ use openvm_native_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
     prelude::{Array, Builder, Config, Ext, Felt, Var},
 };
-use openvm_stark_backend::p3_field::{AbstractField, Field};
+use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
 
 use crate::{
     challenger::{
@@ -220,7 +220,7 @@ mod tests {
     use openvm_stark_backend::{
         config::{StarkGenericConfig, Val},
         p3_challenger::{CanObserve, CanSample},
-        p3_field::AbstractField,
+        p3_field::FieldAlgebra,
     };
     use openvm_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},

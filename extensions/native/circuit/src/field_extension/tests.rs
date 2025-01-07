@@ -10,7 +10,7 @@ use openvm_circuit::arch::testing::{
 use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_native_compiler::FieldExtensionOpcode;
 use openvm_stark_backend::{
-    p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField},
+    p3_field::{extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra},
     utils::disable_debug_builder,
     verifier::VerificationError,
     ChipUsageGetter,
@@ -33,10 +33,10 @@ fn new_field_extension_air_test() {
         NativeVectorizedAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         FieldExtensionCoreChip::new(0),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
     let trace_width = chip.trace_width();
 

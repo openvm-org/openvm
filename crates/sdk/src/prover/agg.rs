@@ -1,12 +1,9 @@
 use std::sync::Arc;
 
-#[cfg(feature = "bench-metrics")]
-use openvm_circuit::arch::SingleSegmentVmExecutor;
-use openvm_circuit::arch::Streams;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     openvm_stark_backend::prover::types::Proof,
 };
 use tracing::info_span;
@@ -26,7 +23,7 @@ use crate::{
     NonRootCommittedExe, RootSC, F, SC,
 };
 
-const DEFAULT_NUM_CHILDREN_LEAF: usize = 2;
+const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
 const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 2;
 const DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS: usize = 4;
 
@@ -37,13 +34,11 @@ pub struct AggStarkProver {
 
     pub num_children_internal: usize,
     pub max_internal_wrapper_layers: usize,
-
-    pub profile: bool,
 }
 pub struct LeafProver {
     prover: VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
-    pub num_children_leaf: usize,
-    pub profile: bool,
+    /// Each leaf proof aggregations `<= num_children` App VM proofs
+    pub num_children: usize,
 }
 
 impl AggStarkProver {
@@ -63,12 +58,11 @@ impl AggStarkProver {
             root_prover,
             num_children_internal: DEFAULT_NUM_CHILDREN_INTERNAL,
             max_internal_wrapper_layers: DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS,
-            profile: false,
         }
     }
 
     pub fn with_num_children_leaf(mut self, num_children_leaf: usize) -> Self {
-        self.leaf_prover.num_children_leaf = num_children_leaf;
+        self.leaf_prover.num_children = num_children_leaf;
         self
     }
 
@@ -79,16 +73,6 @@ impl AggStarkProver {
 
     pub fn with_max_internal_wrapper_layers(mut self, max_internal_wrapper_layers: usize) -> Self {
         self.max_internal_wrapper_layers = max_internal_wrapper_layers;
-        self
-    }
-
-    pub fn set_profile(&mut self, profile: bool) -> &mut Self {
-        self.profile = profile;
-        self.leaf_prover.profile = profile;
-        self
-    }
-    pub fn with_profiling(mut self) -> Self {
-        self.set_profile(true);
         self
     }
 
@@ -142,21 +126,23 @@ impl AggStarkProver {
                 &proofs,
                 self.num_children_internal,
             );
-            proofs = info_span!("internal verifier", group = "internal").in_scope(|| {
+            proofs = info_span!(
+                "agg_layer",
+                group = format!("internal.{internal_node_height}")
+            )
+            .in_scope(|| {
                 #[cfg(feature = "bench-metrics")]
-                metrics::counter!("fri.log_blowup")
-                    .absolute(self.internal_prover.pk.fri_params.log_blowup as u64);
+                {
+                    metrics::counter!("fri.log_blowup")
+                        .absolute(self.internal_prover.fri_params().log_blowup as u64);
+                    metrics::counter!("num_children").absolute(self.num_children_internal as u64);
+                }
                 internal_inputs
                     .into_iter()
                     .map(|input| {
                         internal_node_idx += 1;
-                        info_span!(
-                            "Internal verifier proof",
-                            idx = internal_node_idx,
-                            hgt = internal_node_height
-                        )
-                        .in_scope(|| {
-                            single_segment_prove(&self.internal_prover, input.write(), self.profile)
+                        info_span!("single_internal_agg", idx = internal_node_idx,).in_scope(|| {
+                            SingleSegmentVmProver::prove(&self.internal_prover, input.write())
                         })
                     })
                     .collect()
@@ -167,29 +153,11 @@ impl AggStarkProver {
     }
 
     fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<RootSC> {
-        info_span!("root verifier", group = "root").in_scope(|| {
+        info_span!("agg_layer", group = "root", idx = 0).in_scope(|| {
             let input = root_input.write();
             #[cfg(feature = "bench-metrics")]
-            metrics::counter!("fri.log_blowup").absolute(
-                self.root_prover
-                    .root_verifier_pk
-                    .vm_pk
-                    .fri_params
-                    .log_blowup as u64,
-            );
-            #[cfg(feature = "bench-metrics")]
-            if self.profile {
-                let mut vm_config = self.root_prover.root_verifier_pk.vm_pk.vm_config.clone();
-                vm_config.system.collect_metrics = true;
-                let vm = SingleSegmentVmExecutor::new(vm_config);
-                let exe = self
-                    .root_prover
-                    .root_verifier_pk
-                    .root_committed_exe
-                    .exe
-                    .clone();
-                vm.execute(exe, input.clone()).unwrap();
-            }
+            metrics::counter!("fri.log_blowup")
+                .absolute(self.root_prover.fri_params().log_blowup as u64);
             SingleSegmentVmProver::prove(&self.root_prover, input)
         })
     }
@@ -206,55 +174,38 @@ impl LeafProver {
         );
         Self {
             prover,
-            num_children_leaf: DEFAULT_NUM_CHILDREN_LEAF,
-            profile: false,
+            num_children: DEFAULT_NUM_CHILDREN_LEAF,
         }
     }
-    pub fn with_num_children_leaf(mut self, num_children_leaf: usize) -> Self {
-        self.num_children_leaf = num_children_leaf;
-        self
-    }
-    pub fn with_profile(mut self) -> Self {
-        self.profile = true;
+    pub fn with_num_children(mut self, num_children_leaf: usize) -> Self {
+        self.num_children = num_children_leaf;
         self
     }
     pub fn generate_proof(&self, app_proofs: &ContinuationVmProof<SC>) -> Vec<Proof<SC>> {
-        info_span!("leaf verifier", group = "leaf").in_scope(|| {
+        info_span!("agg_layer", group = "leaf").in_scope(|| {
             #[cfg(feature = "bench-metrics")]
-            metrics::counter!("fri.log_blowup")
-                .absolute(self.prover.pk.fri_params.log_blowup as u64);
-            let leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(
-                app_proofs,
-                self.num_children_leaf,
-            );
+            {
+                metrics::counter!("fri.log_blowup").absolute(self.fri_params().log_blowup as u64);
+                metrics::counter!("num_children").absolute(self.num_children as u64);
+            }
+            let leaf_inputs =
+                LeafVmVerifierInput::chunk_continuation_vm_proof(app_proofs, self.num_children);
+            tracing::info!("num_leaf_proofs={}", leaf_inputs.len());
             leaf_inputs
                 .into_iter()
                 .enumerate()
                 .map(|(leaf_node_idx, input)| {
-                    info_span!("leaf verifier proof", idx = leaf_node_idx).in_scope(|| {
-                        single_segment_prove(&self.prover, input.write_to_stream(), self.profile)
+                    info_span!("single_leaf_agg", idx = leaf_node_idx).in_scope(|| {
+                        SingleSegmentVmProver::prove(&self.prover, input.write_to_stream())
                     })
                 })
                 .collect::<Vec<_>>()
         })
     }
-}
-
-#[allow(unused)]
-fn single_segment_prove<E: StarkFriEngine<SC>>(
-    prover: &VmLocalProver<SC, NativeConfig, E>,
-    input: impl Into<Streams<F>> + Clone,
-    profile: bool,
-) -> Proof<SC> {
-    #[cfg(feature = "bench-metrics")]
-    if profile {
-        let mut vm_config = prover.pk.vm_config.clone();
-        vm_config.system.collect_metrics = true;
-        let vm = SingleSegmentVmExecutor::new(vm_config);
-        vm.execute(prover.committed_exe.exe.clone(), input.clone())
-            .unwrap();
+    #[allow(dead_code)]
+    pub(crate) fn fri_params(&self) -> &FriParameters {
+        &self.prover.pk.fri_params
     }
-    SingleSegmentVmProver::prove(prover, input)
 }
 
 fn heights_le(a: &[usize], b: &[usize]) -> bool {

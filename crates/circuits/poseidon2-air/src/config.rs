@@ -30,13 +30,17 @@ pub struct Poseidon2Constants<F> {
     pub ending_full_round_constants: [[F; POSEIDON2_WIDTH]; BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS],
 }
 
-impl<F: Field> Poseidon2Constants<F> {
-    // FIXME[stephenh]: PR https://github.com/Plonky3/Plonky3/pull/588 is now merged.
-    // We can remove Poseidon2Constants and use Plonky3RoundConstants directly after updating the plonky3 commit.
-    pub fn to_round_constants(&self) -> Plonky3RoundConstants<F> {
-        unsafe { std::mem::transmute_copy(self) }
+impl<F: Field> From<Poseidon2Constants<F>> for Plonky3RoundConstants<F> {
+    fn from(constants: Poseidon2Constants<F>) -> Self {
+        Plonky3RoundConstants::new(
+            constants.beginning_full_round_constants,
+            constants.partial_round_constants,
+            constants.ending_full_round_constants,
+        )
     }
+}
 
+impl<F: Field> Poseidon2Constants<F> {
     pub fn to_external_internal_constants(
         &self,
     ) -> (ExternalLayerConstants<F, POSEIDON2_WIDTH>, Vec<F>) {

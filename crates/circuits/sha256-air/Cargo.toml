@@ -1,0 +1,23 @@
+[package]
+name = "openvm-sha256-air"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+openvm-circuit-primitives = { workspace = true }
+openvm-stark-backend = { workspace = true }
+sha2 = { version = "0.10", features = ["compress"] }
+rand.workspace = true
+
+[dev-dependencies]
+openvm-stark-sdk = { workspace = true }
+test-case.workspace = true
+test-log.workspace = true
+lazy_static.workspace = true
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+hex.workspace = true
+
+[features]
+default = ["parallel"]
+parallel = ["openvm-stark-backend/parallel"]

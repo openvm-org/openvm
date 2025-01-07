@@ -10,14 +10,14 @@ use serde::{Deserialize, Serialize};
 pub struct GuestOptions {
     /// Features for cargo to build the guest with.
     pub features: Vec<String>,
-    /// Custom options to pass as args to `cargo build`.
-    pub options: Vec<String>,
     /// Configuration flags to build the guest with.
     pub rustc_flags: Vec<String>,
     /// Cargo profile
     pub profile: Option<String>,
     /// Target directory
     pub target_dir: Option<PathBuf>,
+    /// Custom options to pass as args to `cargo build`.
+    pub(crate) options: Vec<String>,
 }
 
 impl GuestOptions {
@@ -71,7 +71,7 @@ pub(crate) struct GuestMetadata {
 
 impl From<&Package> for GuestMetadata {
     fn from(value: &Package) -> Self {
-        let Some(obj) = value.metadata.get("risc0") else {
+        let Some(obj) = value.metadata.get("openvm") else {
             return Default::default();
         };
         serde_json::from_value(obj.clone()).unwrap()

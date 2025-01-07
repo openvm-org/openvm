@@ -3,8 +3,8 @@ use std::{marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, Streams, VirtualMachine, VmComplexTraceHeights,
-        VmConfig,
+        hasher::poseidon2::vm_poseidon2_hasher, SingleSegmentVmExecutor, Streams, VirtualMachine,
+        VmComplexTraceHeights, VmConfig,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -14,7 +14,7 @@ use openvm_stark_backend::{
     prover::types::Proof,
     Chip,
 };
-use openvm_stark_sdk::engine::StarkFriEngine;
+use openvm_stark_sdk::{config::FriParameters, engine::StarkFriEngine};
 
 use crate::prover::vm::{
     types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
@@ -28,10 +28,7 @@ pub struct VmLocalProver<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> {
     _marker: PhantomData<E>,
 }
 
-impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
-where
-    Val<SC>: PrimeField32,
-{
+impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E> {
     pub fn new(pk: Arc<VmProvingKey<SC, VC>>, committed_exe: Arc<VmCommittedExe<SC>>) -> Self {
         Self {
             pk,
@@ -56,6 +53,14 @@ where
 
     pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
         self.overridden_heights = Some(overridden_heights);
+    }
+
+    pub fn vm_config(&self) -> &VC {
+        &self.pk.vm_config
+    }
+    #[allow(dead_code)]
+    pub(crate) fn fri_params(&self) -> &FriParameters {
+        &self.pk.fri_params
     }
 }
 
@@ -118,12 +123,13 @@ where
     fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> Proof<SC> {
         assert!(!self.pk.vm_config.system().continuation_enabled);
         let e = E::new(self.pk.fri_params);
-        let vm = VirtualMachine::new(e, self.pk.vm_config.clone());
-        let mut results = vm
-            .execute_and_generate_with_cached_program(self.committed_exe.clone(), input)
+        // note: use SingleSegmentVmExecutor so there's not a "segment" label in metrics
+        let executor = SingleSegmentVmExecutor::new(self.pk.vm_config.clone());
+        let proof_input = executor
+            .execute_and_generate(self.committed_exe.clone(), input)
             .unwrap();
-        let segment = results.per_segment.pop().unwrap();
-        vm.prove_single(&self.pk.vm_pk, segment)
+        let vm = VirtualMachine::new(e, executor.config);
+        vm.prove_single(&self.pk.vm_pk, proof_input)
     }
 }
 

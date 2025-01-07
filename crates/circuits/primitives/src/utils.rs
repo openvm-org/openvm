@@ -1,7 +1,7 @@
 use itertools::zip_eq;
 use openvm_stark_backend::{
     p3_air::{AirBuilder, VirtualPairCol},
-    p3_field::{AbstractField, Field},
+    p3_field::{Field, FieldAlgebra},
 };
 
 /// Return either 0 if n is zero or the next power of two of n.
@@ -14,28 +14,28 @@ pub const fn next_power_of_two_or_zero(n: usize) -> usize {
     }
 }
 
-pub fn not<F: AbstractField>(a: impl Into<F>) -> F {
+pub fn not<F: FieldAlgebra>(a: impl Into<F>) -> F {
     F::ONE - a.into()
 }
 
-pub fn and<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
+pub fn and<F: FieldAlgebra>(a: impl Into<F>, b: impl Into<F>) -> F {
     a.into() * b.into()
 }
 
 /// Assumes that a and b are boolean
-pub fn or<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
+pub fn or<F: FieldAlgebra>(a: impl Into<F>, b: impl Into<F>) -> F {
     let a = a.into();
     let b = b.into();
     a.clone() + b.clone() - and(a, b)
 }
 
 /// Assumes that a and b are boolean
-pub fn implies<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
+pub fn implies<F: FieldAlgebra>(a: impl Into<F>, b: impl Into<F>) -> F {
     or(F::ONE - a.into(), b.into())
 }
 
 /// Assumes that `cond` is boolean. Returns `a` if `cond` is true, otherwise returns `b`.
-pub fn select<F: AbstractField>(cond: impl Into<F>, a: impl Into<F>, b: impl Into<F>) -> F {
+pub fn select<F: FieldAlgebra>(cond: impl Into<F>, a: impl Into<F>, b: impl Into<F>) -> F {
     let cond = cond.into();
     cond.clone() * a.into() + (F::ONE - cond) * b.into()
 }

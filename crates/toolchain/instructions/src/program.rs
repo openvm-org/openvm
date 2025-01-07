@@ -18,7 +18,7 @@ pub struct Program<F> {
     /// A map from program counter to instruction.
     /// Sometimes the instructions are enumerated as 0, 4, 8, etc.
     /// Maybe at some point we will replace this with a struct that would have a `Vec` under the hood and divide the incoming `pc` by whatever given.
-    instructions_and_debug_infos: Vec<Option<(Instruction<F>, Option<DebugInfo>)>>,
+    pub instructions_and_debug_infos: Vec<Option<(Instruction<F>, Option<DebugInfo>)>>,
     pub step: u32,
     pub pc_base: u32,
     /// The upper bound of the number of public values the program would publish.
@@ -51,6 +51,27 @@ impl<F: Field> Program<F> {
             instructions_and_debug_infos: instructions
                 .iter()
                 .map(|instruction| Some((instruction.clone(), None)))
+                .collect(),
+            step,
+            pc_base,
+            max_num_public_values,
+        }
+    }
+
+    pub fn new_without_debug_infos_with_option(
+        instructions: &[Option<Instruction<F>>],
+        step: u32,
+        pc_base: u32,
+        max_num_public_values: usize,
+    ) -> Self {
+        assert!(
+            instructions.is_empty()
+                || pc_base + (instructions.len() as u32 - 1) * step <= MAX_ALLOWED_PC
+        );
+        Self {
+            instructions_and_debug_infos: instructions
+                .iter()
+                .map(|instruction| instruction.clone().map(|instruction| (instruction, None)))
                 .collect(),
             step,
             pc_base,
@@ -105,12 +126,17 @@ impl<F: Field> Program<F> {
         self.instructions_and_debug_infos.is_empty()
     }
 
-    pub fn instructions(&self) -> Vec<Instruction<F>> {
+    pub fn defined_instructions(&self) -> Vec<Instruction<F>> {
         self.instructions_and_debug_infos
             .iter()
             .flatten()
             .map(|(instruction, _)| instruction.clone())
             .collect()
+    }
+
+    // if this is being called a lot, we may want to optimize this later
+    pub fn num_defined_instructions(&self) -> usize {
+        self.defined_instructions().len()
     }
 
     pub fn debug_infos(&self) -> Vec<Option<DebugInfo>> {
@@ -168,7 +194,7 @@ impl<F: Field> Program<F> {
 }
 impl<F: Field> Display for Program<F> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for instruction in self.instructions().iter() {
+        for instruction in self.defined_instructions().iter() {
             let Instruction {
                 opcode,
                 a,
@@ -179,7 +205,7 @@ impl<F: Field> Display for Program<F> {
                 f,
                 g,
             } = instruction;
-            write!(
+            writeln!(
                 formatter,
                 "{:?} {} {} {} {} {} {} {}",
                 opcode, a, b, c, d, e, f, g,
@@ -190,7 +216,7 @@ impl<F: Field> Display for Program<F> {
 }
 
 pub fn display_program_with_pc<F: Field>(program: &Program<F>) {
-    for (pc, instruction) in program.instructions().iter().enumerate() {
+    for (pc, instruction) in program.defined_instructions().iter().enumerate() {
         let Instruction {
             opcode,
             a,

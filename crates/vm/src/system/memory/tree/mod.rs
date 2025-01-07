@@ -5,10 +5,10 @@ use std::{collections::BTreeMap, sync::Arc};
 use openvm_stark_backend::p3_field::PrimeField32;
 use MemoryNode::*;
 
-use super::manager::dimensions::MemoryDimensions;
+use super::controller::dimensions::MemoryDimensions;
 use crate::{
     arch::hasher::{Hasher, HasherChip},
-    system::memory::Equipartition,
+    system::memory::MemoryImage,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -92,18 +92,22 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
 
     pub fn tree_from_memory(
         memory_dimensions: MemoryDimensions,
-        memory: &Equipartition<F, CHUNK>,
+        memory: &MemoryImage<F>,
         hasher: &impl Hasher<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         // Construct a BTreeMap that includes the address space in the label calculation,
         // representing the entire memory tree.
-        let mut memory_modified = BTreeMap::new();
-        for (&label, &values) in memory {
+        let mut memory_partition = BTreeMap::new();
+        for (&(address_space, pointer), value) in memory {
+            let label = (address_space, pointer / CHUNK as u32);
             let index = memory_dimensions.label_to_index(label);
-            memory_modified.insert(index, values);
+            let chunk = memory_partition
+                .entry(index)
+                .or_insert_with(|| [F::ZERO; CHUNK]);
+            chunk[(pointer % CHUNK as u32) as usize] = *value;
         }
         Self::from_memory(
-            &memory_modified,
+            &memory_partition,
             memory_dimensions.overall_height(),
             0,
             hasher,

@@ -12,7 +12,7 @@ use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -55,10 +55,10 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
         Rv32MultAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         MultiplicationCoreChip::new(range_tuple_checker.clone(), 0),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     for _ in 0..num_ops {
@@ -133,7 +133,7 @@ fn run_rv32_mul_negative_test(
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
         MultiplicationCoreChip::new(range_tuple_chip.clone(), 0),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(
