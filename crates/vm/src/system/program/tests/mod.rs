@@ -48,8 +48,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let mut program_cells = vec![];
     for (index, frequency) in execution_frequencies.into_iter().enumerate() {
         let option = program.get_instruction_and_debug_info(index);
-        if option.is_some() {
-            let instruction = option.unwrap().0;
+        if let Some((instruction, _)) = option {
             program_cells.extend(vec![
                 BabyBear::from_canonical_usize(frequency), // hacky: we should switch execution_frequencies into hashmap
                 BabyBear::from_canonical_usize(index * (DEFAULT_PC_STEP as usize)),
@@ -217,7 +216,7 @@ fn test_program_negative() {
 }
 
 #[test]
-fn test_program_with_none_instructions() {
+fn test_program_with_undefined_instructions() {
     let n = 2;
 
     // see core/tests/mod.rs
