@@ -882,7 +882,7 @@ impl<C: Config, V: MemVariable<C>> ZippedIteratorBuilder<'_, C, V> {
         assert!(self.starts.len() == self.ends.len());
         assert!(self.starts.len() == self.step_sizes.len());
         assert!(self.starts.len() == self.arrays.len());
-        assert!(self.starts.len() > 0);
+        assert!(!self.starts.is_empty());
 
         if self.starts.iter().all(|start| start.is_const())
             && self.ends.iter().all(|end| end.is_const())
