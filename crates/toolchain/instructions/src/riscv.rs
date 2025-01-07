@@ -5,3 +5,4 @@ pub const RV32_CELL_BITS: usize = 8;
 pub const RV32_IMM_AS: u32 = 0;
 pub const RV32_REGISTER_AS: u32 = 1;
 pub const RV32_MEMORY_AS: u32 = 2;
+pub const NATIVE_KERNEL_AS: u32 = 5;

@@ -8,7 +8,7 @@ use openvm_circuit::arch::{instructions::exe::VmExe, VmConfig};
 use openvm_keccak256_circuit::Keccak256Rv32Config;
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_native_circuit::Rv32WithKernelsConfig;
-use openvm_native_transpiler::extension::LongFormTranspilerExtension;
+use openvm_native_transpiler::LongFormTranspilerExtension;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };

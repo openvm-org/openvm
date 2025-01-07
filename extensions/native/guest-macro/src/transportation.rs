@@ -1,15 +1,16 @@
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_native_compiler::{CastfOpcode, FieldArithmeticOpcode, NativeJalOpcode};
 use openvm_native_serialization::{
-    GAP_INDICATOR, IMMEDIATE_ADDRESS_SPACE, KERNEL_ADDRESS_SPACE, LONG_FORM_INSTRUCTION_INDICATOR,
-    RUST_REGISTER_ADDRESS_SPACE, VARIABLE_REGISTER_INDICATOR,
+    GAP_INDICATOR, LONG_FORM_INSTRUCTION_INDICATOR,
+    VARIABLE_REGISTER_INDICATOR,
 };
 use p3_field::{Field, PrimeField32};
-
+use openvm_instructions::program::DEFAULT_PC_STEP;
+use openvm_instructions::riscv::{NATIVE_KERNEL_AS, RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 use crate::{
     parse_compiler_output::CompiledKernel,
     transportation::Operand::{Literal, Variable},
-    PC_STEP, REGISTER_LIMBS, REGISTER_LIMB_SIZE, UTILITY_CELL,
+    UTILITY_CELL,
 };
 
 #[derive(Clone, Debug)]
@@ -21,6 +22,10 @@ pub enum Operand<F: Field> {
 impl<F: Field> Operand<F> {
     pub fn usize(val: usize) -> Self {
         Literal(F::from_canonical_usize(val))
+    }
+
+    pub fn u32(val: u32) -> Self {
+        Literal(F::from_canonical_u32(val))
     }
 
     pub fn whatever() -> Self {
@@ -189,13 +194,13 @@ pub fn instructions_to_asm_call<F: PrimeField32>(
             Operand::usize(UTILITY_CELL),
             Operand::whatever(),
             Operand::whatever(),
-            Operand::usize(KERNEL_ADDRESS_SPACE),
+            Operand::u32(NATIVE_KERNEL_AS),
         ],
     );
     let jal_example_directives = instruction_to_directives(jal_instruction.clone());
     pc_diff += jal_example_directives.len() - 1;
 
-    jal_instruction.operands[1] = Operand::usize(PC_STEP * (pc_diff + 1));
+    jal_instruction.operands[1] = Operand::usize(DEFAULT_PC_STEP as usize * (pc_diff + 1));
     add_directives(instruction_to_directives(jal_instruction));
 
     add_directives(vec![
@@ -237,21 +242,21 @@ fn transport_usize_to_felt<F: Field>(
     edsl_fp: usize,
 ) -> Vec<MacroInstruction<F>> {
     let mut result = vec![];
-    for i in (0..REGISTER_LIMBS).rev() {
+    for i in (0..RV32_REGISTER_NUM_LIMBS).rev() {
         // add [{rust_name} + i] to [edsl_fp]
         result.push(MacroInstruction::new(
             VmOpcode::with_default_offset(FieldArithmeticOpcode::ADD),
             [
                 Operand::usize(edsl_fp),
-                Operand::usize(if i == REGISTER_LIMBS - 1 { 0 } else { edsl_fp }),
+                Operand::usize(if i == RV32_REGISTER_NUM_LIMBS - 1 { 0 } else { edsl_fp }),
                 Variable(rust_name.clone(), i),
-                Operand::usize(KERNEL_ADDRESS_SPACE),
-                Operand::usize(if i == REGISTER_LIMBS - 1 {
-                    IMMEDIATE_ADDRESS_SPACE
+                Operand::usize(NATIVE_KERNEL_AS as usize),
+                Operand::u32(if i == RV32_REGISTER_NUM_LIMBS - 1 {
+                    RV32_IMM_AS
                 } else {
-                    KERNEL_ADDRESS_SPACE
+                    NATIVE_KERNEL_AS
                 }),
-                Operand::usize(RUST_REGISTER_ADDRESS_SPACE),
+                Operand::u32(RV32_REGISTER_AS),
             ],
         ));
         if i > 0 {
@@ -260,10 +265,10 @@ fn transport_usize_to_felt<F: Field>(
                 [
                     Operand::usize(edsl_fp),
                     Operand::usize(edsl_fp),
-                    Operand::usize(REGISTER_LIMB_SIZE),
-                    Operand::usize(KERNEL_ADDRESS_SPACE),
-                    Operand::usize(KERNEL_ADDRESS_SPACE),
-                    Operand::usize(IMMEDIATE_ADDRESS_SPACE),
+                    Operand::usize(1 << RV32_CELL_BITS),
+                    Operand::u32(NATIVE_KERNEL_AS),
+                    Operand::u32(NATIVE_KERNEL_AS),
+                    Operand::u32(RV32_IMM_AS),
                 ],
             ));
         }
@@ -296,8 +301,8 @@ fn transport_felt_to_usize<F: Field>(
             Variable(rust_name, 0),
             Operand::usize(edsl_fp),
             Operand::usize(0),
-            Operand::usize(RUST_REGISTER_ADDRESS_SPACE),
-            Operand::usize(KERNEL_ADDRESS_SPACE),
+            Operand::u32(RV32_REGISTER_AS),
+            Operand::u32(NATIVE_KERNEL_AS),
         ],
     )]
 }

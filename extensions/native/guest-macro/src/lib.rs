@@ -6,9 +6,6 @@ mod parse_compiler_output;
 mod parse_kernel;
 mod transportation;
 const UTILITY_CELL: usize = 0;
-const PC_STEP: usize = 4;
-const REGISTER_LIMBS: usize = 4;
-const REGISTER_LIMB_SIZE: usize = 256;
 
 #[proc_macro]
 pub fn edsl_kernel(input: proc_macro::TokenStream) -> proc_macro::TokenStream {

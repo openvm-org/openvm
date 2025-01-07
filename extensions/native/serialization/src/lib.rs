@@ -1,9 +1,6 @@
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use p3_field::PrimeField32;
 
-pub const IMMEDIATE_ADDRESS_SPACE: usize = 0;
-pub const RUST_REGISTER_ADDRESS_SPACE: usize = 1;
-pub const KERNEL_ADDRESS_SPACE: usize = 5;
 pub const LONG_FORM_INSTRUCTION_INDICATOR: u32 = (1 << 31) + 115115115;
 pub const GAP_INDICATOR: u32 = (1 << 31) + 113113113;
 pub const VARIABLE_REGISTER_INDICATOR: u32 = (1 << 31) + 116;
