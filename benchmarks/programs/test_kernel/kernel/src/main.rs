@@ -2,20 +2,27 @@ use std::fs::File;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_stark_backend::p3_field::extension::BinomialExtensionField;
 use std::io::Write;
-
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler},
     conversion::{CompilerOptions, convert_program}
     ,
 };
-use openvm_native_compiler::ir::Felt;
+use openvm_native_compiler::ir::{Felt, Var};
 use openvm_native_serialization::serialize_instructions;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
 
-fn function_name(builder: &mut AsmBuilder<F, EF>, foo: Felt<F>, bar: Felt<F>) -> Felt<F> {
-    return builder.eval(foo + bar);
+fn function_name(builder: &mut AsmBuilder<F, EF>, n: Var<F>) -> Felt<F> {
+    let a: Felt<_> = builder.constant(F::ZERO);
+    let b: Felt<_> = builder.constant(F::ONE);
+    let zero: Var<_> = builder.eval(F::ZERO);
+    builder.range(zero, n).for_each(|_, builder| {
+        builder.assign(&b, a + b);
+        builder.assign(&a, b - a);
+    });
+    a
 }
 
 fn main() {
@@ -23,12 +30,10 @@ fn main() {
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let var_foo = builder.uninit();
-    let var_bar = builder.uninit();
-    let result = function_name(&mut builder, var_foo, var_bar);
+    let var_n = builder.uninit();
+    let result = function_name(&mut builder, var_n);
 
-    writeln!(file, "{}", var_foo.fp()).unwrap();
-    writeln!(file, "{}", var_bar.fp()).unwrap();
+    writeln!(file, "{}", var_n.fp()).unwrap();
     writeln!(file, "{}", result.fp()).unwrap();
 
     let mut compiler = AsmCompiler::new(1);

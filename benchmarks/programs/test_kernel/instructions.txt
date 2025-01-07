@@ -1,20 +1,21 @@
-MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777148), Literal(0), Variable("var_foo", 3), Literal(5), Literal(0), Literal(1)] }
-MacroInstruction { opcode: VmOpcode(306), operands: [Literal(16777148), Literal(16777148), Literal(256), Literal(5), Literal(5), Literal(0)] }
-MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777148), Literal(16777148), Variable("var_foo", 2), Literal(5), Literal(5), Literal(1)] }
-MacroInstruction { opcode: VmOpcode(306), operands: [Literal(16777148), Literal(16777148), Literal(256), Literal(5), Literal(5), Literal(0)] }
-MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777148), Literal(16777148), Variable("var_foo", 1), Literal(5), Literal(5), Literal(1)] }
-MacroInstruction { opcode: VmOpcode(306), operands: [Literal(16777148), Literal(16777148), Literal(256), Literal(5), Literal(5), Literal(0)] }
-MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777148), Literal(16777148), Variable("var_foo", 0), Literal(5), Literal(5), Literal(1)] }
-MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777141), Literal(0), Variable("var_bar", 3), Literal(5), Literal(0), Literal(1)] }
-MacroInstruction { opcode: VmOpcode(306), operands: [Literal(16777141), Literal(16777141), Literal(256), Literal(5), Literal(5), Literal(0)] }
-MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777141), Literal(16777141), Variable("var_bar", 2), Literal(5), Literal(5), Literal(1)] }
-MacroInstruction { opcode: VmOpcode(306), operands: [Literal(16777141), Literal(16777141), Literal(256), Literal(5), Literal(5), Literal(0)] }
-MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777141), Literal(16777141), Variable("var_bar", 1), Literal(5), Literal(5), Literal(1)] }
-MacroInstruction { opcode: VmOpcode(306), operands: [Literal(16777141), Literal(16777141), Literal(256), Literal(5), Literal(5), Literal(0)] }
-MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777141), Literal(16777141), Variable("var_bar", 0), Literal(5), Literal(5), Literal(1)] }
+MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777150), Literal(0), Variable("var_n", 3), Literal(5), Literal(0), Literal(1)] }
+MacroInstruction { opcode: VmOpcode(306), operands: [Literal(16777150), Literal(16777150), Literal(256), Literal(5), Literal(5), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777150), Literal(16777150), Variable("var_n", 2), Literal(5), Literal(5), Literal(1)] }
+MacroInstruction { opcode: VmOpcode(306), operands: [Literal(16777150), Literal(16777150), Literal(256), Literal(5), Literal(5), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777150), Literal(16777150), Variable("var_n", 1), Literal(5), Literal(5), Literal(1)] }
+MacroInstruction { opcode: VmOpcode(306), operands: [Literal(16777150), Literal(16777150), Literal(256), Literal(5), Literal(5), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777150), Literal(16777150), Variable("var_n", 0), Literal(5), Literal(5), Literal(1)] }
 MacroInstruction { opcode: VmOpcode(257), operands: [Literal(0), Literal(0), Literal(0), Literal(0), Literal(5), Literal(0), Literal(0)] }
 MacroInstruction { opcode: VmOpcode(257), operands: [Literal(16777216), Literal(0), Literal(16777212), Literal(0), Literal(5), Literal(0), Literal(0)] }
 MacroInstruction { opcode: VmOpcode(277), operands: [Literal(16777208), Literal(8), Literal(0), Literal(5), Literal(0), Literal(0), Literal(0)] }
 MacroInstruction { opcode: VmOpcode(1), operands: [Literal(0), Literal(0), Literal(1), Literal(0), Literal(0), Literal(0), Literal(0)] }
-MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777140), Literal(16777148), Literal(16777141), Literal(5), Literal(5), Literal(5), Literal(0)] }
-MacroInstruction { opcode: VmOpcode(293), operands: [Variable("result", 0), Literal(16777140), Literal(0), Literal(1), Literal(5)] }
+MacroInstruction { opcode: VmOpcode(257), operands: [Literal(0), Literal(0), Literal(16777148), Literal(0), Literal(5), Literal(0), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(257), operands: [Literal(1), Literal(0), Literal(16777141), Literal(0), Literal(5), Literal(0), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(257), operands: [Literal(0), Literal(0), Literal(16777143), Literal(0), Literal(5), Literal(0), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(256), operands: [Literal(16777142), Literal(0), Literal(16777143), Literal(5), Literal(0), Literal(0), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(277), operands: [Literal(16777208), Literal(16), Literal(0), Literal(5), Literal(0), Literal(0), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777141), Literal(16777148), Literal(16777141), Literal(5), Literal(5), Literal(5), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(305), operands: [Literal(16777148), Literal(16777141), Literal(16777148), Literal(5), Literal(5), Literal(5), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(304), operands: [Literal(16777142), Literal(16777142), Literal(1), Literal(5), Literal(5), Literal(0), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(273), operands: [Literal(16777142), Literal(16777150), Literal(2013265909), Literal(5), Literal(5), Literal(0), Literal(0)] }
+MacroInstruction { opcode: VmOpcode(293), operands: [Variable("result", 0), Literal(16777148), Literal(0), Literal(1), Literal(5)] }
