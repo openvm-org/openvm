@@ -9,7 +9,7 @@ use crate::system::memory::{
 };
 
 /// Represents a single or batch memory write operation.
-/// Can be used to generate [MemoryWriteAuxCols].
+/// Can be used to generate [MemoryWriteAuxCols](crate::system::memory::offline_checker::MemoryWriteAuxCols).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MemoryWriteRecord<T, const N: usize> {
     pub address_space: T,
@@ -29,7 +29,7 @@ impl<T: Copy> MemoryWriteRecord<T, 1> {
 /// Represents a single or batch memory read operation.
 ///
 /// Also used for "reads" from address space 0 (immediates).
-/// Can be used to generate [MemoryReadAuxCols] or [MemoryReadOrImmediateAuxCols].
+/// Can be used to generate [MemoryReadAuxCols](crate::system::memory::offline_checker::MemoryWriteAuxCols) or [MemoryReadOrImmediateAuxCols](crate::system::memory::offline_checker::MemoryReadOrImmediateAuxCols).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MemoryReadRecord<T, const N: usize> {
     pub address_space: T,

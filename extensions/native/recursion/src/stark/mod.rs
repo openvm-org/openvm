@@ -48,7 +48,7 @@ pub struct VerifierProgram<C: Config> {
 }
 
 impl VerifierProgram<InnerConfig> {
-    /// Create a new instance of the program for the [BabyBearPoseidon2] config.
+    /// Create a new instance of the program for the [`openvm_stark_sdk::config::baby_bear_poseidon2`]
     pub fn build(
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
@@ -60,7 +60,7 @@ impl VerifierProgram<InnerConfig> {
         Self::build_with_options(constants, fri_params, options)
     }
 
-    /// Create a new instance of the program for the [BabyBearPoseidon2] config.
+    /// Create a new instance of the program for the [`openvm_stark_sdk::config::baby_bear_poseidon2`]
     pub fn build_with_options(
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,

@@ -12,7 +12,7 @@ use crate::{
     digest::DigestVariable,
 };
 
-/// Reference: [p3_challenger::DuplexChallenger]
+/// Reference: [`openvm_stark_backend::p3_challenger::DuplexChallenger`]
 #[derive(Clone)]
 pub struct DuplexChallengerVariable<C: Config> {
     pub sponge_state: Array<C, Felt<C::F>>,

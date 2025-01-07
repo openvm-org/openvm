@@ -120,10 +120,10 @@ impl<C: Config> Builder<C> {
 
     /// Reverse a list of bits.
     ///
-    /// SAFETY: calling this function with `bit_len` greater [`NUM_BITS`] will result in undefined
+    /// SAFETY: calling this function with `bit_len` greater `NUM_BITS` will result in undefined
     /// behavior.
     ///
-    /// Reference: [p3_util::reverse_bits_len]
+    /// Reference: [`openvm_stark_backend::p3_util`]
     pub fn reverse_bits_len(
         &mut self,
         index_bits: &Array<C, Var<C::N>>,
@@ -149,10 +149,10 @@ impl<C: Config> Builder<C> {
 
     /// Reverse a list of bits inside a circuit.
     ///
-    /// SAFETY: calling this function with `bit_len` greater [`NUM_BITS`] will result in undefined
+    /// SAFETY: calling this function with `bit_len` greater `NUM_BITS` will result in undefined
     /// behavior.
     ///
-    /// Reference: [p3_util::reverse_bits_len]
+    /// Reference: [`openvm_stark_backend::p3_util`]
     pub fn reverse_bits_len_circuit(
         &mut self,
         index_bits: Vec<Var<C::N>>,

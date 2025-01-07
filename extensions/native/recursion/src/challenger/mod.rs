@@ -8,14 +8,14 @@ use crate::digest::DigestVariable;
 pub mod duplex;
 pub mod multi_field32;
 
-/// Reference: [p3_challenger::CanObserve].
+/// Reference: [`openvm_stark_backend::p3_challenger::CanObserve`]
 pub trait CanObserveVariable<C: Config, V> {
     fn observe(&mut self, builder: &mut Builder<C>, value: V);
 
     fn observe_slice(&mut self, builder: &mut Builder<C>, values: Array<C, V>);
 }
 
-/// Reference: [p3_challenger::CanObserve].
+/// Reference: [`openvm_stark_backend::p3_challenger::CanObserve`]
 pub trait CanObserveDigest<C: Config> {
     fn observe_digest(&mut self, builder: &mut Builder<C>, value: DigestVariable<C>);
 }
@@ -25,7 +25,7 @@ pub trait CanSampleVariable<C: Config, V> {
     fn sample(&mut self, builder: &mut Builder<C>) -> V;
 }
 
-/// Reference: [p3_challenger::FieldChallenger].
+/// Reference: [`openvm_stark_backend::p3_challenger::FieldChallenger`]
 pub trait FeltChallenger<C: Config>:
     CanObserveVariable<C, Felt<C::F>> + CanSampleVariable<C, Felt<C::F>> + CanSampleBitsVariable<C>
 {
