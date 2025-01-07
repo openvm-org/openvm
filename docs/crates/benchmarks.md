@@ -90,7 +90,7 @@ OUTPUT_PATH="metrics.json" cargo run --release --bin <benchmark_name>
 ```
 
 where `<benchmark_name>.rs` is one of the files in [`src/bin`](../../benchmarks/src/bin).
-The `OUTPUT_PATH` environmental variable shouuld be set to the file path where you want the collected metrics to be written to. If unset, then metrics are not printed to file.
+The `OUTPUT_PATH` environmental variable should be set to the file path where you want the collected metrics to be written to. If unset, then metrics are not printed to file.
 
 To run a benchmark with the leaf aggregation, add `--features aggregation` to the above command.
 
