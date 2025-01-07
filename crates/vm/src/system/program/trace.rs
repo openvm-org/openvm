@@ -62,7 +62,9 @@ impl<F: PrimeField64> ProgramChip<F> {
         let common_trace = RowMajorMatrix::new_col(
             self.execution_frequencies
                 .into_iter()
-                .map(|x| F::from_canonical_usize(x))
+                .enumerate()
+                .filter(|(i, _)| self.program.get_instruction_and_debug_info(*i).is_some())
+                .map(|(_, x)| F::from_canonical_usize(x))
                 .collect::<Vec<F>>(),
         );
         if let Some(cached_trace) = cached_trace {

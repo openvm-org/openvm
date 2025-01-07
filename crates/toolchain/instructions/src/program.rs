@@ -58,6 +58,27 @@ impl<F: Field> Program<F> {
         }
     }
 
+    pub fn new_without_debug_infos_with_option(
+        instructions: &[Option<Instruction<F>>],
+        step: u32,
+        pc_base: u32,
+        max_num_public_values: usize,
+    ) -> Self {
+        assert!(
+            instructions.is_empty()
+                || pc_base + (instructions.len() as u32 - 1) * step <= MAX_ALLOWED_PC
+        );
+        Self {
+            instructions_and_debug_infos: instructions
+                .iter()
+                .map(|instruction| instruction.clone().map(|instruction| (instruction, None)))
+                .collect(),
+            step,
+            pc_base,
+            max_num_public_values,
+        }
+    }
+
     /// We assume that pc_start = pc_base = 0 everywhere except the RISC-V programs, until we need otherwise
     /// We use [DEFAULT_PC_STEP] for consistency with RISC-V
     pub fn from_instructions_and_debug_infos(
@@ -105,12 +126,16 @@ impl<F: Field> Program<F> {
         self.instructions_and_debug_infos.is_empty()
     }
 
-    pub fn instructions(&self) -> Vec<Instruction<F>> {
+    pub fn non_none_instructions(&self) -> Vec<Instruction<F>> {
         self.instructions_and_debug_infos
             .iter()
             .flatten()
             .map(|(instruction, _)| instruction.clone())
             .collect()
+    }
+
+    pub fn num_non_none_instructions(&self) -> usize {
+        self.non_none_instructions().len()
     }
 
     pub fn debug_infos(&self) -> Vec<Option<DebugInfo>> {
@@ -168,7 +193,7 @@ impl<F: Field> Program<F> {
 }
 impl<F: Field> Display for Program<F> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for instruction in self.instructions().iter() {
+        for instruction in self.non_none_instructions().iter() {
             let Instruction {
                 opcode,
                 a,
@@ -179,7 +204,7 @@ impl<F: Field> Display for Program<F> {
                 f,
                 g,
             } = instruction;
-            write!(
+            writeln!(
                 formatter,
                 "{:?} {} {} {} {} {} {} {}",
                 opcode, a, b, c, d, e, f, g,
@@ -190,7 +215,7 @@ impl<F: Field> Display for Program<F> {
 }
 
 pub fn display_program_with_pc<F: Field>(program: &Program<F>) {
-    for (pc, instruction) in program.instructions().iter().enumerate() {
+    for (pc, instruction) in program.non_none_instructions().iter().enumerate() {
         let Instruction {
             opcode,
             a,
