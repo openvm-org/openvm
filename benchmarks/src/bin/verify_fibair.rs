@@ -27,7 +27,7 @@ fn main() -> Result<()> {
     let app_log_blowup = args.app_log_blowup.unwrap_or(DEFAULT_APP_LOG_BLOWUP);
     let leaf_log_blowup = args.leaf_log_blowup.unwrap_or(DEFAULT_LEAF_LOG_BLOWUP);
 
-    let n = 16; // STARK to calculate 16th Fibonacci number.
+    let n = 1 << 15; // STARK to calculate (2 ** 15)th Fibonacci number.
     let fib_chip = FibonacciChip::new(0, 1, n);
     let engine = BabyBearPoseidon2Engine::new(
         FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
