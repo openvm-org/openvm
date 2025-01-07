@@ -18,7 +18,7 @@ pub struct Program<F> {
     /// A map from program counter to instruction.
     /// Sometimes the instructions are enumerated as 0, 4, 8, etc.
     /// Maybe at some point we will replace this with a struct that would have a `Vec` under the hood and divide the incoming `pc` by whatever given.
-    instructions_and_debug_infos: Vec<Option<(Instruction<F>, Option<DebugInfo>)>>,
+    pub instructions_and_debug_infos: Vec<Option<(Instruction<F>, Option<DebugInfo>)>>,
     pub step: u32,
     pub pc_base: u32,
     /// The upper bound of the number of public values the program would publish.
