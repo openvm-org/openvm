@@ -293,21 +293,21 @@ pub(crate) mod phantom {
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-pub struct CastF;
+pub struct CastFExtension;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
-pub enum CastFExecutor<F: PrimeField32> {
+pub enum CastFExtensionExecutor<F: PrimeField32> {
     CastF(CastFChip<F>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
-pub enum CastFPeriphery<F: PrimeField32> {
+pub enum CastFExtensionPeriphery<F: PrimeField32> {
     Placeholder(CastFChip<F>),
 }
 
-impl<F: PrimeField32> VmExtension<F> for CastF {
-    type Executor = CastFExecutor<F>;
-    type Periphery = CastFPeriphery<F>;
+impl<F: PrimeField32> VmExtension<F> for CastFExtension {
+    type Executor = CastFExtensionExecutor<F>;
+    type Periphery = CastFExtensionPeriphery<F>;
 
     fn build(
         &self,
@@ -323,7 +323,7 @@ impl<F: PrimeField32> VmExtension<F> for CastF {
         let range_checker = builder.system_base().range_checker_chip.clone();
 
         let castf_chip = CastFChip::new(
-            ConvertAdapterChip::new(execution_bus, program_bus, memory_bridge.clone()),
+            ConvertAdapterChip::new(execution_bus, program_bus, memory_bridge),
             CastFCoreChip::new(range_checker.clone(), CastfOpcode::default_offset()),
             offline_memory.clone(),
         );
@@ -349,7 +349,7 @@ pub struct Rv32WithKernelsConfig {
     #[extension]
     pub native: Native,
     #[extension]
-    pub castf: CastF,
+    pub castf: CastFExtension,
 }
 
 impl Default for Rv32WithKernelsConfig {
@@ -360,7 +360,7 @@ impl Default for Rv32WithKernelsConfig {
             rv32m: Rv32M::default(),
             io: Rv32Io,
             native: Native,
-            castf: CastF,
+            castf: CastFExtension,
         }
     }
 }

@@ -42,7 +42,8 @@ fn main() -> Result<()> {
         Rv32WithKernelsConfig::default(),
         exe,
         StdIn::default(),
-    );
+    )
+    .unwrap();
 
     Ok(())
 }
