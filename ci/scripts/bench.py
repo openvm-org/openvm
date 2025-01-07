@@ -12,6 +12,7 @@ def run_cargo_command(
     internal_log_blowup,
     max_segment_length,
     output_path,
+    kzg_params_dir,
     profile="release"
 ):
     # Command to run (for best performance but slower builds, use --profile maxperf)
@@ -29,6 +30,8 @@ def run_cargo_command(
         command.extend(["--internal_log_blowup", internal_log_blowup])
     if max_segment_length is not None:
         command.extend(["--max_segment_length", max_segment_length])
+    if kzg_params_dir is not None:
+        command.extend(["--kzg-params-dir", kzg_params_dir])
     if "profiling" in feature_flags:
         # set guest build args and vm config to profiling
         command.extend(["--profiling"])
@@ -63,6 +66,7 @@ def bench():
     parser.add_argument('--root_log_blowup', type=str, help="Root level log blowup")
     parser.add_argument('--internal_log_blowup', type=str, help="Internal level log blowup")
     parser.add_argument('--max_segment_length', type=str, help="Max segment length for continuations")
+    parser.add_argument('--kzg-params-dir', type=str, help="Directory containing KZG trusted setup files")
     parser.add_argument('--features', type=str, help="Additional features")
     parser.add_argument('--output_path', type=str, required=True, help="The path to write the metrics to")
     args = parser.parse_args()
@@ -79,6 +83,7 @@ def bench():
         args.internal_log_blowup,
         args.max_segment_length,
         args.output_path,
+        args.kzg_params_dir
     )
 
 
