@@ -6,6 +6,7 @@ The main components of the repository are:
   - [Documentation](#documentation)
   - [Benchmarks](#benchmarks)
   - [CI](#ci)
+  - [Profiling](#profiling)
   - [CLI](#cli)
   - [SDK](#sdk)
   - [Toolchain](#toolchain)
@@ -33,13 +34,17 @@ Benchmark guest programs and benchmark scripts are in [`openvm-benchmarks`](../.
 
 Scripts for CI use and metrics post-processing are in [`ci`](../../ci).
 
+### Profiling
+
+- [`openvm-prof`](../../crates/prof): Tools to post-process metrics emitted by the VM for performance profiling.
+
 ### CLI
 
 Command-line binary to compile, execute, and prove guest programs is in [`cli`](../../crates/cli).
 
 ### SDK
 
-- [`sdk`](../../crates/sdk): The developer SDK for the VM. It includes the OpenVM aggregation programs to support continuations for all VMs in the framework, and well as a local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. The SDK includes functionality to generate the final onchain SNARK verifier contract.
+- [`openvm-sdk`](../../crates/sdk): The developer SDK for the VM. It includes the OpenVM aggregation programs to support continuations for all VMs in the framework, and well as a local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. The SDK includes functionality to generate the final onchain SNARK verifier contract.
 
 ### Toolchain
 
