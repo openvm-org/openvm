@@ -49,7 +49,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     for (index, frequency) in execution_frequencies.into_iter().enumerate() {
         let option = program.get_instruction_and_debug_info(index);
         if let Some((instruction, _)) = option {
-            program_cells.extend(vec![
+            program_cells.extend([
                 BabyBear::from_canonical_usize(frequency), // hacky: we should switch execution_frequencies into hashmap
                 BabyBear::from_canonical_usize(index * (DEFAULT_PC_STEP as usize)),
                 instruction.opcode.to_field(),
