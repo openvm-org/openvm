@@ -319,14 +319,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         let rs1 = memory.record_by_id(read_record.rs1_record);
         adapter_cols.rs1_data = rs1.data.clone().try_into().unwrap();
-        adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(rs1);
+        aux_cols_factory.generate_read_aux(rs1, &mut adapter_cols.rs1_aux_cols);
         adapter_cols.rs1_ptr = read_record.rs1_ptr;
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
         adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
 
         let rd = memory.record_by_id(write_record.record_id);
-        adapter_cols.write_aux = aux_cols_factory.make_write_aux_cols(rd);
+        aux_cols_factory.generate_write_aux(rd, &mut adapter_cols.write_aux);
     }
 
     fn air(&self) -> &Self::Air {

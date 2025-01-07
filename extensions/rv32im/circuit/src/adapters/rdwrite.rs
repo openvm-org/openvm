@@ -295,7 +295,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         let rd = memory.record_by_id(write_record.rd_id.unwrap());
         adapter_cols.rd_ptr = rd.pointer;
-        adapter_cols.rd_aux_cols = aux_cols_factory.make_write_aux_cols(rd);
+        aux_cols_factory.generate_write_aux(rd, &mut adapter_cols.rd_aux_cols);
     }
 
     fn air(&self) -> &Self::Air {
@@ -360,10 +360,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
         if let Some(rd_id) = write_record.rd_id {
             let rd = memory.record_by_id(rd_id);
             adapter_cols.inner.rd_ptr = rd.pointer;
-            adapter_cols.inner.rd_aux_cols = aux_cols_factory.make_write_aux_cols(rd);
+            aux_cols_factory.generate_write_aux(rd, &mut adapter_cols.inner.rd_aux_cols);
             adapter_cols.needs_write = F::ONE;
-        } else {
-            adapter_cols.needs_write = F::ZERO;
         }
     }
 

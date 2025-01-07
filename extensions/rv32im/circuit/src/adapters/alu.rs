@@ -302,19 +302,15 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         if let Some(rs2) = rs2 {
             row_slice.rs2 = rs2.pointer;
             row_slice.rs2_as = rs2.address_space;
-            row_slice.reads_aux = [
-                aux_cols_factory.make_read_aux_cols(rs1),
-                aux_cols_factory.make_read_aux_cols(rs2),
-            ];
+            aux_cols_factory.generate_read_aux(rs1, &mut row_slice.reads_aux[0]);
+            aux_cols_factory.generate_read_aux(rs2, &mut row_slice.reads_aux[1]);
         } else {
             row_slice.rs2 = read_record.rs2_imm;
             row_slice.rs2_as = F::ZERO;
-            row_slice.reads_aux = [
-                aux_cols_factory.make_read_aux_cols(rs1),
-                MemoryReadAuxCols::<F>::disabled(),
-            ];
+            aux_cols_factory.generate_read_aux(rs1, &mut row_slice.reads_aux[0]);
+            // row_slice.reads_aux[1] is disabled
         }
-        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(rd);
+        aux_cols_factory.generate_write_aux(rd, &mut row_slice.writes_aux);
     }
 
     fn air(&self) -> &Self::Air {
