@@ -9,7 +9,7 @@ use openvm_circuit::{
 };
 use openvm_native_compiler::{ir::Config, prelude::*};
 use openvm_native_recursion::{digest::DigestVariable, vars::StarkProofVariable};
-use openvm_stark_sdk::openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::openvm_stark_backend::p3_field::FieldAlgebra;
 
 use crate::verifier::internal::types::InternalVmVerifierPvs;
 

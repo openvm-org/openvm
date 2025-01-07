@@ -61,6 +61,9 @@ pub struct BenchmarkCli {
     #[arg(long)]
     pub halo2_wrapper_k: Option<usize>,
 
+    #[arg(long)]
+    pub kzg_params_dir: Option<PathBuf>,
+
     /// Max segment length for continuations
     #[arg(short, long, alias = "max_segment_length")]
     pub max_segment_length: Option<usize>,

@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 use std::marker::PhantomData;
 
-use openvm_stark_backend::p3_field::{AbstractExtensionField, Field, PrimeField};
+use openvm_stark_backend::p3_field::{Field, FieldExtensionAlgebra, PrimeField};
 use serde::{Deserialize, Serialize};
 
 use self::opcodes::ConstraintOpcode;

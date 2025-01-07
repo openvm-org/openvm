@@ -9,7 +9,7 @@ use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
 use crate::{
@@ -17,7 +17,7 @@ use crate::{
         AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, ExecutionBridge,
         ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
     },
-    system::memory::{MemoryAuxColsFactory, MemoryController},
+    system::memory::{MemoryController, OfflineMemory},
 };
 
 // Replaces A: VmAdapterChip while testing VmCoreChip functionality, as it has no
@@ -111,7 +111,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
         row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        _aux_cols_factory: &MemoryAuxColsFactory<F>,
+        _memory: &OfflineMemory<F>,
     ) {
         let cols: &mut TestAdapterCols<F> = row_slice.borrow_mut();
         cols.from_pc = F::from_canonical_u32(write_record.from_pc);

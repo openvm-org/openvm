@@ -5,7 +5,7 @@ use openvm_native_compiler::{
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
 };
 use openvm_native_compiler_derive::DslVariable;
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 #[derive(DslVariable, Clone, Debug)]

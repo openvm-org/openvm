@@ -43,7 +43,7 @@ use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
     config::StarkGenericConfig,
     engine::StarkEngine,
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
 };
 use openvm_stark_sdk::{
     config::{
@@ -78,6 +78,7 @@ fn air_test_with_compress_poseidon2(
     let fri_params = if matches!(std::env::var("OPENVM_FAST_TEST"), Ok(x) if &x == "1") {
         FriParameters {
             log_blowup: 3,
+            log_final_poly_len: 0,
             num_queries: 2,
             proof_of_work_bits: 0,
         }
@@ -162,7 +163,10 @@ fn test_vm_override_executor_height() {
     let vm_config = NativeConfig::aggregation(8, 3);
 
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
-    let res = executor.execute(committed_exe.exe.clone(), vec![]).unwrap();
+    let res = executor
+        .execute_and_compute_heights(committed_exe.exe.clone(), vec![])
+        .unwrap();
+    // Memory trace heights are not computed during execution.
     assert_eq!(
         res.internal_heights.system,
         SystemTraceHeights {
@@ -302,7 +306,9 @@ fn test_vm_public_values() {
             vm.engine.config.pcs(),
         ));
         let single_vm = SingleSegmentVmExecutor::new(config);
-        let exe_result = single_vm.execute(program, vec![]).unwrap();
+        let exe_result = single_vm
+            .execute_and_compute_heights(program, vec![])
+            .unwrap();
         assert_eq!(
             exe_result.public_values,
             [
@@ -680,10 +686,10 @@ fn test_vm_max_access_adapter_8() {
     let mut config = NativeConfig::default();
     {
         let chip_complex1 = config.create_chip_complex().unwrap();
-        let mem_ctrl1 = chip_complex1.base.memory_controller.borrow();
+        let mem_ctrl1 = chip_complex1.base.memory_controller;
         config.system.memory_config.max_access_adapter_n = 8;
         let chip_complex2 = config.create_chip_complex().unwrap();
-        let mem_ctrl2 = chip_complex2.base.memory_controller.borrow();
+        let mem_ctrl2 = chip_complex2.base.memory_controller;
         // AccessAdapterAir with N=16/32/64 are disabled.
         assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 3);
         assert_eq!(

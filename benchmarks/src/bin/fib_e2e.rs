@@ -1,10 +1,10 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks::utils::BenchmarkCli;
 use openvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
-use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
+use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -29,7 +29,11 @@ async fn main() -> Result<()> {
     let agg_config = args.agg_config();
 
     let sdk = Sdk;
-    let halo2_params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
+    let halo2_params_reader = CacheHalo2ParamsReader::new(
+        args.kzg_params_dir
+            .clone()
+            .unwrap_or(PathBuf::from(DEFAULT_PARAMS_DIR)),
+    );
     let app_pk = Arc::new(sdk.app_keygen(app_config)?);
     let full_agg_pk = sdk.agg_keygen(agg_config, &halo2_params_reader)?;
     let elf = args.build_bench_program("fibonacci")?;

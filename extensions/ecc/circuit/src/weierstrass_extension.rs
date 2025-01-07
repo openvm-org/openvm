@@ -82,7 +82,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -95,6 +95,9 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
+        let offline_memory = builder.system_base().offline_memory();
+        let range_checker = builder.system_base().range_checker_chip.clone();
+        let pointer_bits = builder.system_config().memory_config.pointer_max_bits;
         let ec_add_ne_opcodes = (Rv32WeierstrassOpcode::EC_ADD_NE as usize)
             ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize);
         let ec_double_opcodes = (Rv32WeierstrassOpcode::EC_DOUBLE as usize)
@@ -120,12 +123,14 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
                         execution_bus,
                         program_bus,
-                        memory_controller.clone(),
+                        memory_bridge,
+                        pointer_bits,
                         bitwise_lu_chip.clone(),
                     ),
-                    memory_controller.clone(),
                     config32.clone(),
                     class_offset,
+                    range_checker.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcAddNeRv32_32(add_ne_chip),
@@ -137,13 +142,15 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
                         execution_bus,
                         program_bus,
-                        memory_controller.clone(),
+                        memory_bridge,
+                        pointer_bits,
                         bitwise_lu_chip.clone(),
                     ),
-                    memory_controller.clone(),
+                    range_checker.clone(),
                     config32.clone(),
                     class_offset,
                     curve.a.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv32_32(double_chip),
@@ -156,12 +163,14 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
                         execution_bus,
                         program_bus,
-                        memory_controller.clone(),
+                        memory_bridge,
+                        pointer_bits,
                         bitwise_lu_chip.clone(),
                     ),
-                    memory_controller.clone(),
                     config48.clone(),
                     class_offset,
+                    range_checker.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcAddNeRv32_48(add_ne_chip),
@@ -173,13 +182,15 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     Rv32VecHeapAdapterChip::<F, 1, 6, 6, 16, 16>::new(
                         execution_bus,
                         program_bus,
-                        memory_controller.clone(),
+                        memory_bridge,
+                        pointer_bits,
                         bitwise_lu_chip.clone(),
                     ),
-                    memory_controller.clone(),
+                    range_checker.clone(),
                     config48.clone(),
                     class_offset,
                     curve.a.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv32_48(double_chip),

@@ -6,7 +6,7 @@ use openvm_native_compiler::{
     },
     prelude::MemVariable,
 };
-use openvm_stark_backend::p3_field::{AbstractField, Field, TwoAdicField};
+use openvm_stark_backend::p3_field::{Field, FieldAlgebra, TwoAdicField};
 pub use two_adic_pcs::*;
 
 use self::types::{DimensionsVariable, FriConfigVariable, FriQueryProofVariable};

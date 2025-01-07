@@ -3,7 +3,7 @@ use std::{borrow::BorrowMut, iter::repeat, sync::Arc};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
@@ -41,9 +41,9 @@ where
         let inner_trace = self.subchip.generate_trace(inputs);
         let inner_width = self.air.subair.width();
 
-        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
+        let memory = self.offline_memory.lock().unwrap();
         let memory_cols = records.par_iter().map(|record| match record {
-            Some(record) => record.to_memory_cols(&aux_cols_factory),
+            Some(record) => record.to_memory_cols(&memory),
             None => NativePoseidon2MemoryCols::blank(),
         });
 

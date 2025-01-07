@@ -4,7 +4,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
 };
-use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::AbstractField};
+use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::FieldAlgebra};
 use thiserror::Error;
 
 use super::Streams;
@@ -65,6 +65,7 @@ pub trait InstructionExecutor<F> {
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>>;
@@ -77,10 +78,11 @@ pub trait InstructionExecutor<F> {
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         prev_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut().execute(instruction, prev_state)
+        self.borrow_mut().execute(memory, instruction, prev_state)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -91,10 +93,11 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         prev_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut().execute(instruction, prev_state)
+        self.borrow_mut().execute(memory, instruction, prev_state)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -274,7 +277,7 @@ impl<AB: InteractionBuilder> ExecutionBridgeInteractor<AB> {
     }
 }
 
-impl<T: AbstractField> From<(u32, Option<T>)> for PcIncOrSet<T> {
+impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
     fn from((pc_inc, to_pc): (u32, Option<T>)) -> Self {
         match to_pc {
             None => PcIncOrSet::Inc(T::from_canonical_u32(pc_inc)),

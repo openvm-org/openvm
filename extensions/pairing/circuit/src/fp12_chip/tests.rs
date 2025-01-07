@@ -21,7 +21,7 @@ use openvm_pairing_guest::{
 };
 use openvm_pairing_transpiler::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode};
 use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::{fp12_add_expr, fp12_mul_expr, fp12_sub_expr};
@@ -62,7 +62,8 @@ fn test_fp12_fn<
         Rv32VecHeapAdapterChip::<F, 2, INPUT_SIZE, INPUT_SIZE, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
+            tester.address_bits(),
             bitwise_chip.clone(),
         );
 
@@ -78,7 +79,7 @@ fn test_fp12_fn<
             biguint_to_limbs::<NUM_LIMBS>(y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
         })
         .collect::<Vec<[BabyBear; NUM_LIMBS]>>();
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+    let mut chip = VmChipWrapper::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let res = chip.core.air.expr.execute([x, y].concat(), vec![]);
     assert_eq!(res.len(), var_len);

@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use openvm_native_compiler::ir::{Builder, Config, DslIr, Felt, Var};
-use openvm_stark_backend::p3_field::{AbstractField, Field};
+use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
 
 use crate::{utils::reduce_32, vars::OuterDigestVariable, OUTER_DIGEST_SIZE};
 

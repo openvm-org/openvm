@@ -1,7 +1,7 @@
 use std::{any::TypeId, marker::PhantomData};
 
 use derivative::Derivative;
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::{BabyBear, BabyBearInternalLayerParameters};
 use p3_monty_31::InternalLayerBaseParameters;
 use p3_poseidon2::{
@@ -15,7 +15,7 @@ use super::{babybear_internal_linear_layer, BABY_BEAR_POSEIDON2_SBOX_DEGREE};
 const WIDTH: usize = crate::POSEIDON2_WIDTH;
 
 pub trait Poseidon2MatrixConfig: Clone + Sync {
-    fn int_diag_m1_matrix<F: AbstractField>() -> [F; WIDTH];
+    fn int_diag_m1_matrix<F: FieldAlgebra>() -> [F; WIDTH];
 }
 
 /// This type needs to implement GenericPoseidon2LinearLayers generic in F so that our Poseidon2SubAir can also
@@ -28,7 +28,7 @@ pub struct BabyBearPoseidon2LinearLayers;
 // clause that FA needs be multipliable by BabyBear.
 // TODO[jpw/stephen]: This is clearly not the best way to do this, but it would
 // require some reworking in plonky3 to get around the generics.
-impl<FA: AbstractField> GenericPoseidon2LinearLayers<FA, WIDTH> for BabyBearPoseidon2LinearLayers {
+impl<FA: FieldAlgebra> GenericPoseidon2LinearLayers<FA, WIDTH> for BabyBearPoseidon2LinearLayers {
     fn internal_linear_layer(state: &mut [FA; WIDTH]) {
         let diag_m1_matrix = &<BabyBearInternalLayerParameters as InternalLayerBaseParameters<
             _,
@@ -57,12 +57,12 @@ impl<FA: AbstractField> GenericPoseidon2LinearLayers<FA, WIDTH> for BabyBearPose
 
 #[derive(Debug, Derivative)]
 #[derivative(Clone)]
-pub struct Poseidon2InternalLayer<F: AbstractField, LinearLayers> {
+pub struct Poseidon2InternalLayer<F: FieldAlgebra, LinearLayers> {
     pub internal_constants: Vec<F>,
     _marker: PhantomData<LinearLayers>,
 }
 
-impl<AF: AbstractField, LinearLayers> InternalLayerConstructor<AF>
+impl<AF: FieldAlgebra, LinearLayers> InternalLayerConstructor<AF>
     for Poseidon2InternalLayer<AF::F, LinearLayers>
 {
     fn new_from_constants(internal_constants: Vec<AF::F>) -> Self {
@@ -73,7 +73,7 @@ impl<AF: AbstractField, LinearLayers> InternalLayerConstructor<AF>
     }
 }
 
-impl<FA: AbstractField, LinearLayers, const WIDTH: usize>
+impl<FA: FieldAlgebra, LinearLayers, const WIDTH: usize>
     InternalLayer<FA, WIDTH, BABY_BEAR_POSEIDON2_SBOX_DEGREE>
     for Poseidon2InternalLayer<FA::F, LinearLayers>
 where
@@ -90,12 +90,12 @@ where
 
 #[derive(Debug, Derivative)]
 #[derivative(Clone)]
-pub struct Poseidon2ExternalLayer<F: AbstractField, LinearLayers, const WIDTH: usize> {
+pub struct Poseidon2ExternalLayer<F: FieldAlgebra, LinearLayers, const WIDTH: usize> {
     pub constants: ExternalLayerConstants<F, WIDTH>,
     _marker: PhantomData<LinearLayers>,
 }
 
-impl<FA: AbstractField, LinearLayers, const WIDTH: usize> ExternalLayerConstructor<FA, WIDTH>
+impl<FA: FieldAlgebra, LinearLayers, const WIDTH: usize> ExternalLayerConstructor<FA, WIDTH>
     for Poseidon2ExternalLayer<FA::F, LinearLayers, WIDTH>
 {
     fn new_from_constants(external_layer_constants: ExternalLayerConstants<FA::F, WIDTH>) -> Self {
@@ -106,7 +106,7 @@ impl<FA: AbstractField, LinearLayers, const WIDTH: usize> ExternalLayerConstruct
     }
 }
 
-impl<FA: AbstractField, LinearLayers, const WIDTH: usize>
+impl<FA: FieldAlgebra, LinearLayers, const WIDTH: usize>
     ExternalLayer<FA, WIDTH, BABY_BEAR_POSEIDON2_SBOX_DEGREE>
     for Poseidon2ExternalLayer<FA::F, LinearLayers, WIDTH>
 where
@@ -128,7 +128,7 @@ where
     }
 }
 
-fn external_permute_state<FA: AbstractField, LinearLayers, const WIDTH: usize>(
+fn external_permute_state<FA: FieldAlgebra, LinearLayers, const WIDTH: usize>(
     state: &mut [FA; WIDTH],
     constants: &[[FA::F; WIDTH]],
 ) where

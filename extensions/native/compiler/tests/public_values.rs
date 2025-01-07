@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{SingleSegmentVmExecutor, SystemConfig};
 use openvm_native_circuit::{execute_program, Native, NativeConfig};
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 type F = BabyBear;
@@ -33,7 +33,9 @@ fn test_compiler_public_values() {
         Native,
     ));
 
-    let exe_result = executor.execute(program, vec![]).unwrap();
+    let exe_result = executor
+        .execute_and_compute_heights(program, vec![])
+        .unwrap();
     assert_eq!(
         exe_result
             .public_values

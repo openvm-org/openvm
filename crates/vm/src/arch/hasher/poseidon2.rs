@@ -4,7 +4,7 @@ use std::{
 };
 
 use openvm_poseidon2_air::p3_symmetric::Permutation;
-use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 
 use crate::{

@@ -1,7 +1,7 @@
 use openvm_native_compiler::prelude::*;
 use openvm_stark_backend::{
     p3_commit::TwoAdicMultiplicativeCoset,
-    p3_field::{AbstractField, TwoAdicField},
+    p3_field::{FieldAlgebra, TwoAdicField},
 };
 use p3_symmetric::Hash;
 
@@ -39,6 +39,9 @@ pub fn verify_two_adic_pcs<C: Config>(
     C::F: TwoAdicField,
     C::EF: TwoAdicField,
 {
+    // Currently do not support other final poly len
+    builder.assert_var_eq(RVar::from(config.log_final_poly_len), RVar::from(0));
+
     let g = builder.generator();
 
     let log_blowup = config.log_blowup;
@@ -55,9 +58,13 @@ pub fn verify_two_adic_pcs<C: Config>(
             let sample = challenger.sample_ext(builder);
             builder.set(&betas, i, sample);
         });
-    let final_poly_felts = builder.ext2felt(proof.final_poly);
-    challenger.observe_slice(builder, final_poly_felts);
-
+    builder
+        .range(0, proof.final_poly.len())
+        .for_each(|i, builder| {
+            let final_poly_elem = builder.get(&proof.final_poly, i);
+            let final_poly_elem_felts = builder.ext2felt(final_poly_elem);
+            challenger.observe_slice(builder, final_poly_elem_felts);
+        });
     let num_query_proofs = proof.query_proofs.len().clone();
     builder
         .if_ne(num_query_proofs, RVar::from(config.num_queries))
@@ -233,7 +240,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                 log_max_height,
             );
 
-            builder.assert_ext_eq(folded_eval, proof.final_poly);
+            let final_poly_elem = builder.get(&proof.final_poly, 0);
+            builder.assert_ext_eq(folded_eval, final_poly_elem);
         });
     builder.cycle_tracker_end("stage-d-verifier-verify");
 }

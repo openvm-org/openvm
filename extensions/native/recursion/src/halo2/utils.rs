@@ -125,9 +125,10 @@ impl CacheHalo2ParamsReader {
         }
     }
     fn read_params_from_folder(&self, k: usize) -> Halo2Params {
+        let file_path = self.params_dir.as_path().join(format!("kzg_bn254_{k}.srs"));
         ParamsKZG::<Bn256>::read(&mut BufReader::new(
-            std::fs::File::open(self.params_dir.as_path().join(format!("kzg_bn254_{k}.srs")))
-                .expect("Params file does not exist"),
+            std::fs::File::open(&file_path)
+                .unwrap_or_else(|e| panic!("Params file {:?} does not exist: {e:?}", file_path)),
         ))
         .unwrap()
     }

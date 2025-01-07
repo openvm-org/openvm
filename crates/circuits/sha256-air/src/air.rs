@@ -9,7 +9,7 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
     p3_matrix::Matrix,
 };
 

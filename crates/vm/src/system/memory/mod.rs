@@ -1,16 +1,19 @@
 use openvm_circuit_primitives_derive::AlignedBorrow;
 
 mod adapter;
-mod manager;
+mod controller;
 pub mod merkle;
+mod offline;
 pub mod offline_checker;
+mod online;
 mod persistent;
 #[cfg(test)]
 mod tests;
 pub mod tree;
 mod volatile;
 
-pub use manager::*;
+pub use controller::*;
+pub use offline::*;
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {
