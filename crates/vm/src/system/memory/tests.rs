@@ -11,7 +11,7 @@ use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},

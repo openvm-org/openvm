@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilderWithPublicValues},
-    p3_field::{AbstractField, Field},
+    p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{AnyRap, PartitionedBaseAir},

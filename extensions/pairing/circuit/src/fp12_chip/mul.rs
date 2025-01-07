@@ -88,7 +88,7 @@ mod tests {
     };
     use openvm_pairing_guest::bn254::{BN254_MODULUS, BN254_XI_ISIZE};
     use openvm_rv32_adapters::rv32_write_heap_default_with_increment;
-    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
 

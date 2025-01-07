@@ -35,7 +35,7 @@ use openvm_rv32im_circuit::adapters::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.

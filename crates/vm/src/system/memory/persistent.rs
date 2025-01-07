@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut},
     prover::types::AirProofInput,

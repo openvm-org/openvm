@@ -1,7 +1,7 @@
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester};
 use openvm_instructions::{instruction::Instruction, Poseidon2Opcode, UsizeOpcode, VmOpcode};
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_stark_backend::p3_field::{AbstractField, PrimeField64};
+use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField64};
 use openvm_stark_sdk::{
     config::{
         baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},

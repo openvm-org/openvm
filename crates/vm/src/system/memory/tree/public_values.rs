@@ -139,7 +139,7 @@ pub fn extract_public_values<F: PrimeField32>(
 
 #[cfg(test)]
 mod tests {
-    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::{UserPublicValuesProof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET};

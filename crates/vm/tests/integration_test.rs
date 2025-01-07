@@ -43,7 +43,7 @@ use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
     config::StarkGenericConfig,
     engine::StarkEngine,
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
 };
 use openvm_stark_sdk::{
     config::{
@@ -78,6 +78,7 @@ fn air_test_with_compress_poseidon2(
     let fri_params = if matches!(std::env::var("OPENVM_FAST_TEST"), Ok(x) if &x == "1") {
         FriParameters {
             log_blowup: 3,
+            log_final_poly_len: 0,
             num_queries: 2,
             proof_of_work_bits: 0,
         }

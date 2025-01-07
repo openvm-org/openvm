@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
     SubAir,
 };
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, p3_air::AirBuilder, p3_field::AbstractField,
+    interaction::InteractionBuilder, p3_air::AirBuilder, p3_field::FieldAlgebra,
 };
 
 use super::bus::MemoryBus;
@@ -116,7 +116,7 @@ pub struct MemoryReadOperation<'a, T, V, const N: usize> {
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
-impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<'_, F, V, N> {
+impl<F: FieldAlgebra, V: Copy + Into<F>, const N: usize> MemoryReadOperation<'_, F, V, N> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
@@ -170,7 +170,7 @@ pub struct MemoryReadOrImmediateOperation<'a, T, V> {
 /// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.pointer))
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
-impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'_, F, V> {
+impl<F: FieldAlgebra, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'_, F, V> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
@@ -230,7 +230,7 @@ pub struct MemoryWriteOperation<'a, T, V, const N: usize> {
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
-impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<'_, T, V, N> {
+impl<T: FieldAlgebra, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<'_, T, V, N> {
     /// Evaluate constraints and send/receive interactions. `enabled` must be boolean.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where

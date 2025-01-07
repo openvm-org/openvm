@@ -10,7 +10,7 @@ use openvm_sha256_air::{
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSliceMut,

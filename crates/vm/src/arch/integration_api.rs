@@ -14,7 +14,7 @@ use openvm_stark_backend::{
     },
     config::{StarkGenericConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
@@ -993,7 +993,7 @@ mod conversions {
 
     // AdapterRuntimeContext: FlatInterface -> BasicInterface
     impl<
-            T: AbstractField,
+            T: FieldAlgebra,
             PI,
             const NUM_READS: usize,
             const NUM_WRITES: usize,

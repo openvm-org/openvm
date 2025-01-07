@@ -4,7 +4,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
 };
-use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::AbstractField};
+use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::FieldAlgebra};
 use thiserror::Error;
 
 use super::Streams;
@@ -277,7 +277,7 @@ impl<AB: InteractionBuilder> ExecutionBridgeInteractor<AB> {
     }
 }
 
-impl<T: AbstractField> From<(u32, Option<T>)> for PcIncOrSet<T> {
+impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
     fn from((pc_inc, to_pc): (u32, Option<T>)) -> Self {
         match to_pc {
             None => PcIncOrSet::Inc(T::from_canonical_u32(pc_inc)),

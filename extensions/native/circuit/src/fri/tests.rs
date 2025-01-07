@@ -3,7 +3,7 @@ use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_native_compiler::FriOpcode::{self, FRI_REDUCED_OPENING};
 use openvm_stark_backend::{
-    p3_field::{AbstractField, Field},
+    p3_field::{Field, FieldAlgebra},
     utils::disable_debug_builder,
     verifier::VerificationError,
 };

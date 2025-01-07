@@ -21,7 +21,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::Matrix,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     rap::AnyRap,
@@ -1098,7 +1098,7 @@ pub fn generate_air_proof_input<SC: StarkGenericConfig, C: Chip<SC>>(
             height >= main.height(),
             "Overridden height must be greater than or equal to the used height"
         );
-        main.pad_to_height(height, AbstractField::ZERO);
+        main.pad_to_height(height, FieldAlgebra::ZERO);
     }
     proof_input
 }

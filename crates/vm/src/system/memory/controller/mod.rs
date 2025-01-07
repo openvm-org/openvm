@@ -762,7 +762,7 @@ mod tests {
     use std::sync::Arc;
 
     use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 

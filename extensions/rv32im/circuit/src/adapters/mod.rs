@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
 use openvm_circuit::system::memory::{MemoryController, RecordId};
-use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 
 mod alu;
 mod branch;
@@ -61,7 +61,7 @@ pub fn unsafe_read_rv32_register<F: PrimeField32>(memory: &MemoryController<F>, 
     compose(data)
 }
 
-pub fn abstract_compose<T: AbstractField, V: Mul<T, Output = T>>(
+pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(
     data: [V; RV32_REGISTER_NUM_LIMBS],
 ) -> T {
     data.into_iter()

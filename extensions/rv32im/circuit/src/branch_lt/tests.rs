@@ -15,7 +15,7 @@ use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcod
 use openvm_rv32im_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,

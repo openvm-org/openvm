@@ -24,7 +24,7 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
-use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 

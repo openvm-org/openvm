@@ -4,7 +4,7 @@ use openvm_circuit_primitives::{
     encoder::Encoder,
     utils::{not, select},
 };
-use openvm_stark_backend::{p3_air::AirBuilder, p3_field::AbstractField};
+use openvm_stark_backend::{p3_air::AirBuilder, p3_field::FieldAlgebra};
 use rand::{rngs::StdRng, Rng};
 
 use super::{Sha256DigestCols, Sha256RoundCols};
@@ -90,7 +90,7 @@ pub fn limbs_into_u32<const NUM_LIMBS: usize>(limbs: [u32; NUM_LIMBS]) -> u32 {
 
 /// Rotates `bits` right by `n` bits, assumes `bits` is in little-endian
 #[inline]
-pub(crate) fn rotr<F: AbstractField + Clone>(
+pub(crate) fn rotr<F: FieldAlgebra + Clone>(
     bits: &[impl Into<F> + Clone; SHA256_WORD_BITS],
     n: usize,
 ) -> [F; SHA256_WORD_BITS] {
@@ -99,7 +99,7 @@ pub(crate) fn rotr<F: AbstractField + Clone>(
 
 /// Shifts `bits` right by `n` bits, assumes `bits` is in little-endian
 #[inline]
-pub(crate) fn shr<F: AbstractField + Clone>(
+pub(crate) fn shr<F: FieldAlgebra + Clone>(
     bits: &[impl Into<F> + Clone; SHA256_WORD_BITS],
     n: usize,
 ) -> [F; SHA256_WORD_BITS] {
@@ -114,7 +114,7 @@ pub(crate) fn shr<F: AbstractField + Clone>(
 
 /// Computes x ^ y ^ z, where x, y, z are assumed to be boolean
 #[inline]
-pub(crate) fn xor_bit<F: AbstractField + Clone>(
+pub(crate) fn xor_bit<F: FieldAlgebra + Clone>(
     x: impl Into<F>,
     y: impl Into<F>,
     z: impl Into<F>,
@@ -128,7 +128,7 @@ pub(crate) fn xor_bit<F: AbstractField + Clone>(
 
 /// Computes x ^ y ^ z, where x, y, z are [SHA256_WORD_BITS] bit numbers
 #[inline]
-pub(crate) fn xor<F: AbstractField + Clone>(
+pub(crate) fn xor<F: FieldAlgebra + Clone>(
     x: &[impl Into<F> + Clone; SHA256_WORD_BITS],
     y: &[impl Into<F> + Clone; SHA256_WORD_BITS],
     z: &[impl Into<F> + Clone; SHA256_WORD_BITS],
@@ -144,7 +144,7 @@ pub fn ch(x: u32, y: u32, z: u32) -> u32 {
 
 /// Computes Ch(x,y,z), where x, y, z are [SHA256_WORD_BITS] bit numbers
 #[inline]
-pub(crate) fn ch_field<F: AbstractField>(
+pub(crate) fn ch_field<F: FieldAlgebra>(
     x: &[impl Into<F> + Clone; SHA256_WORD_BITS],
     y: &[impl Into<F> + Clone; SHA256_WORD_BITS],
     z: &[impl Into<F> + Clone; SHA256_WORD_BITS],
@@ -159,7 +159,7 @@ pub fn maj(x: u32, y: u32, z: u32) -> u32 {
 
 /// Computes Maj(x,y,z), where x, y, z are [SHA256_WORD_BITS] bit numbers
 #[inline]
-pub(crate) fn maj_field<F: AbstractField + Clone>(
+pub(crate) fn maj_field<F: FieldAlgebra + Clone>(
     x: &[impl Into<F> + Clone; SHA256_WORD_BITS],
     y: &[impl Into<F> + Clone; SHA256_WORD_BITS],
     z: &[impl Into<F> + Clone; SHA256_WORD_BITS],
@@ -181,7 +181,7 @@ pub fn big_sig0(x: u32) -> u32 {
 
 /// Computes BigSigma0(x), where x is a [SHA256_WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn big_sig0_field<F: AbstractField + Clone>(
+pub(crate) fn big_sig0_field<F: FieldAlgebra + Clone>(
     x: &[impl Into<F> + Clone; SHA256_WORD_BITS],
 ) -> [F; SHA256_WORD_BITS] {
     xor(&rotr::<F>(x, 2), &rotr::<F>(x, 13), &rotr::<F>(x, 22))
@@ -194,7 +194,7 @@ pub fn big_sig1(x: u32) -> u32 {
 
 /// Computes BigSigma1(x), where x is a [SHA256_WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn big_sig1_field<F: AbstractField + Clone>(
+pub(crate) fn big_sig1_field<F: FieldAlgebra + Clone>(
     x: &[impl Into<F> + Clone; SHA256_WORD_BITS],
 ) -> [F; SHA256_WORD_BITS] {
     xor(&rotr::<F>(x, 6), &rotr::<F>(x, 11), &rotr::<F>(x, 25))
@@ -207,7 +207,7 @@ pub fn small_sig0(x: u32) -> u32 {
 
 /// Computes SmallSigma0(x), where x is a [SHA256_WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn small_sig0_field<F: AbstractField + Clone>(
+pub(crate) fn small_sig0_field<F: FieldAlgebra + Clone>(
     x: &[impl Into<F> + Clone; SHA256_WORD_BITS],
 ) -> [F; SHA256_WORD_BITS] {
     xor(&rotr::<F>(x, 7), &rotr::<F>(x, 18), &shr::<F>(x, 3))
@@ -220,7 +220,7 @@ pub fn small_sig1(x: u32) -> u32 {
 
 /// Computes SmallSigma1(x), where x is a [SHA256_WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn small_sig1_field<F: AbstractField + Clone>(
+pub(crate) fn small_sig1_field<F: FieldAlgebra + Clone>(
     x: &[impl Into<F> + Clone; SHA256_WORD_BITS],
 ) -> [F; SHA256_WORD_BITS] {
     xor(&rotr::<F>(x, 17), &rotr::<F>(x, 19), &shr::<F>(x, 10))
@@ -235,7 +235,7 @@ pub fn get_random_message(rng: &mut StdRng, len: usize) -> Vec<u8> {
 
 /// Composes a list of limb values into a single field element
 #[inline]
-pub fn compose<F: AbstractField>(a: &[impl Into<F> + Clone], limb_size: usize) -> F {
+pub fn compose<F: FieldAlgebra>(a: &[impl Into<F> + Clone], limb_size: usize) -> F {
     a.iter().enumerate().fold(F::ZERO, |acc, (i, x)| {
         acc + x.clone().into() * F::from_canonical_usize(1 << (i * limb_size))
     })

@@ -2,7 +2,7 @@ use std::array;
 
 use openvm_native_compiler::prelude::*;
 use openvm_native_recursion::{hints::Hintable, types::InnerConfig};
-use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
 
 pub(crate) fn assign_array_to_slice<C: Config>(
     builder: &mut Builder<C>,

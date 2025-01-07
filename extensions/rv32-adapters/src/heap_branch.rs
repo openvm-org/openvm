@@ -36,7 +36,7 @@ use openvm_rv32im_circuit::adapters::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
 /// This adapter reads from NUM_READS <= 2 pointers.

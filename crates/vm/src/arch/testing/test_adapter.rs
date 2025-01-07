@@ -9,7 +9,7 @@ use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
 use crate::{

@@ -15,7 +15,7 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{AbstractField, Field, PrimeField64},
+    p3_field::{Field, FieldAlgebra, PrimeField64},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };

@@ -13,7 +13,7 @@ use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
-    openvm_stark_backend::p3_field::AbstractField,
+    openvm_stark_backend::p3_field::FieldAlgebra,
     p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
 };
