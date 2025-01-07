@@ -877,7 +877,7 @@ pub struct IteratorBuilder<'a, C: Config, V: MemVariable<C>> {
     array: &'a Array<C, V>,
 }
 
-impl<'a, C: Config, V: MemVariable<C>> IteratorBuilder<'a, C, V> {
+impl<C: Config, V: MemVariable<C>> IteratorBuilder<'_, C, V> {
     pub fn for_each(&mut self, mut f: impl FnMut(V, &mut Builder<C>)) {
         if self.start.is_const() && self.end.is_const() {
             self.for_each_unrolled(|var, builder| {
