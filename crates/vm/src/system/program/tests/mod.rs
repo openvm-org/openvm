@@ -46,12 +46,12 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
 
     let counter_air = DummyInteractionAir::new(9, true, bus.0);
     let mut program_cells = vec![];
-    for index in 0..program.len() {
+    for (index, frequency) in execution_frequencies.into_iter().enumerate() {
         let option = program.get_instruction_and_debug_info(index);
         if option.is_some() {
             let instruction = option.unwrap().0;
             program_cells.extend(vec![
-                BabyBear::from_canonical_usize(execution_frequencies[index]), // hacky: we should switch execution_frequencies into hashmap
+                BabyBear::from_canonical_usize(frequency), // hacky: we should switch execution_frequencies into hashmap
                 BabyBear::from_canonical_usize(index * (DEFAULT_PC_STEP as usize)),
                 instruction.opcode.to_field(),
                 instruction.a,
