@@ -173,28 +173,29 @@ where
         // Count the number of main trace commitments together to save a loop.
         let num_cached_mains: Usize<_> = builder.eval(RVar::zero());
         let num_common_main_traces: Usize<_> = builder.eval(RVar::zero());
-        builder.range(0, num_airs).for_each(|i, builder| {
-            let air_advice = builder.get(&m_advice_var.per_air, i);
-            builder
-                .if_eq(air_advice.preprocessed_data.len(), RVar::one())
-                .then(|builder| {
-                    let commit = builder.get(&air_advice.preprocessed_data, RVar::zero());
-                    challenger.observe_digest(builder, commit);
-                });
+        builder
+            .iter(&m_advice_var.per_air)
+            .for_each(|air_advice, builder| {
+                builder
+                    .if_eq(air_advice.preprocessed_data.len(), RVar::one())
+                    .then(|builder| {
+                        let commit = builder.get(&air_advice.preprocessed_data, RVar::zero());
+                        challenger.observe_digest(builder, commit);
+                    });
 
-            builder.assign(
-                &num_cached_mains,
-                num_cached_mains.clone() + air_advice.width.cached_mains.len(),
-            );
-            builder
-                .if_ne(air_advice.width.common_main, RVar::zero())
-                .then(|builder| {
-                    builder.assign(
-                        &num_common_main_traces,
-                        num_common_main_traces.clone() + RVar::one(),
-                    );
-                });
-        });
+                builder.assign(
+                    &num_cached_mains,
+                    num_cached_mains.clone() + air_advice.width.cached_mains.len(),
+                );
+                builder
+                    .if_ne(air_advice.width.common_main, RVar::zero())
+                    .then(|builder| {
+                        builder.assign(
+                            &num_common_main_traces,
+                            num_common_main_traces.clone() + RVar::one(),
+                        );
+                    });
+            });
 
         let CommitmentsVariable {
             main_trace: main_trace_commits,
@@ -209,8 +210,7 @@ where
                 challenger.observe_digest(builder, main_commit);
             });
 
-        builder.range(0, air_proofs.len()).for_each(|i, builder| {
-            let air_proof = builder.get(air_proofs, i);
+        builder.iter(air_proofs).for_each(|air_proof, builder| {
             let log_degree = if builder.flags.static_only {
                 builder.eval(C::F::from_canonical_usize(air_proof.log_degree.value()))
             } else {
@@ -390,9 +390,8 @@ where
             let trace_points = builder.get(&trace_points_per_domain, i);
 
             builder
-                .range(0, cached_main_widths.len())
-                .for_each(|j, builder| {
-                    let cached_main_width = builder.get(cached_main_widths, j);
+                .iter(cached_main_widths)
+                .for_each(|cached_main_width, builder| {
                     let values_per_mat = builder.get(&opening.values.main, main_commit_idx.clone());
                     let batch_commit = builder.get(main_trace_commits, main_commit_idx.clone());
                     builder.assign(&main_commit_idx, main_commit_idx.clone() + RVar::one());
@@ -524,12 +523,13 @@ where
         let quotient_perm = builder.array(num_quotient_mats);
         let perm_offset_per_air = builder.array::<Usize<_>>(num_airs);
         let offset: Usize<_> = builder.eval(RVar::zero());
-        builder.range(0, num_airs).for_each(|i, builder| {
-            let air_index = builder.get(air_perm_by_height, i);
-            builder.set(&perm_offset_per_air, air_index.clone(), offset.clone());
-            let qc_domains = builder.get(&quotient_chunk_domains, air_index);
-            builder.assign(&offset, offset.clone() + qc_domains.len());
-        });
+        builder
+            .iter(air_perm_by_height)
+            .for_each(|air_index, builder| {
+                builder.set(&perm_offset_per_air, air_index.clone(), offset.clone());
+                let qc_domains = builder.get(&quotient_chunk_domains, air_index);
+                builder.assign(&offset, offset.clone() + qc_domains.len());
+            });
 
         let quotient_mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(num_quotient_mats);
         let qc_points = builder.array::<Ext<_, _>>(1);
