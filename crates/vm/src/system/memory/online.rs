@@ -26,34 +26,28 @@ pub(crate) type Address = (u32, u32);
 /// A simple data structure to read to/write from memory.
 ///
 /// Stores a log of memory accesses to reconstruct aspects of memory state for trace generation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Memory<F> {
     pub(super) data: FxHashMap<Address, F>,
     pub(super) log: Vec<MemoryLogEntry<F>>,
     timestamp: u32,
 }
 
-impl<F: PrimeField32> Default for Memory<F> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl<F: PrimeField32> Memory<F> {
-    pub fn new() -> Self {
+    pub fn new(access_capacity: usize) -> Self {
         Self {
             data: MemoryImage::default(),
             timestamp: INITIAL_TIMESTAMP + 1,
-            log: vec![],
+            log: Vec::with_capacity(access_capacity),
         }
     }
 
     /// Instantiates a new `Memory` data structure from an image.
-    pub fn from_image(image: MemoryImage<F>) -> Self {
+    pub fn from_image(image: MemoryImage<F>, access_capacity: usize) -> Self {
         Self {
             data: image,
             timestamp: INITIAL_TIMESTAMP + 1,
-            log: vec![],
+            log: Vec::with_capacity(access_capacity),
         }
     }
 
@@ -141,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_write_read() {
-        let mut memory = Memory::new();
+        let mut memory = Memory::new(0);
         let address_space = 1;
 
         memory.write(address_space, 0, bba![1, 2, 3, 4]);

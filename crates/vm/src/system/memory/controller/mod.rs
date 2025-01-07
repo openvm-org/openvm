@@ -241,7 +241,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: Memory::new(),
+            memory: Memory::new(mem_config.access_capacity),
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
                 initial_memory,
                 1,
@@ -261,20 +261,21 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
+    /// Creates a new memory controller for persistent memory.
+    ///
+    /// Call `set_initial_memory` to set the initial memory state after construction.
     pub fn with_persistent_memory(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChip>,
         merkle_bus: MemoryMerkleBus,
         compression_bus: DirectCompressionBus,
-        initial_memory: MemoryImage<F>,
     ) -> Self {
         let memory_dims = MemoryDimensions {
             as_height: mem_config.as_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
             as_offset: 1,
         };
-        let memory = Memory::from_image(initial_memory.clone());
         let range_checker_bus = range_checker.bus();
         let interface_chip = MemoryInterface::Persistent {
             boundary_chip: PersistentBoundaryChip::new(
@@ -284,15 +285,15 @@ impl<F: PrimeField32> MemoryController<F> {
                 compression_bus,
             ),
             merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus, compression_bus),
-            initial_memory: initial_memory.clone(),
+            initial_memory: MemoryImage::default(),
         };
         Self {
             memory_bus,
             mem_config,
             interface_chip,
-            memory,
+            memory: Memory::new(0), // it is expected that the memory will be set later
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
-                initial_memory,
+                MemoryImage::default(),
                 CHUNK,
                 memory_bus,
                 range_checker.clone(),
@@ -347,15 +348,17 @@ impl<F: PrimeField32> MemoryController<F> {
         let mut offline_memory = self.offline_memory.lock().unwrap();
         offline_memory.set_initial_memory(memory.clone());
 
+        self.memory = Memory::from_image(memory.clone(), self.mem_config.access_capacity);
+
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
-                if !memory.is_empty() {
-                    panic!("Cannot set initial memory for volatile memory");
-                }
+                assert!(
+                    memory.is_empty(),
+                    "Cannot set initial memory for volatile memory"
+                );
             }
             MemoryInterface::Persistent { initial_memory, .. } => {
                 *initial_memory = memory;
-                self.memory = Memory::from_image(initial_memory.clone());
             }
         }
     }
@@ -449,8 +452,10 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     fn replay_access_log(&mut self) {
-        let mut offline_memory = self.offline_memory.lock().unwrap();
         let log = mem::take(&mut self.memory.log);
+
+        let mut offline_memory = self.offline_memory.lock().unwrap();
+        offline_memory.set_log_capacity(log.len());
 
         for entry in log {
             Self::replay_access(

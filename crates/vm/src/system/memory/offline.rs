@@ -77,6 +77,11 @@ impl<F: PrimeField32> OfflineMemory<F> {
         self.data = initial_memory;
     }
 
+    pub(super) fn set_log_capacity(&mut self, access_capacity: usize) {
+        assert!(self.log.is_empty());
+        self.log = Vec::with_capacity(access_capacity);
+    }
+
     pub fn memory_bridge(&self) -> MemoryBridge {
         MemoryBridge::new(
             self.memory_bus,

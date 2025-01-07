@@ -54,11 +54,13 @@ pub struct MemoryConfig {
     pub decomp: usize,
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
+    /// An expected upper bound on the number of memory accesses.
+    pub access_capacity: usize,
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 1, 29, 29, 17, 64)
+        Self::new(29, 1, 29, 29, 17, 64, 1 << 24)
     }
 }
 

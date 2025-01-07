@@ -201,7 +201,7 @@ where
         Self {
             adapter,
             core,
-            records: vec![],
+            records: Vec::with_capacity(1 << 20),
             offline_memory,
         }
     }

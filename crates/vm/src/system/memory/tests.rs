@@ -36,7 +36,7 @@ use crate::{
         memory::{
             merkle::MemoryMerkleBus,
             offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryImage, OfflineMemory, RecordId,
+            MemoryAddress, OfflineMemory, RecordId,
         },
         poseidon2::Poseidon2PeripheryChip,
     },
@@ -249,7 +249,6 @@ fn test_memory_controller_persistent() {
         range_checker.clone(),
         merkle_bus,
         compression_bus,
-        MemoryImage::default(),
     );
 
     let mut rng = create_seeded_rng();
