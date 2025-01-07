@@ -22,7 +22,7 @@ pub struct MemoryBaseAuxCols<T> {
 }
 
 impl<T: Clone> MemoryBaseAuxCols<T> {
-    /// TODO\[arayi\]: Since we have AlignedBorrow, should remove all from_slice, from_iterator, and flatten in a future PR.
+    // TODO[arayi]: Since we have AlignedBorrow, should remove all from_slice, from_iterator, and flatten in a future PR.
     pub fn from_slice(slc: &[T]) -> Self {
         let base_aux_cols: &MemoryBaseAuxCols<T> = slc.borrow();
         base_aux_cols.clone()
