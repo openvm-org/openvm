@@ -67,7 +67,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
 
     // Pad program cells with zeroes to make height a power of two.
     let width = 10;
-    let original_height = program.num_non_none_instructions();
+    let original_height = program.num_defined_instructions();
     let desired_height = original_height.next_power_of_two();
     let cells_to_add = (desired_height - original_height) * width;
     program_cells.extend(iter::repeat(BabyBear::ZERO).take(cells_to_add));

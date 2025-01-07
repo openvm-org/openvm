@@ -126,7 +126,7 @@ impl<F: Field> Program<F> {
         self.instructions_and_debug_infos.is_empty()
     }
 
-    pub fn non_none_instructions(&self) -> Vec<Instruction<F>> {
+    pub fn defined_instructions(&self) -> Vec<Instruction<F>> {
         self.instructions_and_debug_infos
             .iter()
             .flatten()
@@ -134,8 +134,9 @@ impl<F: Field> Program<F> {
             .collect()
     }
 
-    pub fn num_non_none_instructions(&self) -> usize {
-        self.non_none_instructions().len()
+    // if this is being called a lot, we may want to optimize this later
+    pub fn num_defined_instructions(&self) -> usize {
+        self.defined_instructions().len()
     }
 
     pub fn debug_infos(&self) -> Vec<Option<DebugInfo>> {
@@ -193,7 +194,7 @@ impl<F: Field> Program<F> {
 }
 impl<F: Field> Display for Program<F> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for instruction in self.non_none_instructions().iter() {
+        for instruction in self.defined_instructions().iter() {
             let Instruction {
                 opcode,
                 a,
@@ -215,7 +216,7 @@ impl<F: Field> Display for Program<F> {
 }
 
 pub fn display_program_with_pc<F: Field>(program: &Program<F>) {
-    for (pc, instruction) in program.non_none_instructions().iter().enumerate() {
+    for (pc, instruction) in program.defined_instructions().iter().enumerate() {
         let Instruction {
             opcode,
             a,

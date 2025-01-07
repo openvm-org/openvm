@@ -44,7 +44,7 @@ impl<F: PrimeField64> ProgramChip<F> {
 
     pub fn set_program(&mut self, mut program: Program<F>) {
         let true_program_length = program.len();
-        let mut number_actual_instructions = program.num_non_none_instructions();
+        let mut number_actual_instructions = program.num_defined_instructions();
         while !number_actual_instructions.is_power_of_two() {
             program.push_instruction(padding_instruction());
             number_actual_instructions += 1;
