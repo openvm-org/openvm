@@ -6,9 +6,8 @@ edition = "2021"
 [dependencies]
 openvm-native-compiler = { path = "../../../../extensions/native/compiler" }
 openvm-native-serialization = { path = "../../../../extensions/native/serialization" }
-p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
-p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", features = [
-"nightly-features",
-], rev = "9b267c4" }
+openvm-instructions = { path = "../../../../crates/toolchain/instructions" }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "c785515", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "c785515", default-features = false }
 
 [workspace]

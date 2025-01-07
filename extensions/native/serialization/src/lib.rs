@@ -1,8 +1,22 @@
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use p3_field::PrimeField32;
 
-pub const LONG_FORM_INSTRUCTION_INDICATOR: u32 = (1 << 31) + 115115115;
-pub const GAP_INDICATOR: u32 = (1 << 31) + 113113113;
+/*
+ * The indicators use
+ * - opcode = 0x2b (custom-1 as defined in RISC-V spec document)
+ * - funct3 = 0b111
+ *
+ * `LONG_FORM_INSTRUCTION_INDICATOR` has funct7 = 0b0.
+ * `GAP_INDICATOR` has funct7 = 0b1.
+ *
+ * `VARIABLE_REGISTER_INDICATOR` does not need to conform to RISC_V format,
+ * because it occurs only within a block already prefixed with `LONG_FORM_INSTRUCTION_INDICATOR`.
+ * Thus, we make its value larger than 2^31 to ensure that it is not equal to a possible field element.
+ */
+const OPCODE: u32 = 0x2b;
+const FUNCT3: u32 = 0b111;
+pub const LONG_FORM_INSTRUCTION_INDICATOR: u32 = (FUNCT3 << 12) + OPCODE;
+pub const GAP_INDICATOR: u32 = (1 << 25) + (FUNCT3 << 12) + OPCODE;
 pub const VARIABLE_REGISTER_INDICATOR: u32 = (1 << 31) + 116;
 
 pub fn serialize_instructions<F: PrimeField32>(instructions: &[Instruction<F>]) -> Vec<u32> {
@@ -29,6 +43,7 @@ pub fn deserialize_instructions<F: PrimeField32>(words: &[u32]) -> Vec<Instructi
             .iter()
             .map(|&x| x as usize)
             .collect();
+        assert!(!operands.contains(&(VARIABLE_REGISTER_INDICATOR as usize)));
         operands.resize(7, 0);
         let instruction =
             Instruction::from_usize::<7>(opcode, std::array::from_fn(|i| operands[i]));

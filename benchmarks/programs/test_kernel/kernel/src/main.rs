@@ -1,6 +1,6 @@
 use std::fs::File;
-use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::p3_field::extension::BinomialExtensionField;
 use std::io::Write;
 
 use openvm_native_compiler::{
@@ -35,7 +35,7 @@ fn main() {
     compiler.build(builder.operations);
     let asm_code = compiler.code();
     let program = convert_program::<F, EF>(asm_code, CompilerOptions::default());
-    let serialized = serialize_instructions(&program.instructions());
+    let serialized = serialize_instructions(&program.defined_instructions());
     for word in serialized {
         writeln!(file, "{}", word).unwrap();
     }
