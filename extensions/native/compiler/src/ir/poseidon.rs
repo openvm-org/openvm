@@ -1,6 +1,6 @@
 use openvm_stark_backend::p3_field::FieldAlgebra;
 
-use super::{Array, Builder, Config, DslIr, Ext, Felt, Usize, Var};
+use super::{Array, Builder, Config, DslIr, Ext, Felt, MemIndex, Ptr, Usize, Var};
 
 pub const DIGEST_SIZE: usize = 8;
 pub const HASH_RATE: usize = 8;
@@ -130,12 +130,21 @@ impl<C: Config> Builder<C> {
             builder.set(&state, i, C::F::ZERO);
         });
 
+        let address = self.get_ref(&state, 0).ptr.address;
         let idx: Var<_> = self.eval(C::N::ZERO);
         self.iter(&array).for_each(|subarray, builder| {
             builder.iter(&subarray).for_each(|element, builder| {
                 builder.cycle_tracker_start("poseidon2-hash-setup");
-                builder.set_value(&state, idx, element);
-                builder.assign(&idx, idx + C::N::ONE);
+                builder.store(
+                    Ptr { address },
+                    MemIndex {
+                        index: 0.into(),
+                        offset: 0,
+                        size: 1,
+                    },
+                    element,
+                );
+                builder.assign(&address, address + C::N::ONE);
                 builder.cycle_tracker_end("poseidon2-hash-setup");
                 builder
                     .if_eq(idx, C::N::from_canonical_usize(HASH_RATE))
