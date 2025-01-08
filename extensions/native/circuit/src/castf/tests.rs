@@ -44,7 +44,7 @@ fn prepare_castf_rand_write_execute(
 
     tester.execute(
         chip,
-        Instruction::from_usize(
+        &Instruction::from_usize(
             VmOpcode::from_usize(CastfOpcode::CASTF as usize),
             [address_x, address_y, 0, as_x, as_y],
         ),

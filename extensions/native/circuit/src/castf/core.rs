@@ -134,7 +134,7 @@ where
         _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction { opcode, .. } = instruction.clone();
+        let Instruction { opcode, .. } = instruction;
 
         assert_eq!(
             opcode.local_opcode_idx(self.air.offset),

@@ -49,7 +49,7 @@ fn set_and_execute(
 
     tester.execute_with_pc(
         chip,
-        Instruction::large_from_isize(
+        &Instruction::large_from_isize(
             VmOpcode::with_default_offset(opcode),
             a as isize,
             0,

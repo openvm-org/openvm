@@ -154,7 +154,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
             ptr_as as isize,
             data_as as isize,
         );
-        tester.execute(&mut chip, instruction);
+        tester.execute(&mut chip, &instruction);
 
         let expected_limbs = biguint_to_limbs::<NUM_LIMBS>(expected_answer, LIMB_BITS);
         for (i, expected) in expected_limbs.into_iter().enumerate() {
@@ -284,7 +284,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
             ptr_as as isize,
             data_as as isize,
         );
-        tester.execute(&mut chip, instruction);
+        tester.execute(&mut chip, &instruction);
 
         let expected_limbs = biguint_to_limbs::<NUM_LIMBS>(expected_answer, LIMB_BITS);
         for (i, expected) in expected_limbs.into_iter().enumerate() {
@@ -336,7 +336,7 @@ fn test_is_equal<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIM
             vec![[F::ZERO; TOTAL_LIMBS]],
             opcode_offset + Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize,
         );
-        tester.execute(&mut chip, setup_instruction);
+        tester.execute(&mut chip, &setup_instruction);
     }
     for _ in 0..num_tests {
         let b = generate_field_element::<TOTAL_LIMBS, LIMB_BITS>(&modulus, &mut rng);
@@ -352,7 +352,7 @@ fn test_is_equal<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIM
             vec![c.map(F::from_canonical_u32)],
             opcode_offset + Rv32ModularArithmeticOpcode::IS_EQ as usize,
         );
-        tester.execute(&mut chip, instruction);
+        tester.execute(&mut chip, &instruction);
     }
 
     // Special case where b == c are close to the prime
@@ -365,7 +365,7 @@ fn test_is_equal<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIM
         vec![b.map(F::from_canonical_u32)],
         opcode_offset + Rv32ModularArithmeticOpcode::IS_EQ as usize,
     );
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");

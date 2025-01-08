@@ -231,7 +231,7 @@ where
             inputs.push(input);
         }
 
-        let Instruction { opcode, .. } = instruction.clone();
+        let Instruction { opcode, .. } = instruction;
         let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
         let mut flags = vec![];
 

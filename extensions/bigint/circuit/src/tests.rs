@@ -63,7 +63,7 @@ fn run_int_256_rand_execute<E: InstructionExecutor<F>>(
 
             tester.execute_with_pc(
                 executor,
-                instruction,
+                &instruction,
                 rng.gen_range((ABS_MAX_BRANCH as u32)..(1 << (PC_BITS - 1))),
             );
 
@@ -78,7 +78,7 @@ fn run_int_256_rand_execute<E: InstructionExecutor<F>>(
                 vec![c.map(F::from_canonical_u32)],
                 opcode,
             );
-            tester.execute(executor, instruction);
+            tester.execute(executor, &instruction);
         }
     }
 }

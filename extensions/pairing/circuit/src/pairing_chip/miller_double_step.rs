@@ -181,7 +181,7 @@ mod tests {
             chip.0.core.air.offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
         );
 
-        tester.execute(&mut chip, instruction);
+        tester.execute(&mut chip, &instruction);
         let tester = tester.build().load(chip).load(bitwise_chip).finalize();
         tester.simple_test().expect("Verification failed");
     }
@@ -250,7 +250,7 @@ mod tests {
             chip.0.core.air.offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
         );
 
-        tester.execute(&mut chip, instruction);
+        tester.execute(&mut chip, &instruction);
         let tester = tester.build().load(chip).load(bitwise_chip).finalize();
         tester.simple_test().expect("Verification failed");
     }

@@ -167,11 +167,10 @@ impl<F: Field> Program<F> {
     pub fn get_instruction_and_debug_info(
         &self,
         index: usize,
-    ) -> Option<(Instruction<F>, Option<DebugInfo>)> {
+    ) -> Option<&(Instruction<F>, Option<DebugInfo>)> {
         self.instructions_and_debug_infos
             .get(index)
-            .cloned()
-            .flatten()
+            .and_then(|x| x.as_ref())
     }
 
     pub fn push_instruction_and_debug_info(

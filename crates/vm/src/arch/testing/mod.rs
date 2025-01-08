@@ -93,7 +93,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn execute<E: InstructionExecutor<F>>(
         &mut self,
         executor: &mut E,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
     ) {
         let initial_pc = self.next_elem_size_u32();
         self.execute_with_pc(executor, instruction, initial_pc);
@@ -102,7 +102,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn execute_with_pc<E: InstructionExecutor<F>>(
         &mut self,
         executor: &mut E,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         initial_pc: u32,
     ) {
         let initial_state = ExecutionState {
@@ -114,7 +114,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         let final_state = executor
             .execute(
                 &mut *self.memory.controller.borrow_mut(),
-                instruction.clone(),
+                instruction,
                 initial_state,
             )
             .expect("Expected the execution not to fail");

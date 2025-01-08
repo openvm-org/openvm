@@ -138,7 +138,7 @@ fn test_add_ne() {
         vec![one_limbs, one_limbs],
         chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
     );
-    tester.execute(&mut chip, setup_instruction);
+    tester.execute(&mut chip, &setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
@@ -147,7 +147,7 @@ fn test_add_ne() {
         chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
     );
 
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
@@ -204,7 +204,7 @@ fn test_double() {
         vec![],
         chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );
-    tester.execute(&mut chip, setup_instruction);
+    tester.execute(&mut chip, &setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
@@ -213,7 +213,7 @@ fn test_double() {
         chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     tester.simple_test().expect("Verification failed");
@@ -294,7 +294,7 @@ fn test_p256_double() {
         vec![],
         chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );
-    tester.execute(&mut chip, setup_instruction);
+    tester.execute(&mut chip, &setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
@@ -303,7 +303,7 @@ fn test_p256_double() {
         chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     tester.simple_test().expect("Verification failed");

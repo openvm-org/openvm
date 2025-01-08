@@ -78,7 +78,7 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
 
         let (instruction, rd) =
             rv32_rand_write_register_or_imm(&mut tester, b, c, c_imm, opcode as usize, &mut rng);
-        tester.execute(&mut chip, instruction);
+        tester.execute(&mut chip, &instruction);
 
         let (a, _, _) = run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
         assert_eq!(
@@ -155,7 +155,7 @@ fn run_rv32_shift_negative_test(
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 1]),
+        &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 1]),
     );
 
     let bit_shift = prank_vals

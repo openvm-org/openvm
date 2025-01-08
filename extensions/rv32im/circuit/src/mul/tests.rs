@@ -74,7 +74,7 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
             &mut rng,
         );
         instruction.e = F::ZERO;
-        tester.execute(&mut chip, instruction);
+        tester.execute(&mut chip, &instruction);
 
         let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
         assert_eq!(
@@ -138,7 +138,7 @@ fn run_rv32_mul_negative_test(
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(
+        &Instruction::from_usize(
             VmOpcode::from_usize(MulOpcode::MUL as usize),
             [0, 0, 0, 1, 0],
         ),
