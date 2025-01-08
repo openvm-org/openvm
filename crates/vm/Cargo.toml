@@ -27,6 +27,7 @@ enum_dispatch.workspace = true
 backtrace.workspace = true
 rand.workspace = true
 serde.workspace = true
+serde-big-array.workspace = true
 toml.workspace = true
 once_cell.workspace = true
 cfg-if.workspace = true

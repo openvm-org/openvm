@@ -12,6 +12,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 use crate::adapters::LoadStoreInstruction;
 
@@ -54,12 +56,16 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub write_data: [T; NUM_CELLS],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Serialize + DeserializeOwned")]
 pub struct LoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub opcode: Rv32LoadStoreOpcode,
     pub shift: u32,
+    #[serde(with = "BigArray")]
     pub read_data: [F; NUM_CELLS],
+    #[serde(with = "BigArray")]
     pub prev_data: [F; NUM_CELLS],
+    #[serde(with = "BigArray")]
     pub write_data: [F; NUM_CELLS],
 }
 

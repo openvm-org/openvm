@@ -37,6 +37,7 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 use super::{compose, RV32_REGISTER_NUM_LIMBS};
 use crate::adapters::RV32_CELL_BITS;
@@ -122,7 +123,8 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct Rv32LoadStoreReadRecord<F: Field> {
     pub rs1_record: RecordId,
     pub rs1_ptr: F,
@@ -136,7 +138,8 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
     pub shift_amount: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct Rv32LoadStoreWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     /// This will be a write to a register in case of Load and a write to RISC-V memory in case of Stores

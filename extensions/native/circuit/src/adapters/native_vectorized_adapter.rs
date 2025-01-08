@@ -24,6 +24,7 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -48,13 +49,13 @@ impl<F: PrimeField32, const N: usize> NativeVectorizedAdapterChip<F, N> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NativeVectorizedReadRecord<const N: usize> {
     pub b: RecordId,
     pub c: RecordId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NativeVectorizedWriteRecord<const N: usize> {
     pub from_state: ExecutionState<u32>,
     pub a: RecordId,

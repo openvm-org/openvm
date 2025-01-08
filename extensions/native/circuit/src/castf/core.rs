@@ -18,6 +18,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
+
 // LIMB_BITS is the size of the limbs in bits.
 pub(crate) const LIMB_BITS: usize = 8;
 // the final limb has only 6 bits
@@ -95,7 +97,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CastFRecord<F> {
     pub in_val: F,
     pub out_val: [u32; RV32_REGISTER_NUM_LIMBS],

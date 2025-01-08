@@ -26,6 +26,7 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 
@@ -53,14 +54,14 @@ impl<F: PrimeField32> Rv32MultAdapterChip<F> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Rv32MultReadRecord {
     /// Reads from operand registers
     pub rs1: RecordId,
     pub rs2: RecordId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Rv32MultWriteRecord {
     pub from_state: ExecutionState<u32>,
     /// Write to destination register

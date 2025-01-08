@@ -18,6 +18,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -134,10 +136,14 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationCoreChip<NUM_
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound = "T: Serialize + DeserializeOwned")]
 pub struct MultiplicationCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    #[serde(with = "BigArray")]
     pub a: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
     pub b: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
     pub c: [T; NUM_LIMBS],
 }
 

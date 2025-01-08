@@ -16,3 +16,4 @@ tracing = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 openvm-instructions-derive = { workspace = true }
 strum = { workspace = true }
+serde = { workspace = true, features = ["derive"] }

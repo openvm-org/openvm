@@ -28,6 +28,7 @@ eyre.workspace = true
 num-bigint.workspace = true
 num-integer.workspace = true
 serde = { workspace = true, features = ["derive", "std"] }
+serde-big-array.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

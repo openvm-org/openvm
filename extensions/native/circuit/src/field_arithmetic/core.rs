@@ -14,6 +14,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -101,7 +102,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FieldArithmeticRecord<F> {
     pub opcode: FieldArithmeticOpcode,
     pub a: F,

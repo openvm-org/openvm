@@ -21,6 +21,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -214,12 +216,16 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCoreChip<NUM_LIMBS, LIM
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MulHCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode: MulHOpcode,
+    #[serde(with = "BigArray")]
     pub a: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
     pub b: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
     pub c: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
     pub a_mul: [T; NUM_LIMBS],
     pub b_ext: T,
     pub c_ext: T,

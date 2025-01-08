@@ -17,6 +17,8 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 
 use crate::{
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
@@ -158,7 +160,10 @@ where
     }
 }
 
+#[serde_as]
+#[derive(Serialize, Deserialize)]
 pub struct FieldExpressionRecord {
+    #[serde_as(as = "Vec<DisplayFromStr>")]
     pub inputs: Vec<BigUint>,
     pub flags: Vec<bool>,
 }

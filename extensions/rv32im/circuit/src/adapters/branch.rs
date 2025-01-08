@@ -26,6 +26,7 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 
@@ -53,7 +54,7 @@ impl<F: PrimeField32> Rv32BranchAdapterChip<F> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Rv32BranchReadRecord {
     /// Read register value from address space d = 1
     pub rs1: RecordId,
@@ -61,7 +62,7 @@ pub struct Rv32BranchReadRecord {
     pub rs2: RecordId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Rv32BranchWriteRecord {
     pub from_state: ExecutionState<u32>,
 }

@@ -27,6 +27,7 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 
@@ -73,7 +74,7 @@ impl<F: PrimeField32> Rv32CondRdWriteAdapterChip<F> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32RdWriteWriteRecord {
     pub from_state: ExecutionState<u32>,
     pub rd_id: Option<RecordId>,

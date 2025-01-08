@@ -22,6 +22,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::Deserialize;
+use serde_with::serde_derive::Serialize;
 
 /// The number of limbs and limb bits are determined at runtime.
 #[derive(Clone)]
@@ -146,6 +148,7 @@ impl ModularMulDivCoreChip {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct ModularMulDivCoreRecord {
     pub x: BigUint,
     pub y: BigUint,

@@ -25,6 +25,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::adapters::{compose, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
@@ -46,6 +47,7 @@ pub struct Rv32JalrCoreCols<T> {
     pub imm_sign: T,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Rv32JalrCoreRecord<F> {
     pub imm: F,
     pub rs1_data: [F; RV32_REGISTER_NUM_LIMBS],

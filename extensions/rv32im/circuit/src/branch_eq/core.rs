@@ -17,6 +17,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -123,10 +125,12 @@ where
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BranchEqualCoreRecord<T, const NUM_LIMBS: usize> {
     pub opcode: BranchEqualOpcode,
+    #[serde(with = "BigArray")]
     pub a: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
     pub b: [T; NUM_LIMBS],
     pub cmp_result: T,
     pub imm: T,

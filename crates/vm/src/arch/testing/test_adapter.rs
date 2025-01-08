@@ -11,6 +11,7 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
@@ -46,7 +47,7 @@ impl<F> TestAdapterChip<F> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TestAdapterRecord<T> {
     pub from_pc: u32,
     pub operands: [T; 7],

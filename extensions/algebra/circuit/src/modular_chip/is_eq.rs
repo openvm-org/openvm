@@ -24,7 +24,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 // Given two numbers b and c, we want to prove that a) b == c or b != c, depending on
 // result of cmp_result and b) b, c < N for some modulus N that is passed into the AIR
 // at runtime (i.e. when chip is instantiated).
@@ -234,12 +235,15 @@ where
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModularIsEqualCoreRecord<T, const READ_LIMBS: usize> {
     pub is_setup: bool,
+    #[serde(with = "BigArray")]
     pub b: [T; READ_LIMBS],
+    #[serde(with = "BigArray")]
     pub c: [T; READ_LIMBS],
     pub cmp_result: T,
+    #[serde(with = "BigArray")]
     pub eq_marker: [T; READ_LIMBS],
     pub b_diff_idx: usize,
     pub c_diff_idx: usize,

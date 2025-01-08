@@ -37,6 +37,8 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
 /// This adapter reads from 2 pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers
@@ -106,7 +108,9 @@ impl<
     }
 }
 
-#[derive(Clone, Debug)]
+#[serde_as]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct Rv32VecHeapTwoReadsReadRecord<
     F: Field,
     const BLOCKS_PER_READ1: usize,
@@ -121,14 +125,17 @@ pub struct Rv32VecHeapTwoReadsReadRecord<
 
     pub rd_val: F,
 
+    #[serde_as(as = "[_; BLOCKS_PER_READ1]")]
     pub reads1: [RecordId; BLOCKS_PER_READ1],
+    #[serde_as(as = "[_; BLOCKS_PER_READ2]")]
     pub reads2: [RecordId; BLOCKS_PER_READ2],
 }
 
-#[derive(Clone, Debug)]
+#[serde_as]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Rv32VecHeapTwoReadsWriteRecord<const BLOCKS_PER_WRITE: usize, const WRITE_SIZE: usize> {
     pub from_state: ExecutionState<u32>,
-
+    #[serde_as(as = "[_; BLOCKS_PER_WRITE]")]
     pub writes: [RecordId; BLOCKS_PER_WRITE],
 }
 

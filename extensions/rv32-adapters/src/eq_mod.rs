@@ -37,6 +37,9 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
+use serde_with::serde_as;
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers
@@ -272,17 +275,20 @@ impl<
     }
 }
 
-#[derive(Clone, Debug)]
+#[serde_as]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Rv32IsEqualModReadRecord<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
 > {
+    #[serde(with = "BigArray")]
     pub rs: [RecordId; NUM_READS],
+    #[serde_as(as = "[[_; BLOCKS_PER_READ]; NUM_READS]")]
     pub reads: [[RecordId; BLOCKS_PER_READ]; NUM_READS],
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Rv32IsEqualModWriteRecord {
     pub from_state: ExecutionState<u32>,
     pub rd_id: RecordId,

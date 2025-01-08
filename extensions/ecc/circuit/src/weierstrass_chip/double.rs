@@ -25,6 +25,8 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 
 // We do not use FieldExpressionCoreAir because EcDouble needs to do special constraints for
 // its setup instruction.
@@ -174,9 +176,12 @@ impl EcDoubleCoreChip {
     }
 }
 
-#[derive(Clone)]
+#[serde_as]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct EcDoubleCoreRecord {
+    #[serde_as(as = "DisplayFromStr")]
     pub x: BigUint,
+    #[serde_as(as = "DisplayFromStr")]
     pub y: BigUint,
     pub is_double_flag: bool,
 }

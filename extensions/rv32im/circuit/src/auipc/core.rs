@@ -20,6 +20,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
@@ -125,7 +126,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32AuipcCoreRecord<F> {
     pub imm_limbs: [F; RV32_REGISTER_NUM_LIMBS - 1],
     pub pc_limbs: [F; RV32_REGISTER_NUM_LIMBS - 1],

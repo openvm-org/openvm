@@ -18,6 +18,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
 
 pub const BETA: usize = 11;
 pub const EXT_DEG: usize = 4;
@@ -129,7 +130,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FieldExtensionRecord<F> {
     pub opcode: FieldExtensionOpcode,
     pub x: [F; EXT_DEG],

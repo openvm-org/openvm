@@ -31,6 +31,7 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 use super::{compose, RV32_REGISTER_NUM_LIMBS};
 use crate::adapters::RV32_CELL_BITS;
@@ -65,7 +66,8 @@ impl<F: PrimeField32> Rv32HintStoreAdapterChip<F> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct Rv32HintStoreReadRecord<F: Field> {
     pub rs1_record: RecordId,
     pub rs1_ptr: F,
@@ -75,7 +77,7 @@ pub struct Rv32HintStoreReadRecord<F: Field> {
     pub mem_ptr_limbs: [u32; 2],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32HintStoreWriteRecord {
     pub from_state: ExecutionState<u32>,
     pub record_id: RecordId,
