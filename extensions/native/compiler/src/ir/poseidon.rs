@@ -145,6 +145,7 @@ impl<C: Config> Builder<C> {
                     element,
                 );
                 builder.assign(&address, address + C::N::ONE);
+                builder.assign(&idx, idx + C::N::ONE);
                 builder.cycle_tracker_end("poseidon2-hash-setup");
                 builder
                     .if_eq(idx, C::N::from_canonical_usize(HASH_RATE))
