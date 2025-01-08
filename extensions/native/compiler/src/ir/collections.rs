@@ -274,6 +274,42 @@ impl<C: Config> Builder<C> {
         Ref::from_ptr(ptr)
     }
 
+    pub fn iter_ptr_set<V: MemVariable<C>, Expr: Into<V::Expression>>(
+        &mut self,
+        slice: &Array<C, V>,
+        ptr: RVar<C::N>,
+        value: Expr,
+    ) {
+        match slice {
+            Array::Fixed(v) => {
+                if let RVar::Const(_) = ptr {
+                    let idx = ptr.value();
+                    let value = self.eval(value);
+                    v.borrow_mut()[idx] = Some(value);
+                } else {
+                    panic!("Cannot index into a fixed slice with a variable index")
+                }
+            }
+            Array::Dyn(_, _) => {
+                let value: V = self.eval(value);
+                self.store(
+                    Ptr {
+                        address: match ptr {
+                            RVar::Const(_) => unimplemented!(),
+                            RVar::Val(v) => v,
+                        },
+                    },
+                    MemIndex {
+                        index: 0.into(),
+                        offset: 0,
+                        size: V::size_of(),
+                    },
+                    value,
+                );
+            }
+        }
+    }
+
     pub fn set<V: MemVariable<C>, I: Into<RVar<C::N>>, Expr: Into<V::Expression>>(
         &mut self,
         slice: &Array<C, V>,

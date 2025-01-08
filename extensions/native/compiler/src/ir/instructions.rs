@@ -121,6 +121,14 @@ pub enum DslIr<C: Config> {
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
     For(RVar<C::N>, RVar<C::N>, C::N, Var<C::N>, TracedVec<DslIr<C>>),
 
+    ZipFor(
+        Vec<RVar<C::N>>,
+        Vec<RVar<C::N>>,
+        Vec<C::N>,
+        Vec<Var<C::N>>,
+        TracedVec<DslIr<C>>,
+    ),
+
     /// Executes an indefinite loop.
     Loop(TracedVec<DslIr<C>>),
     /// Executes an equal conditional branch with the parameters (lhs var, rhs var, then body, else body).

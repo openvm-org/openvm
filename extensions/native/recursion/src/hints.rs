@@ -127,10 +127,13 @@ impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         let len = builder.hint_var();
         let arr = builder.dyn_array(len);
-        builder.range(0, len).for_each(|i, builder| {
-            let hint = I::read(builder);
-            builder.set(&arr, i, hint);
-        });
+        builder
+            .zipped_iter(&vec![arr.clone()])
+            .for_each(|idx_vec, builder| {
+                let hint = I::read(builder);
+                let ptr = idx_vec[0];
+                builder.iter_ptr_set(&arr, ptr, hint);
+            });
         arr
     }
 
