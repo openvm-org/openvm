@@ -25,7 +25,7 @@ use openvm_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
@@ -312,6 +312,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn memory_image(&self) -> &MemoryImage<F> {
+        // TODO: just return in current form rather than converting
         &self.memory.data
     }
 
