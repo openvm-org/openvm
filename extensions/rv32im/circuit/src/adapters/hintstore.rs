@@ -52,6 +52,7 @@ impl<F: PrimeField32> Rv32HintStoreAdapterChip<F> {
         pointer_max_bits: usize,
         range_checker_chip: Arc<VariableRangeCheckerChip>,
     ) -> Self {
+        assert!(range_checker_chip.range_max_bits() >= 16);
         Self {
             air: Rv32HintStoreAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -72,7 +73,7 @@ pub struct Rv32HintStoreReadRecord<F: Field> {
 
     pub imm: F,
     pub imm_sign: bool,
-    pub mem_ptr_limbs: [F; 2],
+    pub mem_ptr_limbs: [u32; 2],
 }
 
 #[derive(Debug, Clone)]
@@ -249,7 +250,6 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         let Instruction { b, c, d, e, .. } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-        assert!(self.range_checker_chip.range_max_bits() >= 16);
 
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
         let rs1_val = compose(rs1_record.1);
@@ -260,12 +260,6 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         let ptr_val = rs1_val.wrapping_add(imm_extended);
         assert!(ptr_val < (1 << self.air.pointer_max_bits));
         let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
-        self.range_checker_chip
-            .add_count(mem_ptr_limbs[0], RV32_CELL_BITS * 2);
-        self.range_checker_chip.add_count(
-            mem_ptr_limbs[1],
-            self.air.pointer_max_bits - RV32_CELL_BITS * 2,
-        );
 
         Ok((
             [],
@@ -274,7 +268,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
                 rs1_ptr: b,
                 imm: c,
                 imm_sign: imm_sign == 1,
-                mem_ptr_limbs: mem_ptr_limbs.map(F::from_canonical_u32),
+                mem_ptr_limbs,
             },
         ))
     }
@@ -288,8 +282,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let ptr = read_record.mem_ptr_limbs[0]
-            + read_record.mem_ptr_limbs[1] * F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
-        let (write_record_id, _) = memory.write(instruction.e, ptr, output.writes[0]);
+            + read_record.mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
+        let (write_record_id, _) =
+            memory.write(instruction.e, F::from_canonical_u32(ptr), output.writes[0]);
 
         Ok((
             ExecutionState {
@@ -310,6 +305,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         write_record: Self::WriteRecord,
         memory: &OfflineMemory<F>,
     ) {
+        self.range_checker_chip
+            .add_count(read_record.mem_ptr_limbs[0], RV32_CELL_BITS * 2);
+        self.range_checker_chip.add_count(
+            read_record.mem_ptr_limbs[1],
+            self.air.pointer_max_bits - RV32_CELL_BITS * 2,
+        );
+
         let aux_cols_factory = memory.aux_cols_factory();
         let adapter_cols: &mut Rv32HintStoreAdapterCols<_> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
@@ -319,7 +321,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         adapter_cols.rs1_ptr = read_record.rs1_ptr;
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
-        adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs;
+        adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
 
         let rd = memory.record_by_id(write_record.record_id);
         adapter_cols.write_aux = aux_cols_factory.make_write_aux_cols(rd);

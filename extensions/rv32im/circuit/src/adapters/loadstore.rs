@@ -108,6 +108,7 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
         range_checker_chip: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
+        assert!(range_checker_chip.range_max_bits() >= 15);
         Self {
             air: Rv32LoadStoreAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -133,6 +134,7 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
     pub imm_sign: bool,
     pub mem_ptr_limbs: [u32; 2],
     pub mem_as: F,
+    pub shift_amount: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -351,7 +353,6 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
-        assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
@@ -370,14 +371,6 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         );
 
         let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
-        self.range_checker_chip.add_count(
-            (mem_ptr_limbs[0] - shift_amount) / 4,
-            RV32_CELL_BITS * 2 - 2,
-        );
-        self.range_checker_chip.add_count(
-            mem_ptr_limbs[1],
-            self.air.pointer_max_bits - RV32_CELL_BITS * 2,
-        );
 
         let ptr_val = ptr_val - shift_amount;
         let read_record = match local_opcode {
@@ -408,6 +401,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                 read: read_record.0,
                 imm: c,
                 imm_sign: imm_sign == 1,
+                shift_amount,
                 mem_ptr_limbs,
                 mem_as: e,
             },
@@ -457,6 +451,15 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         write_record: Self::WriteRecord,
         memory: &OfflineMemory<F>,
     ) {
+        self.range_checker_chip.add_count(
+            (read_record.mem_ptr_limbs[0] - read_record.shift_amount) / 4,
+            RV32_CELL_BITS * 2 - 2,
+        );
+        self.range_checker_chip.add_count(
+            read_record.mem_ptr_limbs[1],
+            self.air.pointer_max_bits - RV32_CELL_BITS * 2,
+        );
+
         let aux_cols_factory = memory.aux_cols_factory();
         let adapter_cols: &mut Rv32LoadStoreAdapterCols<_> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);

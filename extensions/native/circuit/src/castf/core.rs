@@ -98,7 +98,7 @@ where
 #[derive(Debug)]
 pub struct CastFRecord<F> {
     pub in_val: F,
-    pub out_val: [F; RV32_REGISTER_NUM_LIMBS],
+    pub out_val: [u32; RV32_REGISTER_NUM_LIMBS],
 }
 
 #[derive(Debug)]
@@ -142,15 +142,7 @@ where
         );
 
         let y = reads.into()[0][0];
-
         let x = CastF::solve(y.as_canonical_u32());
-        for (i, limb) in x.iter().enumerate() {
-            if i == 3 {
-                self.range_checker_chip.add_count(*limb, FINAL_LIMB_BITS);
-            } else {
-                self.range_checker_chip.add_count(*limb, LIMB_BITS);
-            }
-        }
 
         let output = AdapterRuntimeContext {
             to_pc: None,
@@ -159,7 +151,7 @@ where
 
         let record = CastFRecord {
             in_val: y,
-            out_val: x.map(F::from_canonical_u32),
+            out_val: x,
         };
 
         Ok((output, record))
@@ -170,9 +162,17 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        for (i, limb) in record.out_val.iter().enumerate() {
+            if i == 3 {
+                self.range_checker_chip.add_count(*limb, FINAL_LIMB_BITS);
+            } else {
+                self.range_checker_chip.add_count(*limb, LIMB_BITS);
+            }
+        }
+
         let cols: &mut CastFCoreCols<F> = row_slice.borrow_mut();
         cols.in_val = record.in_val;
-        cols.out_val = record.out_val;
+        cols.out_val = record.out_val.map(F::from_canonical_u32);
         cols.is_valid = F::ONE;
     }
 

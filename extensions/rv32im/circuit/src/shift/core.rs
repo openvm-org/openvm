@@ -236,7 +236,7 @@ pub struct ShiftCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
     pub c: [T; NUM_LIMBS],
-    pub bit_shift_carry: [T; NUM_LIMBS],
+    pub bit_shift_carry: [u32; NUM_LIMBS],
     pub bit_shift: usize,
     pub limb_shift: usize,
     pub b_sign: T,
@@ -304,18 +304,9 @@ where
                 .request_xor(b[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
         }
 
-        let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
-        self.range_checker_chip.add_count(
-            (((c[0] as usize) - bit_shift - limb_shift * LIMB_BITS) >> num_bits_log) as u32,
-            LIMB_BITS - num_bits_log as usize,
-        );
-
         for i in 0..(NUM_LIMBS / 2) {
             self.bitwise_lookup_chip
                 .request_range(a[i * 2], a[i * 2 + 1]);
-        }
-        for carry_val in bit_shift_carry {
-            self.range_checker_chip.add_count(carry_val, bit_shift);
         }
 
         let output = AdapterRuntimeContext::without_pc([a.map(F::from_canonical_u32)]);
@@ -324,7 +315,7 @@ where
             a: a.map(F::from_canonical_u32),
             b: data[0],
             c: data[1],
-            bit_shift_carry: bit_shift_carry.map(F::from_canonical_u32),
+            bit_shift_carry,
             bit_shift,
             limb_shift,
             b_sign: F::from_canonical_u32(b_sign),
@@ -338,6 +329,20 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        for carry_val in record.bit_shift_carry {
+            self.range_checker_chip
+                .add_count(carry_val, record.bit_shift);
+        }
+
+        let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
+        self.range_checker_chip.add_count(
+            (((record.c[0].as_canonical_u32() as usize)
+                - record.bit_shift
+                - record.limb_shift * LIMB_BITS)
+                >> num_bits_log) as u32,
+            LIMB_BITS - num_bits_log as usize,
+        );
+
         let row_slice: &mut ShiftCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
         row_slice.a = record.a;
         row_slice.b = record.b;
@@ -353,7 +358,7 @@ where
         row_slice.b_sign = record.b_sign;
         row_slice.bit_shift_marker = array::from_fn(|i| F::from_bool(i == record.bit_shift));
         row_slice.limb_shift_marker = array::from_fn(|i| F::from_bool(i == record.limb_shift));
-        row_slice.bit_shift_carry = record.bit_shift_carry;
+        row_slice.bit_shift_carry = record.bit_shift_carry.map(F::from_canonical_u32);
         row_slice.opcode_sll_flag = F::from_bool(record.opcode == ShiftOpcode::SLL);
         row_slice.opcode_srl_flag = F::from_bool(record.opcode == ShiftOpcode::SRL);
         row_slice.opcode_sra_flag = F::from_bool(record.opcode == ShiftOpcode::SRA);
