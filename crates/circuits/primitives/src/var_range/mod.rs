@@ -94,7 +94,6 @@ impl<AB: InteractionBuilder + PairBuilder> Air<AB> for VariableRangeCheckerAir {
     }
 }
 
-#[derive(Debug)]
 pub struct VariableRangeCheckerChip {
     pub air: VariableRangeCheckerAir,
     count: Vec<AtomicU32>,

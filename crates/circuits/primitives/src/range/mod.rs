@@ -79,7 +79,6 @@ impl<AB: InteractionBuilder + PairBuilder> Air<AB> for RangeCheckerAir {
     }
 }
 
-#[derive(Debug)]
 pub struct RangeCheckerChip {
     pub air: RangeCheckerAir,
     count: Vec<AtomicU32>,

@@ -101,7 +101,6 @@ pub struct CastFRecord<F> {
     pub out_val: [F; RV32_REGISTER_NUM_LIMBS],
 }
 
-#[derive(Debug)]
 pub struct CastFCoreChip {
     pub air: CastFCoreAir,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,

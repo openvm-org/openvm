@@ -82,7 +82,6 @@ impl<AB: InteractionBuilder> Air<AB> for RangeCheckerGateAir {
 /// [0, MAX). In the trace, there is a counter column and a multiplicity
 /// column. The counter column is generated using a gate, as opposed to
 /// the other RangeCheckerChip.
-#[derive(Debug)]
 pub struct RangeCheckerGateChip {
     pub air: RangeCheckerGateAir,
     pub count: Vec<AtomicU32>,

@@ -165,7 +165,6 @@ pub struct BaseAluCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> 
     pub c: [T; NUM_LIMBS],
 }
 
-#[derive(Debug)]
 pub struct BaseAluCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,

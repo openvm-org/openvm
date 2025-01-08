@@ -46,7 +46,6 @@ use openvm_stark_backend::{
 /// * NOTE that the two reads can read different numbers of blocks.
 /// * Writes take the form of `BLOCKS_PER_WRITE` consecutive writes of
 ///   size `WRITE_SIZE` to the heap, starting from the address in `rd`.
-#[derive(Debug)]
 pub struct Rv32VecHeapTwoReadsAdapterChip<
     F: Field,
     const BLOCKS_PER_READ1: usize,

@@ -176,7 +176,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct MulHCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: MulHCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,

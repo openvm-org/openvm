@@ -187,7 +187,6 @@ pub struct BranchLessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
     pub diff_idx: usize,
 }
 
-#[derive(Debug)]
 pub struct BranchLessThanCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,

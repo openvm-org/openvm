@@ -8,7 +8,6 @@ use crate::system::memory::{
 };
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
 pub enum MemoryInterface<F> {
     Volatile {
         boundary_chip: VolatileBoundaryChip<F>,

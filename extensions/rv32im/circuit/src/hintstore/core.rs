@@ -91,7 +91,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct Rv32HintStoreCoreChip<F: Field> {
     pub air: Rv32HintStoreCoreAir,
     pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,

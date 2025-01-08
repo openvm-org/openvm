@@ -69,7 +69,6 @@ pub struct JalRecord<F> {
     pub imm: F,
 }
 
-#[derive(Debug)]
 pub struct JalCoreChip {
     pub air: JalCoreAir,
 }

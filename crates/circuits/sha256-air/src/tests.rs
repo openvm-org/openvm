@@ -44,7 +44,6 @@ impl<AB: InteractionBuilder> Air<AB> for Sha256TestAir {
 }
 
 // A wrapper Chip purely for testing purposes
-#[derive(Debug)]
 pub struct Sha256TestChip {
     pub air: Sha256TestAir,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,

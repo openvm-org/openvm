@@ -137,7 +137,6 @@ pub struct FieldExtensionRecord<F> {
     pub z: [F; EXT_DEG],
 }
 
-#[derive(Debug)]
 pub struct FieldExtensionCoreChip {
     pub air: FieldExtensionCoreAir,
 }

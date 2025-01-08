@@ -33,7 +33,6 @@ pub struct MemoryRecord<T> {
     pub prev_data: Option<Vec<T>>,
 }
 
-#[derive(Debug)]
 pub struct OfflineMemory<F> {
     block_data: FxHashMap<Address, BlockData>,
     data: FxHashMap<Address, F>,

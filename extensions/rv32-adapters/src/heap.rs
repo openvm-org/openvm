@@ -102,7 +102,6 @@ impl<
     }
 }
 
-#[derive(Debug)]
 pub struct Rv32HeapAdapterChip<
     F: Field,
     const NUM_READS: usize,

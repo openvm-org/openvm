@@ -84,7 +84,7 @@ pub type TimestampedEquipartition<F, const N: usize> =
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
 pub type Equipartition<F, const N: usize> = BTreeMap<(u32, u32), [F; N]>;
 
-#[derive(Debug, Getters)]
+#[derive(Getters)]
 pub struct MemoryController<F> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
@@ -691,7 +691,6 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 }
 
-#[derive(Clone, Debug)]
 pub struct MemoryAuxColsFactory<T> {
     pub(crate) range_checker: Arc<VariableRangeCheckerChip>,
     pub(crate) timestamp_lt_air: AssertLtSubAir,

@@ -103,7 +103,6 @@ impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
 // for x ^ y and range check. Interactions are of form [x, y, z] where z is either x ^ y for
 // XOR or 0 for range check.
 
-#[derive(Debug)]
 pub struct BitwiseOperationLookupChip<const NUM_BITS: usize> {
     pub air: BitwiseOperationLookupAir<NUM_BITS>,
     count_range: Vec<AtomicU32>,

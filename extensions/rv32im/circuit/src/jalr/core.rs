@@ -170,7 +170,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct Rv32JalrCoreChip {
     pub air: Rv32JalrCoreAir,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,

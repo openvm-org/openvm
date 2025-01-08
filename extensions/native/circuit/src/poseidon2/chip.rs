@@ -24,7 +24,6 @@ use super::{
     NATIVE_POSEIDON2_WIDTH,
 };
 
-#[derive(Debug)]
 pub struct NativePoseidon2BaseChip<F: Field, const SBOX_REGISTERS: usize> {
     pub air: Arc<NativePoseidon2Air<F, SBOX_REGISTERS>>,
     pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,

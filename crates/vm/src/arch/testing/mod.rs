@@ -61,7 +61,6 @@ pub const MEMORY_MERKLE_BUS: usize = 12;
 
 const RANGE_CHECKER_BUS: usize = 4;
 
-#[derive(Debug)]
 pub struct VmChipTestBuilder<F: PrimeField32> {
     pub memory: MemoryTester<F>,
     pub execution: ExecutionTester<F>,
@@ -300,7 +299,7 @@ where
             self = self.load(memory_tester); // dummy memory interactions
             {
                 let air_proof_inputs = Rc::try_unwrap(memory_controller)
-                    .unwrap()
+                    .unwrap_or_else(|_| panic!("Memory controller was not dropped"))
                     .into_inner()
                     .generate_air_proof_inputs();
                 self.air_proof_inputs.extend(

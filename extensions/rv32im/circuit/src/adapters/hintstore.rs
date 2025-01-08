@@ -37,7 +37,6 @@ use crate::adapters::RV32_CELL_BITS;
 
 /// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
 /// It writes to the memory at the intermediate pointer.
-#[derive(Debug)]
 pub struct Rv32HintStoreAdapterChip<F: Field> {
     pub air: Rv32HintStoreAdapterAir,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
