@@ -2,7 +2,7 @@ use std::{collections::HashSet, iter, sync::Arc};
 
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_stark_backend::{
-    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, prover::types::AirProofInput, Chip,
+    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, prover::types::AirProofInput, Chip,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},

@@ -11,7 +11,7 @@ use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpr};
 use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::{EcAddNeChip, EcDoubleChip};
@@ -92,14 +92,16 @@ fn test_add_ne() {
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
+        tester.address_bits(),
         bitwise_chip.clone(),
     );
     let mut chip = EcAddNeChip::new(
         adapter,
-        tester.memory_controller(),
         config,
         Rv32WeierstrassOpcode::default_offset(),
+        tester.range_checker(),
+        tester.offline_memory_mutex_arc(),
     );
     assert_eq!(chip.0.core.expr().builder.num_variables, 3); // lambda, x3, y3
 
@@ -164,7 +166,8 @@ fn test_double() {
     let adapter = Rv32VecHeapAdapterChip::<F, 1, 2, 2, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
+        tester.address_bits(),
         bitwise_chip.clone(),
     );
 
@@ -176,10 +179,11 @@ fn test_double() {
 
     let mut chip = EcDoubleChip::new(
         adapter,
-        tester.memory_controller(),
+        tester.memory_controller().borrow().range_checker.clone(),
         config,
         Rv32WeierstrassOpcode::default_offset(),
         BigUint::zero(),
+        tester.offline_memory_mutex_arc(),
     );
     assert_eq!(chip.0.core.air.expr.builder.num_variables, 3); // lambda, x3, y3
 
@@ -231,7 +235,8 @@ fn test_p256_double() {
     let adapter = Rv32VecHeapAdapterChip::<F, 1, 2, 2, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
+        tester.memory_bridge(),
+        tester.address_bits(),
         bitwise_chip.clone(),
     );
 
@@ -253,10 +258,11 @@ fn test_p256_double() {
 
     let mut chip = EcDoubleChip::new(
         adapter,
-        tester.memory_controller(),
+        tester.memory_controller().borrow().range_checker.clone(),
         config,
         Rv32WeierstrassOpcode::default_offset(),
         a.clone(),
+        tester.offline_memory_mutex_arc(),
     );
     assert_eq!(chip.0.core.air.expr.builder.num_variables, 3); // lambda, x3, y3
 

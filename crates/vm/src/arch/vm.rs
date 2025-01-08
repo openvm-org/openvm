@@ -20,13 +20,13 @@ use crate::{
     arch::segment::ExecutionSegment,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
+        memory::{merkle::MemoryMerklePvs, MemoryImage, CHUNK},
         program::trace::VmCommittedExe,
     },
 };
 
 /// VM memory state for continuations.
-pub type VmMemoryState<F> = Equipartition<F, CHUNK>;
+pub type VmMemoryState<F> = MemoryImage<F>;
 
 #[derive(Clone, Default, Debug)]
 pub struct Streams<F> {
@@ -117,7 +117,7 @@ where
             &self.config,
             exe.program.clone(),
             streams,
-            Some(memory_image_to_equipartition(exe.init_memory)),
+            Some(exe.init_memory.into_iter().collect()),
             exe.fn_bounds.clone(),
         );
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
@@ -233,7 +233,6 @@ where
         let mut segments = self.execute_segments(exe, input)?;
         let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
 
-        #[allow(unused_variables)]
         Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
@@ -293,13 +292,17 @@ where
         self.overridden_heights = Some(overridden_heights);
     }
 
-    /// Executes a program and returns the public values. None means the public value is not set.
-    pub fn execute(
+    /// Executes a program, compute the trace heights, and returns the public values.
+    pub fn execute_and_compute_heights(
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
-        let segment = self.execute_impl(exe.into(), input)?;
+        let segment = {
+            let mut segment = self.execute_impl(exe.into(), input)?;
+            segment.chip_complex.finalize_memory();
+            segment
+        };
         let air_heights = segment.chip_complex.current_trace_heights();
         let internal_heights = segment.chip_complex.get_internal_trace_heights();
         let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {

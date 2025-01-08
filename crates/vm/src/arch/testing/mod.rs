@@ -1,4 +1,8 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_instructions::instruction::Instruction;
@@ -27,7 +31,7 @@ use tracing::Level;
 use crate::{
     arch::{ExecutionState, MemoryConfig},
     system::{
-        memory::{offline_checker::MemoryBus, MemoryController},
+        memory::{offline_checker::MemoryBus, MemoryController, OfflineMemory},
         program::ProgramBus,
     },
 };
@@ -41,7 +45,7 @@ pub use memory::MemoryTester;
 pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
-use crate::system::{memory::MemoryControllerRef, poseidon2::Poseidon2PeripheryChip};
+use crate::system::{memory::offline_checker::MemoryBridge, poseidon2::Poseidon2PeripheryChip};
 
 pub const EXECUTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
@@ -66,7 +70,7 @@ pub struct VmChipTestBuilder<F: PrimeField32> {
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn new(
-        memory_controller: MemoryControllerRef<F>,
+        memory_controller: Rc<RefCell<MemoryController<F>>>,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         rng: StdRng,
@@ -105,7 +109,11 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         tracing::debug!(?initial_state.timestamp);
 
         let final_state = executor
-            .execute(instruction.clone(), initial_state)
+            .execute(
+                &mut *self.memory.controller.borrow_mut(),
+                instruction.clone(),
+                initial_state,
+            )
             .expect("Expected the execution not to fail");
 
         self.program.execute(instruction, &initial_state);
@@ -156,8 +164,24 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.bus
     }
 
-    pub fn memory_controller(&self) -> MemoryControllerRef<F> {
+    pub fn memory_controller(&self) -> Rc<RefCell<MemoryController<F>>> {
         self.memory.controller.clone()
+    }
+
+    pub fn range_checker(&self) -> Arc<VariableRangeCheckerChip> {
+        self.memory.controller.borrow().range_checker.clone()
+    }
+
+    pub fn memory_bridge(&self) -> MemoryBridge {
+        self.memory.controller.borrow().memory_bridge()
+    }
+
+    pub fn address_bits(&self) -> usize {
+        self.memory.controller.borrow().mem_config.pointer_max_bits
+    }
+
+    pub fn offline_memory_mutex_arc(&self) -> Arc<Mutex<OfflineMemory<F>>> {
+        self.memory_controller().borrow().offline_memory().clone()
     }
 
     pub fn get_default_register(&mut self, increment: usize) -> usize {

@@ -2,7 +2,7 @@ use std::ops::RangeInclusive;
 
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_field::{AbstractField, Field},
+    p3_field::{Field, FieldAlgebra},
 };
 
 use crate::SubAir;

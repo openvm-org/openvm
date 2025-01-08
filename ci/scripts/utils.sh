@@ -60,6 +60,7 @@ add_metadata() {
             flamegraph_url=https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${CURRENT_SHA}/${filename}
             echo "[![]($flamegraph_url)]($flamegraph_url)" >> $result_path
         done
+        rm -f ${repo_root}/.bench_metrics/flamegraphs/*.svg
         echo "" >> $result_path
         echo "</details>" >> $result_path
         echo "" >> $result_path

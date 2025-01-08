@@ -10,16 +10,13 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
+    ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
-    system::{
-        memory::{Equipartition, CHUNK},
-        poseidon2::Poseidon2PeripheryChip,
-    },
+    system::memory::MemoryImage,
 };
 
 /// Check segment every 100 instructions.
@@ -31,7 +28,8 @@ where
     VC: VmConfig<F>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
-    pub final_memory: Option<Equipartition<F, CHUNK>>,
+    pub final_memory: Option<MemoryImage<F>>,
+
     pub since_last_segment_check: usize,
 
     /// Air names for debug purposes only.
@@ -52,7 +50,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         config: &VC,
         program: Program<F>,
         init_streams: Streams<F>,
-        initial_memory: Option<Equipartition<F, CHUNK>>,
+        initial_memory: Option<MemoryImage<F>>,
         #[allow(unused_variables)] fn_bounds: FnBounds,
     ) -> Self {
         let mut chip_complex = config.create_chip_complex().unwrap();
@@ -65,10 +63,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         chip_complex.set_program(program);
 
         if let Some(initial_memory) = initial_memory {
-            chip_complex
-                .memory_controller()
-                .borrow_mut()
-                .set_initial_memory(initial_memory);
+            chip_complex.set_initial_memory(initial_memory);
         }
         let air_names = chip_complex.air_names();
 
@@ -101,7 +96,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         &mut self,
         mut pc: u32,
     ) -> Result<ExecutionSegmentState, ExecutionError> {
-        let mut timestamp = self.chip_complex.memory_controller().borrow().timestamp();
+        let mut timestamp = self.chip_complex.memory_controller().timestamp();
         let mut prev_backtrace: Option<Backtrace> = None;
 
         self.chip_complex
@@ -169,9 +164,11 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             }
             prev_backtrace = trace;
 
+            let memory_controller = &mut self.chip_complex.base.memory_controller;
             if let Some(executor) = self.chip_complex.inventory.get_mut_executor(&opcode) {
                 let next_state = InstructionExecutor::execute(
                     executor,
+                    memory_controller,
                     instruction,
                     ExecutionState::new(pc, timestamp),
                 )?;
@@ -192,30 +189,13 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 break;
             }
         }
-        // Finalize memory.
-        {
-            // Need some partial borrows, so code is ugly:
-            let mut memory_controller = self.chip_complex.base.memory_controller.borrow_mut();
-            self.final_memory = if self.system_config().continuation_enabled {
-                let chip = self
-                    .chip_complex
-                    .inventory
-                    .periphery
-                    .get_mut(
-                        VmChipComplex::<F, VC::Executor, VC::Periphery>::POSEIDON2_PERIPHERY_IDX,
-                    )
-                    .expect("Poseidon2 chip required for persistent memory");
-                let hasher: &mut Poseidon2PeripheryChip<F> = chip
-                    .as_any_kind_mut()
-                    .downcast_mut()
-                    .expect("Poseidon2 chip required for persistent memory");
-                memory_controller.finalize(Some(hasher))
-            } else {
-                memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<F>>)
-            };
-        }
-        #[cfg(feature = "bench-metrics")]
-        self.finalize_metrics();
+        self.final_memory = Some(
+            self.chip_complex
+                .base
+                .memory_controller
+                .memory_image()
+                .clone(),
+        );
 
         Ok(ExecutionSegmentState {
             pc,
@@ -225,7 +205,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
 
     /// Generate ProofInput to prove the segment. Should be called after ::execute
     pub fn generate_proof_input<SC: StarkGenericConfig>(
-        self,
+        #[allow(unused_mut)] mut self,
         cached_program: Option<CommittedTraceData<SC>>,
     ) -> ProofInput<SC>
     where
@@ -234,7 +214,11 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         VC::Periphery: Chip<SC>,
     {
         metrics_span("trace_gen_time_ms", || {
-            self.chip_complex.generate_proof_input(cached_program)
+            self.chip_complex.generate_proof_input(
+                cached_program,
+                #[cfg(feature = "bench-metrics")]
+                &mut self.metrics,
+            )
         })
     }
 

@@ -75,6 +75,13 @@ impl<F> AccessAdapterInventory<F> {
         debug_assert!(chip.n() == n);
         chip.add_record(record);
     }
+
+    pub fn extend_records(&mut self, records: Vec<AccessAdapterRecord<F>>) {
+        for record in records {
+            self.add_record(record);
+        }
+    }
+
     pub fn get_heights(&self) -> Vec<usize> {
         self.chips
             .iter()

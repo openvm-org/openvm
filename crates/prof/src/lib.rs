@@ -108,6 +108,10 @@ impl MetricDb {
         sorted_keys.sort();
 
         for label_keys in sorted_keys {
+            if label_keys.contains(&"cycle_tracker_span".to_string()) {
+                // Skip cycle_tracker_span as it is too long for markdown and visualized in flamegraphs
+                continue;
+            }
             let metrics_dict = &self.dict_by_label_types[&label_keys];
             let mut metric_names: Vec<String> = metrics_dict
                 .values()

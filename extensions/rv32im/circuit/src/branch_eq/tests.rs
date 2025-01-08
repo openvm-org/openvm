@@ -9,7 +9,7 @@ use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcod
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -81,10 +81,10 @@ fn run_rv32_branch_eq_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         Rv32BranchAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         BranchEqualCoreChip::new(0, 4),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     for _ in 0..num_ops {
@@ -140,7 +140,7 @@ fn run_rv32_beq_negative_test(
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
         BranchEqualCoreChip::new(0, 4),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(

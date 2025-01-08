@@ -8,7 +8,7 @@ use openvm_native_recursion::{
 };
 use openvm_stark_sdk::{
     config::FriParameters,
-    openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField},
+    openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, p3_field::FieldAlgebra},
 };
 
 use crate::{

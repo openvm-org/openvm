@@ -1,7 +1,7 @@
 use openvm_native_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
 use openvm_stark_backend::{
     p3_commit::TwoAdicMultiplicativeCoset,
-    p3_field::{AbstractField, TwoAdicField},
+    p3_field::{FieldAlgebra, TwoAdicField},
 };
 use openvm_stark_sdk::config::FriParameters;
 
@@ -30,6 +30,7 @@ pub fn const_fri_config<C: Config>(
     FriConfigVariable {
         log_blowup: params.log_blowup,
         blowup: 1 << params.log_blowup,
+        log_final_poly_len: params.log_final_poly_len,
         num_queries: params.num_queries,
         proof_of_work_bits: params.proof_of_work_bits,
         subgroups,

@@ -15,7 +15,7 @@
 // use itertools::Itertools;
 // use openvm_stark_backend::p3_air::{Air, BaseAir};
 // use openvm_stark_sdk::p3_baby_bear::BabyBear;
-// use openvm_stark_backend::p3_field::AbstractField;
+// use openvm_stark_backend::p3_field::FieldAlgebra;
 // use openvm_stark_backend::p3_matrix::{dense::RowMajorMatrix, Matrix};
 // use openvm_stark_backend::p3_util::log2_ceil_usize;
 // use rand::{rngs::StdRng, SeedableRng};

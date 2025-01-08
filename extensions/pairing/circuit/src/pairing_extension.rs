@@ -102,7 +102,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -115,6 +115,9 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
+        let range_checker = builder.system_base().range_checker_chip.clone();
+        let offline_memory = builder.system_base().offline_memory();
+        let address_bits = builder.system_config().memory_config.pointer_max_bits;
         for curve in self.supported_curves.iter() {
             let pairing_idx = *curve as usize;
             let pairing_class_offset =
@@ -131,12 +134,14 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapAdapterChip::<F, 1, 4, 8, 32, 32>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bn_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::MillerDoubleStepRv32_32(miller_double),
@@ -148,12 +153,14 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapAdapterChip::<F, 2, 4, 12, 32, 32>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bn_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::MillerDoubleAndAddStepRv32_32(
@@ -168,12 +175,14 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapTwoReadsAdapterChip::<F, 4, 2, 4, 32, 32>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bn_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EvaluateLineRv32_32(eval_line),
@@ -185,13 +194,15 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapAdapterChip::<F, 2, 4, 10, 32, 32>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
+                        range_checker.clone(),
                         bn_config.clone(),
                         curve.xi(),
                         pairing_class_offset,
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EcLineMul013By013(mul013),
@@ -203,13 +214,15 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapTwoReadsAdapterChip::<F, 12, 10, 12, 32, 32>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bn_config.clone(),
                         curve.xi(),
                         pairing_class_offset,
+                        range_checker.clone(),
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EcLineMulBy01234(mul01234),
@@ -221,13 +234,15 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapAdapterChip::<F, 2, 12, 12, 32, 32>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bn_config.clone(),
                         curve.xi(),
                         fp12_class_offset,
+                        range_checker.clone(),
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::Fp12MulRv32_32(fp12_mul),
@@ -246,12 +261,14 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapAdapterChip::<F, 1, 12, 24, 16, 16>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bls_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::MillerDoubleStepRv32_48(miller_double),
@@ -263,12 +280,14 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapAdapterChip::<F, 2, 12, 36, 16, 16>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bls_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::MillerDoubleAndAddStepRv32_48(
@@ -283,12 +302,14 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapTwoReadsAdapterChip::<F, 12, 6, 12, 16, 16>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bls_config.clone(),
                         pairing_class_offset,
+                        range_checker.clone(),
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EvaluateLineRv32_48(eval_line),
@@ -300,13 +321,15 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapAdapterChip::<F, 2, 12, 30, 16, 16>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
+                        range_checker.clone(),
                         bls_config.clone(),
                         curve.xi(),
                         pairing_class_offset,
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EcLineMul023By023(mul023),
@@ -318,13 +341,15 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapTwoReadsAdapterChip::<F, 36, 30, 36, 16, 16>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
+                        range_checker.clone(),
                         bls_config.clone(),
                         curve.xi(),
                         pairing_class_offset,
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EcLineMulBy02345(mul02345),
@@ -336,13 +361,15 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         Rv32VecHeapAdapterChip::<F, 2, 36, 36, 16, 16>::new(
                             execution_bus,
                             program_bus,
-                            memory_controller.clone(),
+                            memory_bridge,
+                            address_bits,
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bls_config.clone(),
                         curve.xi(),
                         fp12_class_offset,
+                        range_checker.clone(),
+                        offline_memory.clone(),
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::Fp12MulRv32_48(fp12_mul),

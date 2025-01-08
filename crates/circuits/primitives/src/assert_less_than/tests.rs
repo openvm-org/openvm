@@ -7,7 +7,7 @@ use derive_new::new;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
-    p3_field::{AbstractField, Field},
+    p3_field::{Field, FieldAlgebra},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -191,7 +191,7 @@ fn test_assert_less_than_negative_2() {
     let range_trace = range_checker.generate_trace();
 
     // Make the trace invalid
-    trace.values[2] = AbstractField::from_canonical_u64(1 << decomp as u64);
+    trace.values[2] = FieldAlgebra::from_canonical_u64(1 << decomp as u64);
 
     disable_debug_builder();
     assert_eq!(

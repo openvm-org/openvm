@@ -97,18 +97,19 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         let SystemPort {
             execution_bus,
             program_bus,
-            memory_controller,
+            memory_bridge,
         } = builder.system_port();
+        let offline_memory = builder.system_base().offline_memory();
 
         let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
             NativeLoadStoreAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller.clone(),
+                memory_bridge,
                 NativeLoadStoreOpcode::default_offset(),
             ),
             NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset()),
-            memory_controller.clone(),
+            offline_memory.clone(),
         );
         load_store_chip.core.set_streams(builder.streams().clone());
 
@@ -118,13 +119,9 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         )?;
 
         let branch_equal_chip = NativeBranchEqChip::new(
-            BranchNativeAdapterChip::<_>::new(
-                execution_bus,
-                program_bus,
-                memory_controller.clone(),
-            ),
+            BranchNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_bridge),
             BranchEqualCoreChip::new(NativeBranchEqualOpcode::default_offset(), DEFAULT_PC_STEP),
-            memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             branch_equal_chip,
@@ -132,9 +129,9 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         )?;
 
         let jal_chip = NativeJalChip::new(
-            JalNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_controller.clone()),
+            JalNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_bridge),
             JalCoreChip::new(NativeJalOpcode::default_offset()),
-            memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             jal_chip,
@@ -142,13 +139,9 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         )?;
 
         let field_arithmetic_chip = FieldArithmeticChip::new(
-            NativeAdapterChip::<F, 2, 1>::new(
-                execution_bus,
-                program_bus,
-                memory_controller.clone(),
-            ),
+            NativeAdapterChip::<F, 2, 1>::new(execution_bus, program_bus, memory_bridge),
             FieldArithmeticCoreChip::new(FieldArithmeticOpcode::default_offset()),
-            memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             field_arithmetic_chip,
@@ -156,9 +149,9 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         )?;
 
         let field_extension_chip = FieldExtensionChip::new(
-            NativeVectorizedAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
+            NativeVectorizedAdapterChip::new(execution_bus, program_bus, memory_bridge),
             FieldExtensionCoreChip::new(FieldExtensionOpcode::default_offset()),
-            memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             field_extension_chip,
@@ -166,10 +159,11 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         )?;
 
         let fri_reduced_opening_chip = FriReducedOpeningChip::new(
-            memory_controller.clone(),
             execution_bus,
             program_bus,
+            memory_bridge,
             FriOpcode::default_offset(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             fri_reduced_opening_chip,
@@ -179,10 +173,11 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         let poseidon2_chip = NativePoseidon2Chip::new(
             execution_bus,
             program_bus,
-            memory_controller.clone(),
+            memory_bridge,
             Poseidon2Config::default(),
             Poseidon2Opcode::default_offset(),
             builder.system_config().max_constraint_degree,
+            offline_memory.clone(),
         );
         inventory.add_executor(
             poseidon2_chip,

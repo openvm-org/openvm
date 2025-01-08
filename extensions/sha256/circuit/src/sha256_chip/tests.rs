@@ -10,7 +10,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, UsizeOpcode, VmOpcode};
 use openvm_sha256_air::get_random_message;
 use openvm_sha256_transpiler::Rv32Sha256Opcode::{self, *};
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
@@ -85,11 +85,13 @@ fn rand_sha256_test() {
         SystemPort {
             execution_bus: tester.execution_bus(),
             program_bus: tester.program_bus(),
-            memory_controller: tester.memory_controller(),
+            memory_bridge: tester.memory_bridge(),
         },
+        tester.address_bits(),
         bitwise_chip.clone(),
         BUS_IDX,
         Rv32Sha256Opcode::default_offset(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let num_tests: usize = 3;
@@ -118,11 +120,13 @@ fn execute_roundtrip_sanity_test() {
         SystemPort {
             execution_bus: tester.execution_bus(),
             program_bus: tester.program_bus(),
-            memory_controller: tester.memory_controller(),
+            memory_bridge: tester.memory_bridge(),
         },
+        tester.address_bits(),
         bitwise_chip.clone(),
         BUS_IDX,
         Rv32Sha256Opcode::default_offset(),
+        tester.offline_memory_mutex_arc(),
     );
 
     println!(

@@ -59,18 +59,6 @@ where
             self.metrics.update_current_fn(pc);
         }
     }
-
-    pub fn finalize_metrics(&mut self) {
-        counter!("total_cycles").absolute(self.metrics.cycle_count as u64);
-        counter!("main_cells_used")
-            .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
-
-        if self.system_config().profiling {
-            self.metrics.chip_heights =
-                itertools::izip!(self.air_names.clone(), self.current_trace_heights()).collect();
-            self.metrics.emit();
-        }
-    }
 }
 
 impl VmMetrics {

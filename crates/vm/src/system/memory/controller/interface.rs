@@ -1,10 +1,11 @@
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::system::memory::{
+    controller::memory::MemoryImage,
     merkle::{DirectCompressionBus, MemoryMerkleChip},
     persistent::PersistentBoundaryChip,
     volatile::VolatileBoundaryChip,
-    Equipartition, CHUNK,
+    CHUNK,
 };
 
 #[allow(clippy::large_enum_variant)]
@@ -16,7 +17,7 @@ pub enum MemoryInterface<F> {
     Persistent {
         boundary_chip: PersistentBoundaryChip<F, CHUNK>,
         merkle_chip: MemoryMerkleChip<CHUNK, F>,
-        initial_memory: Equipartition<F, CHUNK>,
+        initial_memory: MemoryImage<F>,
     },
 }
 
@@ -33,6 +34,26 @@ impl<F: PrimeField32> MemoryInterface<F> {
             } => {
                 boundary_chip.touch_address(addr_space, pointer);
                 merkle_chip.touch_address(addr_space, pointer);
+            }
+        }
+    }
+
+    pub fn touch_range(&mut self, addr_space: u32, pointer: u32, len: u32) {
+        match self {
+            MemoryInterface::Volatile { boundary_chip } => {
+                for offset in 0..len {
+                    boundary_chip.touch_address(addr_space, pointer + offset);
+                }
+            }
+            MemoryInterface::Persistent {
+                boundary_chip,
+                merkle_chip,
+                ..
+            } => {
+                for offset in 0..len {
+                    boundary_chip.touch_address(addr_space, pointer + offset);
+                    merkle_chip.touch_address(addr_space, pointer + offset);
+                }
             }
         }
     }

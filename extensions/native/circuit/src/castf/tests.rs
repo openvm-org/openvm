@@ -4,7 +4,7 @@ use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_native_compiler::CastfOpcode;
 use openvm_stark_backend::{
-    p3_field::AbstractField, utils::disable_debug_builder, verifier::VerificationError, Chip,
+    p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError, Chip,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
@@ -59,15 +59,14 @@ fn prepare_castf_rand_write_execute(
 fn castf_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
     let mut chip = CastFChip::<F>::new(
         ConvertAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
-        CastFCoreChip::new(range_checker_chip, 0),
-        tester.memory_controller(),
+        CastFCoreChip::new(tester.range_checker(), 0),
+        tester.offline_memory_mutex_arc(),
     );
     let num_tests: usize = 1;
 
@@ -83,21 +82,21 @@ fn castf_rand_test() {
 #[test]
 fn negative_castf_overflow_test() {
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let range_checker_chip = tester.range_checker();
     let mut chip = CastFChip::<F>::new(
         ConvertAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
-    drop(tester);
+    tester.build();
 
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();
@@ -126,16 +125,16 @@ fn negative_castf_memread_test() {
         ConvertAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
-    drop(tester);
+    tester.build();
 
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();
@@ -164,16 +163,16 @@ fn negative_castf_memwrite_test() {
         ConvertAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
-    drop(tester);
+    tester.build();
 
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();
@@ -202,16 +201,16 @@ fn negative_castf_as_test() {
         ConvertAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
-            tester.memory_controller(),
+            tester.memory_bridge(),
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
-        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
-    drop(tester);
+    tester.build();
 
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();

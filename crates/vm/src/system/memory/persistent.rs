@@ -1,4 +1,5 @@
 use std::{
+    array,
     borrow::{Borrow, BorrowMut},
     iter,
     sync::Arc,
@@ -11,7 +12,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut},
     prover::types::AirProofInput,
@@ -24,8 +25,9 @@ use super::merkle::DirectCompressionBus;
 use crate::{
     arch::hasher::HasherChip,
     system::memory::{
-        dimensions::MemoryDimensions, manager::memory::INITIAL_TIMESTAMP, merkle::MemoryMerkleBus,
-        offline_checker::MemoryBus, Equipartition, MemoryAddress, TimestampedEquipartition,
+        controller::memory::INITIAL_TIMESTAMP, dimensions::MemoryDimensions,
+        merkle::MemoryMerkleBus, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
+        TimestampedEquipartition,
     },
 };
 
@@ -138,7 +140,6 @@ struct FinalTouchedLabel<F, const CHUNK: usize> {
     label: u32,
     init_values: [F; CHUNK],
     final_values: [F; CHUNK],
-    init_exists: bool,
     init_hash: [F; CHUNK],
     final_hash: [F; CHUNK],
     final_timestamp: u32,
@@ -197,7 +198,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
     pub fn finalize(
         &mut self,
-        initial_memory: &Equipartition<F, CHUNK>,
+        initial_memory: &MemoryImage<F>,
         final_memory: &TimestampedEquipartition<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) {
@@ -206,24 +207,21 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 // TODO: parallelize this.
                 let final_touched_labels = touched_labels
                     .iter()
-                    .map(|touched_label| {
-                        let (init_exists, initial_hash, init_values) =
-                            match initial_memory.get(touched_label) {
-                                Some(values) => (true, hasher.hash_and_record(values), *values),
-                                None => (
-                                    true,
-                                    hasher.hash_and_record(&[F::ZERO; CHUNK]),
-                                    [F::ZERO; CHUNK],
-                                ),
-                            };
-                        let timestamped_values = final_memory.get(touched_label).unwrap();
+                    .map(|&(address_space, label)| {
+                        let pointer = label * CHUNK as u32;
+                        let init_values = array::from_fn(|i| {
+                            *initial_memory
+                                .get(&(address_space, pointer + i as u32))
+                                .unwrap_or(&F::ZERO)
+                        });
+                        let initial_hash = hasher.hash_and_record(&init_values);
+                        let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
                         let final_hash = hasher.hash_and_record(&timestamped_values.values);
                         FinalTouchedLabel {
-                            address_space: touched_label.0,
-                            label: touched_label.1,
+                            address_space,
+                            label,
                             init_values,
                             final_values: timestamped_values.values,
-                            init_exists,
                             init_hash: initial_hash,
                             final_hash,
                             final_timestamp: timestamped_values.timestamp,
@@ -276,11 +274,7 @@ where
                         leaf_label: Val::<SC>::from_canonical_u32(touched_label.label),
                         values: touched_label.init_values,
                         hash: touched_label.init_hash,
-                        timestamp: if touched_label.init_exists {
-                            Val::<SC>::from_canonical_u32(INITIAL_TIMESTAMP)
-                        } else {
-                            Val::<SC>::ZERO
-                        },
+                        timestamp: Val::<SC>::from_canonical_u32(INITIAL_TIMESTAMP),
                     };
 
                     *final_row.borrow_mut() = PersistentBoundaryCols {

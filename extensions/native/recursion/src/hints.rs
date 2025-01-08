@@ -7,7 +7,7 @@ use openvm_native_compiler::ir::{
 use openvm_stark_backend::{
     keygen::types::TraceWidth,
     p3_commit::ExtensionMmcs,
-    p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field},
+    p3_field::{extension::BinomialExtensionField, Field, FieldAlgebra, FieldExtensionAlgebra},
     p3_util::log2_strict_usize,
     prover::{
         opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
@@ -72,7 +72,7 @@ impl<C: Config> Hintable<C> for usize {
     }
 
     fn write(&self) -> Vec<Vec<C::N>> {
-        vec![vec![AbstractField::from_canonical_usize(*self)]]
+        vec![vec![FieldAlgebra::from_canonical_usize(*self)]]
     }
 }
 
@@ -218,7 +218,7 @@ impl<C: Config> Hintable<C> for Vec<u8> {
     fn write(&self) -> Vec<Vec<C::N>> {
         vec![self
             .iter()
-            .map(|x| AbstractField::from_canonical_u8(*x))
+            .map(|x| FieldAlgebra::from_canonical_u8(*x))
             .collect()]
     }
 }
@@ -475,7 +475,7 @@ mod test {
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
     };
-    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_backend::p3_field::FieldAlgebra;
 
     use crate::hints::{Hintable, InnerChallenge, InnerVal};
 

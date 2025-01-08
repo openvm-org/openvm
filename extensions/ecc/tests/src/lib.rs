@@ -16,7 +16,7 @@ mod tests {
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_sdk::config::SdkVmConfig;
-    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -86,7 +86,7 @@ mod tests {
         let coords: Vec<_> = [p.x.to_bytes(), p.y.to_bytes()]
             .concat()
             .into_iter()
-            .map(AbstractField::from_canonical_u8)
+            .map(FieldAlgebra::from_canonical_u8)
             .collect();
         air_test_with_min_segments(config, openvm_exe, vec![coords], 1);
         Ok(())

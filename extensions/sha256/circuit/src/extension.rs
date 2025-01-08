@@ -88,9 +88,11 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
 
         let sha256_chip = Sha256VmChip::new(
             builder.system_port(),
+            builder.system_config().memory_config.pointer_max_bits,
             bitwise_lu_chip,
             builder.new_bus_idx(),
             Rv32Sha256Opcode::default_offset(),
+            builder.system_base().offline_memory(),
         );
         inventory.add_executor(
             sha256_chip,
