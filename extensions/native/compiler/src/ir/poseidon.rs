@@ -132,7 +132,7 @@ impl<C: Config> Builder<C> {
 
         let address = self.get_ref(&state, 0).ptr.address;
         let start: Var<_> = self.eval(address);
-        let idx: Var<_> = self.eval(C::N::ZERO);
+        let end: Var<_> = self.eval(address + C::N::from_canonical_usize(HASH_RATE));
         self.iter(&array).for_each(|subarray, builder| {
             builder.iter(&subarray).for_each(|element, builder| {
                 builder.cycle_tracker_start("poseidon2-hash-setup");
@@ -146,19 +146,15 @@ impl<C: Config> Builder<C> {
                     element,
                 );
                 builder.assign(&address, address + C::N::ONE);
-                builder.assign(&idx, idx + C::N::ONE);
                 builder.cycle_tracker_end("poseidon2-hash-setup");
-                builder
-                    .if_eq(idx, C::N::from_canonical_usize(HASH_RATE))
-                    .then(|builder| {
-                        builder.poseidon2_permute_mut(&state);
-                        builder.assign(&address, start);
-                        builder.assign(&idx, C::N::ZERO);
-                    });
+                builder.if_eq(address, end).then(|builder| {
+                    builder.poseidon2_permute_mut(&state);
+                    builder.assign(&address, start);
+                });
             });
         });
 
-        self.if_ne(idx, C::N::ZERO).then(|builder| {
+        self.if_ne(address, start).then(|builder| {
             builder.poseidon2_permute_mut(&state);
         });
 
