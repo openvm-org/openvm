@@ -130,10 +130,8 @@ impl<C: Config> Builder<C> {
             builder.set(&state, i, C::F::ZERO);
         });
 
-        let address = match state {
-            Array::Fixed(_) => panic!("Poseidon2 hash is not allowed on fixed arrays"),
-            Array::Dyn(ptr, _) => ptr.address,
-        };
+        let address = self.get_ref(&state, 0).ptr.address;
+        let start: Var<_> = self.eval(address);
         let idx: Var<_> = self.eval(C::N::ZERO);
         self.iter(&array).for_each(|subarray, builder| {
             builder.iter(&subarray).for_each(|element, builder| {
@@ -154,12 +152,6 @@ impl<C: Config> Builder<C> {
                     .if_eq(idx, C::N::from_canonical_usize(HASH_RATE))
                     .then(|builder| {
                         builder.poseidon2_permute_mut(&state);
-                        let start = match state {
-                            Array::Fixed(_) => {
-                                panic!("Poseidon2 hash is not allowed on fixed arrays")
-                            }
-                            Array::Dyn(ptr, _) => ptr.address,
-                        };
                         builder.assign(&address, start);
                         builder.assign(&idx, C::N::ZERO);
                     });
