@@ -42,12 +42,12 @@ macro_rules! impl_bin_op {
             fn $trait_assign_fn(&mut self, rhs: &'a $struct_name) {
                 #[cfg(target_os = "zkvm")]
                 custom_insn_r!(
-                    $opcode,
-                    $func3,
-                    $func7,
-                    self as *mut Self,
-                    self as *const Self,
-                    rhs as *const Self
+                    opcode = $opcode,
+                    funct3 = $func3,
+                    funct7 = $func7,
+                    rd = In self as *mut Self,
+                    rs1 = In self as *const Self,
+                    rs2 = In rhs as *const Self
                 );
                 #[cfg(not(target_os = "zkvm"))]
                 {
@@ -71,12 +71,12 @@ macro_rules! impl_bin_op {
                 {
                     let mut uninit: MaybeUninit<$struct_name> = MaybeUninit::uninit();
                     custom_insn_r!(
-                        $opcode,
-                        $func3,
-                        $func7,
-                        uninit.as_mut_ptr(),
-                        self as *const $struct_name,
-                        rhs as *const $struct_name
+                        opcode = $opcode,
+                        funct3 = $func3,
+                        funct7 = $func7,
+                        rd = In uninit.as_mut_ptr(),
+                        rs1 = In self as *const $struct_name,
+                        rs2 = In rhs as *const $struct_name
                     );
                     unsafe { uninit.assume_init() }
                 }

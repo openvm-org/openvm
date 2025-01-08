@@ -3701,6 +3701,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-custom-insn"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
 name = "openvm-ecc-circuit"
 version = "0.2.0-alpha"
 dependencies = [
@@ -4140,6 +4149,7 @@ dependencies = [
  "embedded-alloc",
  "getrandom",
  "libm",
+ "openvm-custom-insn",
  "stability",
  "strum_macros",
 ]

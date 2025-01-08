@@ -42,12 +42,12 @@ pub fn keccak256(input: &[u8]) -> [u8; 32] {
 #[no_mangle]
 extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
     openvm_platform::custom_insn_r!(
-        OPCODE,
-        KECCAK256_FUNCT3,
-        KECCAK256_FUNCT7,
-        output,
-        bytes,
-        len
+        opcode = OPCODE,
+        funct3 = KECCAK256_FUNCT3,
+        funct7 = KECCAK256_FUNCT7,
+        rd = In output,
+        rs1 = In bytes,
+        rs2 = In len
     );
 }
 

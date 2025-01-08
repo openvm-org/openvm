@@ -6,6 +6,8 @@
 
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod custom_insn;
+#[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
+pub use custom_insn::*;
 #[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]
 mod getrandom;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]

@@ -227,24 +227,24 @@ impl Ord for I256 {
         {
             let mut cmp_result = MaybeUninit::<I256>::uninit();
             custom_insn_r!(
-                OPCODE,
-                INT256_FUNCT3,
-                Int256Funct7::Slt as u8,
-                cmp_result.as_mut_ptr(),
-                self as *const Self,
-                other as *const Self
+                opcode = OPCODE,
+                funct3 = INT256_FUNCT3,
+                funct7 = Int256Funct7::Slt as u8,
+                rd = In cmp_result.as_mut_ptr(),
+                rs1 = In self as *const Self,
+                rs2 = In other as *const Self
             );
             let mut cmp_result = unsafe { cmp_result.assume_init() };
             if cmp_result.limbs[0] != 0 {
                 return Ordering::Less;
             }
             custom_insn_r!(
-                OPCODE,
-                INT256_FUNCT3,
-                Int256Funct7::Slt as u8,
-                &mut cmp_result as *mut I256,
-                other as *const Self,
-                self as *const Self
+                opcode = OPCODE,
+                funct3 = INT256_FUNCT3,
+                funct7 = Int256Funct7::Slt as u8,
+                rd = In &mut cmp_result as *mut I256,
+                rs1 = In other as *const Self,
+                rs2 = In self as *const Self
             );
             if cmp_result.limbs[0] != 0 {
                 return Ordering::Greater;
@@ -262,12 +262,12 @@ impl Clone for I256 {
         {
             let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
             custom_insn_r!(
-                OPCODE,
-                INT256_FUNCT3,
-                Int256Funct7::Add as u8,
-                uninit.as_mut_ptr(),
-                self as *const Self,
-                &Self::ZERO as *const Self
+                opcode = OPCODE,
+                funct3 = INT256_FUNCT3,
+                funct7 = Int256Funct7::Add as u8,
+                rd = In uninit.as_mut_ptr(),
+                rs1 = In self as *const Self,
+                rs2 = In &Self::ZERO as *const Self
             );
             unsafe { uninit.assume_init() }
         }
