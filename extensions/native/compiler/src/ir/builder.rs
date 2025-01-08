@@ -393,21 +393,21 @@ impl<C: Config> Builder<C> {
 
     pub fn zipped_iter<'a, V: MemVariable<C>>(
         &'a mut self,
-        arrays: &'a Vec<Array<C, V>>,
+        arrays: &'a [Array<C, V>],
     ) -> ZippedPointerIteratorBuilder<'a, C> {
         assert!(!arrays.is_empty());
         assert!(arrays
             .windows(2)
             .all(|array| array[0].len() == array[1].len()));
         if arrays.iter().all(|array| matches!(array, Array::Fixed(_))) {
-            return ZippedPointerIteratorBuilder {
+            ZippedPointerIteratorBuilder {
                 starts: vec![RVar::zero(); arrays.len()],
                 ends: vec![arrays[0].len().into(); arrays.len()],
                 step_sizes: vec![1; arrays.len()],
                 builder: self,
-            };
+            }
         } else if arrays.iter().all(|array| matches!(array, Array::Dyn(_, _))) {
-            return ZippedPointerIteratorBuilder {
+            ZippedPointerIteratorBuilder {
                 starts: arrays
                     .iter()
                     .map(|array| array.ptr().address.into())
@@ -432,7 +432,7 @@ impl<C: Config> Builder<C> {
                     .collect(),
                 step_sizes: vec![V::size_of(); arrays.len()],
                 builder: self,
-            };
+            }
         } else {
             panic!("Cannot use zipped pointer iterator with mixed arrays");
         }
