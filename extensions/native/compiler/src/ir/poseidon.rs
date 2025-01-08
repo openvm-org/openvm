@@ -1,6 +1,6 @@
 use openvm_stark_backend::p3_field::FieldAlgebra;
 
-use super::{Array, Builder, Config, DslIr, Ext, Felt, MemIndex, MemVariable, Ptr, Usize, Var};
+use super::{Array, Builder, Config, DslIr, Ext, Felt, MemIndex, Ptr, Usize, Var};
 
 pub const DIGEST_SIZE: usize = 8;
 pub const HASH_RATE: usize = 8;
