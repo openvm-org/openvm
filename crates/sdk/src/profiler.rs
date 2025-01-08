@@ -32,7 +32,7 @@ pub struct Profiler {
 }
 
 impl Profiler {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let mut registry = Registry::default();
         let memory_gauge = MemoryUsage::default();
         registry.register(

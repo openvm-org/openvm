@@ -49,7 +49,7 @@ pub mod static_verifier;
 pub mod keygen;
 pub mod verifier;
 
-mod profiler;
+pub mod profiler;
 mod stdin;
 
 pub use stdin::*;
@@ -58,6 +58,7 @@ pub mod fs;
 use crate::{
     config::AggConfig,
     keygen::AggProvingKey,
+    profiler::Profiler,
     prover::{AppProver, ContinuationProver},
 };
 
@@ -67,7 +68,7 @@ pub(crate) type F = BabyBear;
 pub(crate) type RootSC = BabyBearPoseidon2RootConfig;
 pub type NonRootCommittedExe = VmCommittedExe<SC>;
 
-pub struct Sdk;
+pub struct Sdk(pub Profiler);
 
 impl Sdk {
     pub fn build<P: AsRef<Path>>(
@@ -88,9 +89,9 @@ impl Sdk {
                 ));
             }
         };
-        self.track_memory_usage(Method::BUILD);
         let elf_path = find_unique_executable(pkg_dir, target_dir, target_filter)?;
         let data = read(&elf_path)?;
+        self.0.update_memory_usage(Method::BUILD);
         Elf::decode(&data, MEM_SIZE as u32)
     }
 
@@ -99,7 +100,7 @@ impl Sdk {
         elf: Elf,
         transpiler: Transpiler<F>,
     ) -> Result<VmExe<F>, TranspilerError> {
-        self.track_memory_usage(Method::TRANSPILE);
+        self.0.update_memory_usage(Method::TRANSPILE);
         VmExe::from_elf(elf, transpiler)
     }
 
@@ -114,7 +115,7 @@ impl Sdk {
         VC::Periphery: Chip<SC>,
     {
         let vm = VmExecutor::new(vm_config);
-        self.track_memory_usage(Method::EXECUTE);
+        self.0.update_memory_usage(Method::EXECUTE);
         let final_memory = vm.execute(exe, inputs)?;
         let public_values = extract_public_values(
             &vm.config.system().memory_config.memory_dimensions(),
@@ -129,7 +130,7 @@ impl Sdk {
         app_fri_params: FriParameters,
         exe: VmExe<F>,
     ) -> Result<Arc<NonRootCommittedExe>> {
-        self.track_memory_usage(Method::COMMIT);
+        self.0.update_memory_usage(Method::COMMIT);
         let committed_exe = commit_app_exe(app_fri_params, exe);
         Ok(committed_exe)
     }
@@ -139,9 +140,7 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        self.track_memory_usage(Method::KEYGEN);
-        let profiler = profiler::get_profiler();
-        profiler.print_metrics();
+        self.0.update_memory_usage(Method::KEYGEN);
         let app_pk = AppProvingKey::keygen(config);
         Ok(app_pk)
     }
@@ -157,7 +156,7 @@ impl Sdk {
         VC::Periphery: Chip<SC>,
     {
         let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe);
-        self.track_memory_usage(Method::PROOF);
+        self.0.update_memory_usage(Method::PROOF);
         let proof = app_prover.generate_app_proof(inputs);
         Ok(proof)
     }
@@ -168,7 +167,7 @@ impl Sdk {
         proof: &ContinuationVmProof<SC>,
     ) -> Result<(), VerificationError> {
         let e = BabyBearPoseidon2Engine::new(app_vk.fri_params);
-        self.track_memory_usage(Method::VERIFY);
+        self.0.update_memory_usage(Method::VERIFY);
         for seg_proof in &proof.per_segment {
             e.verify(&app_vk.app_vm_vk, seg_proof)?
         }
@@ -227,10 +226,5 @@ impl Sdk {
             Halo2WrapperProvingKey::evm_verify(evm_verifier, evm_proof);
         })
         .is_ok()
-    }
-
-    fn track_memory_usage(&self, method: Method) {
-        let profiler = profiler::get_profiler();
-        profiler.update_memory_usage(method);
     }
 }
