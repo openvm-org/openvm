@@ -133,7 +133,7 @@ impl<C: Config> Builder<C> {
         let address = self.get_ref(&state, 0).ptr.address;
         let start: Var<_> = self.eval(address);
         let end: Var<_> = self.eval(address + C::N::from_canonical_usize(HASH_RATE));
-        self.iter(&array).for_each(|subarray, builder| {
+        self.iter(array).for_each(|subarray, builder| {
             builder.iter(&subarray).for_each(|element, builder| {
                 builder.cycle_tracker_start("poseidon2-hash-setup");
                 builder.store(
