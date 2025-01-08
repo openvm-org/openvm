@@ -131,11 +131,9 @@ impl<C: Config> Builder<C> {
         });
 
         let idx: Var<_> = self.eval(C::N::ZERO);
-        self.range(0, array.len()).for_each(|i, builder| {
-            let subarray = builder.get(array, i);
-            builder.range(0, subarray.len()).for_each(|j, builder| {
+        self.iter(&array).for_each(|subarray, builder| {
+            builder.iter(&subarray).for_each(|element, builder| {
                 builder.cycle_tracker_start("poseidon2-hash-setup");
-                let element = builder.get(&subarray, j);
                 builder.set_value(&state, idx, element);
                 builder.assign(&idx, idx + C::N::ONE);
                 builder.cycle_tracker_end("poseidon2-hash-setup");
