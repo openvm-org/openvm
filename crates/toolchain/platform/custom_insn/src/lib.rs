@@ -276,6 +276,28 @@ mod kw {
     syn::custom_keyword!(Const);
 }
 
+/// Custom RISC-V instruction macro for the zkVM.
+///
+/// This macro is used to define custom R-type RISC-V instructions for the zkVM.
+/// Usage:
+/// ```rust
+/// custom_insn_r!(
+///     opcode = OPCODE,
+///     funct3 = FUNCT3,
+///     funct7 = FUNCT7,
+///     rd = InOut x0,
+///     rs1 = In rs1,
+///     rs2 = In rs2
+/// );
+/// ```
+/// Here, `opcode`, `funct3`, and `funct7` are the opcode, funct3, and funct7 fields of the RISC-V instruction.
+/// `rd`, `rs1`, and `rs2` are the destination register, source register 1, and source register 2 respectively.
+/// The `In`, `Out`, `InOut`, and `Const` keywords are required to specify the type of the register arguments.
+/// They translate to `in(reg)`, `out(reg)`, `inout(reg)`, and `const` respectively, and mean
+/// - "read the value from this variable" before execution (`In`),
+/// - "write the value to this variable" after execution (`Out`),
+/// - "read the value from this variable, then write it back to the same variable" after execution (`InOut`), and
+/// - "use this constant value" (`Const`).
 #[proc_macro]
 pub fn custom_insn_r(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let CustomInsnR {
@@ -310,6 +332,29 @@ pub fn custom_insn_r(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     expanded.into()
 }
 
+/// Custom RISC-V instruction macro for the zkVM.
+///
+/// This macro is used to define custom I-type RISC-V instructions for the zkVM.
+/// Usage:
+/// ```rust
+/// custom_insn_r!(
+///     opcode = OPCODE,
+///     funct3 = FUNCT3,
+///     rd = InOut x0,
+///     rs1 = In rs1,
+///     imm = Const 123
+/// );
+/// ```
+/// Here, `opcode`, `funct3` are the opcode and funct3 fields of the RISC-V instruction.
+/// `rd`, `rs1`, and `imm` are the destination register, source register 1, and immediate value respectively.
+/// The `In`, `Out`, `InOut`, and `Const` keywords are required to specify the type of the register arguments.
+/// They translate to `in(reg)`, `out(reg)`, `inout(reg)`, and `const` respectively, and mean
+/// - "read the value from this variable" before execution (`In`),
+/// - "write the value to this variable" after execution (`Out`),
+/// - "read the value from this variable, then write it back to the same variable" after execution (`InOut`), and
+/// - "use this constant value" (`Const`).
+///
+/// The `imm` argument is required to be a constant value.
 #[proc_macro]
 pub fn custom_insn_i(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let CustomInsnI {

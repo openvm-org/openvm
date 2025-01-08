@@ -396,17 +396,15 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
 
             #[no_mangle]
             extern "C" fn #hint_decompress_extern_func(rs1: usize, rs2: usize) {
-                unsafe {
-                    core::arch::asm!(
-                        ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
-                        opcode = const OPCODE,
-                        funct3 = const SW_FUNCT3 as usize,
-                        funct7 = const SwBaseFunct7::HintDecompress as usize + #ec_idx
-                            * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                        rs1 = in(reg) rs1,
-                        rs2 = in(reg) rs2
-                    );
-                }
+                openvm::platform::custom_insn_r!(
+                    opcode = OPCODE,
+                    funct3 = SW_FUNCT3 as usize,
+                    funct7 = SwBaseFunct7::HintDecompress as usize + #ec_idx
+                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    rd = Const "x0",
+                    rs1 = In rs1,
+                    rs2 = In rs2
+                );
             }
         });
 
