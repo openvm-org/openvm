@@ -202,8 +202,6 @@ pub fn verify_batch<C: Config + 'static>(
             let sibling = builder.iter_ptr_get(&proof, ptr_vec[0]).ptr();
             let bit = builder.iter_ptr_get(&index_bits, ptr_vec[1]);
 
-            builder.print_v(sibling.address);
-
             builder.if_eq(bit, C::N::ONE).then_or_else(
                 |builder| {
                     builder.assign(&left, sibling);
