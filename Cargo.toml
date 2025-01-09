@@ -124,7 +124,7 @@ openvm-transpiler = { path = "crates/toolchain/transpiler", default-features = f
 openvm-circuit = { path = "crates/vm", default-features = false }
 openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 openvm-toolchain-tests = { path = "crates/toolchain/tests", default-features = false }
-openvm-custom-insn = { path = "crates/toolchain/platform/custom_insn", default-features = false }
+openvm-custom-insn = { path = "crates/toolchain/custom_insn", default-features = false }
 
 # Extensions
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
