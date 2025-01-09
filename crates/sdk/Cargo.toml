@@ -57,3 +57,4 @@ bench-metrics = [
 profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
+memory_profiler = []

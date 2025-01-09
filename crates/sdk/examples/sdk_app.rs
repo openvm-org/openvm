@@ -41,6 +41,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build();
     // ANCHOR_END: vm_config
 
+    #[cfg(feature = "memory_profiler")]
+    let sdk = Sdk::with_profiler();
+
     /// to import example guest code in crate replace `target_path` for:
     /// ```
     /// use std::path::PathBuf;
@@ -49,6 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// path.push("guest");
     /// let target_path = path.to_str().unwrap();
     /// ```
+    #[cfg(not(feature = "memory_profiler"))]
     // ANCHOR: build
     // 1. Build the VmConfig with the extensions needed.
     let sdk = Sdk;
