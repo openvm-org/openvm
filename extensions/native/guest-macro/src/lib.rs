@@ -5,7 +5,6 @@ use crate::parse_compiler_output::CompiledKernel;
 mod parse_compiler_output;
 mod parse_kernel;
 mod transportation;
-const UTILITY_CELL: usize = 0;
 
 #[proc_macro]
 pub fn edsl_kernel(input: proc_macro::TokenStream) -> proc_macro::TokenStream {

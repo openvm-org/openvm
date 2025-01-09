@@ -13,11 +13,10 @@ use openvm_native_serialization::{
 use p3_field::{Field, PrimeField32};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-
+use openvm_native_compiler::asm::A0;
 use crate::{
     parse_compiler_output::CompiledKernel,
     transportation::Operand::{Literal, Variable},
-    UTILITY_CELL,
 };
 
 #[derive(Clone, Debug)]
@@ -35,7 +34,12 @@ impl<F: Field> Operand<F> {
         Literal(F::from_canonical_u32(val))
     }
 
-    pub fn whatever() -> Self {
+    pub fn i32(val: i32) -> Self {
+        let sign = if val >= 0 { F::ONE } else { F::NEG_ONE };
+        Literal(sign * F::from_canonical_u32(val.unsigned_abs()))
+    }
+
+    pub fn arbitrary() -> Self {
         Literal(F::ZERO)
     }
 }
@@ -194,9 +198,9 @@ pub fn instructions_to_asm_call<F: PrimeField32>(
     let mut jal_instruction: MacroInstruction<F> = MacroInstruction::new(
         VmOpcode::with_default_offset(NativeJalOpcode::JAL),
         [
-            Operand::usize(UTILITY_CELL),
-            Operand::whatever(),
-            Operand::whatever(),
+            Operand::i32(A0),
+            Operand::arbitrary(),
+            Operand::arbitrary(),
             Operand::u32(NATIVE_KERNEL_AS),
         ],
     );
