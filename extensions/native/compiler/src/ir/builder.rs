@@ -528,15 +528,15 @@ impl<C: Config> Builder<C> {
         let arr = self.dyn_array(vlen);
 
         // Write the content hints directly into the array memory.
-        self.range(0, vlen).for_each(|i, builder| {
+        self.iter(&arr).for_each(|val, builder| {
             let index = MemIndex {
-                index: i,
+                index: 0.into(),
                 offset: 0,
                 size: 1,
             };
             builder
                 .operations
-                .push(DslIr::StoreHintWord(arr.ptr(), index));
+                .push(DslIr::StoreHintWord(Ptr { address: val }, index));
         });
 
         arr
