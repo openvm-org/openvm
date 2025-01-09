@@ -2,7 +2,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{
-        NATIVE_KERNEL_AS, RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
+        RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
     },
     VmOpcode,
 };
@@ -13,7 +13,7 @@ use openvm_native_serialization::{
 use p3_field::{Field, PrimeField32};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-
+use openvm_native_compiler::conversion::AS;
 use crate::{
     parse_compiler_output::CompiledKernel,
     transportation::Operand::{Literal, Variable},
@@ -25,20 +25,32 @@ pub enum Operand<F: Field> {
     Variable(String, usize),
 }
 
-impl<F: Field> Operand<F> {
-    pub fn usize(val: usize) -> Self {
+impl<F: Field> From<usize> for Operand<F> {
+    fn from(val: usize) -> Self {
         Literal(F::from_canonical_usize(val))
     }
+}
 
-    pub fn u32(val: u32) -> Self {
+impl<F: Field> From<u32> for Operand<F> {
+    fn from(val: u32) -> Self {
         Literal(F::from_canonical_u32(val))
     }
+}
 
-    pub fn i32(val: i32) -> Self {
+impl<F: Field> From<i32> for Operand<F> {
+    fn from(val: i32) -> Self {
         let sign = if val >= 0 { F::ONE } else { F::NEG_ONE };
         Literal(sign * F::from_canonical_u32(val.unsigned_abs()))
     }
+}
 
+impl<F: Field> From<AS> for Operand<F> {
+    fn from(val: AS) -> Self {
+        Literal(F::from_canonical_u32(val as u32))
+    }
+}
+
+impl<F: Field> Operand<F> {
     pub fn arbitrary() -> Self {
         Literal(F::ZERO)
     }
@@ -198,16 +210,16 @@ pub fn instructions_to_asm_call<F: PrimeField32>(
     let mut jal_instruction: MacroInstruction<F> = MacroInstruction::new(
         VmOpcode::with_default_offset(NativeJalOpcode::JAL),
         [
-            Operand::i32(A0),
+            Operand::from(A0),
             Operand::arbitrary(),
             Operand::arbitrary(),
-            Operand::u32(NATIVE_KERNEL_AS),
+            Operand::from(AS::Native),
         ],
     );
     let jal_example_directives = instruction_to_directives(jal_instruction.clone());
     pc_diff += jal_example_directives.len() - 1;
 
-    jal_instruction.operands[1] = Operand::usize(DEFAULT_PC_STEP as usize * (pc_diff + 1));
+    jal_instruction.operands[1] = Operand::from(DEFAULT_PC_STEP as usize * (pc_diff + 1));
     add_directives(instruction_to_directives(jal_instruction));
 
     add_directives(vec![
@@ -254,32 +266,32 @@ fn transport_usize_to_felt<F: Field>(
         result.push(MacroInstruction::new(
             VmOpcode::with_default_offset(FieldArithmeticOpcode::ADD),
             [
-                Operand::usize(edsl_fp),
-                Operand::usize(if i == RV32_REGISTER_NUM_LIMBS - 1 {
+                Operand::from(edsl_fp),
+                Operand::from(if i == RV32_REGISTER_NUM_LIMBS - 1 {
                     0
                 } else {
                     edsl_fp
                 }),
                 Variable(rust_name.clone(), i),
-                Operand::usize(NATIVE_KERNEL_AS as usize),
-                Operand::u32(if i == RV32_REGISTER_NUM_LIMBS - 1 {
-                    RV32_IMM_AS
+                Operand::from(AS::Native),
+                if i == RV32_REGISTER_NUM_LIMBS - 1 {
+                    Operand::from(RV32_IMM_AS)
                 } else {
-                    NATIVE_KERNEL_AS
-                }),
-                Operand::u32(RV32_REGISTER_AS),
+                    Operand::from(AS::Native)
+                },
+                Operand::from(RV32_REGISTER_AS),
             ],
         ));
         if i > 0 {
             result.push(MacroInstruction::new(
                 VmOpcode::with_default_offset(FieldArithmeticOpcode::MUL),
                 [
-                    Operand::usize(edsl_fp),
-                    Operand::usize(edsl_fp),
-                    Operand::usize(1 << RV32_CELL_BITS),
-                    Operand::u32(NATIVE_KERNEL_AS),
-                    Operand::u32(NATIVE_KERNEL_AS),
-                    Operand::u32(RV32_IMM_AS),
+                    Operand::from(edsl_fp),
+                    Operand::from(edsl_fp),
+                    Operand::from(1 << RV32_CELL_BITS),
+                    Operand::from(AS::Native),
+                    Operand::from(AS::Native),
+                    Operand::from(RV32_IMM_AS),
                 ],
             ));
         }
@@ -310,10 +322,10 @@ fn transport_felt_to_usize<F: Field>(
         VmOpcode::with_default_offset(CastfOpcode::CASTF),
         [
             Variable(rust_name, 0),
-            Operand::usize(edsl_fp),
-            Operand::usize(0),
-            Operand::u32(RV32_REGISTER_AS),
-            Operand::u32(NATIVE_KERNEL_AS),
+            Operand::from(edsl_fp),
+            Operand::from(0),
+            Operand::from(RV32_REGISTER_AS),
+            Operand::from(AS::Native),
         ],
     )]
 }
