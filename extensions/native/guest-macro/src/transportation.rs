@@ -1,19 +1,19 @@
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{
-        RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
-    },
+    riscv::{RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     VmOpcode,
 };
-use openvm_native_compiler::{asm::A0, CastfOpcode, FieldArithmeticOpcode, NativeJalOpcode};
+use openvm_native_compiler::{
+    asm::A0, conversion::AS, CastfOpcode, FieldArithmeticOpcode, NativeJalOpcode,
+};
 use openvm_native_serialization::{
     GAP_INDICATOR, LONG_FORM_INSTRUCTION_INDICATOR, VARIABLE_REGISTER_INDICATOR,
 };
 use p3_field::{Field, PrimeField32};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use openvm_native_compiler::conversion::AS;
+
 use crate::{
     parse_compiler_output::CompiledKernel,
     transportation::Operand::{Literal, Variable},
