@@ -26,7 +26,7 @@ fn function_name(builder: &mut AsmBuilder<F, EF>, n: Var<F>) -> Felt<F> {
 }
 
 fn main() {
-    let mut file = File::create("../../compiler_output.txt").unwrap();
+    let mut file = File::create("compiler_output.txt").unwrap();
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
