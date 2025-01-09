@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use eyre::Result;
 use openvm_build::GuestOptions;
-use openvm_sdk::{config::SdkVmConfig, profiler::Profiler, Sdk, StdIn};
+use openvm_sdk::{config::SdkVmConfig, Sdk, StdIn};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -13,7 +13,7 @@ pub struct SomeStruct {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Build the VmConfig with the extensions needed.
-    let sdk = Sdk(Profiler::new());
+    let sdk = Sdk::new();
     let vm_config = SdkVmConfig::builder()
         .system(Default::default())
         .rv32i(Default::default())

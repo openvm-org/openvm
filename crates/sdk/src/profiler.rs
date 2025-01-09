@@ -15,13 +15,18 @@ struct Label {
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelValue)]
 pub enum Method {
-    BUILD,
-    TRANSPILE,
-    EXECUTE,
-    COMMIT,
-    KEYGEN,
-    PROOF,
-    VERIFY,
+    Build,
+    Transpile,
+    Execute,
+    Commit,
+    KeyGen,
+    Proof,
+    Verify,
+    AggVerify,
+    AggKeyGen,
+    EvmProof,
+    SnarkVerifierContract,
+    VerifyEvmProof,
 }
 
 type MemoryUsage = Family<Label, Gauge>;
@@ -68,10 +73,4 @@ impl Drop for Profiler {
     fn drop(&mut self) {
         self.print_metrics();
     }
-}
-
-/// Provides access to the singleton Profiler instance
-pub fn get_profiler() -> &'static Arc<Profiler> {
-    static INSTANCE: Lazy<Arc<Profiler>> = Lazy::new(|| Arc::new(Profiler::new()));
-    &INSTANCE
 }
