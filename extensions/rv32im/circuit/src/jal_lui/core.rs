@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
 use openvm_circuit::arch::{
@@ -9,7 +8,7 @@ use openvm_circuit::arch::{
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -144,12 +143,12 @@ pub struct Rv32JalLuiCoreRecord<F: Field> {
 
 pub struct Rv32JalLuiCoreChip {
     pub air: Rv32JalLuiCoreAir,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
 impl Rv32JalLuiCoreChip {
     pub fn new(
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         offset: usize,
     ) -> Self {
         Self {

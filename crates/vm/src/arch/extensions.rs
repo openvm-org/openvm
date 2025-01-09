@@ -9,7 +9,7 @@ use derive_more::derive::From;
 use getset::Getters;
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
@@ -489,13 +489,13 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, Stateful)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
     Phantom(RefCell<PhantomChip<F>>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, Stateful)]
 pub enum SystemPeriphery<F: PrimeField32> {
     /// Poseidon2 chip with direct compression interactions
     Poseidon2(Poseidon2PeripheryChip<F>),

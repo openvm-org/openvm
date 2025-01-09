@@ -4,7 +4,7 @@ use openvm_circuit::arch::{
     instructions::riscv::RV32_CELL_BITS, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     SubAir,
 };
 use openvm_stark_backend::{
@@ -46,7 +46,7 @@ impl<AB: InteractionBuilder> Air<AB> for Sha256TestAir {
 // A wrapper Chip purely for testing purposes
 pub struct Sha256TestChip {
     pub air: Sha256TestAir,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     pub records: Vec<([u8; SHA256_BLOCK_U8S], bool)>,
 }
 
@@ -62,7 +62,7 @@ where
         let air = self.air();
         let trace = crate::generate_trace::<Val<SC>>(
             &self.air.sub_air,
-            &self.bitwise_lookup_chip,
+            self.bitwise_lookup_chip.clone(),
             self.records,
         );
         AirProofInput::simple(air, trace, vec![])
@@ -88,9 +88,7 @@ fn rand_sha256_test() {
     let mut rng = create_seeded_rng();
     let tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let len = rng.gen_range(1..100);
     let random_records: Vec<_> = (0..len)
         .map(|_| (array::from_fn(|_| rng.gen::<u8>()), true))

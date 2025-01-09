@@ -3,7 +3,6 @@ use std::{
     borrow::{Borrow, BorrowMut},
     iter::once,
     marker::PhantomData,
-    sync::Arc,
 };
 
 use itertools::izip;
@@ -22,7 +21,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -170,7 +169,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
 
 pub struct Rv32HeapBranchAdapterChip<F: Field, const NUM_READS: usize, const READ_SIZE: usize> {
     pub air: Rv32HeapBranchAdapterAir<NUM_READS, READ_SIZE>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     _marker: PhantomData<F>,
 }
 
@@ -182,7 +181,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         address_bits: usize,
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     ) -> Self {
         assert!(NUM_READS <= 2);
         assert!(

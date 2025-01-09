@@ -33,8 +33,9 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter, Stateful,
 };
+use serde::{Deserialize, Serialize};
 
 use super::field_extension::{FieldExtension, EXT_DEG};
 
@@ -294,6 +295,8 @@ impl<AB: InteractionBuilder> Air<AB> for FriReducedOpeningAir {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct FriReducedOpeningRecord<F: Field> {
     pub pc: F,
     pub start_timestamp: F,
@@ -584,5 +587,15 @@ where
     }
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         AirProofInput::simple_no_pis(self.air(), self.generate_trace())
+    }
+}
+
+impl<F: PrimeField32> Stateful<Vec<u8>> for FriReducedOpeningChip<F> {
+    fn load_state(&mut self, state: Vec<u8>) {
+        self.records = bitcode::deserialize(&state).unwrap();
+    }
+
+    fn store_state(&self) -> Vec<u8> {
+        bitcode::serialize(&self.records).unwrap()
     }
 }

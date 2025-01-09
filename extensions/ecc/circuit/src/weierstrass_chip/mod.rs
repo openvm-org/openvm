@@ -13,7 +13,7 @@ use std::sync::Mutex;
 
 use num_bigint_dig::BigUint;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_derive::{InstructionExecutor, Stateful};
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
@@ -25,7 +25,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 /// BLOCKS: how many blocks do we need to represent one input or output
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per input AffinePoint, BLOCKS = 6.
 /// For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
-#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, Stateful)]
 pub struct EcAddNeChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     VmChipWrapper<
         F,
@@ -61,7 +61,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
     }
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, Stateful)]
 pub struct EcDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     VmChipWrapper<
         F,

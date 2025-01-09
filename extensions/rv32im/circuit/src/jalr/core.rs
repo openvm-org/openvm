@@ -9,7 +9,7 @@ use openvm_circuit::arch::{
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -174,13 +174,13 @@ where
 
 pub struct Rv32JalrCoreChip {
     pub air: Rv32JalrCoreAir,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
 impl Rv32JalrCoreChip {
     pub fn new(
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker_chip: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {

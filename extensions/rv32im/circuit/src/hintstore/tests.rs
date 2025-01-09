@@ -12,7 +12,7 @@ use openvm_circuit::{
     utils::{u32_into_limbs, u32_sign_extend},
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
@@ -106,9 +106,7 @@ fn rand_hintstore_test() {
     let mut tester = VmChipTestBuilder::default();
 
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
     let adapter = Rv32HintStoreAdapterChip::<F>::new(
@@ -152,9 +150,7 @@ fn run_negative_hintstore_test(
     let mut tester = VmChipTestBuilder::default();
 
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
     let adapter = Rv32HintStoreAdapterChip::<F>::new(
@@ -211,9 +207,7 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
 
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
     let adapter = Rv32HintStoreAdapterChip::<F>::new(

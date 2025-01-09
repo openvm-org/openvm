@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
@@ -8,9 +6,9 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::*;
@@ -54,14 +52,14 @@ impl Default for Sha256Rv32Config {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Sha256;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, Stateful)]
 pub enum Sha256Executor<F: PrimeField32> {
     Sha256(Sha256VmChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum, Stateful)]
 pub enum Sha256Periphery<F: PrimeField32> {
-    BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
+    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),
 }
 
@@ -74,14 +72,14 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
         let mut inventory = VmInventory::new();
-        let bitwise_lu_chip = if let Some(chip) = builder
-            .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
+        let bitwise_lu_chip = if let Some(&chip) = builder
+            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()
         {
-            Arc::clone(chip)
+            chip.clone()
         } else {
             let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = Arc::new(BitwiseOperationLookupChip::new(bitwise_lu_bus));
+            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
             inventory.add_periphery_chip(chip.clone());
             chip
         };

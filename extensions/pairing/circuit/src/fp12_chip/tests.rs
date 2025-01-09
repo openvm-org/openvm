@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
 use num_bigint_dig::BigUint;
 use openvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use openvm_mod_circuit_builder::{
@@ -54,9 +52,7 @@ fn test_fp12_fn<
         false,
     );
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let adapter =
         Rv32VecHeapAdapterChip::<F, 2, INPUT_SIZE, INPUT_SIZE, BLOCK_SIZE, BLOCK_SIZE>::new(

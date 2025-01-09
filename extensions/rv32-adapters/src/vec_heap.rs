@@ -3,7 +3,6 @@ use std::{
     borrow::{Borrow, BorrowMut},
     iter::{once, zip},
     marker::PhantomData,
-    sync::Arc,
 };
 
 use itertools::izip;
@@ -21,7 +20,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -59,7 +58,7 @@ pub struct Rv32VecHeapAdapterChip<
 > {
     pub air:
         Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     _marker: PhantomData<F>,
 }
 
@@ -78,7 +77,7 @@ impl<
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         address_bits: usize,
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     ) -> Self {
         assert!(NUM_READS <= 2);
         assert!(
@@ -458,7 +457,7 @@ impl<
             row_slice,
             &read_record,
             &write_record,
-            &self.bitwise_lookup_chip,
+            self.bitwise_lookup_chip.clone(),
             self.air.address_bits,
             memory,
         )
@@ -480,7 +479,7 @@ pub(super) fn vec_heap_generate_trace_row_impl<
     row_slice: &mut [F],
     read_record: &Rv32VecHeapReadRecord<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
     write_record: &Rv32VecHeapWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>,
-    bitwise_lookup_chip: &BitwiseOperationLookupChip<RV32_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     address_bits: usize,
     memory: &OfflineMemory<F>,
 ) {

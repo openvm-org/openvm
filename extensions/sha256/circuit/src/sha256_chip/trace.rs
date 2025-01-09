@@ -125,7 +125,7 @@ where
                         width,
                         SHA256VM_CONTROL_WIDTH,
                         &padded_message,
-                        self.bitwise_lookup_chip.as_ref(),
+                        self.bitwise_lookup_chip.clone(),
                         &state.hash,
                         is_last_block,
                         global_block_idx as u32 + 1,

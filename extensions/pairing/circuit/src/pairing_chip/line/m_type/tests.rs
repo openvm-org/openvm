@@ -1,12 +1,10 @@
-use std::sync::Arc;
-
 use halo2curves_axiom::{
     bls12_381::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
 };
 use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_ecc_guest::AffinePoint;
 use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
@@ -35,9 +33,7 @@ const BLOCK_SIZE: usize = 16;
 fn test_mul_023_by_023() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 30, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -136,9 +132,7 @@ fn test_mul_023_by_023() {
 fn test_mul_by_02345() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 36, 30, 36, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),

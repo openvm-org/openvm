@@ -10,7 +10,7 @@ use openvm_circuit::{
     },
     system::{native_adapter::NativeAdapterChip, phantom::PhantomChip},
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful, VmConfig};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
     program::DEFAULT_PC_STEP, PhantomDiscriminant, Poseidon2Opcode, UsizeOpcode, VmOpcode,
@@ -70,7 +70,7 @@ impl NativeConfig {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, Stateful)]
 pub enum NativeExecutor<F: PrimeField32> {
     LoadStore(NativeLoadStoreChip<F, 1>),
     BlockLoadStore(NativeLoadStoreChip<F, 4>),
@@ -82,7 +82,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     FriReducedOpening(FriReducedOpeningChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum, Stateful)]
 pub enum NativePeriphery<F: PrimeField32> {
     Phantom(PhantomChip<F>),
 }

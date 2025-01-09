@@ -23,6 +23,7 @@ use std::sync::Mutex;
 
 pub use columns::*;
 use openvm_circuit::system::memory::{offline_checker::MemoryBridge, OfflineMemory};
+use openvm_circuit_derive::Stateful;
 
 mod trace;
 
@@ -32,6 +33,7 @@ mod tests;
 pub const NATIVE_POSEIDON2_WIDTH: usize = 16;
 pub const NATIVE_POSEIDON2_CHUNK_SIZE: usize = 8;
 
+#[derive(Stateful)]
 pub enum NativePoseidon2Chip<F: Field> {
     Register0(NativePoseidon2BaseChip<F, 0>),
     Register1(NativePoseidon2BaseChip<F, 1>),

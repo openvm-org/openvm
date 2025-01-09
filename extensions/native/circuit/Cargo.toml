@@ -30,6 +30,7 @@ serde.workspace = true
 serde-big-array.workspace = true
 serde_with.workspace = true
 rayon.workspace = true
+bitcode.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

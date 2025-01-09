@@ -5,7 +5,7 @@ use std::{
 };
 
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_derive::{InstructionExecutor, Stateful};
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use crate::Fp12;
 // Input: Fp12 * 2
 // Output: Fp12
-#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, Stateful)]
 pub struct Fp12MulChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub  VmChipWrapper<
         F,
@@ -72,13 +72,11 @@ pub fn fp12_mul_expr(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use itertools::Itertools;
     use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use openvm_circuit_primitives::bitwise_op_lookup::{
-        BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
     use openvm_ecc_guest::algebra::field::FieldExtension;
     use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
@@ -109,9 +107,7 @@ mod tests {
             limb_bits: LIMB_BITS,
         };
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-            bitwise_bus,
-        ));
+        let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
         let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),

@@ -1,4 +1,4 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
@@ -9,8 +9,8 @@ use openvm_circuit::{
     utils::generate_long_number,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_rv32im_transpiler::DivRemOpcode;
@@ -98,10 +98,8 @@ fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
 
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-    let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32DivRemChip::<F>::new(
@@ -240,10 +238,8 @@ fn run_rv32_divrem_negative_test(
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
 
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-    let range_tuple_chip = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let range_tuple_chip = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32DivRemTestChip::<F>::new(
