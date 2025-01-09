@@ -58,7 +58,7 @@ pub fn verify_two_adic_pcs<C: Config + 'static>(
         .for_each(|ptr_vec, builder| {
             let comm_ptr = ptr_vec[0];
             let beta_ptr = ptr_vec[1];
-            let comm = builder.get(&proof.commit_phase_commits, comm_ptr);
+            let comm = builder.iter_ptr_get(&proof.commit_phase_commits, comm_ptr);
             challenger.observe_digest(builder, comm);
             let sample = challenger.sample_ext(builder);
             builder.iter_ptr_set(&betas, beta_ptr, sample);
