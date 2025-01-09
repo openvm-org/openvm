@@ -1,8 +1,8 @@
 pub use domain::*;
 use openvm_native_compiler::{
     ir::{
-        Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
-        DIGEST_SIZE,
+        Array, ArrayLike, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar,
+        Usize, Var, DIGEST_SIZE,
     },
     prelude::MemVariable,
 };
@@ -30,7 +30,7 @@ pub mod witness;
 /// Reference: <https://github.com/Plonky3/Plonky3/blob/4809fa7bedd9ba8f6f5d3267b1592618e3776c57/fri/src/verifier.rs#L101>
 #[allow(clippy::too_many_arguments)]
 #[allow(unused_variables)]
-pub fn verify_query<C: Config>(
+pub fn verify_query<C: Config + 'static>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
     commit_phase_commits: &Array<C, DigestVariable<C>>,
@@ -141,7 +141,7 @@ pub enum NestedOpenedValues<C: Config> {
 /// Reference: <https://github.com/Plonky3/Plonky3/blob/4809fa7bedd9ba8f6f5d3267b1592618e3776c57/merkle-tree/src/mmcs.rs#L92>
 #[allow(clippy::type_complexity)]
 #[allow(unused_variables)]
-pub fn verify_batch<C: Config>(
+pub fn verify_batch<C: Config + 'static>(
     builder: &mut Builder<C>,
     commit: &DigestVariable<C>,
     dimensions: Array<C, DimensionsVariable<C>>,
@@ -193,55 +193,60 @@ pub fn verify_batch<C: Config>(
     // For each sibling in the proof, reconstruct the root.
     let left: Ptr<C::N> = builder.uninit();
     let right: Ptr<C::N> = builder.uninit();
-    builder.range(0, proof.len()).for_each(|i, builder| {
-        let sibling = builder.get_ptr(&proof, i);
-        let bit = builder.get(&index_bits, i);
+    builder
+        .zipped_iter(&[
+            Box::new(proof.clone()) as Box<dyn ArrayLike<C>>,
+            Box::new(index_bits.clone()) as Box<dyn ArrayLike<C>>,
+        ])
+        .for_each(|ptr_vec, builder| {
+            let sibling = builder.iter_ptr_get(&proof, ptr_vec[0]).ptr();
+            let bit = builder.iter_ptr_get(&index_bits, ptr_vec[1]);
 
-        builder.if_eq(bit, C::N::ONE).then_or_else(
-            |builder| {
-                builder.assign(&left, sibling);
-                builder.assign(&right, root_ptr);
-            },
-            |builder| {
-                builder.assign(&left, root_ptr);
-                builder.assign(&right, sibling);
-            },
-        );
+            builder.if_eq(bit, C::N::ONE).then_or_else(
+                |builder| {
+                    builder.assign(&left, sibling);
+                    builder.assign(&right, root_ptr);
+                },
+                |builder| {
+                    builder.assign(&left, root_ptr);
+                    builder.assign(&right, sibling);
+                },
+            );
 
-        builder.poseidon2_compress_x(
-            &Array::Dyn(root_ptr, Usize::from(0)),
-            &Array::Dyn(left, Usize::from(0)),
-            &Array::Dyn(right, Usize::from(0)),
-        );
-        builder.assign(
-            &current_height,
-            current_height.clone() * (C::N::TWO.inverse()),
-        );
+            builder.poseidon2_compress_x(
+                &Array::Dyn(root_ptr, Usize::from(0)),
+                &Array::Dyn(left, Usize::from(0)),
+                &Array::Dyn(right, Usize::from(0)),
+            );
+            builder.assign(
+                &current_height,
+                current_height.clone() * (C::N::TWO.inverse()),
+            );
 
-        builder
-            .if_ne(index.clone(), dimensions.len())
-            .then(|builder| {
-                let next_height = builder.get(&dimensions, index.clone()).height;
-                builder
-                    .if_eq(next_height, current_height.clone())
-                    .then(|builder| {
-                        let next_height_openings_digest = reducer
-                            .reduce_fast(
-                                builder,
-                                index.clone(),
-                                &dimensions,
-                                current_height.clone(),
-                                opened_values,
-                            )
-                            .into_inner_digest();
-                        builder.poseidon2_compress_x(
-                            &root.clone(),
-                            &root.clone(),
-                            &next_height_openings_digest,
-                        );
-                    });
-            })
-    });
+            builder
+                .if_ne(index.clone(), dimensions.len())
+                .then(|builder| {
+                    let next_height = builder.get(&dimensions, index.clone()).height;
+                    builder
+                        .if_eq(next_height, current_height.clone())
+                        .then(|builder| {
+                            let next_height_openings_digest = reducer
+                                .reduce_fast(
+                                    builder,
+                                    index.clone(),
+                                    &dimensions,
+                                    current_height.clone(),
+                                    opened_values,
+                                )
+                                .into_inner_digest();
+                            builder.poseidon2_compress_x(
+                                &root.clone(),
+                                &root.clone(),
+                                &next_height_openings_digest,
+                            );
+                        });
+                })
+        });
 
     // Assert that the commitments match.
     for i in 0..DIGEST_SIZE {
