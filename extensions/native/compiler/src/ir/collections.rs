@@ -284,14 +284,23 @@ impl<C: Config> Builder<C> {
                     panic!("Cannot index into a fixed slice with a variable index")
                 }
             }
-            Array::Dyn(ptr, _) => {
+            Array::Dyn(_, _) => {
                 let index = MemIndex {
                     index: 0.into(),
                     offset: 0,
                     size: V::size_of(),
                 };
                 let var: V = self.uninit();
-                self.load(var.clone(), *ptr, index);
+                self.load(
+                    var.clone(),
+                    Ptr {
+                        address: match ptr {
+                            RVar::Const(_) => unimplemented!(),
+                            RVar::Val(v) => v,
+                        },
+                    },
+                    index,
+                );
                 var
             }
         }
