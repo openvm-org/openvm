@@ -53,7 +53,7 @@ fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
 
     tester.execute_with_pc(
         chip,
-        Instruction::from_isize(
+        &Instruction::from_isize(
             VmOpcode::from_usize(opcode as usize),
             rs1 as isize,
             rs2 as isize,
@@ -145,7 +145,7 @@ fn run_rv32_beq_negative_test(
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(
+        &Instruction::from_usize(
             VmOpcode::from_usize(opcode as usize),
             [0, 0, imm as usize, 1, 1],
         ),

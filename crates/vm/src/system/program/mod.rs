@@ -72,7 +72,7 @@ impl<F: PrimeField64> ProgramChip<F> {
     pub fn get_instruction(
         &mut self,
         pc: u32,
-    ) -> Result<(Instruction<F>, Option<DebugInfo>), ExecutionError> {
+    ) -> Result<&(Instruction<F>, Option<DebugInfo>), ExecutionError> {
         let pc_index = self.get_pc_index(pc)?;
         self.execution_frequencies[pc_index] += 1;
         self.program

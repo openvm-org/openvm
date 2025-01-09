@@ -245,7 +245,6 @@ pub struct ModularIsEqualCoreRecord<T, const READ_LIMBS: usize> {
     pub c_diff_idx: usize,
 }
 
-#[derive(Debug)]
 pub struct ModularIsEqualCoreChip<
     const READ_LIMBS: usize,
     const WRITE_LIMBS: usize,

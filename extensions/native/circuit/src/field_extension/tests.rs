@@ -65,7 +65,7 @@ fn new_field_extension_air_test() {
 
         tester.execute(
             &mut chip,
-            Instruction::from_usize(
+            &Instruction::from_usize(
                 VmOpcode::from_usize(opcode as usize),
                 [result_address, address1, address2, as_d, as_e],
             ),

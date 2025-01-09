@@ -140,7 +140,6 @@ pub struct Rv32JalLuiCoreRecord<F: Field> {
     pub is_lui: bool,
 }
 
-#[derive(Debug)]
 pub struct Rv32JalLuiCoreChip {
     pub air: Rv32JalLuiCoreAir,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,

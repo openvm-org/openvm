@@ -29,7 +29,7 @@ fn test_nops_and_terminate() {
     let mut state: ExecutionState<F> = ExecutionState::new(F::ZERO, F::ONE);
     let num_nops = 5;
     for _ in 0..num_nops {
-        tester.execute_with_pc(&mut chip, nop.clone(), state.pc.as_canonical_u32());
+        tester.execute_with_pc(&mut chip, &nop, state.pc.as_canonical_u32());
         let new_state = tester.execution.records.last().unwrap().final_state;
         assert_eq!(state.pc + F::from_canonical_usize(4), new_state.pc);
         assert_eq!(state.timestamp + F::ONE, new_state.timestamp);

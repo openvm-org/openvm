@@ -132,7 +132,6 @@ pub struct Rv32AuipcCoreRecord<F> {
     pub rd_data: [F; RV32_REGISTER_NUM_LIMBS],
 }
 
-#[derive(Debug)]
 pub struct Rv32AuipcCoreChip {
     pub air: Rv32AuipcCoreAir,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,

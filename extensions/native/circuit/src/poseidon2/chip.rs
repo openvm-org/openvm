@@ -24,7 +24,6 @@ use super::{
     NATIVE_POSEIDON2_WIDTH,
 };
 
-#[derive(Debug)]
 pub struct NativePoseidon2BaseChip<F: Field, const SBOX_REGISTERS: usize> {
     pub air: Arc<NativePoseidon2Air<F, SBOX_REGISTERS>>,
     pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
@@ -79,10 +78,10 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
-        let Instruction {
+        let &Instruction {
             opcode,
             a,
             b,

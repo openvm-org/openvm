@@ -226,7 +226,6 @@ impl<
     }
 }
 
-#[derive(Debug)]
 pub struct Rv32IsEqualModAdapterChip<
     F: Field,
     const NUM_READS: usize,

@@ -66,7 +66,7 @@ pub trait InstructionExecutor<F> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>>;
 
@@ -79,7 +79,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         prev_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
         self.borrow_mut().execute(memory, instruction, prev_state)
@@ -94,7 +94,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         prev_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
         self.borrow_mut().execute(memory, instruction, prev_state)

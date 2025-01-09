@@ -8,7 +8,6 @@ pub mod air;
 pub mod columns;
 pub mod trace;
 
-#[derive(Debug)]
 pub struct ListChip {
     pub air: ListAir,
     pub vals: Vec<u32>,

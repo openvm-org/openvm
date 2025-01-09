@@ -304,7 +304,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct DivRemCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: DivRemCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,

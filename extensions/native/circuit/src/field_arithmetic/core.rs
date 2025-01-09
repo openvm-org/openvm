@@ -109,7 +109,6 @@ pub struct FieldArithmeticRecord<F> {
     pub c: F,
 }
 
-#[derive(Debug)]
 pub struct FieldArithmeticCoreChip {
     pub air: FieldArithmeticCoreAir,
 }

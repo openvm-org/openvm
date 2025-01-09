@@ -61,7 +61,6 @@ pub const MEMORY_MERKLE_BUS: usize = 12;
 
 const RANGE_CHECKER_BUS: usize = 4;
 
-#[derive(Debug)]
 pub struct VmChipTestBuilder<F: PrimeField32> {
     pub memory: MemoryTester<F>,
     pub execution: ExecutionTester<F>,
@@ -93,7 +92,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn execute<E: InstructionExecutor<F>>(
         &mut self,
         executor: &mut E,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
     ) {
         let initial_pc = self.next_elem_size_u32();
         self.execute_with_pc(executor, instruction, initial_pc);
@@ -102,7 +101,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn execute_with_pc<E: InstructionExecutor<F>>(
         &mut self,
         executor: &mut E,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         initial_pc: u32,
     ) {
         let initial_state = ExecutionState {
@@ -114,7 +113,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         let final_state = executor
             .execute(
                 &mut *self.memory.controller.borrow_mut(),
-                instruction.clone(),
+                instruction,
                 initial_state,
             )
             .expect("Expected the execution not to fail");
@@ -241,7 +240,7 @@ impl VmChipTestBuilder<BabyBear> {
 
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
-        let mem_config = MemoryConfig::new(2, 1, 29, 29, 17, 64);
+        let mem_config = MemoryConfig::new(2, 1, 29, 29, 17, 64, 1 << 22);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
@@ -300,7 +299,7 @@ where
             self = self.load(memory_tester); // dummy memory interactions
             {
                 let air_proof_inputs = Rc::try_unwrap(memory_controller)
-                    .unwrap()
+                    .unwrap_or_else(|_| panic!("Memory controller was not dropped"))
                     .into_inner()
                     .generate_air_proof_inputs();
                 self.air_proof_inputs.extend(

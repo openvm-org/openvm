@@ -90,7 +90,7 @@ fn test_fp12_fn<
         y_limbs,
         chip.core.air.offset + local_opcode_idx,
     );
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
 
     let run_tester = tester.build().load(chip).load(bitwise_chip).finalize();
     run_tester.simple_test().expect("Verification failed");

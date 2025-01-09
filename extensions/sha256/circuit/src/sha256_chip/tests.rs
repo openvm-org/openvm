@@ -56,7 +56,7 @@ fn set_and_execute(
 
     tester.execute(
         chip,
-        Instruction::from_usize(VmOpcode::with_default_offset(opcode), [rd, rs1, rs2, 1, 2]),
+        &Instruction::from_usize(VmOpcode::with_default_offset(opcode), [rd, rs1, rs2, 1, 2]),
     );
 
     let output = sha256_solve(message);

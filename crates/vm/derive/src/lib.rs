@@ -38,7 +38,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     fn execute(
                         &mut self,
                         memory: &mut ::openvm_circuit::system::memory::MemoryController<F>,
-                        instruction: ::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         from_state: ::openvm_circuit::arch::ExecutionState<u32>,
                     ) -> ::openvm_circuit::arch::Result<::openvm_circuit::arch::ExecutionState<u32>> {
                         self.0.execute(memory, instruction, from_state)
@@ -92,7 +92,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     fn execute(
                         &mut self,
                         memory: &mut ::openvm_circuit::system::memory::MemoryController<#first_ty_generic>,
-                        instruction: ::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                         from_state: ::openvm_circuit::arch::ExecutionState<u32>,
                     ) -> ::openvm_circuit::arch::Result<::openvm_circuit::arch::ExecutionState<u32>> {
                         match self {

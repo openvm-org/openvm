@@ -163,7 +163,6 @@ pub struct LessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     pub diff_idx: usize,
 }
 
-#[derive(Debug)]
 pub struct LessThanCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: LessThanCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,

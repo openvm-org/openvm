@@ -233,8 +233,8 @@ mod tests {
             y_limbs,
             chip.0.core.air.offset + Fp2Opcode::DIV as usize,
         );
-        tester.execute(&mut chip, instruction1);
-        tester.execute(&mut chip, instruction2);
+        tester.execute(&mut chip, &instruction1);
+        tester.execute(&mut chip, &instruction2);
         let tester = tester.build().load(chip).load(bitwise_chip).finalize();
         tester.simple_test().expect("Verification failed");
     }

@@ -10,7 +10,7 @@ use k256::{
     Secp256k1,
 };
 use openvm_ecc_guest::{
-    algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Coord, weierstrass::WeierstrassPoint,
+    algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
 };
 use openvm_keccak256_guest::keccak256;
 openvm::entry!(main);
@@ -20,7 +20,7 @@ openvm_algebra_moduli_setup::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
 }
 openvm_ecc_sw_setup::sw_init! {
-    Secp256k1Coord,
+    Secp256k1Point,
 }
 
 // Ref: https://docs.rs/k256/latest/k256/ecdsa/index.html

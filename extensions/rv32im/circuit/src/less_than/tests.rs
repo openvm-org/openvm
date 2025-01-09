@@ -74,7 +74,7 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
 
         let (instruction, rd) =
             rv32_rand_write_register_or_imm(&mut tester, b, c, c_imm, opcode as usize, &mut rng);
-        tester.execute(&mut chip, instruction);
+        tester.execute(&mut chip, &instruction);
 
         let (cmp, _, _, _) =
             run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
@@ -87,12 +87,12 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let b = [101, 128, 202, 255];
     let (instruction, _) =
         rv32_rand_write_register_or_imm(&mut tester, b, b, None, opcode as usize, &mut rng);
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
 
     let b = [36, 0, 0, 0];
     let (instruction, _) =
         rv32_rand_write_register_or_imm(&mut tester, b, b, Some(36), opcode as usize, &mut rng);
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
@@ -154,7 +154,7 @@ fn run_rv32_lt_negative_test(
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 1]),
+        &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 1]),
     );
 
     let trace_width = chip.trace_width();

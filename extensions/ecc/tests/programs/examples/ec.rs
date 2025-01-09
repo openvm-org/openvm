@@ -16,7 +16,7 @@ openvm_algebra_moduli_setup::moduli_init! {
 }
 
 openvm_ecc_sw_setup::sw_init! {
-    Secp256k1Coord,
+    Secp256k1Point,
 }
 
 openvm::entry!(main);

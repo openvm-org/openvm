@@ -64,7 +64,7 @@ fn build_keccak256_test(
 
         tester.execute(
             &mut chip,
-            Instruction::from_isize(
+            &Instruction::from_isize(
                 VmOpcode::from_usize(Rv32KeccakOpcode::KECCAK256 as usize),
                 a as isize,
                 b as isize,

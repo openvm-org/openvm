@@ -89,7 +89,7 @@ fn set_and_execute(
 
     tester.execute(
         chip,
-        Instruction::from_usize(
+        &Instruction::from_usize(
             VmOpcode::with_default_offset(opcode),
             [a, b, imm as usize, 1, mem_as],
         ),

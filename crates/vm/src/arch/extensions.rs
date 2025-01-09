@@ -516,7 +516,6 @@ impl<F: PrimeField32> SystemComplex<F> {
                 range_checker.clone(),
                 MemoryMerkleBus(bus_idx_max - 2),
                 DirectCompressionBus(bus_idx_max - 1),
-                MemoryImage::<F>::default(),
             )
         } else {
             MemoryController::with_volatile_memory(

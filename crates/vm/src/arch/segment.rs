@@ -1,5 +1,9 @@
 use backtrace::Backtrace;
-use openvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
+use openvm_instructions::{
+    exe::FnBounds,
+    instruction::{DebugInfo, Instruction},
+    program::Program,
+};
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
@@ -10,7 +14,8 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
+    ExecutionError, Streams, SystemBase, SystemConfig, VmChipComplex, VmComplexTraceHeights,
+    VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -106,77 +111,91 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         let mut did_terminate = false;
 
         loop {
-            let (instruction, debug_info) =
-                self.chip_complex.program_chip_mut().get_instruction(pc)?;
-            tracing::trace!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
-
             #[allow(unused_variables)]
-            let (dsl_instr, trace) = debug_info.map_or(
-                (None, None),
-                |DebugInfo {
-                     dsl_instruction,
-                     trace,
-                 }| (Some(dsl_instruction), trace),
-            );
-
-            let opcode = instruction.opcode;
-            if opcode == VmOpcode::with_default_offset(SystemOpcode::TERMINATE) {
-                did_terminate = true;
-                self.chip_complex.connector_chip_mut().end(
-                    ExecutionState::new(pc, timestamp),
-                    Some(instruction.c.as_canonical_u32()),
-                );
-                break;
-            }
-
-            // Some phantom instruction handling is more convenient to do here than in PhantomChip.
-            if opcode == VmOpcode::with_default_offset(SystemOpcode::PHANTOM) {
-                // Note: the discriminant is the lower 16 bits of the c operand.
-                let discriminant = instruction.c.as_canonical_u32() as u16;
-                let phantom = SysPhantom::from_repr(discriminant);
-                tracing::trace!("pc: {pc:#x} | system phantom: {phantom:?}");
-                match phantom {
-                    Some(SysPhantom::DebugPanic) => {
-                        if let Some(mut backtrace) = prev_backtrace {
-                            backtrace.resolve();
-                            eprintln!("openvm program failure; backtrace:\n{:?}", backtrace);
-                        } else {
-                            eprintln!("openvm program failure; no backtrace");
-                        }
-                        return Err(ExecutionError::Fail { pc });
-                    }
-                    Some(SysPhantom::CtStart) =>
-                    {
-                        #[cfg(feature = "bench-metrics")]
-                        self.metrics
-                            .cycle_tracker
-                            .start(dsl_instr.clone().unwrap_or("Default".to_string()))
-                    }
-                    Some(SysPhantom::CtEnd) =>
-                    {
-                        #[cfg(feature = "bench-metrics")]
-                        self.metrics
-                            .cycle_tracker
-                            .end(dsl_instr.clone().unwrap_or("Default".to_string()))
-                    }
-                    _ => {}
-                }
-            }
-            prev_backtrace = trace;
-
-            let memory_controller = &mut self.chip_complex.base.memory_controller;
-            if let Some(executor) = self.chip_complex.inventory.get_mut_executor(&opcode) {
-                let next_state = InstructionExecutor::execute(
-                    executor,
+            let (opcode, dsl_instr) = {
+                let Self {
+                    chip_complex,
+                    #[cfg(feature = "bench-metrics")]
+                    metrics,
+                    ..
+                } = self;
+                let SystemBase {
+                    program_chip,
                     memory_controller,
-                    instruction,
-                    ExecutionState::new(pc, timestamp),
-                )?;
-                assert!(next_state.timestamp > timestamp);
-                pc = next_state.pc;
-                timestamp = next_state.timestamp;
-            } else {
-                return Err(ExecutionError::DisabledOperation { pc, opcode });
+                    ..
+                } = &mut chip_complex.base;
+
+                let (instruction, debug_info) = program_chip.get_instruction(pc)?;
+                tracing::trace!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
+
+                #[allow(unused_variables)]
+                let (dsl_instr, trace) = debug_info.as_ref().map_or(
+                    (None, None),
+                    |DebugInfo {
+                         dsl_instruction,
+                         trace,
+                     }| (Some(dsl_instruction), trace.as_ref()),
+                );
+
+                let &Instruction { opcode, c, .. } = instruction;
+                if opcode == VmOpcode::with_default_offset(SystemOpcode::TERMINATE) {
+                    did_terminate = true;
+                    self.chip_complex.connector_chip_mut().end(
+                        ExecutionState::new(pc, timestamp),
+                        Some(c.as_canonical_u32()),
+                    );
+                    break;
+                }
+
+                // Some phantom instruction handling is more convenient to do here than in PhantomChip.
+                if opcode == VmOpcode::with_default_offset(SystemOpcode::PHANTOM) {
+                    // Note: the discriminant is the lower 16 bits of the c operand.
+                    let discriminant = c.as_canonical_u32() as u16;
+                    let phantom = SysPhantom::from_repr(discriminant);
+                    tracing::trace!("pc: {pc:#x} | system phantom: {phantom:?}");
+                    match phantom {
+                        Some(SysPhantom::DebugPanic) => {
+                            if let Some(mut backtrace) = prev_backtrace {
+                                backtrace.resolve();
+                                eprintln!("openvm program failure; backtrace:\n{:?}", backtrace);
+                            } else {
+                                eprintln!("openvm program failure; no backtrace");
+                            }
+                            return Err(ExecutionError::Fail { pc });
+                        }
+                        Some(SysPhantom::CtStart) =>
+                        {
+                            #[cfg(feature = "bench-metrics")]
+                            metrics
+                                .cycle_tracker
+                                .start(dsl_instr.cloned().unwrap_or("Default".to_string()))
+                        }
+                        Some(SysPhantom::CtEnd) =>
+                        {
+                            #[cfg(feature = "bench-metrics")]
+                            metrics
+                                .cycle_tracker
+                                .end(dsl_instr.cloned().unwrap_or("Default".to_string()))
+                        }
+                        _ => {}
+                    }
+                }
+                prev_backtrace = trace.cloned();
+
+                if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
+                    let next_state = InstructionExecutor::execute(
+                        executor,
+                        memory_controller,
+                        instruction,
+                        ExecutionState::new(pc, timestamp),
+                    )?;
+                    assert!(next_state.timestamp > timestamp);
+                    pc = next_state.pc;
+                    timestamp = next_state.timestamp;
+                } else {
+                    return Err(ExecutionError::DisabledOperation { pc, opcode });
+                };
+                (opcode, dsl_instr.cloned())
             };
 
             #[cfg(feature = "bench-metrics")]

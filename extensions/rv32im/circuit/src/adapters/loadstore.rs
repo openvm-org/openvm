@@ -91,7 +91,6 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
 /// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
 /// In case of Loads, reads from the shifted intermediate pointer and writes to rd.
 /// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
-#[derive(Debug)]
 pub struct Rv32LoadStoreAdapterChip<F: Field> {
     pub air: Rv32LoadStoreAdapterAir,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
@@ -108,6 +107,7 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
         range_checker_chip: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
+        assert!(range_checker_chip.range_max_bits() >= 15);
         Self {
             air: Rv32LoadStoreAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -131,8 +131,9 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
 
     pub imm: F,
     pub imm_sign: bool,
-    pub mem_ptr_limbs: [F; 2],
+    pub mem_ptr_limbs: [u32; 2],
     pub mem_as: F,
+    pub shift_amount: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -351,7 +352,6 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
-        assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
@@ -370,14 +370,6 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         );
 
         let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
-        self.range_checker_chip.add_count(
-            (mem_ptr_limbs[0] - shift_amount) / 4,
-            RV32_CELL_BITS * 2 - 2,
-        );
-        self.range_checker_chip.add_count(
-            mem_ptr_limbs[1],
-            self.air.pointer_max_bits - RV32_CELL_BITS * 2,
-        );
 
         let ptr_val = ptr_val - shift_amount;
         let read_record = match local_opcode {
@@ -408,7 +400,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                 read: read_record.0,
                 imm: c,
                 imm_sign: imm_sign == 1,
-                mem_ptr_limbs: mem_ptr_limbs.map(F::from_canonical_u32),
+                shift_amount,
+                mem_ptr_limbs,
                 mem_as: e,
             },
         ))
@@ -431,13 +424,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let (write_id, _) = match local_opcode {
             STOREW | STOREH | STOREB => {
                 let ptr = read_record.mem_ptr_limbs[0]
-                    + read_record.mem_ptr_limbs[1]
-                        * F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
-                memory.write(
-                    e,
-                    F::from_canonical_u32(ptr.as_canonical_u32() & 0xfffffffc),
-                    output.writes[0],
-                )
+                    + read_record.mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
+                memory.write(e, F::from_canonical_u32(ptr & 0xfffffffc), output.writes[0])
             }
             LOADW | LOADB | LOADH | LOADBU | LOADHU => memory.write(d, a, output.writes[0]),
         };
@@ -462,6 +450,15 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         write_record: Self::WriteRecord,
         memory: &OfflineMemory<F>,
     ) {
+        self.range_checker_chip.add_count(
+            (read_record.mem_ptr_limbs[0] - read_record.shift_amount) / 4,
+            RV32_CELL_BITS * 2 - 2,
+        );
+        self.range_checker_chip.add_count(
+            read_record.mem_ptr_limbs[1],
+            self.air.pointer_max_bits - RV32_CELL_BITS * 2,
+        );
+
         let aux_cols_factory = memory.aux_cols_factory();
         let adapter_cols: &mut Rv32LoadStoreAdapterCols<_> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
@@ -474,7 +471,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             aux_cols_factory.make_read_aux_cols(memory.record_by_id(read_record.read));
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
-        adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs;
+        adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
         let write = memory.record_by_id(write_record.write_id);
         adapter_cols.write_base_aux = aux_cols_factory
             .make_write_aux_cols::<RV32_REGISTER_NUM_LIMBS>(write)

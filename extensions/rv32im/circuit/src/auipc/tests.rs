@@ -38,7 +38,7 @@ fn set_and_execute(
 
     tester.execute_with_pc(
         chip,
-        Instruction::from_usize(VmOpcode::with_default_offset(opcode), [a, 0, imm, 1, 0]),
+        &Instruction::from_usize(VmOpcode::with_default_offset(opcode), [a, 0, imm, 1, 0]),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();

@@ -190,6 +190,9 @@ pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>>
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
+// TODO: Make this configurable.
+const DEFAULT_RECORDS_CAPACITY: usize = 1 << 20;
+
 impl<F, A, C> VmChipWrapper<F, A, C>
 where
     A: VmAdapterChip<F>,
@@ -199,7 +202,7 @@ where
         Self {
             adapter,
             core,
-            records: vec![],
+            records: Vec::with_capacity(DEFAULT_RECORDS_CAPACITY),
             offline_memory,
         }
     }
@@ -214,16 +217,16 @@ where
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
-        let (reads, read_record) = self.adapter.preprocess(memory, &instruction)?;
+        let (reads, read_record) = self.adapter.preprocess(memory, instruction)?;
         let (output, core_record) =
             self.core
-                .execute_instruction(&instruction, from_state.pc, reads)?;
+                .execute_instruction(instruction, from_state.pc, reads)?;
         let (to_state, write_record) =
             self.adapter
-                .postprocess(memory, &instruction, from_state, output, &read_record)?;
+                .postprocess(memory, instruction, from_state, output, &read_record)?;
         self.records.push((read_record, write_record, core_record));
         Ok(to_state)
     }

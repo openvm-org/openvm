@@ -130,7 +130,7 @@ fn test_mul_013_by_013() {
         chip.0.core.air.offset + PairingOpcode::MUL_013_BY_013 as usize,
     );
 
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -220,7 +220,7 @@ fn test_mul_by_01234() {
         chip.0.core.air.offset + PairingOpcode::MUL_BY_01234 as usize,
     );
 
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -289,7 +289,7 @@ fn test_evaluate_line() {
         chip.0.core.air.offset + PairingOpcode::EVALUATE_LINE as usize,
     );
 
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }

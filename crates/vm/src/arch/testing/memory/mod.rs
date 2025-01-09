@@ -22,7 +22,6 @@ const WORD_SIZE: usize = 1;
 /// Stores a log of raw messages to send/receive to the [MemoryBus].
 ///
 /// It will create a [air::MemoryDummyAir] to add messages to MemoryBus.
-#[derive(Debug)]
 pub struct MemoryTester<F> {
     pub bus: MemoryBus,
     pub controller: Rc<RefCell<MemoryController<F>>>,

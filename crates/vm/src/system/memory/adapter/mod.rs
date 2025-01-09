@@ -28,7 +28,6 @@ mod columns;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Clone)]
 pub struct AccessAdapterInventory<F> {
     chips: Vec<GenericAccessAdapterChip<F>>,
     air_names: Vec<String>,
@@ -165,7 +164,7 @@ pub trait GenericAccessAdapterChipTrait<F> {
         F: PrimeField32;
 }
 
-#[derive(Debug, Clone, Chip, ChipUsageGetter)]
+#[derive(Chip, ChipUsageGetter)]
 #[enum_dispatch(GenericAccessAdapterChipTrait<F>)]
 #[chip(where = "F: PrimeField32")]
 enum GenericAccessAdapterChip<F> {
@@ -197,7 +196,6 @@ impl<F> GenericAccessAdapterChip<F> {
         }
     }
 }
-#[derive(Debug, Clone)]
 pub struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
     range_checker: Arc<VariableRangeCheckerChip>,

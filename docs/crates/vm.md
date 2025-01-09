@@ -11,7 +11,7 @@ pub trait InstructionExecutor<F> {
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
         &mut self,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
   ) -> Result<ExecutionState<u32>>;
 }
