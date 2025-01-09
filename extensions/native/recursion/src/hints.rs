@@ -129,7 +129,7 @@ impl<C: Config + 'static, I: VecAutoHintable + Hintable<C> + 'static> Hintable<C
         let len = builder.hint_var();
         let arr = builder.dyn_array(len);
         builder
-            .zipped_iter(&vec![Box::new(arr.clone()) as Box<dyn ArrayLike<C>>])
+            .zipped_iter(&[Box::new(arr.clone()) as Box<dyn ArrayLike<C>>])
             .for_each(|idx_vec, builder| {
                 let hint = I::read(builder);
                 let ptr = idx_vec[0];

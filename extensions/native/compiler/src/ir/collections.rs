@@ -550,6 +550,7 @@ pub fn unsafe_array_transmute<C: Config, S, T>(arr: Array<C, S>) -> Array<C, T> 
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 pub trait ArrayLike<C: Config> {
     fn len(&self) -> Usize<C::N>;
 

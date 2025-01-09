@@ -51,7 +51,7 @@ pub fn verify_two_adic_pcs<C: Config + 'static>(
     builder.cycle_tracker_start("stage-d-verifier-verify");
     let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
     builder
-        .zipped_iter(&vec![
+        .zipped_iter(&[
             Box::new(proof.commit_phase_commits.clone()) as Box<dyn ArrayLike<C>>,
             Box::new(betas.clone()) as Box<dyn ArrayLike<C>>,
         ])
