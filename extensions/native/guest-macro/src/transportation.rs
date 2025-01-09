@@ -116,12 +116,6 @@ pub fn compiled_kernel_to_function<F: PrimeField32>(
         compiled_kernel.return_fp,
     ));
 
-    let mut instructions_string = String::new();
-    for instruction in instructions.iter() {
-        instructions_string.push_str(&format!("{:?}\n", instruction));
-    }
-    std::fs::write("instructions.txt", instructions_string).expect("Failed to write file");
-
     let asm_call: TokenStream =
         instructions_to_asm_call(instructions, input_vars, vec![return_name.clone()])
             .parse()

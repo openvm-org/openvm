@@ -17,7 +17,5 @@ pub fn edsl_kernel(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         parse_compiler_output::parse_compiled_kernel(parsed_kernel, compiler_output);
     let rust_function = transportation::compiled_kernel_to_function(compiled_kernel);
 
-    std::fs::write("macro_output.txt", rust_function.to_string()).unwrap();
-
     proc_macro::TokenStream::from(rust_function)
 }
