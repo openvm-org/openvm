@@ -396,10 +396,10 @@ impl<C: Config> Builder<C> {
         arrays: &'a [Box<dyn ArrayLike<C>>],
     ) -> ZippedPointerIteratorBuilder<'a, C> {
         assert!(!arrays.is_empty());
-        assert!(arrays
-            .windows(2)
-            .all(|array| array[0].len() == array[1].len()));
         if arrays.iter().all(|array| array.is_fixed()) {
+            assert!(arrays
+                .windows(2)
+                .all(|array| array[0].len() == array[1].len()));
             ZippedPointerIteratorBuilder {
                 starts: vec![RVar::zero(); arrays.len()],
                 ends: vec![arrays[0].len().into(); arrays.len()],

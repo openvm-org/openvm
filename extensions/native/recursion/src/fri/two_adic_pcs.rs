@@ -65,9 +65,8 @@ pub fn verify_two_adic_pcs<C: Config + 'static>(
         });
 
     builder
-        .range(0, proof.final_poly.len())
-        .for_each(|i, builder| {
-            let final_poly_elem = builder.get(&proof.final_poly, i);
+        .iter(&proof.final_poly)
+        .for_each(|final_poly_elem, builder| {
             let final_poly_elem_felts = builder.ext2felt(final_poly_elem);
             challenger.observe_slice(builder, final_poly_elem_felts);
         });
