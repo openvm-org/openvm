@@ -982,7 +982,9 @@ impl<C: Config> ZippedPointerIteratorBuilder<'_, C> {
             .iter()
             .map(|s| C::N::from_canonical_usize(*s))
             .collect();
-        let loop_variables: Vec<Var<C::N>> = vec![self.builder.uninit(); self.starts.len()];
+        let loop_variables: Vec<Var<C::N>> = (0..self.starts.len())
+            .map(|_| self.builder.uninit())
+            .collect();
         let mut loop_body_builder = self.builder.create_sub_builder();
 
         f(
