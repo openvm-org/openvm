@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-openvm_native_guest_macro::edsl_kernel! {
+openvm_native_guest_macro::native_kernel! {
     fn function_name(n: usize | Felt<F>) -> usize | Felt<F> {
         compiler_output.txt
     }

@@ -7,7 +7,7 @@ mod parse_kernel;
 mod transportation;
 
 #[proc_macro]
-pub fn edsl_kernel(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn native_kernel(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = proc_macro2::TokenStream::from(input);
 
     let parsed_kernel = parse_kernel::parse_raw_kernel(input);
