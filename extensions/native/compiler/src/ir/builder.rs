@@ -8,7 +8,7 @@ use super::{
     Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,
     SymbolicFelt, SymbolicVar, Usize, Var, Variable,
 };
-use crate::ir::Ptr;
+use crate::ir::{collections::ArrayLike, Ptr};
 
 /// TracedVec is a Vec wrapper that records a trace whenever an element is pushed. When extending
 /// from another TracedVec, the traces are copied over.
@@ -391,22 +391,22 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    pub fn zipped_iter<'a, V: MemVariable<C>>(
+    pub fn zipped_iter<'a>(
         &'a mut self,
-        arrays: &'a [Array<C, V>],
+        arrays: &'a [Box<dyn ArrayLike<C>>],
     ) -> ZippedPointerIteratorBuilder<'a, C> {
         assert!(!arrays.is_empty());
         assert!(arrays
             .windows(2)
             .all(|array| array[0].len() == array[1].len()));
-        if arrays.iter().all(|array| matches!(array, Array::Fixed(_))) {
+        if arrays.iter().all(|array| array.is_fixed()) {
             ZippedPointerIteratorBuilder {
                 starts: vec![RVar::zero(); arrays.len()],
                 ends: vec![arrays[0].len().into(); arrays.len()],
                 step_sizes: vec![1; arrays.len()],
                 builder: self,
             }
-        } else if arrays.iter().all(|array| matches!(array, Array::Dyn(_, _))) {
+        } else if arrays.iter().all(|array| !array.is_fixed()) {
             ZippedPointerIteratorBuilder {
                 starts: arrays
                     .iter()
@@ -415,22 +415,16 @@ impl<C: Config> Builder<C> {
                 ends: arrays
                     .iter()
                     .map(|array| {
-                        if let Array::Dyn(ptr, len) = array {
-                            let len: RVar<C::N> = len.clone().into();
-                            let end: Var<C::N> = self.eval(
-                                ptr.address
-                                    + len
-                                        * RVar::from_field(
-                                            C::N::from_canonical_usize(V::size_of()),
-                                        ),
-                            );
-                            end.into()
-                        } else {
-                            unreachable!()
-                        }
+                        let len: RVar<C::N> = array.len().into();
+                        let end: Var<C::N> = self.eval(
+                            array.ptr().address
+                                + len
+                                    * RVar::from_field(C::N::from_canonical_usize(array.size_of())),
+                        );
+                        end.into()
                     })
                     .collect(),
-                step_sizes: vec![V::size_of(); arrays.len()],
+                step_sizes: arrays.iter().map(|array| array.size_of()).collect(),
                 builder: self,
             }
         } else {

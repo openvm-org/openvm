@@ -98,7 +98,7 @@ pub struct StarkVerifier<C: Config> {
     _phantom: PhantomData<C>,
 }
 
-impl<C: Config> StarkVerifier<C>
+impl<C: Config + 'static> StarkVerifier<C>
 where
     C::F: TwoAdicField,
 {

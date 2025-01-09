@@ -274,6 +274,29 @@ impl<C: Config> Builder<C> {
         Ref::from_ptr(ptr)
     }
 
+    pub fn iter_ptr_get<V: MemVariable<C>>(&mut self, slice: &Array<C, V>, ptr: RVar<C::N>) -> V {
+        match slice {
+            Array::Fixed(v) => {
+                if let RVar::Const(_) = ptr {
+                    let idx = ptr.value();
+                    v.borrow()[idx].clone().unwrap()
+                } else {
+                    panic!("Cannot index into a fixed slice with a variable index")
+                }
+            }
+            Array::Dyn(ptr, _) => {
+                let index = MemIndex {
+                    index: 0.into(),
+                    offset: 0,
+                    size: V::size_of(),
+                };
+                let var: V = self.uninit();
+                self.load(var.clone(), *ptr, index);
+                var
+            }
+        }
+    }
+
     pub fn iter_ptr_set<V: MemVariable<C>, Expr: Into<V::Expression>>(
         &mut self,
         slice: &Array<C, V>,
@@ -524,5 +547,36 @@ pub fn unsafe_array_transmute<C: Config, S, T>(arr: Array<C, S>) -> Array<C, T> 
         Array::Dyn(ptr, len)
     } else {
         unreachable!()
+    }
+}
+
+pub trait ArrayLike<C: Config> {
+    fn len(&self) -> Usize<C::N>;
+
+    fn ptr(&self) -> Ptr<C::N>;
+
+    fn is_fixed(&self) -> bool;
+
+    fn size_of(&self) -> usize;
+}
+
+impl<C: Config, T: MemVariable<C>> ArrayLike<C> for Array<C, T> {
+    fn len(&self) -> Usize<C::N> {
+        self.len()
+    }
+
+    fn ptr(&self) -> Ptr<C::N> {
+        self.ptr()
+    }
+
+    fn is_fixed(&self) -> bool {
+        match self {
+            Array::Fixed(_) => true,
+            Array::Dyn(_, _) => false,
+        }
+    }
+
+    fn size_of(&self) -> usize {
+        T::size_of()
     }
 }

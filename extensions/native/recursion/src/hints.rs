@@ -2,7 +2,8 @@ use std::cmp::Reverse;
 
 use itertools::Itertools;
 use openvm_native_compiler::ir::{
-    unsafe_array_transmute, Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, DIGEST_SIZE,
+    unsafe_array_transmute, Array, ArrayLike, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
+    DIGEST_SIZE,
 };
 use openvm_stark_backend::{
     keygen::types::TraceWidth,
@@ -121,14 +122,14 @@ impl VecAutoHintable for Vec<Vec<AdjacentOpenedValues<InnerChallenge>>> {}
 impl VecAutoHintable for AirProofData<BabyBearPoseidon2Config> {}
 impl VecAutoHintable for Proof<BabyBearPoseidon2Config> {}
 
-impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
+impl<C: Config + 'static, I: VecAutoHintable + Hintable<C> + 'static> Hintable<C> for Vec<I> {
     type HintVariable = Array<C, I::HintVariable>;
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         let len = builder.hint_var();
         let arr = builder.dyn_array(len);
         builder
-            .zipped_iter(&vec![arr.clone()])
+            .zipped_iter(&vec![Box::new(arr.clone()) as Box<dyn ArrayLike<C>>])
             .for_each(|idx_vec, builder| {
                 let hint = I::read(builder);
                 let ptr = idx_vec[0];

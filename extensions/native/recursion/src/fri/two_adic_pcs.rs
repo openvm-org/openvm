@@ -29,7 +29,7 @@ use crate::{
 /// <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/mmcs.rs#L87>
 /// <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L100>
 /// <https://github.com/Plonky3/Plonky3/blob/784b7dd1fa87c1202e63350cc8182d7c5327a7af/fri/src/verifier.rs#L22>
-pub fn verify_two_adic_pcs<C: Config>(
+pub fn verify_two_adic_pcs<C: Config + 'static>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
     rounds: Array<C, TwoAdicPcsRoundVariable<C>>,
@@ -51,13 +51,19 @@ pub fn verify_two_adic_pcs<C: Config>(
     builder.cycle_tracker_start("stage-d-verifier-verify");
     let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
     builder
-        .range(0, proof.commit_phase_commits.len())
-        .for_each(|i, builder| {
-            let comm = builder.get(&proof.commit_phase_commits, i);
+        .zipped_iter(&vec![
+            Box::new(proof.commit_phase_commits.clone()) as Box<dyn ArrayLike<C>>,
+            Box::new(betas.clone()) as Box<dyn ArrayLike<C>>,
+        ])
+        .for_each(|ptr_vec, builder| {
+            let comm_ptr = ptr_vec[0];
+            let beta_ptr = ptr_vec[1];
+            let comm = builder.get(&proof.commit_phase_commits, comm_ptr);
             challenger.observe_digest(builder, comm);
             let sample = challenger.sample_ext(builder);
-            builder.set(&betas, i, sample);
+            builder.iter_ptr_set(&betas, beta_ptr, sample);
         });
+
     builder
         .range(0, proof.final_poly.len())
         .for_each(|i, builder| {
@@ -308,7 +314,7 @@ pub struct TwoAdicFriPcsVariable<C: Config> {
     pub config: FriConfigVariable<C>,
 }
 
-impl<C: Config> PcsVariable<C> for TwoAdicFriPcsVariable<C>
+impl<C: Config + 'static> PcsVariable<C> for TwoAdicFriPcsVariable<C>
 where
     C::F: TwoAdicField,
     C::EF: TwoAdicField,
