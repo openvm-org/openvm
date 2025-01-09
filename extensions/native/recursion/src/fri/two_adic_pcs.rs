@@ -29,7 +29,7 @@ use crate::{
 /// <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/mmcs.rs#L87>
 /// <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L100>
 /// <https://github.com/Plonky3/Plonky3/blob/784b7dd1fa87c1202e63350cc8182d7c5327a7af/fri/src/verifier.rs#L22>
-pub fn verify_two_adic_pcs<C: Config + 'static>(
+pub fn verify_two_adic_pcs<C: Config>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
     rounds: Array<C, TwoAdicPcsRoundVariable<C>>,
@@ -330,7 +330,7 @@ pub struct TwoAdicFriPcsVariable<C: Config> {
     pub config: FriConfigVariable<C>,
 }
 
-impl<C: Config + 'static> PcsVariable<C> for TwoAdicFriPcsVariable<C>
+impl<C: Config> PcsVariable<C> for TwoAdicFriPcsVariable<C>
 where
     C::F: TwoAdicField,
     C::EF: TwoAdicField,

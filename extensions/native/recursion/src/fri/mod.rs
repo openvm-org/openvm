@@ -30,7 +30,7 @@ pub mod witness;
 /// Reference: <https://github.com/Plonky3/Plonky3/blob/4809fa7bedd9ba8f6f5d3267b1592618e3776c57/fri/src/verifier.rs#L101>
 #[allow(clippy::too_many_arguments)]
 #[allow(unused_variables)]
-pub fn verify_query<C: Config + 'static>(
+pub fn verify_query<C: Config>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
     commit_phase_commits: &Array<C, DigestVariable<C>>,
@@ -141,7 +141,7 @@ pub enum NestedOpenedValues<C: Config> {
 /// Reference: <https://github.com/Plonky3/Plonky3/blob/4809fa7bedd9ba8f6f5d3267b1592618e3776c57/merkle-tree/src/mmcs.rs#L92>
 #[allow(clippy::type_complexity)]
 #[allow(unused_variables)]
-pub fn verify_batch<C: Config + 'static>(
+pub fn verify_batch<C: Config>(
     builder: &mut Builder<C>,
     commit: &DigestVariable<C>,
     dimensions: Array<C, DimensionsVariable<C>>,

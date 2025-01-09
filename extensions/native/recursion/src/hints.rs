@@ -122,7 +122,7 @@ impl VecAutoHintable for Vec<Vec<AdjacentOpenedValues<InnerChallenge>>> {}
 impl VecAutoHintable for AirProofData<BabyBearPoseidon2Config> {}
 impl VecAutoHintable for Proof<BabyBearPoseidon2Config> {}
 
-impl<C: Config + 'static, I: VecAutoHintable + Hintable<C> + 'static> Hintable<C> for Vec<I> {
+impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
     type HintVariable = Array<C, I::HintVariable>;
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {

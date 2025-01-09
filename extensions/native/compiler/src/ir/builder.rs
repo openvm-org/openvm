@@ -393,7 +393,7 @@ impl<C: Config> Builder<C> {
 
     pub fn zipped_iter<'a>(
         &'a mut self,
-        arrays: &'a [Box<dyn ArrayLike<C>>],
+        arrays: &'a [Box<dyn ArrayLike<C> + 'a>],
     ) -> ZippedPointerIteratorBuilder<'a, C> {
         assert!(!arrays.is_empty());
         if arrays.iter().all(|array| array.is_fixed()) {
@@ -528,16 +528,23 @@ impl<C: Config> Builder<C> {
         let arr = self.dyn_array(vlen);
 
         // Write the content hints directly into the array memory.
-        self.iter(&arr).for_each(|val, builder| {
-            let index = MemIndex {
-                index: 0.into(),
-                offset: 0,
-                size: 1,
-            };
-            builder
-                .operations
-                .push(DslIr::StoreHintWord(Ptr { address: val }, index));
-        });
+        self.zipped_iter(&[Box::new(arr.clone()) as Box<dyn ArrayLike<C>>])
+            .for_each(|ptr_vec, builder| {
+                let index = MemIndex {
+                    index: 0.into(),
+                    offset: 0,
+                    size: 1,
+                };
+                builder.operations.push(DslIr::StoreHintWord(
+                    Ptr {
+                        address: match ptr_vec[0] {
+                            RVar::Const(_) => unreachable!(),
+                            RVar::Val(v) => v,
+                        },
+                    },
+                    index,
+                ));
+            });
 
         arr
     }
