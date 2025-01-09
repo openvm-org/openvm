@@ -37,6 +37,7 @@ members = [
     "extensions/native/recursion",
     "extensions/native/transpiler",
     "extensions/native/guest-macro",
+    "extensions/native/guest-macro/test",
     "extensions/native/serialization",
     "extensions/algebra/circuit",
     "extensions/algebra/transpiler",
@@ -139,6 +140,8 @@ openvm-native-compiler = { path = "extensions/native/compiler", default-features
 openvm-native-compiler-derive = { path = "extensions/native/compiler/derive", default-features = false }
 openvm-native-recursion = { path = "extensions/native/recursion", default-features = false }
 openvm-native-guest-macro = { path = "extensions/native/guest-macro", default-features = false }
+openvm-native-integration-test = { path = "extensions/native/guest-macro/test", default-features = false }
+
 openvm-native-transpiler = { path = "extensions/native/transpiler", default-features = false }
 openvm-native-serialization = { path = "extensions/native/serialization", default-features = false }
 openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }

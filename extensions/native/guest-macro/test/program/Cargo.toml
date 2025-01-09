@@ -1,0 +1,13 @@
+[workspace]
+[package]
+name = "openvm-native-integration-test-program"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../../crates/toolchain/openvm" }
+openvm-native-guest-macro = { path = "../.." }
+
+[features]
+default = []
+std = ["openvm/std"]

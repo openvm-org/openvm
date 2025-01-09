@@ -3710,7 +3710,7 @@ version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.90",
+ "syn 2.0.95",
 ]
 
 [[package]]
@@ -4039,7 +4039,51 @@ dependencies = [
  "quote",
  "strum",
  "strum_macros",
- "syn 2.0.90",
+ "syn 2.0.95",
+]
+
+[[package]]
+name = "openvm-native-integration-test"
+version = "0.2.0-alpha"
+dependencies = [
+ "bincode 2.0.0-rc.3",
+ "clap",
+ "criterion",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "k256",
+ "metrics",
+ "num-bigint-dig",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-benchmarks",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-ecc-circuit",
+ "openvm-ecc-transpiler",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-guest",
+ "openvm-keccak256-transpiler",
+ "openvm-native-circuit",
+ "openvm-native-compiler",
+ "openvm-native-recursion",
+ "openvm-native-transpiler",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-transpiler",
+ "pprof",
+ "rand_chacha",
+ "serde",
+ "tempfile",
+ "tiny-keccak",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

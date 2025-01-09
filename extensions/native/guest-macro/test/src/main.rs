@@ -27,7 +27,7 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let elf = args.build_bench_program("test_kernel")?;
+    let elf = args.build_bench_program("../../extensions/native/guest-macro/test/program")?;
     let exe = VmExe::from_elf(
         elf.clone(),
         Transpiler::<BabyBear>::default()
