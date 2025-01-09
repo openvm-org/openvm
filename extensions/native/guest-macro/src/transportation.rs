@@ -6,14 +6,14 @@ use openvm_instructions::{
     },
     VmOpcode,
 };
-use openvm_native_compiler::{CastfOpcode, FieldArithmeticOpcode, NativeJalOpcode};
+use openvm_native_compiler::{asm::A0, CastfOpcode, FieldArithmeticOpcode, NativeJalOpcode};
 use openvm_native_serialization::{
     GAP_INDICATOR, LONG_FORM_INSTRUCTION_INDICATOR, VARIABLE_REGISTER_INDICATOR,
 };
 use p3_field::{Field, PrimeField32};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use openvm_native_compiler::asm::A0;
+
 use crate::{
     parse_compiler_output::CompiledKernel,
     transportation::Operand::{Literal, Variable},
