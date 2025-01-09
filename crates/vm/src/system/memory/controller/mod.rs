@@ -25,7 +25,7 @@ use openvm_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
@@ -248,6 +248,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 memory_bus,
                 range_checker.clone(),
                 mem_config.clk_max_bits,
+                mem_config,
             ))),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
@@ -298,6 +299,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 memory_bus,
                 range_checker.clone(),
                 mem_config.clk_max_bits,
+                mem_config,
             ))),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
@@ -347,7 +349,7 @@ impl<F: PrimeField32> MemoryController<F> {
             panic!("Cannot set initial memory after first timestamp");
         }
         let mut offline_memory = self.offline_memory.lock().unwrap();
-        offline_memory.set_initial_memory(memory.clone());
+        offline_memory.set_initial_memory(memory.clone(), self.mem_config);
 
         self.memory = Memory::from_image(memory.clone(), self.mem_config.access_capacity);
 
@@ -453,6 +455,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     fn replay_access_log(&mut self) {
+        let start = std::time::Instant::now();
         let log = mem::take(&mut self.memory.log);
 
         let mut offline_memory = self.offline_memory.lock().unwrap();
@@ -466,6 +469,10 @@ impl<F: PrimeField32> MemoryController<F> {
                 &mut self.access_adapters,
             );
         }
+        eprintln!(
+            "- - - - - - - - - - - - - - - replay_access_log time: {:?}",
+            start.elapsed()
+        );
     }
 
     fn replay_access(

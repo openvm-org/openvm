@@ -1,77 +1,97 @@
-use std::array;
+use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub(crate) struct PagedVec<T> {
-    page_size: u64,
+    page_size: usize,
     pages: Vec<Option<Vec<T>>>,
 }
 
-impl<T: Default + Copy> PagedVec<T> {
+impl<T: Default + Clone> PagedVec<T> {
     pub fn new(page_size: usize, num_pages: usize) -> Self {
         Self {
-            page_size: page_size as u64,
+            page_size,
             pages: vec![None; num_pages],
         }
     }
 
-    pub fn get(&self, index: u64) -> T {
-        let page_idx = (index / self.page_size) as usize;
-        if let Some(page) = &self.pages[page_idx] {
-            page[(index % self.page_size) as usize]
-        } else {
-            T::default()
-        }
+    pub fn get(&self, index: usize) -> Option<&T> {
+        let page_idx = index / self.page_size;
+        self.pages[page_idx]
+            .as_ref()
+            .map(|page| &page[index % self.page_size])
     }
 
-    pub fn set(&mut self, index: u64, value: T) {
-        let page_idx = (index / self.page_size) as usize;
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+        let page_idx = index / self.page_size;
+        self.pages[page_idx]
+            .as_mut()
+            .map(|page| &mut page[index % self.page_size])
+    }
+
+    pub fn set(&mut self, index: usize, value: T) {
+        let page_idx = index / self.page_size;
         if let Some(page) = self.pages[page_idx].as_mut() {
-            page[(index % self.page_size) as usize] = value;
+            page[index % self.page_size] = value;
         } else {
-            let page = self.pages[page_idx]
-                .get_or_insert_with(|| vec![T::default(); self.page_size as usize]);
-            page[(index % self.page_size) as usize] = value;
+            let page =
+                self.pages[page_idx].get_or_insert_with(|| vec![T::default(); self.page_size]);
+            page[index % self.page_size] = value;
         }
     }
 
-    pub fn get_range<const N: usize>(&self, index: u64) -> [T; N] {
-        let start_page_idx = (index / self.page_size) as usize;
-        let end_page_idx = ((index + N as u64) / self.page_size) as usize;
+    pub fn get_range(&self, range: Range<usize>) -> Vec<T> {
+        let start_page_idx = range.start / self.page_size;
+        let end_page_idx = range.end / self.page_size;
 
         if start_page_idx == end_page_idx {
             if let Some(start_page) = &self.pages[start_page_idx] {
-                let i = (index % self.page_size) as usize;
-                start_page[i..i + N]
-                    .try_into()
-                    .expect("Slice length matches const generic N")
+                let i = range.start % self.page_size;
+                start_page[i..i + range.len()].to_vec()
             } else {
-                [T::default(); N]
+                vec![T::default(); range.len()]
             }
         } else {
             // TODO: This can be more efficient by copying from two slices (but most queries should
             // not be cross-page).
-            array::from_fn(|i| self.get(index + i as u64))
+            range
+                .map(|i| self.get(i).cloned().unwrap_or_default())
+                .collect()
         }
     }
 
-    pub fn set_range<const N: usize>(&mut self, index: u64, values: [T; N]) {
-        let start_page_idx = (index / self.page_size) as usize;
-        let end_page_idx = ((index + N as u64) / self.page_size) as usize;
+    pub fn set_range<'a>(
+        &mut self,
+        range: Range<usize>,
+        values: impl IntoIterator<Item = &'a T>,
+    ) -> Vec<T>
+    where
+        T: 'a,
+    {
+        let start_page_idx = range.start / self.page_size;
+        let end_page_idx = range.end / self.page_size;
 
         if start_page_idx == end_page_idx {
             let page = self.pages[start_page_idx]
-                .get_or_insert_with(|| vec![T::default(); self.page_size as usize]);
-            let i = (index % self.page_size) as usize;
-            page[i..i + N].copy_from_slice(&values);
+                .get_or_insert_with(|| vec![T::default(); self.page_size]);
+            let page_start = range.start - range.start % self.page_size;
+            let result = page[range.start - page_start..range.end - page_start].to_vec();
+            for (j, value) in range.zip(values.into_iter()) {
+                page[j - page_start] = value.clone();
+            }
+            result
         } else {
             // TODO: This can be more efficient by copying into two slices (but most queries should
             // not be cross-page).
-            for i in 0..N {
-                self.set(index + i as u64, values[i]);
+            let result = self.get_range(range.clone());
+            for (i, value) in range.zip(values.into_iter()) {
+                self.set(i, value.clone());
             }
+            result
         }
     }
+}
 
+impl<T> PagedVec<T> {
     pub fn iter(&self) -> PagedVecIter<'_, T> {
         PagedVecIter {
             vec: self,
@@ -87,8 +107,8 @@ pub struct PagedVecIter<'a, T> {
     current_index_in_page: usize,
 }
 
-impl<'a, T: Default + Copy> Iterator for PagedVecIter<'a, T> {
-    type Item = (u64, T);
+impl<T: Clone> Iterator for PagedVecIter<'_, T> {
+    type Item = (usize, T);
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.current_page < self.vec.pages.len()
@@ -101,14 +121,13 @@ impl<'a, T: Default + Copy> Iterator for PagedVecIter<'a, T> {
         if self.current_page >= self.vec.pages.len() {
             return None;
         }
-        let global_index =
-            (self.current_page as u64 * self.vec.page_size) + self.current_index_in_page as u64;
+        let global_index = self.current_page * self.vec.page_size + self.current_index_in_page;
 
         let page = self.vec.pages[self.current_page].as_ref()?;
-        let value = page[self.current_index_in_page];
+        let value = page[self.current_index_in_page].clone();
 
         self.current_index_in_page += 1;
-        if self.current_index_in_page == self.vec.page_size as usize {
+        if self.current_index_in_page == self.vec.page_size {
             self.current_page += 1;
             self.current_index_in_page = 0;
         }
@@ -123,9 +142,9 @@ mod tests {
     #[test]
     fn test_basic_get_set() {
         let mut v = PagedVec::new(4, 3);
-        assert_eq!(v.get(0), 0);
+        assert_eq!(v.get(0), None);
         v.set(0, 42);
-        assert_eq!(v.get(0), 42);
+        assert_eq!(v.get(0), Some(&42));
     }
 
     #[test]
@@ -133,8 +152,8 @@ mod tests {
         let mut v = PagedVec::new(4, 3);
         v.set(3, 10); // Last element of first page
         v.set(4, 20); // First element of second page
-        assert_eq!(v.get(3), 10);
-        assert_eq!(v.get(4), 20);
+        assert_eq!(v.get(3), Some(&10));
+        assert_eq!(v.get(4), Some(&20));
     }
 
     #[test]
@@ -152,14 +171,14 @@ mod tests {
         v.set(7, 8);
 
         // Verify all values
-        assert_eq!(v.get_range::<8>(0), [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(v.get_range(0..8), [1, 2, 3, 4, 5, 6, 7, 8]);
     }
 
     #[test]
     fn test_range_cross_page_boundary() {
         let mut v = PagedVec::new(4, 2);
-        v.set_range::<6>(2, [10, 11, 12, 13, 14, 15]);
-        assert_eq!(v.get_range::<6>(2), [10, 11, 12, 13, 14, 15]);
+        v.set_range(2..8, &[10, 11, 12, 13, 14, 15]);
+        assert_eq!(v.get_range(2..8), [10, 11, 12, 13, 14, 15]);
     }
 
     #[test]
@@ -167,7 +186,7 @@ mod tests {
         let mut v = PagedVec::new(4, 100);
         let large_index = 399;
         v.set(large_index, 42);
-        assert_eq!(v.get(large_index), 42);
+        assert_eq!(v.get(large_index), Some(&42));
     }
 
     #[test]
@@ -177,33 +196,33 @@ mod tests {
         v.set(5, 10);
 
         // Should include both set values and defaults
-        assert_eq!(v.get_range::<6>(1), [0, 5, 0, 0, 10, 0]);
+        assert_eq!(v.get_range(1..7), [0, 5, 0, 0, 10, 0]);
     }
 
     #[test]
     fn test_non_zero_default_type() {
         let mut v: PagedVec<bool> = PagedVec::new(4, 2);
-        assert_eq!(v.get(0), false); // bool's default
+        assert_eq!(v.get(0), None); // bool's default
         v.set(0, true);
-        assert_eq!(v.get(0), true);
-        assert_eq!(v.get(1), false);
+        assert_eq!(v.get(0), Some(&true));
+        assert_eq!(v.get(1), None);
     }
 
     #[test]
     fn test_set_range_overlapping_pages() {
         let mut v = PagedVec::new(4, 3);
         let test_data = [1, 2, 3, 4, 5, 6];
-        v.set_range::<6>(2, test_data);
+        v.set_range(2..8, &test_data);
 
         // Verify first page
-        assert_eq!(v.get(2), 1);
-        assert_eq!(v.get(3), 2);
+        assert_eq!(v.get(2), Some(&1));
+        assert_eq!(v.get(3), Some(&2));
 
         // Verify second page
-        assert_eq!(v.get(4), 3);
-        assert_eq!(v.get(5), 4);
-        assert_eq!(v.get(6), 5);
-        assert_eq!(v.get(7), 6);
+        assert_eq!(v.get(4), Some(&3));
+        assert_eq!(v.get(5), Some(&4));
+        assert_eq!(v.get(6), Some(&5));
+        assert_eq!(v.get(7), Some(&6));
     }
 
     #[test]
@@ -211,20 +230,20 @@ mod tests {
         let mut v = PagedVec::new(4, 3);
 
         // Initial set_range
-        v.set_range::<5>(0, [1, 2, 3, 4, 5]);
-        assert_eq!(v.get_range::<5>(0), [1, 2, 3, 4, 5]);
+        v.set_range(0..5, &[1, 2, 3, 4, 5]);
+        assert_eq!(v.get_range(0..5), [1, 2, 3, 4, 5]);
 
         // Overlap from beginning
-        v.set_range::<3>(0, [10, 20, 30]);
-        assert_eq!(v.get_range::<5>(0), [10, 20, 30, 4, 5]);
+        v.set_range(0..3, &[10, 20, 30]);
+        assert_eq!(v.get_range(0..5), [10, 20, 30, 4, 5]);
 
         // Overlap in middle
-        v.set_range::<2>(2, [42, 43]);
-        assert_eq!(v.get_range::<5>(0), [10, 20, 42, 43, 5]);
+        v.set_range(2..4, &[42, 43]);
+        assert_eq!(v.get_range(0..5), [10, 20, 42, 43, 5]);
 
         // Overlap at end
-        v.set_range::<2>(4, [91, 92]);
-        assert_eq!(v.get_range::<6>(0), [10, 20, 42, 43, 91, 92]);
+        v.set_range(4..6, &[91, 92]);
+        assert_eq!(v.get_range(0..6), [10, 20, 42, 43, 91, 92]);
     }
 
     #[test]
@@ -232,28 +251,32 @@ mod tests {
         let mut v = PagedVec::new(4, 3);
 
         // Fill across first two pages
-        v.set_range::<8>(0, [1, 2, 3, 4, 5, 6, 7, 8]);
+        v.set_range(0..8, &[1, 2, 3, 4, 5, 6, 7, 8]);
 
         // Overlap end of first page and start of second
-        v.set_range::<4>(2, [21, 22, 23, 24]);
-        assert_eq!(v.get_range::<8>(0), [1, 2, 21, 22, 23, 24, 7, 8]);
+        v.set_range(2..6, &[21, 22, 23, 24]);
+        assert_eq!(v.get_range(0..8), [1, 2, 21, 22, 23, 24, 7, 8]);
 
         // Overlap multiple pages
-        v.set_range::<6>(1, [31, 32, 33, 34, 35, 36]);
-        assert_eq!(v.get_range::<8>(0), [1, 31, 32, 33, 34, 35, 36, 8]);
+        v.set_range(1..7, &[31, 32, 33, 34, 35, 36]);
+        assert_eq!(v.get_range(0..8), [1, 31, 32, 33, 34, 35, 36, 8]);
     }
 
     #[test]
     fn test_iterator() {
         let mut v = PagedVec::new(4, 3);
 
-        v.set_range::<6>(4, [1, 2, 3, 4, 5, 6]);
+        v.set_range(4..10, &[1, 2, 3, 4, 5, 6]);
         let contents: Vec<_> = v.iter().collect();
         assert_eq!(contents.len(), 8); // two pages
 
-        for i in 0..6 {
-            assert_eq!(contents[i], (4 + i as u64, 1 + i));
-        }
+        contents
+            .iter()
+            .take(6)
+            .enumerate()
+            .for_each(|(i, &(idx, val))| {
+                assert_eq!((idx, val), (4 + i, 1 + i));
+            });
         assert_eq!(contents[6], (10, 0));
         assert_eq!(contents[7], (11, 0));
     }
