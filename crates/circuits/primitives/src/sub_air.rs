@@ -3,7 +3,7 @@ use openvm_stark_backend::p3_air::AirBuilder;
 /// Trait with associated types intended to allow re-use of constraint logic
 /// inside other AIRs.
 ///
-/// A `SubAir` is **not** an [`Air`](p3_air::Air) itself.
+/// A `SubAir` is **not** an [Air](openvm_stark_backend::p3_air::Air) itself.
 /// A `SubAir` is a struct that holds the means to generate a particular set of constraints,
 /// meant to be re-usable within other AIRs.
 ///

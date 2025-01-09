@@ -9,10 +9,23 @@
 
 use openvm_instructions::UsizeOpcode;
 use openvm_instructions_derive::UsizeOpcode;
+use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr};
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x200]
 #[repr(usize)]
@@ -25,7 +38,19 @@ pub enum BaseAluOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x205]
 #[repr(usize)]
@@ -36,7 +61,19 @@ pub enum ShiftOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x208]
 #[repr(usize)]
@@ -47,7 +84,19 @@ pub enum LessThanOpcode {
 
 // TODO[jpw]: life would be easier if we split LOADB,LOADH into a separate enum
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x210]
 #[repr(usize)]
@@ -65,7 +114,19 @@ pub enum Rv32LoadStoreOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x220]
 #[repr(usize)]
@@ -76,7 +137,19 @@ pub enum BranchEqualOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x225]
 #[repr(usize)]
@@ -130,7 +203,19 @@ pub enum MulOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x251]
 #[repr(usize)]
@@ -142,7 +227,19 @@ pub enum MulHOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x254]
 #[repr(usize)]

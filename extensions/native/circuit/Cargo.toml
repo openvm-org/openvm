@@ -27,6 +27,8 @@ derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 eyre.workspace = true
 serde.workspace = true
+serde-big-array.workspace = true
+serde_with.workspace = true
 rayon.workspace = true
 
 [dev-dependencies]

@@ -198,7 +198,7 @@ fn set_and_execute(
 
     tester.execute_with_pc(
         chip,
-        Instruction::from_usize(
+        &Instruction::from_usize(
             VmOpcode::with_default_offset(opcode),
             [data.a, data.b, data.c, data.d, data.e, data.f, data.g]
                 .map(|x| x.as_canonical_u32() as usize),

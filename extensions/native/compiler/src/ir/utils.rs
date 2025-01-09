@@ -23,7 +23,7 @@ pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
 impl<C: Config> Builder<C> {
     /// The generator for the field.
     ///
-    /// Reference: [p3_baby_bear::BabyBear]
+    /// Reference: [`openvm_stark_sdk::p3_baby_bear::BabyBear`]
     pub fn generator(&mut self) -> Felt<C::F> {
         self.eval(C::F::from_canonical_u32(31))
     }
@@ -141,7 +141,7 @@ impl<C: Config> Builder<C> {
 
     /// Exponentiates a variable to a list of reversed bits with a given length.
     ///
-    /// Reference: [p3_util::reverse_bits_len]
+    /// Reference: [`openvm_stark_backend::p3_util::reverse_bits_len`]
     pub fn exp_reverse_bits_len<V>(
         &mut self,
         x: V,

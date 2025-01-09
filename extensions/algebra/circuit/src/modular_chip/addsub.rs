@@ -22,6 +22,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::Deserialize;
+use serde_with::serde_derive::Serialize;
 
 /// The number of limbs and limb bits are determined at runtime.
 #[derive(Clone)]
@@ -131,6 +133,7 @@ impl ModularAddSubCoreChip {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct ModularAddSubCoreRecord {
     pub x: BigUint,
     pub y: BigUint,
@@ -155,7 +158,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let num_limbs = self.air.expr.canonical_num_limbs();
         let limb_bits = self.air.expr.canonical_limb_bits();
-        let Instruction { opcode, .. } = instruction.clone();
+        let Instruction { opcode, .. } = instruction;
         let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
         let data: DynArray<_> = reads.into();
         let data = data.0;

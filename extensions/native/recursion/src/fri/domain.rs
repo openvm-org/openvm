@@ -7,7 +7,7 @@ use openvm_stark_backend::{
 use super::types::FriConfigVariable;
 use crate::commit::PolynomialSpaceVariable;
 
-/// Reference: [p3_commit::TwoAdicMultiplicativeCoset]
+/// Reference: [`openvm_stark_backend::p3_commit::TwoAdicMultiplicativeCoset`]
 #[derive(DslVariable, Clone)]
 pub struct TwoAdicMultiplicativeCosetVariable<C: Config> {
     pub log_n: Usize<C::N>,

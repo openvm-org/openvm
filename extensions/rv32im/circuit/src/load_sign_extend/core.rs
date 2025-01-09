@@ -20,6 +20,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 use crate::adapters::LoadStoreInstruction;
 
@@ -44,11 +46,14 @@ pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
     pub prev_data: [T; NUM_CELLS],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Serialize + DeserializeOwned")]
 pub struct LoadSignExtendCoreRecord<F, const NUM_CELLS: usize> {
     pub opcode: Rv32LoadStoreOpcode,
     pub most_sig_bit: bool,
+    #[serde(with = "BigArray")]
     pub shifted_read_data: [F; NUM_CELLS],
+    #[serde(with = "BigArray")]
     pub prev_data: [F; NUM_CELLS],
     pub shift_amount: u32,
 }
@@ -169,7 +174,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct LoadSignExtendCoreChip<const NUM_CELLS: usize, const LIMB_BITS: usize> {
     pub air: LoadSignExtendCoreAir<NUM_CELLS, LIMB_BITS>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,

@@ -44,7 +44,6 @@ const SHA256_WRITE_SIZE: usize = 32;
 pub const SHA256_BLOCK_CELLS: usize = SHA256_BLOCK_BITS / RV32_CELL_BITS;
 /// Number of rows we will do a read on for each SHA256 block
 pub const SHA256_NUM_READ_ROWS: usize = SHA256_BLOCK_CELLS / SHA256_READ_SIZE;
-#[derive(Debug)]
 pub struct Sha256VmChip<F: PrimeField32> {
     pub air: Sha256VmAir,
     /// IO and memory data necessary for each opcode call
@@ -101,10 +100,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
-        let Instruction {
+        let &Instruction {
             opcode,
             a,
             b,

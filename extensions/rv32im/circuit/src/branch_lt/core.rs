@@ -21,6 +21,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -173,10 +175,12 @@ where
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BranchLessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode: BranchLessThanOpcode,
+    #[serde(with = "BigArray")]
     pub a: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
     pub b: [T; NUM_LIMBS],
     pub cmp_result: T,
     pub cmp_lt: T,
@@ -187,7 +191,6 @@ pub struct BranchLessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
     pub diff_idx: usize,
 }
 
-#[derive(Debug)]
 pub struct BranchLessThanCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,

@@ -37,7 +37,7 @@ pub struct KeccakInstructionCols<T> {
     /// False on dummy rows only used to pad the height.
     pub is_enabled: T,
     /// Is enabled and first round of block. Used to lower constraint degree.
-    /// is_enabled * inner.step_flags[0]
+    /// is_enabled * inner.step_flags\[0\]
     pub is_enabled_first_round: T,
     /// The starting timestamp to use for memory access in this row.
     /// A single row will do multiple memory accesses.
@@ -51,17 +51,17 @@ pub struct KeccakInstructionCols<T> {
     /// Memory address space
     pub e: T,
     // Register values
-    /// dst <- [dst_ptr:4]_1
+    /// dst <- \[dst_ptr:4\]_1
     pub dst: [T; RV32_REGISTER_NUM_LIMBS],
-    /// src <- [src_ptr:4]_1
-    /// We store src_limbs[i] = [src_ptr + i + 1]_1 and src = u32([src_ptr:4]_1) from which [src_ptr]_1
+    /// src <- \[src_ptr:4\]_1
+    /// We store src_limbs\[i\] = \[src_ptr + i + 1\]_1 and src = u32(\[src_ptr:4\]_1) from which \[src_ptr\]_1
     /// can be recovered by linear combination.
     /// We do this because `src` needs to be incremented between keccak-f permutations.
     pub src_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
     pub src: T,
-    /// len <- [len_ptr:4]_1
-    /// We store len_limbs[i] = [len_ptr + i + 1]_1 and remaining_len = u32([len_ptr:4]_1)
-    /// from which [len_ptr]_1 can be recovered by linear combination.
+    /// len <- \[len_ptr:4\]_1
+    /// We store len_limbs\[i\] = \[len_ptr + i + 1\]_1 and remaining_len = u32(\[len_ptr:4\]_1)
+    /// from which \[len_ptr\]_1 can be recovered by linear combination.
     /// We do this because `remaining_len` needs to be decremented between keccak-f permutations.
     pub len_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
     /// The remaining length of the unpadded input, in bytes.
@@ -99,8 +99,8 @@ pub struct KeccakMemoryCols<T> {
     pub register_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; KECCAK_REGISTER_READS],
     pub absorb_reads: [MemoryReadAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_ABSORB_READS],
     pub digest_writes: [MemoryWriteAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
-    /// The input bytes are batch read in blocks of [KECCAK_WORD_SIZE] bytes. However
-    /// if the input length is not a multiple of [KECCAK_WORD_SIZE], we read into
+    /// The input bytes are batch read in blocks of private constant KECCAK_WORD_SIZE bytes. However
+    /// if the input length is not a multiple of KECCAK_WORD_SIZE, we read into
     /// `partial_block` more bytes than we need. On the other hand `block_bytes` expects
     /// only the partial block of bytes and then the correctly padded bytes.
     /// We will select between `partial_block` and `block_bytes` for what to read from memory.

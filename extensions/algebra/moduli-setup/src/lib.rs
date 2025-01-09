@@ -779,12 +779,12 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                 #[no_mangle]
                 extern "C" fn #func_name(rd: usize, rs1: usize, rs2: usize) {
                     openvm::platform::custom_insn_r!(
-                        ::openvm_algebra_guest::OPCODE,
-                        ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
-                        ::openvm_algebra_guest::ModArithBaseFunct7::#local_opcode as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                        rd,
-                        rs1,
-                        rs2
+                        opcode = ::openvm_algebra_guest::OPCODE,
+                        funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                        funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::#local_opcode as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                        rd = In rd,
+                        rs1 = In rs1,
+                        rs2 = In rs2
                     )
                 }
             });
@@ -796,17 +796,14 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #is_eq_extern_func(rs1: usize, rs2: usize) -> bool {
                 let mut x: u32;
-                unsafe {
-                    core::arch::asm!(
-                        ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
-                        opcode = const ::openvm_algebra_guest::OPCODE,
-                        funct3 = const ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
-                        funct7 = const ::openvm_algebra_guest::ModArithBaseFunct7::IsEqMod as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                        rd = out(reg) x,
-                        rs1 = in(reg) rs1,
-                        rs2 = in(reg) rs2
-                    );
-                }
+                openvm::platform::custom_insn_r!(
+                    opcode = ::openvm_algebra_guest::OPCODE,
+                    funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                    funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::IsEqMod as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    rd = Out x,
+                    rs1 = In rs1,
+                    rs2 = In rs2
+                );
                 x != 0
             }
         });
@@ -833,36 +830,37 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0`, `x1` or `x2`, into a `SETUP_ADDSUB`, `SETUP_MULDIV` or `SETUP_ISEQ` instruction.
                     let mut uninit: core::mem::MaybeUninit<[u8; #limbs]> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(
-                        ::openvm_algebra_guest::OPCODE,
-                        ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                        ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
+                        opcode = ::openvm_algebra_guest::OPCODE,
+                        funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                        funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
                             + #mod_idx
                                 * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        remaining.as_ptr(),
-                        "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
+                        rd = In uninit.as_mut_ptr(),
+                        rs1 = In remaining.as_ptr(),
+                        rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
                     );
                     openvm::platform::custom_insn_r!(
-                        ::openvm_algebra_guest::OPCODE,
-                        ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                        ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
+                        opcode = ::openvm_algebra_guest::OPCODE,
+                        funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                        funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
                             + #mod_idx
                                 * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        remaining.as_ptr(),
-                        "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
+                        rd = In uninit.as_mut_ptr(),
+                        rs1 = In remaining.as_ptr(),
+                        rs2 = Const "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
                     );
                     unsafe {
                         // This should not be x0:
                         let mut tmp = uninit.as_mut_ptr() as usize;
-                        // rs2="x2" will be parsed as 2 and therefore transpiled to SETUP_ISEQ
-                        core::arch::asm!(
-                            ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, x2",
-                            opcode = const ::openvm_algebra_guest::OPCODE,
-                            funct3 = const ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
-                            funct7 = const ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                            rd = inout(reg) tmp,
-                            rs1 = in(reg) remaining.as_ptr(),
+                        openvm::platform::custom_insn_r!(
+                            opcode = ::openvm_algebra_guest::OPCODE,
+                            funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                            funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
+                                + #mod_idx
+                                    * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                            rd = InOut tmp,
+                            rs1 = In remaining.as_ptr(),
+                            rs2 = Const "x2" // will be parsed as 2 and therefore transpiled to SETUP_ISEQ
                         );
                         // rd = inout(reg) is necessary because this instruction will write to `rd` register
                     }

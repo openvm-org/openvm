@@ -17,7 +17,13 @@ extern crate alloc;
 #[inline(always)]
 pub fn terminate<const EXIT_CODE: u8>() {
     #[cfg(target_os = "zkvm")]
-    crate::custom_insn_i!(SYSTEM_OPCODE, 0, "x0", "x0", EXIT_CODE);
+    crate::custom_insn_i!(
+        opcode = SYSTEM_OPCODE,
+        funct3 = 0,
+        rd = Const "x0",
+        rs1 = Const "x0",
+        imm = Const EXIT_CODE
+    );
     #[cfg(not(target_os = "zkvm"))]
     {
         unimplemented!()

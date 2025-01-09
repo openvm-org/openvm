@@ -29,7 +29,7 @@ pub fn sha256(input: &[u8]) -> [u8; 32] {
 #[inline(always)]
 #[no_mangle]
 extern "C" fn zkvm_sha256_impl(bytes: *const u8, len: usize, output: *mut u8) {
-    openvm_platform::custom_insn_r!(OPCODE, SHA256_FUNCT3, SHA256_FUNCT7, output, bytes, len);
+    openvm_platform::custom_insn_r!(opcode = OPCODE, funct3 = SHA256_FUNCT3, funct7 = SHA256_FUNCT7, rd = In output, rs1 = In bytes, rs2 = In len);
 }
 
 /// Sets `output` to the sha256 hash of `input`.

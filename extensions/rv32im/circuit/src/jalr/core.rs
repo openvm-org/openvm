@@ -25,6 +25,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::adapters::{compose, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
@@ -46,12 +47,13 @@ pub struct Rv32JalrCoreCols<T> {
     pub imm_sign: T,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Rv32JalrCoreRecord<F> {
     pub imm: F,
     pub rs1_data: [F; RV32_REGISTER_NUM_LIMBS],
     pub rd_data: [F; RV32_REGISTER_NUM_LIMBS - 1],
     pub to_pc_least_sig_bit: F,
-    pub to_pc_limbs: [F; 2],
+    pub to_pc_limbs: [u32; 2],
     pub imm_sign: F,
 }
 
@@ -170,7 +172,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct Rv32JalrCoreChip {
     pub air: Rv32JalrCoreAir,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
@@ -183,7 +184,7 @@ impl Rv32JalrCoreChip {
         range_checker_chip: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
-        assert!(range_checker_chip.bus().range_max_bits >= 15);
+        assert!(range_checker_chip.range_max_bits() >= 16);
         Self {
             air: Rv32JalrCoreAir {
                 bitwise_lookup_bus: bitwise_lookup_chip.bus(),
@@ -211,7 +212,6 @@ where
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        assert!(self.range_checker_chip.range_max_bits() >= 16);
         let Instruction { opcode, c, .. } = *instruction;
         let local_opcode = Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
@@ -234,11 +234,7 @@ where
         let mask = (1 << 15) - 1;
         let to_pc_least_sig_bit = rs1_val.wrapping_add(imm_extended) & 1;
 
-        let to_pc_limbs = array::from_fn(|i| F::from_canonical_u32((to_pc >> (1 + i * 15)) & mask));
-        self.range_checker_chip
-            .add_count(to_pc_limbs[0].as_canonical_u32(), 15);
-        self.range_checker_chip
-            .add_count(to_pc_limbs[1].as_canonical_u32(), 14);
+        let to_pc_limbs = array::from_fn(|i| ((to_pc >> (1 + i * 15)) & mask));
 
         let rd_data = rd_data.map(F::from_canonical_u32);
 
@@ -265,12 +261,15 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        self.range_checker_chip.add_count(record.to_pc_limbs[0], 15);
+        self.range_checker_chip.add_count(record.to_pc_limbs[1], 14);
+
         let core_cols: &mut Rv32JalrCoreCols<F> = row_slice.borrow_mut();
         core_cols.imm = record.imm;
         core_cols.rd_data = record.rd_data;
         core_cols.rs1_data = record.rs1_data;
         core_cols.to_pc_least_sig_bit = record.to_pc_least_sig_bit;
-        core_cols.to_pc_limbs = record.to_pc_limbs;
+        core_cols.to_pc_limbs = record.to_pc_limbs.map(F::from_canonical_u32);
         core_cols.imm_sign = record.imm_sign;
         core_cols.is_valid = F::ONE;
     }

@@ -101,7 +101,7 @@ fn tester_with_random_poseidon2_ops(
             }
         }
 
-        tester.execute(&mut chip, instruction);
+        tester.execute(&mut chip, &instruction);
 
         match opcode {
             Poseidon2Opcode::COMP_POS2 => {

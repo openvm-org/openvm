@@ -38,6 +38,8 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 /// This adapter reads from NUM_READS <= 2 pointers.
 /// * The data is read from the heap (address space 2), and the pointers
@@ -166,7 +168,6 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
     }
 }
 
-#[derive(Debug)]
 pub struct Rv32HeapBranchAdapterChip<F: Field, const NUM_READS: usize, const READ_SIZE: usize> {
     pub air: Rv32HeapBranchAdapterAir<NUM_READS, READ_SIZE>,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
@@ -201,9 +202,11 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Rv32HeapBranchReadRecord<const NUM_READS: usize, const READ_SIZE: usize> {
+    #[serde(with = "BigArray")]
     pub rs_reads: [RecordId; NUM_READS],
+    #[serde(with = "BigArray")]
     pub heap_reads: [RecordId; NUM_READS],
 }
 

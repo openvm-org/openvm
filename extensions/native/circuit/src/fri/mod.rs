@@ -348,10 +348,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
-        let Instruction {
+        let &Instruction {
             a: a_ptr_ptr,
             b: b_ptr_ptr,
             c: result_ptr,
@@ -401,7 +401,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         self.records.push(FriReducedOpeningRecord {
             pc: F::from_canonical_u32(from_state.pc),
             start_timestamp: F::from_canonical_u32(from_state.timestamp),
-            instruction,
+            instruction: instruction.clone(),
             alpha_read: alpha_read.0,
             length_read: length_read.0,
             a_ptr_read: a_ptr_read.0,

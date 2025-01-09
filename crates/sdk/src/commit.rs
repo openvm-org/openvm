@@ -35,7 +35,7 @@ pub struct AppExecutionCommit<T> {
     ///     ),
     ///     hash(right_pad(pc_start, 0))
     /// )
-    /// `right_pad` example, if pc_start = 123, right_pad(pc_start, 0) = [123,0,0,0,0,0,0,0]
+    /// `right_pad` example, if pc_start = 123, right_pad(pc_start, 0) = \[123,0,0,0,0,0,0,0\]
     pub exe_commit: [T; DIGEST_SIZE],
 }
 

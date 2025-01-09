@@ -33,7 +33,6 @@ pub struct MemoryRecord<T> {
     pub prev_data: Option<Vec<T>>,
 }
 
-#[derive(Debug)]
 pub struct OfflineMemory<F> {
     block_data: FxHashMap<Address, BlockData>,
     data: FxHashMap<Address, F>,
@@ -75,6 +74,11 @@ impl<F: PrimeField32> OfflineMemory<F> {
     pub fn set_initial_memory(&mut self, initial_memory: MemoryImage<F>) {
         assert_eq!(self.timestamp, INITIAL_TIMESTAMP + 1);
         self.data = initial_memory;
+    }
+
+    pub(super) fn set_log_capacity(&mut self, access_capacity: usize) {
+        assert!(self.log.is_empty());
+        self.log = Vec::with_capacity(access_capacity);
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {

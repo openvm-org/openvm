@@ -73,7 +73,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for NativePoseidon2Chip<F> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         match self {

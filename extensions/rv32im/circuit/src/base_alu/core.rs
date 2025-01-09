@@ -21,6 +21,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_big_array::BigArray;
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -157,15 +159,18 @@ where
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound = "T: Serialize + DeserializeOwned")]
 pub struct BaseAluCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode: BaseAluOpcode,
+    #[serde(with = "BigArray")]
     pub a: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
     pub b: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
     pub c: [T; NUM_LIMBS],
 }
 
-#[derive(Debug)]
 pub struct BaseAluCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,

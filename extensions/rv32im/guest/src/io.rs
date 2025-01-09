@@ -6,11 +6,11 @@ use crate::{PhantomImm, PHANTOM_FUNCT3, SYSTEM_OPCODE};
 macro_rules! hint_store_u32 {
     ($x:expr, $imm:expr) => {
         openvm_platform::custom_insn_i!(
-            openvm_rv32im_guest::SYSTEM_OPCODE,
-            openvm_rv32im_guest::HINT_STORE_W_FUNCT3,
-            $x,
-            "x0",
-            $imm
+            opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
+            funct3 = openvm_rv32im_guest::HINT_STORE_W_FUNCT3,
+            rd = In $x,
+            rs1 = Const "x0",
+            imm = Const $imm
         )
     };
 }
@@ -19,11 +19,11 @@ macro_rules! hint_store_u32 {
 #[inline(always)]
 pub fn hint_input() {
     openvm_platform::custom_insn_i!(
-        SYSTEM_OPCODE,
-        PHANTOM_FUNCT3,
-        "x0",
-        "x0",
-        PhantomImm::HintInput as u16
+        opcode = SYSTEM_OPCODE,
+        funct3 = PHANTOM_FUNCT3,
+        rd = Const "x0",
+        rs1 = Const "x0",
+        imm = Const PhantomImm::HintInput as u16
     );
 }
 
@@ -32,11 +32,11 @@ pub fn hint_input() {
 macro_rules! reveal {
     ($rd:ident, $rs1:ident, $imm:expr) => {
         openvm_platform::custom_insn_i!(
-            openvm_rv32im_guest::SYSTEM_OPCODE,
-            openvm_rv32im_guest::REVEAL_FUNCT3,
-            $rd,
-            $rs1,
-            $imm
+            opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
+            funct3 = openvm_rv32im_guest::REVEAL_FUNCT3,
+            rd = In $rd,
+            rs1 = In $rs1,
+            imm = Const $imm
         )
     };
 }
@@ -50,10 +50,10 @@ pub fn print_str_from_bytes(str_as_bytes: &[u8]) {
 #[inline(always)]
 pub fn raw_print_str_from_bytes(msg_ptr: *const u8, len: usize) {
     openvm_platform::custom_insn_i!(
-        SYSTEM_OPCODE,
-        PHANTOM_FUNCT3,
-        msg_ptr,
-        len,
-        PhantomImm::PrintStr as u16
+        opcode = SYSTEM_OPCODE,
+        funct3 = PHANTOM_FUNCT3,
+        rd = In msg_ptr,
+        rs1 = In len,
+        imm = Const PhantomImm::PrintStr as u16
     );
 }

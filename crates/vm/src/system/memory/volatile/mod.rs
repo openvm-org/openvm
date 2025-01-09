@@ -130,7 +130,6 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
     }
 }
 
-#[derive(Debug)]
 pub struct VolatileBoundaryChip<F> {
     pub air: VolatileBoundaryAir,
     touched_addresses: FxHashSet<(u32, u32)>,

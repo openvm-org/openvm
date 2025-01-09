@@ -25,6 +25,7 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 pub struct NativeLoadStoreInstruction<T> {
     pub is_valid: T,
@@ -73,7 +74,8 @@ impl<F: PrimeField32, const NUM_CELLS: usize> NativeLoadStoreAdapterChip<F, NUM_
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct NativeLoadStoreReadRecord<F: Field, const NUM_CELLS: usize> {
     pub pointer1_read: RecordId,
     pub pointer2_read: Option<RecordId>,
@@ -90,7 +92,8 @@ pub struct NativeLoadStoreReadRecord<F: Field, const NUM_CELLS: usize> {
     pub g: F,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct NativeLoadStoreWriteRecord<F: Field, const NUM_CELLS: usize> {
     pub from_state: ExecutionState<F>,
     pub write_id: RecordId,

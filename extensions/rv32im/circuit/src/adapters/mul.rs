@@ -26,10 +26,11 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 
-/// Reads instructions of the form OP a, b, c, d where [a:4]_d = [b:4]_d op [c:4]_d.
+/// Reads instructions of the form OP a, b, c, d where \[a:4\]_d = \[b:4\]_d op \[c:4\]_d.
 /// Operand d can only be 1, and there is no immediate support.
 #[derive(Debug)]
 pub struct Rv32MultAdapterChip<F: Field> {
@@ -53,14 +54,14 @@ impl<F: PrimeField32> Rv32MultAdapterChip<F> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Rv32MultReadRecord {
     /// Reads from operand registers
     pub rs1: RecordId,
     pub rs2: RecordId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Rv32MultWriteRecord {
     pub from_state: ExecutionState<u32>,
     /// Write to destination register

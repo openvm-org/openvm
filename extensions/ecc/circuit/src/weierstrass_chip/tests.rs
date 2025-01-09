@@ -9,9 +9,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-use openvm_mod_circuit_builder::{
-    test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpressionCoreChip,
-};
+use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpr};
 use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -72,9 +70,8 @@ lazy_static::lazy_static! {
     };
 }
 
-fn prime_limbs(chip: &FieldExpressionCoreChip) -> Vec<BabyBear> {
-    chip.expr()
-        .prime_limbs
+fn prime_limbs(expr: &FieldExpr) -> Vec<BabyBear> {
+    expr.prime_limbs
         .iter()
         .map(|n| BabyBear::from_canonical_usize(*n))
         .collect::<Vec<_>>()
@@ -124,12 +121,12 @@ fn test_add_ne() {
         .0
         .core
         .expr()
-        .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![]);
+        .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[2].0);
     assert_eq!(r[2], SampleEcPoints[2].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(chip.0.core.expr()).try_into().unwrap();
     let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
     one_limbs[0] = BabyBear::ONE;
     let setup_instruction = rv32_write_heap_default(
@@ -138,7 +135,7 @@ fn test_add_ne() {
         vec![one_limbs, one_limbs],
         chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
     );
-    tester.execute(&mut chip, setup_instruction);
+    tester.execute(&mut chip, &setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
@@ -147,7 +144,7 @@ fn test_add_ne() {
         chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
     );
 
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
@@ -188,23 +185,22 @@ fn test_double() {
         BigUint::zero(),
         tester.offline_memory_mutex_arc(),
     );
-    assert_eq!(chip.0.core.expr().builder.num_variables, 3); // lambda, x3, y3
+    assert_eq!(chip.0.core.air.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = chip.0.core.expr().execute(vec![p1_x, p1_y], vec![]);
+    let r = chip.0.core.air.expr.execute(vec![p1_x, p1_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core).try_into().unwrap();
-    let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
-    one_limbs[0] = BabyBear::ONE;
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
+    let a_limbs = [BabyBear::ZERO; NUM_LIMBS];
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
-        vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
+        vec![prime_limbs, a_limbs], // inputs[0] = prime, inputs[1] = a coeff of weierstrass equation
         vec![],
         chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );
-    tester.execute(&mut chip, setup_instruction);
+    tester.execute(&mut chip, &setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
@@ -213,7 +209,7 @@ fn test_double() {
         chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     tester.simple_test().expect("Verification failed");
@@ -265,12 +261,12 @@ fn test_p256_double() {
         tester.memory_controller().borrow().range_checker.clone(),
         config,
         Rv32WeierstrassOpcode::default_offset(),
-        a,
+        a.clone(),
         tester.offline_memory_mutex_arc(),
     );
-    assert_eq!(chip.0.core.expr().builder.num_variables, 3); // lambda, x3, y3
+    assert_eq!(chip.0.core.air.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = chip.0.core.expr().execute(vec![p1_x, p1_y], vec![]);
+    let r = chip.0.core.air.expr.execute(vec![p1_x, p1_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     let expected_double_x = BigUint::from_str_radix(
         "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978",
@@ -285,16 +281,16 @@ fn test_p256_double() {
     assert_eq!(r[1], expected_double_x);
     assert_eq!(r[2], expected_double_y);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core).try_into().unwrap();
-    let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
-    one_limbs[0] = BabyBear::ONE;
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
+    let a_limbs =
+        biguint_to_limbs::<NUM_LIMBS>(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
-        vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
+        vec![prime_limbs, a_limbs], // inputs[0] = prime, inputs[1] = a coeff of weierstrass equation
         vec![],
         chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );
-    tester.execute(&mut chip, setup_instruction);
+    tester.execute(&mut chip, &setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
@@ -303,7 +299,7 @@ fn test_p256_double() {
         chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
-    tester.execute(&mut chip, instruction);
+    tester.execute(&mut chip, &instruction);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     tester.simple_test().expect("Verification failed");

@@ -29,10 +29,11 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 use super::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
-/// Reads instructions of the form OP a, b, c, d, e where [a:4]_d = [b:4]_d op [c:4]_e.
+/// Reads instructions of the form OP a, b, c, d, e where \[a:4\]_d = \[b:4\]_d op \[c:4\]_e.
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
 /// is an immediate).
 #[derive(Debug)]
@@ -57,7 +58,8 @@ impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct Rv32BaseAluReadRecord<F: Field> {
     /// Read register value from address space d=1
     pub rs1: RecordId,
@@ -69,7 +71,8 @@ pub struct Rv32BaseAluReadRecord<F: Field> {
     pub rs2_imm: F,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct Rv32BaseAluWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     /// Write to destination register

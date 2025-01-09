@@ -5,6 +5,7 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
 };
 use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::FieldAlgebra};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::Streams;
@@ -66,7 +67,7 @@ pub trait InstructionExecutor<F> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>>;
 
@@ -79,7 +80,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         prev_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
         self.borrow_mut().execute(memory, instruction, prev_state)
@@ -94,7 +95,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
-        instruction: Instruction<F>,
+        instruction: &Instruction<F>,
         prev_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
         self.borrow_mut().execute(memory, instruction, prev_state)
@@ -105,7 +106,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default, AlignedBorrow)]
+#[derive(Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, Serialize, Deserialize)]
 #[repr(C)]
 pub struct ExecutionState<T> {
     pub pc: T,
@@ -287,7 +288,7 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 }
 
 /// Phantom sub-instructions affect the runtime of the VM and the trace matrix values.
-/// However they all have no AIR constraints besides advancing the pc by [DEFAULT_PC_STEP](super::program::DEFAULT_PC_STEP).
+/// However they all have no AIR constraints besides advancing the pc by [DEFAULT_PC_STEP](openvm_instructions::program::DEFAULT_PC_STEP).
 ///
 /// They should not mutate memory, but they can mutate the input & hint streams.
 ///

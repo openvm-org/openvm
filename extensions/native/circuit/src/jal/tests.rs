@@ -37,7 +37,7 @@ fn set_and_execute(
 
     tester.execute_with_pc(
         chip,
-        Instruction::from_usize(
+        &Instruction::from_usize(
             VmOpcode::with_default_offset(JAL),
             [a, imm as usize, 0, d, 0, 0, 0],
         ),

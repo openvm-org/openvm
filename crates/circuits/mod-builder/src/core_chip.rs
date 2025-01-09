@@ -17,6 +17,8 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 
 use crate::{
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
@@ -123,11 +125,8 @@ where
         let writes: Vec<AB::Expr> = self
             .output_indices()
             .iter()
-            .map(|&i| vars[i].clone())
-            .collect::<Vec<_>>()
-            .concat()
-            .iter()
-            .map(|x| (*x).into())
+            .flat_map(|&i| vars[i].clone())
+            .map(Into::into)
             .collect();
 
         let opcode_flags_except_last = self.opcode_flag_idx.iter().map(|&i| flags[i]).collect_vec();
@@ -161,7 +160,10 @@ where
     }
 }
 
+#[serde_as]
+#[derive(Serialize, Deserialize)]
 pub struct FieldExpressionRecord {
+    #[serde_as(as = "Vec<DisplayFromStr>")]
     pub inputs: Vec<BigUint>,
     pub flags: Vec<bool>,
 }
@@ -231,7 +233,7 @@ where
             inputs.push(input);
         }
 
-        let Instruction { opcode, .. } = instruction.clone();
+        let Instruction { opcode, .. } = instruction;
         let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
         let mut flags = vec![];
 
@@ -289,7 +291,8 @@ where
             return;
         }
         // We will copy over the core part of last row to padded rows (all rows after num_records).
-        let adapter_width = trace.width() - <Self::Air as BaseAir<F>>::width(&self.air);
+        let core_width = <Self::Air as BaseAir<F>>::width(&self.air);
+        let adapter_width = trace.width() - core_width;
         let last_row = trace
             .rows()
             .nth(num_records - 1)

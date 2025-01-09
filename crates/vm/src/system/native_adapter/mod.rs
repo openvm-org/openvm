@@ -24,6 +24,8 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 use crate::system::memory::{OfflineMemory, RecordId};
 
@@ -52,8 +54,9 @@ impl<F: PrimeField32, const R: usize, const W: usize> NativeAdapterChip<F, R, W>
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NativeReadRecord<F: Field, const R: usize> {
+    #[serde(with = "BigArray")]
     pub reads: [(RecordId, [F; 1]); R],
 }
 
@@ -67,9 +70,11 @@ impl<F: Field, const R: usize> NativeReadRecord<F, R> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct NativeWriteRecord<F: Field, const W: usize> {
     pub from_state: ExecutionState<u32>,
+    #[serde(with = "BigArray")]
     pub writes: [(RecordId, [F; 1]); W],
 }
 

@@ -11,6 +11,7 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
@@ -22,7 +23,6 @@ use crate::{
 
 // Replaces A: VmAdapterChip while testing VmCoreChip functionality, as it has no
 // constraints and thus cannot cause a failure.
-#[derive(Debug)]
 pub struct TestAdapterChip<F> {
     /// List of the return values of `preprocess` this chip should provide on each sequential call.
     pub prank_reads: VecDeque<Vec<F>>,
@@ -47,7 +47,7 @@ impl<F> TestAdapterChip<F> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TestAdapterRecord<T> {
     pub from_pc: u32,
     pub operands: [T; 7],

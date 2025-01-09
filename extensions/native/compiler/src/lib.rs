@@ -4,6 +4,7 @@
 use openvm_instructions::UsizeOpcode;
 use openvm_instructions_derive::UsizeOpcode;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
+use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 extern crate alloc;
@@ -25,7 +26,19 @@ pub mod prelude {
 // =================================================================================================
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x100]
 #[repr(usize)]
@@ -67,7 +80,19 @@ pub enum CastfOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x130]
 #[repr(usize)]
@@ -79,7 +104,19 @@ pub enum FieldArithmeticOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x140]
 #[repr(usize)]

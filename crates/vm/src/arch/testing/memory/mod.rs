@@ -22,7 +22,6 @@ const WORD_SIZE: usize = 1;
 /// Stores a log of raw messages to send/receive to the [MemoryBus].
 ///
 /// It will create a [air::MemoryDummyAir] to add messages to MemoryBus.
-#[derive(Debug)]
 pub struct MemoryTester<F> {
     pub bus: MemoryBus,
     pub controller: Rc<RefCell<MemoryController<F>>>,
@@ -40,7 +39,7 @@ impl<F: PrimeField32> MemoryTester<F> {
         }
     }
 
-    /// Returns the cell value at the current timestamp according to [MemoryController].
+    /// Returns the cell value at the current timestamp according to `MemoryController`.
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler

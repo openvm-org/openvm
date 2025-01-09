@@ -25,7 +25,7 @@ pub struct RootVmVerifierPvs<T> {
 
 /// Input for the root VM verifier.
 /// Note: Root verifier is proven in Root SC, but it usually verifies proofs in SC. So
-/// usually only RootVmVerifierInput<SC> is needed.
+/// usually only RootVmVerifierInput\<SC\> is needed.
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound = "")]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]

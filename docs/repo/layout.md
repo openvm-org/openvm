@@ -6,6 +6,7 @@ The main components of the repository are:
   - [Documentation](#documentation)
   - [Benchmarks](#benchmarks)
   - [CI](#ci)
+  - [Profiling](#profiling)
   - [CLI](#cli)
   - [SDK](#sdk)
   - [Toolchain](#toolchain)
@@ -33,13 +34,17 @@ Benchmark guest programs and benchmark scripts are in [`openvm-benchmarks`](../.
 
 Scripts for CI use and metrics post-processing are in [`ci`](../../ci).
 
+### Profiling
+
+- [`openvm-prof`](../../crates/prof): Tools to post-process metrics emitted by the VM for performance profiling.
+
 ### CLI
 
 Command-line binary to compile, execute, and prove guest programs is in [`cli`](../../crates/cli).
 
 ### SDK
 
-- [`sdk`](../../crates/sdk): The developer SDK for the VM. It includes the OpenVM aggregation programs to support continuations for all VMs in the framework, and well as a local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. The SDK includes functionality to generate the final onchain SNARK verifier contract.
+- [`openvm-sdk`](../../crates/sdk): The developer SDK for the VM. It includes the OpenVM aggregation programs to support continuations for all VMs in the framework, and well as a local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. The SDK includes functionality to generate the final onchain SNARK verifier contract.
 
 ### Toolchain
 
@@ -51,6 +56,7 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 - [`openvm-instructions-derive`](../../crates/toolchain/instructions/derive): Procedural macros to derive traits for OpenVM instructions.
 - [`openvm-macros-common`](../../crates/toolchain/macros): Common library for parsing utilities shared across procedural macros used for custom instruction setup in guest programs.
 - [`openvm-toolchain-tests`](../../crates/toolchain/tests): Includes all official RISC-V 32-bit IM test vectors and transpiler tests. Also, provides utilities for writing integration tests for custom extensions.
+- [`openvm-custom-insn`](../../crates/toolchain/custom_insn): Custom instruction macros for use in guest programs.
 
 ### Circuit Framework
 
@@ -70,7 +76,7 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 
 ### Extensions
 
-The toolchain, ISA, and VM are simultaenously extendable. All non-system functionality is implemented via extensions, which may be moved to standalone repositories in the future but are presently in this repository for maintainer convenience.
+The toolchain, ISA, and VM are simultaneously extendable. All non-system functionality is implemented via extensions, which may be moved to standalone repositories in the future but are presently in this repository for maintainer convenience.
 
 #### RV32IM
 

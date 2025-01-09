@@ -27,17 +27,18 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 
-/// This adapter doesn't read anything, and writes to [a:4]_d, where d == 1
+/// This adapter doesn't read anything, and writes to \[a:4\]_d, where d == 1
 #[derive(Debug)]
 pub struct Rv32RdWriteAdapterChip<F: Field> {
     pub air: Rv32RdWriteAdapterAir,
     _marker: PhantomData<F>,
 }
 
-/// This adapter doesn't read anything, and **maybe** writes to [a:4]_d, where d == 1
+/// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
 #[derive(Debug)]
 pub struct Rv32CondRdWriteAdapterChip<F: Field> {
     /// Do not use the inner air directly, use `air` instead.
@@ -73,7 +74,7 @@ impl<F: PrimeField32> Rv32CondRdWriteAdapterChip<F> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32RdWriteWriteRecord {
     pub from_state: ExecutionState<u32>,
     pub rd_id: Option<RecordId>,

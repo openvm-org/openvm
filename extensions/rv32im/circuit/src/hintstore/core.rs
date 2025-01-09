@@ -20,6 +20,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
@@ -31,7 +32,7 @@ pub struct Rv32HintStoreCoreCols<T> {
     pub data: [T; RV32_REGISTER_NUM_LIMBS],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32HintStoreCoreRecord<F> {
     pub data: [F; RV32_REGISTER_NUM_LIMBS],
 }
@@ -91,7 +92,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct Rv32HintStoreCoreChip<F: Field> {
     pub air: Rv32HintStoreCoreAir,
     pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,

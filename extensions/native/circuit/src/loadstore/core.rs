@@ -17,6 +17,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 use strum::IntoEnumIterator;
 
 use super::super::adapters::loadstore_native_adapter::NativeLoadStoreInstruction;
@@ -35,12 +37,13 @@ pub struct NativeLoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub data_write: [T; NUM_CELLS],
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub opcode: NativeLoadStoreOpcode,
 
     pub pointer_reads: [F; 2],
     pub data_read: F,
+    #[serde(with = "BigArray")]
     pub data_write: [F; NUM_CELLS],
 }
 

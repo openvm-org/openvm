@@ -5,7 +5,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
-pub mod custom_insn;
+pub use openvm_custom_insn::{custom_insn_i, custom_insn_r};
 #[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]
 mod getrandom;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]

@@ -77,7 +77,7 @@ After generating a proof, you can verify it. To do so, you need your verifying k
 
 ### Setup
 
-To generate an EVM proof, you'll first need to ensure that you have followed the [CLI installation steps](../../getting-started/install.md). get the appropraite KZG params by running the following command.
+To generate an EVM proof, you'll first need to ensure that you have followed the [CLI installation steps](../../getting-started/install.md). get the appropriate KZG params by running the following command.
 
 ```bash
 cargo openvm setup

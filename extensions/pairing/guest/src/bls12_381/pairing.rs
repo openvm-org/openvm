@@ -36,12 +36,12 @@ impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
         {
             let mut uninit: MaybeUninit<EvaluatedLine<Fp2>> = MaybeUninit::uninit();
             custom_insn_r!(
-                OPCODE,
-                PAIRING_FUNCT3,
-                shifted_funct7::<Bls12_381>(PairingBaseFunct7::EvaluateLine),
-                uninit.as_mut_ptr(),
-                self as *const UnevaluatedLine<Fp2>,
-                xy_frac as *const (Fp, Fp)
+                opcode = OPCODE,
+                funct3 = PAIRING_FUNCT3,
+                funct7 = shifted_funct7::<Bls12_381>(PairingBaseFunct7::EvaluateLine),
+                rd = In uninit.as_mut_ptr(),
+                rs1 = In self as *const UnevaluatedLine<Fp2>,
+                rs2 = In xy_frac as *const (Fp, Fp)
             );
             unsafe { uninit.assume_init() }
         }
@@ -80,12 +80,12 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
         {
             let mut uninit: MaybeUninit<[Fp2; 5]> = MaybeUninit::uninit();
             custom_insn_r!(
-                OPCODE,
-                PAIRING_FUNCT3,
-                shifted_funct7::<Bls12_381>(PairingBaseFunct7::Mul023By023),
-                uninit.as_mut_ptr(),
-                l0 as *const EvaluatedLine<Fp2>,
-                l1 as *const EvaluatedLine<Fp2>
+                opcode = OPCODE,
+                funct3 = PAIRING_FUNCT3,
+                funct7 = shifted_funct7::<Bls12_381>(PairingBaseFunct7::Mul023By023),
+                rd = In uninit.as_mut_ptr(),
+                rs1 = In l0 as *const EvaluatedLine<Fp2>,
+                rs2 = In l1 as *const EvaluatedLine<Fp2>
             );
             unsafe { uninit.assume_init() }
         }
@@ -150,12 +150,12 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
         {
             let mut uninit: MaybeUninit<Fp12> = MaybeUninit::uninit();
             custom_insn_r!(
-                OPCODE,
-                PAIRING_FUNCT3,
-                shifted_funct7::<Bls12_381>(PairingBaseFunct7::MulBy02345),
-                uninit.as_mut_ptr(),
-                f as *const Fp12,
-                x as *const [Fp2; 5]
+                opcode = OPCODE,
+                funct3 = PAIRING_FUNCT3,
+                funct7 = shifted_funct7::<Bls12_381>(PairingBaseFunct7::MulBy02345),
+                rd = In uninit.as_mut_ptr(),
+                rs1 = In f as *const Fp12,
+                rs2 = In x as *const [Fp2; 5]
             );
             unsafe { uninit.assume_init() }
         }
@@ -284,13 +284,13 @@ impl PairingCheck for Bls12_381 {
             let p_fat_ptr = (P.as_ptr() as u32, P.len() as u32);
             let q_fat_ptr = (Q.as_ptr() as u32, Q.len() as u32);
             unsafe {
-                core::arch::asm!(
-                    ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
-                    opcode = const OPCODE,
-                    funct3 = const PAIRING_FUNCT3,
-                    funct7 = const ((Bls12_381::PAIRING_IDX as u8) * PairingBaseFunct7::PAIRING_MAX_KINDS + PairingBaseFunct7::HintFinalExp as u8),
-                    rs1 = in(reg) &p_fat_ptr,
-                    rs2 = in(reg) &q_fat_ptr
+                custom_insn_r!(
+                    opcode = OPCODE,
+                    funct3 = PAIRING_FUNCT3,
+                    funct7 = ((Bls12_381::PAIRING_IDX as u8) * PairingBaseFunct7::PAIRING_MAX_KINDS + PairingBaseFunct7::HintFinalExp as u8),
+                    rd = Const "x0",
+                    rs1 = In &p_fat_ptr,
+                    rs2 = In &q_fat_ptr
                 );
                 let mut ptr = hint.as_ptr() as *const u8;
                 // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)

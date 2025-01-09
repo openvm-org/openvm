@@ -24,6 +24,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS};
 
@@ -132,7 +133,8 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct Rv32JalLuiCoreRecord<F: Field> {
     pub rd_data: [F; RV32_REGISTER_NUM_LIMBS],
     pub imm: F,
@@ -140,7 +142,6 @@ pub struct Rv32JalLuiCoreRecord<F: Field> {
     pub is_lui: bool,
 }
 
-#[derive(Debug)]
 pub struct Rv32JalLuiCoreChip {
     pub air: Rv32JalLuiCoreAir,
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,

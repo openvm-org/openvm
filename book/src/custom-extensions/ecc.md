@@ -34,18 +34,18 @@ For elliptic curve cryptography, the `openvm-ecc-guest` crate provides macros si
 ```rust
 sw_declare! {
     Bls12_381G1Affine { mod_type = Bls12_381Fp, b = BLS12_381_B },
-    Bn254G1Affine { mod_type = Bn254Fp, b = BN254_B },
+    P256Affine { mod_type = P256Coord, a = P256_A, b = P256_B },
 }
 ```
 
-Each declared curve must specify the `mod_type` (implementing `IntMod`) and a constant `b` for the Weierstrass curve equation \\(y^2 = x^3 + b\\).
-This creates `Bls12_381G1Affine` and `Bn254G1Affine` structs which implement the `Group` and `WeierstrassPoint` traits. The underlying memory layout of the structs uses the memory layout of the `Bls12_381Fp` and `Bn254Fp` structs, respectively.
+Each declared curve must specify the `mod_type` (implementing `IntMod`) and a constant `b` for the Weierstrass curve equation \\(y^2 = x^3 + ax + b\\). `a` is optional and defaults to 0 for short Weierstrass curves.
+This creates `Bls12_381G1Affine` and `P256Affine` structs which implement the `Group` and `WeierstrassPoint` traits. The underlying memory layout of the structs uses the memory layout of the `Bls12_381Fp` and `P256Coord` structs, respectively.
 
 2. **Init**: Called once, it enumerates these curves and allows the compiler to produce optimized instructions:
 
 ```rust
 sw_init! {
-    Bls12_381Fp, Bn254Fp,
+    Bls12_381G1Affine, P256Affine,
 }
 ```
 

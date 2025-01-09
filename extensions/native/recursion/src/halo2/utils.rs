@@ -149,7 +149,7 @@ fn read_params(k: u32) -> Arc<Halo2Params> {
 /// Sort AIRs by their trace height in descending order. This should not be used outside
 /// static-verifier because a dynamic verifier should support any AIR order.
 /// This is related to an implementation detail of FieldMerkleTreeMMCS which is used in most configs.
-/// Reference: https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53
+/// Reference: <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53>
 pub fn sort_chips<SC: StarkGenericConfig>(
     mut air_proof_inputs: Vec<AirProofInput<SC>>,
 ) -> Vec<AirProofInput<SC>> {

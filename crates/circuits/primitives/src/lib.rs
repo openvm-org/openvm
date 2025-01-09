@@ -1,7 +1,7 @@
 //! This crate contains a collection of primitives for use when building circuits.
-//! The primitives are separated into two types: standalone [Air](p3_air::Air)s and [SubAir]s.
+//! The primitives are separated into two types: standalone [Air](openvm_stark_backend::p3_air::Air)s and [SubAir]s.
 //!
-//! The following modules contain standalone [Air]s:
+//! The following modules contain standalone [Air](openvm_stark_backend::p3_air::Air)s:
 //! - [range]
 //! - [range_gate]
 //! - [range_tuple]

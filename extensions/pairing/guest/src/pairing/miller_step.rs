@@ -88,12 +88,12 @@ where
             let mut uninit: MaybeUninit<(AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp2>)> =
                 MaybeUninit::uninit();
             custom_insn_r!(
-                OPCODE,
-                PAIRING_FUNCT3,
-                shifted_funct7::<P>(PairingBaseFunct7::MillerDoubleStep),
-                uninit.as_mut_ptr(),
-                s as *const _,
-                "x0"
+                opcode = OPCODE,
+                funct3 = PAIRING_FUNCT3,
+                funct7 = shifted_funct7::<P>(PairingBaseFunct7::MillerDoubleStep),
+                rd = In uninit.as_mut_ptr(),
+                rs1 = In s as *const _,
+                rs2 = Const "x0"
             );
             unsafe { uninit.assume_init() }
         }
@@ -185,12 +185,12 @@ where
                 UnevaluatedLine<Self::Fp2>,
             )> = MaybeUninit::uninit();
             custom_insn_r!(
-                OPCODE,
-                PAIRING_FUNCT3,
-                shifted_funct7::<P>(PairingBaseFunct7::MillerDoubleAndAddStep),
-                uninit.as_mut_ptr(),
-                s as *const _,
-                q as *const _
+                opcode = OPCODE,
+                funct3 = PAIRING_FUNCT3,
+                funct7 = shifted_funct7::<P>(PairingBaseFunct7::MillerDoubleAndAddStep),
+                rd = In uninit.as_mut_ptr(),
+                rs1 = In s as *const _,
+                rs2 = In q as *const _
             );
             unsafe { uninit.assume_init() }
         }

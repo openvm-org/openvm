@@ -7,7 +7,9 @@ mod tests {
         arch::{instructions::exe::VmExe, SystemConfig},
         utils::{air_test, air_test_with_min_segments},
     };
-    use openvm_ecc_circuit::{Rv32WeierstrassConfig, WeierstrassExtension, SECP256K1_CONFIG};
+    use openvm_ecc_circuit::{
+        Rv32WeierstrassConfig, WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG,
+    };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_rv32im_transpiler::{
@@ -33,6 +35,27 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
         let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        air_test(config, openvm_exe);
+        Ok(())
+    }
+
+    #[test]
+    fn test_ec_nonzero_a() -> Result<()> {
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "ec_nonzero_a",
+            ["p256"],
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
         air_test(config, openvm_exe);
         Ok(())
     }

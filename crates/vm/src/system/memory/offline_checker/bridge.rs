@@ -115,7 +115,7 @@ pub struct MemoryReadOperation<'a, T, V, const N: usize> {
 
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
-/// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
+/// eval_bulk_access: refer to private function MemoryOfflineChecker::eval_bulk_access
 impl<F: FieldAlgebra, V: Copy + Into<F>, const N: usize> MemoryReadOperation<'_, F, V, N> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
@@ -169,7 +169,7 @@ pub struct MemoryReadOrImmediateOperation<'a, T, V> {
 ///                           deg(address.address_space) + deg(aux.is_zero_aux))
 /// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.pointer))
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
-/// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
+/// eval_bulk_access: refer to private function MemoryOfflineChecker::eval_bulk_access
 impl<F: FieldAlgebra, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'_, F, V> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
@@ -229,7 +229,7 @@ pub struct MemoryWriteOperation<'a, T, V, const N: usize> {
 
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
-/// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
+/// eval_bulk_access: refer to private function MemoryOfflineChecker::eval_bulk_access
 impl<T: FieldAlgebra, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<'_, T, V, N> {
     /// Evaluate constraints and send/receive interactions. `enabled` must be boolean.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
