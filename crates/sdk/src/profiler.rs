@@ -1,6 +1,3 @@
-use std::sync::Arc;
-
-use once_cell::sync::Lazy;
 use prometheus_client::{
     encoding::{text::encode, EncodeLabelSet, EncodeLabelValue},
     metrics::{family::Family, gauge::Gauge},
