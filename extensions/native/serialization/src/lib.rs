@@ -3,7 +3,7 @@ use p3_field::PrimeField32;
 
 /*
  * The indicators use
- * - opcode = 0x2b (custom-1 as defined in RISC-V spec document)
+ * - opcode = 0x0b (custom-0 as defined in RISC-V spec document)
  * - funct3 = 0b111
  *
  * `LONG_FORM_INSTRUCTION_INDICATOR` has funct7 = 0b0.
@@ -13,7 +13,7 @@ use p3_field::PrimeField32;
  * because it occurs only within a block already prefixed with `LONG_FORM_INSTRUCTION_INDICATOR`.
  * Thus, we make its value larger than 2^31 to ensure that it is not equal to a possible field element.
  */
-const OPCODE: u32 = 0x2b;
+const OPCODE: u32 = 0x0b;
 const FUNCT3: u32 = 0b111;
 pub const LONG_FORM_INSTRUCTION_INDICATOR: u32 = (FUNCT3 << 12) + OPCODE;
 pub const GAP_INDICATOR: u32 = (1 << 25) + (FUNCT3 << 12) + OPCODE;
