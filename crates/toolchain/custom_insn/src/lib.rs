@@ -29,7 +29,7 @@ struct CustomInsnI {
     pub funct3: TokenStream,
 }
 
-// Helper function to parse common fields
+/// Returns `(rd, rs1, opcode, funct3)`.
 #[allow(clippy::type_complexity)]
 fn parse_common_fields(
     input: ParseStream,
