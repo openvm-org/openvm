@@ -835,6 +835,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> IfCom
     }
 }
 
+// Zipped for loop -- loop extends over the first entry in starts and ends
 pub struct ZipForCompiler<'a, F: Field, EF> {
     compiler: &'a mut AsmCompiler<F, EF>,
     starts: Vec<RVar<F>>,
@@ -890,23 +891,22 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
             });
 
         self.compiler.basic_block();
-        self.ends
-            .iter()
-            .zip(self.loop_vars.iter())
-            .for_each(|(end, loop_var)| match end {
-                RVar::Const(end) => {
-                    self.compiler.push(
-                        AsmInstruction::BneI(loop_label, loop_var.fp(), *end),
-                        debug_info.clone(),
-                    );
-                }
-                RVar::Val(end) => {
-                    self.compiler.push(
-                        AsmInstruction::Bne(loop_label, loop_var.fp(), end.fp()),
-                        debug_info.clone(),
-                    );
-                }
-            });
+        let end = self.ends[0];
+        let loop_var = self.loop_vars[0];
+        match end {
+            RVar::Const(end) => {
+                self.compiler.push(
+                    AsmInstruction::BneI(loop_label, loop_var.fp(), end),
+                    debug_info.clone(),
+                );
+            }
+            RVar::Val(end) => {
+                self.compiler.push(
+                    AsmInstruction::Bne(loop_label, loop_var.fp(), end.fp()),
+                    debug_info.clone(),
+                );
+            }
+        };
 
         let label = self.compiler.block_label();
         let instr = AsmInstruction::j(label);
