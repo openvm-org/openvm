@@ -51,7 +51,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     builder.cycle_tracker_start("stage-d-verifier-verify");
     let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
     builder
-        .zipped_iter(&[
+        .zip(&[
             Box::new(proof.commit_phase_commits.clone()) as Box<dyn ArrayLike<C>>,
             Box::new(betas.clone()) as Box<dyn ArrayLike<C>>,
         ])
@@ -106,7 +106,7 @@ pub fn verify_two_adic_pcs<C: Config>(
             }
 
             builder
-                .zipped_iter(&[
+                .zip(&[
                     Box::new(query_proof.input_proof.clone()) as Box<dyn ArrayLike<C>>,
                     Box::new(rounds.clone()) as Box<dyn ArrayLike<C>>,
                 ])
@@ -179,7 +179,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     let opened_values = batch_opening.opened_values;
 
                     builder
-                        .zipped_iter(&[
+                        .zip(&[
                             Box::new(opened_values.clone()) as Box<dyn ArrayLike<C>>,
                             Box::new(mats.clone()) as Box<dyn ArrayLike<C>>,
                         ])
@@ -206,7 +206,7 @@ pub fn verify_two_adic_pcs<C: Config>(
 
                             let index_bits_shifted_truncated =
                                 index_bits_shifted.slice(builder, 0, log_height);
-                            let two_adic_generator_exp = builder.exp_reverse_bits_len(
+                            let two_adic_generator_exp = builder.exp_bits_big_endian(
                                 two_adic_generator,
                                 &index_bits_shifted_truncated,
                             );
@@ -214,7 +214,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
                             builder
-                                .zipped_iter(&[
+                                .zip(&[
                                     Box::new(mat_points.clone()) as Box<dyn ArrayLike<C>>,
                                     Box::new(mat_values.clone()) as Box<dyn ArrayLike<C>>,
                                 ])

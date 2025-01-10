@@ -273,6 +273,11 @@ impl<C: Config> Builder<C> {
         Ref::from_ptr(ptr)
     }
 
+    /// Intended to be used with `ptr` from `zip`. Assumes that:
+    /// - if `slice` is `Array::Fixed`, then `ptr` is a constant index in [0, slice.len()).
+    /// - if `slice` is `Array::Dyn`, then `ptr` is a variable iterator over the entries of `slice`.
+    ///
+    /// In both cases, loads and returns the corresponding element of `slice`.
     pub fn iter_ptr_get<V: MemVariable<C>>(&mut self, slice: &Array<C, V>, ptr: RVar<C::N>) -> V {
         match slice {
             Array::Fixed(v) => {
@@ -305,6 +310,11 @@ impl<C: Config> Builder<C> {
         }
     }
 
+    /// Intended to be used with `ptr` from `zip`. Assumes that:
+    /// - if `slice` is `Array::Fixed`, then `ptr` is a constant index in [0, slice.len()).
+    /// - if `slice` is `Array::Dyn`, then `ptr` is a variable iterator over the entries of `slice`.
+    ///
+    /// In both cases, stores the given `value` at the corresponding element of `slice`.
     pub fn iter_ptr_set<V: MemVariable<C>, Expr: Into<V::Expression>>(
         &mut self,
         slice: &Array<C, V>,
@@ -566,7 +576,7 @@ pub trait ArrayLike<C: Config> {
 
     fn is_fixed(&self) -> bool;
 
-    fn size_of(&self) -> usize;
+    fn element_size_of(&self) -> usize;
 }
 
 impl<C: Config, T: MemVariable<C>> ArrayLike<C> for Array<C, T> {
@@ -585,7 +595,7 @@ impl<C: Config, T: MemVariable<C>> ArrayLike<C> for Array<C, T> {
         }
     }
 
-    fn size_of(&self) -> usize {
+    fn element_size_of(&self) -> usize {
         T::size_of()
     }
 }

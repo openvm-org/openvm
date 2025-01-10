@@ -129,7 +129,7 @@ impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
         let len = builder.hint_var();
         let arr = builder.dyn_array(len);
         builder
-            .zipped_iter(&[Box::new(arr.clone()) as Box<dyn ArrayLike<C>>])
+            .zip(&[Box::new(arr.clone()) as Box<dyn ArrayLike<C>>])
             .for_each(|idx_vec, builder| {
                 let hint = I::read(builder);
                 let ptr = idx_vec[0];
@@ -263,7 +263,7 @@ impl Hintable<InnerConfig> for Vec<Vec<InnerChallenge>> {
         let len = builder.hint_var();
         let arr = builder.dyn_array(len);
         builder
-            .zipped_iter(&[Box::new(arr.clone()) as Box<dyn ArrayLike<InnerConfig>>])
+            .zip(&[Box::new(arr.clone()) as Box<dyn ArrayLike<InnerConfig>>])
             .for_each(|idx_vec, builder| {
                 let hint = Vec::<InnerChallenge>::read(builder);
                 builder.iter_ptr_set(&arr, idx_vec[0], hint);

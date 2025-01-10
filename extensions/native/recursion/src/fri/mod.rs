@@ -52,7 +52,7 @@ where
     let two_adic_generator_ef: Ext<_, _> = builder.eval(two_adic_gen_ext);
 
     let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
-    let x = builder.exp_reverse_bits_len(two_adic_generator_ef, &index_bits_truncated);
+    let x = builder.exp_bits_big_endian(two_adic_generator_ef, &index_bits_truncated);
 
     builder
         .range(0, commit_phase_commits.len())
@@ -195,7 +195,7 @@ pub fn verify_batch<C: Config>(
     let left: Ptr<C::N> = builder.uninit();
     let right: Ptr<C::N> = builder.uninit();
     builder
-        .zipped_iter(&[
+        .zip(&[
             Box::new(proof.clone()) as Box<dyn ArrayLike<C>>,
             Box::new(index_bits.clone()) as Box<dyn ArrayLike<C>>,
         ])
@@ -365,7 +365,7 @@ where
     let dims_shifted = dims.shift(builder, start_dim_idx.clone());
     let opened_values_shifted = opened_values.shift(builder, start_dim_idx);
     builder
-        .zipped_iter(&[
+        .zip(&[
             Box::new(dims_shifted.clone()) as Box<dyn ArrayLike<C>>,
             Box::new(opened_values_shifted.clone()) as Box<dyn ArrayLike<C>>,
         ])

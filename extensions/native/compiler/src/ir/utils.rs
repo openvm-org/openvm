@@ -139,12 +139,12 @@ impl<C: Config> Builder<C> {
         result
     }
 
-    /// Exponentiates a variable to a list of reversed bits with a given length.
+    /// Exponentiates a variable to a list of big endian bits with a given length.
     ///
     /// Example: if power_bits = [1, 0, 1, 0], then the result should be x^8 * x^2 = x^10.
     ///
     /// Reference: [`openvm_stark_backend::p3_util::reverse_bits_len`]
-    pub fn exp_reverse_bits_len<V>(&mut self, x: V, power_bits: &Array<C, Var<C::N>>) -> V
+    pub fn exp_bits_big_endian<V>(&mut self, x: V, power_bits: &Array<C, Var<C::N>>) -> V
     where
         V::Expression: FieldAlgebra,
         V: Copy + Mul<Output = V::Expression> + Variable<C> + CanSelect<C>,
