@@ -202,11 +202,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let two_adic_generator =
                                 config.get_two_adic_generator(builder, log_height);
                             builder.cycle_tracker_start("exp-reverse-bits-len");
-                            let two_adic_generator_exp = builder.exp_reverse_bits_len(
-                                two_adic_generator,
-                                &index_bits_shifted,
-                                log_height,
-                            );
+                            let two_adic_generator_exp = builder
+                                .exp_reverse_bits_len(two_adic_generator, &index_bits_shifted);
                             builder.cycle_tracker_end("exp-reverse-bits-len");
                             let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 

@@ -51,7 +51,7 @@ where
     let two_adic_gen_ext = two_adic_generator_f.to_operand().symbolic();
     let two_adic_generator_ef: Ext<_, _> = builder.eval(two_adic_gen_ext);
 
-    let x = builder.exp_reverse_bits_len(two_adic_generator_ef, index_bits, log_max_height);
+    let x = builder.exp_reverse_bits_len(two_adic_generator_ef, index_bits);
 
     builder
         .range(0, commit_phase_commits.len())
