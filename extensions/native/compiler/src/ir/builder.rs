@@ -377,9 +377,7 @@ impl<C: Config> Builder<C> {
             },
             Array::Dyn(ptr, len) => {
                 let len: RVar<C::N> = len.clone().into();
-                let end: Var<C::N> = self.eval(
-                    ptr.address + len * RVar::from_field(C::N::from_canonical_usize(V::size_of())),
-                );
+                let end: Var<C::N> = self.eval(ptr.address + len * RVar::from(V::size_of()));
                 IteratorBuilder {
                     start: ptr.address.into(),
                     end: end.into(),
@@ -402,7 +400,7 @@ impl<C: Config> Builder<C> {
                 .all(|array| array[0].len() == array[1].len()));
             ZippedPointerIteratorBuilder {
                 starts: vec![RVar::zero(); arrays.len()],
-                ends: vec![arrays[0].len().into(); arrays.len()],
+                end0: arrays[0].len().into(),
                 step_sizes: vec![1; arrays.len()],
                 builder: self,
             }
@@ -412,20 +410,13 @@ impl<C: Config> Builder<C> {
                     .iter()
                     .map(|array| array.ptr().address.into())
                     .collect(),
-                ends: arrays
-                    .iter()
-                    .map(|array| {
-                        let len: RVar<C::N> = array.len().into();
-                        let end: Var<C::N> = self.eval(
-                            array.ptr().address
-                                + len
-                                    * RVar::from_field(C::N::from_canonical_usize(
-                                        array.element_size_of(),
-                                    )),
-                        );
-                        end.into()
-                    })
-                    .collect(),
+                end0: {
+                    let len: RVar<C::N> = arrays[0].len().into();
+                    let size = arrays[0].element_size_of();
+                    let end: Var<C::N> =
+                        self.eval(arrays[0].ptr().address + len * RVar::from(size));
+                    end.into()
+                },
                 step_sizes: arrays.iter().map(|array| array.element_size_of()).collect(),
                 builder: self,
             }
@@ -922,20 +913,17 @@ impl<C: Config> IfBuilder<'_, C> {
 // iterates through zipped pointers
 pub struct ZippedPointerIteratorBuilder<'a, C: Config> {
     starts: Vec<RVar<C::N>>,
-    ends: Vec<RVar<C::N>>,
+    end0: RVar<C::N>,
     step_sizes: Vec<usize>,
     builder: &'a mut Builder<C>,
 }
 
 impl<C: Config> ZippedPointerIteratorBuilder<'_, C> {
     pub fn for_each(&mut self, mut f: impl FnMut(Vec<RVar<C::N>>, &mut Builder<C>)) {
-        assert!(self.starts.len() == self.ends.len());
         assert!(self.starts.len() == self.step_sizes.len());
         assert!(!self.starts.is_empty());
 
-        if self.starts.iter().all(|start| start.is_const())
-            && self.ends.iter().all(|end| end.is_const())
-        {
+        if self.starts.iter().all(|start| start.is_const()) && self.end0.is_const() {
             self.for_each_unrolled(|ptrs, builder| {
                 f(ptrs, builder);
                 Ok(())
@@ -960,15 +948,9 @@ impl<C: Config> ZippedPointerIteratorBuilder<'_, C> {
         self.builder.flags.static_loop = true;
 
         let starts: Vec<usize> = self.starts.iter().map(|start| start.value()).collect();
-        let ends: Vec<usize> = self.ends.iter().map(|end| end.value()).collect();
-        // check that the number of iterations is the same for all vectors
-        assert!(starts
-            .windows(2)
-            .zip(ends.windows(2))
-            .zip(self.step_sizes.windows(2))
-            .all(|((s, e), ss)| (e[0] - s[0]) / ss[0] == (e[1] - s[1]) / ss[1]));
+        let end0 = self.end0.value();
 
-        for i in (starts[0]..ends[0]).step_by(self.step_sizes[0]) {
+        for i in (starts[0]..end0).step_by(self.step_sizes[0]) {
             let ptrs = vec![i.into(); self.starts.len()];
             if f(ptrs, self.builder).is_err() {
                 break;
@@ -1005,7 +987,7 @@ impl<C: Config> ZippedPointerIteratorBuilder<'_, C> {
         let loop_instructions = loop_body_builder.operations;
         let op = DslIr::ZipFor(
             self.starts.clone(),
-            self.ends.clone(),
+            self.end0,
             step_sizes,
             loop_variables,
             loop_instructions,

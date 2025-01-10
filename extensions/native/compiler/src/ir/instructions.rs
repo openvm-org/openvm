@@ -123,7 +123,7 @@ pub enum DslIr<C: Config> {
 
     ZipFor(
         Vec<RVar<C::N>>,
-        Vec<RVar<C::N>>,
+        RVar<C::N>,
         Vec<C::N>,
         Vec<Var<C::N>>,
         TracedVec<DslIr<C>>,

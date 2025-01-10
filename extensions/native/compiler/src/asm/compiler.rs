@@ -381,11 +381,11 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     };
                     for_compiler.for_each(move |_, builder| builder.build(block), debug_info);
                 }
-                DslIr::ZipFor(starts, ends, step_sizes, loop_vars, block) => {
+                DslIr::ZipFor(starts, end0, step_sizes, loop_vars, block) => {
                     let zip_for_compiler = ZipForCompiler {
                         compiler: self,
                         starts,
-                        ends,
+                        end0,
                         step_sizes,
                         loop_vars,
                     };
@@ -839,7 +839,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> IfCom
 pub struct ZipForCompiler<'a, F: Field, EF> {
     compiler: &'a mut AsmCompiler<F, EF>,
     starts: Vec<RVar<F>>,
-    ends: Vec<RVar<F>>,
+    end0: RVar<F>,
     step_sizes: Vec<F>,
     loop_vars: Vec<Var<F>>,
 }
@@ -847,6 +847,10 @@ pub struct ZipForCompiler<'a, F: Field, EF> {
 impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
     ZipForCompiler<'_, F, EF>
 {
+    /// This assumes that the number of steps in `range(starts[0], ends[0], step_sizes[0])` is
+    /// minimal among all ranges.
+    ///
+    /// It is the responsibility of the caller to ensure that this precondition holds.
     pub(super) fn for_each(
         self,
         f: impl FnOnce(Vec<Var<F>>, &mut AsmCompiler<F, EF>),
@@ -891,7 +895,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
             });
 
         self.compiler.basic_block();
-        let end = self.ends[0];
+        let end = self.end0;
         let loop_var = self.loop_vars[0];
         match end {
             RVar::Const(end) => {
