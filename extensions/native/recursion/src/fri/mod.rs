@@ -6,6 +6,7 @@ use openvm_native_compiler::{
     },
     prelude::MemVariable,
 };
+use openvm_native_compiler_derive::compile_zip;
 use openvm_stark_backend::p3_field::{Field, FieldAlgebra, TwoAdicField};
 pub use two_adic_pcs::*;
 
@@ -194,60 +195,56 @@ pub fn verify_batch<C: Config>(
     // For each sibling in the proof, reconstruct the root.
     let left: Ptr<C::N> = builder.uninit();
     let right: Ptr<C::N> = builder.uninit();
-    builder
-        .zip(&[
-            Box::new(proof.clone()) as Box<dyn ArrayLike<C>>,
-            Box::new(index_bits.clone()) as Box<dyn ArrayLike<C>>,
-        ])
-        .for_each(|ptr_vec, builder| {
-            let sibling = builder.iter_ptr_get(&proof, ptr_vec[0]).ptr();
-            let bit = builder.iter_ptr_get(&index_bits, ptr_vec[1]);
 
-            builder.if_eq(bit, C::N::ONE).then_or_else(
-                |builder| {
-                    builder.assign(&left, sibling);
-                    builder.assign(&right, root_ptr);
-                },
-                |builder| {
-                    builder.assign(&left, root_ptr);
-                    builder.assign(&right, sibling);
-                },
-            );
+    compile_zip!(builder, proof, index_bits).for_each(|ptr_vec, builder| {
+        let sibling = builder.iter_ptr_get(&proof, ptr_vec[0]).ptr();
+        let bit = builder.iter_ptr_get(&index_bits, ptr_vec[1]);
 
-            builder.poseidon2_compress_x(
-                &Array::Dyn(root_ptr, Usize::from(0)),
-                &Array::Dyn(left, Usize::from(0)),
-                &Array::Dyn(right, Usize::from(0)),
-            );
-            builder.assign(
-                &current_height,
-                current_height.clone() * (C::N::TWO.inverse()),
-            );
+        builder.if_eq(bit, C::N::ONE).then_or_else(
+            |builder| {
+                builder.assign(&left, sibling);
+                builder.assign(&right, root_ptr);
+            },
+            |builder| {
+                builder.assign(&left, root_ptr);
+                builder.assign(&right, sibling);
+            },
+        );
 
-            builder
-                .if_ne(index.clone(), dimensions.len())
-                .then(|builder| {
-                    let next_height = builder.get(&dimensions, index.clone()).height;
-                    builder
-                        .if_eq(next_height, current_height.clone())
-                        .then(|builder| {
-                            let next_height_openings_digest = reducer
-                                .reduce_fast(
-                                    builder,
-                                    index.clone(),
-                                    &dimensions,
-                                    current_height.clone(),
-                                    opened_values,
-                                )
-                                .into_inner_digest();
-                            builder.poseidon2_compress_x(
-                                &root.clone(),
-                                &root.clone(),
-                                &next_height_openings_digest,
-                            );
-                        });
-                })
-        });
+        builder.poseidon2_compress_x(
+            &Array::Dyn(root_ptr, Usize::from(0)),
+            &Array::Dyn(left, Usize::from(0)),
+            &Array::Dyn(right, Usize::from(0)),
+        );
+        builder.assign(
+            &current_height,
+            current_height.clone() * (C::N::TWO.inverse()),
+        );
+
+        builder
+            .if_ne(index.clone(), dimensions.len())
+            .then(|builder| {
+                let next_height = builder.get(&dimensions, index.clone()).height;
+                builder
+                    .if_eq(next_height, current_height.clone())
+                    .then(|builder| {
+                        let next_height_openings_digest = reducer
+                            .reduce_fast(
+                                builder,
+                                index.clone(),
+                                &dimensions,
+                                current_height.clone(),
+                                opened_values,
+                            )
+                            .into_inner_digest();
+                        builder.poseidon2_compress_x(
+                            &root.clone(),
+                            &root.clone(),
+                            &next_height_openings_digest,
+                        );
+                    });
+            })
+    });
 
     // Assert that the commitments match.
     for i in 0..DIGEST_SIZE {
@@ -364,25 +361,20 @@ where
     builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
     let dims_shifted = dims.shift(builder, start_dim_idx.clone());
     let opened_values_shifted = opened_values.shift(builder, start_dim_idx);
-    builder
-        .zip(&[
-            Box::new(dims_shifted.clone()) as Box<dyn ArrayLike<C>>,
-            Box::new(opened_values_shifted.clone()) as Box<dyn ArrayLike<C>>,
-        ])
-        .for_each(|ptr_vec, builder| {
-            let height = builder.iter_ptr_get(&dims_shifted, ptr_vec[0]).height;
-            builder
-                .if_eq(height, curr_height_padded.clone())
-                .then(|builder| {
-                    let opened_values = builder.iter_ptr_get(&opened_values_shifted, ptr_vec[1]);
-                    builder.set_value(
-                        &nested_opened_values_buffer,
-                        nb_opened_values.clone(),
-                        opened_values.clone(),
-                    );
-                    builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::ONE);
-                });
-        });
+    compile_zip!(builder, dims_shifted, opened_values_shifted).for_each(|ptr_vec, builder| {
+        let height = builder.iter_ptr_get(&dims_shifted, ptr_vec[0]).height;
+        builder
+            .if_eq(height, curr_height_padded.clone())
+            .then(|builder| {
+                let opened_values = builder.iter_ptr_get(&opened_values_shifted, ptr_vec[1]);
+                builder.set_value(
+                    &nested_opened_values_buffer,
+                    nb_opened_values.clone(),
+                    opened_values.clone(),
+                );
+                builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::ONE);
+            });
+    });
     builder.assign(&dim_idx, dim_idx.clone() + nb_opened_values.clone());
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup");
 

@@ -1,6 +1,7 @@
 use std::{iter::Zip, vec::IntoIter};
 
 use backtrace::Backtrace;
+use openvm_native_compiler_derive::compile_zip;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use serde::{Deserialize, Serialize};
 
@@ -521,23 +522,22 @@ impl<C: Config> Builder<C> {
         let arr = self.dyn_array(vlen);
 
         // Write the content hints directly into the array memory.
-        self.zip(&[Box::new(arr.clone()) as Box<dyn ArrayLike<C>>])
-            .for_each(|ptr_vec, builder| {
-                let index = MemIndex {
-                    index: 0.into(),
-                    offset: 0,
-                    size: 1,
-                };
-                builder.operations.push(DslIr::StoreHintWord(
-                    Ptr {
-                        address: match ptr_vec[0] {
-                            RVar::Const(_) => unreachable!(),
-                            RVar::Val(v) => v,
-                        },
+        compile_zip!(self, arr).for_each(|ptr_vec, builder| {
+            let index = MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: 1,
+            };
+            builder.operations.push(DslIr::StoreHintWord(
+                Ptr {
+                    address: match ptr_vec[0] {
+                        RVar::Const(_) => unreachable!(),
+                        RVar::Val(v) => v,
                     },
-                    index,
-                ));
-            });
+                },
+                index,
+            ));
+        });
 
         arr
     }

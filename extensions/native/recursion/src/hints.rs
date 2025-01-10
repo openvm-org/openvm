@@ -5,6 +5,7 @@ use openvm_native_compiler::ir::{
     unsafe_array_transmute, Array, ArrayLike, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
     DIGEST_SIZE,
 };
+use openvm_native_compiler_derive::compile_zip;
 use openvm_stark_backend::{
     keygen::types::TraceWidth,
     p3_commit::ExtensionMmcs,
@@ -128,13 +129,11 @@ impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         let len = builder.hint_var();
         let arr = builder.dyn_array(len);
-        builder
-            .zip(&[Box::new(arr.clone()) as Box<dyn ArrayLike<C>>])
-            .for_each(|idx_vec, builder| {
-                let hint = I::read(builder);
-                let ptr = idx_vec[0];
-                builder.iter_ptr_set(&arr, ptr, hint);
-            });
+        compile_zip!(builder, arr).for_each(|idx_vec, builder| {
+            let hint = I::read(builder);
+            let ptr = idx_vec[0];
+            builder.iter_ptr_set(&arr, ptr, hint);
+        });
         arr
     }
 
@@ -262,12 +261,10 @@ impl Hintable<InnerConfig> for Vec<Vec<InnerChallenge>> {
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let len = builder.hint_var();
         let arr = builder.dyn_array(len);
-        builder
-            .zip(&[Box::new(arr.clone()) as Box<dyn ArrayLike<InnerConfig>>])
-            .for_each(|idx_vec, builder| {
-                let hint = Vec::<InnerChallenge>::read(builder);
-                builder.iter_ptr_set(&arr, idx_vec[0], hint);
-            });
+        compile_zip!(builder, arr).for_each(|idx_vec, builder| {
+            let hint = Vec::<InnerChallenge>::read(builder);
+            builder.iter_ptr_set(&arr, idx_vec[0], hint);
+        });
         arr
     }
 
