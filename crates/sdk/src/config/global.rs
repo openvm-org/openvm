@@ -20,7 +20,10 @@ use openvm_ecc_circuit::{
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_native_circuit::{CastFExtension, CastFExtensionExecutor, CastFExtensionPeriphery, Native, NativeExecutor, NativePeriphery};
+use openvm_native_circuit::{
+    CastFExtension, CastFExtensionExecutor, CastFExtensionPeriphery, Native, NativeExecutor,
+    NativePeriphery,
+};
 use openvm_pairing_circuit::{
     PairingExtension, PairingExtensionExecutor, PairingExtensionPeriphery,
 };
