@@ -53,6 +53,18 @@ pub enum NativeLoadStoreOpcode {
     HINT_STOREW4,
 }
 
+pub const SINGLE_LOAD_STORE_OPCODES: [NativeLoadStoreOpcode; 3] = [
+    NativeLoadStoreOpcode::LOADW,
+    NativeLoadStoreOpcode::STOREW,
+    NativeLoadStoreOpcode::HINT_STOREW,
+];
+
+pub const BLOCK_LOAD_STORE_OPCODES: [NativeLoadStoreOpcode; 3] = [
+    NativeLoadStoreOpcode::LOADW4,
+    NativeLoadStoreOpcode::STOREW4,
+    NativeLoadStoreOpcode::HINT_STOREW4,
+];
+
 #[derive(Copy, Clone, Debug, UsizeOpcode)]
 #[opcode_offset = 0x110]
 pub struct NativeBranchEqualOpcode(pub BranchEqualOpcode);

@@ -10,7 +10,9 @@ use openvm_circuit::arch::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::instruction::Instruction;
-use openvm_native_compiler::NativeLoadStoreOpcode;
+use openvm_native_compiler::{
+    NativeLoadStoreOpcode, BLOCK_LOAD_STORE_OPCODES, SINGLE_LOAD_STORE_OPCODES,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -86,17 +88,9 @@ where
         let expected_opcode = flags
             .iter()
             .zip(if NUM_CELLS == 1 {
-                [
-                    NativeLoadStoreOpcode::LOADW,
-                    NativeLoadStoreOpcode::STOREW,
-                    NativeLoadStoreOpcode::HINT_STOREW,
-                ]
+                SINGLE_LOAD_STORE_OPCODES
             } else if NUM_CELLS == 4 {
-                [
-                    NativeLoadStoreOpcode::LOADW4,
-                    NativeLoadStoreOpcode::STOREW4,
-                    NativeLoadStoreOpcode::HINT_STOREW4,
-                ]
+                BLOCK_LOAD_STORE_OPCODES
             } else {
                 panic!("Unsupported number of cells: {}", NUM_CELLS);
             })
