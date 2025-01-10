@@ -360,9 +360,10 @@ where
     };
 
     let nb_opened_values: Usize<_> = builder.eval(C::N::ZERO);
+    let start_dim_idx: Usize<_> = builder.eval(dim_idx.clone());
     builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
-    let dims_shifted = dims.shift(builder, dim_idx.clone());
-    let opened_values_shifted = opened_values.shift(builder, dim_idx);
+    let dims_shifted = dims.shift(builder, start_dim_idx.clone());
+    let opened_values_shifted = opened_values.shift(builder, start_dim_idx);
     builder
         .zipped_iter(&[
             Box::new(dims_shifted.clone()) as Box<dyn ArrayLike<C>>,
@@ -380,6 +381,7 @@ where
                         opened_values.clone(),
                     );
                     builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::ONE);
+                    builder.assign(&dim_idx, dim_idx.clone() + C::N::ONE);
                 });
         });
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup");

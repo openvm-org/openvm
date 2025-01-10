@@ -26,7 +26,7 @@ pub struct NonLeafVerifierVariables<C: Config> {
     pub internal_advice: MultiStarkVerificationAdvice<C>,
 }
 
-impl<C: Config + 'static> NonLeafVerifierVariables<C> {
+impl<C: Config> NonLeafVerifierVariables<C> {
     /// Verify proofs of internal verifier or leaf verifier.
     /// Returns aggregated VmVerifierPvs and leaf verifier commitment of these proofs.
     #[allow(clippy::type_complexity)]
