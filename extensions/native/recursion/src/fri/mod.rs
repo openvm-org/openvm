@@ -360,23 +360,26 @@ where
     };
 
     let nb_opened_values: Usize<_> = builder.eval(C::N::ZERO);
-    let start_dim_idx: Usize<_> = builder.eval(dim_idx.clone());
     builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
+    let dims_shifted = dims.shift(builder, dim_idx.clone());
+    let opened_values_shifted = opened_values.shift(builder, dim_idx);
     builder
-        .range(start_dim_idx, dims.len())
-        .for_each(|i, builder| {
-            let height = builder.get(dims, i).height;
+        .zipped_iter(&[
+            Box::new(dims_shifted.clone()) as Box<dyn ArrayLike<C>>,
+            Box::new(opened_values_shifted.clone()) as Box<dyn ArrayLike<C>>,
+        ])
+        .for_each(|ptr_vec, builder| {
+            let height = builder.iter_ptr_get(&dims_shifted, ptr_vec[0]).height;
             builder
                 .if_eq(height, curr_height_padded.clone())
                 .then(|builder| {
-                    let opened_values = builder.get(opened_values, i);
+                    let opened_values = builder.iter_ptr_get(&opened_values_shifted, ptr_vec[1]);
                     builder.set_value(
                         &nested_opened_values_buffer,
                         nb_opened_values.clone(),
                         opened_values.clone(),
                     );
                     builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::ONE);
-                    builder.assign(&dim_idx, dim_idx.clone() + C::N::ONE);
                 });
         });
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup");

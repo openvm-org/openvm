@@ -78,10 +78,9 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                 }
             }
             Self::Dyn(ptr, len) => {
-                assert_eq!(V::size_of(), 1, "only support variables of size 1");
                 let len = RVar::from(len.clone());
                 let shift = shift.into();
-                let new_ptr = builder.eval(*ptr + shift);
+                let new_ptr = builder.eval(*ptr + shift * RVar::from(V::size_of()));
                 let new_length = builder.eval(len - shift);
                 Array::Dyn(new_ptr, Usize::Var(new_length))
             }
@@ -134,7 +133,7 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                 }
 
                 let slice_len = builder.eval(end - start);
-                let address = builder.eval(ptr.address + start);
+                let address = builder.eval(ptr.address + start * RVar::from(V::size_of()));
                 let ptr = Ptr { address };
                 Array::Dyn(ptr, Usize::Var(slice_len))
             }
