@@ -342,10 +342,32 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 AS::Native,
             ),
         ],
+        AsmInstruction::LoadEI(dst, src, index, size, offset) => vec![
+            // mem[dst] <- mem[mem[src] + index * size + offset]
+            inst(
+                options.opcode_with_offset(NativeLoadStoreOpcode::LOADW4),
+                i32_f(dst),
+                index * size + offset,
+                i32_f(src),
+                AS::Native,
+                AS::Native,
+            ),
+        ],
         AsmInstruction::StoreFI(val, addr, index, size, offset) => vec![
             // mem[mem[addr] + index * size + offset] <- mem[val]
             inst(
                 options.opcode_with_offset(NativeLoadStoreOpcode::STOREW),
+                i32_f(val),
+                index * size + offset,
+                i32_f(addr),
+                AS::Native,
+                AS::Native,
+            ),
+        ],
+        AsmInstruction::StoreEI(val, addr, index, size, offset) => vec![
+            // mem[mem[addr] + index * size + offset] <- mem[val]
+            inst(
+                options.opcode_with_offset(NativeLoadStoreOpcode::STOREW4),
                 i32_f(val),
                 index * size + offset,
                 i32_f(addr),
@@ -490,6 +512,14 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         ],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW),
+            F::ZERO,
+            offset,
+            i32_f(val),
+            AS::Native,
+            AS::Native,
+        )],
+        AsmInstruction::StoreHintExtI(val, offset) => vec![inst(
+            options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW4),
             F::ZERO,
             offset,
             i32_f(val),

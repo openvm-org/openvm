@@ -19,7 +19,6 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
-use strum::IntoEnumIterator;
 
 use super::super::adapters::loadstore_native_adapter::NativeLoadStoreInstruction;
 
@@ -84,12 +83,27 @@ where
         });
         builder.assert_bool(is_valid.clone());
 
-        let expected_opcode = flags.iter().zip(NativeLoadStoreOpcode::iter()).fold(
-            AB::Expr::ZERO,
-            |acc, (flag, opcode)| {
+        let expected_opcode = flags
+            .iter()
+            .zip(if NUM_CELLS == 1 {
+                [
+                    NativeLoadStoreOpcode::LOADW,
+                    NativeLoadStoreOpcode::STOREW,
+                    NativeLoadStoreOpcode::SHINTW,
+                ]
+            } else if NUM_CELLS == 4 {
+                [
+                    NativeLoadStoreOpcode::LOADW4,
+                    NativeLoadStoreOpcode::STOREW4,
+                    NativeLoadStoreOpcode::SHINTW4,
+                ]
+            } else {
+                panic!("Unsupported number of cells: {}", NUM_CELLS);
+            })
+            .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_usize(opcode.as_usize())
-            },
-        ) + AB::Expr::from_canonical_usize(self.offset);
+            })
+            + AB::Expr::from_canonical_usize(self.offset);
 
         AdapterAirContext {
             to_pc: None,
@@ -145,7 +159,9 @@ where
             NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
         let (pointer_read, data_read) = reads.into();
 
-        let data_write = if local_opcode == NativeLoadStoreOpcode::SHINTW {
+        let data_write = if (NUM_CELLS == 1 && local_opcode == NativeLoadStoreOpcode::SHINTW)
+            || (NUM_CELLS == 4 && local_opcode == NativeLoadStoreOpcode::SHINTW4)
+        {
             let mut streams = self.streams.get().unwrap().lock().unwrap();
             if streams.hint_stream.len() < NUM_CELLS {
                 return Err(ExecutionError::HintOutOfBounds { pc: from_pc });
@@ -174,9 +190,17 @@ where
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let cols: &mut NativeLoadStoreCoreCols<_, NUM_CELLS> = row_slice.borrow_mut();
-        cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW);
-        cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW);
-        cols.is_shintw = F::from_bool(record.opcode == NativeLoadStoreOpcode::SHINTW);
+        if NUM_CELLS == 1 {
+            cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW);
+            cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW);
+            cols.is_shintw = F::from_bool(record.opcode == NativeLoadStoreOpcode::SHINTW);
+        } else if NUM_CELLS == 4 {
+            cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW4);
+            cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW4);
+            cols.is_shintw = F::from_bool(record.opcode == NativeLoadStoreOpcode::SHINTW4);
+        } else {
+            panic!("Unsupported number of cells: {}", NUM_CELLS);
+        }
 
         cols.pointer_read = record.pointer_read;
         cols.data_read = record.data_read;

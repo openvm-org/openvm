@@ -47,6 +47,9 @@ pub enum NativeLoadStoreOpcode {
     STOREW,
     /// Instruction to write the next hint word into memory.
     SHINTW,
+    LOADW4,
+    STOREW4,
+    SHINTW4,
 }
 
 #[derive(Copy, Clone, Debug, UsizeOpcode)]

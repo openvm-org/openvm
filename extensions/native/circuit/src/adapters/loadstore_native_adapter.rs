@@ -253,20 +253,22 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         let (data_read_as, data_write_as) = {
             match local_opcode {
-                LOADW => (e, d),
-                STOREW | SHINTW => (d, e),
+                LOADW | LOADW4 => (e, d),
+                STOREW | STOREW4 | SHINTW | SHINTW4 => (d, e),
             }
         };
         let (data_read_ptr, data_write_ptr) = {
             match local_opcode {
-                LOADW => (read_cell.1 + b, a),
-                STOREW | SHINTW => (a, read_cell.1 + b),
+                LOADW | LOADW4 => (read_cell.1 + b, a),
+                STOREW | STOREW4 | SHINTW | SHINTW4 => (a, read_cell.1 + b),
             }
         };
 
         let data_read = match local_opcode {
-            SHINTW => None,
-            LOADW | STOREW => Some(memory.read::<NUM_CELLS>(data_read_as, data_read_ptr)),
+            SHINTW | SHINTW4 => None,
+            LOADW | LOADW4 | STOREW | STOREW4 => {
+                Some(memory.read::<NUM_CELLS>(data_read_as, data_read_ptr))
+            }
         };
         let record = NativeLoadStoreReadRecord {
             pointer_read: read_cell.0,
