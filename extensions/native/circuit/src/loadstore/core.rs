@@ -11,7 +11,8 @@ use openvm_circuit::arch::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::instruction::Instruction;
 use openvm_native_compiler::{
-    NativeLoadStoreOpcode, BLOCK_LOAD_STORE_OPCODES, SINGLE_LOAD_STORE_OPCODES,
+    NativeLoadStoreOpcode, BLOCK_LOAD_STORE_OPCODES, BLOCK_LOAD_STORE_SIZE,
+    SINGLE_LOAD_STORE_OPCODES,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -87,12 +88,10 @@ where
 
         let expected_opcode = flags
             .iter()
-            .zip(if NUM_CELLS == 1 {
-                SINGLE_LOAD_STORE_OPCODES
-            } else if NUM_CELLS == 4 {
-                BLOCK_LOAD_STORE_OPCODES
-            } else {
-                panic!("Unsupported number of cells: {}", NUM_CELLS);
+            .zip(match NUM_CELLS {
+                1 => SINGLE_LOAD_STORE_OPCODES,
+                BLOCK_LOAD_STORE_SIZE => BLOCK_LOAD_STORE_OPCODES,
+                _ => panic!("Unsupported number of cells: {}", NUM_CELLS),
             })
             .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_usize(opcode.as_usize())
@@ -154,7 +153,8 @@ where
         let (pointer_read, data_read) = reads.into();
 
         let data_write = if (NUM_CELLS == 1 && local_opcode == NativeLoadStoreOpcode::HINT_STOREW)
-            || (NUM_CELLS == 4 && local_opcode == NativeLoadStoreOpcode::HINT_STOREW4)
+            || (NUM_CELLS == BLOCK_LOAD_STORE_SIZE
+                && local_opcode == NativeLoadStoreOpcode::HINT_STOREW4)
         {
             let mut streams = self.streams.get().unwrap().lock().unwrap();
             if streams.hint_stream.len() < NUM_CELLS {
@@ -184,17 +184,20 @@ where
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let cols: &mut NativeLoadStoreCoreCols<_, NUM_CELLS> = row_slice.borrow_mut();
-        if NUM_CELLS == 1 {
-            cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW);
-            cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW);
-            cols.is_hint_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::HINT_STOREW);
-        } else if NUM_CELLS == 4 {
-            cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW4);
-            cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW4);
-            cols.is_hint_storew =
-                F::from_bool(record.opcode == NativeLoadStoreOpcode::HINT_STOREW4);
-        } else {
-            panic!("Unsupported number of cells: {}", NUM_CELLS);
+        match NUM_CELLS {
+            1 => {
+                cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW);
+                cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW);
+                cols.is_hint_storew =
+                    F::from_bool(record.opcode == NativeLoadStoreOpcode::HINT_STOREW);
+            }
+            BLOCK_LOAD_STORE_SIZE => {
+                cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW4);
+                cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW4);
+                cols.is_hint_storew =
+                    F::from_bool(record.opcode == NativeLoadStoreOpcode::HINT_STOREW4);
+            }
+            _ => panic!("Unsupported number of cells: {}", NUM_CELLS),
         }
 
         cols.pointer_read = record.pointer_read;

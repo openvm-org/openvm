@@ -18,7 +18,7 @@ use openvm_instructions::{
 use openvm_native_compiler::{
     FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
     NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom, BLOCK_LOAD_STORE_OPCODES,
-    SINGLE_LOAD_STORE_OPCODES,
+    BLOCK_LOAD_STORE_SIZE, SINGLE_LOAD_STORE_OPCODES,
 };
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreChip;
@@ -122,7 +122,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 .map(|&opcode| VmOpcode::with_default_offset(opcode)),
         )?;
 
-        let mut block_load_store_chip = NativeLoadStoreChip::<F, 4>::new(
+        let mut block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
             NativeLoadStoreAdapterChip::new(
                 execution_bus,
                 program_bus,

@@ -65,6 +65,8 @@ pub const BLOCK_LOAD_STORE_OPCODES: [NativeLoadStoreOpcode; 3] = [
     NativeLoadStoreOpcode::HINT_STOREW4,
 ];
 
+pub const BLOCK_LOAD_STORE_SIZE: usize = 4;
+
 #[derive(Copy, Clone, Debug, UsizeOpcode)]
 #[opcode_offset = 0x110]
 pub struct NativeBranchEqualOpcode(pub BranchEqualOpcode);
