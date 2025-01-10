@@ -45,6 +45,7 @@ tracing.workspace = true
 itertools.workspace = true
 getset.workspace = true
 prometheus-client = "0.22.3"
+sysinfo = "0.33.1"
 
 [features]
 default = ["parallel"]
