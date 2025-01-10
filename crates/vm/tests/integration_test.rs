@@ -182,13 +182,14 @@ fn test_vm_override_executor_height() {
             chips: vec![
                 (ChipId::Executor(0), 0),
                 (ChipId::Executor(1), 0),
-                (ChipId::Executor(2), 1),
+                (ChipId::Executor(2), 0),
                 (ChipId::Executor(3), 0),
                 (ChipId::Executor(4), 0),
                 (ChipId::Executor(5), 0),
-                (ChipId::Executor(6), 0),
+                (ChipId::Executor(6), 1), // corresponds to FieldArithmeticChip
                 (ChipId::Executor(7), 0),
                 (ChipId::Executor(8), 0),
+                (ChipId::Executor(9), 0),
             ]
             .into_iter()
             .collect(),
@@ -204,15 +205,16 @@ fn test_vm_override_executor_height() {
     };
     let inventory_overridden_heights = VmInventoryTraceHeights {
         chips: vec![
-            (ChipId::Executor(0), 1),
-            (ChipId::Executor(1), 2),
-            (ChipId::Executor(2), 4),
-            (ChipId::Executor(3), 8),
-            (ChipId::Executor(4), 16),
-            (ChipId::Executor(5), 8),
-            (ChipId::Executor(6), 4),
-            (ChipId::Executor(7), 2),
-            (ChipId::Executor(8), 1),
+            (ChipId::Executor(0), 16),
+            (ChipId::Executor(1), 32),
+            (ChipId::Executor(2), 64),
+            (ChipId::Executor(3), 128),
+            (ChipId::Executor(4), 256),
+            (ChipId::Executor(5), 512),
+            (ChipId::Executor(6), 1024),
+            (ChipId::Executor(7), 2048),
+            (ChipId::Executor(8), 4096),
+            (ChipId::Executor(9), 8192),
         ]
         .into_iter()
         .collect(),
@@ -237,7 +239,7 @@ fn test_vm_override_executor_height() {
     // heights by hands whenever something changes.
     assert_eq!(
         air_heights,
-        vec![2, 2, 1, 1, 8, 4, 2, 1, 2, 4, 8, 16, 8, 4, 2, 262144]
+        vec![2, 2, 16, 1, 8, 4, 2, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 262144]
     );
 }
 
