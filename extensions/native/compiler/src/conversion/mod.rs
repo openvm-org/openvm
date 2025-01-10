@@ -511,7 +511,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             Instruction::phantom(PhantomDiscriminant(NativePhantom::HintBits as u16), i32_f(src), F::from_canonical_u32(len), AS::Native as u16)
         ],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
-            options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW),
+            options.opcode_with_offset(NativeLoadStoreOpcode::HINT_STOREW),
             F::ZERO,
             offset,
             i32_f(val),
@@ -519,7 +519,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Native,
         )],
         AsmInstruction::StoreHintExtI(val, offset) => vec![inst(
-            options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW4),
+            options.opcode_with_offset(NativeLoadStoreOpcode::HINT_STOREW4),
             F::ZERO,
             offset,
             i32_f(val),

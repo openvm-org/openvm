@@ -67,7 +67,7 @@ fn gen_test_data(rng: &mut StdRng, is_immediate: bool, opcode: NativeLoadStoreOp
         cd_val: F::from_canonical_u32(222),
         data_val: F::from_canonical_u32(444),
         is_load,
-        is_hint: matches!(opcode, NativeLoadStoreOpcode::SHINTW),
+        is_hint: matches!(opcode, NativeLoadStoreOpcode::HINT_STOREW),
     }
 }
 
@@ -171,7 +171,7 @@ fn rand_native_loadstore_test() {
     let (mut rng, mut tester, mut chip) = setup();
     for _ in 0..20 {
         set_and_execute(&mut tester, &mut chip, &mut rng, false, STOREW);
-        set_and_execute(&mut tester, &mut chip, &mut rng, false, SHINTW);
+        set_and_execute(&mut tester, &mut chip, &mut rng, false, HINT_STOREW);
         set_and_execute(&mut tester, &mut chip, &mut rng, false, LOADW);
     }
     let tester = tester.build().load(chip).finalize();

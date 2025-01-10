@@ -27,7 +27,7 @@ use super::super::adapters::loadstore_native_adapter::NativeLoadStoreInstruction
 pub struct NativeLoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub is_loadw: T,
     pub is_storew: T,
-    pub is_shintw: T,
+    pub is_hint_storew: T,
 
     pub pointer_read: T,
     pub data_read: [T; NUM_CELLS],
@@ -76,7 +76,7 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &NativeLoadStoreCoreCols<_, NUM_CELLS> = (*local_core).borrow();
-        let flags = [cols.is_loadw, cols.is_storew, cols.is_shintw];
+        let flags = [cols.is_loadw, cols.is_storew, cols.is_hint_storew];
         let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag.into()
@@ -89,13 +89,13 @@ where
                 [
                     NativeLoadStoreOpcode::LOADW,
                     NativeLoadStoreOpcode::STOREW,
-                    NativeLoadStoreOpcode::SHINTW,
+                    NativeLoadStoreOpcode::HINT_STOREW,
                 ]
             } else if NUM_CELLS == 4 {
                 [
                     NativeLoadStoreOpcode::LOADW4,
                     NativeLoadStoreOpcode::STOREW4,
-                    NativeLoadStoreOpcode::SHINTW4,
+                    NativeLoadStoreOpcode::HINT_STOREW4,
                 ]
             } else {
                 panic!("Unsupported number of cells: {}", NUM_CELLS);
@@ -114,7 +114,7 @@ where
                 opcode: expected_opcode,
                 is_loadw: cols.is_loadw.into(),
                 is_storew: cols.is_storew.into(),
-                is_shintw: cols.is_shintw.into(),
+                is_hint_storew: cols.is_hint_storew.into(),
             }
             .into(),
         }
@@ -159,8 +159,8 @@ where
             NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
         let (pointer_read, data_read) = reads.into();
 
-        let data_write = if (NUM_CELLS == 1 && local_opcode == NativeLoadStoreOpcode::SHINTW)
-            || (NUM_CELLS == 4 && local_opcode == NativeLoadStoreOpcode::SHINTW4)
+        let data_write = if (NUM_CELLS == 1 && local_opcode == NativeLoadStoreOpcode::HINT_STOREW)
+            || (NUM_CELLS == 4 && local_opcode == NativeLoadStoreOpcode::HINT_STOREW4)
         {
             let mut streams = self.streams.get().unwrap().lock().unwrap();
             if streams.hint_stream.len() < NUM_CELLS {
@@ -193,11 +193,12 @@ where
         if NUM_CELLS == 1 {
             cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW);
             cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW);
-            cols.is_shintw = F::from_bool(record.opcode == NativeLoadStoreOpcode::SHINTW);
+            cols.is_hint_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::HINT_STOREW);
         } else if NUM_CELLS == 4 {
             cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW4);
             cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW4);
-            cols.is_shintw = F::from_bool(record.opcode == NativeLoadStoreOpcode::SHINTW4);
+            cols.is_hint_storew =
+                F::from_bool(record.opcode == NativeLoadStoreOpcode::HINT_STOREW4);
         } else {
             panic!("Unsupported number of cells: {}", NUM_CELLS);
         }

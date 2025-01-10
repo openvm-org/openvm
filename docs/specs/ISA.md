@@ -51,7 +51,7 @@ addressable cells. Registers are represented using the [LIMB] format with `LIMB_
 ## Hints
 
 The `input_stream` is a private non-interactive queue of vectors of field elements which is provided at the start of
-runtime execution. The `hint_stream` is a queue of values that can be written to memory by calling the `HINTSTOREW_RV32` and `HINTSTORE` instructions. The `hint_stream` is populated via [phantom sub-instructions](#phantom-sub-instructions) such
+runtime execution. The `hint_stream` is a queue of values that can be written to memory by calling the `HINT_STOREW_RV32` and `HINT_STORE_RV32` instructions. The `hint_stream` is populated via [phantom sub-instructions](#phantom-sub-instructions) such
 as `HINT_INPUT` and `HINT_BITS`.
 
 ## Public Outputs
@@ -266,7 +266,7 @@ We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(
 
 | Name            | Operands    | Description                                                                                                                         |
 | --------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| HINTSTOREW_RV32 | `_,b,c,1,2` | `[r32{c}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                            |
+| HINT_STOREW_RV32 | `_,b,c,1,2` | `[r32{c}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                            |
 | REVEAL_RV32     | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`. Only valid when continuations are enabled. |
 
 ### Hashes
@@ -425,16 +425,17 @@ instruction format suggested by Max Gillet to enable easier compatibility with o
 
 In the instructions below, `d,e` may be any valid address space unless otherwise specified. In particular, the immediate address space `0` is allowed for non-vectorized reads but not allowed for writes. When using immediates, we interpret `[a]_0` as the immediate value `a`. Base kernel instructions enable memory movement between address spaces.
 
-In some instructions below, `W` is a generic parameter for the block size.
-
 | Name           | Operands        | Description                                                                                                                                                                                                                                                                                                               |
 | -------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LOAD\<W\>      | `a,b,c,d,e`     | Set `[a:W]_d = [[c]_d + b:W]_e`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
-| STORE\<W\>     | `a,b,c,d,e`     | Set `[[c]_d + b:W]_e = [a:W]_d`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
+| LOADW      | `a,b,c,d,e`     | Set `[a]_d = [[c]_d + b]_e`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
+| STOREW     | `a,b,c,d,e`     | Set `[[c]_d + b]_e = [a]_d`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
+| LOADW4     | `a,b,c,d,e`     | Set `[a:4]_d = [[c]_d + b:4]_e`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
+| STOREW4    | `a,b,c,d,e`     | Set `[[c]_d + b:4]_e = [a:4]_d`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
 | JAL            | `a,b,c,d`       | Jump to address and link: set `[a]_d = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`. Here `d` must be non-zero.                                                                                                                                                                                                           |
 | BEQ\<W\>       | `a,b,c,d,e`     | If `[a:W]_d == [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
 | BNE\<W\>       | `a,b,c,d,e`     | If `[a:W]_d != [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
-| HINTSTORE\<W\> | `_,b,c,d,e`     | Set `[[c]_d + b:W]_e = next W elements from hint stream`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                   |
+| HINT_STOREW | `_,b,c,d,e`     | Set `[[c]_d + b]_e = next element from hint stream`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                   |
+| HINT_STOREW4 | `_,b,c,d,e`     | Set `[[c]_d + b:4]_e = next 4 elements from hint stream`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                   |
 | PUBLISH        | `a,b,_,d,e`     | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                                                                                    |
 | CASTF          | `a,b,_,d,e`     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. Both `d, e` must be non-zero. |
 

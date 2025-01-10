@@ -42,14 +42,15 @@ pub mod prelude {
 )]
 #[opcode_offset = 0x100]
 #[repr(usize)]
+#[allow(non_camel_case_types)]
 pub enum NativeLoadStoreOpcode {
     LOADW,
     STOREW,
     /// Instruction to write the next hint word into memory.
-    SHINTW,
+    HINT_STOREW,
     LOADW4,
     STOREW4,
-    SHINTW4,
+    HINT_STOREW4,
 }
 
 #[derive(Copy, Clone, Debug, UsizeOpcode)]

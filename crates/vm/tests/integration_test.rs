@@ -756,7 +756,7 @@ fn test_vm_hint() {
             0,
             0,
         ),
-        Instruction::from_isize(VmOpcode::with_default_offset(SHINTW), 32, 0, 0, 1, 2),
+        Instruction::from_isize(VmOpcode::with_default_offset(HINT_STOREW), 32, 0, 0, 1, 2),
         Instruction::from_isize(VmOpcode::with_default_offset(LOADW), 38, 0, 32, 1, 2),
         Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 44, 20, 0, 1, 1, 0, 0),
         Instruction::from_isize(VmOpcode::with_default_offset(MUL), 24, 38, 1, 1, 0),
@@ -772,7 +772,7 @@ fn test_vm_hint() {
         ),
         Instruction::from_isize(VmOpcode::with_default_offset(MUL), 0, 50, 1, 1, 0),
         Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 44, 0, 1, 1, 1, 0),
-        Instruction::from_isize(VmOpcode::with_default_offset(SHINTW), 0, 0, 0, 1, 2),
+        Instruction::from_isize(VmOpcode::with_default_offset(HINT_STOREW), 0, 0, 0, 1, 2),
         Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 50, 50, 1, 1, 1, 0, 0),
         Instruction::from_isize(
             VmOpcode::with_default_offset(NativeBranchEqualOpcode(BNE)),

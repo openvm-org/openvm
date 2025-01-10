@@ -33,7 +33,7 @@ pub struct NativeLoadStoreInstruction<T> {
     pub opcode: T,
     pub is_loadw: T,
     pub is_storew: T,
-    pub is_shintw: T,
+    pub is_hint_storew: T,
 }
 
 pub struct NativeLoadStoreAdapterInterface<T, const NUM_CELLS: usize>(PhantomData<T>);
@@ -144,7 +144,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         let is_valid = ctx.instruction.is_valid;
         let is_loadw = ctx.instruction.is_loadw;
         let is_storew = ctx.instruction.is_storew;
-        let is_shintw = ctx.instruction.is_shintw;
+        let is_hint_storew = ctx.instruction.is_hint_storew;
 
         // first pointer read is always [c]_d
         self.memory_bridge
@@ -162,14 +162,14 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         // read data, disabled if SHINTW
         // data pointer = [c]_d + b, degree 2
         builder
-            .when(is_valid.clone() - is_shintw.clone())
+            .when(is_valid.clone() - is_hint_storew.clone())
             .assert_eq(
                 cols.data_read_as,
                 utils::select::<AB::Expr>(is_loadw.clone(), cols.e, cols.d),
             );
         // TODO[yi]: Do we need to check for overflow?
         builder.assert_eq(
-            (is_valid.clone() - is_shintw.clone()) * cols.data_read_pointer,
+            (is_valid.clone() - is_hint_storew.clone()) * cols.data_read_pointer,
             is_storew.clone() * cols.a + is_loadw.clone() * (ctx.reads.0.clone() + cols.b),
         );
         self.memory_bridge
@@ -179,8 +179,8 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
                 timestamp + timestamp_delta.clone(),
                 &cols.data_read_aux_cols,
             )
-            .eval(builder, is_valid.clone() - is_shintw.clone());
-        timestamp_delta += is_valid.clone() - is_shintw.clone();
+            .eval(builder, is_valid.clone() - is_hint_storew.clone());
+        timestamp_delta += is_valid.clone() - is_hint_storew.clone();
 
         // data write
         builder.when(is_valid.clone()).assert_eq(
@@ -191,7 +191,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         builder.assert_eq(
             is_valid.clone() * cols.data_write_pointer,
             is_loadw.clone() * cols.a
-                + (is_storew.clone() + is_shintw.clone()) * (ctx.reads.0.clone() + cols.b),
+                + (is_storew.clone() + is_hint_storew.clone()) * (ctx.reads.0.clone() + cols.b),
         );
         self.memory_bridge
             .write(
@@ -254,18 +254,18 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         let (data_read_as, data_write_as) = {
             match local_opcode {
                 LOADW | LOADW4 => (e, d),
-                STOREW | STOREW4 | SHINTW | SHINTW4 => (d, e),
+                STOREW | STOREW4 | HINT_STOREW | HINT_STOREW4 => (d, e),
             }
         };
         let (data_read_ptr, data_write_ptr) = {
             match local_opcode {
                 LOADW | LOADW4 => (read_cell.1 + b, a),
-                STOREW | STOREW4 | SHINTW | SHINTW4 => (a, read_cell.1 + b),
+                STOREW | STOREW4 | HINT_STOREW | HINT_STOREW4 => (a, read_cell.1 + b),
             }
         };
 
         let data_read = match local_opcode {
-            SHINTW | SHINTW4 => None,
+            HINT_STOREW | HINT_STOREW4 => None,
             LOADW | LOADW4 | STOREW | STOREW4 => {
                 Some(memory.read::<NUM_CELLS>(data_read_as, data_read_ptr))
             }

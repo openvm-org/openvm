@@ -119,7 +119,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             [
                 NativeLoadStoreOpcode::LOADW,
                 NativeLoadStoreOpcode::STOREW,
-                NativeLoadStoreOpcode::SHINTW,
+                NativeLoadStoreOpcode::HINT_STOREW,
             ]
             .iter()
             .map(|&opcode| VmOpcode::with_default_offset(opcode)),
@@ -144,7 +144,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             [
                 NativeLoadStoreOpcode::LOADW4,
                 NativeLoadStoreOpcode::STOREW4,
-                NativeLoadStoreOpcode::SHINTW4,
+                NativeLoadStoreOpcode::HINT_STOREW4,
             ]
             .iter()
             .map(|&opcode| VmOpcode::with_default_offset(opcode)),
