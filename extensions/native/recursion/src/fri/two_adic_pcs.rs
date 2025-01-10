@@ -197,13 +197,19 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let cur_alpha_pow = builder.get(&alpha_pow, log_height);
 
                             let bits_reduced: Usize<_> = builder.eval(log_max_height - log_height);
-                            let index_bits_shifted = index_bits.shift(builder, bits_reduced);
+                            let index_bits_shifted =
+                                index_bits.shift(builder, bits_reduced.clone());
 
                             let two_adic_generator =
                                 config.get_two_adic_generator(builder, log_height);
                             builder.cycle_tracker_start("exp-reverse-bits-len");
-                            let two_adic_generator_exp = builder
-                                .exp_reverse_bits_len(two_adic_generator, &index_bits_shifted);
+
+                            let index_bits_shifted_truncated =
+                                index_bits_shifted.slice(builder, 0, log_height);
+                            let two_adic_generator_exp = builder.exp_reverse_bits_len(
+                                two_adic_generator,
+                                &index_bits_shifted_truncated,
+                            );
                             builder.cycle_tracker_end("exp-reverse-bits-len");
                             let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 

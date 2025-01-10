@@ -139,7 +139,6 @@ impl<C: Config> DuplexChallengerVariable<C> {
         builder.range(nb_bits, bits.len()).for_each(|i, builder| {
             builder.set(&bits, i, C::N::ZERO);
         });
-
         bits
     }
 
