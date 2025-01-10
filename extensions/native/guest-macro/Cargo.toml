@@ -10,7 +10,6 @@ repository.workspace = true
 proc-macro = true
 
 [dependencies]
-syn = { version = "2.0", features = ["parsing"] }
 quote = "1.0"
 proc-macro2 = "1.0"
 openvm-instructions = { workspace = true }
@@ -18,7 +17,6 @@ openvm-native-compiler = { workspace = true }
 openvm-native-transpiler = { workspace = true }
 p3-field = { workspace = true }
 p3-baby-bear = { workspace = true }
-openvm-stark-backend = { workspace = true }
 
 [dev-dependencies]
 strum.workspace = true

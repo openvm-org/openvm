@@ -9,22 +9,5 @@ repository.workspace = true
 
 [dependencies]
 openvm-instructions = { workspace = true }
-openvm-native-compiler = { workspace = true }
 openvm-transpiler = { workspace = true }
 p3-field = { workspace = true }
-p3-baby-bear = { workspace = true }
-openvm-circuit-derive = { workspace = true }
-openvm-rv32im-circuit = { workspace = true }
-derive-new = { workspace = true }
-openvm-circuit = { workspace = true }
-openvm-native-circuit = { workspace = true }
-derive_more = { workspace = true }
-serde = { workspace = true }
-strum = { workspace = true }
-openvm-circuit-primitives-derive = { workspace = true }
-openvm-stark-backend = { workspace = true }
-
-[dev-dependencies]
-strum.workspace = true
-strum_macros.workspace = true
-openvm-instructions.workspace = true
