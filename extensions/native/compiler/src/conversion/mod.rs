@@ -517,7 +517,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             panic!(
                 "Unsupported instruction {:?}, field arithmetic is disabled",
                 instruction
-            )       
+            )
         },
         AsmInstruction::CopyF(dst, src) => if options.field_arithmetic_enabled {
             vec![inst_med(
