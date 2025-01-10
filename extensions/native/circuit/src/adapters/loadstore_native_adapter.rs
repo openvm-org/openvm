@@ -172,7 +172,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
             cols.data_write_as,
             utils::select::<AB::Expr>(is_loadw.clone(), cols.d, cols.e),
         );
-        // TODO[yi]: Do we need to check for overflow?
+
         builder.assert_eq(
             is_valid.clone() * cols.data_write_pointer,
             is_loadw.clone() * cols.a
