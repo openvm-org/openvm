@@ -103,9 +103,6 @@ pub struct NativeLoadStoreAdapterCols<T, const NUM_CELLS: usize> {
     pub d: T,
     pub e: T,
 
-    pub data_read_as: T,
-    pub data_read_pointer: T,
-
     pub data_write_as: T,
     pub data_write_pointer: T,
 
@@ -157,24 +154,12 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
             .eval(builder, is_valid.clone());
         timestamp_delta += is_valid.clone();
 
-        // TODO[yi]: Remove when vectorizing
-        // TODO[yi]: Decrease degree
-        // read data, disabled if SHINTW
-        // data pointer = [c]_d + b, degree 2
-        builder
-            .when(is_valid.clone() - is_hint_storew.clone())
-            .assert_eq(
-                cols.data_read_as,
-                utils::select::<AB::Expr>(is_loadw.clone(), cols.e, cols.d),
-            );
-        // TODO[yi]: Do we need to check for overflow?
-        builder.assert_eq(
-            (is_valid.clone() - is_hint_storew.clone()) * cols.data_read_pointer,
-            is_storew.clone() * cols.a + is_loadw.clone() * (ctx.reads.0.clone() + cols.b),
-        );
         self.memory_bridge
             .read(
-                MemoryAddress::new(cols.data_read_as, cols.data_read_pointer),
+                MemoryAddress::new(
+                    utils::select::<AB::Expr>(is_loadw.clone(), cols.e, cols.d),
+                    is_storew.clone() * cols.a + is_loadw.clone() * (ctx.reads.0.clone() + cols.b),
+                ),
                 ctx.reads.1.clone(),
                 timestamp + timestamp_delta.clone(),
                 &cols.data_read_aux_cols,
@@ -328,8 +313,6 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         let data_read = read_record.data_read.map(|read| memory.record_by_id(read));
         if let Some(data_read) = data_read {
-            cols.data_read_as = data_read.address_space;
-            cols.data_read_pointer = data_read.pointer;
             cols.data_read_aux_cols = aux_cols_factory.make_read_aux_cols(data_read);
         } else {
             cols.data_read_aux_cols = MemoryReadAuxCols::disabled();

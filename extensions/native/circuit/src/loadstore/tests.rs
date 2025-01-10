@@ -4,7 +4,7 @@ use openvm_circuit::arch::{testing::VmChipTestBuilder, Streams};
 use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
@@ -168,6 +168,7 @@ fn set_and_execute(
 
 #[test]
 fn rand_native_loadstore_test() {
+    setup_tracing();
     let (mut rng, mut tester, mut chip) = setup();
     for _ in 0..20 {
         set_and_execute(&mut tester, &mut chip, &mut rng, false, STOREW);
