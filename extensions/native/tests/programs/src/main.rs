@@ -9,12 +9,10 @@ openvm_native_guest_macro::native_kernel! {
 
 openvm::entry!(main);
 
-const N: usize = 8;
-
 fn main() {
-    let answers: [usize; N] = [0, 1, 1, 2, 3, 5, 8, 13];
-    for i in 0..N {
-        if function_name(i) != answers[i] {
+    let answers = [0, 1, 1, 2, 3, 5, 8, 13];
+    for (i, answer) in answers.into_iter().enumerate() {
+        if function_name(i) != answer {
             panic!();
         }
     }
