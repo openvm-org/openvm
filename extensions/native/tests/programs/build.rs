@@ -1,15 +1,13 @@
-use std::fs::File;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use openvm_stark_backend::p3_field::extension::BinomialExtensionField;
-use std::io::Write;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use std::{fs::File, io::Write};
+
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler},
-    conversion::{CompilerOptions, convert_program}
-    ,
+    conversion::{convert_program, CompilerOptions},
+    ir::{Felt, Var},
 };
-use openvm_native_compiler::ir::{Felt, Var};
 use openvm_native_transpiler::serialize_defined_instructions;
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
