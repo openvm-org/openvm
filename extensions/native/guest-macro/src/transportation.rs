@@ -7,7 +7,7 @@ use openvm_instructions::{
 use openvm_native_compiler::{
     asm::A0, conversion::AS, CastfOpcode, FieldArithmeticOpcode, NativeJalOpcode,
 };
-use openvm_native_serialization::{
+use openvm_native_transpiler::{
     GAP_INDICATOR, LONG_FORM_INSTRUCTION_INDICATOR, VARIABLE_REGISTER_INDICATOR,
 };
 use p3_field::{Field, PrimeField32};

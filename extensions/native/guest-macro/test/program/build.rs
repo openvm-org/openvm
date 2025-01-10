@@ -9,7 +9,7 @@ use openvm_native_compiler::{
     ,
 };
 use openvm_native_compiler::ir::{Felt, Var};
-use openvm_native_serialization::serialize_instructions;
+use openvm_native_transpiler::serialize_defined_instructions;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -40,7 +40,7 @@ fn main() {
     compiler.build(builder.operations);
     let asm_code = compiler.code();
     let program = convert_program::<F, EF>(asm_code, CompilerOptions::default());
-    let serialized = serialize_instructions(&program.defined_instructions());
+    let serialized = serialize_defined_instructions(&program.defined_instructions());
     for word in serialized {
         writeln!(file, "{}", word).unwrap();
     }

@@ -14,7 +14,7 @@ std = ["openvm/std"]
 
 [build-dependencies]
 openvm-native-compiler = { path = "../../../compiler" }
-openvm-native-serialization = { path = "../../../serialization" }
+openvm-native-transpiler = { path = "../../../transpiler" }
 openvm-instructions = { path = "../../../../../crates/toolchain/instructions" }
 openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "c785515", default-features = false }
 openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "c785515", default-features = false }

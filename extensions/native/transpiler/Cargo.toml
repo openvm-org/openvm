@@ -10,7 +10,6 @@ repository.workspace = true
 [dependencies]
 openvm-instructions = { workspace = true }
 openvm-native-compiler = { workspace = true }
-openvm-native-serialization = { workspace = true }
 openvm-transpiler = { workspace = true }
 p3-field = { workspace = true }
 p3-baby-bear = { workspace = true }

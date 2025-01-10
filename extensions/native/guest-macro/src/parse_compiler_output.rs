@@ -1,5 +1,5 @@
 use openvm_instructions::instruction::Instruction;
-use openvm_native_serialization::deserialize_instructions;
+use openvm_native_transpiler::deserialize_defined_instructions;
 use p3_field::{Field, PrimeField32};
 
 use crate::parse_kernel::ParsedKernel;
@@ -52,7 +52,7 @@ pub fn parse_compiled_kernel<F: PrimeField32>(
     let return_fp = words[index] as usize;
     index += 1;
 
-    let instructions = deserialize_instructions(&words[index..]);
+    let instructions = deserialize_defined_instructions(&words[index..]);
 
     CompiledKernel {
         function_name: parsed_kernel.function_name,

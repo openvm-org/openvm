@@ -1,9 +1,24 @@
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, VmOpcode};
-use openvm_native_serialization::{
-    GAP_INDICATOR, LONG_FORM_INSTRUCTION_INDICATOR, VARIABLE_REGISTER_INDICATOR,
-};
 use openvm_transpiler::{TranspilerExtension, TranspilerOutput};
 use p3_field::PrimeField32;
+
+/*
+ * The indicators use
+ * - opcode = 0x0b (custom-0 as defined in RISC-V spec document)
+ * - funct3 = 0b111
+ *
+ * `LONG_FORM_INSTRUCTION_INDICATOR` has funct7 = 0b0.
+ * `GAP_INDICATOR` has funct7 = 0b1.
+ *
+ * `VARIABLE_REGISTER_INDICATOR` does not need to conform to RISC_V format,
+ * because it occurs only within a block already prefixed with `LONG_FORM_INSTRUCTION_INDICATOR`.
+ * Thus, we make its value larger than 2^31 to ensure that it is not equal to a possible field element.
+ */
+const OPCODE: u32 = 0x0b;
+const FUNCT3: u32 = 0b111;
+pub const LONG_FORM_INSTRUCTION_INDICATOR: u32 = (FUNCT3 << 12) + OPCODE;
+pub const GAP_INDICATOR: u32 = (1 << 25) + (FUNCT3 << 12) + OPCODE;
+pub const VARIABLE_REGISTER_INDICATOR: u32 = (1 << 31) + 116;
 
 pub struct LongFormTranspilerExtension;
 
@@ -49,4 +64,32 @@ impl<F: PrimeField32> TranspilerExtension<F> for LongFormTranspilerExtension {
             None
         }
     }
+}
+
+pub fn serialize_defined_instructions<F: PrimeField32>(
+    instructions: &[Instruction<F>],
+) -> Vec<u32> {
+    let mut words = vec![];
+    for instruction in instructions {
+        words.push(LONG_FORM_INSTRUCTION_INDICATOR);
+        let operands = instruction.operands();
+        words.push(operands.len() as u32);
+        words.push(instruction.opcode.as_usize() as u32);
+        words.extend(operands.iter().map(F::as_canonical_u32))
+    }
+    words
+}
+
+// panics if deserialization fails or results in gaps
+pub fn deserialize_defined_instructions<F: PrimeField32>(words: &[u32]) -> Vec<Instruction<F>> {
+    let mut index = 0;
+    let mut instructions = vec![];
+    while index < words.len() {
+        let next = LongFormTranspilerExtension
+            .process_custom(&words[index..])
+            .unwrap();
+        instructions.extend(next.instructions.into_iter().map(Option::unwrap));
+        index += next.used_u32s;
+    }
+    instructions
 }
