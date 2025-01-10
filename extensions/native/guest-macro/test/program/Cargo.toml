@@ -6,15 +6,15 @@ edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../../../crates/toolchain/openvm" }
-openvm-native-guest-macro = { path = "../.." }
+openvm-native-guest-macro = { path = "../..", default-features = false }
 
 [features]
 default = []
 std = ["openvm/std"]
 
 [build-dependencies]
-openvm-native-compiler = { path = "../../../compiler" }
-openvm-native-transpiler = { path = "../../../transpiler" }
-openvm-instructions = { path = "../../../../../crates/toolchain/instructions" }
+openvm-native-compiler = { path = "../../../compiler", default-features = false }
+openvm-native-transpiler = { path = "../../../transpiler", default-features = false }
+openvm-instructions = { path = "../../../../../crates/toolchain/instructions", default-features = false }
 openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "c785515", default-features = false }
 openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "c785515", default-features = false }
