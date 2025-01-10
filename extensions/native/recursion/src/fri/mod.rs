@@ -381,9 +381,9 @@ where
                         opened_values.clone(),
                     );
                     builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::ONE);
-                    builder.assign(&dim_idx, dim_idx.clone() + C::N::ONE);
                 });
         });
+    builder.assign(&dim_idx, dim_idx.clone() + nb_opened_values.clone());
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup");
 
     nested_opened_values_buffer.truncate(builder, nb_opened_values);
