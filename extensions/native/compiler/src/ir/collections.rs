@@ -194,31 +194,6 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    /// Returns a pointer to the array at the specified `index` within the given `slice`.
-    pub fn get_ptr<V: MemVariable<C>, I: Into<RVar<C::N>>>(
-        &mut self,
-        slice: &Array<C, Array<C, V>>,
-        index: I,
-    ) -> Ptr<C::N> {
-        let index = index.into();
-
-        match slice {
-            Array::Fixed(_) => {
-                todo!()
-            }
-            Array::Dyn(ptr, _) => {
-                let index = MemIndex {
-                    index,
-                    offset: 0,
-                    size: <Array<C, V> as MemVariable<C>>::size_of(),
-                };
-                let var: Ptr<C::N> = self.uninit();
-                self.load(var, *ptr, index);
-                var
-            }
-        }
-    }
-
     fn ptr_at<V: MemVariable<C>, I: Into<RVar<C::N>>>(
         &mut self,
         slice: &Array<C, V>,
