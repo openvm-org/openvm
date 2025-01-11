@@ -586,14 +586,6 @@ impl<C: Config> Builder<C> {
         self.operations.trace_push(DslIr::Error());
     }
 
-    /// Materializes a usize into a variable.
-    pub fn materialize(&mut self, num: RVar<C::N>) -> Var<C::N> {
-        match num {
-            RVar::Const(num) => self.eval(num),
-            RVar::Val(num) => num,
-        }
-    }
-
     fn get_nb_public_values(&mut self) -> Var<C::N> {
         assert!(
             !self.is_sub_builder,

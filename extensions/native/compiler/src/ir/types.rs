@@ -88,13 +88,6 @@ impl<N: PrimeField> Usize<N> {
     pub fn from_field(value: N) -> Self {
         Usize::Const(Rc::new(RefCell::new(value)))
     }
-
-    pub fn materialize<C: Config<N = N>>(&self, builder: &mut Builder<C>) -> Var<C::N> {
-        match self {
-            Usize::Const(c) => builder.eval(*c.borrow()),
-            Usize::Var(v) => *v,
-        }
-    }
 }
 
 impl<N: PrimeField> From<Var<N>> for Usize<N> {
