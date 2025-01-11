@@ -194,26 +194,6 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    pub fn ptr_at<V: MemVariable<C>, I: Into<RVar<C::N>>>(
-        &mut self,
-        slice: &Array<C, V>,
-        index: I,
-    ) -> Ptr<C::N> {
-        let index = index.into();
-
-        match slice {
-            Array::Fixed(_) => {
-                panic!();
-            }
-            Array::Dyn(ptr, _) => Ptr {
-                address: self.eval(
-                    ptr.address
-                        + index * RVar::from_field(C::N::from_canonical_usize(V::size_of())),
-                ),
-            },
-        }
-    }
-
     /// Intended to be used with `ptr` from `zip`. Assumes that:
     /// - if `slice` is `Array::Fixed`, then `ptr` is a constant index in [0, slice.len()).
     /// - if `slice` is `Array::Dyn`, then `ptr` is a variable iterator over the entries of `slice`.
