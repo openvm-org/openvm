@@ -206,6 +206,11 @@ impl<C: Config> Builder<C> {
         felt
     }
 
+    /// Asserts that a Usize is non-zero
+    pub fn assert_nonzero(&mut self, u: &Usize<C::N>) {
+        self.operations.push(DslIr::AssertNonZero(u.clone()));
+    }
+
     /// Asserts that two expressions are equal.
     pub fn assert_eq<V: Variable<C>>(
         &mut self,
@@ -213,15 +218,6 @@ impl<C: Config> Builder<C> {
         rhs: impl Into<V::Expression>,
     ) {
         V::assert_eq(lhs, rhs, self);
-    }
-
-    /// Asserts that two expressions are not equal.
-    pub fn assert_ne<V: Variable<C>>(
-        &mut self,
-        lhs: impl Into<V::Expression>,
-        rhs: impl Into<V::Expression>,
-    ) {
-        V::assert_ne(lhs, rhs, self);
     }
 
     /// Assert that two vars are equal.
@@ -233,15 +229,6 @@ impl<C: Config> Builder<C> {
         self.assert_eq::<Var<C::N>>(lhs, rhs);
     }
 
-    /// Assert that two vars are not equal.
-    pub fn assert_var_ne<LhsExpr: Into<SymbolicVar<C::N>>, RhsExpr: Into<SymbolicVar<C::N>>>(
-        &mut self,
-        lhs: LhsExpr,
-        rhs: RhsExpr,
-    ) {
-        self.assert_ne::<Var<C::N>>(lhs, rhs);
-    }
-
     /// Assert that two felts are equal.
     pub fn assert_felt_eq<LhsExpr: Into<SymbolicFelt<C::F>>, RhsExpr: Into<SymbolicFelt<C::F>>>(
         &mut self,
@@ -249,15 +236,6 @@ impl<C: Config> Builder<C> {
         rhs: RhsExpr,
     ) {
         self.assert_eq::<Felt<C::F>>(lhs, rhs);
-    }
-
-    /// Assert that two felts are not equal.
-    pub fn assert_felt_ne<LhsExpr: Into<SymbolicFelt<C::F>>, RhsExpr: Into<SymbolicFelt<C::F>>>(
-        &mut self,
-        lhs: LhsExpr,
-        rhs: RhsExpr,
-    ) {
-        self.assert_ne::<Felt<C::F>>(lhs, rhs);
     }
 
     /// Assert that two exts are equal.
@@ -270,18 +248,6 @@ impl<C: Config> Builder<C> {
         rhs: RhsExpr,
     ) {
         self.assert_eq::<Ext<C::F, C::EF>>(lhs, rhs);
-    }
-
-    /// Assert that two exts are not equal.
-    pub fn assert_ext_ne<
-        LhsExpr: Into<SymbolicExt<C::F, C::EF>>,
-        RhsExpr: Into<SymbolicExt<C::F, C::EF>>,
-    >(
-        &mut self,
-        lhs: LhsExpr,
-        rhs: RhsExpr,
-    ) {
-        self.assert_ne::<Ext<C::F, C::EF>>(lhs, rhs);
     }
 
     /// Assert that two arrays are equal.

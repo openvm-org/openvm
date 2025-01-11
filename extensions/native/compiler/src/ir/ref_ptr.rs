@@ -74,18 +74,6 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Ref<C, T> {
         builder.assert_eq::<T>(a, b);
     }
 
-    fn assert_ne(
-        lhs: impl Into<Self::Expression>,
-        rhs: impl Into<Self::Expression>,
-        builder: &mut Builder<C>,
-    ) {
-        let lhs = lhs.into();
-        let rhs = rhs.into();
-        let a = builder.deref(&lhs);
-        let b = builder.deref(&rhs);
-        builder.assert_ne::<T>(a, b);
-    }
-
     // The default version calls `uninit`. If `expr` is `Fixed`, it will be converted into `Dyn`.
     fn eval(_builder: &mut Builder<C>, expr: impl Into<Self::Expression>) -> Self {
         expr.into()

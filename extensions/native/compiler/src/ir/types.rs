@@ -202,14 +202,6 @@ impl<C: Config> Variable<C> for Usize<C::N> {
         Var::<C::N>::assert_eq(lhs, rhs, builder);
     }
 
-    fn assert_ne(
-        lhs: impl Into<Self::Expression>,
-        rhs: impl Into<Self::Expression>,
-        builder: &mut Builder<C>,
-    ) {
-        Var::<C::N>::assert_ne(lhs, rhs, builder);
-    }
-
     fn eval(builder: &mut Builder<C>, expr: impl Into<Self::Expression>) -> Self {
         let expr = expr.into();
         match expr {
@@ -452,47 +444,6 @@ impl<C: Config> Variable<C> for Var<C::N> {
                 let rhs_value = Self::uninit(builder);
                 rhs_value.assign(rhs, builder);
                 builder.trace_push(DslIr::AssertEqV(lhs_value, rhs_value));
-            }
-        }
-    }
-
-    fn assert_ne(
-        lhs: impl Into<Self::Expression>,
-        rhs: impl Into<Self::Expression>,
-        builder: &mut Builder<C>,
-    ) {
-        let lhs = lhs.into();
-        let rhs = rhs.into();
-
-        match (lhs, rhs) {
-            (SymbolicVar::Const(lhs, _), SymbolicVar::Const(rhs, _)) => {
-                assert_ne!(lhs, rhs, "Assertion failed at compile time");
-            }
-            (SymbolicVar::Const(lhs, _), SymbolicVar::Val(rhs, _)) => {
-                builder.trace_push(DslIr::AssertNeVI(rhs, lhs));
-            }
-            (SymbolicVar::Const(lhs, _), rhs) => {
-                let rhs_value = Self::uninit(builder);
-                rhs_value.assign(rhs, builder);
-                builder.trace_push(DslIr::AssertNeVI(rhs_value, lhs));
-            }
-            (SymbolicVar::Val(lhs, _), SymbolicVar::Const(rhs, _)) => {
-                builder.trace_push(DslIr::AssertNeVI(lhs, rhs));
-            }
-            (SymbolicVar::Val(lhs, _), SymbolicVar::Val(rhs, _)) => {
-                builder.trace_push(DslIr::AssertNeV(lhs, rhs));
-            }
-            (SymbolicVar::Val(lhs, _), rhs) => {
-                let rhs_value = Self::uninit(builder);
-                rhs_value.assign(rhs, builder);
-                builder.trace_push(DslIr::AssertNeV(lhs, rhs_value));
-            }
-            (lhs, rhs) => {
-                let lhs_value = Self::uninit(builder);
-                lhs_value.assign(lhs, builder);
-                let rhs_value = Self::uninit(builder);
-                rhs_value.assign(rhs, builder);
-                builder.trace_push(DslIr::AssertNeV(lhs_value, rhs_value));
             }
         }
     }
@@ -818,47 +769,6 @@ impl<C: Config> Variable<C> for Felt<C::F> {
                 let rhs_value = Self::uninit(builder);
                 rhs_value.assign(rhs, builder);
                 builder.trace_push(DslIr::AssertEqF(lhs_value, rhs_value));
-            }
-        }
-    }
-
-    fn assert_ne(
-        lhs: impl Into<Self::Expression>,
-        rhs: impl Into<Self::Expression>,
-        builder: &mut Builder<C>,
-    ) {
-        let lhs = lhs.into();
-        let rhs = rhs.into();
-
-        match (lhs, rhs) {
-            (SymbolicFelt::Const(lhs, _), SymbolicFelt::Const(rhs, _)) => {
-                assert_ne!(lhs, rhs, "Assertion failed at compile time");
-            }
-            (SymbolicFelt::Const(lhs, _), SymbolicFelt::Val(rhs, _)) => {
-                builder.trace_push(DslIr::AssertNeFI(rhs, lhs));
-            }
-            (SymbolicFelt::Const(lhs, _), rhs) => {
-                let rhs_value = Self::uninit(builder);
-                rhs_value.assign(rhs, builder);
-                builder.trace_push(DslIr::AssertNeFI(rhs_value, lhs));
-            }
-            (SymbolicFelt::Val(lhs, _), SymbolicFelt::Const(rhs, _)) => {
-                builder.trace_push(DslIr::AssertNeFI(lhs, rhs));
-            }
-            (SymbolicFelt::Val(lhs, _), SymbolicFelt::Val(rhs, _)) => {
-                builder.trace_push(DslIr::AssertNeF(lhs, rhs));
-            }
-            (SymbolicFelt::Val(lhs, _), rhs) => {
-                let rhs_value = Self::uninit(builder);
-                rhs_value.assign(rhs, builder);
-                builder.trace_push(DslIr::AssertNeF(lhs, rhs_value));
-            }
-            (lhs, rhs) => {
-                let lhs_value = Self::uninit(builder);
-                lhs_value.assign(lhs, builder);
-                let rhs_value = Self::uninit(builder);
-                rhs_value.assign(rhs, builder);
-                builder.trace_push(DslIr::AssertNeF(lhs_value, rhs_value));
             }
         }
     }
@@ -1245,47 +1155,6 @@ impl<C: Config> Variable<C> for Ext<C::F, C::EF> {
                 let rhs_value = Self::uninit(builder);
                 rhs_value.assign(rhs, builder);
                 builder.trace_push(DslIr::AssertEqE(lhs_value, rhs_value));
-            }
-        }
-    }
-
-    fn assert_ne(
-        lhs: impl Into<Self::Expression>,
-        rhs: impl Into<Self::Expression>,
-        builder: &mut Builder<C>,
-    ) {
-        let lhs = lhs.into();
-        let rhs = rhs.into();
-
-        match (lhs, rhs) {
-            (SymbolicExt::Const(lhs, _), SymbolicExt::Const(rhs, _)) => {
-                assert_ne!(lhs, rhs, "Assertion failed at compile time");
-            }
-            (SymbolicExt::Const(lhs, _), SymbolicExt::Val(rhs, _)) => {
-                builder.trace_push(DslIr::AssertNeEI(rhs, lhs));
-            }
-            (SymbolicExt::Const(lhs, _), rhs) => {
-                let rhs_value = Self::uninit(builder);
-                rhs_value.assign(rhs, builder);
-                builder.trace_push(DslIr::AssertNeEI(rhs_value, lhs));
-            }
-            (SymbolicExt::Val(lhs, _), SymbolicExt::Const(rhs, _)) => {
-                builder.trace_push(DslIr::AssertNeEI(lhs, rhs));
-            }
-            (SymbolicExt::Val(lhs, _), SymbolicExt::Val(rhs, _)) => {
-                builder.trace_push(DslIr::AssertNeE(lhs, rhs));
-            }
-            (SymbolicExt::Val(lhs, _), rhs) => {
-                let rhs_value = Self::uninit(builder);
-                rhs_value.assign(rhs, builder);
-                builder.trace_push(DslIr::AssertNeE(lhs, rhs_value));
-            }
-            (lhs, rhs) => {
-                let lhs_value = Self::uninit(builder);
-                lhs_value.assign(lhs, builder);
-                let rhs_value = Self::uninit(builder);
-                rhs_value.assign(rhs, builder);
-                builder.trace_push(DslIr::AssertNeE(lhs_value, rhs_value));
             }
         }
     }

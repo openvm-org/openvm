@@ -473,44 +473,6 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
         }
     }
 
-    fn assert_ne(
-        lhs: impl Into<Self::Expression>,
-        rhs: impl Into<Self::Expression>,
-        builder: &mut Builder<C>,
-    ) {
-        let lhs = lhs.into();
-        let rhs = rhs.into();
-
-        match (lhs.clone(), rhs.clone()) {
-            (Array::Fixed(lhs), Array::Fixed(rhs)) => {
-                // No need to compare if they are the same reference. The same reference will
-                // also cause borrow errors.
-                if Rc::ptr_eq(&lhs, &rhs) {
-                    panic!("assert not equal on the same array");
-                }
-                for (l, r) in lhs.borrow().iter().zip_eq(rhs.borrow().iter()) {
-                    assert!(l.is_some(), "lhs array is not fully initialized");
-                    assert!(r.is_some(), "rhs array is not fully initialized");
-                    T::assert_ne(
-                        T::Expression::from(l.as_ref().unwrap().clone()),
-                        T::Expression::from(r.as_ref().unwrap().clone()),
-                        builder,
-                    );
-                }
-            }
-            (Array::Dyn(_, lhs_len), Array::Dyn(_, rhs_len)) => {
-                builder.assert_eq::<Usize<_>>(lhs_len.clone(), rhs_len);
-
-                builder.range(0, lhs_len).for_each(|i, builder| {
-                    let a = builder.get(&lhs, i);
-                    let b = builder.get(&rhs, i);
-                    builder.assert_ne::<T>(a, b);
-                });
-            }
-            _ => panic!("cannot compare arrays of different types"),
-        }
-    }
-
     // The default version calls `uninit`. If `expr` is `Fixed`, it will be converted into `Dyn`.
     fn eval(_builder: &mut Builder<C>, expr: impl Into<Self::Expression>) -> Self {
         expr.into()

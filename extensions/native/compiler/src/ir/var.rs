@@ -18,12 +18,6 @@ pub trait Variable<C: Config>: Clone {
         builder: &mut Builder<C>,
     );
 
-    fn assert_ne(
-        lhs: impl Into<Self::Expression>,
-        rhs: impl Into<Self::Expression>,
-        builder: &mut Builder<C>,
-    );
-
     fn eval(builder: &mut Builder<C>, expr: impl Into<Self::Expression>) -> Self {
         let dst: Self = builder.uninit();
         dst.assign(expr.into(), builder);
@@ -71,14 +65,6 @@ impl<C: Config, T: Variable<C>, const N: usize> Variable<C> for [T; N] {
         builder: &mut Builder<C>,
     ) {
         izip!(lhs.into(), rhs.into()).for_each(|(l, r)| T::assert_eq(l, r, builder));
-    }
-
-    fn assert_ne(
-        _lhs: impl Into<Self::Expression>,
-        _rhs: impl Into<Self::Expression>,
-        _builder: &mut Builder<C>,
-    ) {
-        unimplemented!("assert_ne cannot be implemented for slices")
     }
 }
 

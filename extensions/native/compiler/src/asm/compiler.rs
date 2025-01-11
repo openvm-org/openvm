@@ -399,14 +399,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::Const(rhs), false, debug_info)
                 }
-                DslIr::AssertNeV(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Val(rhs.fp()), true, debug_info)
-                }
-                DslIr::AssertNeVI(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Const(rhs), true, debug_info)
-                }
                 DslIr::AssertEqF(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::Val(rhs.fp()), false, debug_info)
@@ -414,14 +406,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::AssertEqFI(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::Const(rhs), false, debug_info)
-                }
-                DslIr::AssertNeF(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Val(rhs.fp()), true, debug_info)
-                }
-                DslIr::AssertNeFI(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Const(rhs), true, debug_info)
                 }
                 DslIr::AssertEqE(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
@@ -431,13 +415,19 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::ExtConst(rhs), false, debug_info)
                 }
-                DslIr::AssertNeE(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::ExtVal(rhs.fp()), true, debug_info)
-                }
-                DslIr::AssertNeEI(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::ExtConst(rhs), true, debug_info)
+                DslIr::AssertNonZero(u) => {
+                    // If u == 0, execute TRAP
+                    match u {
+                        Usize::Const(_) => self.assert(
+                            u.value() as i32,
+                            ValueOrConst::Const(F::ZERO),
+                            true,
+                            debug_info,
+                        ),
+                        Usize::Var(v) => {
+                            self.assert(v.fp(), ValueOrConst::Const(F::ZERO), true, debug_info)
+                        }
+                    }
                 }
                 DslIr::Alloc(ptr, len, size) => {
                     self.alloc(ptr, len, size, debug_info);
