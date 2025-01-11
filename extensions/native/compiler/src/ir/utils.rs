@@ -91,24 +91,6 @@ impl<C: Config> Builder<C> {
         self.eval(e)
     }
 
-    /// Exponentiates a variable to an array of bits in little endian.
-    pub fn exp_bits<V>(&mut self, x: V, power_bits: &Array<C, Var<C::N>>) -> V
-    where
-        V::Expression: FieldAlgebra,
-        V: Copy + Mul<Output = V::Expression> + Variable<C>,
-    {
-        let result: V = self.eval(V::Expression::ONE);
-        let power_f: V = self.eval(x);
-        self.range(0, power_bits.len()).for_each(|i, builder| {
-            let bit = builder.get(power_bits, i);
-            builder
-                .if_eq(bit, C::N::ONE)
-                .then(|builder| builder.assign(&result, result * power_f));
-            builder.assign(&power_f, power_f * power_f);
-        });
-        result
-    }
-
     /// Exponentiates a felt to a list of bits in little endian.
     pub fn exp_f_bits(&mut self, x: Felt<C::F>, power_bits: Vec<Var<C::N>>) -> Felt<C::F> {
         let mut result = self.eval(C::F::ONE);
