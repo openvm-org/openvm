@@ -1,7 +1,7 @@
 use std::{array, borrow::Borrow};
 
 use openvm_circuit::arch::PUBLIC_VALUES_AIR_ID;
-use openvm_native_compiler::ir::{Array, Builder, Config, Felt, RVar, Usize, DIGEST_SIZE};
+use openvm_native_compiler::ir::{Array, Builder, Config, Felt, RVar, DIGEST_SIZE};
 use openvm_native_recursion::{
     challenger::duplex::DuplexChallengerVariable, fri::TwoAdicFriPcsVariable, stark::StarkVerifier,
     types::MultiStarkVerificationAdvice, vars::StarkProofVariable,
