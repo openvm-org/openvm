@@ -104,12 +104,6 @@ pub enum DslIr<C: Config> {
     /// Negates an extension field element (ext = -ext).
     NegE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
 
-    // Comparisons.
-    /// Compares two variables
-    LessThanV(Var<C::N>, Var<C::N>, Var<C::N>),
-    /// Compares a variable and an immediate
-    LessThanVI(Var<C::N>, Var<C::N>, C::N),
-
     /// Cast a Felt to a Var.
     CastFV(Var<C::N>, Felt<C::F>),
     /// Cast a Var to a Felt. This is unsafe because of possible overflow. Dynamic mode only.

@@ -6,8 +6,7 @@ use openvm_stark_backend::p3_field::FieldAlgebra;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RVar, Ref, SymbolicVar, Usize, Var,
-    Variable,
+    Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RVar, Ref, Usize, Var, Variable,
 };
 
 /// A logical array.
@@ -122,16 +121,7 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                     panic!("Cannot slice a fixed array with a variable start or end");
                 }
             }
-            Self::Dyn(ptr, len) => {
-                if builder.flags.debug {
-                    let valid = builder.lt(start, end);
-                    builder.assert_var_eq(valid, C::N::ONE);
-
-                    let len_plus_1_v = SymbolicVar::from(len.clone()) + C::N::ONE;
-                    let valid = builder.lt(end, len_plus_1_v);
-                    builder.assert_var_eq(valid, C::N::ONE);
-                }
-
+            Self::Dyn(ptr, _) => {
                 let slice_len = builder.eval(end - start);
                 let address = builder.eval(ptr.address + start * RVar::from(V::size_of()));
                 let ptr = Ptr { address };
@@ -191,11 +181,7 @@ impl<C: Config> Builder<C> {
                     panic!("Cannot index into a fixed slice with a variable size")
                 }
             }
-            Array::Dyn(ptr, len) => {
-                if self.flags.debug {
-                    let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::ONE);
-                }
+            Array::Dyn(ptr, _) => {
                 let index = MemIndex {
                     index,
                     offset: 0,
@@ -220,11 +206,7 @@ impl<C: Config> Builder<C> {
             Array::Fixed(_) => {
                 todo!()
             }
-            Array::Dyn(ptr, len) => {
-                if self.flags.debug {
-                    let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::ONE);
-                }
+            Array::Dyn(ptr, _) => {
                 let index = MemIndex {
                     index,
                     offset: 0,
@@ -248,18 +230,12 @@ impl<C: Config> Builder<C> {
             Array::Fixed(_) => {
                 panic!();
             }
-            Array::Dyn(ptr, len) => {
-                if self.flags.debug {
-                    let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::ONE);
-                }
-                Ptr {
-                    address: self.eval(
-                        ptr.address
-                            + index * RVar::from_field(C::N::from_canonical_usize(V::size_of())),
-                    ),
-                }
-            }
+            Array::Dyn(ptr, _) => Ptr {
+                address: self.eval(
+                    ptr.address
+                        + index * RVar::from_field(C::N::from_canonical_usize(V::size_of())),
+                ),
+            },
         }
     }
 
@@ -373,11 +349,7 @@ impl<C: Config> Builder<C> {
                     panic!("Cannot index into a fixed slice with a variable index")
                 }
             }
-            Array::Dyn(ptr, len) => {
-                if self.flags.debug {
-                    let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::ONE);
-                }
+            Array::Dyn(ptr, _) => {
                 let index = MemIndex {
                     index,
                     offset: 0,

@@ -260,32 +260,6 @@ impl<C: Config> Builder<C> {
         });
     }
 
-    /// Compares two variables.
-    pub fn lt<LhsExpr: Into<SymbolicVar<C::N>>, RhsExpr: Into<SymbolicVar<C::N>>>(
-        &mut self,
-        lhs: LhsExpr,
-        rhs: RhsExpr,
-    ) -> RVar<C::N> {
-        let lhs = lhs.into();
-        let rhs = rhs.into();
-        match (&lhs, &rhs) {
-            (SymbolicVar::Const(lhs, _), SymbolicVar::Const(rhs, _)) => {
-                if rhs < lhs {
-                    RVar::one()
-                } else {
-                    RVar::zero()
-                }
-            }
-            _ => {
-                let result = self.uninit();
-                let lhs = self.eval(lhs);
-                let rhs = self.eval(rhs);
-                self.operations.push(DslIr::LessThanV(result, lhs, rhs));
-                RVar::Val(result)
-            }
-        }
-    }
-
     /// Evaluate a block of operations if two expressions are equal.
     pub fn if_eq<LhsExpr: Into<SymbolicVar<C::N>>, RhsExpr: Into<SymbolicVar<C::N>>>(
         &mut self,
