@@ -81,7 +81,7 @@ where
                         _ => unreachable!(),
                     },
                 )
-                .eval(builder, AB::Expr::ONE);
+                .eval(builder, cols.is_valid);
         }
 
         AdapterAirContext {
