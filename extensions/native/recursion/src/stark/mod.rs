@@ -877,7 +877,7 @@ where
             alpha,
             accumulator: SymbolicExt::ZERO,
             public_values,
-            exposed_values_after_challenge, // FIXME
+            exposed_values_after_challenge,
             _marker: PhantomData,
         };
         folder.eval_constraints(constraints);
