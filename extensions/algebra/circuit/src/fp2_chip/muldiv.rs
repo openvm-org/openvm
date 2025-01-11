@@ -153,8 +153,9 @@ mod tests {
     #[test]
     fn test_fp2_muldiv() {
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let modulus = BN254_MODULUS.clone();
         let config = ExprBuilderConfig {
-            modulus: BN254_MODULUS.clone(),
+            modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
@@ -221,6 +222,15 @@ mod tests {
                     .map(BabyBear::from_canonical_u32)
             })
             .collect_vec();
+        let modulus =
+            biguint_to_limbs::<NUM_LIMBS>(modulus, LIMB_BITS).map(BabyBear::from_canonical_u32);
+        let zero = [BabyBear::ZERO; NUM_LIMBS];
+        let setup_instruction = rv32_write_heap_default(
+            &mut tester,
+            vec![modulus, zero],
+            vec![zero; 2],
+            chip.0.core.air.offset + Fp2Opcode::SETUP_MULDIV as usize,
+        );
         let instruction1 = rv32_write_heap_default(
             &mut tester,
             x_limbs.clone(),
@@ -233,6 +243,7 @@ mod tests {
             y_limbs,
             chip.0.core.air.offset + Fp2Opcode::DIV as usize,
         );
+        tester.execute(&mut chip, &setup_instruction);
         tester.execute(&mut chip, &instruction1);
         tester.execute(&mut chip, &instruction2);
         let tester = tester.build().load(chip).load(bitwise_chip).finalize();

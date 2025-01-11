@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "crates/circuits/primitives/**"
+      - "crates/circuits/**"
       - "crates/vm/**"
       - "extensions/**"
       - ".github/workflows/extension-tests.yml"
@@ -48,7 +48,7 @@ jobs:
         id: filter
         with:
           filters: |
-            - "crates/circuits/primitives/**"
+            - "crates/circuits/**"
             - "crates/vm/**"
             - "extensions/${{ matrix.extensions.path }}/**"
             - ".github/workflows/extension-tests.yml"
