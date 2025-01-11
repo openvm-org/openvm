@@ -115,6 +115,8 @@ pub enum DslIr<C: Config> {
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
     For(RVar<C::N>, RVar<C::N>, C::N, Var<C::N>, TracedVec<DslIr<C>>),
 
+    /// Executes a zipped iterator for loop over pointers with the parameters
+    /// (start step values, end step value of first pointer, step sizes, step variables, body).
     ZipFor(
         Vec<RVar<C::N>>,
         RVar<C::N>,
@@ -158,6 +160,7 @@ pub enum DslIr<C: Config> {
     /// Assert that an extension field element is equal to an extension field immediate (ext == ext field imm).
     AssertEqEI(Ext<C::F, C::EF>, C::EF),
 
+    /// Assert that a usize is not zero (usize != 0).
     AssertNonZero(Usize<C::N>),
 
     // Memory instructions.
