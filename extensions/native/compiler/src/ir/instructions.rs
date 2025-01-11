@@ -129,8 +129,6 @@ pub enum DslIr<C: Config> {
         TracedVec<DslIr<C>>,
     ),
 
-    /// Executes an indefinite loop.
-    Loop(TracedVec<DslIr<C>>),
     /// Executes an equal conditional branch with the parameters (lhs var, rhs var, then body, else body).
     IfEq(
         Var<C::N>,

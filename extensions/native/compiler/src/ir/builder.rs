@@ -423,18 +423,6 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    /// Evaluate a block of operations repeatedly (until a break).
-    pub fn do_loop(&mut self, mut f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>) {
-        let mut loop_body_builder = self.create_sub_builder();
-
-        f(&mut loop_body_builder).expect("should not be break issues in dynamic loop");
-
-        let loop_instructions = loop_body_builder.operations;
-
-        let op = DslIr::Loop(loop_instructions);
-        self.operations.push(op);
-    }
-
     /// Break out of a loop.
     pub fn break_loop(&mut self) -> Result<(), BreakLoop> {
         if self.flags.disable_break {
