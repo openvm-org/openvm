@@ -396,9 +396,6 @@ impl<C: Config> Builder<C> {
     ) -> ZippedPointerIteratorBuilder<'a, C> {
         assert!(!arrays.is_empty());
         if arrays.iter().all(|array| array.is_fixed()) {
-            assert!(arrays
-                .windows(2)
-                .all(|array| array[0].len() == array[1].len()));
             ZippedPointerIteratorBuilder {
                 starts: vec![RVar::zero(); arrays.len()],
                 end0: arrays[0].len().into(),

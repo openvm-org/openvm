@@ -299,7 +299,9 @@ impl<C: Config> Builder<C> {
                     var.clone(),
                     Ptr {
                         address: match ptr {
-                            RVar::Const(_) => unimplemented!(),
+                            RVar::Const(_) => panic!(
+                                "iter_ptr_get on dynamic array not supported for constant ptr"
+                            ),
                             RVar::Val(v) => v,
                         },
                     },
@@ -336,7 +338,9 @@ impl<C: Config> Builder<C> {
                 self.store(
                     Ptr {
                         address: match ptr {
-                            RVar::Const(_) => unimplemented!(),
+                            RVar::Const(_) => panic!(
+                                "iter_ptr_set on dynamic array not supported for constant ptr"
+                            ),
                             RVar::Val(v) => v,
                         },
                     },
