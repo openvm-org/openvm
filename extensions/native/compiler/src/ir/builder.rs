@@ -575,9 +575,9 @@ impl<C: Config> Builder<C> {
         self.operations.push(DslIr::CircuitCommitVkeyHash(var));
     }
 
-    pub fn commit_commited_values_digest_circuit(&mut self, var: Var<C::N>) {
+    pub fn commit_committed_values_digest_circuit(&mut self, var: Var<C::N>) {
         self.operations
-            .push(DslIr::CircuitCommitCommitedValuesDigest(var));
+            .push(DslIr::CircuitCommitCommittedValuesDigest(var));
     }
 
     pub fn cycle_tracker_start(&mut self, name: &str) {
