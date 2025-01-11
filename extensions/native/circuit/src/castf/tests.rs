@@ -68,7 +68,7 @@ fn castf_rand_test() {
         CastFCoreChip::new(tester.range_checker(), 0),
         tester.offline_memory_mutex_arc(),
     );
-    let num_tests: usize = 1;
+    let num_tests: usize = 3;
 
     for _ in 0..num_tests {
         let y = generate_uint_number(&mut rng);
