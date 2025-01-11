@@ -194,7 +194,7 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    fn ptr_at<V: MemVariable<C>, I: Into<RVar<C::N>>>(
+    pub fn ptr_at<V: MemVariable<C>, I: Into<RVar<C::N>>>(
         &mut self,
         slice: &Array<C, V>,
         index: I,
@@ -212,16 +212,6 @@ impl<C: Config> Builder<C> {
                 ),
             },
         }
-    }
-
-    pub fn get_ref<V: MemVariable<C>, I: Into<RVar<C::N>>>(
-        &mut self,
-        slice: &Array<C, V>,
-        index: I,
-    ) -> Ref<C, V> {
-        let index = index.into();
-        let ptr = self.ptr_at(slice, index);
-        Ref::from_ptr(ptr)
     }
 
     /// Intended to be used with `ptr` from `zip`. Assumes that:
