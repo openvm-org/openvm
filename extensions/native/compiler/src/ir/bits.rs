@@ -1,8 +1,6 @@
 use openvm_stark_backend::p3_field::FieldAlgebra;
 
-use super::{Array, Builder, Config, DslIr, Felt, MemIndex, RVar, Var};
-
-pub const NUM_BITS: usize = 31;
+use super::{Array, Builder, Config, DslIr, Felt, MemIndex, Var};
 
 impl<C: Config> Builder<C> {
     /// Converts a variable to bits.
