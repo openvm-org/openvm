@@ -6,7 +6,7 @@ use openvm_stark_backend::p3_field::FieldAlgebra;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RVar, Ref, Usize, Var, Variable,
+    Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RVar, Usize, Var, Variable,
 };
 
 /// A logical array.
