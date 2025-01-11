@@ -44,23 +44,6 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
         }
     }
 
-    /// Asserts that an array has a certain length. Change its length to constant if it is a variable.
-    pub fn assert_len(&self, builder: &mut Builder<C>, len: usize) {
-        match self {
-            Self::Fixed(vec) => {
-                assert_eq!(vec.borrow().len(), len);
-            }
-            Self::Dyn(_, c_len) => match c_len {
-                Usize::Const(_) => {
-                    assert_eq!(c_len.value(), len);
-                }
-                Usize::Var(c_len) => {
-                    builder.assert_eq::<Var<_>>(*c_len, C::N::from_canonical_usize(len));
-                }
-            },
-        }
-    }
-
     /// Shifts the array by `shift` elements.
     /// !Attention!: the behavior of `Fixed` and `Dyn` is different. For Dyn, the shift is a view
     /// and shares memory with the original. For `Fixed`, `set`/`set_value` on slices won't impact
