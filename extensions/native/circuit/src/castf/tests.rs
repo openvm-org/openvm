@@ -65,7 +65,7 @@ fn castf_rand_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        CastFCoreChip::new(tester.range_checker(), 0),
+        CastFCoreChip::new(tester.range_checker(), CastfOpcode::default_offset()),
         tester.offline_memory_mutex_arc(),
     );
     let num_tests: usize = 1;
