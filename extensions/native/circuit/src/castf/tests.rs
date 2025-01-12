@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_native_compiler::CastfOpcode;
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError, Chip,
@@ -89,7 +89,7 @@ fn negative_castf_overflow_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        CastFCoreChip::new(range_checker_chip.clone(), 0),
+        CastFCoreChip::new(range_checker_chip.clone(), CastfOpcode::default_offset()),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -127,7 +127,7 @@ fn negative_castf_memread_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        CastFCoreChip::new(range_checker_chip.clone(), 0),
+        CastFCoreChip::new(range_checker_chip.clone(), CastfOpcode::default_offset()),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -165,7 +165,7 @@ fn negative_castf_memwrite_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        CastFCoreChip::new(range_checker_chip.clone(), 0),
+        CastFCoreChip::new(range_checker_chip.clone(), CastfOpcode::default_offset()),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -203,7 +203,7 @@ fn negative_castf_as_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        CastFCoreChip::new(range_checker_chip.clone(), 0),
+        CastFCoreChip::new(range_checker_chip.clone(), CastfOpcode::default_offset()),
         tester.offline_memory_mutex_arc(),
     );
 
