@@ -400,7 +400,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         assert!(vkey_hash.is_none());
                         vkey_hash = Some(vars[&a.0]);
                     }
-                    DslIr::CircuitCommitCommitedValuesDigest(a) => {
+                    DslIr::CircuitCommitCommittedValuesDigest(a) => {
                         assert!(committed_values_digest.is_none());
                         committed_values_digest = Some(vars[&a.0]);
                     }

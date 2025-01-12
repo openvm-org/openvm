@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Var};
+use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Usize, Var};
 
 /// An intermeddiate instruction set for implementing programs.
 ///
@@ -104,12 +104,6 @@ pub enum DslIr<C: Config> {
     /// Negates an extension field element (ext = -ext).
     NegE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
 
-    // Comparisons.
-    /// Compares two variables
-    LessThanV(Var<C::N>, Var<C::N>, Var<C::N>),
-    /// Compares a variable and an immediate
-    LessThanVI(Var<C::N>, Var<C::N>, C::N),
-
     /// Cast a Felt to a Var.
     CastFV(Var<C::N>, Felt<C::F>),
     /// Cast a Var to a Felt. This is unsafe because of possible overflow. Dynamic mode only.
@@ -121,6 +115,8 @@ pub enum DslIr<C: Config> {
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
     For(RVar<C::N>, RVar<C::N>, C::N, Var<C::N>, TracedVec<DslIr<C>>),
 
+    /// Executes a zipped iterator for loop over pointers with the parameters
+    /// (start step values, end step value of first pointer, step sizes, step variables, body).
     ZipFor(
         Vec<RVar<C::N>>,
         RVar<C::N>,
@@ -129,8 +125,6 @@ pub enum DslIr<C: Config> {
         TracedVec<DslIr<C>>,
     ),
 
-    /// Executes an indefinite loop.
-    Loop(TracedVec<DslIr<C>>),
     /// Executes an equal conditional branch with the parameters (lhs var, rhs var, then body, else body).
     IfEq(
         Var<C::N>,
@@ -155,28 +149,19 @@ pub enum DslIr<C: Config> {
     // Assertions.
     /// Assert that two variables are equal (var == var).
     AssertEqV(Var<C::N>, Var<C::N>),
-    /// Assert that two variables are not equal (var != var).
-    AssertNeV(Var<C::N>, Var<C::N>),
     /// Assert that two field elements are equal (felt == felt).
     AssertEqF(Felt<C::F>, Felt<C::F>),
-    /// Assert that two field elements are not equal (felt != felt).
-    AssertNeF(Felt<C::F>, Felt<C::F>),
     /// Assert that two extension field elements are equal (ext == ext).
     AssertEqE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
-    /// Assert that two extension field elements are not equal (ext != ext).
-    AssertNeE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
     /// Assert that a variable is equal to an immediate (var == imm).
     AssertEqVI(Var<C::N>, C::N),
-    /// Assert that a variable is not equal to an immediate (var != imm).
-    AssertNeVI(Var<C::N>, C::N),
     /// Assert that a field element is equal to a field immediate (felt == field imm).
     AssertEqFI(Felt<C::F>, C::F),
-    /// Assert that a field element is not equal to a field immediate (felt != field imm).
-    AssertNeFI(Felt<C::F>, C::F),
     /// Assert that an extension field element is equal to an extension field immediate (ext == ext field imm).
     AssertEqEI(Ext<C::F, C::EF>, C::EF),
-    /// Assert that an extension field element is not equal to an extension field immediate (ext != ext field imm).
-    AssertNeEI(Ext<C::F, C::EF>, C::EF),
+
+    /// Assert that a usize is not zero (usize != 0).
+    AssertNonZero(Usize<C::N>),
 
     // Memory instructions.
     /// Allocate (ptr, len, size) a memory slice of length len
@@ -230,8 +215,6 @@ pub enum DslIr<C: Config> {
     /// Prepare next input vector (preceded by its length) for hinting.
     HintInputVec(),
     /// Prepare bit decomposition for hinting.
-    HintBitsU(RVar<C::N>),
-    /// Prepare bit decomposition for hinting.
     HintBitsV(Var<C::N>, u32),
     /// Prepare bit decomposition for hinting.
     HintBitsF(Felt<C::F>, u32),
@@ -255,7 +238,7 @@ pub enum DslIr<C: Config> {
     CircuitCommitVkeyHash(Var<C::N>),
     /// Asserts that the inputted var is equal the circuit's committed values digest public input. Should
     /// only be used when target is a circuit.
-    CircuitCommitCommitedValuesDigest(Var<C::N>),
+    CircuitCommitCommittedValuesDigest(Var<C::N>),
     /// Publish a field element as the ith public value. Should only be used when target is a circuit.
     CircuitPublish(Var<C::N>, usize),
 

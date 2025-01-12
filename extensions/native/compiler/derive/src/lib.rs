@@ -71,14 +71,6 @@ pub fn derive_variable(input: TokenStream) -> TokenStream {
                     }
                 });
 
-                let fields_assert_ne = fields.named.iter().map(|f| {
-                    let fname = &f.ident;
-                    let ftype = &f.ty;
-                    quote! {
-                        <#ftype as Variable<C>>::assert_ne(lhs.#fname, rhs.#fname, builder);
-                    }
-                });
-
                 let field_sizes = fields.named.iter().map(|f| {
                     let ftype = &f.ty;
                     quote! {
@@ -132,16 +124,6 @@ pub fn derive_variable(input: TokenStream) -> TokenStream {
                             let lhs = lhs.into();
                             let rhs = rhs.into();
                             #(#fields_assert_eq)*
-                        }
-
-                        fn assert_ne(
-                            lhs: impl Into<Self::Expression>,
-                            rhs: impl Into<Self::Expression>,
-                            builder: &mut Builder<C>,
-                        ) {
-                            let lhs = lhs.into();
-                            let rhs = rhs.into();
-                            #(#fields_assert_ne)*
                         }
                     }
 

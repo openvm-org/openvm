@@ -58,18 +58,6 @@ impl<C: Config> Variable<C> for DigestVariable<C> {
             _ => panic!("Assertion types mismatch"),
         }
     }
-
-    fn assert_ne(
-        lhs: impl Into<Self::Expression>,
-        rhs: impl Into<Self::Expression>,
-        builder: &mut Builder<C>,
-    ) {
-        match (lhs.into(), rhs.into()) {
-            (Self::Felt(lhs), Self::Felt(rhs)) => builder.assert_ne::<Array<C, _>>(lhs, rhs),
-            (Self::Var(lhs), Self::Var(rhs)) => builder.assert_ne::<Array<C, _>>(lhs, rhs),
-            _ => panic!("Assertion types mismatch"),
-        }
-    }
 }
 
 impl<C: Config> MemVariable<C> for DigestVariable<C> {

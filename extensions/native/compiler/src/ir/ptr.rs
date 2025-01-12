@@ -76,14 +76,6 @@ impl<C: Config> Variable<C> for Ptr<C::N> {
     ) {
         Var::assert_eq(lhs.into().address, rhs.into().address, builder);
     }
-
-    fn assert_ne(
-        lhs: impl Into<Self::Expression>,
-        rhs: impl Into<Self::Expression>,
-        builder: &mut Builder<C>,
-    ) {
-        Var::assert_ne(lhs.into().address, rhs.into().address, builder);
-    }
 }
 
 impl<C: Config> MemVariable<C> for Ptr<C::N> {

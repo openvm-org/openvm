@@ -205,7 +205,7 @@ where
 
     pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
         &self,
-        commited_exe: Arc<VmCommittedExe<SC>>,
+        committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
@@ -214,8 +214,8 @@ where
         VC::Periphery: Chip<SC>,
     {
         self.execute_and_generate_impl(
-            commited_exe.exe.clone(),
-            Some(commited_exe.committed_program.clone()),
+            committed_exe.exe.clone(),
+            Some(committed_exe.committed_program.clone()),
             input,
         )
     }
@@ -320,7 +320,7 @@ where
     /// Executes a program and returns its proof input.
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
-        commited_exe: Arc<VmCommittedExe<SC>>,
+        committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
@@ -328,9 +328,9 @@ where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let segment = self.execute_impl(commited_exe.exe.clone(), input)?;
+        let segment = self.execute_impl(committed_exe.exe.clone(), input)?;
         let proof_input = tracing::info_span!("trace_gen").in_scope(|| {
-            segment.generate_proof_input(Some(commited_exe.committed_program.clone()))
+            segment.generate_proof_input(Some(committed_exe.committed_program.clone()))
         });
         Ok(proof_input)
     }

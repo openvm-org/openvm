@@ -391,10 +391,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     };
                     zip_for_compiler.for_each(move |_, builder| builder.build(block), debug_info);
                 }
-                DslIr::Loop(block) => {
-                    let loop_compiler = LoopCompiler { compiler: self };
-                    loop_compiler.compile(move |builder| builder.build(block), debug_info);
-                }
                 DslIr::AssertEqV(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::Val(rhs.fp()), false, debug_info)
@@ -402,14 +398,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::AssertEqVI(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::Const(rhs), false, debug_info)
-                }
-                DslIr::AssertNeV(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Val(rhs.fp()), true, debug_info)
-                }
-                DslIr::AssertNeVI(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Const(rhs), true, debug_info)
                 }
                 DslIr::AssertEqF(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
@@ -419,14 +407,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::Const(rhs), false, debug_info)
                 }
-                DslIr::AssertNeF(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Val(rhs.fp()), true, debug_info)
-                }
-                DslIr::AssertNeFI(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Const(rhs), true, debug_info)
-                }
                 DslIr::AssertEqE(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::ExtVal(rhs.fp()), false, debug_info)
@@ -435,13 +415,19 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::ExtConst(rhs), false, debug_info)
                 }
-                DslIr::AssertNeE(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::ExtVal(rhs.fp()), true, debug_info)
-                }
-                DslIr::AssertNeEI(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::ExtConst(rhs), true, debug_info)
+                DslIr::AssertNonZero(u) => {
+                    // If u == 0, execute TRAP
+                    match u {
+                        Usize::Const(_) => self.assert(
+                            u.value() as i32,
+                            ValueOrConst::Const(F::ZERO),
+                            true,
+                            debug_info,
+                        ),
+                        Usize::Var(v) => {
+                            self.assert(v.fp(), ValueOrConst::Const(F::ZERO), true, debug_info)
+                        }
+                    }
                 }
                 DslIr::Alloc(ptr, len, size) => {
                     self.alloc(ptr, len, size, debug_info);
@@ -529,9 +515,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::HintBitsV(var, len) => {
                     self.push(AsmInstruction::HintBits(var.fp(), len), debug_info);
-                }
-                DslIr::HintBitsU(_) => {
-                    todo!()
                 }
                 DslIr::Poseidon2PermuteBabyBear(dst, src) => match (dst, src) {
                     (Array::Dyn(dst, _), Array::Dyn(src, _)) => self.push(
@@ -1045,51 +1028,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> ForCo
             RVar::Val(end) => {
                 let instr = AsmInstruction::Bne(loop_label, self.loop_var.fp(), end.fp());
                 self.compiler.push(instr, debug_info.clone());
-            }
-        }
-    }
-}
-
-struct LoopCompiler<'a, F: Field, EF> {
-    compiler: &'a mut AsmCompiler<F, EF>,
-}
-
-impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> LoopCompiler<'_, F, EF> {
-    fn compile(
-        self,
-        compile_body: impl FnOnce(&mut AsmCompiler<F, EF>),
-        debug_info: Option<DebugInfo>,
-    ) {
-        // Initialize a break label for this loop.
-        let break_label = self.compiler.new_break_label();
-        self.compiler.break_label = Some(break_label);
-
-        // Loop block.
-        self.compiler.basic_block();
-        let loop_label = self.compiler.block_label();
-
-        compile_body(self.compiler);
-        self.compiler
-            .push(AsmInstruction::j(loop_label), debug_info.clone());
-
-        // After loop block.
-        self.compiler.basic_block();
-        let after_loop_label = self.compiler.block_label();
-        self.compiler
-            .break_label_map
-            .insert(break_label, after_loop_label);
-
-        // Replace break instructions with a jump to the after loop block.
-        for block in self.compiler.contains_break.iter() {
-            for instruction in self.compiler.basic_blocks[block.as_canonical_u32() as usize]
-                .0
-                .iter_mut()
-            {
-                if let AsmInstruction::Break(l) = instruction {
-                    if *l == break_label {
-                        *instruction = AsmInstruction::j(after_loop_label);
-                    }
-                }
             }
         }
     }

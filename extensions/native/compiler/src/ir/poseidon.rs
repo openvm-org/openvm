@@ -130,7 +130,7 @@ impl<C: Config> Builder<C> {
             builder.set(&state, i, C::F::ZERO);
         });
 
-        let address = self.get_ref(&state, 0).ptr.address;
+        let address = self.eval(state.ptr().address);
         let start: Var<_> = self.eval(address);
         let end: Var<_> = self.eval(address + C::N::from_canonical_usize(HASH_RATE));
         self.iter(array).for_each(|subarray, builder| {

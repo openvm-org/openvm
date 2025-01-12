@@ -57,7 +57,7 @@ impl LeafVmVerifierConfig {
             let proofs: Array<C, StarkProofVariable<_>> =
                 <Vec<Proof<BabyBearPoseidon2Config>> as Hintable<C>>::read(&mut builder);
             // At least 1 proof should be provided.
-            builder.assert_ne::<Usize<_>>(proofs.len(), RVar::zero());
+            builder.assert_nonzero(&proofs.len());
             builder.cycle_tracker_end("ReadProofsFromInput");
 
             builder.cycle_tracker_start("VerifyProofs");

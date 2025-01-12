@@ -1,4 +1,4 @@
-use std::ops::{Add, Mul, MulAssign};
+use std::ops::{Add, Mul};
 
 use openvm_stark_backend::p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField};
 
@@ -75,75 +75,9 @@ impl<C: Config> Builder<C> {
         c
     }
 
-    /// Exponentiates a variable to a power of two.
-    pub fn exp_power_of_2<V: Variable<C>, E: Into<V::Expression>>(
-        &mut self,
-        e: E,
-        power_log: usize,
-    ) -> V
-    where
-        V::Expression: MulAssign<V::Expression> + Clone,
-    {
-        let mut e = e.into();
-        for _ in 0..power_log {
-            e *= e.clone();
-        }
-        self.eval(e)
-    }
-
-    /// Exponentiates a variable to an array of bits in little endian.
-    pub fn exp_bits<V>(&mut self, x: V, power_bits: &Array<C, Var<C::N>>) -> V
-    where
-        V::Expression: FieldAlgebra,
-        V: Copy + Mul<Output = V::Expression> + Variable<C>,
-    {
-        let result: V = self.eval(V::Expression::ONE);
-        let power_f: V = self.eval(x);
-        self.range(0, power_bits.len()).for_each(|i, builder| {
-            let bit = builder.get(power_bits, i);
-            builder
-                .if_eq(bit, C::N::ONE)
-                .then(|builder| builder.assign(&result, result * power_f));
-            builder.assign(&power_f, power_f * power_f);
-        });
-        result
-    }
-
-    /// Exponentiates a felt to a list of bits in little endian.
-    pub fn exp_f_bits(&mut self, x: Felt<C::F>, power_bits: Vec<Var<C::N>>) -> Felt<C::F> {
-        let mut result = self.eval(C::F::ONE);
-        let mut power_f: Felt<_> = self.eval(x);
-        for i in 0..power_bits.len() {
-            let bit = power_bits[i];
-            let tmp = self.eval(result * power_f);
-            result = self.select_f(bit, tmp, result);
-            power_f = self.eval(power_f * power_f);
-        }
-        result
-    }
-
-    /// Exponentiates a extension to a list of bits in little endian.
-    pub fn exp_e_bits(
-        &mut self,
-        x: Ext<C::F, C::EF>,
-        power_bits: Vec<Var<C::N>>,
-    ) -> Ext<C::F, C::EF> {
-        let mut result = self.eval(SymbolicExt::from_f(C::EF::ONE));
-        let mut power_f: Ext<_, _> = self.eval(x);
-        for i in 0..power_bits.len() {
-            let bit = power_bits[i];
-            let tmp = self.eval(result * power_f);
-            result = self.select_ef(bit, tmp, result);
-            power_f = self.eval(power_f * power_f);
-        }
-        result
-    }
-
     /// Exponentiates a variable to a list of big endian bits with a given length.
     ///
     /// Example: if power_bits = [1, 0, 1, 0], then the result should be x^8 * x^2 = x^10.
-    ///
-    /// Reference: [`openvm_stark_backend::p3_util::reverse_bits_len`]
     pub fn exp_bits_big_endian<V>(&mut self, x: V, power_bits: &Array<C, Var<C::N>>) -> V
     where
         V::Expression: FieldAlgebra,
@@ -176,22 +110,6 @@ impl<C: Config> Builder<C> {
         let power_log = power_log.into();
         self.range(0, power_log)
             .for_each(|_, builder| builder.assign(&result, result * result));
-        result
-    }
-
-    /// Exponentiates a variable to a list of bits in little endian inside a circuit.
-    pub fn exp_power_of_2_v_circuit<V>(
-        &mut self,
-        base: impl Into<V::Expression>,
-        power_log: usize,
-    ) -> V
-    where
-        V: Copy + Mul<Output = V::Expression> + Variable<C>,
-    {
-        let mut result: V = self.eval(base);
-        for _ in 0..power_log {
-            result = self.eval(result * result)
-        }
         result
     }
 

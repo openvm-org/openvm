@@ -39,9 +39,6 @@ fn test_compiler_arithmetic() {
     builder.assert_ext_eq(one_ext, EF::ONE.cons());
     builder.assert_ext_eq(two_ext, EF::TWO.cons());
 
-    // Check Val() vs Const() inequality
-    builder.assert_ext_ne(one_ext, EF::TWO.cons());
-
     builder.assert_ext_eq(zero_ext * one_ext, EF::ZERO.cons());
     builder.assert_ext_eq(one_ext * one_ext, EF::ONE.cons());
     builder.assert_ext_eq(one_ext + one_ext, EF::TWO.cons());
@@ -327,11 +324,6 @@ fn test_felt_equality() {
     builder.assert_felt_eq(a, a);
     builder.assert_ext_eq(a, a);
 
-    builder.assert_felt_ne(a, a + F::ONE);
-    builder.assert_felt_ne(a, f + F::ONE);
-    builder.assert_felt_ne(a + F::ONE, a);
-    builder.assert_felt_ne(f + F::ONE, a);
-
     builder.halt();
 
     let mut compiler = AsmCompiler::new(WORD_SIZE);
@@ -350,12 +342,6 @@ fn test_felt_equality_negative() {
 
     let mut rng = thread_rng();
     let f = rng.gen::<F>();
-
-    let mut builder = AsmBuilder::<F, EF>::default();
-    let a: Felt<_> = builder.constant(f);
-    builder.assert_felt_ne(a, a);
-    builder.halt();
-    assert_failed_assertion(builder);
 
     let mut builder = AsmBuilder::<F, EF>::default();
     let a: Felt<_> = builder.constant(f);
@@ -380,19 +366,6 @@ fn test_ext_equality() {
     builder.assert_ext_eq(a, a_ext.cons());
     builder.assert_ext_eq(a_ext.cons(), a);
 
-    builder.assert_ext_ne(a, a + EF::ONE);
-    builder.assert_ext_ne(a + EF::ONE, a);
-    builder.assert_ext_ne(a, (a_ext + EF::ONE).cons());
-    builder.assert_ext_ne((a_ext + EF::ONE).cons(), a);
-
-    for i in 0..4 {
-        let mut base = a_ext.as_base_slice().to_vec();
-        base[i] = rng.gen::<F>();
-        let b_ext = EF::from_base_slice(&base);
-        builder.assert_ext_ne(a, b_ext.cons());
-        builder.assert_ext_ne(b_ext.cons(), a);
-    }
-
     builder.halt();
 
     let program = builder.compile_isa();
@@ -406,12 +379,6 @@ fn test_ext_equality_negative() {
 
     let mut rng = thread_rng();
     let a_ext = rng.gen::<EF>();
-
-    let mut builder = AsmBuilder::<F, EF>::default();
-    let a: Ext<_, _> = builder.constant(a_ext);
-    builder.assert_ext_ne(a, a);
-    builder.halt();
-    assert_failed_assertion(builder);
 
     let mut builder = AsmBuilder::<F, EF>::default();
     let a: Ext<_, _> = builder.constant(a_ext);

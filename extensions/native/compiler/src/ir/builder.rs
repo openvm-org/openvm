@@ -206,6 +206,11 @@ impl<C: Config> Builder<C> {
         felt
     }
 
+    /// Asserts that a Usize is non-zero
+    pub fn assert_nonzero(&mut self, u: &Usize<C::N>) {
+        self.operations.push(DslIr::AssertNonZero(u.clone()));
+    }
+
     /// Asserts that two expressions are equal.
     pub fn assert_eq<V: Variable<C>>(
         &mut self,
@@ -213,15 +218,6 @@ impl<C: Config> Builder<C> {
         rhs: impl Into<V::Expression>,
     ) {
         V::assert_eq(lhs, rhs, self);
-    }
-
-    /// Asserts that two expressions are not equal.
-    pub fn assert_ne<V: Variable<C>>(
-        &mut self,
-        lhs: impl Into<V::Expression>,
-        rhs: impl Into<V::Expression>,
-    ) {
-        V::assert_ne(lhs, rhs, self);
     }
 
     /// Assert that two vars are equal.
@@ -233,15 +229,6 @@ impl<C: Config> Builder<C> {
         self.assert_eq::<Var<C::N>>(lhs, rhs);
     }
 
-    /// Assert that two vars are not equal.
-    pub fn assert_var_ne<LhsExpr: Into<SymbolicVar<C::N>>, RhsExpr: Into<SymbolicVar<C::N>>>(
-        &mut self,
-        lhs: LhsExpr,
-        rhs: RhsExpr,
-    ) {
-        self.assert_ne::<Var<C::N>>(lhs, rhs);
-    }
-
     /// Assert that two felts are equal.
     pub fn assert_felt_eq<LhsExpr: Into<SymbolicFelt<C::F>>, RhsExpr: Into<SymbolicFelt<C::F>>>(
         &mut self,
@@ -249,15 +236,6 @@ impl<C: Config> Builder<C> {
         rhs: RhsExpr,
     ) {
         self.assert_eq::<Felt<C::F>>(lhs, rhs);
-    }
-
-    /// Assert that two felts are not equal.
-    pub fn assert_felt_ne<LhsExpr: Into<SymbolicFelt<C::F>>, RhsExpr: Into<SymbolicFelt<C::F>>>(
-        &mut self,
-        lhs: LhsExpr,
-        rhs: RhsExpr,
-    ) {
-        self.assert_ne::<Felt<C::F>>(lhs, rhs);
     }
 
     /// Assert that two exts are equal.
@@ -272,18 +250,6 @@ impl<C: Config> Builder<C> {
         self.assert_eq::<Ext<C::F, C::EF>>(lhs, rhs);
     }
 
-    /// Assert that two exts are not equal.
-    pub fn assert_ext_ne<
-        LhsExpr: Into<SymbolicExt<C::F, C::EF>>,
-        RhsExpr: Into<SymbolicExt<C::F, C::EF>>,
-    >(
-        &mut self,
-        lhs: LhsExpr,
-        rhs: RhsExpr,
-    ) {
-        self.assert_ne::<Ext<C::F, C::EF>>(lhs, rhs);
-    }
-
     /// Assert that two arrays are equal.
     pub fn assert_var_array_eq(&mut self, lhs: &Array<C, Var<C::N>>, rhs: &Array<C, Var<C::N>>) {
         self.assert_var_eq(lhs.len(), rhs.len());
@@ -292,32 +258,6 @@ impl<C: Config> Builder<C> {
             let r = builder.get(rhs, i);
             builder.assert_var_eq(l, r);
         });
-    }
-
-    /// Compares two variables.
-    pub fn lt<LhsExpr: Into<SymbolicVar<C::N>>, RhsExpr: Into<SymbolicVar<C::N>>>(
-        &mut self,
-        lhs: LhsExpr,
-        rhs: RhsExpr,
-    ) -> RVar<C::N> {
-        let lhs = lhs.into();
-        let rhs = rhs.into();
-        match (&lhs, &rhs) {
-            (SymbolicVar::Const(lhs, _), SymbolicVar::Const(rhs, _)) => {
-                if rhs < lhs {
-                    RVar::one()
-                } else {
-                    RVar::zero()
-                }
-            }
-            _ => {
-                let result = self.uninit();
-                let lhs = self.eval(lhs);
-                let rhs = self.eval(rhs);
-                self.operations.push(DslIr::LessThanV(result, lhs, rhs));
-                RVar::Val(result)
-            }
-        }
     }
 
     /// Evaluate a block of operations if two expressions are equal.
@@ -421,18 +361,6 @@ impl<C: Config> Builder<C> {
         } else {
             panic!("Cannot use zipped pointer iterator with mixed arrays");
         }
-    }
-
-    /// Evaluate a block of operations repeatedly (until a break).
-    pub fn do_loop(&mut self, mut f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>) {
-        let mut loop_body_builder = self.create_sub_builder();
-
-        f(&mut loop_body_builder).expect("should not be break issues in dynamic loop");
-
-        let loop_instructions = loop_body_builder.operations;
-
-        let op = DslIr::Loop(loop_instructions);
-        self.operations.push(op);
     }
 
     /// Break out of a loop.
@@ -598,14 +526,6 @@ impl<C: Config> Builder<C> {
         self.operations.trace_push(DslIr::Error());
     }
 
-    /// Materializes a usize into a variable.
-    pub fn materialize(&mut self, num: RVar<C::N>) -> Var<C::N> {
-        match num {
-            RVar::Const(num) => self.eval(num),
-            RVar::Val(num) => num,
-        }
-    }
-
     fn get_nb_public_values(&mut self) -> Var<C::N> {
         assert!(
             !self.is_sub_builder,
@@ -655,9 +575,9 @@ impl<C: Config> Builder<C> {
         self.operations.push(DslIr::CircuitCommitVkeyHash(var));
     }
 
-    pub fn commit_commited_values_digest_circuit(&mut self, var: Var<C::N>) {
+    pub fn commit_committed_values_digest_circuit(&mut self, var: Var<C::N>) {
         self.operations
-            .push(DslIr::CircuitCommitCommitedValuesDigest(var));
+            .push(DslIr::CircuitCommitCommittedValuesDigest(var));
     }
 
     pub fn cycle_tracker_start(&mut self, name: &str) {
