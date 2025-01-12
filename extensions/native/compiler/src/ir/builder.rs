@@ -571,15 +571,6 @@ impl<C: Config> Builder<C> {
         });
     }
 
-    pub fn commit_vkey_hash_circuit(&mut self, var: Var<C::N>) {
-        self.operations.push(DslIr::CircuitCommitVkeyHash(var));
-    }
-
-    pub fn commit_committed_values_digest_circuit(&mut self, var: Var<C::N>) {
-        self.operations
-            .push(DslIr::CircuitCommitCommittedValuesDigest(var));
-    }
-
     pub fn cycle_tracker_start(&mut self, name: &str) {
         self.operations
             .push(DslIr::CycleTrackerStart(name.to_string()));
