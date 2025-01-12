@@ -4,7 +4,7 @@
 
 ## Instruction format
 
-Instructions are encoded as a global opcode (field element) followed by `NUM_OPERANDS = 6` operands (field elements): `opcode, a, b, c, d, e, f`. An instruction does not need to use all operands, and trailing unused operands should be set to zero.
+Instructions are encoded as a global opcode (field element) followed by `NUM_OPERANDS = 7` operands (field elements): `opcode, a, b, c, d, e, f, g`. An instruction does not need to use all operands, and trailing unused operands should be set to zero.
 
 ## Program ROM
 
