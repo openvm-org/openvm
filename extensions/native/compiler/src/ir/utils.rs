@@ -139,33 +139,27 @@ impl<C: Config> Builder<C> {
         result
     }
 
-    /// Exponentiates a variable to a list of reversed bits with a given length.
+    /// Exponentiates a variable to a list of big endian bits with a given length.
+    ///
+    /// Example: if power_bits = [1, 0, 1, 0], then the result should be x^8 * x^2 = x^10.
     ///
     /// Reference: [`openvm_stark_backend::p3_util::reverse_bits_len`]
-    pub fn exp_reverse_bits_len<V>(
-        &mut self,
-        x: V,
-        power_bits: &Array<C, Var<C::N>>,
-        bit_len: impl Into<RVar<C::N>>,
-    ) -> V
+    pub fn exp_bits_big_endian<V>(&mut self, x: V, power_bits: &Array<C, Var<C::N>>) -> V
     where
         V::Expression: FieldAlgebra,
         V: Copy + Mul<Output = V::Expression> + Variable<C> + CanSelect<C>,
     {
         let result: V = self.eval(V::Expression::ONE);
         let power_f: V = self.eval(x);
-        let bit_len = bit_len.into();
-        let bit_len_plus_one = self.eval_expr(bit_len + C::N::ONE);
         let one_var: V = self.eval(V::Expression::ONE);
 
-        self.range(RVar::one(), bit_len_plus_one)
-            .for_each(|i, builder| {
-                let index = builder.eval_expr(bit_len - i);
-                let bit = builder.get(power_bits, index);
-                let mul = V::select(builder, bit, power_f, one_var);
-                builder.assign(&result, result * mul);
-                builder.assign(&power_f, power_f * power_f);
-            });
+        // Implements a square-and-multiply algorithm.
+        self.iter(power_bits).for_each(|bit, builder| {
+            builder.assign(&result, result * result);
+            let mul = V::select(builder, bit, power_f, one_var);
+            builder.assign(&result, result * mul);
+        });
+
         result
     }
 

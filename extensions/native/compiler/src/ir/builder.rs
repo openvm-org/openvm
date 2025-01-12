@@ -1,6 +1,7 @@
 use std::{iter::Zip, vec::IntoIter};
 
 use backtrace::Backtrace;
+use openvm_native_compiler_derive::compile_zip;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +9,7 @@ use super::{
     Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,
     SymbolicFelt, SymbolicVar, Usize, Var, Variable,
 };
+use crate::ir::{collections::ArrayLike, Ptr};
 
 /// TracedVec is a Vec wrapper that records a trace whenever an element is pushed. When extending
 /// from another TracedVec, the traces are copied over.
@@ -125,8 +127,8 @@ impl<C: Config> Builder<C> {
             var_count: self.var_count,
             felt_count: self.felt_count,
             ext_count: self.ext_count,
-            // Witness counts are only used when the target is a gnark circuit.  And sub-builders are
-            // not used when the target is a gnark circuit, so it's fine to set the witness counts to 0.
+            // Witness counts are only used when the target is a circuit.  And sub-builders are
+            // not used when the target is a circuit, so it is fine to set the witness counts to 0.
             witness_var_count: 0,
             witness_felt_count: 0,
             witness_ext_count: 0,
@@ -362,6 +364,65 @@ impl<C: Config> Builder<C> {
         }
     }
 
+    pub fn iter<'a, V: MemVariable<C>>(
+        &'a mut self,
+        array: &'a Array<C, V>,
+    ) -> IteratorBuilder<'a, C, V> {
+        match array {
+            Array::Fixed(_) => IteratorBuilder {
+                start: RVar::zero(),
+                end: array.len().into(),
+                step_size: 1,
+                builder: self,
+                array,
+            },
+            Array::Dyn(ptr, len) => {
+                let len: RVar<C::N> = len.clone().into();
+                let end: Var<C::N> = self.eval(ptr.address + len * RVar::from(V::size_of()));
+                IteratorBuilder {
+                    start: ptr.address.into(),
+                    end: end.into(),
+                    step_size: V::size_of(),
+                    builder: self,
+                    array,
+                }
+            }
+        }
+    }
+
+    pub fn zip<'a>(
+        &'a mut self,
+        arrays: &'a [Box<dyn ArrayLike<C> + 'a>],
+    ) -> ZippedPointerIteratorBuilder<'a, C> {
+        assert!(!arrays.is_empty());
+        if arrays.iter().all(|array| array.is_fixed()) {
+            ZippedPointerIteratorBuilder {
+                starts: vec![RVar::zero(); arrays.len()],
+                end0: arrays[0].len().into(),
+                step_sizes: vec![1; arrays.len()],
+                builder: self,
+            }
+        } else if arrays.iter().all(|array| !array.is_fixed()) {
+            ZippedPointerIteratorBuilder {
+                starts: arrays
+                    .iter()
+                    .map(|array| array.ptr().address.into())
+                    .collect(),
+                end0: {
+                    let len: RVar<C::N> = arrays[0].len().into();
+                    let size = arrays[0].element_size_of();
+                    let end: Var<C::N> =
+                        self.eval(arrays[0].ptr().address + len * RVar::from(size));
+                    end.into()
+                },
+                step_sizes: arrays.iter().map(|array| array.element_size_of()).collect(),
+                builder: self,
+            }
+        } else {
+            panic!("Cannot use zipped pointer iterator with mixed arrays");
+        }
+    }
+
     /// Evaluate a block of operations repeatedly (until a break).
     pub fn do_loop(&mut self, mut f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>) {
         let mut loop_body_builder = self.create_sub_builder();
@@ -458,15 +519,21 @@ impl<C: Config> Builder<C> {
         let arr = self.dyn_array(vlen);
 
         // Write the content hints directly into the array memory.
-        self.range(0, vlen).for_each(|i, builder| {
+        compile_zip!(self, arr).for_each(|ptr_vec, builder| {
             let index = MemIndex {
-                index: i,
+                index: 0.into(),
                 offset: 0,
                 size: 1,
             };
-            builder
-                .operations
-                .push(DslIr::StoreHintWord(arr.ptr(), index));
+            builder.operations.push(DslIr::StoreHintWord(
+                Ptr {
+                    address: match ptr_vec[0] {
+                        RVar::Const(_) => unreachable!(),
+                        RVar::Val(v) => v,
+                    },
+                },
+                index,
+            ));
         });
 
         arr
@@ -837,6 +904,169 @@ impl<C: Config> IfBuilder<'_, C> {
                 IfCondition::Ne(lhs, rhs)
             }
         }
+    }
+}
+
+// iterates through zipped pointers
+pub struct ZippedPointerIteratorBuilder<'a, C: Config> {
+    starts: Vec<RVar<C::N>>,
+    end0: RVar<C::N>,
+    step_sizes: Vec<usize>,
+    builder: &'a mut Builder<C>,
+}
+
+impl<C: Config> ZippedPointerIteratorBuilder<'_, C> {
+    pub fn for_each(&mut self, mut f: impl FnMut(Vec<RVar<C::N>>, &mut Builder<C>)) {
+        assert!(self.starts.len() == self.step_sizes.len());
+        assert!(!self.starts.is_empty());
+
+        if self.starts.iter().all(|start| start.is_const()) && self.end0.is_const() {
+            self.for_each_unrolled(|ptrs, builder| {
+                f(ptrs, builder);
+                Ok(())
+            });
+            return;
+        }
+
+        let old_disable_break = self.builder.flags.disable_break;
+        self.builder.flags.disable_break = true;
+        self.for_each_dynamic(|ptrs, builder| {
+            f(ptrs, builder);
+            Ok(())
+        });
+        self.builder.flags.disable_break = old_disable_break;
+    }
+
+    fn for_each_unrolled(
+        &mut self,
+        mut f: impl FnMut(Vec<RVar<C::N>>, &mut Builder<C>) -> Result<(), BreakLoop>,
+    ) {
+        let old_static_loop = self.builder.flags.static_loop;
+        self.builder.flags.static_loop = true;
+
+        let starts: Vec<usize> = self.starts.iter().map(|start| start.value()).collect();
+        let end0 = self.end0.value();
+
+        for i in (starts[0]..end0).step_by(self.step_sizes[0]) {
+            let ptrs = vec![i.into(); self.starts.len()];
+            if f(ptrs, self.builder).is_err() {
+                break;
+            }
+        }
+        self.builder.flags.static_loop = old_static_loop;
+    }
+
+    fn for_each_dynamic(
+        &mut self,
+        mut f: impl FnMut(Vec<RVar<C::N>>, &mut Builder<C>) -> Result<(), BreakLoop>,
+    ) {
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic loop in static mode"
+        );
+
+        let step_sizes = self
+            .step_sizes
+            .iter()
+            .map(|s| C::N::from_canonical_usize(*s))
+            .collect();
+        let loop_variables: Vec<Var<C::N>> = (0..self.starts.len())
+            .map(|_| self.builder.uninit())
+            .collect();
+        let mut loop_body_builder = self.builder.create_sub_builder();
+
+        f(
+            loop_variables.iter().map(|&v| v.into()).collect(),
+            &mut loop_body_builder,
+        )
+        .expect("BreakLoop should never be returned in a dynamic loop");
+
+        let loop_instructions = loop_body_builder.operations;
+        let op = DslIr::ZipFor(
+            self.starts.clone(),
+            self.end0,
+            step_sizes,
+            loop_variables,
+            loop_instructions,
+        );
+        self.builder.operations.push(op);
+    }
+}
+
+pub struct IteratorBuilder<'a, C: Config, V: MemVariable<C>> {
+    start: RVar<C::N>,
+    end: RVar<C::N>,
+    step_size: usize,
+    builder: &'a mut Builder<C>,
+    array: &'a Array<C, V>,
+}
+
+impl<C: Config, V: MemVariable<C>> IteratorBuilder<'_, C, V> {
+    pub fn for_each(&mut self, mut f: impl FnMut(V, &mut Builder<C>)) {
+        if self.start.is_const() && self.end.is_const() {
+            self.for_each_unrolled(|var, builder| {
+                f(var, builder);
+                Ok(())
+            });
+            return;
+        }
+        let old_disable_break = self.builder.flags.disable_break;
+        self.builder.flags.disable_break = true;
+        self.for_each_dynamic(|var, builder| {
+            f(var, builder);
+            Ok(())
+        });
+        self.builder.flags.disable_break = old_disable_break;
+    }
+
+    fn for_each_unrolled(
+        &mut self,
+        mut f: impl FnMut(V, &mut Builder<C>) -> Result<(), BreakLoop>,
+    ) {
+        let old_static_loop = self.builder.flags.static_loop;
+        self.builder.flags.static_loop = true;
+        let start = self.start.value();
+        let end = self.end.value();
+        for i in (start..end).step_by(self.step_size) {
+            let val = self.builder.get(self.array, i);
+            if f(val, self.builder).is_err() {
+                break;
+            }
+        }
+        self.builder.flags.static_loop = old_static_loop;
+    }
+
+    fn for_each_dynamic(&mut self, mut f: impl FnMut(V, &mut Builder<C>) -> Result<(), BreakLoop>) {
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic loop in static mode"
+        );
+        let step_size = C::N::from_canonical_usize(self.step_size);
+        let loop_variable: Var<C::N> = self.builder.uninit();
+        let mut loop_body_builder = self.builder.create_sub_builder();
+        let val: V = loop_body_builder.uninit();
+        loop_body_builder.load(
+            val.clone(),
+            Ptr {
+                address: loop_variable,
+            },
+            MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: V::size_of(),
+            },
+        );
+        f(val, &mut loop_body_builder)
+            .expect("BreakLoop should never be returned in a dynamic loop");
+        let loop_instructions = loop_body_builder.operations;
+        let op = DslIr::For(
+            self.start,
+            self.end,
+            step_size,
+            loop_variable,
+            loop_instructions,
+        );
+        self.builder.operations.push(op);
     }
 }
 

@@ -381,6 +381,16 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     };
                     for_compiler.for_each(move |_, builder| builder.build(block), debug_info);
                 }
+                DslIr::ZipFor(starts, end0, step_sizes, loop_vars, block) => {
+                    let zip_for_compiler = ZipForCompiler {
+                        compiler: self,
+                        starts,
+                        end0,
+                        step_sizes,
+                        loop_vars,
+                    };
+                    zip_for_compiler.for_each(move |_, builder| builder.build(block), debug_info);
+                }
                 DslIr::Loop(block) => {
                     let loop_compiler = LoopCompiler { compiler: self };
                     loop_compiler.compile(move |builder| builder.build(block), debug_info);
@@ -821,6 +831,107 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> IfCom
             (ValueOrConst::Val(rhs), false) => AsmInstruction::Beq(block, lhs, rhs),
             (ValueOrConst::ExtVal(rhs), true) => AsmInstruction::BneE(block, lhs, rhs),
             (ValueOrConst::ExtVal(rhs), false) => AsmInstruction::BeqE(block, lhs, rhs),
+        }
+    }
+}
+
+// Zipped for loop -- loop extends over the first entry in starts and ends
+pub struct ZipForCompiler<'a, F: Field, EF> {
+    compiler: &'a mut AsmCompiler<F, EF>,
+    starts: Vec<RVar<F>>,
+    end0: RVar<F>,
+    step_sizes: Vec<F>,
+    loop_vars: Vec<Var<F>>,
+}
+
+impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
+    ZipForCompiler<'_, F, EF>
+{
+    /// This assumes that the number of steps in `range(starts[0], ends[0], step_sizes[0])` is
+    /// minimal among all ranges.
+    ///
+    /// It is the responsibility of the caller to ensure that this precondition holds.
+    pub(super) fn for_each(
+        self,
+        f: impl FnOnce(Vec<Var<F>>, &mut AsmCompiler<F, EF>),
+        debug_info: Option<DebugInfo>,
+    ) {
+        // initialize the loop variables
+        self.starts
+            .iter()
+            .zip(self.loop_vars.iter())
+            .for_each(|(start, loop_var)| match start {
+                RVar::Const(start) => {
+                    self.compiler.push(
+                        AsmInstruction::ImmF(loop_var.fp(), *start),
+                        debug_info.clone(),
+                    );
+                }
+                RVar::Val(start) => {
+                    self.compiler.push(
+                        AsmInstruction::CopyF(loop_var.fp(), start.fp()),
+                        debug_info.clone(),
+                    );
+                }
+            });
+
+        let loop_call_label = self.compiler.block_label();
+        let break_label = self.compiler.new_break_label();
+        self.compiler.break_label = Some(break_label);
+
+        self.compiler.basic_block();
+        let loop_label = self.compiler.block_label();
+
+        f(self.loop_vars.clone(), self.compiler);
+
+        self.loop_vars
+            .iter()
+            .zip(self.step_sizes.iter())
+            .for_each(|(loop_var, step_size)| {
+                self.compiler.push(
+                    AsmInstruction::AddFI(loop_var.fp(), loop_var.fp(), *step_size),
+                    debug_info.clone(),
+                );
+            });
+
+        self.compiler.basic_block();
+        let end = self.end0;
+        let loop_var = self.loop_vars[0];
+        match end {
+            RVar::Const(end) => {
+                self.compiler.push(
+                    AsmInstruction::BneI(loop_label, loop_var.fp(), end),
+                    debug_info.clone(),
+                );
+            }
+            RVar::Val(end) => {
+                self.compiler.push(
+                    AsmInstruction::Bne(loop_label, loop_var.fp(), end.fp()),
+                    debug_info.clone(),
+                );
+            }
+        };
+
+        let label = self.compiler.block_label();
+        let instr = AsmInstruction::j(label);
+        self.compiler
+            .push_to_block(loop_call_label, instr, debug_info.clone());
+
+        self.compiler.basic_block();
+        let label = self.compiler.block_label();
+        self.compiler.break_label_map.insert(break_label, label);
+
+        for block in self.compiler.contains_break.iter() {
+            for instruction in self.compiler.basic_blocks[block.as_canonical_u32() as usize]
+                .0
+                .iter_mut()
+            {
+                if let AsmInstruction::Break(l) = instruction {
+                    if *l == break_label {
+                        *instruction = AsmInstruction::j(label);
+                    }
+                }
+            }
         }
     }
 }

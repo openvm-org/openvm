@@ -6,8 +6,10 @@ use hints::create_new_struct_and_impl_hintable;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, Data, DeriveInput, Fields, GenericParam, Generics, ItemStruct,
-    TypeParamBound,
+    parse::{Parse, ParseStream},
+    parse_macro_input,
+    punctuated::Punctuated,
+    Data, DeriveInput, Expr, Fields, GenericParam, Generics, ItemStruct, Token, TypeParamBound,
 };
 
 mod hints;
@@ -183,4 +185,37 @@ pub fn hintable_derive(input: TokenStream) -> TokenStream {
         Ok(new_struct) => new_struct.into(),
         Err(err) => err.into(),
     }
+}
+
+struct CompileZipArgs {
+    builder: Expr,
+    args: Punctuated<Expr, Token![,]>,
+}
+
+impl Parse for CompileZipArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let builder = input.parse()?;
+        let _: Token![,] = input.parse()?;
+        let args = Punctuated::parse_terminated(input)?;
+
+        Ok(CompileZipArgs { builder, args })
+    }
+}
+
+#[proc_macro]
+pub fn compile_zip(input: TokenStream) -> TokenStream {
+    let CompileZipArgs { builder, args } = parse_macro_input!(input as CompileZipArgs);
+    let array_elements = args.iter().map(|arg| {
+        quote! {
+            Box::new(#arg.clone()) as Box<dyn ArrayLike<_>>
+        }
+    });
+
+    let expanded = quote! {
+        #builder.zip(&[
+            #(#array_elements),*
+        ])
+    };
+
+    expanded.into()
 }

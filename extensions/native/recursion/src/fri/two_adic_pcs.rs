@@ -1,4 +1,5 @@
 use openvm_native_compiler::prelude::*;
+use openvm_native_compiler_derive::compile_zip;
 use openvm_stark_backend::{
     p3_commit::TwoAdicMultiplicativeCoset,
     p3_field::{FieldAlgebra, TwoAdicField},
@@ -50,18 +51,18 @@ pub fn verify_two_adic_pcs<C: Config>(
 
     builder.cycle_tracker_start("stage-d-verifier-verify");
     let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
+    compile_zip!(builder, proof.commit_phase_commits, betas).for_each(|ptr_vec, builder| {
+        let comm_ptr = ptr_vec[0];
+        let beta_ptr = ptr_vec[1];
+        let comm = builder.iter_ptr_get(&proof.commit_phase_commits, comm_ptr);
+        challenger.observe_digest(builder, comm);
+        let sample = challenger.sample_ext(builder);
+        builder.iter_ptr_set(&betas, beta_ptr, sample);
+    });
+
     builder
-        .range(0, proof.commit_phase_commits.len())
-        .for_each(|i, builder| {
-            let comm = builder.get(&proof.commit_phase_commits, i);
-            challenger.observe_digest(builder, comm);
-            let sample = challenger.sample_ext(builder);
-            builder.set(&betas, i, sample);
-        });
-    builder
-        .range(0, proof.final_poly.len())
-        .for_each(|i, builder| {
-            let final_poly_elem = builder.get(&proof.final_poly, i);
+        .iter(&proof.final_poly)
+        .for_each(|final_poly_elem, builder| {
             let final_poly_elem_felts = builder.ext2felt(final_poly_elem);
             challenger.observe_slice(builder, final_poly_elem_felts);
         });
@@ -78,9 +79,8 @@ pub fn verify_two_adic_pcs<C: Config>(
         builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(log_blowup));
 
     builder
-        .range(0, proof.query_proofs.len())
-        .for_each(|i, builder| {
-            let query_proof = builder.get(&proof.query_proofs, i);
+        .iter(&proof.query_proofs)
+        .for_each(|query_proof, builder| {
             let index_bits = challenger.sample_bits(builder, log_max_height);
 
             let ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
@@ -101,9 +101,9 @@ pub fn verify_two_adic_pcs<C: Config>(
                 }
             }
 
-            builder.range(0, rounds.len()).for_each(|j, builder| {
-                let batch_opening = builder.get(&query_proof.input_proof, j);
-                let round = builder.get(&rounds, j);
+            compile_zip!(builder, query_proof.input_proof, rounds).for_each(|ptr_vec, builder| {
+                let batch_opening = builder.iter_ptr_get(&query_proof.input_proof, ptr_vec[0]);
+                let round = builder.iter_ptr_get(&rounds, ptr_vec[1]);
                 let batch_commit = round.batch_commit;
                 let mats = round.mats;
                 let permutation = round.permutation;
@@ -167,65 +167,63 @@ pub fn verify_two_adic_pcs<C: Config>(
                 builder.cycle_tracker_start("compute-reduced-opening");
                 // `verify_challenges` requires `opened_values` to be in the original order.
                 let opened_values = batch_opening.opened_values;
-                builder
-                    .range(0, opened_values.len())
-                    .for_each(|k, builder| {
-                        let mat_opening = builder.get(&opened_values, k);
-                        let mat = builder.get(&mats, k);
-                        let mat_points = mat.points;
-                        let mat_values = mat.values;
-                        let domain = mat.domain;
-                        let log2_domain_size = domain.log_n;
-                        let log_height =
-                            builder.eval_expr(log2_domain_size + RVar::from(log_blowup));
 
-                        let cur_ro = builder.get(&ro, log_height);
-                        let cur_alpha_pow = builder.get(&alpha_pow, log_height);
+                compile_zip!(builder, opened_values, mats).for_each(|ptr_vec, builder| {
+                    let mat_opening = builder.iter_ptr_get(&opened_values, ptr_vec[0]);
+                    let mat = builder.iter_ptr_get(&mats, ptr_vec[1]);
+                    let mat_points = mat.points;
+                    let mat_values = mat.values;
+                    let domain = mat.domain;
+                    let log2_domain_size = domain.log_n;
+                    let log_height = builder.eval_expr(log2_domain_size + RVar::from(log_blowup));
 
-                        let bits_reduced: Usize<_> = builder.eval(log_max_height - log_height);
-                        let index_bits_shifted = index_bits.shift(builder, bits_reduced);
+                    let cur_ro = builder.get(&ro, log_height);
+                    let cur_alpha_pow = builder.get(&alpha_pow, log_height);
 
-                        let two_adic_generator = config.get_two_adic_generator(builder, log_height);
-                        builder.cycle_tracker_start("exp-reverse-bits-len");
-                        let two_adic_generator_exp = builder.exp_reverse_bits_len(
-                            two_adic_generator,
-                            &index_bits_shifted,
-                            log_height,
-                        );
-                        builder.cycle_tracker_end("exp-reverse-bits-len");
-                        let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
+                    let bits_reduced: Usize<_> = builder.eval(log_max_height - log_height);
+                    let index_bits_shifted = index_bits.shift(builder, bits_reduced.clone());
 
-                        builder.range(0, mat_points.len()).for_each(|l, builder| {
-                            let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
-                            let ps_at_z = builder.get(&mat_values, l);
+                    let two_adic_generator = config.get_two_adic_generator(builder, log_height);
+                    builder.cycle_tracker_start("exp-reverse-bits-len");
 
-                            builder.cycle_tracker_start("single-reduced-opening-eval");
+                    let index_bits_shifted_truncated =
+                        index_bits_shifted.slice(builder, 0, log_height);
+                    let two_adic_generator_exp = builder
+                        .exp_bits_big_endian(two_adic_generator, &index_bits_shifted_truncated);
+                    builder.cycle_tracker_end("exp-reverse-bits-len");
+                    let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
-                            if builder.flags.static_only {
-                                builder.range(0, ps_at_z.len()).for_each(|t, builder| {
-                                    let p_at_x = builder.get(&mat_opening, t);
-                                    let p_at_z = builder.get(&ps_at_z, t);
-                                    let quotient = (p_at_z - p_at_x) / (z - x);
+                    compile_zip!(builder, mat_points, mat_values).for_each(|ptr_vec, builder| {
+                        let z: Ext<C::F, C::EF> = builder.iter_ptr_get(&mat_points, ptr_vec[0]);
+                        let ps_at_z = builder.iter_ptr_get(&mat_values, ptr_vec[1]);
 
-                                    builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
-                                    builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
-                                });
-                            } else {
-                                let mat_ro = builder.fri_single_reduced_opening_eval(
-                                    alpha,
-                                    cur_alpha_pow,
-                                    &mat_opening,
-                                    &ps_at_z,
-                                );
-                                builder.assign(&cur_ro, cur_ro + (mat_ro / (z - x)));
-                            }
+                        builder.cycle_tracker_start("single-reduced-opening-eval");
 
-                            builder.cycle_tracker_end("single-reduced-opening-eval");
-                        });
+                        if builder.flags.static_only {
+                            builder.range(0, ps_at_z.len()).for_each(|t, builder| {
+                                let p_at_x = builder.get(&mat_opening, t);
+                                let p_at_z = builder.get(&ps_at_z, t);
+                                let quotient = (p_at_z - p_at_x) / (z - x);
 
-                        builder.set_value(&ro, log_height, cur_ro);
-                        builder.set_value(&alpha_pow, log_height, cur_alpha_pow);
+                                builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
+                                builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
+                            });
+                        } else {
+                            let mat_ro = builder.fri_single_reduced_opening_eval(
+                                alpha,
+                                cur_alpha_pow,
+                                &mat_opening,
+                                &ps_at_z,
+                            );
+                            builder.assign(&cur_ro, cur_ro + (mat_ro / (z - x)));
+                        }
+
+                        builder.cycle_tracker_end("single-reduced-opening-eval");
                     });
+
+                    builder.set_value(&ro, log_height, cur_ro);
+                    builder.set_value(&alpha_pow, log_height, cur_alpha_pow);
+                });
                 builder.cycle_tracker_end("compute-reduced-opening");
             });
 

@@ -139,17 +139,18 @@ impl<C: Config> DuplexChallengerVariable<C> {
         builder.range(nb_bits, bits.len()).for_each(|i, builder| {
             builder.set(&bits, i, C::N::ZERO);
         });
-
         bits
     }
 
     pub fn check_witness(&mut self, builder: &mut Builder<C>, nb_bits: usize, witness: Felt<C::F>) {
         self.observe(builder, witness);
         let element_bits = self.sample_bits(builder, RVar::from(nb_bits));
-        builder.range(0, nb_bits).for_each(|i, builder| {
-            let element = builder.get(&element_bits, i);
-            builder.assert_var_eq(element, C::N::ZERO);
-        });
+        let element_bits_truncated = element_bits.slice(builder, 0, nb_bits);
+        builder
+            .iter(&element_bits_truncated)
+            .for_each(|element, builder| {
+                builder.assert_var_eq(element, C::N::ZERO);
+            });
     }
 }
 
@@ -159,8 +160,7 @@ impl<C: Config> CanObserveVariable<C, Felt<C::F>> for DuplexChallengerVariable<C
     }
 
     fn observe_slice(&mut self, builder: &mut Builder<C>, values: Array<C, Felt<C::F>>) {
-        builder.range(0, values.len()).for_each(|i, builder| {
-            let element = builder.get(&values, i);
+        builder.iter(&values).for_each(|element, builder| {
             self.observe(builder, element);
         });
     }
