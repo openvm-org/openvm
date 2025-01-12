@@ -17,7 +17,8 @@ use openvm_instructions::{
 };
 use openvm_native_compiler::{
     FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
-    NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom,
+    NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom, BLOCK_LOAD_STORE_OPCODES,
+    BLOCK_LOAD_STORE_SIZE, SINGLE_LOAD_STORE_OPCODES,
 };
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreChip;
@@ -72,6 +73,7 @@ pub struct Native;
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum NativeExecutor<F: PrimeField32> {
     LoadStore(NativeLoadStoreChip<F, 1>),
+    BlockLoadStore(NativeLoadStoreChip<F, 4>),
     BranchEqual(NativeBranchEqChip<F>),
     Jal(NativeJalChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
@@ -115,7 +117,30 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         inventory.add_executor(
             load_store_chip,
-            NativeLoadStoreOpcode::iter().map(VmOpcode::with_default_offset),
+            SINGLE_LOAD_STORE_OPCODES
+                .iter()
+                .map(|&opcode| VmOpcode::with_default_offset(opcode)),
+        )?;
+
+        let mut block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
+            NativeLoadStoreAdapterChip::new(
+                execution_bus,
+                program_bus,
+                memory_bridge,
+                NativeLoadStoreOpcode::default_offset(),
+            ),
+            NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset()),
+            offline_memory.clone(),
+        );
+        block_load_store_chip
+            .core
+            .set_streams(builder.streams().clone());
+
+        inventory.add_executor(
+            block_load_store_chip,
+            BLOCK_LOAD_STORE_OPCODES
+                .iter()
+                .map(|&opcode| VmOpcode::with_default_offset(opcode)),
         )?;
 
         let branch_equal_chip = NativeBranchEqChip::new(

@@ -1108,33 +1108,17 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     }
 
     fn load_ext(&mut self, val: Ext<F, EF>, addr: i32, offset: F, debug_info: Option<DebugInfo>) {
-        for i in 0..EF::D {
-            self.push(
-                AsmInstruction::LoadFI(
-                    val.fp() + i as i32,
-                    addr,
-                    F::from_canonical_usize(i),
-                    F::ONE,
-                    offset,
-                ),
-                debug_info.clone(),
-            )
-        }
+        self.push(
+            AsmInstruction::LoadEI(val.fp(), addr, F::ZERO, F::ONE, offset),
+            debug_info.clone(),
+        );
     }
 
     fn store_ext(&mut self, val: Ext<F, EF>, addr: i32, offset: F, debug_info: Option<DebugInfo>) {
-        for i in 0..EF::D {
-            self.push(
-                AsmInstruction::StoreFI(
-                    val.fp() + i as i32,
-                    addr,
-                    F::from_canonical_usize(i),
-                    F::ONE,
-                    offset,
-                ),
-                debug_info.clone(),
-            )
-        }
+        self.push(
+            AsmInstruction::StoreEI(val.fp(), addr, F::ZERO, F::ONE, offset),
+            debug_info.clone(),
+        );
     }
 
     fn add_ext_exti(

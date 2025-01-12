@@ -42,12 +42,30 @@ pub mod prelude {
 )]
 #[opcode_offset = 0x100]
 #[repr(usize)]
+#[allow(non_camel_case_types)]
 pub enum NativeLoadStoreOpcode {
     LOADW,
     STOREW,
     /// Instruction to write the next hint word into memory.
-    SHINTW,
+    HINT_STOREW,
+    LOADW4,
+    STOREW4,
+    HINT_STOREW4,
 }
+
+pub const SINGLE_LOAD_STORE_OPCODES: [NativeLoadStoreOpcode; 3] = [
+    NativeLoadStoreOpcode::LOADW,
+    NativeLoadStoreOpcode::STOREW,
+    NativeLoadStoreOpcode::HINT_STOREW,
+];
+
+pub const BLOCK_LOAD_STORE_OPCODES: [NativeLoadStoreOpcode; 3] = [
+    NativeLoadStoreOpcode::LOADW4,
+    NativeLoadStoreOpcode::STOREW4,
+    NativeLoadStoreOpcode::HINT_STOREW4,
+];
+
+pub const BLOCK_LOAD_STORE_SIZE: usize = 4;
 
 #[derive(Copy, Clone, Debug, UsizeOpcode)]
 #[opcode_offset = 0x110]

@@ -10,7 +10,10 @@ use openvm_circuit::arch::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::instruction::Instruction;
-use openvm_native_compiler::NativeLoadStoreOpcode;
+use openvm_native_compiler::{
+    NativeLoadStoreOpcode, BLOCK_LOAD_STORE_OPCODES, BLOCK_LOAD_STORE_SIZE,
+    SINGLE_LOAD_STORE_OPCODES,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -19,7 +22,6 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
-use strum::IntoEnumIterator;
 
 use super::super::adapters::loadstore_native_adapter::NativeLoadStoreInstruction;
 
@@ -28,10 +30,10 @@ use super::super::adapters::loadstore_native_adapter::NativeLoadStoreInstruction
 pub struct NativeLoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub is_loadw: T,
     pub is_storew: T,
-    pub is_shintw: T,
+    pub is_hint_storew: T,
 
     pub pointer_read: T,
-    pub data_read: T,
+    pub data_read: [T; NUM_CELLS],
     pub data_write: [T; NUM_CELLS],
 }
 
@@ -40,7 +42,8 @@ pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub opcode: NativeLoadStoreOpcode,
 
     pub pointer_read: F,
-    pub data_read: F,
+    #[serde(with = "BigArray")]
+    pub data_read: [F; NUM_CELLS],
     #[serde(with = "BigArray")]
     pub data_write: [F; NUM_CELLS],
 }
@@ -65,7 +68,7 @@ impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for NativeLoadStoreCoreAir<
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<(AB::Expr, AB::Expr)>,
+    I::Reads: From<(AB::Expr, [AB::Expr; NUM_CELLS])>,
     I::Writes: From<[AB::Expr; NUM_CELLS]>,
     I::ProcessedInstruction: From<NativeLoadStoreInstruction<AB::Expr>>,
 {
@@ -76,30 +79,35 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &NativeLoadStoreCoreCols<_, NUM_CELLS> = (*local_core).borrow();
-        let flags = [cols.is_loadw, cols.is_storew, cols.is_shintw];
+        let flags = [cols.is_loadw, cols.is_storew, cols.is_hint_storew];
         let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag.into()
         });
         builder.assert_bool(is_valid.clone());
 
-        let expected_opcode = flags.iter().zip(NativeLoadStoreOpcode::iter()).fold(
-            AB::Expr::ZERO,
-            |acc, (flag, opcode)| {
+        let expected_opcode = flags
+            .iter()
+            .zip(match NUM_CELLS {
+                1 => SINGLE_LOAD_STORE_OPCODES,
+                BLOCK_LOAD_STORE_SIZE => BLOCK_LOAD_STORE_OPCODES,
+                _ => panic!("Unsupported number of cells: {}", NUM_CELLS),
+            })
+            .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_usize(opcode.as_usize())
-            },
-        ) + AB::Expr::from_canonical_usize(self.offset);
+            })
+            + AB::Expr::from_canonical_usize(self.offset);
 
         AdapterAirContext {
             to_pc: None,
-            reads: (cols.pointer_read.into(), cols.data_read.into()).into(),
+            reads: (cols.pointer_read.into(), cols.data_read.map(Into::into)).into(),
             writes: cols.data_write.map(Into::into).into(),
             instruction: NativeLoadStoreInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 is_loadw: cols.is_loadw.into(),
                 is_storew: cols.is_storew.into(),
-                is_shintw: cols.is_shintw.into(),
+                is_hint_storew: cols.is_hint_storew.into(),
             }
             .into(),
         }
@@ -127,7 +135,7 @@ impl<F: Field, const NUM_CELLS: usize> NativeLoadStoreCoreChip<F, NUM_CELLS> {
 impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
     for NativeLoadStoreCoreChip<F, NUM_CELLS>
 where
-    I::Reads: Into<(F, F)>,
+    I::Reads: Into<(F, [F; NUM_CELLS])>,
     I::Writes: From<[F; NUM_CELLS]>,
 {
     type Record = NativeLoadStoreCoreRecord<F, NUM_CELLS>;
@@ -144,14 +152,17 @@ where
             NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
         let (pointer_read, data_read) = reads.into();
 
-        let data_write = if local_opcode == NativeLoadStoreOpcode::SHINTW {
+        let data_write = if (NUM_CELLS == 1 && local_opcode == NativeLoadStoreOpcode::HINT_STOREW)
+            || (NUM_CELLS == BLOCK_LOAD_STORE_SIZE
+                && local_opcode == NativeLoadStoreOpcode::HINT_STOREW4)
+        {
             let mut streams = self.streams.get().unwrap().lock().unwrap();
             if streams.hint_stream.len() < NUM_CELLS {
                 return Err(ExecutionError::HintOutOfBounds { pc: from_pc });
             }
             array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
         } else {
-            [data_read; NUM_CELLS]
+            data_read
         };
 
         let output = AdapterRuntimeContext::without_pc(data_write);
@@ -173,9 +184,21 @@ where
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let cols: &mut NativeLoadStoreCoreCols<_, NUM_CELLS> = row_slice.borrow_mut();
-        cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW);
-        cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW);
-        cols.is_shintw = F::from_bool(record.opcode == NativeLoadStoreOpcode::SHINTW);
+        match NUM_CELLS {
+            1 => {
+                cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW);
+                cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW);
+                cols.is_hint_storew =
+                    F::from_bool(record.opcode == NativeLoadStoreOpcode::HINT_STOREW);
+            }
+            BLOCK_LOAD_STORE_SIZE => {
+                cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW4);
+                cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW4);
+                cols.is_hint_storew =
+                    F::from_bool(record.opcode == NativeLoadStoreOpcode::HINT_STOREW4);
+            }
+            _ => panic!("Unsupported number of cells: {}", NUM_CELLS),
+        }
 
         cols.pointer_read = record.pointer_read;
         cols.data_read = record.data_read;

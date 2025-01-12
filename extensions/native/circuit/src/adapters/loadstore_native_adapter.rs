@@ -10,7 +10,7 @@ use openvm_circuit::{
     },
     system::{
         memory::{
-            offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
@@ -33,7 +33,7 @@ pub struct NativeLoadStoreInstruction<T> {
     pub opcode: T,
     pub is_loadw: T,
     pub is_storew: T,
-    pub is_shintw: T,
+    pub is_hint_storew: T,
 }
 
 pub struct NativeLoadStoreAdapterInterface<T, const NUM_CELLS: usize>(PhantomData<T>);
@@ -41,8 +41,7 @@ pub struct NativeLoadStoreAdapterInterface<T, const NUM_CELLS: usize>(PhantomDat
 impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     for NativeLoadStoreAdapterInterface<T, NUM_CELLS>
 {
-    // TODO[yi]: Fix when vectorizing
-    type Reads = (T, T);
+    type Reads = (T, [T; NUM_CELLS]);
     type Writes = [T; NUM_CELLS];
     type ProcessedInstruction = NativeLoadStoreInstruction<T>;
 }
@@ -104,16 +103,11 @@ pub struct NativeLoadStoreAdapterCols<T, const NUM_CELLS: usize> {
     pub d: T,
     pub e: T,
 
-    pub data_read_as: T,
-    pub data_read_pointer: T,
-
     pub data_write_as: T,
     pub data_write_pointer: T,
 
-    pub pointer_read_aux_cols: MemoryReadOrImmediateAuxCols<T>,
-    pub data_read_aux_cols: MemoryReadOrImmediateAuxCols<T>,
-    // TODO[yi]: Fix when vectorizing
-    // pub data_read_aux_cols: MemoryReadAuxCols<T, NUM_CELLS>,
+    pub pointer_read_aux_cols: MemoryReadAuxCols<T, 1>,
+    pub data_read_aux_cols: MemoryReadAuxCols<T, NUM_CELLS>,
     pub data_write_aux_cols: MemoryWriteAuxCols<T, NUM_CELLS>,
 }
 
@@ -140,9 +134,6 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        // TODO[yi]: Remove when vectorizing
-        assert_eq!(NUM_CELLS, 1);
-
         let cols: &NativeLoadStoreAdapterCols<_, NUM_CELLS> = local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta = AB::Expr::from_canonical_usize(0);
@@ -150,53 +141,42 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         let is_valid = ctx.instruction.is_valid;
         let is_loadw = ctx.instruction.is_loadw;
         let is_storew = ctx.instruction.is_storew;
-        let is_shintw = ctx.instruction.is_shintw;
+        let is_hint_storew = ctx.instruction.is_hint_storew;
 
         // first pointer read is always [c]_d
         self.memory_bridge
-            .read_or_immediate(
+            .read(
                 MemoryAddress::new(cols.d, cols.c),
-                ctx.reads.0.clone(),
+                [ctx.reads.0.clone()],
                 timestamp + timestamp_delta.clone(),
                 &cols.pointer_read_aux_cols,
             )
             .eval(builder, is_valid.clone());
         timestamp_delta += is_valid.clone();
 
-        // TODO[yi]: Remove when vectorizing
-        // read data, disabled if SHINTW
-        // data pointer = [c]_d + [f]_d * g + b, degree 2
-        builder
-            .when(is_valid.clone() - is_shintw.clone())
-            .assert_eq(
-                cols.data_read_as,
-                utils::select::<AB::Expr>(is_loadw.clone(), cols.e, cols.d),
-            );
-        // TODO[yi]: Do we need to check for overflow?
-        builder.assert_eq(
-            (is_valid.clone() - is_shintw.clone()) * cols.data_read_pointer,
-            is_storew.clone() * cols.a + is_loadw.clone() * (ctx.reads.0.clone() + cols.b),
-        );
         self.memory_bridge
-            .read_or_immediate(
-                MemoryAddress::new(cols.data_read_as, cols.data_read_pointer),
+            .read(
+                MemoryAddress::new(
+                    utils::select::<AB::Expr>(is_loadw.clone(), cols.e, cols.d),
+                    is_storew.clone() * cols.a + is_loadw.clone() * (ctx.reads.0.clone() + cols.b),
+                ),
                 ctx.reads.1.clone(),
                 timestamp + timestamp_delta.clone(),
                 &cols.data_read_aux_cols,
             )
-            .eval(builder, is_valid.clone() - is_shintw.clone());
-        timestamp_delta += is_valid.clone() - is_shintw.clone();
+            .eval(builder, is_valid.clone() - is_hint_storew.clone());
+        timestamp_delta += is_valid.clone() - is_hint_storew.clone();
 
         // data write
         builder.when(is_valid.clone()).assert_eq(
             cols.data_write_as,
             utils::select::<AB::Expr>(is_loadw.clone(), cols.d, cols.e),
         );
-        // TODO[yi]: Do we need to check for overflow?
+
         builder.assert_eq(
             is_valid.clone() * cols.data_write_pointer,
             is_loadw.clone() * cols.a
-                + (is_storew.clone() + is_shintw.clone()) * (ctx.reads.0.clone() + cols.b),
+                + (is_storew.clone() + is_hint_storew.clone()) * (ctx.reads.0.clone() + cols.b),
         );
         self.memory_bridge
             .write(
@@ -228,8 +208,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
 impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
     for NativeLoadStoreAdapterChip<F, NUM_CELLS>
 {
-    // TODO[yi]: Fix when vectorizing
-    type ReadRecord = NativeLoadStoreReadRecord<F, 1>;
+    type ReadRecord = NativeLoadStoreReadRecord<F, NUM_CELLS>;
     type WriteRecord = NativeLoadStoreWriteRecord<F, NUM_CELLS>;
     type Air = NativeLoadStoreAdapterAir<NUM_CELLS>;
     type Interface = NativeLoadStoreAdapterInterface<F, NUM_CELLS>;
@@ -259,22 +238,22 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         let (data_read_as, data_write_as) = {
             match local_opcode {
-                LOADW => (e, d),
-                STOREW | SHINTW => (d, e),
+                LOADW | LOADW4 => (e, d),
+                STOREW | STOREW4 | HINT_STOREW | HINT_STOREW4 => (d, e),
             }
         };
         let (data_read_ptr, data_write_ptr) = {
             match local_opcode {
-                LOADW => (read_cell.1 + b, a),
-                STOREW => (a, read_cell.1 + b),
-                SHINTW => (a, read_cell.1 + b),
+                LOADW | LOADW4 => (read_cell.1 + b, a),
+                STOREW | STOREW4 | HINT_STOREW | HINT_STOREW4 => (a, read_cell.1 + b),
             }
         };
 
-        // TODO[yi]: Fix when vectorizing
         let data_read = match local_opcode {
-            SHINTW => None,
-            _ => Some(memory.read::<1>(data_read_as, data_read_ptr)),
+            HINT_STOREW | HINT_STOREW4 => None,
+            LOADW | LOADW4 | STOREW | STOREW4 => {
+                Some(memory.read::<NUM_CELLS>(data_read_as, data_read_ptr))
+            }
         };
         let record = NativeLoadStoreReadRecord {
             pointer_read: read_cell.0,
@@ -288,7 +267,10 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             e,
         };
 
-        Ok(((read_cell.1, data_read.map_or(F::ZERO, |x| x.1[0])), record))
+        Ok((
+            (read_cell.1, data_read.map_or([F::ZERO; NUM_CELLS], |x| x.1)),
+            record,
+        ))
     }
 
     fn postprocess(
@@ -331,19 +313,17 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         let data_read = read_record.data_read.map(|read| memory.record_by_id(read));
         if let Some(data_read) = data_read {
-            cols.data_read_as = data_read.address_space;
-            cols.data_read_pointer = data_read.pointer;
-            cols.data_read_aux_cols = aux_cols_factory.make_read_or_immediate_aux_cols(data_read);
+            cols.data_read_aux_cols = aux_cols_factory.make_read_aux_cols(data_read);
         } else {
-            cols.data_read_aux_cols = MemoryReadOrImmediateAuxCols::disabled();
+            cols.data_read_aux_cols = MemoryReadAuxCols::disabled();
         }
 
         let write = memory.record_by_id(write_record.write_id);
         cols.data_write_as = write.address_space;
         cols.data_write_pointer = write.pointer;
 
-        cols.pointer_read_aux_cols = aux_cols_factory
-            .make_read_or_immediate_aux_cols(memory.record_by_id(read_record.pointer_read));
+        cols.pointer_read_aux_cols =
+            aux_cols_factory.make_read_aux_cols(memory.record_by_id(read_record.pointer_read));
         cols.data_write_aux_cols = aux_cols_factory.make_write_aux_cols(write);
     }
 
