@@ -1,6 +1,8 @@
 use std::{collections::HashSet, iter, sync::Arc};
 
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, SharedVariableRangeCheckerChip};
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, prover::types::AirProofInput, Chip,
 };

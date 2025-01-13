@@ -5,7 +5,9 @@ use std::{
 };
 
 use itertools::Itertools;
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, SharedVariableRangeCheckerChip};
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{

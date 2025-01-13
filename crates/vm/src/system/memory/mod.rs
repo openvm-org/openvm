@@ -5,7 +5,7 @@ mod controller;
 pub mod merkle;
 mod offline;
 pub mod offline_checker;
-mod online;
+pub mod online;
 mod persistent;
 #[cfg(test)]
 mod tests;

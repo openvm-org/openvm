@@ -7,12 +7,13 @@ use std::{
 
 use derive_more::derive::From;
 use getset::Getters;
+use itertools::Itertools;
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
-    var_range::{VariableRangeCheckerBus, SharedVariableRangeCheckerChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
@@ -25,7 +26,7 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     rap::AnyRap,
-    Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter, Stateful,
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -39,8 +40,10 @@ use crate::metrics::VmMetrics;
 use crate::system::{
     connector::VmConnectorChip,
     memory::{
+        interface::MemoryInterface,
         merkle::{DirectCompressionBus, MemoryMerkleBus},
         offline_checker::{MemoryBridge, MemoryBus},
+        online::MemoryLogEntry,
         MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
     },
     native_adapter::NativeAdapterChip,
@@ -195,6 +198,14 @@ pub struct VmInventory<E, P> {
     /// Order of insertion. The reverse of this will be the order the chips are destroyed
     /// to generate trace.
     insertion_order: Vec<ChipId>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct VmInventoryState {
+    /// Executor states in order
+    executors: Vec<Vec<u8>>,
+    /// Periphery states in order
+    periphery: Vec<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -380,6 +391,27 @@ impl<E, P> VmInventory<E, P> {
     }
 }
 
+impl<E: Stateful<Vec<u8>>, P: Stateful<Vec<u8>>> Stateful<VmInventoryState> for VmInventory<E, P> {
+    fn load_state(&mut self, state: VmInventoryState) {
+        for (e, s) in self.executors.iter_mut().zip_eq(state.executors) {
+            e.load_state(s)
+        }
+        for (p, s) in self.periphery.iter_mut().zip_eq(state.periphery) {
+            p.load_state(s)
+        }
+    }
+
+    fn store_state(&self) -> VmInventoryState {
+        // TODO: parallelize this.
+        let executors = self.executors.iter().map(|e| e.store_state()).collect();
+        let periphery = self.periphery.iter().map(|p| p.store_state()).collect();
+        VmInventoryState {
+            executors,
+            periphery,
+        }
+    }
+}
+
 impl VmInventoryTraceHeights {
     /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
     pub fn round_to_next_power_of_two(&mut self) {
@@ -431,6 +463,12 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     bus_idx_max: usize,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct VmChipComplexState<F> {
+    base: SystemBaseState<F>,
+    inventory: VmInventoryState,
+}
+
 /// The base [VmChipComplex] with only system chips.
 pub type SystemComplex<F> = VmChipComplex<F, SystemExecutor<F>, SystemPeriphery<F>>;
 
@@ -443,13 +481,20 @@ pub struct SystemBase<F> {
     pub memory_controller: MemoryController<F>,
     pub connector_chip: VmConnectorChip<F>,
     pub program_chip: ProgramChip<F>,
+}
 
-    range_checker_bus: VariableRangeCheckerBus,
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SystemBaseState<F> {
+    pub range_checker_chip: Vec<u8>,
+    pub initial_memory: Option<MemoryImage<F>>,
+    pub memory_logs: Vec<MemoryLogEntry<F>>,
+    pub connector_chip: Vec<u8>,
+    pub program_chip: Vec<u8>,
 }
 
 impl<F: PrimeField32> SystemBase<F> {
     pub fn range_checker_bus(&self) -> VariableRangeCheckerBus {
-        self.range_checker_bus
+        self.range_checker_chip.bus()
     }
 
     pub fn memory_bus(&self) -> MemoryBus {
@@ -485,6 +530,30 @@ impl<F: PrimeField32> SystemBase<F> {
     pub fn get_dummy_system_trace_heights(&self) -> SystemTraceHeights {
         SystemTraceHeights {
             memory: self.memory_controller.get_dummy_memory_trace_heights(),
+        }
+    }
+}
+
+impl<F: PrimeField32> Stateful<SystemBaseState<F>> for SystemBase<F> {
+    fn load_state(&mut self, state: SystemBaseState<F>) {
+        self.range_checker_chip.load_state(state.range_checker_chip);
+        if let Some(initial_memory) = state.initial_memory {
+            self.memory_controller.set_initial_memory(initial_memory);
+        }
+        self.memory_controller.set_memory_logs(state.memory_logs);
+        self.connector_chip.load_state(state.connector_chip);
+        self.program_chip.load_state(state.program_chip);
+    }
+    fn store_state(&self) -> SystemBaseState<F> {
+        SystemBaseState {
+            range_checker_chip: self.range_checker_chip.store_state(),
+            initial_memory: match &self.memory_controller.interface_chip {
+                MemoryInterface::Volatile { .. } => None,
+                MemoryInterface::Persistent { initial_memory, .. } => Some(initial_memory.clone()),
+            },
+            memory_logs: self.memory_controller.get_memory_logs(),
+            connector_chip: self.connector_chip.store_state(),
+            program_chip: self.program_chip.store_state(),
         }
     }
 }
@@ -581,7 +650,6 @@ impl<F: PrimeField32> SystemComplex<F> {
             connector_chip,
             memory_controller,
             range_checker_chip: range_checker,
-            range_checker_bus: range_bus,
         };
 
         Self {
@@ -1043,6 +1111,22 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 }
 
+impl<F: PrimeField32, E: Stateful<Vec<u8>>, P: Stateful<Vec<u8>>> Stateful<VmChipComplexState<F>>
+    for VmChipComplex<F, E, P>
+{
+    fn load_state(&mut self, state: VmChipComplexState<F>) {
+        self.base.load_state(state.base);
+        self.inventory.load_state(state.inventory);
+    }
+
+    fn store_state(&self) -> VmChipComplexState<F> {
+        VmChipComplexState {
+            base: self.base.store_state(),
+            inventory: self.inventory.store_state(),
+        }
+    }
+}
+
 struct VmProofInputBuilder<SC: StarkGenericConfig> {
     curr_air_id: usize,
     proof_input_per_air: Vec<(usize, AirProofInput<SC>)>,
@@ -1151,16 +1235,16 @@ where
             Either::Periphery(chip) => chip.current_trace_height(),
         }
     }
-    fn current_trace_cells(&self) -> usize {
-        match self {
-            Either::Executor(chip) => chip.current_trace_cells(),
-            Either::Periphery(chip) => chip.current_trace_cells(),
-        }
-    }
     fn trace_width(&self) -> usize {
         match self {
             Either::Executor(chip) => chip.trace_width(),
             Either::Periphery(chip) => chip.trace_width(),
+        }
+    }
+    fn current_trace_cells(&self) -> usize {
+        match self {
+            Either::Executor(chip) => chip.current_trace_cells(),
+            Either::Periphery(chip) => chip.current_trace_cells(),
         }
     }
 }

@@ -48,7 +48,7 @@ use crate::{
 };
 
 pub mod dimensions;
-mod interface;
+pub mod interface;
 
 pub const CHUNK: usize = 8;
 /// The offset of the Merkle AIR in AIRs of MemoryController.
@@ -693,6 +693,13 @@ impl<F: PrimeField32> MemoryController<F> {
     /// and store the returned reference for later use.
     pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
         self.offline_memory.clone()
+    }
+    pub fn get_memory_logs(&self) -> Vec<MemoryLogEntry<F>> {
+        // TODO: can we avoid clone?
+        self.memory.log.clone()
+    }
+    pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {
+        self.memory.log = logs;
     }
 }
 
