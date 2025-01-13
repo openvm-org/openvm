@@ -12,7 +12,7 @@ use metrics::counter;
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{VariableRangeCheckerBus, SharedVariableRangeCheckerChip},
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
@@ -439,7 +439,7 @@ pub type SystemComplex<F> = VmChipComplex<F, SystemExecutor<F>, SystemPeriphery<
 /// for the VM architecture.
 pub struct SystemBase<F> {
     // RangeCheckerChip **must** be the last chip to have trace generation called on
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub memory_controller: MemoryController<F>,
     pub connector_chip: VmConnectorChip<F>,
     pub program_chip: ProgramChip<F>,
@@ -507,7 +507,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
         let mut bus_idx_max = RANGE_CHECKER_BUS;
 
-        let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
         let memory_controller = if config.continuation_enabled {
             bus_idx_max += 2;
             MemoryController::with_persistent_memory(
@@ -683,7 +683,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         &self.base.memory_controller
     }
 
-    pub fn range_checker_chip(&self) -> &Arc<VariableRangeCheckerChip> {
+    pub fn range_checker_chip(&self) -> &SharedVariableRangeCheckerChip {
         &self.base.range_checker_chip
     }
 
@@ -1120,7 +1120,7 @@ impl AnyEnum for () {
     }
 }
 
-impl AnyEnum for Arc<VariableRangeCheckerChip> {
+impl AnyEnum for SharedVariableRangeCheckerChip {
     fn as_any_kind(&self) -> &dyn Any {
         self
     }

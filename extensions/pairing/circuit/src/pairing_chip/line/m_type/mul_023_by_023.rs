@@ -7,7 +7,7 @@ use std::{
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::{InstructionExecutor, Stateful};
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, SharedVariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
@@ -41,7 +41,7 @@ impl<
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         config: ExprBuilderConfig,
         xi: [isize; 2],
         offset: usize,

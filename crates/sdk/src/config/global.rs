@@ -12,7 +12,7 @@ use openvm_circuit::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
     },
     circuit_derive::{Chip, ChipUsageGetter},
-    derive::{AnyEnum, InstructionExecutor},
+    derive::{AnyEnum, InstructionExecutor, Stateful},
 };
 use openvm_ecc_circuit::{
     WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
@@ -63,7 +63,7 @@ pub struct SdkVmConfig {
     pub castf: Option<CastFExtension>,
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, Stateful)]
 pub enum SdkVmConfigExecutor<F: PrimeField32> {
     #[any_enum]
     System(SystemExecutor<F>),
@@ -93,7 +93,7 @@ pub enum SdkVmConfigExecutor<F: PrimeField32> {
     CastF(CastFExtensionExecutor<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum, Stateful)]
 pub enum SdkVmConfigPeriphery<F: PrimeField32> {
     #[any_enum]
     System(SystemPeriphery<F>),

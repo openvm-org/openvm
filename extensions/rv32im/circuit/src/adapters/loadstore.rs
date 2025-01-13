@@ -2,7 +2,6 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
-    sync::Arc,
 };
 
 use openvm_circuit::{
@@ -22,7 +21,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     utils::select,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -94,7 +93,7 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
 /// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
 pub struct Rv32LoadStoreAdapterChip<F: Field> {
     pub air: Rv32LoadStoreAdapterAir,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     offset: usize,
     _marker: PhantomData<F>,
 }
@@ -105,7 +104,7 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         pointer_max_bits: usize,
-        range_checker_chip: Arc<VariableRangeCheckerChip>,
+        range_checker_chip: SharedVariableRangeCheckerChip,
         offset: usize,
     ) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 15);

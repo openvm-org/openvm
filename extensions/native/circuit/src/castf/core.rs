@@ -1,13 +1,12 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    sync::Arc,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::instruction::Instruction;
 use openvm_native_compiler::CastfOpcode;
@@ -105,11 +104,11 @@ pub struct CastFRecord<F> {
 
 pub struct CastFCoreChip {
     pub air: CastFCoreAir,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl CastFCoreChip {
-    pub fn new(range_checker_chip: Arc<VariableRangeCheckerChip>, offset: usize) -> Self {
+    pub fn new(range_checker_chip: SharedVariableRangeCheckerChip, offset: usize) -> Self {
         Self {
             air: CastFCoreAir {
                 bus: range_checker_chip.bus(),

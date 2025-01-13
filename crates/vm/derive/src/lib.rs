@@ -403,7 +403,7 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                     #(#executor_enum_fields)*
                 }
 
-                #[derive(ChipUsageGetter, Chip, From, AnyEnum)]
+                #[derive(ChipUsageGetter, Chip, From, AnyEnum, ::openvm_circuit_derive::Stateful)]
                 pub enum #periphery_type<F: PrimeField32> {
                     #[any_enum]
                     #system_name_upper(SystemPeriphery<F>),

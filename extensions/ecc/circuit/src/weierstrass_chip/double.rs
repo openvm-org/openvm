@@ -1,4 +1,4 @@
-use std::{cell::RefCell, iter, rc::Rc, sync::Arc};
+use std::{cell::RefCell, iter, rc::Rc};
 
 use itertools::{zip_eq, Itertools};
 use num_bigint_dig::BigUint;
@@ -9,7 +9,7 @@ use openvm_circuit::arch::{
 };
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_num_limbs,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     SubAir, TraceSubRowGenerator,
 };
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
@@ -161,13 +161,13 @@ where
 
 pub struct EcDoubleCoreChip {
     pub air: EcDoubleCoreAir,
-    pub range_checker: Arc<VariableRangeCheckerChip>,
+    pub range_checker: SharedVariableRangeCheckerChip,
 }
 
 impl EcDoubleCoreChip {
     pub fn new(
         config: ExprBuilderConfig,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         a_biguint: BigUint,
         offset: usize,
     ) -> Self {
@@ -258,7 +258,7 @@ where
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         self.air.expr.generate_subrow(
             (
-                &self.range_checker,
+                self.range_checker.as_ref(),
                 vec![record.x, record.y],
                 vec![record.is_double_flag],
             ),

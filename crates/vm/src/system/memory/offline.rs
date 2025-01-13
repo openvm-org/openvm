@@ -1,7 +1,7 @@
-use std::{array, cmp::max, sync::Arc};
+use std::{array, cmp::max};
 
 use openvm_circuit_primitives::{
-    assert_less_than::AssertLtSubAir, var_range::VariableRangeCheckerChip,
+    assert_less_than::AssertLtSubAir, var_range::SharedVariableRangeCheckerChip,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -41,7 +41,7 @@ pub struct OfflineMemory<F> {
     timestamp_max_bits: usize,
 
     memory_bus: MemoryBus,
-    range_checker: Arc<VariableRangeCheckerChip>,
+    range_checker: SharedVariableRangeCheckerChip,
 
     log: Vec<Option<MemoryRecord<F>>>,
 }
@@ -54,7 +54,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         initial_memory: MemoryImage<F>,
         initial_block_size: usize,
         memory_bus: MemoryBus,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         timestamp_max_bits: usize,
     ) -> Self {
         assert!(initial_block_size.is_power_of_two());
@@ -446,9 +446,9 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+    use openvm_circuit_primitives::var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+    };
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -486,9 +486,7 @@ mod tests {
             initial_memory,
             8,
             MemoryBus(0),
-            Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-                1, 29,
-            ))),
+            SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
         );
         assert_eq!(
@@ -535,9 +533,7 @@ mod tests {
             initial_memory,
             1,
             MemoryBus(0),
-            Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-                1, 29,
-            ))),
+            SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
         );
         let address_space = 1;
@@ -563,9 +559,7 @@ mod tests {
             initial_memory,
             1,
             MemoryBus(0),
-            Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-                1, 29,
-            ))),
+            SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
         );
 
@@ -710,9 +704,7 @@ mod tests {
             initial_memory,
             8,
             MemoryBus(0),
-            Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-                1, 29,
-            ))),
+            SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
         );
 
@@ -827,9 +819,7 @@ mod tests {
             initial_memory,
             1,
             MemoryBus(0),
-            Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-                1, 29,
-            ))),
+            SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
         );
 
@@ -851,9 +841,7 @@ mod tests {
             initial_memory,
             8,
             MemoryBus(0),
-            Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-                1, 29,
-            ))),
+            SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
         );
 
@@ -875,9 +863,7 @@ mod tests {
             initial_memory,
             4,
             MemoryBus(0),
-            Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-                1, 29,
-            ))),
+            SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
         );
 
@@ -893,9 +879,7 @@ mod tests {
             initial_memory,
             8,
             MemoryBus(0),
-            Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-                1, 29,
-            ))),
+            SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
         );
         // Make block 0:4 in address space 1 active.
@@ -965,9 +949,7 @@ mod tests {
             initial_memory,
             8,
             MemoryBus(0),
-            Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-                1, 29,
-            ))),
+            SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
         );
 

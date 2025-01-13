@@ -14,8 +14,9 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter, Stateful,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{instructions::SystemOpcode::TERMINATE, ExecutionBus, ExecutionState},
@@ -66,7 +67,7 @@ impl<F: Field> BaseAir<F> for VmConnectorAir {
     }
 }
 
-#[derive(Debug, Copy, Clone, AlignedBorrow)]
+#[derive(Debug, Copy, Clone, AlignedBorrow, Serialize, Deserialize)]
 #[repr(C)]
 pub struct ConnectorCols<T> {
     pub pc: T,
@@ -216,5 +217,15 @@ impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {
 
     fn trace_width(&self) -> usize {
         4
+    }
+}
+
+impl<F: PrimeField32> Stateful<Vec<u8>> for VmConnectorChip<F> {
+    fn load_state(&mut self, state: Vec<u8>) {
+        self.boundary_states = bitcode::deserialize(&state).unwrap();
+    }
+
+    fn store_state(&self) -> Vec<u8> {
+        bitcode::serialize(&self.boundary_states).unwrap()
     }
 }

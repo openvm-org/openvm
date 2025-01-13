@@ -8,7 +8,7 @@ use openvm_circuit_primitives::{
         IsLtArrayAuxCols, IsLtArrayIo, IsLtArraySubAir, IsLtArrayWhenTransitionAir,
     },
     utils::implies,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     SubAir, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -133,7 +133,7 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
 pub struct VolatileBoundaryChip<F> {
     pub air: VolatileBoundaryAir,
     touched_addresses: FxHashSet<(u32, u32)>,
-    range_checker: Arc<VariableRangeCheckerChip>,
+    range_checker: SharedVariableRangeCheckerChip,
     overridden_height: Option<usize>,
     final_memory: Option<TimestampedEquipartition<F, 1>>,
 }
@@ -143,7 +143,7 @@ impl<F: Field> VolatileBoundaryChip<F> {
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
         pointer_max_bits: usize,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
     ) -> Self {
         let range_bus = range_checker.bus();
         Self {
@@ -232,7 +232,7 @@ where
                     let mut out = Val::<SC>::ZERO;
                     air.addr_lt_air.0.generate_subrow(
                         (
-                            &self.range_checker,
+                            self.range_checker.as_ref(),
                             &[row.addr_space, row.pointer],
                             &[
                                 Val::<SC>::from_canonical_u32(next_addr_space),
@@ -250,7 +250,7 @@ where
             let row: &mut VolatileBoundaryCols<_> = rows[width * (trace_height - 1)..].borrow_mut();
             air.addr_lt_air.0.generate_subrow(
                 (
-                    &self.range_checker,
+                    self.range_checker.as_ref(),
                     &[Val::<SC>::ZERO, Val::<SC>::ZERO],
                     &[Val::<SC>::ZERO, Val::<SC>::ZERO],
                 ),
