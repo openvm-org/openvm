@@ -51,6 +51,8 @@ impl GithubSummary {
             .zip_eq(md_paths.iter())
             .map(|((aggregated, prev_aggregated), md_path)| {
                 let md_filename = md_path.file_name().unwrap().to_str().unwrap();
+                println!("aggregated: {:?}", aggregated.by_group.keys());
+                println!("md_filename: {:?}", md_filename);
                 let mut row = aggregated.get_summary_row(md_filename).unwrap();
                 if let Some(prev_aggregated) = prev_aggregated {
                     // md_filename doesn't matter
