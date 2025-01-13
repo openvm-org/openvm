@@ -56,6 +56,7 @@ fn main() -> Result<()> {
     for (metrics_path, prev_metrics_path) in args.json_paths.into_iter().zip_eq(prev_json_paths) {
         let db = MetricDb::new(&metrics_path)?;
         let grouped = GroupedMetrics::new(&db, "group")?;
+        // ^ is empty?
         let mut aggregated = grouped.aggregate();
         let mut prev_aggregated = None;
         if let Some(prev_path) = prev_metrics_path {
