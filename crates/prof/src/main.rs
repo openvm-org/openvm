@@ -82,6 +82,7 @@ fn main() -> Result<()> {
         md_paths.push(md_path);
         aggregated_metrics.push((aggregated, prev_aggregated));
     }
+    println!("aggregated_metrics: {:?}", aggregated_metrics);
     if let Some(command) = args.command {
         match command {
             Commands::Summary(cmd) => {
