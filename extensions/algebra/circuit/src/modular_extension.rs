@@ -21,7 +21,6 @@ use strum::EnumCount;
 
 use crate::modular_chip::{
     ModularAddSubChip, ModularIsEqualChip, ModularIsEqualCoreChip, ModularMulDivChip,
-    ModularMulDivCoreChip,
 };
 
 #[serde_as]
@@ -133,11 +132,9 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                 )?;
                 let muldiv_chip = ModularMulDivChip::new(
                     adapter_chip_32.clone(),
-                    ModularMulDivCoreChip::new(
-                        config32.clone(),
-                        range_checker.clone(),
-                        class_offset,
-                    ),
+                    config32.clone(),
+                    class_offset,
+                    range_checker.clone(),
                     offline_memory.clone(),
                 );
                 inventory.add_executor(
@@ -183,11 +180,9 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                 )?;
                 let muldiv_chip = ModularMulDivChip::new(
                     adapter_chip_48.clone(),
-                    ModularMulDivCoreChip::new(
-                        config48.clone(),
-                        range_checker.clone(),
-                        class_offset,
-                    ),
+                    config48.clone(),
+                    class_offset,
+                    range_checker.clone(),
                     offline_memory.clone(),
                 );
                 inventory.add_executor(
