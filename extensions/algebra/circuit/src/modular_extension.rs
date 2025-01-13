@@ -20,8 +20,8 @@ use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
 use crate::modular_chip::{
-    ModularAddSubChip, ModularAddSubCoreChip, ModularIsEqualChip, ModularIsEqualCoreChip,
-    ModularMulDivChip, ModularMulDivCoreChip,
+    ModularAddSubChip, ModularIsEqualChip, ModularIsEqualCoreChip, ModularMulDivChip,
+    ModularMulDivCoreChip,
 };
 
 #[serde_as]
@@ -120,11 +120,9 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
             if bytes <= 32 {
                 let addsub_chip = ModularAddSubChip::new(
                     adapter_chip_32.clone(),
-                    ModularAddSubCoreChip::new(
-                        config32.clone(),
-                        range_checker.clone(),
-                        class_offset,
-                    ),
+                    config32.clone(),
+                    class_offset,
+                    range_checker.clone(),
                     offline_memory.clone(),
                 );
                 inventory.add_executor(
@@ -172,11 +170,9 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
             } else if bytes <= 48 {
                 let addsub_chip = ModularAddSubChip::new(
                     adapter_chip_48.clone(),
-                    ModularAddSubCoreChip::new(
-                        config48.clone(),
-                        range_checker.clone(),
-                        class_offset,
-                    ),
+                    config48.clone(),
+                    class_offset,
+                    range_checker.clone(),
                     offline_memory.clone(),
                 );
                 inventory.add_executor(

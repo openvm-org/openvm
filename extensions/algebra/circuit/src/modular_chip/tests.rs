@@ -26,9 +26,7 @@ use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
-use super::{
-    ModularAddSubCoreChip, ModularIsEqualChip, ModularIsEqualCoreChip, ModularMulDivCoreChip,
-};
+use super::{ModularAddSubChip, ModularIsEqualChip, ModularIsEqualCoreChip, ModularMulDivCoreChip};
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
@@ -59,11 +57,11 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         num_limbs: NUM_LIMBS,
         limb_bits: LIMB_BITS,
     };
-    let core = ModularAddSubCoreChip::new(
-        config,
-        tester.memory_controller().borrow().range_checker.clone(),
-        Rv32ModularArithmeticOpcode::default_offset() + opcode_offset,
-    );
+    // let core = ModularAddSubCoreChip::new(
+    //     config,
+    //     tester.memory_controller().borrow().range_checker.clone(),
+    //     Rv32ModularArithmeticOpcode::default_offset() + opcode_offset,
+    // );
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
@@ -75,7 +73,14 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         tester.address_bits(),
         bitwise_chip.clone(),
     );
-    let mut chip = VmChipWrapper::new(adapter, core, tester.offline_memory_mutex_arc());
+    // let mut chip = VmChipWrapper::new(adapter, core, tester.offline_memory_mutex_arc());
+    let mut chip = ModularAddSubChip::new(
+        adapter,
+        config,
+        Rv32ModularArithmeticOpcode::default_offset() + opcode_offset,
+        tester.range_checker(),
+        tester.offline_memory_mutex_arc(),
+    );
     let mut rng = create_seeded_rng();
     let num_tests = 50;
     let mut all_ops = vec![ADD_LOCAL + 2]; // setup
@@ -145,7 +150,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
-            VmOpcode::from_usize(chip.core.air.offset + op),
+            VmOpcode::from_usize(chip.0.core.air.offset + op),
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,

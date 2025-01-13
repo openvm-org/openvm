@@ -15,16 +15,16 @@ mod tests;
 
 /// Each prime field element will be represented as `NUM_LANES * LANE_SIZE` cells in memory.
 /// The `LANE_SIZE` must be a power of 2 and determines the size of the batch memory read/writes.
-pub type ModularAddSubAir<const NUM_LANES: usize, const LANE_SIZE: usize> = VmAirWrapper<
-    Rv32VecHeapAdapterAir<2, NUM_LANES, NUM_LANES, LANE_SIZE, LANE_SIZE>,
-    ModularAddSubCoreAir,
->;
-/// See [ModularAddSubAir].
-pub type ModularAddSubChip<F, const NUM_LANES: usize, const LANE_SIZE: usize> = VmChipWrapper<
-    F,
-    Rv32VecHeapAdapterChip<F, 2, NUM_LANES, NUM_LANES, LANE_SIZE, LANE_SIZE>,
-    ModularAddSubCoreChip,
->;
+// pub type ModularAddSubAir<const NUM_LANES: usize, const LANE_SIZE: usize> = VmAirWrapper<
+//     Rv32VecHeapAdapterAir<2, NUM_LANES, NUM_LANES, LANE_SIZE, LANE_SIZE>,
+//     ModularAddSubCoreAir,
+// >;
+// /// See [ModularAddSubAir].
+// pub type ModularAddSubChip<F, const NUM_LANES: usize, const LANE_SIZE: usize> = VmChipWrapper<
+//     F,
+//     Rv32VecHeapAdapterChip<F, 2, NUM_LANES, NUM_LANES, LANE_SIZE, LANE_SIZE>,
+//     ModularAddSubCoreChip, // should be FieldExpressionCoreChip
+// >;
 /// Each prime field element will be represented as `NUM_LANES * LANE_SIZE` cells in memory.
 /// The `LANE_SIZE` must be a power of 2 and determines the size of the batch memory read/writes.
 pub type ModularMulDivAir<const NUM_LANES: usize, const LANE_SIZE: usize> = VmAirWrapper<
