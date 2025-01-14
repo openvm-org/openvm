@@ -89,7 +89,7 @@ pub struct Rv32HintStoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1_aux_cols: MemoryReadAuxCols<T>,
 
     pub imm: T,
     pub imm_sign: T,

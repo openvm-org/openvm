@@ -32,10 +32,10 @@ pub struct NativePoseidon2MemoryCols<T> {
     pub rd_ptr: T,
     pub rs_val: [T; 2],
     pub rd_val: T,
-    pub rs_read_aux: [MemoryReadAuxCols<T, 1>; 2],
-    pub rd_read_aux: MemoryReadAuxCols<T, 1>,
+    pub rs_read_aux: [MemoryReadAuxCols<T>; 2],
+    pub rd_read_aux: MemoryReadAuxCols<T>,
 
-    pub chunk_read_aux: [MemoryReadAuxCols<T, NATIVE_POSEIDON2_CHUNK_SIZE>; 2],
+    pub chunk_read_aux: [MemoryReadAuxCols<T>; 2],
     pub chunk_write_aux: [MemoryWriteAuxCols<T, NATIVE_POSEIDON2_CHUNK_SIZE>; 2],
 }
 

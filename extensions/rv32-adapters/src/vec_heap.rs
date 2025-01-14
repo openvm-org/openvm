@@ -144,10 +144,10 @@ pub struct Rv32VecHeapAdapterCols<
     pub rs_val: [[T; RV32_REGISTER_NUM_LIMBS]; NUM_READS],
     pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
 
-    pub rs_read_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; NUM_READS],
-    pub rd_read_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
+    pub rd_read_aux: MemoryReadAuxCols<T>,
 
-    pub reads_aux: [[MemoryReadAuxCols<T, READ_SIZE>; BLOCKS_PER_READ]; NUM_READS],
+    pub reads_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; BLOCKS_PER_WRITE],
 }
 

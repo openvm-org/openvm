@@ -704,10 +704,7 @@ pub struct MemoryAuxColsFactory<T> {
 
 // NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in parallelized trace generation.
 impl<F: PrimeField32> MemoryAuxColsFactory<F> {
-    pub fn make_read_aux_cols<const N: usize>(
-        &self,
-        read: &MemoryRecord<F>,
-    ) -> MemoryReadAuxCols<F, N> {
+    pub fn make_read_aux_cols(&self, read: &MemoryRecord<F>) -> MemoryReadAuxCols<F> {
         assert!(
             !read.address_space.is_zero(),
             "cannot make `MemoryReadAuxCols` for address space 0"
