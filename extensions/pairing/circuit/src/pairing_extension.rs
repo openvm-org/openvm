@@ -5,11 +5,11 @@ use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful};
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
@@ -64,7 +64,7 @@ pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, Stateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, BytesStateful)]
 pub enum PairingExtensionExecutor<F: PrimeField32> {
     // bn254 (32 limbs)
     MillerDoubleStepRv32_32(MillerDoubleStepChip<F, 4, 8, 32>),
@@ -82,7 +82,7 @@ pub enum PairingExtensionExecutor<F: PrimeField32> {
     EcLineMulBy02345(EcLineMulBy02345Chip<F, 36, 30, 36, 16>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, Stateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
 pub enum PairingExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),

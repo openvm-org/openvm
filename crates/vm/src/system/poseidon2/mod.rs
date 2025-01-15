@@ -24,7 +24,7 @@ pub mod tests;
 pub mod air;
 mod chip;
 pub use chip::*;
-use openvm_circuit_derive::Stateful;
+use openvm_circuit_primitives_derive::BytesStateful;
 
 use crate::arch::hasher::{Hasher, HasherChip};
 pub mod columns;
@@ -33,7 +33,7 @@ pub mod trace;
 pub const PERIPHERY_POSEIDON2_WIDTH: usize = 16;
 pub const PERIPHERY_POSEIDON2_CHUNK_SIZE: usize = 8;
 
-#[derive(Stateful)]
+#[derive(BytesStateful)]
 pub enum Poseidon2PeripheryChip<F: PrimeField32> {
     Register0(Poseidon2PeripheryBaseChip<F, 0>),
     Register1(Poseidon2PeripheryBaseChip<F, 1>),

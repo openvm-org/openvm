@@ -7,11 +7,11 @@ use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful};
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_ecc_guest::{
     k256::{SECP256K1_MODULUS, SECP256K1_ORDER},
     p256::{CURVE_A as P256_A, CURVE_B as P256_B, P256_MODULUS, P256_ORDER},
@@ -63,7 +63,7 @@ pub struct WeierstrassExtension {
     pub supported_curves: Vec<CurveConfig>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, Stateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, BytesStateful)]
 pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     EcAddNeRv32_32(EcAddNeChip<F, 2, 32>),
@@ -73,7 +73,7 @@ pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
     EcDoubleRv32_48(EcDoubleChip<F, 6, 16>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, Stateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
 pub enum WeierstrassExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),

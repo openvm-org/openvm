@@ -10,8 +10,8 @@ use openvm_circuit::{
     },
     system::{native_adapter::NativeAdapterChip, phantom::PhantomChip},
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful, VmConfig};
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_instructions::{
     program::DEFAULT_PC_STEP, PhantomDiscriminant, Poseidon2Opcode, UsizeOpcode, VmOpcode,
 };
@@ -77,7 +77,7 @@ impl NativeConfig {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, Stateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
 pub enum NativeExecutor<F: PrimeField32> {
     LoadStore(NativeLoadStoreChip<F, 1>),
     BlockLoadStore(NativeLoadStoreChip<F, 4>),
@@ -89,7 +89,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     FriReducedOpening(FriReducedOpeningChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, Stateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
 pub enum NativePeriphery<F: PrimeField32> {
     Phantom(PhantomChip<F>),
 }
@@ -320,12 +320,12 @@ pub(crate) mod phantom {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct CastFExtension;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, Stateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
 pub enum CastFExtensionExecutor<F: PrimeField32> {
     CastF(CastFChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, Stateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
 pub enum CastFExtensionPeriphery<F: PrimeField32> {
     Placeholder(CastFChip<F>),
 }

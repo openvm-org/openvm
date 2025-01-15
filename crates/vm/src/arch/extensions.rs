@@ -10,12 +10,12 @@ use getset::Getters;
 use itertools::Itertools;
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful};
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_instructions::{
     program::Program, PhantomDiscriminant, PublishOpcode, SystemOpcode, UsizeOpcode, VmOpcode,
 };
@@ -558,13 +558,13 @@ impl<F: PrimeField32> Stateful<SystemBaseState<F>> for SystemBase<F> {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, Stateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, BytesStateful)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
     Phantom(RefCell<PhantomChip<F>>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, Stateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
 pub enum SystemPeriphery<F: PrimeField32> {
     /// Poseidon2 chip with direct compression interactions
     Poseidon2(Poseidon2PeripheryChip<F>),

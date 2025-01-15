@@ -6,11 +6,11 @@ use std::{
 
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::{InstructionExecutor, Stateful};
+use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip, FieldVariable, SymbolicExpr,
 };
@@ -57,7 +57,7 @@ pub fn muldiv_expr(
     )
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, Stateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, BytesStateful)]
 pub struct ModularMulDivChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub  VmChipWrapper<
         F,

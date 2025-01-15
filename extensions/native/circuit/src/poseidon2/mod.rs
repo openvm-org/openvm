@@ -1,9 +1,14 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
+pub use columns::*;
 use openvm_circuit::{
     arch::{ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
-    system::{memory::MemoryController, program::ProgramBus},
+    system::{
+        memory::{offline_checker::MemoryBridge, MemoryController, OfflineMemory},
+        program::ProgramBus,
+    },
 };
+use openvm_circuit_primitives_derive::BytesStateful;
 use openvm_instructions::instruction::Instruction;
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
@@ -19,11 +24,6 @@ pub use air::*;
 mod chip;
 pub use chip::*;
 mod columns;
-use std::sync::Mutex;
-
-pub use columns::*;
-use openvm_circuit::system::memory::{offline_checker::MemoryBridge, OfflineMemory};
-use openvm_circuit_derive::Stateful;
 
 mod trace;
 
@@ -33,7 +33,7 @@ mod tests;
 pub const NATIVE_POSEIDON2_WIDTH: usize = 16;
 pub const NATIVE_POSEIDON2_CHUNK_SIZE: usize = 8;
 
-#[derive(Stateful)]
+#[derive(BytesStateful)]
 pub enum NativePoseidon2Chip<F: Field> {
     Register0(NativePoseidon2BaseChip<F, 0>),
     Register1(NativePoseidon2BaseChip<F, 1>),
