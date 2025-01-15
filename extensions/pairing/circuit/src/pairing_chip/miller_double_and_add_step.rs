@@ -6,7 +6,7 @@ use std::{
 
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_derive::{InstructionExecutor, Stateful};
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: two AffinePoint<Fp2>: 4 field elements each
 // Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
-#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, Stateful)]
 pub struct MillerDoubleAndAddStepChip<
     F: PrimeField32,
     const INPUT_BLOCKS: usize,
@@ -103,12 +103,10 @@ pub fn miller_double_and_add_step_expr(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use halo2curves_axiom::bn256::G2Affine;
     use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use openvm_circuit_primitives::bitwise_op_lookup::{
-        BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
     use openvm_ecc_guest::AffinePoint;
     use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
@@ -134,9 +132,7 @@ mod tests {
     fn test_miller_double_and_add() {
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-            bitwise_bus,
-        ));
+        let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
         let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),

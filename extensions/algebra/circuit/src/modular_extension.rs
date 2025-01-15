@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
@@ -8,9 +6,9 @@ use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{UsizeOpcode, VmOpcode};
@@ -33,7 +31,7 @@ pub struct ModularExtension {
     pub supported_modulus: Vec<BigUint>,
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From, Stateful)]
 pub enum ModularExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     ModularAddSubRv32_32(ModularAddSubChip<F, 1, 32>),
@@ -45,9 +43,9 @@ pub enum ModularExtensionExecutor<F: PrimeField32> {
     ModularIsEqualRv32_48(ModularIsEqualChip<F, 3, 16, 48>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, Stateful)]
 pub enum ModularExtensionPeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
+    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     // We put this only to get the <F> generic to work
     Phantom(PhantomChip<F>),
 }
@@ -67,14 +65,14 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
             memory_bridge,
         } = builder.system_port();
         let range_checker = builder.system_base().range_checker_chip.clone();
-        let bitwise_lu_chip = if let Some(chip) = builder
-            .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
+        let bitwise_lu_chip = if let Some(&chip) = builder
+            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()
         {
-            Arc::clone(chip)
+            chip.clone()
         } else {
             let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = Arc::new(BitwiseOperationLookupChip::new(bitwise_lu_bus));
+            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
             inventory.add_periphery_chip(chip.clone());
             chip
         };

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
@@ -8,10 +6,10 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful, VmConfig};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{program::DEFAULT_PC_STEP, PhantomDiscriminant, UsizeOpcode, VmOpcode};
@@ -152,7 +150,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 // ============ Executor and Periphery Enums for Extension ============
 
 /// RISC-V 32-bit Base (RV32I) Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, Stateful)]
 pub enum Rv32IExecutor<F: PrimeField32> {
     // Rv32 (for standard 32-bit integers):
     BaseAlu(Rv32BaseAluChip<F>),
@@ -168,7 +166,7 @@ pub enum Rv32IExecutor<F: PrimeField32> {
 }
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, Stateful)]
 pub enum Rv32MExecutor<F: PrimeField32> {
     Multiplication(Rv32MultiplicationChip<F>),
     MultiplicationHigh(Rv32MulHChip<F>),
@@ -176,30 +174,30 @@ pub enum Rv32MExecutor<F: PrimeField32> {
 }
 
 /// RISC-V 32-bit Io Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, Stateful)]
 pub enum Rv32IoExecutor<F: PrimeField32> {
     HintStore(Rv32HintStoreChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum, Stateful)]
 pub enum Rv32IPeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
+    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     // We put this only to get the <F> generic to work
     Phantom(PhantomChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum, Stateful)]
 pub enum Rv32MPeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
+    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     /// Only needed for multiplication extension
-    RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
+    RangeTupleChecker(SharedRangeTupleCheckerChip<2>),
     // We put this only to get the <F> generic to work
     Phantom(PhantomChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum, Stateful)]
 pub enum Rv32IoPeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
+    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     // We put this only to get the <F> generic to work
     Phantom(PhantomChip<F>),
 }
@@ -225,14 +223,14 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         let offline_memory = builder.system_base().offline_memory();
         let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
 
-        let bitwise_lu_chip = if let Some(chip) = builder
-            .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
+        let bitwise_lu_chip = if let Some(&chip) = builder
+            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()
         {
-            Arc::clone(chip)
+            chip.clone()
         } else {
             let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = Arc::new(BitwiseOperationLookupChip::new(bitwise_lu_bus));
+            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
             inventory.add_periphery_chip(chip.clone());
             chip
         };
@@ -398,20 +396,20 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
         } = builder.system_port();
         let offline_memory = builder.system_base().offline_memory();
 
-        let bitwise_lu_chip = if let Some(chip) = builder
-            .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
+        let bitwise_lu_chip = if let Some(&chip) = builder
+            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()
         {
-            Arc::clone(chip)
+            chip.clone()
         } else {
             let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = Arc::new(BitwiseOperationLookupChip::new(bitwise_lu_bus));
+            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
             inventory.add_periphery_chip(chip.clone());
             chip
         };
 
         let range_tuple_checker = if let Some(chip) = builder
-            .find_chip::<Arc<RangeTupleCheckerChip<2>>>()
+            .find_chip::<SharedRangeTupleCheckerChip<2>>()
             .into_iter()
             .find(|c| {
                 c.bus().sizes[0] >= self.range_tuple_checker_sizes[0]
@@ -421,7 +419,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
         } else {
             let range_tuple_bus =
                 RangeTupleCheckerBus::new(builder.new_bus_idx(), self.range_tuple_checker_sizes);
-            let chip = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+            let chip = SharedRangeTupleCheckerChip::new(range_tuple_bus);
             inventory.add_periphery_chip(chip.clone());
             chip
         };
@@ -486,14 +484,14 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
         let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let range_checker = builder.system_base().range_checker_chip.clone();
-        let bitwise_lu_chip = if let Some(chip) = builder
-            .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
+        let bitwise_lu_chip = if let Some(&chip) = builder
+            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()
         {
-            Arc::clone(chip)
+            chip.clone()
         } else {
             let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = Arc::new(BitwiseOperationLookupChip::new(bitwise_lu_bus));
+            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
             inventory.add_periphery_chip(chip.clone());
             chip
         };

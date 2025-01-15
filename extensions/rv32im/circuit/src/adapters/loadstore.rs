@@ -153,11 +153,11 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1_aux_cols: MemoryReadAuxCols<T>,
 
     /// Will write to rd when Load and read from rs2 when Store
     pub rd_rs2_ptr: T,
-    pub read_data_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    pub read_data_aux: MemoryReadAuxCols<T>,
     pub imm: T,
     pub imm_sign: T,
     /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use openvm_circuit::{
     arch::{
         testing::VmChipTestBuilder, InstructionExecutor, BITWISE_OP_LOOKUP_BUS,
@@ -8,8 +6,8 @@ use openvm_circuit::{
     utils::generate_long_number,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
 use openvm_instructions::{program::PC_BITS, riscv::RV32_CELL_BITS, UsizeOpcode};
 use openvm_rv32_adapters::{
@@ -85,9 +83,7 @@ fn run_int_256_rand_execute<E: InstructionExecutor<F>>(
 
 fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
 
@@ -135,9 +131,7 @@ fn alu_256_and_rand_test() {
 
 fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32LessThan256Chip::<F>::new(
@@ -175,11 +169,9 @@ fn run_mul_256_rand_test(num_ops: usize) {
             (INT256_NUM_LIMBS * (1 << RV32_CELL_BITS)) as u32,
         ],
     );
-    let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+    let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32Multiplication256Chip::<F>::new(
@@ -217,9 +209,7 @@ fn mul_256_rand_test() {
 
 fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32Shift256Chip::<F>::new(
@@ -261,9 +251,7 @@ fn shift_256_sra_rand_test() {
 fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut chip = Rv32BranchEqual256Chip::<F>::new(
         Rv32HeapBranchAdapterChip::<F, 2, INT256_NUM_LIMBS>::new(
             tester.execution_bus(),
@@ -306,9 +294,7 @@ fn beq_256_bne_rand_test() {
 
 fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32BranchLessThan256Chip::<F>::new(

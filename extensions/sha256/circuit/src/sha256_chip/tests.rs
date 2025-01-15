@@ -1,11 +1,9 @@
-use std::sync::Arc;
-
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder},
     SystemPort, BITWISE_OP_LOOKUP_BUS,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, UsizeOpcode, VmOpcode};
 use openvm_sha256_air::get_random_message;
@@ -78,9 +76,7 @@ fn rand_sha256_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut chip = Sha256VmChip::new(
         SystemPort {
             execution_bus: tester.execution_bus(),
@@ -113,9 +109,7 @@ fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut chip = Sha256VmChip::new(
         SystemPort {
             execution_bus: tester.execution_bus(),

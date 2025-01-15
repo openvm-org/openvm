@@ -6,7 +6,7 @@ use std::{
 
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_derive::{InstructionExecutor, Stateful};
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: AffinePoint<Fp2>: 4 field elements
 // Output: (AffinePoint<Fp2>, Fp2, Fp2) -> 8 field elements
-#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, Stateful)]
 pub struct MillerDoubleStepChip<
     F: PrimeField32,
     const INPUT_BLOCKS: usize,
@@ -90,11 +90,9 @@ pub fn miller_double_step_expr(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use openvm_circuit_primitives::bitwise_op_lookup::{
-        BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
     use openvm_ecc_guest::AffinePoint;
     use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
@@ -132,9 +130,7 @@ mod tests {
             num_limbs: BN254_NUM_LIMBS,
         };
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-            bitwise_bus,
-        ));
+        let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
         let adapter = Rv32VecHeapAdapterChip::<F, 1, 4, 8, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),
@@ -201,9 +197,7 @@ mod tests {
             num_limbs: BLS12_381_NUM_LIMBS,
         };
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-            bitwise_bus,
-        ));
+        let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
         let adapter = Rv32VecHeapAdapterChip::<F, 1, 12, 24, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),

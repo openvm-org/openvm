@@ -877,7 +877,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         mod openvm_intrinsics_ffi {
             #(#externs)*
         }
-        #[allow(non_snake_case)]
+        #[allow(non_snake_case, non_upper_case_globals)]
         pub mod openvm_intrinsics_meta_do_not_type_this_by_yourself {
             pub const two_modular_limbs_list: [u8; #total_limbs_cnt] = [#(#two_modular_limbs_flattened_list),*];
             pub const limb_list_borders: [usize; #cnt_limbs_list_len] = [#(#limb_list_borders),*];

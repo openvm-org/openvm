@@ -90,6 +90,7 @@ fn agg_config_for_test() -> AggConfig {
         halo2_config: Halo2Config {
             verifier_k: 24,
             wrapper_k: None,
+            profiling: false,
         },
     }
 }

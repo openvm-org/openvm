@@ -76,6 +76,8 @@ pub struct Halo2ProvingKey {
     pub verifier: Halo2VerifierProvingKey,
     /// Wrapper circuit to verify static verifier and reduce the verification costs in the final proof.
     pub wrapper: Halo2WrapperProvingKey,
+    /// Whether to collect detailed profiling metrics
+    pub profiling: bool,
 }
 
 impl<VC: VmConfig<F>> AppProvingKey<VC>
@@ -315,7 +317,11 @@ impl AggProvingKey {
         } else {
             Halo2WrapperProvingKey::keygen_auto_tune(reader, dummy_snark)
         };
-        let halo2_pk = Halo2ProvingKey { verifier, wrapper };
+        let halo2_pk = Halo2ProvingKey {
+            verifier,
+            wrapper,
+            profiling: halo2_config.profiling,
+        };
         Self {
             agg_stark_pk,
             halo2_pk,

@@ -4,7 +4,7 @@ use std::{
 };
 
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, Stateful};
 use rustc_hash::FxHashMap;
 
 use super::{
@@ -69,5 +69,17 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> HasherChip<PERIPHERY_POSEIDON
 
         let output = self.subchip.permute(input);
         array::from_fn(|i| output[i])
+    }
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> Stateful<Vec<u8>>
+    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+{
+    fn load_state(&mut self, state: Vec<u8>) {
+        self.records = bitcode::deserialize(&state).unwrap();
+    }
+
+    fn store_state(&self) -> Vec<u8> {
+        bitcode::serialize(&self.records).unwrap()
     }
 }

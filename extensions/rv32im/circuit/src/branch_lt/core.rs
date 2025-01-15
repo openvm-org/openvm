@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
 use openvm_circuit::arch::{
@@ -9,7 +8,7 @@ use openvm_circuit::arch::{
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -193,12 +192,12 @@ pub struct BranchLessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
 
 pub struct BranchLessThanCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
     ) -> Self {
         Self {

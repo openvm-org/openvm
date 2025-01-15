@@ -1,7 +1,6 @@
 use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
 use num_bigint_dig::BigUint;
@@ -12,7 +11,7 @@ use openvm_circuit::arch::{
 };
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     is_equal_array::{IsEqArrayIo, IsEqArraySubAir},
     SubAir, TraceSubRowGenerator,
 };
@@ -255,7 +254,7 @@ pub struct ModularIsEqualCoreChip<
     const LIMB_BITS: usize,
 > {
     pub air: ModularIsEqualCoreAir<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
 impl<const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
@@ -263,7 +262,7 @@ impl<const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
 {
     pub fn new(
         modulus: BigUint,
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
     ) -> Self {
         Self {

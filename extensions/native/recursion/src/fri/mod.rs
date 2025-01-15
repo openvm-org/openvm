@@ -1,11 +1,12 @@
 pub use domain::*;
 use openvm_native_compiler::{
     ir::{
-        Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
-        DIGEST_SIZE,
+        Array, ArrayLike, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar,
+        Usize, Var, DIGEST_SIZE,
     },
     prelude::MemVariable,
 };
+use openvm_native_compiler_derive::compile_zip;
 use openvm_stark_backend::p3_field::{Field, FieldAlgebra, TwoAdicField};
 pub use two_adic_pcs::*;
 
@@ -51,7 +52,8 @@ where
     let two_adic_gen_ext = two_adic_generator_f.to_operand().symbolic();
     let two_adic_generator_ef: Ext<_, _> = builder.eval(two_adic_gen_ext);
 
-    let x = builder.exp_reverse_bits_len(two_adic_generator_ef, index_bits, log_max_height);
+    let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
+    let x = builder.exp_bits_big_endian(two_adic_generator_ef, &index_bits_truncated);
 
     builder
         .range(0, commit_phase_commits.len())
@@ -193,9 +195,10 @@ pub fn verify_batch<C: Config>(
     // For each sibling in the proof, reconstruct the root.
     let left: Ptr<C::N> = builder.uninit();
     let right: Ptr<C::N> = builder.uninit();
-    builder.range(0, proof.len()).for_each(|i, builder| {
-        let sibling = builder.get_ptr(&proof, i);
-        let bit = builder.get(&index_bits, i);
+
+    compile_zip!(builder, proof, index_bits).for_each(|ptr_vec, builder| {
+        let sibling = builder.iter_ptr_get(&proof, ptr_vec[0]).ptr();
+        let bit = builder.iter_ptr_get(&index_bits, ptr_vec[1]);
 
         builder.if_eq(bit, C::N::ONE).then_or_else(
             |builder| {
@@ -356,23 +359,23 @@ where
     let nb_opened_values: Usize<_> = builder.eval(C::N::ZERO);
     let start_dim_idx: Usize<_> = builder.eval(dim_idx.clone());
     builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
-    builder
-        .range(start_dim_idx, dims.len())
-        .for_each(|i, builder| {
-            let height = builder.get(dims, i).height;
-            builder
-                .if_eq(height, curr_height_padded.clone())
-                .then(|builder| {
-                    let opened_values = builder.get(opened_values, i);
-                    builder.set_value(
-                        &nested_opened_values_buffer,
-                        nb_opened_values.clone(),
-                        opened_values.clone(),
-                    );
-                    builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::ONE);
-                    builder.assign(&dim_idx, dim_idx.clone() + C::N::ONE);
-                });
-        });
+    let dims_shifted = dims.shift(builder, start_dim_idx.clone());
+    let opened_values_shifted = opened_values.shift(builder, start_dim_idx);
+    compile_zip!(builder, dims_shifted, opened_values_shifted).for_each(|ptr_vec, builder| {
+        let height = builder.iter_ptr_get(&dims_shifted, ptr_vec[0]).height;
+        builder
+            .if_eq(height, curr_height_padded.clone())
+            .then(|builder| {
+                let opened_values = builder.iter_ptr_get(&opened_values_shifted, ptr_vec[1]);
+                builder.set_value(
+                    &nested_opened_values_buffer,
+                    nb_opened_values.clone(),
+                    opened_values.clone(),
+                );
+                builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::ONE);
+            });
+    });
+    builder.assign(&dim_idx, dim_idx.clone() + nb_opened_values.clone());
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup");
 
     nested_opened_values_buffer.truncate(builder, nb_opened_values);

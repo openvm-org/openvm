@@ -75,7 +75,7 @@ pub struct Rv32MultAdapterCols<T> {
     pub rd_ptr: T,
     pub rs1_ptr: T,
     pub rs2_ptr: T,
-    pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; 2],
+    pub reads_aux: [MemoryReadAuxCols<T>; 2],
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 }
 

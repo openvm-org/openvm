@@ -83,29 +83,6 @@ fn inst_med<F: PrimeField64>(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn inst_large<F: PrimeField64>(
-    opcode: VmOpcode,
-    a: F,
-    b: F,
-    c: F,
-    d: AS,
-    e: AS,
-    f: F,
-    g: F,
-) -> Instruction<F> {
-    Instruction {
-        opcode,
-        a,
-        b,
-        c,
-        d: d.to_field(),
-        e: e.to_field(),
-        f,
-        g,
-    }
-}
-
 #[derive(Clone, Copy)]
 #[repr(u8)]
 pub enum AS {
@@ -354,19 +331,6 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
 ) -> Program<F> {
     let instructions = match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
-        AsmInstruction::LoadF(dst, src, index, size, offset) => vec![
-            // mem[dst] <- mem[mem[src] + mem[index] * size + offset]
-            inst_large(
-                options.opcode_with_offset(NativeLoadStoreOpcode::LOADW2),
-                i32_f(dst),
-                offset,
-                i32_f(src),
-                AS::Native,
-                AS::Native,
-                i32_f(index),
-                size,
-            ),
-        ],
         AsmInstruction::LoadFI(dst, src, index, size, offset) => vec![
             // mem[dst] <- mem[mem[src] + index * size + offset]
             inst(
@@ -378,23 +342,32 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 AS::Native,
             ),
         ],
-        AsmInstruction::StoreF(val, addr, index, size, offset) => vec![
-            // mem[mem[addr] + mem[index] * size + offset] <- mem[val]
-            inst_large(
-                options.opcode_with_offset(NativeLoadStoreOpcode::STOREW2),
-                i32_f(val),
-                offset,
-                i32_f(addr),
+        AsmInstruction::LoadEI(dst, src, index, size, offset) => vec![
+            // mem[dst] <- mem[mem[src] + index * size + offset]
+            inst(
+                options.opcode_with_offset(NativeLoadStoreOpcode::LOADW4),
+                i32_f(dst),
+                index * size + offset,
+                i32_f(src),
                 AS::Native,
                 AS::Native,
-                i32_f(index),
-                size,
             ),
         ],
         AsmInstruction::StoreFI(val, addr, index, size, offset) => vec![
             // mem[mem[addr] + index * size + offset] <- mem[val]
             inst(
                 options.opcode_with_offset(NativeLoadStoreOpcode::STOREW),
+                i32_f(val),
+                index * size + offset,
+                i32_f(addr),
+                AS::Native,
+                AS::Native,
+            ),
+        ],
+        AsmInstruction::StoreEI(val, addr, index, size, offset) => vec![
+            // mem[mem[addr] + index * size + offset] <- mem[val]
+            inst(
+                options.opcode_with_offset(NativeLoadStoreOpcode::STOREW4),
                 i32_f(val),
                 index * size + offset,
                 i32_f(addr),
@@ -538,7 +511,15 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             Instruction::phantom(PhantomDiscriminant(NativePhantom::HintBits as u16), i32_f(src), F::from_canonical_u32(len), AS::Native as u16)
         ],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
-            options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW),
+            options.opcode_with_offset(NativeLoadStoreOpcode::HINT_STOREW),
+            F::ZERO,
+            offset,
+            i32_f(val),
+            AS::Native,
+            AS::Native,
+        )],
+        AsmInstruction::StoreHintExtI(val, offset) => vec![inst(
+            options.opcode_with_offset(NativeLoadStoreOpcode::HINT_STOREW4),
             F::ZERO,
             offset,
             i32_f(val),
@@ -552,22 +533,38 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 vec![]
             }
         }
-        AsmInstruction::ImmF(dst, val) => vec![inst(
-            options.opcode_with_offset(NativeLoadStoreOpcode::STOREW),
-            val,
-            F::ZERO,
-            i32_f(dst),
-            AS::Immediate,
-            AS::Native,
-        )],
-        AsmInstruction::CopyF(dst, src) => vec![inst(
-            options.opcode_with_offset(NativeLoadStoreOpcode::LOADW),
-            i32_f(dst),
-            F::ZERO,
-            i32_f(src),
-            AS::Native,
-            AS::Immediate,
-        )],
+        AsmInstruction::ImmF(dst, val) => if options.field_arithmetic_enabled {
+            vec![inst_med(
+                options.opcode_with_offset(FieldArithmeticOpcode::ADD),
+                i32_f(dst),
+                val,
+                F::ZERO,
+                AS::Native,
+                AS::Immediate,
+                AS::Native,
+            )]
+        } else {
+            panic!(
+                "Unsupported instruction {:?}, field arithmetic is disabled",
+                instruction
+            )
+        },
+        AsmInstruction::CopyF(dst, src) => if options.field_arithmetic_enabled {
+            vec![inst_med(
+                options.opcode_with_offset(FieldArithmeticOpcode::ADD),
+                i32_f(dst),
+                i32_f(src),
+                F::ZERO,
+                AS::Native,
+                AS::Native,
+                AS::Immediate
+            )]
+        } else {
+            panic!(
+                "Unsupported instruction {:?}, field arithmetic is disabled",
+                instruction
+            )
+        },
         AsmInstruction::AddF(..)
         | AsmInstruction::SubF(..)
         | AsmInstruction::MulF(..)
@@ -661,13 +658,14 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
     options: CompilerOptions,
 ) -> Program<F> {
     // mem[0] <- 0
-    let init_register_0 = inst(
-        options.opcode_with_offset(NativeLoadStoreOpcode::STOREW),
+    let init_register_0 = inst_med(
+        options.opcode_with_offset(FieldArithmeticOpcode::ADD),
         F::ZERO,
         F::ZERO,
-        i32_f(0),
-        AS::Immediate,
+        F::ZERO,
         AS::Native,
+        AS::Immediate,
+        AS::Immediate,
     );
     let init_debug_info = None;
 

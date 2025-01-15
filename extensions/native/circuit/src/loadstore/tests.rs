@@ -4,7 +4,7 @@ use openvm_circuit::arch::{testing::VmChipTestBuilder, Streams};
 use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
@@ -21,14 +21,10 @@ struct TestData {
     c: F,
     d: F,
     e: F,
-    f: F,
-    g: F,
     ad_val: F,
     cd_val: F,
-    fd_val: F,
     data_val: F,
     is_load: bool,
-    is_extended: bool,
     is_hint: bool,
 }
 
@@ -49,14 +45,7 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeLoadStoreChip<F, 1>) {
 }
 
 fn gen_test_data(rng: &mut StdRng, is_immediate: bool, opcode: NativeLoadStoreOpcode) -> TestData {
-    let is_load = matches!(
-        opcode,
-        NativeLoadStoreOpcode::LOADW | NativeLoadStoreOpcode::LOADW2
-    );
-    let is_extended = matches!(
-        opcode,
-        NativeLoadStoreOpcode::LOADW2 | NativeLoadStoreOpcode::STOREW2
-    );
+    let is_load = matches!(opcode, NativeLoadStoreOpcode::LOADW);
 
     let a = rng.gen_range(0..1 << 20);
     let b = rng.gen_range(0..1 << 20);
@@ -67,16 +56,6 @@ fn gen_test_data(rng: &mut StdRng, is_immediate: bool, opcode: NativeLoadStoreOp
         F::from_canonical_u32(rng.gen_range(1..4))
     };
     let e = F::from_canonical_u32(rng.gen_range(1..4));
-    let f = if is_extended {
-        rng.gen_range(0..1 << 10)
-    } else {
-        0
-    };
-    let g = if is_extended {
-        rng.gen_range(0..1 << 10)
-    } else {
-        0
-    };
 
     TestData {
         a: F::from_canonical_u32(a),
@@ -84,35 +63,19 @@ fn gen_test_data(rng: &mut StdRng, is_immediate: bool, opcode: NativeLoadStoreOp
         c: F::from_canonical_u32(c),
         d,
         e,
-        f: F::from_canonical_u32(f),
-        g: F::from_canonical_u32(g),
         ad_val: F::from_canonical_u32(111),
         cd_val: F::from_canonical_u32(222),
-        fd_val: F::from_canonical_u32(333),
         data_val: F::from_canonical_u32(444),
         is_load,
-        is_extended,
-        is_hint: matches!(opcode, NativeLoadStoreOpcode::SHINTW),
+        is_hint: matches!(opcode, NativeLoadStoreOpcode::HINT_STOREW),
     }
 }
 
 fn get_data_pointer(data: &TestData) -> F {
     if data.d != F::ZERO {
-        data.cd_val
-            + data.b
-            + if data.is_extended {
-                data.g * data.fd_val
-            } else {
-                F::ZERO
-            }
+        data.cd_val + data.b
     } else {
-        data.c
-            + data.b
-            + if data.is_extended {
-                data.g * data.f
-            } else {
-                F::ZERO
-            }
+        data.c + data.b
     }
 }
 
@@ -131,11 +94,6 @@ fn set_values(
             data.d.as_canonical_u32() as usize,
             data.c.as_canonical_u32() as usize,
             [data.cd_val],
-        );
-        tester.write(
-            data.d.as_canonical_u32() as usize,
-            data.f.as_canonical_u32() as usize,
-            [data.fd_val],
         );
     }
     if data.is_load {
@@ -200,8 +158,7 @@ fn set_and_execute(
         chip,
         &Instruction::from_usize(
             VmOpcode::with_default_offset(opcode),
-            [data.a, data.b, data.c, data.d, data.e, data.f, data.g]
-                .map(|x| x.as_canonical_u32() as usize),
+            [data.a, data.b, data.c, data.d, data.e].map(|x| x.as_canonical_u32() as usize),
         ),
         0u32,
     );
@@ -211,17 +168,12 @@ fn set_and_execute(
 
 #[test]
 fn rand_native_loadstore_test() {
+    setup_tracing();
     let (mut rng, mut tester, mut chip) = setup();
     for _ in 0..20 {
         set_and_execute(&mut tester, &mut chip, &mut rng, false, STOREW);
-        set_and_execute(&mut tester, &mut chip, &mut rng, false, STOREW2);
-        set_and_execute(&mut tester, &mut chip, &mut rng, false, SHINTW);
+        set_and_execute(&mut tester, &mut chip, &mut rng, false, HINT_STOREW);
         set_and_execute(&mut tester, &mut chip, &mut rng, false, LOADW);
-        set_and_execute(&mut tester, &mut chip, &mut rng, false, LOADW2);
-
-        set_and_execute(&mut tester, &mut chip, &mut rng, true, STOREW);
-        set_and_execute(&mut tester, &mut chip, &mut rng, true, STOREW2);
-        set_and_execute(&mut tester, &mut chip, &mut rng, true, SHINTW);
     }
     let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");

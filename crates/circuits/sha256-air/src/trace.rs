@@ -1,7 +1,7 @@
 use std::{array, borrow::BorrowMut, ops::Range};
 
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChip, utils::next_power_of_two_or_zero,
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, utils::next_power_of_two_or_zero,
 };
 use openvm_stark_backend::{
     p3_air::BaseAir, p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix,
@@ -50,7 +50,7 @@ impl Sha256Air {
         trace_width: usize,
         trace_start_col: usize,
         input: &[u32; SHA256_BLOCK_WORDS],
-        bitwise_lookup_chip: &BitwiseOperationLookupChip<8>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
         prev_hash: &[u32; SHA256_HASH_WORDS],
         is_last_block: bool,
         global_block_idx: u32,
@@ -463,7 +463,7 @@ impl Sha256Air {
 /// `records` consists of pairs of `(input_block, is_last_block)`.
 pub fn generate_trace<F: PrimeField32>(
     sub_air: &Sha256Air,
-    bitwise_lookup_chip: &BitwiseOperationLookupChip<8>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     records: Vec<([u8; SHA256_BLOCK_U8S], bool)>,
 ) -> RowMajorMatrix<F> {
     let non_padded_height = records.len() * SHA256_ROWS_PER_BLOCK;
@@ -521,7 +521,7 @@ pub fn generate_trace<F: PrimeField32>(
                 width,
                 0,
                 &input_words,
-                bitwise_lookup_chip,
+                bitwise_lookup_chip.clone(),
                 &prev_hash,
                 is_last_block,
                 global_block_idx,

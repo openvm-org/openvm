@@ -89,7 +89,19 @@ pub enum PublishOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
 )]
 #[opcode_offset = 0x150]
 #[repr(usize)]

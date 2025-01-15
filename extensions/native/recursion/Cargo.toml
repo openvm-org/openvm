@@ -10,6 +10,7 @@ repository.workspace = true
 openvm-stark-backend = { workspace = true }
 openvm-native-circuit = { workspace = true }
 openvm-native-compiler = { workspace = true }
+openvm-native-compiler-derive = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
 
@@ -45,7 +46,7 @@ static-verifier = [
     "dep:once_cell",
 ]
 test-utils = ["openvm-circuit/test-utils"]
-bench-metrics = ["dep:metrics", "openvm-circuit/bench-metrics"]
+bench-metrics = ["dep:metrics", "openvm-circuit/bench-metrics", "openvm-native-compiler/bench-metrics"]
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 nightly-features = ["openvm-circuit/nightly-features"]

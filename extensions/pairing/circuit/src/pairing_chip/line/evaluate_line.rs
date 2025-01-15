@@ -6,7 +6,7 @@ use std::{
 
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_derive::{InstructionExecutor, Stateful};
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: UnevaluatedLine<Fp2>, (Fp, Fp)
 // Output: EvaluatedLine<Fp2>
-#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, Stateful)]
 pub struct EvaluateLineChip<
     F: PrimeField32,
     const INPUT_BLOCKS1: usize,

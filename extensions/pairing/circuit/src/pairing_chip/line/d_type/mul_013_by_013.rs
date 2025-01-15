@@ -6,7 +6,7 @@ use std::{
 
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_derive::{InstructionExecutor, Stateful};
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: line0.b, line0.c, line1.b, line1.c <Fp2>: 2 x 4 field elements
 // Output: 5 Fp2 coefficients -> 10 field elements
-#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, Stateful)]
 pub struct EcLineMul013By013Chip<
     F: PrimeField32,
     const INPUT_BLOCKS: usize,

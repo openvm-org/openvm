@@ -1,4 +1,4 @@
-use std::{array::from_fn, sync::Arc};
+use std::array::from_fn;
 
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
     bigint::utils::{
         big_uint_mod_inverse, big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime,
     },
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, VmOpcode};
 use openvm_mod_circuit_builder::{
@@ -65,9 +65,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         Rv32ModularArithmeticOpcode::default_offset() + opcode_offset,
     );
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     // doing 1xNUM_LIMBS reads and writes
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, BLOCK_SIZE, BLOCK_SIZE>::new(
@@ -195,9 +193,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         Rv32ModularArithmeticOpcode::default_offset() + opcode_offset,
     );
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     // doing 1xNUM_LIMBS reads and writes
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
@@ -305,7 +301,7 @@ fn test_is_equal<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIM
 ) {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus);
 
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let mut chip = ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(

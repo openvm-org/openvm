@@ -17,7 +17,11 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, Poseidon2Opcode, UsizeOpcode,
 };
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
-use openvm_stark_backend::p3_field::{Field, PrimeField32};
+use openvm_stark_backend::{
+    p3_field::{Field, PrimeField32},
+    Stateful,
+};
+use serde::{Deserialize, Serialize};
 
 use super::{
     NativePoseidon2Air, NativePoseidon2MemoryCols, NATIVE_POSEIDON2_CHUNK_SIZE,
@@ -31,7 +35,7 @@ pub struct NativePoseidon2BaseChip<F: Field, const SBOX_REGISTERS: usize> {
     pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NativePoseidon2ChipRecord<F> {
     pub from_state: ExecutionState<u32>,
     pub opcode: Poseidon2Opcode,
@@ -214,5 +218,17 @@ impl<F: PrimeField32 + Sync> NativePoseidon2ChipRecord<F> {
                 }),
             ],
         }
+    }
+}
+
+impl<F: Field, const SBOX_REGISTERS: usize> Stateful<Vec<u8>>
+    for NativePoseidon2BaseChip<F, SBOX_REGISTERS>
+{
+    fn load_state(&mut self, state: Vec<u8>) {
+        self.records = bitcode::deserialize(&state).unwrap()
+    }
+
+    fn store_state(&self) -> Vec<u8> {
+        bitcode::serialize(&self.records).unwrap()
     }
 }

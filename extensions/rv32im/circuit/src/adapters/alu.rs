@@ -89,7 +89,7 @@ pub struct Rv32BaseAluAdapterCols<T> {
     pub rs2: T,
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: T,
-    pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; 2],
+    pub reads_aux: [MemoryReadAuxCols<T>; 2],
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 }
 
@@ -311,7 +311,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
             row_slice.rs2_as = F::ZERO;
             row_slice.reads_aux = [
                 aux_cols_factory.make_read_aux_cols(rs1),
-                MemoryReadAuxCols::<F, RV32_REGISTER_NUM_LIMBS>::disabled(),
+                MemoryReadAuxCols::<F>::disabled(),
             ];
         }
         row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(rd);

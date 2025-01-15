@@ -39,7 +39,12 @@ pub fn generate_halo2_verifier_proving_key(
 }
 
 impl Halo2VerifierProvingKey {
-    pub fn prove(&self, params: &Halo2Params, witness: Witness<OuterConfig>) -> Snark {
+    pub fn prove(
+        &self,
+        params: &Halo2Params,
+        witness: Witness<OuterConfig>,
+        profiling: bool,
+    ) -> Snark {
         Halo2Prover::prove(
             params,
             self.pinning.metadata.config_params.clone(),
@@ -47,6 +52,7 @@ impl Halo2VerifierProvingKey {
             &self.pinning.pk,
             self.dsl_ops.clone(),
             witness,
+            profiling,
         )
     }
     // TODO: Add verify method

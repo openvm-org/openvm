@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Var};
+use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Usize, Var};
 
 /// An intermeddiate instruction set for implementing programs.
 ///
@@ -51,7 +51,7 @@ pub enum DslIr<C: Config> {
     SubFIN(Felt<C::F>, C::F, Felt<C::F>),
     /// Subtracts two extension field elements (ext = ext - ext).
     SubE(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Ext<C::F, C::EF>),
-    /// Subtrancts an extension field element and an extension field immediate (ext = ext - ext field imm).
+    /// Subtracts an extension field element and an extension field immediate (ext = ext - ext field imm).
     SubEI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::EF),
     /// Subtracts an extension field immediate and an extension field element (ext = ext field imm - ext).
     SubEIN(Ext<C::F, C::EF>, C::EF, Ext<C::F, C::EF>),
@@ -104,12 +104,6 @@ pub enum DslIr<C: Config> {
     /// Negates an extension field element (ext = -ext).
     NegE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
 
-    // Comparisons.
-    /// Compares two variables
-    LessThanV(Var<C::N>, Var<C::N>, Var<C::N>),
-    /// Compares a variable and an immediate
-    LessThanVI(Var<C::N>, Var<C::N>, C::N),
-
     /// Cast a Felt to a Var.
     CastFV(Var<C::N>, Felt<C::F>),
     /// Cast a Var to a Felt. This is unsafe because of possible overflow. Dynamic mode only.
@@ -120,8 +114,17 @@ pub enum DslIr<C: Config> {
     // Control flow.
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
     For(RVar<C::N>, RVar<C::N>, C::N, Var<C::N>, TracedVec<DslIr<C>>),
-    /// Executes an indefinite loop.
-    Loop(TracedVec<DslIr<C>>),
+
+    /// Executes a zipped iterator for loop over pointers with the parameters
+    /// (start step values, end step value of first pointer, step sizes, step variables, body).
+    ZipFor(
+        Vec<RVar<C::N>>,
+        RVar<C::N>,
+        Vec<C::N>,
+        Vec<Var<C::N>>,
+        TracedVec<DslIr<C>>,
+    ),
+
     /// Executes an equal conditional branch with the parameters (lhs var, rhs var, then body, else body).
     IfEq(
         Var<C::N>,
@@ -146,28 +149,19 @@ pub enum DslIr<C: Config> {
     // Assertions.
     /// Assert that two variables are equal (var == var).
     AssertEqV(Var<C::N>, Var<C::N>),
-    /// Assert that two variables are not equal (var != var).
-    AssertNeV(Var<C::N>, Var<C::N>),
     /// Assert that two field elements are equal (felt == felt).
     AssertEqF(Felt<C::F>, Felt<C::F>),
-    /// Assert that two field elements are not equal (felt != felt).
-    AssertNeF(Felt<C::F>, Felt<C::F>),
     /// Assert that two extension field elements are equal (ext == ext).
     AssertEqE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
-    /// Assert that two extension field elements are not equal (ext != ext).
-    AssertNeE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
     /// Assert that a variable is equal to an immediate (var == imm).
     AssertEqVI(Var<C::N>, C::N),
-    /// Assert that a variable is not equal to an immediate (var != imm).
-    AssertNeVI(Var<C::N>, C::N),
     /// Assert that a field element is equal to a field immediate (felt == field imm).
     AssertEqFI(Felt<C::F>, C::F),
-    /// Assert that a field element is not equal to a field immediate (felt != field imm).
-    AssertNeFI(Felt<C::F>, C::F),
     /// Assert that an extension field element is equal to an extension field immediate (ext == ext field imm).
     AssertEqEI(Ext<C::F, C::EF>, C::EF),
-    /// Assert that an extension field element is not equal to an extension field immediate (ext != ext field imm).
-    AssertNeEI(Ext<C::F, C::EF>, C::EF),
+
+    /// Assert that a usize is not zero (usize != 0).
+    AssertNonZero(Usize<C::N>),
 
     // Memory instructions.
     /// Allocate (ptr, len, size) a memory slice of length len
@@ -190,9 +184,9 @@ pub enum DslIr<C: Config> {
     StoreHeapPtr(Ptr<C::N>),
 
     // Bits.
-    /// Decompose a variable into size bits (bits = num2bits(var, size)). Should only be used when target is a gnark circuit.
+    /// Decompose a variable into size bits (bits = num2bits(var, size)). Should only be used when target is a circuit.
     CircuitNum2BitsV(Var<C::N>, usize, Vec<Var<C::N>>),
-    /// Decompose a field element into bits (bits = num2bits(felt)). Should only be used when target is a gnark circuit.
+    /// Decompose a field element into bits (bits = num2bits(felt)). Should only be used when target is a circuit.
     CircuitNum2BitsF(Felt<C::F>, Vec<Var<C::N>>),
 
     // Hashing.
@@ -205,7 +199,7 @@ pub enum DslIr<C: Config> {
         Array<C, Felt<C::F>>,
     ),
     /// Permutes an array of Bn254 elements using Poseidon2 (output = p2_permute(array)). Should only
-    /// be used when target is a gnark circuit.
+    /// be used when target is a circuit.
     CircuitPoseidon2Permute([Var<C::N>; 3]),
 
     // Miscellaneous instructions.
@@ -221,19 +215,17 @@ pub enum DslIr<C: Config> {
     /// Prepare next input vector (preceded by its length) for hinting.
     HintInputVec(),
     /// Prepare bit decomposition for hinting.
-    HintBitsU(RVar<C::N>),
-    /// Prepare bit decomposition for hinting.
     HintBitsV(Var<C::N>, u32),
     /// Prepare bit decomposition for hinting.
     HintBitsF(Felt<C::F>, u32),
 
     StoreHintWord(Ptr<C::N>, MemIndex<C::N>),
 
-    /// Witness a variable. Should only be used when target is a gnark circuit.
+    /// Witness a variable. Should only be used when target is a circuit.
     WitnessVar(Var<C::N>, u32),
-    /// Witness a field element. Should only be used when target is a gnark circuit.
+    /// Witness a field element. Should only be used when target is a circuit.
     WitnessFelt(Felt<C::F>, u32),
-    /// Witness an extension field element. Should only be used when target is a gnark circuit.
+    /// Witness an extension field element. Should only be used when target is a circuit.
     WitnessExt(Ext<C::F, C::EF>, u32),
     /// Label a field element as the ith public input.
     Publish(Felt<C::F>, Var<C::N>),
@@ -242,32 +234,32 @@ pub enum DslIr<C: Config> {
 
     // Public inputs for circuits.
     /// Asserts that the inputted var is equal the circuit's vkey hash public input. Should only be
-    /// used when target is a gnark circuit.
+    /// used when target is a circuit.
     CircuitCommitVkeyHash(Var<C::N>),
-    /// Asserts that the inputted var is equal the circuit's commited values digest public input. Should
-    /// only be used when target is a gnark circuit.
-    CircuitCommitCommitedValuesDigest(Var<C::N>),
-    /// Publish a field element as the ith public value. Should only be used when target is a halo2 circuit.
+    /// Asserts that the inputted var is equal the circuit's committed values digest public input. Should
+    /// only be used when target is a circuit.
+    CircuitCommitCommittedValuesDigest(Var<C::N>),
+    /// Publish a field element as the ith public value. Should only be used when target is a circuit.
     CircuitPublish(Var<C::N>, usize),
 
     // FRI specific instructions.
     /// Select's a variable based on a condition. (select(cond, true_val, false_val) => output).
-    /// Should only be used when target is a gnark circuit.
+    /// Should only be used when target is a circuit.
     CircuitSelectV(Var<C::N>, Var<C::N>, Var<C::N>, Var<C::N>),
     /// Select's a field element based on a condition. (select(cond, true_val, false_val) => output).
-    /// Should only be used when target is a gnark circuit.
+    /// Should only be used when target is a circuit.
     CircuitSelectF(Var<C::N>, Felt<C::F>, Felt<C::F>, Felt<C::F>),
     /// Select's an extension field element based on a condition. (select(cond, true_val, false_val) => output).
-    /// Should only be used when target is a gnark circuit.
+    /// Should only be used when target is a circuit.
     CircuitSelectE(
         Var<C::N>,
         Ext<C::F, C::EF>,
         Ext<C::F, C::EF>,
         Ext<C::F, C::EF>,
     ),
-    /// Converts an ext to a slice of felts. Should only be used when target is a gnark circuit.
+    /// Converts an ext to a slice of felts. Should only be used when target is a circuit.
     CircuitExt2Felt([Felt<C::F>; 4], Ext<C::F, C::EF>),
-    /// Converts a slice of felts to an ext. Should only be used when target is a gnark circuit.
+    /// Converts a slice of felts to an ext. Should only be used when target is a circuit.
     CircuitFelts2Ext([Felt<C::F>; 4], Ext<C::F, C::EF>),
     /// FriReducedOpening(alpha, curr_alpha_pow, at_x_array, at_z_array, result)
     FriReducedOpening(
