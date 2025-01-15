@@ -528,15 +528,20 @@ fn test_vm_continuations_recover_state() {
         .executor
         .execute_segments(program.clone(), Streams::default())
         .unwrap();
+    // Simulate remote proving which chip complex state needs to be serialized then deserialized.
     let states: Vec<_> = segments
         .iter()
-        .map(|s| s.store_chip_complex_state())
+        .map(|s| bitcode::serialize(&s.store_chip_complex_state()).unwrap())
         .collect();
     let proof_inputs_per_seg = states
         .into_iter()
         .map(|s| {
-            ExecutionSegment::new_for_proving(&config, program.clone(), s)
-                .generate_proof_input(None)
+            ExecutionSegment::new_for_proving(
+                &config,
+                program.clone(),
+                bitcode::deserialize(&s).unwrap(),
+            )
+            .generate_proof_input(None)
         })
         .collect();
     let proofs = vm.prove(
