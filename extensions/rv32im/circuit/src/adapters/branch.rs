@@ -73,7 +73,7 @@ pub struct Rv32BranchAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs2_ptr: T,
-    pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; 2],
+    pub reads_aux: [MemoryReadAuxCols<T>; 2],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]

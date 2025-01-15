@@ -35,6 +35,9 @@ members = [
     "extensions/native/compiler",
     "extensions/native/compiler/derive",
     "extensions/native/recursion",
+    "extensions/native/transpiler",
+    "extensions/native/guest-macro",
+    "extensions/native/tests",
     "extensions/algebra/circuit",
     "extensions/algebra/transpiler",
     "extensions/algebra/guest",
@@ -103,8 +106,8 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "25265e7", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "25265e7", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "47a0bda", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "47a0bda", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
@@ -135,6 +138,9 @@ openvm-native-circuit = { path = "extensions/native/circuit", default-features =
 openvm-native-compiler = { path = "extensions/native/compiler", default-features = false }
 openvm-native-compiler-derive = { path = "extensions/native/compiler/derive", default-features = false }
 openvm-native-recursion = { path = "extensions/native/recursion", default-features = false }
+openvm-native-guest-macro = { path = "extensions/native/guest-macro", default-features = false }
+openvm-native-integration-test = { path = "extensions/native/guest-macro/test", default-features = false }
+openvm-native-transpiler = { path = "extensions/native/transpiler", default-features = false }
 openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }

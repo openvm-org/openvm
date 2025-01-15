@@ -49,6 +49,8 @@ pub struct Halo2Config {
     pub verifier_k: usize,
     /// If not specified, keygen will tune wrapper_k automatically.
     pub wrapper_k: Option<usize>,
+    /// Sets the profiling mode of halo2 VM
+    pub profiling: bool,
 }
 
 impl<VC> AppConfig<VC> {
@@ -101,6 +103,7 @@ impl Default for AggConfig {
             halo2_config: Halo2Config {
                 verifier_k: 24,
                 wrapper_k: None,
+                profiling: false,
             },
         }
     }

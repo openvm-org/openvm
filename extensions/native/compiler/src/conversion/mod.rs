@@ -85,7 +85,7 @@ fn inst_med<F: PrimeField64>(
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
-enum AS {
+pub enum AS {
     Immediate = 0,
     Native = 5,
 }

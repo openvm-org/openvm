@@ -1,8 +1,8 @@
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::UsizeOpcode;
 use openvm_instructions_derive::UsizeOpcode;
 use openvm_keccak256_guest::{KECCAK256_FUNCT3, KECCAK256_FUNCT7, OPCODE};
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_transpiler::{util::from_r_type, TranspilerExtension};
+use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
@@ -19,7 +19,7 @@ pub enum Rv32KeccakOpcode {
 pub struct Keccak256TranspilerExtension;
 
 impl<F: PrimeField32> TranspilerExtension<F> for Keccak256TranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -39,6 +39,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for Keccak256TranspilerExtension {
             2,
             &dec_insn,
         );
-        Some((instruction, 1))
+        Some(TranspilerOutput::one_to_one(instruction))
     }
 }

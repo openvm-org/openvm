@@ -3499,8 +3499,6 @@ dependencies = [
  "openvm-algebra-transpiler",
  "openvm-build",
  "openvm-circuit",
- "openvm-circuit-derive",
- "openvm-circuit-primitives-derive",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
@@ -3970,10 +3968,8 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand",
- "rayon",
  "serde",
  "serde-big-array",
- "serde_with",
  "strum",
  "test-case",
  "test-log",
@@ -3985,17 +3981,13 @@ name = "openvm-native-compiler"
 version = "0.2.0-alpha"
 dependencies = [
  "backtrace",
- "cfg-if",
  "hex",
  "itertools 0.13.0",
  "lazy_static",
  "metrics",
  "num-bigint 0.4.6",
- "num-bigint-dig",
  "num-integer",
- "num-traits",
  "openvm-circuit",
- "openvm-circuit-primitives",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-native-circuit",
@@ -4008,13 +4000,11 @@ dependencies = [
  "p3-symmetric",
  "rand",
  "serde",
- "serde_json",
  "snark-verifier-sdk",
  "strum",
  "strum_macros",
  "test-case",
  "test-log",
- "tracing",
  "zkhash",
 ]
 
@@ -4028,6 +4018,37 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.95",
+]
+
+[[package]]
+name = "openvm-native-guest-macro"
+version = "0.2.0-alpha"
+dependencies = [
+ "openvm-instructions",
+ "openvm-native-compiler",
+ "openvm-native-transpiler",
+ "p3-baby-bear",
+ "p3-field",
+ "proc-macro2",
+ "quote",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
+name = "openvm-native-integration-tests"
+version = "0.2.0-alpha"
+dependencies = [
+ "eyre",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-native-circuit",
+ "openvm-native-transpiler",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "p3-baby-bear",
 ]
 
 [[package]]
@@ -4057,6 +4078,15 @@ dependencies = [
  "snark-verifier-sdk",
  "tempfile",
  "tracing",
+]
+
+[[package]]
+name = "openvm-native-transpiler"
+version = "0.2.0-alpha"
+dependencies = [
+ "openvm-instructions",
+ "openvm-transpiler",
+ "p3-field",
 ]
 
 [[package]]
@@ -4452,7 +4482,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "0.2.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=25265e7#25265e7abd59c21ad110e2c673d549801bbf9a17"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=47a0bda#47a0bdabb827bcb95eac0b3ff15c599b5e89236d"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -4479,7 +4509,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "0.2.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=25265e7#25265e7abd59c21ad110e2c673d549801bbf9a17"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=47a0bda#47a0bdabb827bcb95eac0b3ff15c599b5e89236d"
 dependencies = [
  "derive_more 0.99.18",
  "ff 0.13.0",

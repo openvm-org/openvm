@@ -20,7 +20,10 @@ use openvm_ecc_circuit::{
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_native_circuit::{Native, NativeExecutor, NativePeriphery};
+use openvm_native_circuit::{
+    CastFExtension, CastFExtensionExecutor, CastFExtensionPeriphery, Native, NativeExecutor,
+    NativePeriphery,
+};
 use openvm_pairing_circuit::{
     PairingExtension, PairingExtensionExecutor, PairingExtensionPeriphery,
 };
@@ -57,6 +60,7 @@ pub struct SdkVmConfig {
     pub fp2: Option<Fp2Extension>,
     pub pairing: Option<PairingExtension>,
     pub ecc: Option<WeierstrassExtension>,
+    pub castf: Option<CastFExtension>,
 }
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
@@ -85,6 +89,8 @@ pub enum SdkVmConfigExecutor<F: PrimeField32> {
     Pairing(PairingExtensionExecutor<F>),
     #[any_enum]
     Ecc(WeierstrassExtensionExecutor<F>),
+    #[any_enum]
+    CastF(CastFExtensionExecutor<F>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
@@ -113,6 +119,8 @@ pub enum SdkVmConfigPeriphery<F: PrimeField32> {
     Pairing(PairingExtensionPeriphery<F>),
     #[any_enum]
     Ecc(WeierstrassExtensionPeriphery<F>),
+    #[any_enum]
+    CastF(CastFExtensionPeriphery<F>),
 }
 
 impl SdkVmConfig {
@@ -216,6 +224,9 @@ impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
         }
         if let Some(ref ecc) = self.ecc {
             complex = complex.extend(ecc)?;
+        }
+        if let Some(ref castf) = self.castf {
+            complex = complex.extend(castf)?;
         }
 
         Ok(complex)

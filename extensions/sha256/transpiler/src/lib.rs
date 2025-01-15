@@ -1,8 +1,8 @@
-use openvm_instructions::{instruction::Instruction, riscv::RV32_MEMORY_AS, UsizeOpcode};
+use openvm_instructions::{riscv::RV32_MEMORY_AS, UsizeOpcode};
 use openvm_instructions_derive::UsizeOpcode;
 use openvm_sha256_guest::{OPCODE, SHA256_FUNCT3, SHA256_FUNCT7};
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_transpiler::{util::from_r_type, TranspilerExtension};
+use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
@@ -19,7 +19,7 @@ pub enum Rv32Sha256Opcode {
 pub struct Sha256TranspilerExtension;
 
 impl<F: PrimeField32> TranspilerExtension<F> for Sha256TranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -40,6 +40,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for Sha256TranspilerExtension {
             RV32_MEMORY_AS as usize,
             &dec_insn,
         );
-        Some((instruction, 1))
+        Some(TranspilerOutput::one_to_one(instruction))
     }
 }

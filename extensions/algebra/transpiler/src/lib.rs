@@ -7,7 +7,7 @@ use openvm_instructions::{
 };
 use openvm_instructions_derive::UsizeOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_transpiler::{util::from_r_type, TranspilerExtension};
+use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
@@ -50,7 +50,7 @@ pub struct ModularTranspilerExtension;
 pub struct Fp2TranspilerExtension;
 
 impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -122,12 +122,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
                 Some(from_r_type(global_opcode, 2, &dec_insn))
             }
         };
-        instruction.map(|instruction| (instruction, 1))
+        instruction.map(TranspilerOutput::one_to_one)
     }
 }
 
 impl<F: PrimeField32> TranspilerExtension<F> for Fp2TranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -190,6 +190,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for Fp2TranspilerExtension {
                 Some(from_r_type(global_opcode, 2, &dec_insn))
             }
         };
-        instruction.map(|instruction| (instruction, 1))
+        instruction.map(TranspilerOutput::one_to_one)
     }
 }

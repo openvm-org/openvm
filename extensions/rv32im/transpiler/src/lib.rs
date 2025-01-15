@@ -11,7 +11,7 @@ use openvm_rv32im_guest::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{
     util::{nop, unimp},
-    TranspilerExtension,
+    TranspilerExtension, TranspilerOutput,
 };
 use rrs::InstructionTranspiler;
 use rrs_lib::{
@@ -33,7 +33,7 @@ pub struct Rv32MTranspilerExtension;
 pub struct Rv32IoTranspilerExtension;
 
 impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         let mut transpiler = InstructionTranspiler::<F>(PhantomData);
         if instruction_stream.is_empty() {
             return None;
@@ -50,14 +50,14 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
                     // CSRRW
                     if dec_insn.rs1 == 0 && dec_insn.rd == 0 {
                         // This resets the CSR counter to zero. Since we don't have any CSR registers, this is a nop.
-                        return Some((nop(), 1));
+                        return Some(TranspilerOutput::one_to_one(nop()));
                     }
                 }
                 eprintln!(
                     "Transpiling system / CSR instruction: {:b} (opcode = {:07b}, funct3 = {:03b}) to unimp",
                     instruction_u32, opcode, funct3
                 );
-                return Some((unimp(), 1));
+                return Some(TranspilerOutput::one_to_one(unimp()));
             }
             (SYSTEM_OPCODE, TERMINATE_FUNCT3) => {
                 let dec_insn = IType::new(instruction_u32);
@@ -98,12 +98,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
             _ => process_instruction(&mut transpiler, instruction_u32),
         };
 
-        instruction.map(|ret| (ret, 1))
+        instruction.map(TranspilerOutput::one_to_one)
     }
 }
 
 impl<F: PrimeField32> TranspilerExtension<F> for Rv32MTranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -125,12 +125,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32MTranspilerExtension {
             instruction_u32,
         );
 
-        instruction.map(|instruction| (instruction, 1))
+        instruction.map(TranspilerOutput::one_to_one)
     }
 }
 
 impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -175,6 +175,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
             _ => return None,
         };
 
-        instruction.map(|instruction| (instruction, 1))
+        instruction.map(TranspilerOutput::one_to_one)
     }
 }

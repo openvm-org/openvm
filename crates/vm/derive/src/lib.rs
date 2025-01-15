@@ -396,7 +396,7 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
             let executor_type = Ident::new(&format!("{}Executor", name), name.span());
             let periphery_type = Ident::new(&format!("{}Periphery", name), name.span());
             TokenStream::from(quote! {
-                #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, ::openvm_circuit_derive::Stateful)]
+                #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, ::openvm_circuit::derive::Stateful)]
                 pub enum #executor_type<F: PrimeField32> {
                     #[any_enum]
                     #system_name_upper(SystemExecutor<F>),

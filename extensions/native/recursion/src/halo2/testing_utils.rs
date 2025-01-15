@@ -57,7 +57,7 @@ pub fn run_static_verifier_test(
     .entered();
     let mut witness = Witness::default();
     vparams.data.proof.write(&mut witness);
-    let static_verifier_snark = stark_verifier_circuit.prove(params, witness);
+    let static_verifier_snark = stark_verifier_circuit.prove(params, witness, false);
     info_span.exit();
     (stark_verifier_circuit, static_verifier_snark)
 }

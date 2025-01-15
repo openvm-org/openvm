@@ -122,6 +122,7 @@ impl BenchmarkCli {
             halo2_config: Halo2Config {
                 verifier_k: self.halo2_outer_k.unwrap_or(24),
                 wrapper_k: self.halo2_wrapper_k,
+                profiling: self.profiling,
             },
         }
     }
