@@ -19,6 +19,14 @@ use super::{
 use crate::system::memory::BOUNDARY_AIR_OFFSET;
 
 const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
+
+// a heuristic number for the maximum number of cells per chip in a segment
+// a few reasons for this number:
+//  1. `VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>` is
+//    the chip with the most cells in a segment from the reth-benchmark.
+//  2. `VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>`:
+//    its trace width is 36 and its after challenge trace width is 80.
+const DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT: usize = DEFAULT_MAX_SEGMENT_LEN * 120;
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
 // allows log_blowup = 1
 const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
@@ -88,6 +96,9 @@ pub struct SystemConfig {
     pub num_public_values: usize,
     /// When continuations are enabled, a heuristic used to determine when to segment execution.
     pub max_segment_len: usize,
+    /// When continuations are enabled, whenever a chip has more than this number of cells,
+    /// a new segment is created.
+    pub max_cells_per_chip_in_segment: usize,
     /// Whether to collect detailed profiling metrics.
     /// **Warning**: this slows down the runtime.
     pub profiling: bool,
@@ -111,6 +122,7 @@ impl SystemConfig {
             memory_config,
             num_public_values,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+            max_cells_per_chip_in_segment: DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT,
             profiling: false,
         }
     }
@@ -137,6 +149,11 @@ impl SystemConfig {
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
         self.max_segment_len = max_segment_len;
+        self
+    }
+
+    pub fn with_max_cells_per_chip_in_segment(mut self, max_cells_per_chip_in_segment: usize) -> Self {
+        self.max_cells_per_chip_in_segment = max_cells_per_chip_in_segment;
         self
     }
 

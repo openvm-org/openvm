@@ -251,6 +251,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             return false;
         }
         self.since_last_segment_check = 0;
+
         let heights = self.chip_complex.dynamic_trace_heights();
         for (i, height) in heights.enumerate() {
             if height > self.system_config().max_segment_len {
@@ -262,7 +263,17 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 return true;
             }
         }
-
+        for (i, num_cells) in self.current_trace_cells().into_iter().enumerate() {
+            if num_cells > self.system_config().max_cells_per_chip_in_segment {
+                tracing::info!(
+                    "Should segment because chip {} has {} cells which exceeds limit {}",
+                    self.air_names[i],
+                    num_cells,
+                    self.system_config().max_cells_per_chip_in_segment,
+                );
+                return true;
+            }
+        }
         false
     }
 
