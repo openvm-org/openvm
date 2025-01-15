@@ -593,6 +593,7 @@ where
 impl<F: PrimeField32> Stateful<Vec<u8>> for FriReducedOpeningChip<F> {
     fn load_state(&mut self, state: Vec<u8>) {
         self.records = bitcode::deserialize(&state).unwrap();
+        self.height = self.records.iter().map(|record| record.a_reads.len()).sum();
     }
 
     fn store_state(&self) -> Vec<u8> {
