@@ -19,7 +19,7 @@ use crate::{
 
 pub const INITIAL_TIMESTAMP: u32 = 0;
 
-const PAGE_SIZE: usize = 1 << 13;
+const PAGE_SIZE: usize = 1 << 12;
 
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 struct BlockData {
@@ -29,14 +29,14 @@ struct BlockData {
 }
 
 struct BlockStructure {
-    block_data: Vec<PagedVec<BlockData>>,
+    block_data: Vec<PagedVec<BlockData, PAGE_SIZE>>,
     as_offset: u32,
 }
 
 impl BlockStructure {
     pub fn new(as_offset: u32, as_height: usize, mem_size: usize) -> Self {
         Self {
-            block_data: vec![PagedVec::new(PAGE_SIZE, mem_size / PAGE_SIZE); 1 << as_height],
+            block_data: vec![PagedVec::new(mem_size.div_ceil(PAGE_SIZE)); 1 << as_height],
             as_offset,
         }
     }
@@ -81,7 +81,7 @@ pub struct MemoryRecord<T> {
 
 pub struct OfflineMemory<F> {
     block_data: BlockStructure,
-    data: Vec<PagedVec<F>>,
+    data: Vec<PagedVec<F, PAGE_SIZE>>,
     as_offset: u32,
     initial_block_size: usize,
     timestamp: u32,
@@ -132,10 +132,10 @@ impl<F: PrimeField32> OfflineMemory<F> {
     fn memory_image_to_paged_vec(
         memory_image: MemoryImage<F>,
         config: MemoryConfig,
-    ) -> Vec<PagedVec<F>> {
+    ) -> Vec<PagedVec<F, PAGE_SIZE>> {
         let mut paged_vec =
             vec![
-                PagedVec::new(PAGE_SIZE, (1 << config.pointer_max_bits) / PAGE_SIZE);
+                PagedVec::new((1usize << config.pointer_max_bits).div_ceil(PAGE_SIZE));
                 1 << config.as_height
             ];
         for ((addr_space, pointer), value) in memory_image {
