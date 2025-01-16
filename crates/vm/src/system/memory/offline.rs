@@ -275,6 +275,9 @@ impl<F: PrimeField32> OfflineMemory<F> {
         let mut equipartition = TimestampedEquipartition::<F, N>::new();
         for (address_space, pointer) in to_access {
             let block = self.block_data.get(&(address_space, pointer)).unwrap();
+            if block.size == 0 {
+                continue;
+            }
 
             debug_assert_eq!(block.pointer % N as u32, 0);
             debug_assert_eq!(block.size, N);
@@ -438,9 +441,12 @@ impl<F: PrimeField32> OfflineMemory<F> {
         let left_block = self.block_data.get(&(address_space, pointer));
 
         let left_timestamp = left_block.map(|b| b.timestamp).unwrap_or(INITIAL_TIMESTAMP);
-        let size = left_block
+        let mut size = left_block
             .map(|b| b.size)
             .unwrap_or(self.initial_block_size);
+        if size == 0 {
+            size = self.initial_block_size;
+        }
 
         let right_timestamp = self
             .block_data
@@ -530,10 +536,13 @@ mod tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::{BlockData, MemoryRecord, OfflineMemory};
-    use crate::system::memory::{
-        adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
-        offline_checker::MemoryBus,
-        MemoryImage, TimestampedValues,
+    use crate::{
+        arch::MemoryConfig,
+        system::memory::{
+            adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
+            offline_checker::MemoryBus,
+            MemoryImage, TimestampedValues,
+        },
     };
 
     macro_rules! bb {
@@ -565,7 +574,10 @@ mod tests {
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
-            Default::default(),
+            MemoryConfig {
+                as_offset: 0,
+                ..Default::default()
+            },
         );
         assert_eq!(
             partition.block_containing(0, 13),
@@ -902,7 +914,10 @@ mod tests {
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
-            Default::default(),
+            MemoryConfig {
+                as_offset: 0,
+                ..Default::default()
+            },
         );
 
         memory.write(1, 0, bbvec![4, 3, 2, 1]);
@@ -925,7 +940,10 @@ mod tests {
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
             29,
-            Default::default(),
+            MemoryConfig {
+                as_offset: 0,
+                ..Default::default()
+            },
         );
 
         memory.write(1, 0, bbvec![4, 3, 2, 1]);

@@ -202,7 +202,7 @@ mod tests {
         assert_eq!(v.get(0), None); // bool's default
         v.set(0, true);
         assert_eq!(v.get(0), Some(&true));
-        assert_eq!(v.get(1), None);
+        assert_eq!(v.get(1), Some(&false)); // because we created the page
     }
 
     #[test]
