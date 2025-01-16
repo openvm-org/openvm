@@ -126,6 +126,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
     pub fn set_initial_memory(&mut self, initial_memory: MemoryImage<F>, config: MemoryConfig) {
         assert_eq!(self.timestamp, INITIAL_TIMESTAMP + 1);
+        self.as_offset = config.as_offset;
         self.data = Self::memory_image_to_paged_vec(initial_memory, config);
     }
 
@@ -267,7 +268,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
         for &(address_space, pointer) in to_access.iter() {
             let block = self.block_data.get(&(address_space, pointer)).unwrap();
-            if block.pointer != pointer || block.size != N {
+            if block.size > 0 && (block.pointer != pointer || block.size != N) {
                 self.access(address_space, pointer, N, &mut adapter_records);
             }
         }
@@ -379,7 +380,8 @@ impl<F: PrimeField32> OfflineMemory<F> {
         let mut prev_timestamp = None;
 
         for i in 0..size as u32 {
-            if self.block_data.get(&(address_space, pointer + i)).is_none() {
+            let block = self.block_data.get(&(address_space, pointer + i));
+            if block.is_none() || block.unwrap().size == 0 {
                 self.block_data.insert(
                     (address_space, pointer + i),
                     Self::initial_block_data(pointer + i, self.initial_block_size),
