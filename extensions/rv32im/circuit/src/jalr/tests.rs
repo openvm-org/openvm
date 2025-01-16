@@ -1,8 +1,8 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
@@ -85,9 +85,7 @@ fn set_and_execute(
 fn rand_jalr_test() {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 
@@ -136,9 +134,7 @@ fn run_negative_jalr_test(
 ) {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 
@@ -278,9 +274,7 @@ fn overflow_negative_tests() {
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 

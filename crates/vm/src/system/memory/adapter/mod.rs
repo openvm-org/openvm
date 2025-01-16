@@ -5,7 +5,7 @@ pub use columns::*;
 use enum_dispatch::enum_dispatch;
 use openvm_circuit_primitives::{
     is_less_than::IsLtSubAir, utils::next_power_of_two_or_zero,
-    var_range::VariableRangeCheckerChip, TraceSubRowGenerator,
+    var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_stark_backend::{
@@ -35,7 +35,7 @@ pub struct AccessAdapterInventory<F> {
 
 impl<F> AccessAdapterInventory<F> {
     pub fn new(
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
         clk_max_bits: usize,
         max_access_adapter_n: usize,
@@ -119,7 +119,7 @@ impl<F> AccessAdapterInventory<F> {
     }
 
     fn create_access_adapter_chip<const N: usize>(
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
         clk_max_bits: usize,
         max_access_adapter_n: usize,
@@ -178,7 +178,7 @@ enum GenericAccessAdapterChip<F> {
 
 impl<F> GenericAccessAdapterChip<F> {
     fn new<const N: usize>(
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
         clk_max_bits: usize,
     ) -> Self {
@@ -198,13 +198,13 @@ impl<F> GenericAccessAdapterChip<F> {
 }
 pub struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
-    range_checker: Arc<VariableRangeCheckerChip>,
+    range_checker: SharedVariableRangeCheckerChip,
     records: Vec<AccessAdapterRecord<F>>,
     overridden_height: Option<usize>,
 }
 impl<F, const N: usize> AccessAdapterChip<F, N> {
     pub fn new(
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
         clk_max_bits: usize,
     ) -> Self {
@@ -268,7 +268,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                 row.is_split = F::from_bool(record.kind == AccessAdapterRecordKind::Split);
 
                 self.air.lt_air.generate_subrow(
-                    (&self.range_checker, left_timestamp, right_timestamp),
+                    (self.range_checker.as_ref(), left_timestamp, right_timestamp),
                     (&mut row.lt_aux, &mut row.is_right_larger),
                 );
             });

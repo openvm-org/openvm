@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
 use openvm_circuit::arch::{
@@ -9,7 +8,7 @@ use openvm_circuit::arch::{
 };
 use openvm_circuit_primitives::{
     utils::select,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, UsizeOpcode};
@@ -176,11 +175,11 @@ where
 
 pub struct LoadSignExtendCoreChip<const NUM_CELLS: usize, const LIMB_BITS: usize> {
     pub air: LoadSignExtendCoreAir<NUM_CELLS, LIMB_BITS>,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<const NUM_CELLS: usize, const LIMB_BITS: usize> LoadSignExtendCoreChip<NUM_CELLS, LIMB_BITS> {
-    pub fn new(range_checker_chip: Arc<VariableRangeCheckerChip>, offset: usize) -> Self {
+    pub fn new(range_checker_chip: SharedVariableRangeCheckerChip, offset: usize) -> Self {
         Self {
             air: LoadSignExtendCoreAir::<NUM_CELLS, LIMB_BITS> {
                 range_bus: range_checker_chip.bus(),

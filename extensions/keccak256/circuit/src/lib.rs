@@ -6,8 +6,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_stark_backend::{p3_field::PrimeField32, Stateful};
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
 
@@ -71,14 +73,14 @@ pub struct KeccakVmChip<F: PrimeField32> {
     pub air: KeccakVmAir,
     /// IO and memory data necessary for each opcode call
     pub records: Vec<KeccakRecord<F>>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
 
     offset: usize,
 
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KeccakRecord<F> {
     pub pc: F,
     pub dst_read: RecordId,
@@ -88,13 +90,14 @@ pub struct KeccakRecord<F> {
     pub digest_writes: [RecordId; KECCAK_DIGEST_WRITES],
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KeccakInputBlock {
     /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES / KECCAK_WORD_SIZE].
     pub reads: Vec<RecordId>,
     /// Index in `reads` of the memory read for < KECCAK_WORD_SIZE bytes, if any.
     pub partial_read_idx: Option<usize>,
     /// Bytes with padding. Can be derived from `bytes_read` but we store for convenience.
+    #[serde(with = "BigArray")]
     pub padded_bytes: [u8; KECCAK_RATE_BYTES],
     pub remaining_len: usize,
     pub src: usize,
@@ -107,7 +110,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         address_bits: usize,
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
@@ -278,5 +281,15 @@ impl Default for KeccakInputBlock {
             reads: Vec::new(),
             src: 0,
         }
+    }
+}
+
+impl<F: PrimeField32> Stateful<Vec<u8>> for KeccakVmChip<F> {
+    fn load_state(&mut self, state: Vec<u8>) {
+        self.records = bitcode::deserialize(&state).unwrap();
+    }
+
+    fn store_state(&self) -> Vec<u8> {
+        bitcode::serialize(&self.records).unwrap()
     }
 }

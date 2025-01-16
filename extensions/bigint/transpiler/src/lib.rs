@@ -8,7 +8,7 @@ use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_transpiler::{util::from_r_type, TranspilerExtension};
+use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::{BType, RType};
 use strum::IntoEnumIterator;
 
@@ -80,7 +80,7 @@ impl Rv32Mul256Opcode {
 pub struct Int256TranspilerExtension;
 
 impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -154,6 +154,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
             }
             _ => None,
         };
-        instruction.map(|instruction| (instruction, 1))
+        instruction.map(TranspilerOutput::one_to_one)
     }
 }

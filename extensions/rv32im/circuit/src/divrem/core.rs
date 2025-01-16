@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
 use num_bigint::BigUint;
@@ -11,8 +10,8 @@ use openvm_circuit::arch::{
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
     utils::{not, select},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -308,14 +307,14 @@ where
 
 pub struct DivRemCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: DivRemCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
-    pub range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
-        range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+        range_tuple_chip: SharedRangeTupleCheckerChip<2>,
         offset: usize,
     ) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i

@@ -2,7 +2,6 @@ use std::{
     array::{self, from_fn},
     borrow::Borrow,
     marker::PhantomData,
-    sync::Arc,
 };
 
 use openvm_circuit::{
@@ -17,7 +16,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -109,7 +108,7 @@ pub struct Rv32HeapAdapterChip<
     const WRITE_SIZE: usize,
 > {
     pub air: Rv32HeapAdapterAir<NUM_READS, READ_SIZE, WRITE_SIZE>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     _marker: PhantomData<F>,
 }
 
@@ -121,7 +120,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         address_bits: usize,
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     ) -> Self {
         assert!(NUM_READS <= 2);
         assert!(
@@ -226,7 +225,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
             row_slice,
             &read_record,
             &write_record,
-            &self.bitwise_lookup_chip,
+            self.bitwise_lookup_chip.clone(),
             self.air.address_bits,
             memory,
         );

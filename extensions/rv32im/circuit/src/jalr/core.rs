@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
 use openvm_circuit::arch::{
@@ -9,8 +8,8 @@ use openvm_circuit::arch::{
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -174,14 +173,14 @@ where
 
 pub struct Rv32JalrCoreChip {
     pub air: Rv32JalrCoreAir,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl Rv32JalrCoreChip {
     pub fn new(
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
-        range_checker_chip: Arc<VariableRangeCheckerChip>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        range_checker_chip: SharedVariableRangeCheckerChip,
         offset: usize,
     ) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 16);

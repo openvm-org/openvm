@@ -30,6 +30,8 @@ derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 eyre.workspace = true
 serde.workspace = true
+serde-big-array.workspace = true
+bitcode.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

@@ -9,7 +9,9 @@ use std::{
 use openvm_circuit::arch::{
     ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, SystemPort,
 };
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupChip, encoder::Encoder};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder,
+};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -19,7 +21,8 @@ use openvm_instructions::{
 use openvm_rv32im_circuit::adapters::read_rv32_register;
 use openvm_sha256_air::{Sha256Air, SHA256_BLOCK_BITS};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, Stateful};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 mod air;
@@ -49,12 +52,12 @@ pub struct Sha256VmChip<F: PrimeField32> {
     /// IO and memory data necessary for each opcode call
     pub records: Vec<Sha256Record<F>>,
     pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
 
     offset: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Sha256Record<F> {
     pub from_state: ExecutionState<F>,
     pub dst_read: RecordId,
@@ -73,7 +76,7 @@ impl<F: PrimeField32> Sha256VmChip<F> {
             memory_bridge,
         }: SystemPort,
         address_bits: usize,
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
         self_bus_idx: usize,
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
@@ -191,6 +194,16 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
 
     fn get_opcode_name(&self, _: usize) -> String {
         "SHA256".to_string()
+    }
+}
+
+impl<F: PrimeField32> Stateful<Vec<u8>> for Sha256VmChip<F> {
+    fn load_state(&mut self, state: Vec<u8>) {
+        self.records = bitcode::deserialize(&state).unwrap();
+    }
+
+    fn store_state(&self) -> Vec<u8> {
+        bitcode::serialize(&self.records).unwrap()
     }
 }
 

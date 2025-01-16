@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{
@@ -9,7 +9,7 @@ use openvm_circuit::{
     utils::{generate_long_number, i32_to_f},
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
 use openvm_rv32im_transpiler::BranchLessThanOpcode;
@@ -88,9 +88,7 @@ fn run_rv32_branch_lt_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     const ABS_MAX_BRANCH: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32BranchLessThanChip::<F>::new(
@@ -191,9 +189,7 @@ fn run_rv32_blt_negative_test(
 ) {
     let imm = 16u32;
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = Rv32BranchLessThanTestChip::<F>::new(
@@ -496,9 +492,7 @@ fn rv32_blt_unsigned_wrong_b_msb_sign_negative_test() {
 #[test]
 fn execute_pc_increment_sanity_test() {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let core =
         BranchLessThanCoreChip::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(bitwise_chip, 0);
 

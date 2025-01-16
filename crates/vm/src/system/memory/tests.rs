@@ -5,7 +5,9 @@ use std::{
 };
 
 use itertools::Itertools;
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
@@ -56,9 +58,9 @@ struct MemoryRequesterCols<T> {
     timestamp: T,
     write_1_aux: MemoryWriteAuxCols<T, 1>,
     write_4_aux: MemoryWriteAuxCols<T, 4>,
-    read_1_aux: MemoryReadAuxCols<T, 1>,
-    read_4_aux: MemoryReadAuxCols<T, 4>,
-    read_max_aux: MemoryReadAuxCols<T, MAX>,
+    read_1_aux: MemoryReadAuxCols<T>,
+    read_4_aux: MemoryReadAuxCols<T>,
+    read_max_aux: MemoryReadAuxCols<T>,
     is_write_1: T,
     is_write_4: T,
     is_read_1: T,
@@ -205,7 +207,7 @@ fn test_memory_controller() {
     let memory_bus = MemoryBus(MEMORY_BUS);
     let memory_config = MemoryConfig::default();
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
-    let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+    let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
 
     let mut memory_controller =
         MemoryController::with_volatile_memory(memory_bus, memory_config, range_checker.clone());
@@ -241,7 +243,7 @@ fn test_memory_controller_persistent() {
     let compression_bus = DirectCompressionBus(POSEIDON2_DIRECT_BUS);
     let memory_config = MemoryConfig::default();
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
-    let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+    let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
 
     let mut memory_controller = MemoryController::with_persistent_memory(
         memory_bus,

@@ -19,6 +19,7 @@ openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true }
 
+bitcode.workspace = true
 itertools.workspace = true
 tracing.workspace = true
 derive-new.workspace = true

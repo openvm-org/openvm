@@ -2,7 +2,6 @@ use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
-    sync::Arc,
 };
 
 use itertools::izip;
@@ -21,7 +20,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -60,8 +59,8 @@ pub struct Rv32IsEqualModAdapterCols<
 
     pub rs_ptr: [T; NUM_READS],
     pub rs_val: [[T; RV32_REGISTER_NUM_LIMBS]; NUM_READS],
-    pub rs_read_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; NUM_READS],
-    pub heap_read_aux: [[MemoryReadAuxCols<T, BLOCK_SIZE>; BLOCKS_PER_READ]; NUM_READS],
+    pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
+    pub heap_read_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
 
     pub rd_ptr: T,
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
@@ -237,7 +236,7 @@ pub struct Rv32IsEqualModAdapterChip<
     const TOTAL_READ_SIZE: usize,
 > {
     pub air: Rv32IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     _marker: PhantomData<F>,
 }
 
@@ -254,7 +253,7 @@ impl<
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         address_bits: usize,
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     ) -> Self {
         assert!(NUM_READS <= 2);
         assert_eq!(TOTAL_READ_SIZE, BLOCKS_PER_READ * BLOCK_SIZE);

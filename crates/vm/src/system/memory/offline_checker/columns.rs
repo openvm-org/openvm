@@ -68,11 +68,11 @@ impl<const N: usize, F: FieldAlgebra> MemoryWriteAuxCols<F, N> {
 /// the address space, pointer, and data must be provided.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
-pub struct MemoryReadAuxCols<T, const N: usize> {
+pub struct MemoryReadAuxCols<T> {
     pub(super) base: MemoryBaseAuxCols<T>,
 }
 
-impl<const N: usize, F: PrimeField32> MemoryReadAuxCols<F, N> {
+impl<F: PrimeField32> MemoryReadAuxCols<F> {
     pub fn new(prev_timestamp: u32, clk_lt_aux: LessThanAuxCols<F, AUX_LEN>) -> Self {
         Self {
             base: MemoryBaseAuxCols {
@@ -83,7 +83,7 @@ impl<const N: usize, F: PrimeField32> MemoryReadAuxCols<F, N> {
     }
 }
 
-impl<const N: usize, F: FieldAlgebra + Copy> MemoryReadAuxCols<F, N> {
+impl<F: FieldAlgebra + Copy> MemoryReadAuxCols<F> {
     pub const fn disabled() -> Self {
         Self {
             base: MemoryBaseAuxCols {

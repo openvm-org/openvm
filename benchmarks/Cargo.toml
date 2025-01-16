@@ -15,7 +15,6 @@ openvm-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
 openvm-transpiler.workspace = true
-
 openvm-algebra-circuit.workspace = true
 openvm-algebra-transpiler.workspace = true
 openvm-ecc-circuit.workspace = true
@@ -55,7 +54,7 @@ pprof = { version = "0.13", features = [
 
 [features]
 default = ["parallel", "mimalloc", "bench-metrics"]
-bench-metrics = ["openvm-native-recursion/bench-metrics", "openvm-native-compiler/bench-metrics"]
+bench-metrics = ["openvm-native-recursion/bench-metrics"]
 profiling = ["openvm-sdk/profiling"]
 aggregation = []
 static-verifier = ["openvm-native-recursion/static-verifier"]

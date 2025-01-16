@@ -17,7 +17,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter, Stateful,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -206,6 +206,18 @@ where
             records: Vec::with_capacity(DEFAULT_RECORDS_CAPACITY),
             offline_memory,
         }
+    }
+}
+
+impl<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> Stateful<Vec<u8>>
+    for VmChipWrapper<F, A, C>
+{
+    fn load_state(&mut self, state: Vec<u8>) {
+        self.records = bitcode::deserialize(&state).unwrap();
+    }
+
+    fn store_state(&self) -> Vec<u8> {
+        bitcode::serialize(&self.records).unwrap()
     }
 }
 

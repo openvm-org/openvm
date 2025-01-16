@@ -4,7 +4,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -170,7 +172,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.controller.clone()
     }
 
-    pub fn range_checker(&self) -> Arc<VariableRangeCheckerChip> {
+    pub fn range_checker(&self) -> SharedVariableRangeCheckerChip {
         self.memory.controller.borrow().range_checker.clone()
     }
 
@@ -241,10 +243,10 @@ impl VmChipTestBuilder<BabyBear> {
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
         let mem_config = MemoryConfig::new(2, 1, 29, 29, 17, 64, 1 << 22);
-        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+        let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
-        )));
+        ));
         let memory_controller = MemoryController::with_volatile_memory(
             MemoryBus(MEMORY_BUS),
             mem_config,

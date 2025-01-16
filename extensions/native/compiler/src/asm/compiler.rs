@@ -20,7 +20,7 @@ pub(crate) const HEAP_START_ADDRESS: i32 = 1 << 24;
 /// The heap pointer address.
 pub(crate) const HEAP_PTR: i32 = HEAP_START_ADDRESS - 4;
 /// Utility register.
-pub(crate) const A0: i32 = HEAP_START_ADDRESS - 8;
+pub const A0: i32 = HEAP_START_ADDRESS - 8;
 
 /// The memory location for the top of the stack.
 pub(crate) const STACK_TOP: i32 = HEAP_START_ADDRESS - 64;

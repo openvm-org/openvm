@@ -106,8 +106,8 @@ pub struct NativeLoadStoreAdapterCols<T, const NUM_CELLS: usize> {
     pub data_write_as: T,
     pub data_write_pointer: T,
 
-    pub pointer_read_aux_cols: MemoryReadAuxCols<T, 1>,
-    pub data_read_aux_cols: MemoryReadAuxCols<T, NUM_CELLS>,
+    pub pointer_read_aux_cols: MemoryReadAuxCols<T>,
+    pub data_read_aux_cols: MemoryReadAuxCols<T>,
     pub data_write_aux_cols: MemoryWriteAuxCols<T, NUM_CELLS>,
 }
 

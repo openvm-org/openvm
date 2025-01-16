@@ -4,9 +4,10 @@ use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        ChipId, ExitCode, MemoryConfig, SingleSegmentVmExecutor, SystemConfig, SystemExecutor,
-        SystemPeriphery, SystemTraceHeights, VirtualMachine, VmChipComplex, VmComplexTraceHeights,
-        VmConfig, VmInventoryError, VmInventoryTraceHeights,
+        ChipId, ExecutionSegment, ExitCode, MemoryConfig, SingleSegmentVmExecutor, Streams,
+        SystemConfig, SystemExecutor, SystemPeriphery, SystemTraceHeights, VirtualMachine,
+        VmChipComplex, VmComplexTraceHeights, VmConfig, VmExecutorResult, VmInventoryError,
+        VmInventoryTraceHeights,
     },
     derive::{AnyEnum, InstructionExecutor, VmConfig},
     system::{
@@ -437,16 +438,13 @@ fn test_vm_1_persistent() {
         .expect("Verification failed");
 }
 
-#[test]
-fn test_vm_continuations() {
-    let n = 200000;
-
+fn gen_continuation_test_program<F: PrimeField32>(n: isize) -> Program<F> {
     // Simple Fibonacci program to compute nth Fibonacci number mod BabyBear (with F_0 = 1).
     // Register [0]_1 <- stores the loop counter.
     // Register [1]_1 <- stores F_i at the beginning of iteration i.
     // Register [2]_1 <- stores F_{i+1} at the beginning of iteration i.
     // Register [3]_1 is used as a temporary register.
-    let program = Program::from_instructions(&[
+    Program::from_instructions(&[
         // [0]_1 <- 0
         Instruction::from_isize(VmOpcode::with_default_offset(ADD), 0, 0, 0, 1, 0),
         // [1]_1 <- 0
@@ -481,8 +479,13 @@ fn test_vm_continuations() {
             0,
             0,
         ),
-    ]);
+    ])
+}
 
+#[test]
+fn test_vm_continuations() {
+    let n = 200000;
+    let program = gen_continuation_test_program(n);
     let config = NativeConfig {
         system: SystemConfig::new(3, MemoryConfig::default(), 0).with_max_segment_len(200000),
         native: Default::default(),
@@ -507,6 +510,49 @@ fn test_vm_continuations() {
         UserPublicValuesProof::compute(memory_dimensions, num_public_values, &hasher, &final_state);
     assert_eq!(pv_proof.public_values.len(), num_public_values);
     assert_eq!(pv_proof.public_values[0], expected_output);
+}
+
+#[test]
+fn test_vm_continuations_recover_state() {
+    let n = 2000;
+    let program = gen_continuation_test_program(n);
+    let config = NativeConfig {
+        system: SystemConfig::new(3, MemoryConfig::default(), 0).with_max_segment_len(500),
+        native: Default::default(),
+    }
+    .with_continuations();
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let vm = VirtualMachine::new(engine, config.clone());
+    let pk = vm.keygen();
+    let segments = vm
+        .executor
+        .execute_segments(program.clone(), Streams::default())
+        .unwrap();
+    // Simulate remote proving which chip complex state needs to be serialized then deserialized.
+    let states: Vec<_> = segments
+        .iter()
+        .map(|s| bitcode::serialize(&s.store_chip_complex_state()).unwrap())
+        .collect();
+    let proof_inputs_per_seg = states
+        .into_iter()
+        .map(|s| {
+            ExecutionSegment::new_for_proving(
+                &config,
+                program.clone(),
+                bitcode::deserialize(&s).unwrap(),
+            )
+            .generate_proof_input(None)
+        })
+        .collect();
+    let proofs = vm.prove(
+        &pk,
+        VmExecutorResult {
+            per_segment: proof_inputs_per_seg,
+            final_memory: None,
+        },
+    );
+    vm.verify(&pk.get_vk(), proofs)
+        .expect("Verification failed");
 }
 
 #[test]

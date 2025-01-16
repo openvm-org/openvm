@@ -9,7 +9,7 @@ use openvm_circuit::arch::{
     VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, UsizeOpcode};
@@ -95,12 +95,12 @@ where
 pub struct Rv32HintStoreCoreChip<F: Field> {
     pub air: Rv32HintStoreCoreAir,
     pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
 impl<F: PrimeField32> Rv32HintStoreCoreChip<F> {
     pub fn new(
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         offset: usize,
     ) -> Self {
         Self {

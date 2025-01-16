@@ -96,8 +96,8 @@ pub struct KeccakSpongeCols<T> {
 #[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow)]
 pub struct KeccakMemoryCols<T> {
-    pub register_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; KECCAK_REGISTER_READS],
-    pub absorb_reads: [MemoryReadAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_ABSORB_READS],
+    pub register_aux: [MemoryReadAuxCols<T>; KECCAK_REGISTER_READS],
+    pub absorb_reads: [MemoryReadAuxCols<T>; KECCAK_ABSORB_READS],
     pub digest_writes: [MemoryWriteAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
     /// The input bytes are batch read in blocks of private constant KECCAK_WORD_SIZE bytes. However
     /// if the input length is not a multiple of KECCAK_WORD_SIZE, we read into

@@ -11,22 +11,29 @@ use openvm_circuit::{
     system::{native_adapter::NativeAdapterChip, phantom::PhantomChip},
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_instructions::{
     program::DEFAULT_PC_STEP, PhantomDiscriminant, Poseidon2Opcode, UsizeOpcode, VmOpcode,
 };
 use openvm_native_compiler::{
-    FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
+    CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
     NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom, BLOCK_LOAD_STORE_OPCODES,
     BLOCK_LOAD_STORE_SIZE, SINGLE_LOAD_STORE_OPCODES,
 };
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_rv32im_circuit::BranchEqualCoreChip;
+use openvm_rv32im_circuit::{
+    BranchEqualCoreChip, Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor,
+    Rv32IoPeriphery, Rv32M, Rv32MExecutor, Rv32MPeriphery,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{adapters::*, phantom::*, *};
+use crate::{
+    adapters::{convert_adapter::ConvertAdapterChip, *},
+    phantom::*,
+    *,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize, VmConfig, derive_new::new)]
 pub struct NativeConfig {
@@ -70,7 +77,7 @@ impl NativeConfig {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
 pub enum NativeExecutor<F: PrimeField32> {
     LoadStore(NativeLoadStoreChip<F, 1>),
     BlockLoadStore(NativeLoadStoreChip<F, 4>),
@@ -82,7 +89,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     FriReducedOpening(FriReducedOpeningChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
 pub enum NativePeriphery<F: PrimeField32> {
     Phantom(PhantomChip<F>),
 }
@@ -306,6 +313,79 @@ pub(crate) mod phantom {
                 val >>= 1;
             }
             Ok(())
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct CastFExtension;
+
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+pub enum CastFExtensionExecutor<F: PrimeField32> {
+    CastF(CastFChip<F>),
+}
+
+#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+pub enum CastFExtensionPeriphery<F: PrimeField32> {
+    Placeholder(CastFChip<F>),
+}
+
+impl<F: PrimeField32> VmExtension<F> for CastFExtension {
+    type Executor = CastFExtensionExecutor<F>;
+    type Periphery = CastFExtensionPeriphery<F>;
+
+    fn build(
+        &self,
+        builder: &mut VmInventoryBuilder<F>,
+    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
+        let mut inventory = VmInventory::new();
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_bridge,
+        } = builder.system_port();
+        let offline_memory = builder.system_base().offline_memory();
+        let range_checker = builder.system_base().range_checker_chip.clone();
+
+        let castf_chip = CastFChip::new(
+            ConvertAdapterChip::new(execution_bus, program_bus, memory_bridge),
+            CastFCoreChip::new(range_checker.clone(), CastfOpcode::default_offset()),
+            offline_memory.clone(),
+        );
+        inventory.add_executor(
+            castf_chip,
+            [VmOpcode::with_default_offset(CastfOpcode::CASTF)],
+        )?;
+
+        Ok(inventory)
+    }
+}
+
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
+pub struct Rv32WithKernelsConfig {
+    #[system]
+    pub system: SystemConfig,
+    #[extension]
+    pub rv32i: Rv32I,
+    #[extension]
+    pub rv32m: Rv32M,
+    #[extension]
+    pub io: Rv32Io,
+    #[extension]
+    pub native: Native,
+    #[extension]
+    pub castf: CastFExtension,
+}
+
+impl Default for Rv32WithKernelsConfig {
+    fn default() -> Self {
+        Self {
+            system: SystemConfig::default().with_continuations(),
+            rv32i: Rv32I,
+            rv32m: Rv32M::default(),
+            io: Rv32Io,
+            native: Native,
+            castf: CastFExtension,
         }
     }
 }

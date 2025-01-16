@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
 use openvm_circuit::arch::{
@@ -9,9 +8,9 @@ use openvm_circuit::arch::{
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, UsizeOpcode};
@@ -251,14 +250,14 @@ pub struct ShiftCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
 pub struct ShiftCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: ShiftCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
-        range_checker_chip: Arc<VariableRangeCheckerChip>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+        range_checker_chip: SharedVariableRangeCheckerChip,
         offset: usize,
     ) -> Self {
         assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");

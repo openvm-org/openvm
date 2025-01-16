@@ -5,9 +5,13 @@
 
 use std::{
     mem::size_of,
-    sync::{atomic::AtomicU32, Arc},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
 };
 
+use itertools::Itertools;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -16,7 +20,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter, Stateful,
 };
 
 mod bus;
@@ -100,6 +104,9 @@ pub struct RangeTupleCheckerChip<const N: usize> {
     count: Vec<Arc<AtomicU32>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct SharedRangeTupleCheckerChip<const N: usize>(Arc<RangeTupleCheckerChip<N>>);
+
 impl<const N: usize> RangeTupleCheckerChip<N> {
     pub fn new(bus: RangeTupleCheckerBus<N>) -> Self {
         let range_max = bus.sizes.iter().product();
@@ -152,6 +159,31 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
     }
 }
 
+impl<const N: usize> SharedRangeTupleCheckerChip<N> {
+    pub fn new(bus: RangeTupleCheckerBus<N>) -> Self {
+        Self(Arc::new(RangeTupleCheckerChip::new(bus)))
+    }
+    pub fn bus(&self) -> &RangeTupleCheckerBus<N> {
+        self.0.bus()
+    }
+
+    pub fn sizes(&self) -> &[u32; N] {
+        self.0.sizes()
+    }
+
+    pub fn add_count(&self, ids: &[u32]) {
+        self.0.add_count(ids);
+    }
+
+    pub fn clear(&self) {
+        self.0.clear();
+    }
+
+    pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
+        self.0.generate_trace()
+    }
+}
+
 impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for RangeTupleCheckerChip<N>
 where
     Val<SC>: PrimeField32,
@@ -163,6 +195,19 @@ where
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let trace = self.generate_trace::<Val<SC>>();
         AirProofInput::simple_no_pis(Arc::new(self.air), trace)
+    }
+}
+
+impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for SharedRangeTupleCheckerChip<N>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        self.0.air()
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        self.0.generate_air_proof_input()
     }
 }
 
@@ -178,5 +223,32 @@ impl<const N: usize> ChipUsageGetter for RangeTupleCheckerChip<N> {
     }
     fn trace_width(&self) -> usize {
         NUM_RANGE_TUPLE_COLS
+    }
+}
+
+impl<const N: usize> ChipUsageGetter for SharedRangeTupleCheckerChip<N> {
+    fn air_name(&self) -> String {
+        self.0.air_name()
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.0.current_trace_height()
+    }
+
+    fn trace_width(&self) -> usize {
+        self.0.trace_width()
+    }
+}
+
+impl<const N: usize> Stateful<Vec<u8>> for SharedRangeTupleCheckerChip<N> {
+    fn load_state(&mut self, state: Vec<u8>) {
+        let vals: Vec<u32> = bitcode::deserialize(&state).unwrap();
+        for (x, v) in self.0.count.iter().zip_eq(vals) {
+            x.store(v, Ordering::Relaxed);
+        }
+    }
+
+    fn store_state(&self) -> Vec<u8> {
+        bitcode::serialize(&self.0.count).unwrap()
     }
 }
