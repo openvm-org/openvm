@@ -1,28 +1,17 @@
-use std::marker::PhantomData;
+use rustc_hash::FxHashMap;
 
-pub trait VanEmdeBoas<T: Clone>: Clone {
-    type Iter<'a>: Iterator<Item = (u32, &'a T)>
-    where
-        T: 'a,
-        Self: 'a;
-
+pub trait VanEmdeBoas: Clone {
     /// Constructs a new empty van Emde Boas tree.
     fn new() -> Self;
 
-    /// Inserts a key-value pair into the tree.
-    fn insert(&mut self, key: u32, value: T) -> Option<T>;
+    /// Inserts a key into the tree.
+    fn insert(&mut self, key: u32);
 
     /// Removes a key from the tree. The key must be present in the tree.
     fn erase(&mut self, key: u32);
 
-    /// Returns the value associated with the given key.
-    fn get(&self, key: u32) -> Option<&T>;
-
     /// Checks if a key is present in the tree.
     fn contains(&self, key: u32) -> bool;
-
-    /// Returns an iterator over the tree.
-    fn iter(&self) -> Self::Iter<'_>;
 
     /// Checks if the tree is empty.
     fn empty(&self) -> bool;
@@ -38,124 +27,77 @@ pub trait VanEmdeBoas<T: Clone>: Clone {
 }
 
 #[derive(Clone)]
-pub struct VebLeaf<T: Clone> {
-    values: [Option<T>; LEAF_SIZE],
+pub struct VebLeaf {
+    mask: u64,
 }
 
-impl<T: Clone> VanEmdeBoas<T> for VebLeaf<T> {
-    type Iter<'a>
-        = VebLeafIter<'a, T>
-    where
-        T: 'a,
-        Self: 'a;
-
+impl VanEmdeBoas for VebLeaf {
     fn new() -> Self {
-        Self {
-            values: [const { None }; LEAF_SIZE],
-        }
+        Self { mask: 0 }
     }
 
-    fn insert(&mut self, key: u32, value: T) -> Option<T> {
-        let key = key as usize;
-        self.values[key].replace(value)
+    fn insert(&mut self, key: u32) {
+        self.mask |= 1 << key;
     }
 
     fn erase(&mut self, key: u32) {
-        let key = key as usize;
-        self.values[key] = None;
-    }
-
-    fn get(&self, key: u32) -> Option<&T> {
-        let key = key as usize;
-        self.values[key].as_ref()
+        self.mask &= !(1 << key);
     }
 
     fn contains(&self, key: u32) -> bool {
-        let key = key as usize;
-        self.values[key].is_some()
+        (self.mask & (1 << key)) > 0
     }
 
     fn empty(&self) -> bool {
-        self.values.iter().all(|v| v.is_none())
+        self.mask == 0
     }
 
     fn min(&self) -> Option<u32> {
-        self.values
-            .iter()
-            .enumerate()
-            .find_map(move |(i, v)| v.as_ref().map(|_| i as u32))
+        if self.mask == 0 {
+            None
+        } else {
+            Some(self.mask.trailing_zeros())
+        }
     }
 
     fn max(&self) -> Option<u32> {
-        self.values
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(move |(i, v)| v.as_ref().map(|_| i as u32))
+        if self.mask == 0 {
+            None
+        } else {
+            Some(self.mask.ilog2())
+        }
     }
 
     fn max_not_exceeding(&self, key: u32) -> Option<u32> {
-        let mut key = key as usize;
-        while key > 0 && self.values[key].is_none() {
-            key -= 1;
+        if key == 63 {
+            return self.max();
         }
-        if self.values[key].is_some() {
-            Some(key as u32)
-        } else {
+        let mask = self.mask & ((1 << (key + 1)) - 1);
+        if mask == 0 {
             None
-        }
-    }
-
-    fn iter(&self) -> Self::Iter<'_> {
-        VebLeafIter {
-            values: &self.values,
-            idx: 0,
-        }
-    }
-}
-
-pub struct VebLeafIter<'a, T: Clone> {
-    values: &'a [Option<T>],
-    idx: usize,
-}
-
-impl<'a, T: Clone> Iterator for VebLeafIter<'a, T> {
-    type Item = (u32, &'a T);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.idx < LEAF_SIZE && self.values[self.idx].is_none() {
-            self.idx += 1;
-        }
-        if self.idx < LEAF_SIZE {
-            let item = self.values[self.idx].as_ref().unwrap();
-            self.idx += 1;
-            Some((self.idx as u32 - 1, item))
         } else {
-            None
+            Some(mask.ilog2())
         }
     }
 }
 
 #[derive(Clone)]
-pub struct VebNode<const LOW_BITS: usize, const HIGH_CNT: usize, SmallKeys, HighKeys, T>
+pub struct VebNode<const LOW_BITS: usize, const HIGH_CNT: usize, SmallKeys, HighKeys>
 where
-    SmallKeys: VanEmdeBoas<T>,
-    HighKeys: VanEmdeBoas<()>,
-    T: Clone,
+    SmallKeys: VanEmdeBoas,
+    HighKeys: VanEmdeBoas,
 {
     existing_children: HighKeys,
     subtrees: Vec<Option<SmallKeys>>,
     min: Option<u32>,
     max: Option<u32>,
-    _phantom: PhantomData<T>,
 }
 
-impl<const LOW_BITS: usize, const HIGH_CNT: usize, SmallKeys, HighKeys, T>
-    VebNode<LOW_BITS, HIGH_CNT, SmallKeys, HighKeys, T>
+impl<const LOW_BITS: usize, const HIGH_CNT: usize, SmallKeys, HighKeys>
+    VebNode<LOW_BITS, HIGH_CNT, SmallKeys, HighKeys>
 where
-    SmallKeys: VanEmdeBoas<T>,
-    HighKeys: VanEmdeBoas<()>,
-    T: Clone,
+    SmallKeys: VanEmdeBoas,
+    HighKeys: VanEmdeBoas,
 {
     fn high(key: u32) -> u32 {
         key >> LOW_BITS
@@ -166,34 +108,26 @@ where
     }
 }
 
-impl<const LOW_BITS: usize, const HIGH_CNT: usize, SmallKeys, HighKeys, T> VanEmdeBoas<T>
-    for VebNode<LOW_BITS, HIGH_CNT, SmallKeys, HighKeys, T>
+impl<const LOW_BITS: usize, const HIGH_CNT: usize, SmallKeys, HighKeys> VanEmdeBoas
+    for VebNode<LOW_BITS, HIGH_CNT, SmallKeys, HighKeys>
 where
-    SmallKeys: VanEmdeBoas<T>,
-    HighKeys: VanEmdeBoas<()>,
-    T: Clone,
+    SmallKeys: VanEmdeBoas,
+    HighKeys: VanEmdeBoas,
 {
-    type Iter<'a>
-        = VebNodeIter<'a, LOW_BITS, HIGH_CNT, SmallKeys, HighKeys, T>
-    where
-        T: 'a,
-        Self: 'a;
-
     fn new() -> Self {
         Self {
             existing_children: HighKeys::new(),
             subtrees: vec![None; HIGH_CNT],
             min: None,
             max: None,
-            _phantom: PhantomData,
         }
     }
 
-    fn insert(&mut self, key: u32, value: T) -> Option<T> {
-        self.existing_children.insert(Self::high(key), ());
-        let result = self.subtrees[Self::high(key) as usize]
+    fn insert(&mut self, key: u32) {
+        self.existing_children.insert(Self::high(key));
+        self.subtrees[Self::high(key) as usize]
             .get_or_insert(SmallKeys::new())
-            .insert(Self::low(key), value);
+            .insert(Self::low(key));
         if let Some(k) = self.min {
             if key < k {
                 self.min = Some(key);
@@ -208,7 +142,6 @@ where
         } else {
             self.max = Some(key);
         }
-        result
     }
 
     fn erase(&mut self, key: u32) {
@@ -228,7 +161,7 @@ where
                 self.min = None;
                 self.max = None;
             } else {
-                let high = <HighKeys as VanEmdeBoas<()>>::min(&self.existing_children).unwrap();
+                let high = <HighKeys as VanEmdeBoas>::min(&self.existing_children).unwrap();
                 let low = self.subtrees[high as usize]
                     .as_ref()
                     .unwrap()
@@ -237,7 +170,7 @@ where
                 self.min = Some(high << LOW_BITS | low);
             }
         } else if key == self.max.unwrap() {
-            let high = <HighKeys as VanEmdeBoas<()>>::max(&self.existing_children).unwrap();
+            let high = <HighKeys as VanEmdeBoas>::max(&self.existing_children).unwrap();
             let low = self.subtrees[high as usize]
                 .as_ref()
                 .unwrap()
@@ -247,26 +180,11 @@ where
         }
     }
 
-    fn get(&self, key: u32) -> Option<&T> {
-        self.subtrees[Self::high(key) as usize]
-            .as_ref()?
-            .get(Self::low(key))
-    }
-
     fn contains(&self, key: u32) -> bool {
         self.subtrees[Self::high(key) as usize]
             .as_ref()
             .unwrap()
             .contains(Self::low(key))
-    }
-
-    fn iter(&self) -> Self::Iter<'_> {
-        VebNodeIter {
-            high_iter: self.existing_children.iter(),
-            current_high: None,
-            current_low_iter: None,
-            subtrees: &self.subtrees,
-        }
     }
 
     fn empty(&self) -> bool {
@@ -307,53 +225,48 @@ where
     }
 }
 
-pub struct VebNodeIter<'a, const LOW_BITS: usize, const HIGH_CNT: usize, SmallKeys, HighKeys, T>
-where
-    SmallKeys: VanEmdeBoas<T> + 'a,
-    HighKeys: VanEmdeBoas<()> + 'a,
-    T: Clone + 'a,
-{
-    high_iter: <HighKeys as VanEmdeBoas<()>>::Iter<'a>,
-    current_high: Option<u32>,
-    current_low_iter: Option<<SmallKeys as VanEmdeBoas<T>>::Iter<'a>>,
-    subtrees: &'a [Option<SmallKeys>],
+pub type _VebTree1 = VebNode<6, 64, VebLeaf, VebLeaf>; // 12 bits
+pub type _VebTree2 = VebNode<12, 64, _VebTree1, VebLeaf>; // 18 bits
+pub type _VebTree3 = VebNode<12, 262144, _VebTree1, _VebTree2>; // 30 bits
+
+pub type VebTree = _VebTree3;
+
+#[derive(Clone)]
+pub struct VebMap<T> {
+    tree: VebTree,
+    values: FxHashMap<u32, T>,
 }
 
-impl<'a, const LOW_BITS: usize, const HIGH_CNT: usize, SmallKeys, HighKeys, T> Iterator
-    for VebNodeIter<'a, LOW_BITS, HIGH_CNT, SmallKeys, HighKeys, T>
-where
-    SmallKeys: VanEmdeBoas<T> + 'a,
-    HighKeys: VanEmdeBoas<()> + 'a,
-    T: Clone + 'a,
-{
-    type Item = (u32, &'a T);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(low_iter) = &mut self.current_low_iter {
-                if let Some((low, value)) = low_iter.next() {
-                    return Some((self.current_high.unwrap() << LOW_BITS | low, value));
-                }
-                self.current_low_iter = None;
-            }
-
-            if let Some(high) = self.high_iter.next() {
-                self.current_high = Some(high.0);
-                self.current_low_iter =
-                    Some(self.subtrees[high.0 as usize].as_ref().unwrap().iter());
-                continue;
-            }
-
-            return None;
+impl<T> VebMap<T> {
+    pub fn new() -> Self {
+        Self {
+            tree: VebTree::new(),
+            values: FxHashMap::default(),
         }
     }
+
+    pub fn insert(&mut self, key: u32, value: T) -> Option<T> {
+        self.tree.insert(key);
+        self.values.insert(key, value)
+    }
+
+    pub fn erase(&mut self, key: u32) {
+        self.tree.erase(key);
+        self.values.remove(&key);
+    }
+
+    pub fn get(&self, key: u32) -> Option<&T> {
+        self.values.get(&key)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (u32, &T)> {
+        self.values.iter().map(|(key, value)| (*key, value))
+    }
+
+    pub fn max_not_exceeding(&self, key: u32) -> Option<u32> {
+        self.tree.max_not_exceeding(key)
+    }
 }
-
-const LEAF_SIZE: usize = 1 << 8;
-pub type _VebTree1<T> = VebNode<8, 256, VebLeaf<T>, VebLeaf<()>, T>;
-pub type _VebTree2<T> = VebNode<16, 65536, _VebTree1<T>, _VebTree1<()>, T>;
-
-pub type VebTree<T> = _VebTree2<T>;
 
 #[cfg(test)]
 mod tests {
@@ -361,20 +274,14 @@ mod tests {
 
     #[test]
     fn test_veb_tree() {
-        let mut tree = VebTree::<u32>::new();
+        let mut tree = VebTree::new();
         for i in 0..100 {
-            tree.insert(i * i, i);
+            tree.insert(i * i);
         }
         for i in 0..100 {
-            assert_eq!(tree.get(i * i), Some(&i));
+            assert!(tree.contains(i * i));
         }
 
-        let v = tree.iter().collect::<Vec<_>>();
-        assert_eq!(v.len(), 100);
-        for (i, (key, value)) in v.into_iter().enumerate() {
-            assert_eq!(key, (i * i) as u32);
-            assert_eq!(*value, i as u32);
-        }
         assert_eq!(tree.min(), Some(0));
         assert_eq!(tree.max(), Some(99 * 99));
         assert_eq!(tree.max_not_exceeding(99 * 99 - 1), Some(98 * 98));
@@ -389,7 +296,7 @@ mod tests {
             tree.erase(i * i);
         }
         for i in 0..100 {
-            assert_eq!(tree.get(i * i), None);
+            assert!(!tree.contains(i * i));
         }
     }
 }

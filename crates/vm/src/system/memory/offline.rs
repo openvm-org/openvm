@@ -5,14 +5,13 @@ use openvm_circuit_primitives::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{paged_vec::PagedVec, van_emde_boas::VebTree};
+use super::{paged_vec::PagedVec, van_emde_boas::VebMap};
 use crate::{
     arch::MemoryConfig,
     system::memory::{
         adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
         offline_checker::{MemoryBridge, MemoryBus},
         paged_vec::PAGE_SIZE,
-        van_emde_boas::VanEmdeBoas,
         MemoryAuxColsFactory, MemoryImage, RecordId, TimestampedEquipartition, TimestampedValues,
     },
 };
@@ -37,7 +36,7 @@ pub struct MemoryRecord<T> {
 }
 
 pub struct OfflineMemory<F> {
-    block_data: Vec<VebTree<BlockData>>,
+    block_data: Vec<VebMap<BlockData>>,
     data: Vec<PagedVec<F>>,
     as_offset: u32,
     initial_block_size: usize,
@@ -66,7 +65,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         eprintln!("initial_block_size: {}", initial_block_size);
 
         Self {
-            block_data: vec![VanEmdeBoas::new(); 1 << config.as_height],
+            block_data: vec![VebMap::new(); 1 << config.as_height],
             data: Self::memory_image_to_paged_vec(initial_memory, config),
             as_offset: config.as_offset,
             initial_block_size,
