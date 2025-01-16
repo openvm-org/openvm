@@ -37,6 +37,8 @@ pub struct AggStarkConfig {
     pub leaf_fri_params: FriParameters,
     pub internal_fri_params: FriParameters,
     pub root_fri_params: FriParameters,
+    /// Whether to publish aggregation public values or just assert them in the static verifier.
+    pub publish_agg_pvs: bool,
     /// Only for AggVM debugging.
     pub compiler_options: CompilerOptions,
 }

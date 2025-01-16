@@ -9,6 +9,7 @@ use openvm_native_recursion::{
     hints::Hintable,
     stark::StarkVerifier,
     utils::const_fri_config,
+    vars::StarkProofVariable,
     witness::Witnessable,
 };
 use openvm_stark_sdk::{
@@ -24,7 +25,9 @@ use crate::{
     keygen::RootVerifierProvingKey,
     prover::{vm::SingleSegmentVmProver, RootVerifierLocalProver},
     verifier::{
-        common::assert_single_segment_vm_exit_successfully_with_connector_air_id,
+        common::{
+            assert_single_segment_vm_exit_successfully_with_connector_air_id, types::SpecialAirIds,
+        },
         root::types::{RootVmVerifierInput, RootVmVerifierPvs},
     },
     RootSC, F, SC,
@@ -71,44 +74,13 @@ fn build_static_verifier_operations(
     root_verifier_pk: &RootVerifierProvingKey,
     proof: &Proof<RootSC>,
 ) -> DslOperations<OuterConfig> {
-    let advice = new_from_outer_multi_vk(&root_verifier_pk.vm_pk.vm_pk.get_vk());
     let special_air_ids = root_verifier_pk.air_id_permutation().get_special_air_ids();
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;
     let num_public_values = {
         builder.cycle_tracker_start("VerifierProgram");
         let input = proof.read(&mut builder);
-
-        let pcs = TwoAdicFriPcsVariable {
-            config: const_fri_config(&mut builder, &root_verifier_pk.vm_pk.fri_params),
-        };
-        StarkVerifier::verify::<MultiField32ChallengerVariable<_>>(
-            &mut builder,
-            &pcs,
-            &advice,
-            &input,
-        );
-        {
-            // Program AIR is the only AIR with a cached trace. The cached trace index doesn't
-            // change after reordering.
-            let t_id = RVar::from(PROGRAM_CACHED_TRACE_INDEX);
-            let commit = builder.get(&input.commitments.main_trace, t_id);
-            let commit = if let DigestVariable::Var(commit_arr) = commit {
-                builder.get(&commit_arr, 0)
-            } else {
-                unreachable!()
-            };
-            let expected_program_commit: [Bn254Fr; 1] = root_verifier_pk
-                .root_committed_exe
-                .get_program_commit()
-                .into();
-            builder.assert_var_eq(commit, expected_program_commit[0]);
-        }
-        assert_single_segment_vm_exit_successfully_with_connector_air_id(
-            &mut builder,
-            &input,
-            special_air_ids.connector_air_id,
-        );
+        verify_root_proof(&mut builder, &input, root_verifier_pk, &special_air_ids);
 
         let pv_air = builder.get(&input.per_air, special_air_ids.public_values_air_id);
         let public_values: Vec<_> = pv_air
@@ -120,9 +92,16 @@ fn build_static_verifier_operations(
         let pvs = RootVmVerifierPvs::from_flatten(public_values);
         let exe_commit = compress_babybear_var_to_bn254(&mut builder, pvs.exe_commit);
         let leaf_commit = compress_babybear_var_to_bn254(&mut builder, pvs.leaf_verifier_commit);
-        let num_public_values = 2 + pvs.public_values.len();
-        builder.static_commit_public_value(0, exe_commit);
-        builder.static_commit_public_value(1, leaf_commit);
+        let num_public_values = if root_verifier_pk.publish_agg_pvs {
+            let num_public_values = 2 + pvs.public_values.len();
+            builder.static_commit_public_value(0, exe_commit);
+            builder.static_commit_public_value(1, leaf_commit);
+            num_public_values
+        } else {
+            builder.assert_var_eq(exe_commit, pvs.exe_commit[0]);
+            builder.assert_var_eq(leaf_commit, pvs.leaf_verifier_commit[0]);
+            pvs.public_values.len()
+        };
         for (i, x) in pvs.public_values.into_iter().enumerate() {
             builder.static_commit_public_value(i + 2, x);
         }
@@ -133,6 +112,40 @@ fn build_static_verifier_operations(
         operations: builder.operations,
         num_public_values,
     }
+}
+
+fn verify_root_proof(
+    builder: &mut Builder<OuterConfig>,
+    input: &StarkProofVariable<OuterConfig>,
+    root_verifier_pk: &RootVerifierProvingKey,
+    special_air_ids: &SpecialAirIds,
+) {
+    let advice = new_from_outer_multi_vk(&root_verifier_pk.vm_pk.vm_pk.get_vk());
+    let pcs = TwoAdicFriPcsVariable {
+        config: const_fri_config(builder, &root_verifier_pk.vm_pk.fri_params),
+    };
+    StarkVerifier::verify::<MultiField32ChallengerVariable<_>>(builder, &pcs, &advice, input);
+    {
+        // Program AIR is the only AIR with a cached trace. The cached trace index doesn't
+        // change after reordering.
+        let t_id = RVar::from(PROGRAM_CACHED_TRACE_INDEX);
+        let commit = builder.get(&input.commitments.main_trace, t_id);
+        let commit = if let DigestVariable::Var(commit_arr) = commit {
+            builder.get(&commit_arr, 0)
+        } else {
+            unreachable!()
+        };
+        let expected_program_commit: [Bn254Fr; 1] = root_verifier_pk
+            .root_committed_exe
+            .get_program_commit()
+            .into();
+        builder.assert_var_eq(commit, expected_program_commit[0]);
+    }
+    assert_single_segment_vm_exit_successfully_with_connector_air_id(
+        builder,
+        input,
+        special_air_ids.connector_air_id,
+    );
 }
 
 fn compress_babybear_var_to_bn254(

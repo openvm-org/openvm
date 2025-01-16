@@ -278,6 +278,9 @@ pub struct RootVerifierProvingKey {
     pub root_committed_exe: Arc<VmCommittedExe<RootSC>>,
     /// The constant trace heights, ordered by AIR ID.
     pub air_heights: Vec<usize>,
+    /// Whether to publish aggregation public values or assert them in the static verifier.
+    /// User public values are always published.
+    pub publish_agg_pvs: bool,
     // The following is currently not used:
     // The constant trace heights, ordered according to an internal ordering determined by the `NativeConfig`.
     // pub internal_heights: VmComplexTraceHeights,
