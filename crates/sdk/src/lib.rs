@@ -49,6 +49,7 @@ pub mod keygen;
 pub mod verifier;
 
 mod stdin;
+use static_verifier::StaticVerifierPvHandler;
 pub use stdin::*;
 pub mod fs;
 
@@ -178,8 +179,9 @@ impl Sdk {
         &self,
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
+        pv_handler: Option<&impl StaticVerifierPvHandler>,
     ) -> Result<AggProvingKey> {
-        let agg_pk = AggProvingKey::keygen(config, reader);
+        let agg_pk = AggProvingKey::keygen(config, reader, pv_handler);
         Ok(agg_pk)
     }
 

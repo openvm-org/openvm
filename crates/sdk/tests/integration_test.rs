@@ -14,7 +14,7 @@ use openvm_native_recursion::{halo2::utils::CacheHalo2ParamsReader, types::Inner
 use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use openvm_sdk::{
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
-    keygen::AppProvingKey,
+    keygen::{AppProvingKey, RootVerifierProvingKey},
     verifier::{
         common::types::VmVerifierPvs,
         leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
@@ -261,7 +261,11 @@ fn test_e2e_proof_generation_and_verification() {
     let app_pk = Sdk.app_keygen(app_config).unwrap();
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
     let agg_pk = Sdk
-        .agg_keygen(agg_config_for_test(), &params_reader)
+        .agg_keygen(
+            agg_config_for_test(),
+            &params_reader,
+            None::<&RootVerifierProvingKey>,
+        )
         .unwrap();
     let evm_verifier = Sdk
         .generate_snark_verifier_contract(&params_reader, &agg_pk)
