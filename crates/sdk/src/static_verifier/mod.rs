@@ -77,6 +77,7 @@ pub trait StaticVerifierPvHandler {
         &self,
         builder: &mut Builder<OuterConfig>,
         input: &StarkProofVariable<OuterConfig>,
+        root_verifier_pk: &RootVerifierProvingKey,
         special_air_ids: &SpecialAirIds,
     ) -> usize;
 }
@@ -86,6 +87,7 @@ impl StaticVerifierPvHandler for RootVerifierProvingKey {
         &self,
         builder: &mut Builder<OuterConfig>,
         input: &StarkProofVariable<OuterConfig>,
+        _root_verifier_pk: &RootVerifierProvingKey,
         special_air_ids: &SpecialAirIds,
     ) -> usize {
         let pv_air = builder.get(&input.per_air, special_air_ids.public_values_air_id);
@@ -122,8 +124,18 @@ fn build_static_verifier_operations(
         verify_root_proof(&mut builder, &input, root_verifier_pk, &special_air_ids);
 
         let num_public_values = match &pv_handler {
-            Some(handler) => handler.handle_public_values(&mut builder, &input, &special_air_ids),
-            None => root_verifier_pk.handle_public_values(&mut builder, &input, &special_air_ids),
+            Some(handler) => handler.handle_public_values(
+                &mut builder,
+                &input,
+                root_verifier_pk,
+                &special_air_ids,
+            ),
+            None => root_verifier_pk.handle_public_values(
+                &mut builder,
+                &input,
+                root_verifier_pk,
+                &special_air_ids,
+            ),
         };
         builder.cycle_tracker_end("VerifierProgram");
         num_public_values
