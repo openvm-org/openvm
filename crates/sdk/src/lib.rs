@@ -58,10 +58,10 @@ use crate::{
     prover::{AppProver, ContinuationProver},
 };
 
-pub(crate) type SC = BabyBearPoseidon2Config;
-pub(crate) type C = InnerConfig;
-pub(crate) type F = BabyBear;
-pub(crate) type RootSC = BabyBearPoseidon2RootConfig;
+pub type SC = BabyBearPoseidon2Config;
+pub type C = InnerConfig;
+pub type F = BabyBear;
+pub type RootSC = BabyBearPoseidon2RootConfig;
 pub type NonRootCommittedExe = VmCommittedExe<SC>;
 
 pub struct Sdk;
