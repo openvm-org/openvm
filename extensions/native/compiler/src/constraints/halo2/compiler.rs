@@ -307,7 +307,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     }
                     DslIr::CastFV(a, b) => {
                         let felt = felts[&b.0];
-                        let reduced_felt = f_chip.full_reduce(ctx, felt);
+                        let reduced_felt = f_chip.reduce(ctx, felt);
                         vars.insert(a.0, reduced_felt.value);
                     }
                     DslIr::CircuitNum2BitsV(value, bits, output) => {
@@ -320,7 +320,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         }
                     }
                     DslIr::CircuitNum2BitsF(value, output) => {
-                        let val = f_chip.full_reduce(ctx, felts[&value.0]);
+                        let val = f_chip.reduce(ctx, felts[&value.0]);
                         let x = gate.num_to_bits(ctx, val.value, 32); // C::F::bits());
                         assert!(output.len() <= x.len());
                         for (o, x) in output.into_iter().zip(x) {
