@@ -7,7 +7,7 @@ use core::{
 };
 
 #[cfg(not(target_os = "zkvm"))]
-use {super::bigint_to_limbs, num_bigint_dig::BigInt};
+use {super::bigint_to_limbs, num_bigint::BigInt};
 #[cfg(target_os = "zkvm")]
 use {
     super::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE},

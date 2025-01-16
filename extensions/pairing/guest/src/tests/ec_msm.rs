@@ -2,7 +2,7 @@ use std::{ops::Mul, str::FromStr};
 
 use ax_sdk::utils::create_seeded_rng;
 use elliptic_curve::group::cofactor::CofactorCurveAffine;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use rand::Rng;
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{

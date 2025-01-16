@@ -5,7 +5,7 @@ use std::{
 
 use derive_more::derive::From;
 use eyre::Result;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
     ModularExtensionExecutor, ModularExtensionPeriphery,

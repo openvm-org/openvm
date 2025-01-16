@@ -1,7 +1,7 @@
 use std::{cell::RefCell, iter, rc::Rc};
 
 use itertools::{zip_eq, Itertools};
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::One;
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,

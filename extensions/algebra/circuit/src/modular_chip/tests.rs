@@ -1,15 +1,13 @@
 use std::array::from_fn;
 
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::UsizeOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
 };
 use openvm_circuit_primitives::{
-    bigint::utils::{
-        big_uint_mod_inverse, big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime,
-    },
+    bigint::utils::{big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime},
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, VmOpcode};
@@ -241,7 +239,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         }
         let expected_answer = match op - MUL_LOCAL {
             0 => (&a * &b) % &modulus,
-            1 => (&a * big_uint_mod_inverse(&b, &modulus)) % &modulus,
+            1 => (&a * b.modinv(&modulus).unwrap()) % &modulus,
             2 => a.clone() % &modulus,
             _ => panic!(),
         };

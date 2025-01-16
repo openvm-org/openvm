@@ -1,4 +1,4 @@
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
 
 // little endian.

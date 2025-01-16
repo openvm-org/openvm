@@ -1,5 +1,5 @@
 use derive_more::derive::From;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     self,

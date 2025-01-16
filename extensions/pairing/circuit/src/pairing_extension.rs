@@ -1,5 +1,5 @@
 use derive_more::derive::From;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},

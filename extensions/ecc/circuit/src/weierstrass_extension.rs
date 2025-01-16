@@ -1,5 +1,5 @@
 use derive_more::derive::From;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
 use openvm_algebra_guest::IntMod;
@@ -224,7 +224,7 @@ pub(crate) mod phantom {
     use std::iter::repeat;
 
     use eyre::bail;
-    use num_bigint_dig::BigUint;
+    use num_bigint::BigUint;
     use num_integer::Integer;
     use num_traits::One;
     use openvm_circuit::{

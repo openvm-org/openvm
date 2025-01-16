@@ -22,8 +22,7 @@ openvm = { workspace = true }
 openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
 openvm-ecc-circuit.workspace = true
 eyre.workspace = true
-num-bigint-dig.workspace = true
-
+num-bigint.workspace = true
 
 [features]
 default = ["parallel"]
