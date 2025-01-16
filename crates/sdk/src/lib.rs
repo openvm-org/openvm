@@ -42,10 +42,9 @@ use prover::vm::ContinuationVmProof;
 
 pub mod commit;
 pub mod config;
+pub mod keygen;
 pub mod prover;
 pub mod static_verifier;
-
-pub mod keygen;
 pub mod verifier;
 
 mod stdin;
