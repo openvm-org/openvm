@@ -44,8 +44,9 @@ metrics.workspace = true
 tracing.workspace = true
 itertools.workspace = true
 getset.workspace = true
-prometheus-client = "0.22.3"
-sysinfo = "0.33.1"
+metrics-util = "0.19.0"
+metrics-process = "2.4.0"
+metrics-exporter-prometheus = "0.16.1"
 
 [features]
 default = ["parallel"]
@@ -56,4 +57,3 @@ bench-metrics = [
 profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
-memory_profiler = []

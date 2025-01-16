@@ -1,6 +1,6 @@
 extern crate core;
 
-use std::{fs::read, panic::catch_unwind, path::Path, sync::Arc};
+use std::{fs::read, ops::Deref, panic::catch_unwind, path::Path, sync::Arc};
 
 use commit::commit_app_exe;
 use config::AppConfig;
@@ -38,8 +38,6 @@ use openvm_transpiler::{
     transpiler::{Transpiler, TranspilerError},
     FromElf,
 };
-#[cfg(feature = "memory_profiler")]
-use profiler::Method;
 use prover::vm::ContinuationVmProof;
 
 pub mod commit;
@@ -50,19 +48,17 @@ pub mod static_verifier;
 pub mod keygen;
 pub mod verifier;
 
-#[cfg(feature = "memory_profiler")]
-mod profiler;
+mod recorder;
 mod stdin;
 
 pub use stdin::*;
 pub mod fs;
 
-#[cfg(feature = "memory_profiler")]
-use crate::profiler::Profiler;
 use crate::{
     config::AggConfig,
     keygen::AggProvingKey,
     prover::{AppProver, ContinuationProver},
+    recorder::{install_prometheus_recorder, PrometheusRecorder},
 };
 
 pub(crate) type SC = BabyBearPoseidon2Config;
@@ -71,21 +67,35 @@ pub(crate) type F = BabyBear;
 pub(crate) type RootSC = BabyBearPoseidon2RootConfig;
 pub type NonRootCommittedExe = VmCommittedExe<SC>;
 
-#[cfg(feature = "memory_profiler")]
-pub struct Sdk {
-    profiler: Profiler,
-}
-
-#[cfg(not(feature = "memory_profiler"))]
 pub struct Sdk;
 
-impl Sdk {
-    #[cfg(feature = "memory_profiler")]
-    pub fn with_profiler() -> Self {
+pub struct SdkWithProfiler<'a> {
+    sdk: Sdk,
+    profiler: &'a PrometheusRecorder,
+}
+
+impl<'a> SdkWithProfiler<'a> {
+    pub fn new() -> Self {
         Self {
-            profiler: Profiler::new(),
+            sdk: Sdk,
+            profiler: install_prometheus_recorder(),
         }
     }
+
+    pub fn get_profiler(&self) -> &'a PrometheusRecorder {
+        &self.profiler
+    }
+}
+
+impl<'a> Deref for SdkWithProfiler<'a> {
+    type Target = Sdk;
+
+    fn deref(&self) -> &Self::Target {
+        &self.sdk
+    }
+}
+
+impl Sdk {
     pub fn build<P: AsRef<Path>>(
         &self,
         guest_opts: GuestOptions,
@@ -106,10 +116,6 @@ impl Sdk {
         };
         let elf_path = find_unique_executable(pkg_dir, target_dir, target_filter)?;
         let data = read(&elf_path)?;
-
-        #[cfg(feature = "memory_profiler")]
-        self.profiler.update_memory_usage(Method::Build);
-
         Elf::decode(&data, MEM_SIZE as u32)
     }
 
@@ -118,8 +124,6 @@ impl Sdk {
         elf: Elf,
         transpiler: Transpiler<F>,
     ) -> Result<VmExe<F>, TranspilerError> {
-        #[cfg(feature = "memory_profiler")]
-        self.profiler.update_memory_usage(Method::Transpile);
         VmExe::from_elf(elf, transpiler)
     }
 
@@ -134,8 +138,6 @@ impl Sdk {
         VC::Periphery: Chip<SC>,
     {
         let vm = VmExecutor::new(vm_config);
-        #[cfg(feature = "memory_profiler")]
-        self.profiler.update_memory_usage(Method::Execute);
         let final_memory = vm.execute(exe, inputs)?;
         let public_values = extract_public_values(
             &vm.config.system().memory_config.memory_dimensions(),
@@ -150,8 +152,6 @@ impl Sdk {
         app_fri_params: FriParameters,
         exe: VmExe<F>,
     ) -> Result<Arc<NonRootCommittedExe>> {
-        #[cfg(feature = "memory_profiler")]
-        self.profiler.update_memory_usage(Method::Commit);
         let committed_exe = commit_app_exe(app_fri_params, exe);
         Ok(committed_exe)
     }
@@ -161,8 +161,6 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        #[cfg(feature = "memory_profiler")]
-        self.profiler.update_memory_usage(Method::KeyGen);
         let app_pk = AppProvingKey::keygen(config);
         Ok(app_pk)
     }
@@ -178,8 +176,6 @@ impl Sdk {
         VC::Periphery: Chip<SC>,
     {
         let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe);
-        #[cfg(feature = "memory_profiler")]
-        self.profiler.update_memory_usage(Method::Proof);
         let proof = app_prover.generate_app_proof(inputs);
         Ok(proof)
     }
@@ -190,8 +186,6 @@ impl Sdk {
         proof: &ContinuationVmProof<SC>,
     ) -> Result<(), VerificationError> {
         let e = BabyBearPoseidon2Engine::new(app_vk.fri_params);
-        #[cfg(feature = "memory_profiler")]
-        self.profiler.update_memory_usage(Method::AggVerify);
         for seg_proof in &proof.per_segment {
             e.verify(&app_vk.app_vm_vk, seg_proof)?
         }
@@ -205,8 +199,6 @@ impl Sdk {
         proof: &Proof<SC>,
     ) -> Result<(), VerificationError> {
         let e = BabyBearPoseidon2Engine::new(app_vk.fri_params);
-        #[cfg(feature = "memory_profiler")]
-        self.profiler.update_memory_usage(Method::Verify);
         e.verify(&app_vk.app_vm_vk, proof)
     }
 
@@ -215,8 +207,6 @@ impl Sdk {
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
     ) -> Result<AggProvingKey> {
-        #[cfg(feature = "memory_profiler")]
-        self.profiler.update_memory_usage(Method::AggKeyGen);
         let agg_pk = AggProvingKey::keygen(config, reader);
         Ok(agg_pk)
     }
@@ -234,8 +224,6 @@ impl Sdk {
         VC::Periphery: Chip<SC>,
     {
         let e2e_prover = ContinuationProver::new(reader, app_pk, app_exe, agg_pk);
-        #[cfg(feature = "memory_profiler")]
-        self.profiler.update_memory_usage(Method::EvmProof);
         let proof = e2e_prover.generate_proof_for_evm(inputs);
         Ok(proof)
     }
@@ -246,17 +234,12 @@ impl Sdk {
         agg_pk: &AggProvingKey,
     ) -> Result<EvmVerifier> {
         let params = reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
-        #[cfg(feature = "memory_profiler")]
-        self.profiler
-            .update_memory_usage(Method::SnarkVerifierContract);
         let evm_verifier = agg_pk.halo2_pk.wrapper.generate_evm_verifier(&params);
         Ok(evm_verifier)
     }
 
     pub fn verify_evm_proof(&self, evm_verifier: &EvmVerifier, evm_proof: &EvmProof) -> bool {
         // FIXME: we should return the concrete error.
-        #[cfg(feature = "memory_profiler")]
-        self.profiler.update_memory_usage(Method::VerifyEvmProof);
         catch_unwind(|| {
             Halo2WrapperProvingKey::evm_verify(evm_verifier, evm_proof);
         })

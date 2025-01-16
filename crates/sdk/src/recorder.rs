@@ -101,7 +101,7 @@ mod tests {
     // This test ensures that `metrics-process` dependency plays well with the current
     // `metrics-exporter-prometheus` dependency version.
     #[test]
-    fn process_metrics() {
+    fn test_prometheus_recorder() {
         // initialize the lazy handle
         let _ = &*PROMETHEUS_RECORDER_HANDLE;
         thread::sleep(Duration::from_secs(2));

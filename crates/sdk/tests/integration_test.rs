@@ -19,7 +19,7 @@ use openvm_sdk::{
         common::types::VmVerifierPvs,
         leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
     },
-    Sdk, StdIn,
+    Sdk, SdkWithProfiler, StdIn,
 };
 use openvm_stark_sdk::{
     config::{
@@ -281,6 +281,29 @@ fn test_e2e_proof_generation_and_verification() {
 #[test]
 fn test_sdk_guest_build_and_transpile() {
     let sdk = Sdk;
+    let guest_opts = GuestOptions::default()
+        // .with_features(vec!["zkvm"])
+        // .with_options(vec!["--release"]);
+        ;
+    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
+    pkg_dir.push("guest");
+    let one = sdk
+        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .unwrap();
+    let two = sdk
+        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .unwrap();
+    assert_eq!(one.instructions, two.instructions);
+    assert_eq!(one.instructions, two.instructions);
+    let transpiler = Transpiler::<F>::default()
+        .with_extension(Rv32ITranspilerExtension)
+        .with_extension(Rv32MTranspilerExtension);
+    let _exe = sdk.transpile(one, transpiler).unwrap();
+}
+
+#[test]
+fn test_sdk_with_profiler_guest_build_and_transpile() {
+    let sdk = SdkWithProfiler::new();
     let guest_opts = GuestOptions::default()
         // .with_features(vec!["zkvm"])
         // .with_options(vec!["--release"]);
