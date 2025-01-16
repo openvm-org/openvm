@@ -259,7 +259,7 @@ impl BabyBearChip {
             [0],
         );
         let div = ctx.get(-2);
-        // Constrain that `abs(div) <= 2 ** a_num_bits / b`.
+        // Constrain that `abs(div) <= 2 ** (2 ** a_num_bits / b`).bits().
         let bound = (BigUint::from(1u32) << (a_num_bits as u32)) / &b;
         let shifted_div =
             self.range
@@ -321,7 +321,7 @@ where
     );
     let rem = ctx.get(-4);
     let div = ctx.get(-2);
-    // Constrain that `abs(div) <= 2 ** a_num_bits / b`.
+    // Constrain that `abs(div) <= 2 ** (2 ** a_num_bits / b`).bits().
     let bound = (BigUint::from(1u32) << (a_num_bits as u32)) / &b;
     let shifted_div = range
         .gate()
