@@ -9,6 +9,7 @@ use openvm_native_recursion::{
     hints::Hintable,
     stark::StarkVerifier,
     utils::const_fri_config,
+    vars::StarkProofVariable,
     witness::Witnessable,
 };
 use openvm_stark_sdk::{
@@ -24,7 +25,9 @@ use crate::{
     keygen::RootVerifierProvingKey,
     prover::{vm::SingleSegmentVmProver, RootVerifierLocalProver},
     verifier::{
-        common::assert_single_segment_vm_exit_successfully_with_connector_air_id,
+        common::{
+            assert_single_segment_vm_exit_successfully_with_connector_air_id, types::SpecialAirIds,
+        },
         root::types::{RootVmVerifierInput, RootVmVerifierPvs},
     },
     RootSC, F, SC,
@@ -39,7 +42,7 @@ impl RootVerifierProvingKey {
     ) -> Halo2VerifierProvingKey {
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
-        let dsl_operations = build_static_verifier_operations(self, &root_proof);
+        let dsl_operations = Self::build_static_verifier_operations(self, &root_proof);
         Halo2VerifierProvingKey {
             pinning: Halo2Prover::keygen(params, dsl_operations.clone(), witness),
             dsl_ops: dsl_operations,
@@ -67,27 +70,41 @@ impl RootVerifierProvingKey {
     }
 }
 
-fn build_static_verifier_operations(
-    root_verifier_pk: &RootVerifierProvingKey,
-    proof: &Proof<RootSC>,
-) -> DslOperations<OuterConfig> {
-    let advice = new_from_outer_multi_vk(&root_verifier_pk.vm_pk.vm_pk.get_vk());
-    let special_air_ids = root_verifier_pk.air_id_permutation().get_special_air_ids();
-    let mut builder = Builder::<OuterConfig>::default();
-    builder.flags.static_only = true;
-    let num_public_values = {
-        builder.cycle_tracker_start("VerifierProgram");
-        let input = proof.read(&mut builder);
+pub trait StaticVerifierBuilder {
+    fn build_static_verifier_operations(
+        root_verifier_pk: &RootVerifierProvingKey,
+        proof: &Proof<RootSC>,
+    ) -> DslOperations<OuterConfig> {
+        let special_air_ids = root_verifier_pk.air_id_permutation().get_special_air_ids();
+        let mut builder = Builder::<OuterConfig>::default();
+        builder.flags.static_only = true;
+        let num_public_values = {
+            builder.cycle_tracker_start("VerifierProgram");
+            let input = proof.read(&mut builder);
+            Self::verify_root_proof(&mut builder, &input, root_verifier_pk, &special_air_ids);
 
-        let pcs = TwoAdicFriPcsVariable {
-            config: const_fri_config(&mut builder, &root_verifier_pk.vm_pk.fri_params),
+            let num_public_values =
+                Self::handle_public_values(&mut builder, &input, &special_air_ids);
+            builder.cycle_tracker_end("VerifierProgram");
+            num_public_values
         };
-        StarkVerifier::verify::<MultiField32ChallengerVariable<_>>(
-            &mut builder,
-            &pcs,
-            &advice,
-            &input,
-        );
+        DslOperations {
+            operations: builder.operations,
+            num_public_values,
+        }
+    }
+
+    fn verify_root_proof(
+        builder: &mut Builder<OuterConfig>,
+        input: &StarkProofVariable<OuterConfig>,
+        root_verifier_pk: &RootVerifierProvingKey,
+        special_air_ids: &SpecialAirIds,
+    ) {
+        let advice = new_from_outer_multi_vk(&root_verifier_pk.vm_pk.vm_pk.get_vk());
+        let pcs = TwoAdicFriPcsVariable {
+            config: const_fri_config(builder, &root_verifier_pk.vm_pk.fri_params),
+        };
+        StarkVerifier::verify::<MultiField32ChallengerVariable<_>>(builder, &pcs, &advice, input);
         {
             // Program AIR is the only AIR with a cached trace. The cached trace index doesn't
             // change after reordering.
@@ -105,11 +122,17 @@ fn build_static_verifier_operations(
             builder.assert_var_eq(commit, expected_program_commit[0]);
         }
         assert_single_segment_vm_exit_successfully_with_connector_air_id(
-            &mut builder,
-            &input,
+            builder,
+            input,
             special_air_ids.connector_air_id,
         );
+    }
 
+    fn handle_public_values(
+        builder: &mut Builder<OuterConfig>,
+        input: &StarkProofVariable<OuterConfig>,
+        special_air_ids: &SpecialAirIds,
+    ) -> usize {
         let pv_air = builder.get(&input.per_air, special_air_ids.public_values_air_id);
         let public_values: Vec<_> = pv_air
             .public_values
@@ -118,22 +141,19 @@ fn build_static_verifier_operations(
             .map(|x| builder.cast_felt_to_var(x))
             .collect();
         let pvs = RootVmVerifierPvs::from_flatten(public_values);
-        let exe_commit = compress_babybear_var_to_bn254(&mut builder, pvs.exe_commit);
-        let leaf_commit = compress_babybear_var_to_bn254(&mut builder, pvs.leaf_verifier_commit);
+        let exe_commit = compress_babybear_var_to_bn254(builder, pvs.exe_commit);
+        let leaf_commit = compress_babybear_var_to_bn254(builder, pvs.leaf_verifier_commit);
         let num_public_values = 2 + pvs.public_values.len();
         builder.static_commit_public_value(0, exe_commit);
         builder.static_commit_public_value(1, leaf_commit);
         for (i, x) in pvs.public_values.into_iter().enumerate() {
             builder.static_commit_public_value(i + 2, x);
         }
-        builder.cycle_tracker_end("VerifierProgram");
         num_public_values
-    };
-    DslOperations {
-        operations: builder.operations,
-        num_public_values,
     }
 }
+
+impl StaticVerifierBuilder for RootVerifierProvingKey {}
 
 fn compress_babybear_var_to_bn254(
     builder: &mut Builder<OuterConfig>,
