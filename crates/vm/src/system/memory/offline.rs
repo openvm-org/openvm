@@ -301,6 +301,11 @@ impl<F: PrimeField32> OfflineMemory<F> {
         query: u32,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) {
+        let lim = (self.data[(address_space - self.as_offset) as usize].memory_size()) as u32;
+        if query == lim {
+            return;
+        }
+        assert!(query < lim);
         let original_block = self.block_containing(address_space, query);
         if original_block.pointer == query {
             return;

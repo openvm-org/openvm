@@ -86,6 +86,10 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
             result
         }
     }
+
+    pub fn memory_size(&self) -> usize {
+        self.pages.len() * PAGE_SIZE
+    }
 }
 
 impl<T, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
