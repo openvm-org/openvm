@@ -38,7 +38,7 @@ pub struct MemoryRecord<T> {
 
 pub struct OfflineMemory<F> {
     block_data: Vec<VebTree<BlockData>>,
-    data: Vec<PagedVec<F>>,
+    data: Vec<PagedVec<F, PAGE_SIZE>>,
     as_offset: u32,
     initial_block_size: usize,
     timestamp: u32,
@@ -86,13 +86,10 @@ impl<F: PrimeField32> OfflineMemory<F> {
     fn memory_image_to_paged_vec(
         memory_image: MemoryImage<F>,
         config: MemoryConfig,
-    ) -> Vec<PagedVec<F>> {
+    ) -> Vec<PagedVec<F, PAGE_SIZE>> {
         let start = std::time::Instant::now();
         let mut paged_vec =
-            vec![
-                PagedVec::new(PAGE_SIZE, (1 << config.pointer_max_bits) / PAGE_SIZE);
-                1 << config.as_height
-            ];
+            vec![PagedVec::new((1 << config.pointer_max_bits) / PAGE_SIZE); 1 << config.as_height];
         for ((addr_space, pointer), value) in memory_image.items() {
             paged_vec[(addr_space - config.as_offset) as usize].insert(pointer as usize, value);
         }
