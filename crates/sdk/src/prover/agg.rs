@@ -3,13 +3,11 @@ use std::sync::Arc;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     openvm_stark_backend::prover::types::Proof,
 };
 use tracing::info_span;
 
-// #[cfg(feature = "bench-metrics")]
-use super::vm::types::VmProvingKey;
 use crate::{
     keygen::AggStarkProvingKey,
     prover::{
