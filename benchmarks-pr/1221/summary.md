@@ -1,11 +1,11 @@
 | group | app.proof_time_ms | app.cycles | app.cells_used | leaf.proof_time_ms | leaf.cycles | leaf.cells_used |
 | -- | -- | -- | -- | -- | -- | -- |
-| [verify_fibair](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/1221/verify_fibair-11d03ef3a3a68aa4a826cec223602ca3d7ab1b79.md) |<span style='color: red'>(+9 [+0.3%])</span> 3,521 |  711,211 |  25,510,215 |- | - | - |
-| [fibonacci_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/1221/fibonacci-11d03ef3a3a68aa4a826cec223602ca3d7ab1b79.md) |<span style='color: green'>(-60 [-1.0%])</span> 6,043 |  1,500,137 |  51,505,102 |- | - | - |
-| [regex_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/1221/regex-11d03ef3a3a68aa4a826cec223602ca3d7ab1b79.md) |<span style='color: red'>(+120 [+0.6%])</span> 19,031 |  4,190,904 |  165,028,173 |- | - | - |
-| [ecrecover_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/1221/ecrecover-11d03ef3a3a68aa4a826cec223602ca3d7ab1b79.md) |<span style='color: red'>(+5 [+0.2%])</span> 2,621 |  285,401 |  15,092,297 |- | - | - |
+| [verify_fibair](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/1221/verify_fibair-fceeb044f180bc3ca64060261e81f35a09117ba8.md) |<span style='color: red'>(+108 [+3.2%])</span> 3,526 |  711,240 |  25,510,505 |- | - | - |
+| [fibonacci_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/1221/fibonacci-fceeb044f180bc3ca64060261e81f35a09117ba8.md) |<span style='color: green'>(-12 [-0.2%])</span> 6,089 |  1,500,137 |  51,505,102 |- | - | - |
+| [regex_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/1221/regex-fceeb044f180bc3ca64060261e81f35a09117ba8.md) |<span style='color: green'>(-95 [-0.5%])</span> 18,802 |  4,190,904 |  165,028,173 |- | - | - |
+| [ecrecover_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/1221/ecrecover-fceeb044f180bc3ca64060261e81f35a09117ba8.md) |<span style='color: green'>(-33 [-1.2%])</span> 2,607 |  285,401 |  15,092,297 |- | - | - |
 
 
-Commit: https://github.com/openvm-org/openvm/commit/11d03ef3a3a68aa4a826cec223602ca3d7ab1b79
+Commit: https://github.com/openvm-org/openvm/commit/fceeb044f180bc3ca64060261e81f35a09117ba8
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/12804071309)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/12832848900)
