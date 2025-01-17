@@ -22,6 +22,8 @@ impl<C: Config> Builder<C> {
         let output = self.dyn_array::<Felt<_>>(num_bits as usize);
 
         let sum: Felt<_> = self.eval(C::F::ZERO);
+        let prefix_sum: Felt<_> = self.eval(C::F::ZERO);
+        let suffix_bit_sum: Felt<_> = self.eval(C::F::ZERO);
         for i in 0..num_bits as usize {
             let index = MemIndex {
                 index: i.into(),
@@ -33,11 +35,27 @@ impl<C: Config> Builder<C> {
             let bit = self.get(&output, i);
             self.assert_felt_eq(bit * (bit - C::F::ONE), C::F::ZERO);
             self.assign(&sum, sum + bit * C::F::from_canonical_u32(1 << i));
+            if i == 16 {
+                self.assign(&prefix_sum, sum);
+            }
+            if i > 16 {
+                self.assign(&suffix_bit_sum, suffix_bit_sum + bit);
+            }
         }
-
-        // FIXME: There is an edge case where the witnessed bits may slightly overflow and cause
-        // the output to be incorrect.
         self.assert_felt_eq(sum, num);
+
+        // Check that the bits represent the number without overflow.
+        // If F is BabyBear, then any element of F can be represented either as:
+        //    * 2^30 + ... + 2^x + y for y in [0, 2^(x - 1)) and x > 17
+        //    * 2^30 + ... + 2^17
+        // To check that bits b[0], ..., b[30] represent b[0] + ... + b[30] * 2^30 without overflow,
+        // we may check that:
+        //    * if b_17 + ... + b_30 = 14, then b_0 + ... + b_16 * 2^16 = 0
+        let suffix_bit_sum_var = self.cast_felt_to_var(suffix_bit_sum);
+        self.if_eq(suffix_bit_sum_var, C::N::from_canonical_u32(14))
+            .then(|builder| {
+                builder.assert_felt_eq(prefix_sum, C::F::ZERO);
+            });
 
         // Cast Array<C, Felt<C::F>> to Array<C, Var<C::N>>
         Array::Dyn(output.ptr(), output.len())
