@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashSet;
 
-use super::paged_vec::{AddressMap, PagedVec, PAGE_SIZE};
+use super::{AddressMap, PagedVec, PAGE_SIZE};
 use crate::{
     arch::MemoryConfig,
     system::memory::{
@@ -21,8 +21,8 @@ pub const INITIAL_TIMESTAMP: u32 = 0;
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 struct BlockData {
     pointer: u32,
-    size: usize,
     timestamp: u32,
+    size: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,7 +59,6 @@ impl<F: PrimeField32> OfflineMemory<F> {
         initial_block_size: usize,
         memory_bus: MemoryBus,
         range_checker: SharedVariableRangeCheckerChip,
-        timestamp_max_bits: usize,
         config: MemoryConfig,
     ) -> Self {
         assert!(initial_block_size.is_power_of_two());
@@ -70,7 +69,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
             as_offset: config.as_offset,
             initial_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
-            timestamp_max_bits,
+            timestamp_max_bits: config.clk_max_bits,
             memory_bus,
             range_checker,
             log: vec![],
@@ -527,7 +526,6 @@ mod tests {
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
             MemoryConfig {
                 as_offset: 0,
                 ..Default::default()
@@ -578,7 +576,6 @@ mod tests {
             1,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
             Default::default(),
         );
         let address_space = 1;
@@ -605,7 +602,6 @@ mod tests {
             1,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
             Default::default(),
         );
 
@@ -751,7 +747,6 @@ mod tests {
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
             Default::default(),
         );
 
@@ -867,7 +862,6 @@ mod tests {
             1,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
             MemoryConfig {
                 as_offset: 0,
                 ..Default::default()
@@ -893,7 +887,6 @@ mod tests {
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
             MemoryConfig {
                 as_offset: 0,
                 ..Default::default()
@@ -919,7 +912,6 @@ mod tests {
             4,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
             Default::default(),
         );
 
@@ -936,7 +928,6 @@ mod tests {
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
             Default::default(),
         );
         // Make block 0:4 in address space 1 active.
@@ -1007,7 +998,6 @@ mod tests {
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
             Default::default(),
         );
 

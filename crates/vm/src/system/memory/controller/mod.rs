@@ -250,7 +250,6 @@ impl<F: PrimeField32> MemoryController<F> {
                 1,
                 memory_bus,
                 range_checker.clone(),
-                mem_config.clk_max_bits,
                 mem_config,
             ))),
             access_adapters: AccessAdapterInventory::new(
@@ -301,7 +300,6 @@ impl<F: PrimeField32> MemoryController<F> {
                 CHUNK,
                 memory_bus,
                 range_checker.clone(),
-                mem_config.clk_max_bits,
                 mem_config,
             ))),
             access_adapters: AccessAdapterInventory::new(
@@ -358,7 +356,7 @@ impl<F: PrimeField32> MemoryController<F> {
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
                 assert!(
-                    memory.items().collect::<Vec<_>>().is_empty(),
+                    memory.is_empty(),
                     "Cannot set initial memory for volatile memory"
                 );
             }

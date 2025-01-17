@@ -46,58 +46,41 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
     }
 
     pub fn get_range(&self, range: Range<usize>) -> Vec<T> {
-        let start_page_idx = range.start / PAGE_SIZE;
-        let end_page_idx = range.end / PAGE_SIZE;
-
-        if start_page_idx == end_page_idx {
-            if let Some(start_page) = &self.pages[start_page_idx] {
-                let i = range.start % PAGE_SIZE;
-                start_page[i..i + range.len()].to_vec()
+        let mut result = Vec::with_capacity(range.len());
+        for page_idx in (range.start / PAGE_SIZE)..range.end.div_ceil(PAGE_SIZE) {
+            let in_page_start = range.start.saturating_sub(page_idx * PAGE_SIZE);
+            let in_page_end = (range.end - page_idx * PAGE_SIZE).min(PAGE_SIZE);
+            if let Some(page) = self.pages[page_idx].as_ref() {
+                result.extend(page[in_page_start..in_page_end].iter().cloned());
             } else {
-                vec![T::default(); range.len()]
+                result.extend(vec![T::default(); in_page_end - in_page_start]);
             }
-        } else {
-            // TODO: This can be more efficient by copying from two slices (but most queries should
-            // not be cross-page).
-            range
-                .map(|i| self.get(i).cloned().unwrap_or_default())
-                .collect()
         }
+        result
     }
 
-    pub fn set_range<'a>(
-        &mut self,
-        range: Range<usize>,
-        values: impl IntoIterator<Item = &'a T>,
-    ) -> Vec<T>
-    where
-        T: 'a,
-    {
-        let start_page_idx = range.start / PAGE_SIZE;
-        let end_page_idx = range.end / PAGE_SIZE;
-
-        if start_page_idx == end_page_idx {
-            let page =
-                self.pages[start_page_idx].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
-            let page_start = range.start - range.start % PAGE_SIZE;
-            let result = page[range.start - page_start..range.end - page_start].to_vec();
-            for (j, value) in range.zip(values.into_iter()) {
-                page[j - page_start] = value.clone();
-            }
-            result
-        } else {
-            // TODO: This can be more efficient by copying into two slices (but most queries should
-            // not be cross-page).
-            let result = self.get_range(range.clone());
-            for (i, value) in range.zip(values.into_iter()) {
-                self.set(i, value.clone());
-            }
-            result
+    pub fn set_range(&mut self, range: Range<usize>, values: &[T]) -> Vec<T> {
+        let mut result = Vec::with_capacity(range.len());
+        let mut values = values.iter();
+        for page_idx in (range.start / PAGE_SIZE)..range.end.div_ceil(PAGE_SIZE) {
+            let in_page_start = range.start.saturating_sub(page_idx * PAGE_SIZE);
+            let in_page_end = (range.end - page_idx * PAGE_SIZE).min(PAGE_SIZE);
+            let page = self.pages[page_idx].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
+            result.extend(
+                page[in_page_start..in_page_end]
+                    .iter_mut()
+                    .map(|x| std::mem::replace(x, values.next().unwrap().clone())),
+            );
         }
+        result
     }
 
     pub fn memory_size(&self) -> usize {
         self.pages.len() * PAGE_SIZE
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.pages.iter().all(|page| page.is_none())
     }
 }
 
@@ -204,6 +187,9 @@ impl<T: Clone + Default, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
                 .try_into()
                 .unwrap_unchecked()
         }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.paged_vecs.iter().all(|page| page.is_empty())
     }
 
     pub fn from_iter(

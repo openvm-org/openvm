@@ -15,6 +15,7 @@ mod volatile;
 
 pub use controller::*;
 pub use offline::*;
+pub use paged_vec::*;
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {
