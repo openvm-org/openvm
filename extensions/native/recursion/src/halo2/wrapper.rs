@@ -137,7 +137,7 @@ impl Halo2WrapperProvingKey {
             1,
             "Snark should only have 1 instance column"
         );
-        let accumulator_pv_len = if hash_prev_accumulator { 12 } else { 0 };
+        let accumulator_pv_len = if hash_prev_accumulator { 0 } else { 12 };
         assert_eq!(
             self.pinning.metadata.num_pvs[0],
             snark_to_verify.instances[0].len() + accumulator_pv_len,
