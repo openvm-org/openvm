@@ -15,14 +15,17 @@ impl<C: Config> Builder<C> {
         output
     }
 
-    /// Converts a felt to bits.
+    /// Converts a felt to bits. Only works for C::F = BabyBear
     pub fn num2bits_f(&mut self, num: Felt<C::F>, num_bits: u32) -> Array<C, Var<C::N>> {
-        self.push(DslIr::HintBitsF(num, num_bits));
+        assert!(TypeId::of::<C::F>() == BabyBear::F::TYPE_ID);
 
+        self.push(DslIr::HintBitsF(num, num_bits));
         let output = self.dyn_array::<Felt<_>>(num_bits as usize);
 
         let sum: Felt<_> = self.eval(C::F::ZERO);
+        // will be used to compute b_0 + ... + b_16 * 2^16
         let prefix_sum: Felt<_> = self.eval(C::F::ZERO);
+        // will be used to compute b_17 + ... + b_30
         let suffix_bit_sum: Felt<_> = self.eval(C::F::ZERO);
         for i in 0..num_bits as usize {
             let index = MemIndex {
