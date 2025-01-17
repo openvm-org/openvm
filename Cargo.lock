@@ -4336,6 +4336,7 @@ dependencies = [
  "async-trait",
  "bitcode",
  "bon",
+ "clap",
  "derivative",
  "derive_more 1.0.0",
  "eyre",
