@@ -116,7 +116,7 @@ where
                 shift: builder.eval(self.shift * domain_power),
                 g,
             };
-            // FIXME: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
+            // ATTENTION: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
             // to `Usize::Var` because it calls `builder.eval`.
             builder.set_value(&domains, i, domain);
             builder.assign(&domain_power, domain_power * g_dom);
