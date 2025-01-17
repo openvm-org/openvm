@@ -6,7 +6,7 @@ pub mod merkle;
 mod offline;
 pub mod offline_checker;
 pub mod online;
-mod paged_vec;
+pub mod paged_vec;
 mod persistent;
 #[cfg(test)]
 mod tests;

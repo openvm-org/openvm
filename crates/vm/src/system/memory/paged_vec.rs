@@ -1,6 +1,14 @@
 use std::ops::Range;
 
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+
+use crate::arch::MemoryConfig;
+
+/// (address_space, pointer)
+pub(crate) type Address = (u32, u32);
+pub(crate) const PAGE_SIZE: usize = 1 << 12;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct PagedVec<T, const PAGE_SIZE: usize> {
     pages: Vec<Option<Vec<T>>>,
 }
@@ -26,13 +34,14 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
             .map(|page| &mut page[index % PAGE_SIZE])
     }
 
-    pub fn set(&mut self, index: usize, value: T) {
+    pub fn set(&mut self, index: usize, value: T) -> Option<T> {
         let page_idx = index / PAGE_SIZE;
         if let Some(page) = self.pages[page_idx].as_mut() {
-            page[index % PAGE_SIZE] = value;
+            Some(std::mem::replace(&mut page[index % PAGE_SIZE], value))
         } else {
             let page = self.pages[page_idx].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
             page[index % PAGE_SIZE] = value;
+            None
         }
     }
 
@@ -133,6 +142,81 @@ impl<T: Clone, const PAGE_SIZE: usize> Iterator for PagedVecIter<'_, T, PAGE_SIZ
             self.current_index_in_page = 0;
         }
         Some((global_index, value))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddressMap<T, const PAGE_SIZE: usize> {
+    paged_vecs: Vec<PagedVec<T, PAGE_SIZE>>,
+    as_offset: u32,
+}
+
+impl<T: Clone + Default, const PAGE_SIZE: usize> Default for AddressMap<T, PAGE_SIZE> {
+    fn default() -> Self {
+        Self::from_mem_config(&MemoryConfig::default())
+    }
+}
+
+impl<T: Clone + Default, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
+    pub fn new(as_offset: u32, as_cnt: usize, mem_size: usize) -> Self {
+        Self {
+            paged_vecs: vec![PagedVec::new(mem_size.div_ceil(PAGE_SIZE)); as_cnt],
+            as_offset,
+        }
+    }
+    pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
+        Self::new(
+            mem_config.as_offset,
+            1 << mem_config.as_height,
+            1 << mem_config.pointer_max_bits,
+        )
+    }
+    pub fn items(&self) -> impl Iterator<Item = (Address, T)> + '_ {
+        self.paged_vecs
+            .iter()
+            .enumerate()
+            .flat_map(move |(as_idx, page)| {
+                page.iter()
+                    .map(move |(ptr_idx, x)| ((as_idx as u32 + self.as_offset, ptr_idx as u32), x))
+            })
+    }
+    pub fn get(&self, address: &Address) -> Option<&T> {
+        self.paged_vecs[(address.0 - self.as_offset) as usize].get(address.1 as usize)
+    }
+    pub fn get_mut(&mut self, address: &Address) -> Option<&mut T> {
+        self.paged_vecs[(address.0 - self.as_offset) as usize].get_mut(address.1 as usize)
+    }
+    pub fn insert(&mut self, address: &Address, data: T) -> Option<T> {
+        self.paged_vecs[(address.0 - self.as_offset) as usize].set(address.1 as usize, data)
+    }
+    pub fn get_range<const N: usize>(&self, address: &Address) -> [T; N] {
+        unsafe {
+            self.paged_vecs[(address.0 - self.as_offset) as usize]
+                .get_range((address.1 as usize)..(address.1 as usize + N))
+                .try_into()
+                .unwrap_unchecked()
+        }
+    }
+    pub fn set_range<const N: usize>(&mut self, address: &Address, values: &[T; N]) -> [T; N] {
+        unsafe {
+            self.paged_vecs[(address.0 - self.as_offset) as usize]
+                .set_range((address.1 as usize)..(address.1 as usize + N), values)
+                .try_into()
+                .unwrap_unchecked()
+        }
+    }
+
+    pub fn from_iter(
+        as_offset: u32,
+        as_cnt: usize,
+        mem_size: usize,
+        iter: impl IntoIterator<Item = (Address, T)>,
+    ) -> Self {
+        let mut vec = Self::new(as_offset, as_cnt, mem_size);
+        for (address, data) in iter {
+            vec.insert(&address, data);
+        }
+        vec
     }
 }
 

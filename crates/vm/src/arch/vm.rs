@@ -20,7 +20,7 @@ use crate::{
     arch::segment::ExecutionSegment,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{merkle::MemoryMerklePvs, MemoryImage, CHUNK},
+        memory::{merkle::MemoryMerklePvs, paged_vec::AddressMap, MemoryImage, CHUNK},
         program::trace::VmCommittedExe,
     },
 };
@@ -113,11 +113,17 @@ where
         let exe = exe.into();
         let streams = input.into();
         let mut segments = vec![];
+        let mem_config = self.config.system().memory_config;
         let mut segment = ExecutionSegment::new(
             &self.config,
             exe.program.clone(),
             streams,
-            Some(exe.init_memory.into_iter().collect()),
+            Some(AddressMap::from_iter(
+                mem_config.as_offset,
+                1 << mem_config.as_height,
+                1 << mem_config.pointer_max_bits,
+                exe.init_memory.clone(),
+            )),
             exe.fn_bounds.clone(),
         );
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {

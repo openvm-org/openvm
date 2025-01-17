@@ -6,7 +6,10 @@ use openvm_circuit::{
         instructions::exe::VmExe,
         VmConfig,
     },
-    system::{memory::tree::MemoryNode, program::trace::VmCommittedExe},
+    system::{
+        memory::{paged_vec::AddressMap, tree::MemoryNode},
+        program::trace::VmCommittedExe,
+    },
 };
 use openvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
 use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
@@ -60,9 +63,15 @@ impl AppExecutionCommit<F> {
             .commit
             .into();
 
+        let mem_config = app_vm_config.system().memory_config;
         let init_memory_commit = MemoryNode::tree_from_memory(
             memory_dimensions,
-            &app_exe.exe.init_memory.clone().into_iter().collect(),
+            &AddressMap::from_iter(
+                mem_config.as_offset,
+                1 << mem_config.as_height,
+                1 << mem_config.pointer_max_bits,
+                app_exe.exe.init_memory.clone(),
+            ),
             &hasher,
         )
         .hash();

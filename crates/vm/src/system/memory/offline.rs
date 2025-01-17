@@ -6,66 +6,23 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashSet;
 
-use super::paged_vec::PagedVec;
+use super::paged_vec::{AddressMap, PagedVec, PAGE_SIZE};
 use crate::{
     arch::MemoryConfig,
     system::memory::{
         adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
         offline_checker::{MemoryBridge, MemoryBus},
-        online::Address,
         MemoryAuxColsFactory, MemoryImage, RecordId, TimestampedEquipartition, TimestampedValues,
     },
 };
 
 pub const INITIAL_TIMESTAMP: u32 = 0;
 
-const PAGE_SIZE: usize = 1 << 12;
-
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 struct BlockData {
     pointer: u32,
     size: usize,
     timestamp: u32,
-}
-
-struct BlockStructure {
-    block_data: Vec<PagedVec<BlockData, PAGE_SIZE>>,
-    as_offset: u32,
-}
-
-impl BlockStructure {
-    pub fn new(as_offset: u32, as_height: usize, mem_size: usize) -> Self {
-        Self {
-            block_data: vec![PagedVec::new(mem_size.div_ceil(PAGE_SIZE)); 1 << as_height],
-            as_offset,
-        }
-    }
-
-    pub fn items(&self) -> impl Iterator<Item = (Address, BlockData)> + '_ {
-        self.block_data
-            .iter()
-            .enumerate()
-            .flat_map(move |(as_idx, page)| {
-                page.iter().map(move |(ptr_idx, block)| {
-                    (
-                        (as_idx as u32 + self.as_offset, ptr_idx as u32),
-                        block.clone(),
-                    )
-                })
-            })
-    }
-
-    pub fn get(&self, address: &Address) -> Option<&BlockData> {
-        self.block_data[(address.0 - self.as_offset) as usize].get(address.1 as usize)
-    }
-
-    pub fn get_mut(&mut self, address: &Address) -> Option<&mut BlockData> {
-        self.block_data[(address.0 - self.as_offset) as usize].get_mut(address.1 as usize)
-    }
-
-    pub fn insert(&mut self, address: Address, data: BlockData) {
-        self.block_data[(address.0 - self.as_offset) as usize].set(address.1 as usize, data);
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -80,7 +37,7 @@ pub struct MemoryRecord<T> {
 }
 
 pub struct OfflineMemory<F> {
-    block_data: BlockStructure,
+    block_data: AddressMap<BlockData, PAGE_SIZE>,
     data: Vec<PagedVec<F, PAGE_SIZE>>,
     as_offset: u32,
     initial_block_size: usize,
@@ -108,11 +65,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         assert!(initial_block_size.is_power_of_two());
 
         Self {
-            block_data: BlockStructure::new(
-                config.as_offset,
-                config.as_height,
-                1 << config.pointer_max_bits,
-            ),
+            block_data: AddressMap::from_mem_config(&config),
             data: Self::memory_image_to_paged_vec(initial_memory, config),
             as_offset: config.as_offset,
             initial_block_size,
@@ -139,7 +92,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
                 PagedVec::new((1usize << config.pointer_max_bits).div_ceil(PAGE_SIZE));
                 1 << config.as_height
             ];
-        for ((addr_space, pointer), value) in memory_image {
+        for ((addr_space, pointer), value) in memory_image.items() {
             paged_vec[(addr_space - config.as_offset) as usize].set(pointer as usize, value);
         }
         paged_vec
@@ -343,7 +296,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
                 };
                 for i in 0..half_size_u32 {
                     self.block_data
-                        .insert((address_space, mid_ptr + i), block.clone());
+                        .insert(&(address_space, mid_ptr + i), block.clone());
                 }
             }
             if query >= cur_ptr + half_size_u32 {
@@ -355,7 +308,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
                 };
                 for i in 0..half_size_u32 {
                     self.block_data
-                        .insert((address_space, cur_ptr + i), block.clone());
+                        .insert(&(address_space, cur_ptr + i), block.clone());
                 }
             }
             if mid_ptr <= query {
@@ -383,7 +336,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
             let block = self.block_data.get(&(address_space, pointer + i));
             if block.is_none() || block.unwrap().size == 0 {
                 self.block_data.insert(
-                    (address_space, pointer + i),
+                    &(address_space, pointer + i),
                     Self::initial_block_data(pointer + i, self.initial_block_size),
                 );
             }
@@ -464,7 +417,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         let timestamp = max(left_timestamp, right_timestamp);
         for i in 0..2 * size as u32 {
             self.block_data.insert(
-                (address_space, pointer + i),
+                &(address_space, pointer + i),
                 BlockData {
                     pointer,
                     size: 2 * size,
@@ -548,6 +501,7 @@ mod tests {
         system::memory::{
             adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
             offline_checker::MemoryBus,
+            paged_vec::AddressMap,
             MemoryImage, TimestampedValues,
         },
     };
@@ -574,7 +528,7 @@ mod tests {
     fn test_partition() {
         type F = BabyBear;
 
-        let initial_memory = MemoryImage::default();
+        let initial_memory = AddressMap::new(0, 1, 16);
         let mut partition = OfflineMemory::<F>::new(
             initial_memory,
             8,
@@ -1051,8 +1005,8 @@ mod tests {
         // Initialize initial memory with blocks at indices 0 and 2
         let mut initial_memory = MemoryImage::default();
         for i in 0..8 {
-            initial_memory.insert((1, i), F::from_canonical_u32(i + 1));
-            initial_memory.insert((1, 16 + i), F::from_canonical_u32(i + 1));
+            initial_memory.insert(&(1, i), F::from_canonical_u32(i + 1));
+            initial_memory.insert(&(1, 16 + i), F::from_canonical_u32(i + 1));
         }
 
         let mut memory = OfflineMemory::<BabyBear>::new(
