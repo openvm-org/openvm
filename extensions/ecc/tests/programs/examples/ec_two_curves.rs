@@ -6,8 +6,9 @@ use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
     k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
     msm,
+    p256::{P256Coord, P256Point, P256Scalar},
     weierstrass::WeierstrassPoint,
-    Group,
+    CyclicGroup, Group,
 };
 
 openvm_algebra_moduli_setup::moduli_init! {
@@ -19,6 +20,7 @@ openvm_algebra_moduli_setup::moduli_init! {
 
 openvm_ecc_sw_setup::sw_init! {
     Secp256k1Point,
+    P256Point,
 }
 
 openvm::entry!(main);
@@ -87,6 +89,34 @@ pub fn main() {
     ));
     let result = msm(&[scalar], &[p1]);
     if result.x() != &x5 || result.y() != &y5 {
+        panic!();
+    }
+
+    // Sample points got from https://asecuritysite.com/ecc/p256p
+    let x1 = P256Coord::from_u32(5);
+    let y1 = P256Coord::from_le_bytes(&hex!(
+        "ccfb4832085c4133c5a3d9643c50ca11de7a8199ce3b91fe061858aab9439245"
+    ));
+    let p1 = P256Point::from_xy(x1.clone(), y1.clone()).unwrap();
+    let x2 = P256Coord::from_u32(6);
+    let y2 = P256Coord::from_le_bytes(&hex!(
+        "cb23828228510d22e9c0e70fb802d1dc47007233e5856946c20a25542c4cb236"
+    ));
+    let p2 = P256Point::from_xy(x2.clone(), y2.clone()).unwrap();
+
+    // Generic add can handle equal or unequal points.
+    let p3 = &p1 + &p2;
+    let p4 = &p2 + &p2;
+
+    // Add assign and double assign
+    let mut sum = P256Point::from_xy(x1, y1).unwrap();
+    sum += &p2;
+    if sum.x() != p3.x() || sum.y() != p3.y() {
+        panic!();
+    }
+    let mut double = P256Point::from_xy(x2, y2).unwrap();
+    double.double_assign();
+    if double.x() != p4.x() || double.y() != p4.y() {
         panic!();
     }
 }
