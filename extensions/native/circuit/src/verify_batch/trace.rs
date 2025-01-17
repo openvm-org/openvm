@@ -14,13 +14,15 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    chip::NUM_INITIAL_READS,
+    chip::{SimplePermuteRecord, NUM_INITIAL_READS},
     verify_batch::{
         chip::{
             CellRecord, IncorporateRowRecord, IncorporateSiblingRecord, InsideRowRecord,
             VerifyBatchChip, VerifyBatchRecord,
         },
-        columns::{InsideRowSpecificCols, TopLevelSpecificCols, VerifyBatchCols},
+        columns::{
+            InsideRowSpecificCols, SimplePermuteSpecificCols, TopLevelSpecificCols, VerifyBatchCols,
+        },
         CHUNK,
     },
 };
@@ -72,6 +74,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         cols.incorporate_row = F::ZERO;
         cols.incorporate_sibling = F::ONE;
         cols.inside_row = F::ZERO;
+        cols.simple = F::ZERO;
         cols.end_inside_row = F::ZERO;
         cols.end_top_level = F::ZERO;
         cols.start_top_level = F::ZERO;
@@ -180,6 +183,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         cols.incorporate_row = F::ONE;
         cols.incorporate_sibling = F::ZERO;
         cols.inside_row = F::ZERO;
+        cols.simple = F::ZERO;
         cols.end_inside_row = F::ZERO;
         cols.end_top_level = F::ZERO;
         cols.start_top_level = F::from_bool(proof_index == 0);
@@ -232,6 +236,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         cols.incorporate_row = F::ZERO;
         cols.incorporate_sibling = F::ZERO;
         cols.inside_row = F::ONE;
+        cols.simple = F::ZERO;
         cols.end_inside_row = F::from_bool(is_last);
         cols.end_top_level = F::ZERO;
         cols.opened_element_size_inv = grandparent.opened_element_size_inv();
@@ -278,7 +283,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         cols.opened_base_pointer = grandparent.opened_base_pointer;
     }
     // returns number of used cells
-    fn record_to_rows(
+    fn verify_batch_record_to_rows(
         &self,
         record: &VerifyBatchRecord<F>,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
@@ -347,6 +352,63 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
 
         used_cells
     }
+    fn simple_record_to_row(
+        &self,
+        record: &SimplePermuteRecord<F>,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
+        slice: &mut [F],
+        memory: &OfflineMemory<F>,
+    ) {
+        let &SimplePermuteRecord {
+            from_state,
+            read_input_pointer,
+            read_output_pointer,
+            read_data,
+            write_data,
+            input_pointer,
+            output_pointer,
+            p2_input,
+            ..
+        } = record;
+
+        let output_register = record.instruction.a;
+        let input_register = record.instruction.b;
+        let register_address_space = record.instruction.d;
+        let data_address_space = record.instruction.e;
+
+        let read_input_pointer = memory.record_by_id(read_input_pointer);
+        let read_output_pointer = memory.record_by_id(read_output_pointer);
+        let read_data = memory.record_by_id(read_data);
+        let write_data = memory.record_by_id(write_data);
+
+        self.generate_subair_cols(p2_input, slice);
+        let cols: &mut VerifyBatchCols<F, SBOX_REGISTERS> = slice.borrow_mut();
+        cols.incorporate_row = F::ZERO;
+        cols.incorporate_sibling = F::ZERO;
+        cols.inside_row = F::ZERO;
+        cols.simple = F::ONE;
+        cols.end_inside_row = F::ZERO;
+        cols.end_top_level = F::ZERO;
+        cols.is_exhausted = [F::ZERO; CHUNK];
+
+        cols.start_timestamp = F::from_canonical_u32(from_state.timestamp);
+        let specific: &mut SimplePermuteSpecificCols<F> =
+            cols.specific[..SimplePermuteSpecificCols::<F>::width()].borrow_mut();
+
+        *specific = SimplePermuteSpecificCols {
+            pc: F::from_canonical_u32(from_state.pc),
+            output_register,
+            input_register,
+            register_address_space,
+            data_address_space,
+            output_pointer,
+            input_pointer,
+            read_output_pointer: aux_cols_factory.make_read_aux_cols(read_output_pointer),
+            read_input_pointer: aux_cols_factory.make_read_aux_cols(read_input_pointer),
+            read_data: aux_cols_factory.make_read_aux_cols(read_data),
+            write_data: aux_cols_factory.make_write_aux_cols(write_data),
+        };
+    }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let width = self.trace_width();
@@ -358,13 +420,22 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         let aux_cols_factory = memory.aux_cols_factory();
 
         let mut used_cells = 0;
-        for record in self.records.iter() {
-            used_cells += self.record_to_rows(
-                &record,
+        for record in self.record_set.verify_batch_records.iter() {
+            used_cells += self.verify_batch_record_to_rows(
+                record,
                 &aux_cols_factory,
                 &mut flat_trace[used_cells..],
                 &memory,
             );
+        }
+        for record in self.record_set.simple_permute_records.iter() {
+            self.simple_record_to_row(
+                record,
+                &aux_cols_factory,
+                &mut flat_trace[used_cells..used_cells + width],
+                &memory,
+            );
+            used_cells += width;
         }
         // poseidon2 constraints are always checked
         // following can be optimized to only hash [0; _] once

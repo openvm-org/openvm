@@ -5,6 +5,7 @@ use openvm_circuit::{
     system::memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 use openvm_circuit_primitives::utils::not;
+use openvm_instructions::Poseidon2Opcode::PERM_POS2;
 use openvm_native_compiler::VerifyBatchOpcode::VERIFY_BATCH;
 use openvm_poseidon2_air::{Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS};
 use openvm_stark_backend::{
@@ -19,7 +20,9 @@ use openvm_stark_backend::{
 use crate::{
     chip::NUM_INITIAL_READS,
     verify_batch::{
-        columns::{InsideRowSpecificCols, TopLevelSpecificCols, VerifyBatchCols},
+        columns::{
+            InsideRowSpecificCols, SimplePermuteSpecificCols, TopLevelSpecificCols, VerifyBatchCols,
+        },
         CHUNK,
     },
 };
@@ -30,7 +33,8 @@ pub struct VerifyBatchAir<F: Field, const SBOX_REGISTERS: usize> {
     pub memory_bridge: MemoryBridge,
     pub internal_bus: VerifyBatchBus,
     pub(crate) subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
-    pub(super) offset: usize,
+    pub(super) verify_batch_offset: usize,
+    pub(super) perm_pos2_offset: usize,
     pub(crate) address_space: F,
 }
 
@@ -65,6 +69,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             incorporate_row,
             incorporate_sibling,
             inside_row,
+            simple,
             end_inside_row,
             end_top_level,
             start_top_level,
@@ -91,13 +96,14 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         builder.assert_bool(incorporate_row);
         builder.assert_bool(incorporate_sibling);
         builder.assert_bool(inside_row);
-        let enabled = incorporate_row + incorporate_sibling + inside_row;
+        builder.assert_bool(simple);
+        let enabled = incorporate_row + incorporate_sibling + inside_row + simple;
         builder.assert_bool(enabled.clone());
         builder.assert_bool(end_inside_row);
         builder.when(end_inside_row).assert_one(inside_row);
         builder.assert_bool(end_top_level);
 
-        let end = end_inside_row + end_top_level + (AB::Expr::ONE - enabled.clone());
+        let end = end_inside_row + end_top_level + simple + (AB::Expr::ONE - enabled.clone());
         builder
             .when(end.clone())
             .when(next.incorporate_row)
@@ -335,7 +341,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .assert_eq(next.initial_opened_index, AB::F::ZERO);
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_usize(VERIFY_BATCH as usize + self.offset),
+                AB::Expr::from_canonical_usize(VERIFY_BATCH as usize + self.verify_batch_offset),
                 [
                     dim_register,
                     opened_register,
@@ -575,6 +581,76 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             end_timestamp,
             timestamp_after_initial_reads + AB::F::from_canonical_usize(2 + CHUNK),
         );
+
+        //// simple permute
+
+        let simple_permute_specific: &SimplePermuteSpecificCols<AB::Var> =
+            specific[..SimplePermuteSpecificCols::<AB::Var>::width()].borrow();
+
+        let &SimplePermuteSpecificCols {
+            pc,
+            output_register,
+            input_register,
+            register_address_space,
+            data_address_space,
+            output_pointer,
+            input_pointer,
+            read_output_pointer,
+            read_input_pointer,
+            read_data,
+            write_data,
+        } = simple_permute_specific;
+
+        self.execution_bridge
+            .execute_and_increment_pc(
+                AB::Expr::from_canonical_usize(PERM_POS2 as usize + self.perm_pos2_offset),
+                [
+                    output_register.into(),
+                    input_register.into(),
+                    AB::Expr::ZERO,
+                    register_address_space.into(),
+                    data_address_space.into(),
+                ],
+                ExecutionState::new(pc, start_timestamp),
+                AB::Expr::from_canonical_usize(4),
+            )
+            .eval(builder, simple);
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(register_address_space, output_register),
+                [output_pointer],
+                start_timestamp,
+                &read_output_pointer,
+            )
+            .eval(builder, simple);
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(register_address_space, input_register),
+                [input_pointer],
+                start_timestamp + AB::F::ONE,
+                &read_input_pointer,
+            )
+            .eval(builder, simple);
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(data_address_space, input_pointer),
+                local.inner.inputs,
+                start_timestamp + AB::F::TWO,
+                &read_data,
+            )
+            .eval(builder, simple);
+
+        self.memory_bridge
+            .write(
+                MemoryAddress::new(data_address_space, output_pointer),
+                local.inner.ending_full_rounds[BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS - 1].post,
+                start_timestamp + AB::F::from_canonical_usize(3),
+                &write_data,
+            )
+            .eval(builder, simple);
     }
 }
 

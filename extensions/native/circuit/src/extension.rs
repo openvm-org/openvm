@@ -209,12 +209,16 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             program_bus,
             memory_bridge,
             VerifyBatchOpcode::default_offset(),
+            Poseidon2Opcode::default_offset(),
             offline_memory.clone(),
             Poseidon2Config::default(),
         );
         inventory.add_executor(
             verify_batch_chip,
-            VerifyBatchOpcode::iter().map(VmOpcode::with_default_offset),
+            [
+                VmOpcode::with_default_offset(VerifyBatchOpcode::VERIFY_BATCH),
+                VmOpcode::with_default_offset(Poseidon2Opcode::PERM_POS2),
+            ],
         )?;
 
         let poseidon2_chip = NativePoseidon2Chip::new(

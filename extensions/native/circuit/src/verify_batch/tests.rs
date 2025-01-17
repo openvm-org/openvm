@@ -1,22 +1,29 @@
 use std::cmp::min;
 
-use openvm_circuit::{
-    arch::testing::{memory::gen_pointer, VmChipTestBuilder},
-    system::memory::CHUNK,
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester};
+use openvm_instructions::{
+    instruction::Instruction, Poseidon2Opcode, Poseidon2Opcode::PERM_POS2, UsizeOpcode, VmOpcode,
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_native_compiler::{VerifyBatchOpcode, VerifyBatchOpcode::VERIFY_BATCH};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32, PrimeField64},
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{
+    config::{
+        baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+    },
+    engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
+    utils::create_seeded_rng,
+};
 use rand::{rngs::StdRng, Rng};
 
-use crate::verify_batch::chip::VerifyBatchChip;
+use crate::verify_batch::{chip::VerifyBatchChip, CHUNK};
 
 fn compute_commit<F: Field>(
     dim: &[usize],
@@ -132,14 +139,13 @@ fn test<const N: usize>(cases: [Case; N]) {
     // single op
     let address_space = 5;
 
-    let offset = VerifyBatchOpcode::default_offset();
-
     let mut tester = VmChipTestBuilder::default();
     let mut chip = VerifyBatchChip::<F, SBOX_REGISTERS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
-        offset,
+        VerifyBatchOpcode::default_offset(),
+        Poseidon2Opcode::default_offset(),
         tester.offline_memory_mutex_arc(),
         Poseidon2Config::default(),
     );
@@ -222,7 +228,7 @@ fn test<const N: usize>(cases: [Case; N]) {
         tester.execute(
             &mut chip,
             &Instruction::from_usize(
-                VmOpcode::from_usize(VERIFY_BATCH as usize + offset),
+                VmOpcode::from_usize(VERIFY_BATCH as usize + VerifyBatchOpcode::default_offset()),
                 [
                     dim_register,
                     opened_register,
@@ -333,4 +339,114 @@ fn verify_batch_test_felt_and_ext() {
             opened_element_size: 4,
         },
     ])
+}
+
+/// Create random instructions for the poseidon2 chip.
+fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
+    let mut rng = create_seeded_rng();
+    (0..num_ops)
+        .map(|_| {
+            let [a, b] =
+                std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
+            Instruction {
+                opcode: VmOpcode::from_usize(
+                    Poseidon2Opcode::PERM_POS2 as usize + Poseidon2Opcode::default_offset(),
+                ),
+                a,
+                b,
+                c: BabyBear::ZERO,
+                d: BabyBear::ONE,
+                e: BabyBear::TWO,
+                f: BabyBear::ZERO,
+                g: BabyBear::ZERO,
+            }
+        })
+        .collect()
+}
+
+fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlake3Config> {
+    let elem_range = || 1..=100;
+
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = VerifyBatchChip::<F, SBOX_REGISTERS>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_bridge(),
+        VerifyBatchOpcode::default_offset(),
+        Poseidon2Opcode::default_offset(),
+        tester.offline_memory_mutex_arc(),
+        Poseidon2Config::default(),
+    );
+
+    let mut rng = create_seeded_rng();
+
+    for instruction in random_instructions(num_ops) {
+        let opcode = PERM_POS2;
+        let [a, b, c, d, e] = [
+            instruction.a,
+            instruction.b,
+            instruction.c,
+            instruction.d,
+            instruction.e,
+        ]
+        .map(|elem| elem.as_canonical_u64() as usize);
+
+        let dst = gen_pointer(&mut rng, CHUNK);
+        let lhs = gen_pointer(&mut rng, CHUNK);
+        let rhs = gen_pointer(&mut rng, CHUNK);
+
+        let data: [_; 2 * CHUNK] =
+            std::array::from_fn(|_| BabyBear::from_canonical_usize(rng.gen_range(elem_range())));
+
+        let hash = chip.subchip.permute(data);
+
+        tester.write_cell(d, a, BabyBear::from_canonical_usize(dst));
+        tester.write_cell(d, b, BabyBear::from_canonical_usize(lhs));
+        if opcode == Poseidon2Opcode::COMP_POS2 {
+            tester.write_cell(d, c, BabyBear::from_canonical_usize(rhs));
+        }
+
+        match opcode {
+            Poseidon2Opcode::COMP_POS2 => {
+                let data_left: [_; CHUNK] = std::array::from_fn(|i| data[i]);
+                let data_right: [_; CHUNK] = std::array::from_fn(|i| data[CHUNK + i]);
+                tester.write(e, lhs, data_left);
+                tester.write(e, rhs, data_right);
+            }
+            Poseidon2Opcode::PERM_POS2 => {
+                tester.write(e, lhs, data);
+            }
+        }
+
+        tester.execute(&mut chip, &instruction);
+
+        match opcode {
+            Poseidon2Opcode::COMP_POS2 => {
+                let expected: [_; CHUNK] = std::array::from_fn(|i| hash[i]);
+                let actual = tester.read::<{ CHUNK }>(e, dst);
+                assert_eq!(expected, actual);
+            }
+            Poseidon2Opcode::PERM_POS2 => {
+                let actual = tester.read::<{ 2 * CHUNK }>(e, dst);
+                assert_eq!(hash, actual);
+            }
+        }
+    }
+    tester.build().load(chip).finalize()
+}
+
+fn get_engine() -> BabyBearBlake3Engine {
+    BabyBearBlake3Engine::new(standard_fri_params_with_100_bits_conjectured_security(3))
+}
+
+#[test]
+fn verify_batch_chip_simple_permute_1() {
+    let tester = tester_with_random_poseidon2_ops(1);
+    tester.test(get_engine).expect("Verification failed");
+}
+
+#[test]
+fn verify_batch_chip_simple_permute_50() {
+    let tester = tester_with_random_poseidon2_ops(50);
+    tester.test(get_engine).expect("Verification failed");
 }

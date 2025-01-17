@@ -1,4 +1,4 @@
-use openvm_circuit::system::memory::offline_checker::MemoryReadAuxCols;
+use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_poseidon2_air::Poseidon2SubCols;
 
@@ -14,6 +14,7 @@ pub struct VerifyBatchCols<T, const SBOX_REGISTERS: usize> {
     pub incorporate_row: T,
     pub incorporate_sibling: T,
     pub inside_row: T,
+    pub simple: T,
 
     pub end_inside_row: T,
     pub end_top_level: T,
@@ -33,14 +34,18 @@ pub struct VerifyBatchCols<T, const SBOX_REGISTERS: usize> {
     // cannot be shared, should be 0 on rows that are not inside row
     pub is_exhausted: [T; CHUNK],
 
-    pub specific: [T; max(
+    pub specific: [T; max3(
         TopLevelSpecificCols::<usize>::width(),
         InsideRowSpecificCols::<usize>::width(),
+        SimplePermuteSpecificCols::<usize>::width(),
     )],
 }
 
 const fn max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]
+}
+const fn max3(a: usize, b: usize, c: usize) -> usize {
+    max(a, max(b, c))
 }
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -101,4 +106,23 @@ pub struct VerifyBatchCellCols<T> {
     pub row_pointer: T,
     pub row_end: T,
     pub is_first_in_row: T,
+}
+
+#[repr(C)]
+#[derive(AlignedBorrow, Copy, Clone)]
+pub struct SimplePermuteSpecificCols<T> {
+    pub pc: T,
+    // instruction (a, b, d, e)
+    pub output_register: T,
+    pub input_register: T,
+    pub register_address_space: T,
+    pub data_address_space: T,
+
+    pub output_pointer: T,
+    pub input_pointer: T,
+
+    pub read_output_pointer: MemoryReadAuxCols<T>,
+    pub read_input_pointer: MemoryReadAuxCols<T>,
+    pub read_data: MemoryReadAuxCols<T>,
+    pub write_data: MemoryWriteAuxCols<T, { 2 * CHUNK }>,
 }
