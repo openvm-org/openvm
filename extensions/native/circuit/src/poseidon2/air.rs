@@ -21,8 +21,8 @@ use crate::{
     chip::{NUM_INITIAL_READS, NUM_SIMPLE_ACCESSES},
     poseidon2::{
         columns::{
-            InsideRowSpecificCols, SimplePoseidonSpecificCols, TopLevelSpecificCols,
-            NativePoseidon2Cols,
+            InsideRowSpecificCols, NativePoseidon2Cols, SimplePoseidonSpecificCols,
+            TopLevelSpecificCols,
         },
         CHUNK,
     },

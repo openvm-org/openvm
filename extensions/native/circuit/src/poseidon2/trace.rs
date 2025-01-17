@@ -22,14 +22,16 @@ use crate::{
             NativePoseidon2Chip, VerifyBatchRecord,
         },
         columns::{
-            InsideRowSpecificCols, SimplePoseidonSpecificCols, TopLevelSpecificCols,
-            NativePoseidon2Cols,
+            InsideRowSpecificCols, NativePoseidon2Cols, SimplePoseidonSpecificCols,
+            TopLevelSpecificCols,
         },
         CHUNK,
     },
 };
 
-impl<F: Field, const SBOX_REGISTERS: usize> ChipUsageGetter for NativePoseidon2Chip<F, SBOX_REGISTERS> {
+impl<F: Field, const SBOX_REGISTERS: usize> ChipUsageGetter
+    for NativePoseidon2Chip<F, SBOX_REGISTERS>
+{
     fn air_name(&self) -> String {
         "VerifyBatchAir".to_string()
     }
