@@ -232,7 +232,6 @@ impl<F: PrimeField32> MemoryController<F> {
         range_checker: SharedVariableRangeCheckerChip,
     ) -> Self {
         let range_checker_bus = range_checker.bus();
-        let initial_memory = AddressMap::from_mem_config(&mem_config);
         Self {
             memory_bus,
             mem_config,
@@ -246,7 +245,6 @@ impl<F: PrimeField32> MemoryController<F> {
             },
             memory: Memory::new(&mem_config),
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
-                initial_memory,
                 1,
                 memory_bus,
                 range_checker.clone(),
@@ -296,7 +294,6 @@ impl<F: PrimeField32> MemoryController<F> {
             interface_chip,
             memory: Memory::new(&mem_config), // it is expected that the memory will be set later
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
-                AddressMap::from_mem_config(&mem_config),
                 CHUNK,
                 memory_bus,
                 range_checker.clone(),
