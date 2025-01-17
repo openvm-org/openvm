@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     asm::{AsmInstruction, AssemblyCode},
     FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
-    NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom,
+    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom,
 };
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -345,7 +345,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::LoadEI(dst, src, index, size, offset) => vec![
             // mem[dst] <- mem[mem[src] + index * size + offset]
             inst(
-                options.opcode_with_offset(NativeLoadStoreOpcode::LOADW4),
+                options.opcode_with_offset(NativeLoadStore4Opcode(NativeLoadStoreOpcode::LOADW)),
                 i32_f(dst),
                 index * size + offset,
                 i32_f(src),
@@ -367,7 +367,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::StoreEI(val, addr, index, size, offset) => vec![
             // mem[mem[addr] + index * size + offset] <- mem[val]
             inst(
-                options.opcode_with_offset(NativeLoadStoreOpcode::STOREW4),
+                options.opcode_with_offset(NativeLoadStore4Opcode(NativeLoadStoreOpcode::STOREW)),
                 i32_f(val),
                 index * size + offset,
                 i32_f(addr),
@@ -519,7 +519,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Native,
         )],
         AsmInstruction::StoreHintExtI(val, offset) => vec![inst(
-            options.opcode_with_offset(NativeLoadStoreOpcode::HINT_STOREW4),
+            options.opcode_with_offset(NativeLoadStore4Opcode(NativeLoadStoreOpcode::HINT_STOREW)),
             F::ZERO,
             offset,
             i32_f(val),

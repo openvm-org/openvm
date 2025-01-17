@@ -48,22 +48,17 @@ pub enum NativeLoadStoreOpcode {
     STOREW,
     /// Instruction to write the next hint word into memory.
     HINT_STOREW,
-    LOADW4,
-    STOREW4,
-    HINT_STOREW4,
 }
 
-pub const SINGLE_LOAD_STORE_OPCODES: [NativeLoadStoreOpcode; 3] = [
-    NativeLoadStoreOpcode::LOADW,
-    NativeLoadStoreOpcode::STOREW,
-    NativeLoadStoreOpcode::HINT_STOREW,
-];
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x108]
+pub struct NativeLoadStore4Opcode(pub NativeLoadStoreOpcode);
 
-pub const BLOCK_LOAD_STORE_OPCODES: [NativeLoadStoreOpcode; 3] = [
-    NativeLoadStoreOpcode::LOADW4,
-    NativeLoadStoreOpcode::STOREW4,
-    NativeLoadStoreOpcode::HINT_STOREW4,
-];
+impl NativeLoadStore4Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        NativeLoadStoreOpcode::iter().map(Self)
+    }
+}
 
 pub const BLOCK_LOAD_STORE_SIZE: usize = 4;
 
