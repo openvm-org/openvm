@@ -35,10 +35,6 @@ pub struct AggStarkProver {
     pub num_children_internal: usize,
     pub max_internal_wrapper_layers: usize,
 }
-// pub struct LeafProver {
-//     prover: VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
-//     // pub num_children: usize,
-// }
 
 pub struct LeafProvingController {
     /// Each leaf proof aggregations `<= num_children` App VM proofs
