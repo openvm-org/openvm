@@ -53,7 +53,7 @@ fn test<const CHUNK: usize>(
         let label = pointer / CHUNK as u32;
         assert!(address_space - as_offset < (1 << as_height));
         assert!(pointer < ((CHUNK << address_height).div_ceil(PAGE_SIZE) * PAGE_SIZE) as u32);
-        if initial_memory.get(&(address_space, pointer)).cloned() != Some(value) {
+        if initial_memory.get(&(address_space, pointer)) != Some(&value) {
             assert!(touched_labels.contains(&(address_space, label)));
         }
     }
