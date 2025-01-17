@@ -1,0 +1,5 @@
+[patch."https://github.com/openvm-org/openvm.git"]
+openvm = { path = "crates/toolchain/openvm" }
+openvm-platform = { path = "crates/toolchain/platform" }
+openvm-algebra-guest = { path = "extensions/algebra/guest" }
+openvm-algebra-complex-macros = { path = "extensions/algebra/guest/src/field/complex-macros" }
