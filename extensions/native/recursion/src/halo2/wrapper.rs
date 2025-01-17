@@ -48,7 +48,7 @@ impl Halo2WrapperProvingKey {
         dummy_snark: Snark,
         hash_prev_accumulator: bool,
     ) -> Self {
-        let k = Self::select_k(dummy_snark.clone());
+        let k = Self::select_k(dummy_snark.clone(), hash_prev_accumulator);
         tracing::info!("Selected k: {}", k);
         let params = reader.read_params(k);
         Self::keygen(&params, dummy_snark, hash_prev_accumulator)
@@ -154,12 +154,16 @@ impl Halo2WrapperProvingKey {
             .use_break_points(self.pinning.metadata.break_points.clone())
     }
 
-    pub(crate) fn select_k(dummy_snark: Snark) -> usize {
+    pub(crate) fn select_k(dummy_snark: Snark, hash_prev_accumulator: bool) -> usize {
         let mut k = 20;
         let mut first_run = true;
         loop {
-            let mut circuit =
-                generate_wrapper_circuit_object(Keygen, k, dummy_snark.clone(), false);
+            let mut circuit = generate_wrapper_circuit_object(
+                Keygen,
+                k,
+                dummy_snark.clone(),
+                hash_prev_accumulator,
+            );
             circuit.calculate_params(Some(MIN_ROWS));
             assert_eq!(
                 circuit.builder.config_params.num_advice_per_phase.len(),
