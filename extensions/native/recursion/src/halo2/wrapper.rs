@@ -43,17 +43,22 @@ const MIN_ROWS: usize = 20;
 
 impl Halo2WrapperProvingKey {
     /// Auto select k to let Wrapper circuit only have 1 advice column.
-    pub fn keygen_auto_tune(reader: &impl Halo2ParamsReader, dummy_snark: Snark) -> Self {
+    pub fn keygen_auto_tune(
+        reader: &impl Halo2ParamsReader,
+        dummy_snark: Snark,
+        hash_prev_accumulator: bool,
+    ) -> Self {
         let k = Self::select_k(dummy_snark.clone());
         tracing::info!("Selected k: {}", k);
         let params = reader.read_params(k);
-        Self::keygen(&params, dummy_snark)
+        Self::keygen(&params, dummy_snark, hash_prev_accumulator)
     }
-    pub fn keygen(params: &Halo2Params, dummy_snark: Snark) -> Self {
+    pub fn keygen(params: &Halo2Params, dummy_snark: Snark, hash_prev_accumulator: bool) -> Self {
         let k = params.k();
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
-        let mut circuit = generate_wrapper_circuit_object(Keygen, k as usize, dummy_snark, true);
+        let mut circuit =
+            generate_wrapper_circuit_object(Keygen, k as usize, dummy_snark, hash_prev_accumulator);
         circuit.calculate_params(Some(MIN_ROWS));
         let config_params = circuit.builder.config_params.clone();
         tracing::info!(
@@ -100,11 +105,17 @@ impl Halo2WrapperProvingKey {
             None,
         ))
     }
-    pub fn prove_for_evm(&self, params: &Halo2Params, snark_to_verify: Snark) -> EvmProof {
+    pub fn prove_for_evm(
+        &self,
+        params: &Halo2Params,
+        snark_to_verify: Snark,
+        hash_prev_accumulator: bool,
+    ) -> EvmProof {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
         let k = self.pinning.metadata.config_params.k;
-        let prover_circuit = self.generate_circuit_object_for_proving(k, snark_to_verify);
+        let prover_circuit =
+            self.generate_circuit_object_for_proving(k, snark_to_verify, hash_prev_accumulator);
         let pvs = prover_circuit.instances();
         let proof = gen_evm_proof_shplonk(params, &self.pinning.pk, prover_circuit, pvs.clone());
         #[cfg(feature = "bench-metrics")]
@@ -119,18 +130,19 @@ impl Halo2WrapperProvingKey {
         &self,
         k: usize,
         snark_to_verify: Snark,
+        hash_prev_accumulator: bool,
     ) -> AggregationCircuit {
         assert_eq!(
             snark_to_verify.instances.len(),
             1,
             "Snark should only have 1 instance column"
         );
+        let accumulator_pv_len = if hash_prev_accumulator { 12 } else { 0 };
         assert_eq!(
             self.pinning.metadata.num_pvs[0],
-            // 12 is the number of public values for the accumulator
-            snark_to_verify.instances[0].len() + 12
+            snark_to_verify.instances[0].len() + accumulator_pv_len,
         );
-        generate_wrapper_circuit_object(Prover, k, snark_to_verify, false)
+        generate_wrapper_circuit_object(Prover, k, snark_to_verify, hash_prev_accumulator)
             .use_params(
                 self.pinning
                     .metadata

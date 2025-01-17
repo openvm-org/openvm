@@ -42,7 +42,12 @@ impl EvmProvingSetupCmd {
         let agg_config = AggConfig::default();
 
         println!("Generating proving key...");
-        let agg_pk = Sdk.agg_keygen(agg_config, &params_reader, None::<&RootVerifierProvingKey>)?;
+        let agg_pk = Sdk.agg_keygen(
+            agg_config,
+            &params_reader,
+            None::<&RootVerifierProvingKey>,
+            false,
+        )?;
 
         println!("Generating verifier contract...");
         let verifier = Sdk.generate_snark_verifier_contract(&params_reader, &agg_pk)?;

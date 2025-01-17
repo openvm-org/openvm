@@ -94,6 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         agg_config,
         &halo2_params_reader,
         None::<&RootVerifierProvingKey>,
+        false,
     )?;
 
     // 9. Generate the SNARK verifier smart contract
@@ -106,6 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app_committed_exe,
         agg_pk,
         stdin,
+        false,
     )?;
 
     // 11. Verify the EVM proof

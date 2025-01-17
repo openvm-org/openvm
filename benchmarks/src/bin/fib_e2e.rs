@@ -41,6 +41,7 @@ async fn main() -> Result<()> {
         agg_config,
         &halo2_params_reader,
         None::<&RootVerifierProvingKey>,
+        false,
     )?;
     let elf = args.build_bench_program("fibonacci")?;
     let exe = VmExe::from_elf(
@@ -59,7 +60,7 @@ async fn main() -> Result<()> {
         let mut e2e_prover =
             ContinuationProver::new(&halo2_params_reader, app_pk, app_committed_exe, full_agg_pk);
         e2e_prover.set_program_name("fib_e2e");
-        let _proof = e2e_prover.generate_proof_for_evm(stdin);
+        let _proof = e2e_prover.generate_proof_for_evm(stdin, false);
     });
 
     Ok(())

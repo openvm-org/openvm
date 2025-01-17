@@ -301,6 +301,7 @@ impl AggProvingKey {
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
         pv_handler: Option<&impl StaticVerifierPvHandler>,
+        hash_prev_accumulator: bool,
     ) -> Self {
         let AggConfig {
             agg_stark_config,
@@ -319,9 +320,13 @@ impl AggProvingKey {
         );
         let dummy_snark = verifier.generate_dummy_snark(reader);
         let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {
-            Halo2WrapperProvingKey::keygen(&reader.read_params(wrapper_k), dummy_snark)
+            Halo2WrapperProvingKey::keygen(
+                &reader.read_params(wrapper_k),
+                dummy_snark,
+                hash_prev_accumulator,
+            )
         } else {
-            Halo2WrapperProvingKey::keygen_auto_tune(reader, dummy_snark)
+            Halo2WrapperProvingKey::keygen_auto_tune(reader, dummy_snark, hash_prev_accumulator)
         };
         let halo2_pk = Halo2ProvingKey {
             verifier,
