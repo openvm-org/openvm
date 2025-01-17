@@ -6,9 +6,9 @@ use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
     k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
     msm,
-    p256::{P256Coord, P256Point, P256Scalar},
+    p256::{P256Coord, P256Point},
     weierstrass::WeierstrassPoint,
-    CyclicGroup, Group,
+    Group,
 };
 
 openvm_algebra_moduli_setup::moduli_init! {
