@@ -172,11 +172,11 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         // right input
 
-        for i in 0..CHUNK {
+        for &next_right_input in next_right_input.iter() {
             builder
                 .when(end.clone())
                 .when(next.inside_row)
-                .assert_zero(next_right_input[i]);
+                .assert_zero(next_right_input);
         }
 
         for i in 0..CHUNK {
@@ -700,6 +700,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 }
 
 impl VerifyBatchBus {
+    #[allow(clippy::too_many_arguments)]
     pub fn interact<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,

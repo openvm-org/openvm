@@ -149,7 +149,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Stateful<Vec<u8>>
                 if let Some(incorporate_row) = &top_level.incorporate_row {
                     self.height += 1 + incorporate_row.chunks.len();
                 }
-                if let Some(_) = &top_level.incorporate_sibling {
+                if top_level.incorporate_sibling.is_some() {
                     self.height += 1;
                 }
             }
@@ -354,7 +354,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 
                     loop {
                         let mut cells = vec![];
-                        for i in 0..CHUNK {
+                        for chunk_elem in rolling_hash.iter_mut().take(CHUNK) {
                             let read_row_pointer_and_length = if is_first_in_segment
                                 || row_pointer == row_end
                             {
@@ -393,7 +393,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                                 row_pointer,
                                 row_end,
                             });
-                            rolling_hash[i] = value;
+                            *chunk_elem = value;
                             row_pointer += 1;
                         }
                         if cells.is_empty() {
@@ -470,12 +470,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 
                     let mut sibling = [F::ZERO; CHUNK];
                     let mut reads = vec![];
-                    for i in 0..CHUNK {
+                    for (i, sibling_elem) in sibling.iter_mut().enumerate().take(CHUNK) {
                         let (read, value) = memory.read_cell(
                             address_space,
                             F::from_canonical_usize(sibling_array_start + i),
                         );
-                        sibling[i] = value;
+                        *sibling_elem = value;
                         reads.push(read);
                     }
 
@@ -538,11 +538,11 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         if opcode == (VERIFY_BATCH as usize) + self.air.verify_batch_offset {
-            return String::from("VERIFY_BATCH");
+            String::from("VERIFY_BATCH")
         } else if opcode == (PERM_POS2 as usize) + self.air.simple_offset {
-            return String::from("PERM_POS2");
+            String::from("PERM_POS2")
         } else if opcode == (COMP_POS2 as usize) + self.air.simple_offset {
-            return String::from("COMP_POS2");
+            String::from("COMP_POS2")
         } else {
             unreachable!("unsupported opcode: {}", opcode)
         }

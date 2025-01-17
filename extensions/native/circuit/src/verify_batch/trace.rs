@@ -47,8 +47,9 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
     fn generate_subair_cols(&self, input: [F; 2 * CHUNK], cols: &mut [F]) {
         let inner_trace = self.subchip.generate_trace(vec![input]);
         let inner_width = self.air.subair.width();
-        cols[..inner_width].copy_from_slice(&inner_trace.values.as_slice());
+        cols[..inner_width].copy_from_slice(inner_trace.values.as_slice());
     }
+    #[allow(clippy::too_many_arguments)]
     fn incorporate_sibling_record_to_row(
         &self,
         record: &IncorporateSiblingRecord<F>,
@@ -158,6 +159,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         specific.commit_read =
             aux_cols_factory.make_read_aux_cols(memory.record_by_id(commit_read));
     }
+    #[allow(clippy::too_many_arguments)]
     fn incorporate_row_record_to_row(
         &self,
         record: &IncorporateRowRecord<F>,
@@ -221,6 +223,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         specific.read_final_height_or_sibling_array_start =
             aux_cols_factory.make_read_aux_cols(final_height_read);
     }
+    #[allow(clippy::too_many_arguments)]
     fn inside_row_record_to_row(
         &self,
         record: &InsideRowRecord<F>,
@@ -295,17 +298,16 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         let width = VerifyBatchCols::<F, SBOX_REGISTERS>::width();
         let mut used_cells = 0;
 
-        let mut proof_index = 0;
         let mut height = record.initial_height;
         let mut opened_index = 0;
-        for top_level in record.top_level.iter() {
+        for (proof_index, top_level) in record.top_level.iter().enumerate() {
             if let Some(incorporate_row) = &top_level.incorporate_row {
                 self.incorporate_row_record_to_row(
-                    &incorporate_row,
+                    incorporate_row,
                     aux_cols_factory,
                     &mut slice[used_cells..used_cells + width],
                     memory,
-                    &record,
+                    record,
                     proof_index,
                     height,
                 );
@@ -314,11 +316,11 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
             }
             if let Some(incorporate_sibling) = &top_level.incorporate_sibling {
                 self.incorporate_sibling_record_to_row(
-                    &incorporate_sibling,
+                    incorporate_sibling,
                     aux_cols_factory,
                     &mut slice[used_cells..used_cells + width],
                     memory,
-                    &record,
+                    record,
                     proof_index,
                     opened_index,
                     height,
@@ -326,7 +328,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
                 used_cells += width;
             }
             height /= 2;
-            proof_index += 1;
         }
         self.correct_last_top_level_row(
             record,
@@ -339,12 +340,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
             if let Some(incorporate_row) = &top_level.incorporate_row {
                 for (i, chunk) in incorporate_row.chunks.iter().enumerate() {
                     self.inside_row_record_to_row(
-                        &chunk,
+                        chunk,
                         aux_cols_factory,
                         &mut slice[used_cells..used_cells + width],
                         memory,
-                        &incorporate_row,
-                        &record,
+                        incorporate_row,
+                        record,
                         i == incorporate_row.chunks.len() - 1,
                     );
                     used_cells += width;
