@@ -204,7 +204,7 @@ fn generate_wrapper_circuit_object(
         [snark],
         VerifierUniversality::None,
     );
-    circuit.expose_previous_instances(hash_prev_accumulator);
+    // circuit.expose_previous_instances(hash_prev_accumulator);
     circuit
 }
 
