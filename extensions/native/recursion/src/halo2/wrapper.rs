@@ -53,7 +53,7 @@ impl Halo2WrapperProvingKey {
         let k = params.k();
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
-        let mut circuit = generate_wrapper_circuit_object(Keygen, k as usize, dummy_snark);
+        let mut circuit = generate_wrapper_circuit_object(Keygen, k as usize, dummy_snark, true);
         circuit.calculate_params(Some(MIN_ROWS));
         let config_params = circuit.builder.config_params.clone();
         tracing::info!(
@@ -130,7 +130,7 @@ impl Halo2WrapperProvingKey {
             // 12 is the number of public values for the accumulator
             snark_to_verify.instances[0].len() + 12
         );
-        generate_wrapper_circuit_object(Prover, k, snark_to_verify)
+        generate_wrapper_circuit_object(Prover, k, snark_to_verify, false)
             .use_params(
                 self.pinning
                     .metadata
@@ -146,7 +146,8 @@ impl Halo2WrapperProvingKey {
         let mut k = 20;
         let mut first_run = true;
         loop {
-            let mut circuit = generate_wrapper_circuit_object(Keygen, k, dummy_snark.clone());
+            let mut circuit =
+                generate_wrapper_circuit_object(Keygen, k, dummy_snark.clone(), false);
             circuit.calculate_params(Some(MIN_ROWS));
             assert_eq!(
                 circuit.builder.config_params.num_advice_per_phase.len(),
@@ -173,6 +174,7 @@ fn generate_wrapper_circuit_object(
     stage: CircuitBuilderStage,
     k: usize,
     snark: Snark,
+    hash_prev_accumulator: bool,
 ) -> AggregationCircuit {
     let config_params = AggregationConfigParams {
         degree: k as u32,
@@ -186,7 +188,7 @@ fn generate_wrapper_circuit_object(
         [snark],
         VerifierUniversality::None,
     );
-    circuit.expose_previous_instances(false);
+    circuit.expose_previous_instances(hash_prev_accumulator);
     circuit
 }
 
