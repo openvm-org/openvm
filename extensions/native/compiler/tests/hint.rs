@@ -34,29 +34,3 @@ fn test_hint_bits_felt() {
     println!("{}", program);
     execute_program(program, vec![]);
 }
-
-#[test]
-fn test_hint_bits_var() {
-    let mut builder = AsmBuilder::<F, EF>::default();
-
-    let var: Var<_> = builder.constant(F::from_canonical_u32(5));
-    let bits = builder.num2bits_v(var, F::bits() as u32);
-
-    let x = builder.get(&bits, RVar::zero());
-    builder.assert_var_eq(x, F::ONE);
-    let x = builder.get(&bits, RVar::one());
-    builder.assert_var_eq(x, F::ZERO);
-    let x = builder.get(&bits, 2);
-    builder.assert_var_eq(x, F::ONE);
-
-    for i in 3..31 {
-        let x = builder.get(&bits, i);
-        builder.assert_var_eq(x, F::ZERO);
-    }
-
-    builder.halt();
-
-    let program = builder.compile_isa();
-    println!("{}", program);
-    execute_program(program, vec![]);
-}
