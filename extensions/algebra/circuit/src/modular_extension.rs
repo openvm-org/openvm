@@ -88,8 +88,8 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
         for (i, modulus) in self.supported_modulus.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8);
-            let class_offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET
-                + i * Rv32ModularArithmeticOpcode::COUNT;
+            let class_offset =
+                Rv32ModularArithmeticOpcode::CLASS_OFFSET + i * Rv32ModularArithmeticOpcode::COUNT;
 
             let config32 = ExprBuilderConfig {
                 modulus: modulus.clone(),
