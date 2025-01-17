@@ -1,4 +1,7 @@
+use std::any::TypeId;
+
 use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::{Array, Builder, Config, DslIr, Felt, MemIndex, Var};
 
@@ -17,7 +20,7 @@ impl<C: Config> Builder<C> {
 
     /// Converts a felt to bits. Only works for C::F = BabyBear
     pub fn num2bits_f(&mut self, num: Felt<C::F>, num_bits: u32) -> Array<C, Var<C::N>> {
-        assert!(TypeId::of::<C::F>() == BabyBear::F::TYPE_ID);
+        assert!(TypeId::of::<C::F>() == TypeId::of::<BabyBear>());
 
         self.push(DslIr::HintBitsF(num, num_bits));
         let output = self.dyn_array::<Felt<_>>(num_bits as usize);
