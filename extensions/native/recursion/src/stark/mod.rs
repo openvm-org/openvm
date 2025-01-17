@@ -576,8 +576,6 @@ where
         builder.cycle_tracker_end("stage-d-verify-pcs");
 
         builder.cycle_tracker_start("stage-e-verify-constraints");
-
-        // TODO[zach]: make per phase; for now just 1 phase so OK
         let after_challenge_idx: Usize<C::N> = builder.eval(C::N::ZERO);
         let preprocessed_idx: Usize<_> = builder.eval(C::N::ZERO);
         let cached_main_commit_idx: Usize<_> = builder.eval(C::N::ZERO);
