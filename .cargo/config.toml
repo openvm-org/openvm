@@ -1,9 +1,0 @@
-[patch."https://github.com/openvm-org/openvm.git"]
-openvm = { path = "crates/toolchain/openvm" }
-openvm-platform = { path = "crates/toolchain/platform" }
-openvm-algebra-guest = { path = "extensions/algebra/guest" }
-openvm-algebra-moduli-setup = { path = "extensions/algebra/moduli-setup" }
-openvm-algebra-complex-macros = { path = "extensions/algebra/guest/src/field/complex-macros" }
-openvm-bigint-guest = { path = "extensions/bigint/guest" }
-openvm-ecc-guest = { path = "extensions/ecc/guest" }
-openvm-pairing-guest = { path = "extensions/pairing/guest" }
