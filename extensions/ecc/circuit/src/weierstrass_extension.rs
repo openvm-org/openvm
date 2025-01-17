@@ -114,7 +114,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
 
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let class_offset =
-                Rv32WeierstrassOpcode::default_offset() + i * Rv32WeierstrassOpcode::COUNT;
+                Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8);
             let config32 = ExprBuilderConfig {
                 modulus: curve.modulus.clone(),

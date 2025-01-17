@@ -119,8 +119,8 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
         for curve in self.supported_curves.iter() {
             let pairing_idx = *curve as usize;
             let pairing_class_offset =
-                PairingOpcode::default_offset() + pairing_idx * PairingOpcode::COUNT;
-            let fp12_class_offset = Fp12Opcode::default_offset() + pairing_idx * Fp12Opcode::COUNT;
+                PairingOpcode::CLASS_OFFSET + pairing_idx * PairingOpcode::COUNT;
+            let fp12_class_offset = Fp12Opcode::CLASS_OFFSET + pairing_idx * Fp12Opcode::COUNT;
             match curve {
                 PairingCurve::Bn254 => {
                     let bn_config = ExprBuilderConfig {

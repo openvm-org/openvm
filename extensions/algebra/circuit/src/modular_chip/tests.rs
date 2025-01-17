@@ -69,7 +69,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     let mut chip = ModularAddSubChip::new(
         adapter,
         config,
-        Rv32ModularArithmeticOpcode::default_offset() + opcode_offset,
+        Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset,
         tester.range_checker(),
         tester.offline_memory_mutex_arc(),
     );
@@ -197,7 +197,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     let mut chip = ModularMulDivChip::new(
         adapter,
         config,
-        Rv32ModularArithmeticOpcode::default_offset() + opcode_offset,
+        Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset,
         tester.range_checker(),
         tester.offline_memory_mutex_arc(),
     );

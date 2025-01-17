@@ -41,9 +41,7 @@ pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
 
             quote! {
                 impl UsizeOpcode for #name {
-                    fn default_offset() -> usize {
-                        #offset
-                    }
+                    const CLASS_OFFSET: usize = #offset;
 
                     fn from_usize(value: usize) -> Self {
                         #name(<#inner_ty as UsizeOpcode>::from_usize(value))
@@ -58,9 +56,7 @@ pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
         Data::Enum(_) => {
             quote! {
                 impl UsizeOpcode for #name {
-                    fn default_offset() -> usize {
-                        #offset
-                    }
+                    const CLASS_OFFSET: usize = #offset;
 
                     fn from_usize(value: usize) -> Self {
                         Self::from_repr(value.try_into().unwrap())

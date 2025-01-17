@@ -143,7 +143,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             ),
             BaseAluCoreChip::new(
                 bitwise_lu_chip.clone(),
-                Rv32BaseAlu256Opcode::default_offset(),
+                Rv32BaseAlu256Opcode::CLASS_OFFSET,
             ),
             offline_memory.clone(),
         );
@@ -162,7 +162,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             ),
             LessThanCoreChip::new(
                 bitwise_lu_chip.clone(),
-                Rv32LessThan256Opcode::default_offset(),
+                Rv32LessThan256Opcode::CLASS_OFFSET,
             ),
             offline_memory.clone(),
         );
@@ -179,7 +179,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 address_bits,
                 bitwise_lu_chip.clone(),
             ),
-            BranchEqualCoreChip::new(Rv32BranchEqual256Opcode::default_offset(), DEFAULT_PC_STEP),
+            BranchEqualCoreChip::new(Rv32BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -197,7 +197,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             ),
             BranchLessThanCoreChip::new(
                 bitwise_lu_chip.clone(),
-                Rv32LessThan256Opcode::default_offset(),
+                Rv32LessThan256Opcode::CLASS_OFFSET,
             ),
             offline_memory.clone(),
         );
@@ -214,7 +214,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 address_bits,
                 bitwise_lu_chip.clone(),
             ),
-            MultiplicationCoreChip::new(range_tuple_chip, Rv32Mul256Opcode::default_offset()),
+            MultiplicationCoreChip::new(range_tuple_chip, Rv32Mul256Opcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -233,7 +233,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             ShiftCoreChip::new(
                 bitwise_lu_chip.clone(),
                 range_checker_chip,
-                Rv32Shift256Opcode::default_offset(),
+                Rv32Shift256Opcode::CLASS_OFFSET,
             ),
             offline_memory.clone(),
         );

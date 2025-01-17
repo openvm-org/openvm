@@ -118,7 +118,7 @@ fn rand_hintstore_test() {
     );
 
     let mut core =
-        Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
+        Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::CLASS_OFFSET);
     core.set_streams(Arc::new(Mutex::new(Streams::default())));
     let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
@@ -161,7 +161,7 @@ fn run_negative_hintstore_test(
         range_checker_chip.clone(),
     );
     let mut core =
-        Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
+        Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::CLASS_OFFSET);
     core.set_streams(Arc::new(Mutex::new(Streams::default())));
     let adapter_width = BaseAir::<F>::width(adapter.air());
     let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
@@ -218,7 +218,7 @@ fn execute_roundtrip_sanity_test() {
         range_checker_chip.clone(),
     );
     let mut core =
-        Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
+        Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::CLASS_OFFSET);
     core.set_streams(Arc::new(Mutex::new(Streams::default())));
     let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 

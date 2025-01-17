@@ -97,7 +97,7 @@ fn rand_jalr_test() {
     let inner = Rv32JalrCoreChip::new(
         bitwise_chip.clone(),
         range_checker_chip.clone(),
-        Rv32JalrOpcode::default_offset(),
+        Rv32JalrOpcode::CLASS_OFFSET,
     );
     let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
 
@@ -147,7 +147,7 @@ fn run_negative_jalr_test(
     let inner = Rv32JalrCoreChip::new(
         bitwise_chip.clone(),
         range_checker_chip.clone(),
-        Rv32JalrOpcode::default_offset(),
+        Rv32JalrOpcode::CLASS_OFFSET,
     );
     let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
 
@@ -286,7 +286,7 @@ fn execute_roundtrip_sanity_test() {
     let inner = Rv32JalrCoreChip::new(
         bitwise_chip,
         range_checker_chip,
-        Rv32JalrOpcode::default_offset(),
+        Rv32JalrOpcode::CLASS_OFFSET,
     );
     let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
 

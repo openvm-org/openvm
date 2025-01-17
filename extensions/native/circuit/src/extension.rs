@@ -115,9 +115,9 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 execution_bus,
                 program_bus,
                 memory_bridge,
-                NativeLoadStoreOpcode::default_offset(),
+                NativeLoadStoreOpcode::CLASS_OFFSET,
             ),
-            NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset()),
+            NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         load_store_chip.core.set_streams(builder.streams().clone());
@@ -132,9 +132,9 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 execution_bus,
                 program_bus,
                 memory_bridge,
-                NativeLoadStore4Opcode::default_offset(),
+                NativeLoadStore4Opcode::CLASS_OFFSET,
             ),
-            NativeLoadStoreCoreChip::new(NativeLoadStore4Opcode::default_offset()),
+            NativeLoadStoreCoreChip::new(NativeLoadStore4Opcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         block_load_store_chip
@@ -148,7 +148,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         let branch_equal_chip = NativeBranchEqChip::new(
             BranchNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_bridge),
-            BranchEqualCoreChip::new(NativeBranchEqualOpcode::default_offset(), DEFAULT_PC_STEP),
+            BranchEqualCoreChip::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -158,7 +158,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         let jal_chip = NativeJalChip::new(
             JalNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_bridge),
-            JalCoreChip::new(NativeJalOpcode::default_offset()),
+            JalCoreChip::new(NativeJalOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -168,7 +168,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         let field_arithmetic_chip = FieldArithmeticChip::new(
             NativeAdapterChip::<F, 2, 1>::new(execution_bus, program_bus, memory_bridge),
-            FieldArithmeticCoreChip::new(FieldArithmeticOpcode::default_offset()),
+            FieldArithmeticCoreChip::new(FieldArithmeticOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -178,7 +178,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         let field_extension_chip = FieldExtensionChip::new(
             NativeVectorizedAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            FieldExtensionCoreChip::new(FieldExtensionOpcode::default_offset()),
+            FieldExtensionCoreChip::new(FieldExtensionOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -190,7 +190,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             execution_bus,
             program_bus,
             memory_bridge,
-            FriOpcode::default_offset(),
+            FriOpcode::CLASS_OFFSET,
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -203,7 +203,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             program_bus,
             memory_bridge,
             Poseidon2Config::default(),
-            Poseidon2Opcode::default_offset(),
+            Poseidon2Opcode::CLASS_OFFSET,
             builder.system_config().max_constraint_degree,
             offline_memory.clone(),
         );
@@ -345,7 +345,7 @@ impl<F: PrimeField32> VmExtension<F> for CastFExtension {
 
         let castf_chip = CastFChip::new(
             ConvertAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            CastFCoreChip::new(range_checker.clone(), CastfOpcode::default_offset()),
+            CastFCoreChip::new(range_checker.clone(), CastfOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         inventory.add_executor(

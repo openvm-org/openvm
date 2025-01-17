@@ -122,7 +122,7 @@ mod tests {
             adapter,
             config,
             BN254_XI_ISIZE,
-            Fp12Opcode::default_offset(),
+            Fp12Opcode::CLASS_OFFSET,
             tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );

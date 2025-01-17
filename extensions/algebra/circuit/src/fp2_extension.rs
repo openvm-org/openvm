@@ -79,7 +79,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
         for (i, modulus) in self.supported_modulus.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8);
-            let class_offset = Fp2Opcode::default_offset() + i * Fp2Opcode::COUNT;
+            let class_offset = Fp2Opcode::CLASS_OFFSET + i * Fp2Opcode::COUNT;
 
             let config32 = ExprBuilderConfig {
                 modulus: modulus.clone(),

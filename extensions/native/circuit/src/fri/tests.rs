@@ -39,7 +39,7 @@ fn fri_mat_opening_air_test() {
     let address_space_range = || 1usize..=2;
     let length_range = || 1..=49;
 
-    let offset = FriOpcode::default_offset();
+    let offset = FriOpcode::CLASS_OFFSET;
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = FriReducedOpeningChip::new(

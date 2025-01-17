@@ -97,7 +97,7 @@ fn test_add_ne() {
     let mut chip = EcAddNeChip::new(
         adapter,
         config,
-        Rv32WeierstrassOpcode::default_offset(),
+        Rv32WeierstrassOpcode::CLASS_OFFSET,
         tester.range_checker(),
         tester.offline_memory_mutex_arc(),
     );
@@ -177,7 +177,7 @@ fn test_double() {
         adapter,
         tester.memory_controller().borrow().range_checker.clone(),
         config,
-        Rv32WeierstrassOpcode::default_offset(),
+        Rv32WeierstrassOpcode::CLASS_OFFSET,
         BigUint::zero(),
         tester.offline_memory_mutex_arc(),
     );
@@ -254,7 +254,7 @@ fn test_p256_double() {
         adapter,
         tester.memory_controller().borrow().range_checker.clone(),
         config,
-        Rv32WeierstrassOpcode::default_offset(),
+        Rv32WeierstrassOpcode::CLASS_OFFSET,
         a.clone(),
         tester.offline_memory_mutex_arc(),
     );

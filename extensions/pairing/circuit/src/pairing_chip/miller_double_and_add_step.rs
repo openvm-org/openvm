@@ -149,7 +149,7 @@ mod tests {
                 limb_bits: LIMB_BITS,
                 num_limbs: NUM_LIMBS,
             },
-            PairingOpcode::default_offset(),
+            PairingOpcode::CLASS_OFFSET,
             tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );

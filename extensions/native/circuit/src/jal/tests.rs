@@ -62,7 +62,7 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeJalChip<F>) {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let inner = JalCoreChip::new(NativeJalOpcode::default_offset());
+    let inner = JalCoreChip::new(NativeJalOpcode::CLASS_OFFSET);
     let chip = NativeJalChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
     (rng, tester, chip)
 }

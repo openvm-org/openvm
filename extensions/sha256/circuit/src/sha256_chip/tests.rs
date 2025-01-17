@@ -86,7 +86,7 @@ fn rand_sha256_test() {
         tester.address_bits(),
         bitwise_chip.clone(),
         BUS_IDX,
-        Rv32Sha256Opcode::default_offset(),
+        Rv32Sha256Opcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
@@ -119,7 +119,7 @@ fn execute_roundtrip_sanity_test() {
         tester.address_bits(),
         bitwise_chip.clone(),
         BUS_IDX,
-        Rv32Sha256Opcode::default_offset(),
+        Rv32Sha256Opcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 

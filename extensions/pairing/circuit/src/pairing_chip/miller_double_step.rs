@@ -143,7 +143,7 @@ mod tests {
         let mut chip = MillerDoubleStepChip::new(
             adapter,
             config,
-            PairingOpcode::default_offset(),
+            PairingOpcode::CLASS_OFFSET,
             tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );
@@ -210,7 +210,7 @@ mod tests {
         let mut chip = MillerDoubleStepChip::new(
             adapter,
             config,
-            PairingOpcode::default_offset(),
+            PairingOpcode::CLASS_OFFSET,
             tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );

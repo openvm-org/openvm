@@ -89,7 +89,7 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
             builder.system_config().memory_config.pointer_max_bits,
             bitwise_lu_chip,
             builder.new_bus_idx(),
-            Rv32Sha256Opcode::default_offset(),
+            Rv32Sha256Opcode::CLASS_OFFSET,
             builder.system_base().offline_memory(),
         );
         inventory.add_executor(

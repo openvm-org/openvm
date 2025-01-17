@@ -98,23 +98,23 @@ impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
                 let global_opcode = match ModArithBaseFunct7::from_repr(base_funct7) {
                     Some(ModArithBaseFunct7::AddMod) => {
                         Rv32ModularArithmeticOpcode::ADD as usize
-                            + Rv32ModularArithmeticOpcode::default_offset()
+                            + Rv32ModularArithmeticOpcode::CLASS_OFFSET
                     }
                     Some(ModArithBaseFunct7::SubMod) => {
                         Rv32ModularArithmeticOpcode::SUB as usize
-                            + Rv32ModularArithmeticOpcode::default_offset()
+                            + Rv32ModularArithmeticOpcode::CLASS_OFFSET
                     }
                     Some(ModArithBaseFunct7::MulMod) => {
                         Rv32ModularArithmeticOpcode::MUL as usize
-                            + Rv32ModularArithmeticOpcode::default_offset()
+                            + Rv32ModularArithmeticOpcode::CLASS_OFFSET
                     }
                     Some(ModArithBaseFunct7::DivMod) => {
                         Rv32ModularArithmeticOpcode::DIV as usize
-                            + Rv32ModularArithmeticOpcode::default_offset()
+                            + Rv32ModularArithmeticOpcode::CLASS_OFFSET
                     }
                     Some(ModArithBaseFunct7::IsEqMod) => {
                         Rv32ModularArithmeticOpcode::IS_EQ as usize
-                            + Rv32ModularArithmeticOpcode::default_offset()
+                            + Rv32ModularArithmeticOpcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };
@@ -173,16 +173,16 @@ impl<F: PrimeField32> TranspilerExtension<F> for Fp2TranspilerExtension {
             } else {
                 let global_opcode = match ComplexExtFieldBaseFunct7::from_repr(base_funct7) {
                     Some(ComplexExtFieldBaseFunct7::Add) => {
-                        Fp2Opcode::ADD as usize + Fp2Opcode::default_offset()
+                        Fp2Opcode::ADD as usize + Fp2Opcode::CLASS_OFFSET
                     }
                     Some(ComplexExtFieldBaseFunct7::Sub) => {
-                        Fp2Opcode::SUB as usize + Fp2Opcode::default_offset()
+                        Fp2Opcode::SUB as usize + Fp2Opcode::CLASS_OFFSET
                     }
                     Some(ComplexExtFieldBaseFunct7::Mul) => {
-                        Fp2Opcode::MUL as usize + Fp2Opcode::default_offset()
+                        Fp2Opcode::MUL as usize + Fp2Opcode::CLASS_OFFSET
                     }
                     Some(ComplexExtFieldBaseFunct7::Div) => {
-                        Fp2Opcode::DIV as usize + Fp2Opcode::default_offset()
+                        Fp2Opcode::DIV as usize + Fp2Opcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };

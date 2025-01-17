@@ -18,14 +18,14 @@ pub mod utils;
 pub use phantom::*;
 
 pub trait UsizeOpcode {
-    fn default_offset() -> usize;
+    const CLASS_OFFSET: usize;
     /// Convert from the discriminant of the enum to the typed enum variant.
     /// Default implementation uses `from_repr`.
     fn from_usize(value: usize) -> Self;
     fn local_usize(&self) -> usize;
 
     fn with_default_offset(&self) -> usize {
-        self.local_usize() + Self::default_offset()
+        self.local_usize() + Self::CLASS_OFFSET
     }
 }
 

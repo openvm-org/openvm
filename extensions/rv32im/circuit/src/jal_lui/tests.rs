@@ -90,7 +90,7 @@ fn rand_jal_lui_test() {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone(), Rv32JalLuiOpcode::default_offset());
+    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone(), Rv32JalLuiOpcode::CLASS_OFFSET);
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
@@ -133,7 +133,7 @@ fn run_negative_jal_lui_test(
         tester.memory_bridge(),
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone(), Rv32JalLuiOpcode::default_offset());
+    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone(), Rv32JalLuiOpcode::CLASS_OFFSET);
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     set_and_execute(
@@ -315,7 +315,7 @@ fn execute_roundtrip_sanity_test() {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let core = Rv32JalLuiCoreChip::new(bitwise_chip, Rv32JalLuiOpcode::default_offset());
+    let core = Rv32JalLuiCoreChip::new(bitwise_chip, Rv32JalLuiOpcode::CLASS_OFFSET);
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
     let num_tests: usize = 10;
     for _ in 0..num_tests {

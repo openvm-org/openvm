@@ -606,7 +606,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 NativeAdapterChip::new(EXECUTION_BUS, PROGRAM_BUS, memory_bridge),
                 PublicValuesCoreChip::new(
                     config.num_public_values,
-                    PublishOpcode::default_offset(),
+                    PublishOpcode::CLASS_OFFSET,
                     config.max_constraint_degree as u32 - 1,
                 ),
                 offline_memory,
@@ -639,7 +639,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         let streams = Arc::new(Mutex::new(Streams::default()));
         let phantom_opcode = VmOpcode::with_default_offset(SystemOpcode::PHANTOM);
         let mut phantom_chip =
-            PhantomChip::new(EXECUTION_BUS, PROGRAM_BUS, SystemOpcode::default_offset());
+            PhantomChip::new(EXECUTION_BUS, PROGRAM_BUS, SystemOpcode::CLASS_OFFSET);
         phantom_chip.set_streams(streams.clone());
         inventory
             .add_executor(RefCell::new(phantom_chip), [phantom_opcode])

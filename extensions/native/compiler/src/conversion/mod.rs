@@ -39,7 +39,7 @@ impl Default for CompilerOptions {
 
 impl CompilerOptions {
     pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> VmOpcode {
-        let offset = Opcode::default_offset();
+        let offset = Opcode::CLASS_OFFSET;
         VmOpcode::from_usize(offset + opcode.local_usize())
     }
     pub fn with_cycle_tracker(mut self) -> Self {

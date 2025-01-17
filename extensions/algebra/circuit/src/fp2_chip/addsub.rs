@@ -133,7 +133,7 @@ mod tests {
         let mut chip = Fp2AddSubChip::new(
             adapter,
             config,
-            Fp2Opcode::default_offset(),
+            Fp2Opcode::CLASS_OFFSET,
             tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );

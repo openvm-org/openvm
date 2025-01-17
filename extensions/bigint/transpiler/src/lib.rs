@@ -100,37 +100,37 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
             INT256_FUNCT3 => {
                 let global_opcode = match Int256Funct7::from_repr(dec_insn.funct7 as u8) {
                     Some(Int256Funct7::Add) => {
-                        BaseAluOpcode::ADD as usize + Rv32BaseAlu256Opcode::default_offset()
+                        BaseAluOpcode::ADD as usize + Rv32BaseAlu256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Sub) => {
-                        BaseAluOpcode::SUB as usize + Rv32BaseAlu256Opcode::default_offset()
+                        BaseAluOpcode::SUB as usize + Rv32BaseAlu256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Xor) => {
-                        BaseAluOpcode::XOR as usize + Rv32BaseAlu256Opcode::default_offset()
+                        BaseAluOpcode::XOR as usize + Rv32BaseAlu256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Or) => {
-                        BaseAluOpcode::OR as usize + Rv32BaseAlu256Opcode::default_offset()
+                        BaseAluOpcode::OR as usize + Rv32BaseAlu256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::And) => {
-                        BaseAluOpcode::AND as usize + Rv32BaseAlu256Opcode::default_offset()
+                        BaseAluOpcode::AND as usize + Rv32BaseAlu256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Sll) => {
-                        ShiftOpcode::SLL as usize + Rv32Shift256Opcode::default_offset()
+                        ShiftOpcode::SLL as usize + Rv32Shift256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Srl) => {
-                        ShiftOpcode::SRL as usize + Rv32Shift256Opcode::default_offset()
+                        ShiftOpcode::SRL as usize + Rv32Shift256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Sra) => {
-                        ShiftOpcode::SRA as usize + Rv32Shift256Opcode::default_offset()
+                        ShiftOpcode::SRA as usize + Rv32Shift256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Slt) => {
-                        LessThanOpcode::SLT as usize + Rv32LessThan256Opcode::default_offset()
+                        LessThanOpcode::SLT as usize + Rv32LessThan256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Sltu) => {
-                        LessThanOpcode::SLTU as usize + Rv32LessThan256Opcode::default_offset()
+                        LessThanOpcode::SLTU as usize + Rv32LessThan256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Mul) => {
-                        MulOpcode::MUL as usize + Rv32Mul256Opcode::default_offset()
+                        MulOpcode::MUL as usize + Rv32Mul256Opcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };
@@ -141,7 +141,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
                 Some(Instruction::new(
                     VmOpcode::from_usize(
                         BranchEqualOpcode::BEQ as usize
-                            + Rv32BranchEqual256Opcode::default_offset(),
+                            + Rv32BranchEqual256Opcode::CLASS_OFFSET,
                     ),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),

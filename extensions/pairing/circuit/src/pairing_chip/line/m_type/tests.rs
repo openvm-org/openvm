@@ -50,7 +50,7 @@ fn test_mul_023_by_023() {
             limb_bits: BLS12_381_LIMB_BITS,
         },
         BLS12_381_XI_ISIZE,
-        PairingOpcode::default_offset(),
+        PairingOpcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
@@ -149,7 +149,7 @@ fn test_mul_by_02345() {
             limb_bits: BLS12_381_LIMB_BITS,
         },
         BLS12_381_XI_ISIZE,
-        PairingOpcode::default_offset(),
+        PairingOpcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
