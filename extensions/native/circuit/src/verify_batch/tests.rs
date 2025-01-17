@@ -2,7 +2,7 @@ use std::cmp::min;
 
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester};
 use openvm_instructions::{
-    instruction::Instruction, Poseidon2Opcode, Poseidon2Opcode::PERM_POS2, UsizeOpcode, VmOpcode,
+    instruction::Instruction, Poseidon2Opcode, Poseidon2Opcode::*, UsizeOpcode, VmOpcode,
 };
 use openvm_native_compiler::{VerifyBatchOpcode, VerifyBatchOpcode::VERIFY_BATCH};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
@@ -346,15 +346,20 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
     let mut rng = create_seeded_rng();
     (0..num_ops)
         .map(|_| {
-            let [a, b] =
+            let [a, b, c] =
                 std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
             Instruction {
                 opcode: VmOpcode::from_usize(
-                    Poseidon2Opcode::PERM_POS2 as usize + Poseidon2Opcode::default_offset(),
+                    if rng.gen_bool(0.5) {
+                        PERM_POS2
+                    } else {
+                        COMP_POS2
+                    } as usize
+                        + Poseidon2Opcode::default_offset(),
                 ),
                 a,
                 b,
-                c: BabyBear::ZERO,
+                c,
                 d: BabyBear::ONE,
                 e: BabyBear::TWO,
                 f: BabyBear::ZERO,
@@ -381,7 +386,9 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
     let mut rng = create_seeded_rng();
 
     for instruction in random_instructions(num_ops) {
-        let opcode = PERM_POS2;
+        let opcode = Poseidon2Opcode::from_usize(
+            instruction.opcode.as_usize() - Poseidon2Opcode::default_offset(),
+        );
         let [a, b, c, d, e] = [
             instruction.a,
             instruction.b,
@@ -402,18 +409,18 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
 
         tester.write_cell(d, a, BabyBear::from_canonical_usize(dst));
         tester.write_cell(d, b, BabyBear::from_canonical_usize(lhs));
-        if opcode == Poseidon2Opcode::COMP_POS2 {
+        if opcode == COMP_POS2 {
             tester.write_cell(d, c, BabyBear::from_canonical_usize(rhs));
         }
 
         match opcode {
-            Poseidon2Opcode::COMP_POS2 => {
+            COMP_POS2 => {
                 let data_left: [_; CHUNK] = std::array::from_fn(|i| data[i]);
                 let data_right: [_; CHUNK] = std::array::from_fn(|i| data[CHUNK + i]);
                 tester.write(e, lhs, data_left);
                 tester.write(e, rhs, data_right);
             }
-            Poseidon2Opcode::PERM_POS2 => {
+            PERM_POS2 => {
                 tester.write(e, lhs, data);
             }
         }
@@ -421,12 +428,12 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
         tester.execute(&mut chip, &instruction);
 
         match opcode {
-            Poseidon2Opcode::COMP_POS2 => {
+            COMP_POS2 => {
                 let expected: [_; CHUNK] = std::array::from_fn(|i| hash[i]);
                 let actual = tester.read::<{ CHUNK }>(e, dst);
                 assert_eq!(expected, actual);
             }
-            Poseidon2Opcode::PERM_POS2 => {
+            PERM_POS2 => {
                 let actual = tester.read::<{ 2 * CHUNK }>(e, dst);
                 assert_eq!(hash, actual);
             }
@@ -440,13 +447,19 @@ fn get_engine() -> BabyBearBlake3Engine {
 }
 
 #[test]
-fn verify_batch_chip_simple_permute_1() {
+fn verify_batch_chip_simple_1() {
     let tester = tester_with_random_poseidon2_ops(1);
     tester.test(get_engine).expect("Verification failed");
 }
 
 #[test]
-fn verify_batch_chip_simple_permute_50() {
+fn verify_batch_chip_simple_3() {
+    let tester = tester_with_random_poseidon2_ops(3);
+    tester.test(get_engine).expect("Verification failed");
+}
+
+#[test]
+fn verify_batch_chip_simple_50() {
     let tester = tester_with_random_poseidon2_ops(50);
     tester.test(get_engine).expect("Verification failed");
 }

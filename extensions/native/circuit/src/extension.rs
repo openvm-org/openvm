@@ -217,6 +217,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             [
                 VmOpcode::with_default_offset(VerifyBatchOpcode::VERIFY_BATCH),
                 VmOpcode::with_default_offset(Poseidon2Opcode::PERM_POS2),
+                VmOpcode::with_default_offset(Poseidon2Opcode::COMP_POS2),
             ],
         )?;
 

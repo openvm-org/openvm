@@ -37,7 +37,7 @@ pub struct VerifyBatchCols<T, const SBOX_REGISTERS: usize> {
     pub specific: [T; max3(
         TopLevelSpecificCols::<usize>::width(),
         InsideRowSpecificCols::<usize>::width(),
-        SimplePermuteSpecificCols::<usize>::width(),
+        SimplePoseidonSpecificCols::<usize>::width(),
     )],
 }
 
@@ -110,19 +110,23 @@ pub struct VerifyBatchCellCols<T> {
 
 #[repr(C)]
 #[derive(AlignedBorrow, Copy, Clone)]
-pub struct SimplePermuteSpecificCols<T> {
+pub struct SimplePoseidonSpecificCols<T> {
     pub pc: T,
-    // instruction (a, b, d, e)
+    pub is_compress: T,
+    // instruction (a, b, c, d, e)
     pub output_register: T,
-    pub input_register: T,
+    pub input_register_1: T,
+    pub input_register_2: T,
     pub register_address_space: T,
     pub data_address_space: T,
 
     pub output_pointer: T,
-    pub input_pointer: T,
+    pub input_pointer_1: T,
+    pub input_pointer_2: T,
 
     pub read_output_pointer: MemoryReadAuxCols<T>,
-    pub read_input_pointer: MemoryReadAuxCols<T>,
+    pub read_input_pointer_1: MemoryReadAuxCols<T>,
+    pub read_input_pointer_2: MemoryReadAuxCols<T>,
     pub read_data_1: MemoryReadAuxCols<T>,
     pub read_data_2: MemoryReadAuxCols<T>,
     pub write_data_1: MemoryWriteAuxCols<T, { CHUNK }>,

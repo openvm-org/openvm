@@ -8,7 +8,10 @@ use openvm_circuit::{
     },
 };
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, Poseidon2Opcode::PERM_POS2, VmOpcode,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    Poseidon2Opcode::{COMP_POS2, PERM_POS2},
+    VmOpcode,
 };
 use openvm_native_compiler::VerifyBatchOpcode::VERIFY_BATCH;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip};
@@ -102,18 +105,20 @@ pub struct CellRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
-pub struct SimplePermuteRecord<F: Field> {
+pub struct SimplePoseidonRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<F>,
 
-    pub read_input_pointer: RecordId,
+    pub read_input_pointer_1: RecordId,
+    pub read_input_pointer_2: Option<RecordId>,
     pub read_output_pointer: RecordId,
     pub read_data_1: RecordId,
     pub read_data_2: RecordId,
     pub write_data_1: RecordId,
-    pub write_data_2: RecordId,
+    pub write_data_2: Option<RecordId>,
 
-    pub input_pointer: F,
+    pub input_pointer_1: F,
+    pub input_pointer_2: F,
     pub output_pointer: F,
     pub p2_input: [F; 2 * CHUNK],
 }
@@ -122,7 +127,7 @@ pub struct SimplePermuteRecord<F: Field> {
 #[serde(bound = "F: Field")]
 pub struct VerifyBatchRecordSet<F: Field> {
     pub verify_batch_records: Vec<VerifyBatchRecord<F>>,
-    pub simple_permute_records: Vec<SimplePermuteRecord<F>>,
+    pub simple_permute_records: Vec<SimplePoseidonRecord<F>>,
 }
 
 pub struct VerifyBatchChip<F: Field, const SBOX_REGISTERS: usize> {
@@ -172,7 +177,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
             internal_bus: VerifyBatchBus(7),
             subair: Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
             verify_batch_offset,
-            perm_pos2_offset,
+            simple_offset: perm_pos2_offset,
             address_space: F::from_canonical_u32(5),
         };
         Self {
@@ -193,6 +198,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
 }
 
 pub(super) const NUM_INITIAL_READS: usize = 7;
+pub(super) const NUM_SIMPLE_ACCESSES: u32 = 7;
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
     for VerifyBatchChip<F, SBOX_REGISTERS>
@@ -203,10 +209,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
         instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
-        if instruction.opcode == VmOpcode::with_default_offset(PERM_POS2) {
+        if instruction.opcode == VmOpcode::with_default_offset(PERM_POS2)
+            || instruction.opcode == VmOpcode::with_default_offset(COMP_POS2)
+        {
             let &Instruction {
                 a: output_register,
-                b: input_register,
+                b: input_register_1,
+                c: input_register_2,
                 d: register_address_space,
                 e: data_address_space,
                 ..
@@ -214,13 +223,19 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 
             let (read_output_pointer, output_pointer) =
                 memory.read_cell(register_address_space, output_register);
-            let (read_input_pointer, input_pointer) =
-                memory.read_cell(register_address_space, input_register);
-            let (read_data_1, data_1) = memory.read::<CHUNK>(data_address_space, input_pointer);
-            let (read_data_2, data_2) = memory.read::<CHUNK>(
-                data_address_space,
-                input_pointer + F::from_canonical_usize(CHUNK),
-            );
+            let (read_input_pointer_1, input_pointer_1) =
+                memory.read_cell(register_address_space, input_register_1);
+            let (read_input_pointer_2, input_pointer_2) =
+                if instruction.opcode == VmOpcode::with_default_offset(PERM_POS2) {
+                    memory.increment_timestamp();
+                    (None, input_pointer_1 + F::from_canonical_usize(CHUNK))
+                } else {
+                    let (read_input_pointer_2, input_pointer_2) =
+                        memory.read_cell(register_address_space, input_register_2);
+                    (Some(read_input_pointer_2), input_pointer_2)
+                };
+            let (read_data_1, data_1) = memory.read::<CHUNK>(data_address_space, input_pointer_1);
+            let (read_data_2, data_2) = memory.read::<CHUNK>(data_address_space, input_pointer_2);
             let p2_input = std::array::from_fn(|i| {
                 if i < CHUNK {
                     data_1[i]
@@ -234,24 +249,40 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 output_pointer,
                 std::array::from_fn(|i| output[i]),
             );
-            let (write_data_2, _) = memory.write::<CHUNK>(
-                data_address_space,
-                output_pointer + F::from_canonical_usize(CHUNK),
-                std::array::from_fn(|i| output[CHUNK + i]),
+            let write_data_2 = if instruction.opcode == VmOpcode::with_default_offset(PERM_POS2) {
+                Some(
+                    memory
+                        .write::<CHUNK>(
+                            data_address_space,
+                            output_pointer + F::from_canonical_usize(CHUNK),
+                            std::array::from_fn(|i| output[CHUNK + i]),
+                        )
+                        .0,
+                )
+            } else {
+                memory.increment_timestamp();
+                None
+            };
+
+            assert_eq!(
+                memory.timestamp(),
+                from_state.timestamp + NUM_SIMPLE_ACCESSES
             );
 
             self.record_set
                 .simple_permute_records
-                .push(SimplePermuteRecord {
+                .push(SimplePoseidonRecord {
                     from_state,
                     instruction: instruction.clone(),
-                    read_input_pointer,
+                    read_input_pointer_1,
+                    read_input_pointer_2,
                     read_output_pointer,
                     read_data_1,
                     read_data_2,
                     write_data_1,
                     write_data_2,
-                    input_pointer,
+                    input_pointer_1,
+                    input_pointer_2,
                     output_pointer,
                     p2_input,
                 });
@@ -508,10 +539,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
     fn get_opcode_name(&self, opcode: usize) -> String {
         if opcode == (VERIFY_BATCH as usize) + self.air.verify_batch_offset {
             return String::from("VERIFY_BATCH");
-        } else if opcode == (PERM_POS2 as usize) + self.air.perm_pos2_offset {
+        } else if opcode == (PERM_POS2 as usize) + self.air.simple_offset {
             return String::from("PERM_POS2");
+        } else if opcode == (COMP_POS2 as usize) + self.air.simple_offset {
+            return String::from("COMP_POS2");
         } else {
-            unreachable!()
+            unreachable!("unsupported opcode: {}", opcode)
         }
     }
 }

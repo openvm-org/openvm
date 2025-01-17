@@ -5,7 +5,7 @@ use openvm_circuit::{
     system::memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 use openvm_circuit_primitives::utils::not;
-use openvm_instructions::Poseidon2Opcode::PERM_POS2;
+use openvm_instructions::Poseidon2Opcode::{COMP_POS2, PERM_POS2};
 use openvm_native_compiler::VerifyBatchOpcode::VERIFY_BATCH;
 use openvm_poseidon2_air::{Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS};
 use openvm_stark_backend::{
@@ -18,10 +18,11 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    chip::NUM_INITIAL_READS,
+    chip::{NUM_INITIAL_READS, NUM_SIMPLE_ACCESSES},
     verify_batch::{
         columns::{
-            InsideRowSpecificCols, SimplePermuteSpecificCols, TopLevelSpecificCols, VerifyBatchCols,
+            InsideRowSpecificCols, SimplePoseidonSpecificCols, TopLevelSpecificCols,
+            VerifyBatchCols,
         },
         CHUNK,
     },
@@ -34,7 +35,7 @@ pub struct VerifyBatchAir<F: Field, const SBOX_REGISTERS: usize> {
     pub internal_bus: VerifyBatchBus,
     pub(crate) subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
     pub(super) verify_batch_offset: usize,
-    pub(super) perm_pos2_offset: usize,
+    pub(super) simple_offset: usize,
     pub(crate) address_space: F,
 }
 
@@ -584,37 +585,45 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         //// simple permute
 
-        let simple_permute_specific: &SimplePermuteSpecificCols<AB::Var> =
-            specific[..SimplePermuteSpecificCols::<AB::Var>::width()].borrow();
+        let simple_permute_specific: &SimplePoseidonSpecificCols<AB::Var> =
+            specific[..SimplePoseidonSpecificCols::<AB::Var>::width()].borrow();
 
-        let &SimplePermuteSpecificCols {
+        let &SimplePoseidonSpecificCols {
             pc,
+            is_compress,
             output_register,
-            input_register,
+            input_register_1,
+            input_register_2,
             register_address_space,
             data_address_space,
             output_pointer,
-            input_pointer,
+            input_pointer_1,
+            input_pointer_2,
             read_output_pointer,
-            read_input_pointer,
+            read_input_pointer_1,
+            read_input_pointer_2,
             read_data_1,
             read_data_2,
             write_data_1,
             write_data_2,
         } = simple_permute_specific;
 
+        let is_permute = AB::Expr::ONE - is_compress;
+
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_usize(PERM_POS2 as usize + self.perm_pos2_offset),
+                (is_permute.clone() * AB::F::from_canonical_usize(PERM_POS2 as usize))
+                    + (is_compress * AB::F::from_canonical_usize(COMP_POS2 as usize))
+                    + AB::F::from_canonical_usize(self.simple_offset),
                 [
                     output_register.into(),
-                    input_register.into(),
-                    AB::Expr::ZERO,
+                    input_register_1.into(),
+                    input_register_2.into(),
                     register_address_space.into(),
                     data_address_space.into(),
                 ],
                 ExecutionState::new(pc, start_timestamp),
-                AB::Expr::from_canonical_usize(6),
+                AB::Expr::from_canonical_u32(NUM_SIMPLE_ACCESSES),
             )
             .eval(builder, simple);
 
@@ -629,30 +638,40 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(register_address_space, input_register),
-                [input_pointer],
+                MemoryAddress::new(register_address_space, input_register_1),
+                [input_pointer_1],
                 start_timestamp + AB::F::ONE,
-                &read_input_pointer,
+                &read_input_pointer_1,
             )
             .eval(builder, simple);
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(data_address_space, input_pointer),
-                left_input,
+                MemoryAddress::new(register_address_space, input_register_2),
+                [input_pointer_2],
                 start_timestamp + AB::F::TWO,
+                &read_input_pointer_2,
+            )
+            .eval(builder, simple * is_compress);
+        builder.when(simple).when(is_permute.clone()).assert_eq(
+            input_pointer_2,
+            input_pointer_1 + AB::F::from_canonical_usize(CHUNK),
+        );
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(data_address_space, input_pointer_1),
+                left_input,
+                start_timestamp + AB::F::from_canonical_usize(3),
                 &read_data_1,
             )
             .eval(builder, simple);
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(
-                    data_address_space,
-                    input_pointer + AB::F::from_canonical_usize(CHUNK),
-                ),
+                MemoryAddress::new(data_address_space, input_pointer_2),
                 right_input,
-                start_timestamp + AB::F::from_canonical_usize(3),
+                start_timestamp + AB::F::from_canonical_usize(4),
                 &read_data_2,
             )
             .eval(builder, simple);
@@ -661,7 +680,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .write(
                 MemoryAddress::new(data_address_space, output_pointer),
                 left_output,
-                start_timestamp + AB::F::from_canonical_usize(4),
+                start_timestamp + AB::F::from_canonical_usize(5),
                 &write_data_1,
             )
             .eval(builder, simple);
@@ -673,10 +692,10 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                     output_pointer + AB::F::from_canonical_usize(CHUNK),
                 ),
                 right_output,
-                start_timestamp + AB::F::from_canonical_usize(5),
+                start_timestamp + AB::F::from_canonical_usize(6),
                 &write_data_2,
             )
-            .eval(builder, simple);
+            .eval(builder, simple * is_permute);
     }
 }
 

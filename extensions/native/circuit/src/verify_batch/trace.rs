@@ -2,6 +2,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::system::memory::{MemoryAuxColsFactory, OfflineMemory};
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
+use openvm_instructions::{instruction::Instruction, Poseidon2Opcode::COMP_POS2, VmOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
@@ -14,14 +15,15 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    chip::{SimplePermuteRecord, NUM_INITIAL_READS},
+    chip::{SimplePoseidonRecord, NUM_INITIAL_READS},
     verify_batch::{
         chip::{
             CellRecord, IncorporateRowRecord, IncorporateSiblingRecord, InsideRowRecord,
             VerifyBatchChip, VerifyBatchRecord,
         },
         columns::{
-            InsideRowSpecificCols, SimplePermuteSpecificCols, TopLevelSpecificCols, VerifyBatchCols,
+            InsideRowSpecificCols, SimplePoseidonSpecificCols, TopLevelSpecificCols,
+            VerifyBatchCols,
         },
         CHUNK,
     },
@@ -354,36 +356,41 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
     }
     fn simple_record_to_row(
         &self,
-        record: &SimplePermuteRecord<F>,
+        record: &SimplePoseidonRecord<F>,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
         slice: &mut [F],
         memory: &OfflineMemory<F>,
     ) {
-        let &SimplePermuteRecord {
+        let &SimplePoseidonRecord {
             from_state,
-            read_input_pointer,
+            instruction:
+                Instruction {
+                    opcode,
+                    a: output_register,
+                    b: input_register_1,
+                    c: input_register_2,
+                    d: register_address_space,
+                    e: data_address_space,
+                    ..
+                },
+            read_input_pointer_1,
+            read_input_pointer_2,
             read_output_pointer,
             read_data_1,
             read_data_2,
             write_data_1,
             write_data_2,
-            input_pointer,
+            input_pointer_1,
+            input_pointer_2,
             output_pointer,
             p2_input,
-            ..
         } = record;
 
-        let output_register = record.instruction.a;
-        let input_register = record.instruction.b;
-        let register_address_space = record.instruction.d;
-        let data_address_space = record.instruction.e;
-
-        let read_input_pointer = memory.record_by_id(read_input_pointer);
+        let read_input_pointer_1 = memory.record_by_id(read_input_pointer_1);
         let read_output_pointer = memory.record_by_id(read_output_pointer);
         let read_data_1 = memory.record_by_id(read_data_1);
         let read_data_2 = memory.record_by_id(read_data_2);
         let write_data_1 = memory.record_by_id(write_data_1);
-        let write_data_2 = memory.record_by_id(write_data_2);
 
         self.generate_subair_cols(p2_input, slice);
         let cols: &mut VerifyBatchCols<F, SBOX_REGISTERS> = slice.borrow_mut();
@@ -396,24 +403,33 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         cols.is_exhausted = [F::ZERO; CHUNK];
 
         cols.start_timestamp = F::from_canonical_u32(from_state.timestamp);
-        let specific: &mut SimplePermuteSpecificCols<F> =
-            cols.specific[..SimplePermuteSpecificCols::<F>::width()].borrow_mut();
+        let specific: &mut SimplePoseidonSpecificCols<F> =
+            cols.specific[..SimplePoseidonSpecificCols::<F>::width()].borrow_mut();
 
-        *specific = SimplePermuteSpecificCols {
-            pc: F::from_canonical_u32(from_state.pc),
-            output_register,
-            input_register,
-            register_address_space,
-            data_address_space,
-            output_pointer,
-            input_pointer,
-            read_output_pointer: aux_cols_factory.make_read_aux_cols(read_output_pointer),
-            read_input_pointer: aux_cols_factory.make_read_aux_cols(read_input_pointer),
-            read_data_1: aux_cols_factory.make_read_aux_cols(read_data_1),
-            read_data_2: aux_cols_factory.make_read_aux_cols(read_data_2),
-            write_data_1: aux_cols_factory.make_write_aux_cols(write_data_1),
-            write_data_2: aux_cols_factory.make_write_aux_cols(write_data_2),
-        };
+        specific.pc = F::from_canonical_u32(from_state.pc);
+        specific.is_compress = F::from_bool(opcode == VmOpcode::with_default_offset(COMP_POS2));
+        specific.output_register = output_register;
+        specific.input_register_1 = input_register_1;
+        specific.input_register_2 = input_register_2;
+        specific.register_address_space = register_address_space;
+        specific.data_address_space = data_address_space;
+        specific.output_pointer = output_pointer;
+        specific.input_pointer_1 = input_pointer_1;
+        specific.input_pointer_2 = input_pointer_2;
+        specific.read_output_pointer = aux_cols_factory.make_read_aux_cols(read_output_pointer);
+        specific.read_input_pointer_1 = aux_cols_factory.make_read_aux_cols(read_input_pointer_1);
+        specific.read_data_1 = aux_cols_factory.make_read_aux_cols(read_data_1);
+        specific.read_data_2 = aux_cols_factory.make_read_aux_cols(read_data_2);
+        specific.write_data_1 = aux_cols_factory.make_write_aux_cols(write_data_1);
+
+        if opcode == VmOpcode::with_default_offset(COMP_POS2) {
+            let read_input_pointer_2 = memory.record_by_id(read_input_pointer_2.unwrap());
+            specific.read_input_pointer_2 =
+                aux_cols_factory.make_read_aux_cols(read_input_pointer_2);
+        } else {
+            let write_data_2 = memory.record_by_id(write_data_2.unwrap());
+            specific.write_data_2 = aux_cols_factory.make_write_aux_cols(write_data_2);
+        }
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
