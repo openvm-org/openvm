@@ -283,6 +283,11 @@ where
         // Thus we will copy over the first row (which is a setup row) and set is_valid = 0.
         let first_row = trace.rows().nth(0).unwrap().collect::<Vec<_>>();
         let (_, first_row_core) = first_row.split_at(adapter_width);
+        println!(
+            "first row core: {:?}, {:?}",
+            first_row_core[0],                        // valid
+            first_row_core[first_row_core.len() - 1]  // flag
+        );
         for row in trace.rows_mut().skip(num_records) {
             let (_, core_row) = row.split_at_mut(adapter_width);
             core_row.copy_from_slice(first_row_core);
