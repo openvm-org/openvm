@@ -266,7 +266,7 @@ fn execute_pc_increment_sanity_test() {
     let core = BranchEqualCoreChip::<RV32_REGISTER_NUM_LIMBS>::new(0, 4);
 
     let mut instruction = Instruction::<F> {
-        opcode: VmOpcode::from_usize(BranchEqualOpcode::BEQ.as_usize()),
+        opcode: VmOpcode::from_usize(BranchEqualOpcode::BEQ.local_usize()),
         c: F::from_canonical_u8(8),
         ..Default::default()
     };
@@ -280,7 +280,7 @@ fn execute_pc_increment_sanity_test() {
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
 
-    instruction.opcode = VmOpcode::from_usize(BranchEqualOpcode::BNE.as_usize());
+    instruction.opcode = VmOpcode::from_usize(BranchEqualOpcode::BNE.local_usize());
     let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
         F,
         BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,

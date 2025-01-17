@@ -19,9 +19,9 @@ pub struct WrapperOpcode(TestOpcode);
 
 #[test]
 fn test_opcode_macro() {
-    assert_eq!(TestOpcode::A.as_usize(), 0);
-    assert_eq!(TestOpcode::B.as_usize(), 1);
-    assert_eq!(TestOpcode::C.as_usize(), 2);
+    assert_eq!(TestOpcode::A.local_usize(), 0);
+    assert_eq!(TestOpcode::B.local_usize(), 1);
+    assert_eq!(TestOpcode::C.local_usize(), 2);
     assert_eq!(TestOpcode::default_offset(), 0x0);
 
     assert_eq!(WrapperOpcode::default_offset(), 0x123);

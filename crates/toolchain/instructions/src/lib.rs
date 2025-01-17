@@ -22,10 +22,10 @@ pub trait UsizeOpcode {
     /// Convert from the discriminant of the enum to the typed enum variant.
     /// Default implementation uses `from_repr`.
     fn from_usize(value: usize) -> Self;
-    fn as_usize(&self) -> usize;
+    fn local_usize(&self) -> usize;
 
     fn with_default_offset(&self) -> usize {
-        self.as_usize() + Self::default_offset()
+        self.local_usize() + Self::default_offset()
     }
 }
 

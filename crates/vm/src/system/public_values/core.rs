@@ -90,7 +90,7 @@ impl<AB: InteractionBuilder + AirBuilderWithPublicValues> VmCoreAir<AB, AdapterI
             writes: [],
             instruction: MinimalInstruction {
                 is_valid: is_valid.into(),
-                opcode: AB::Expr::from_canonical_usize(PUBLISH.as_usize() + self.offset),
+                opcode: AB::Expr::from_canonical_usize(PUBLISH.local_usize() + self.offset),
             },
         }
     }

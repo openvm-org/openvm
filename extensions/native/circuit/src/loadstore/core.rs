@@ -87,7 +87,7 @@ where
         let expected_opcode = flags.iter().zip(NativeLoadStoreOpcode::iter()).fold(
             AB::Expr::ZERO,
             |acc, (flag, local_opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_usize(local_opcode.as_usize())
+                acc + (*flag).into() * AB::Expr::from_canonical_usize(local_opcode.local_usize())
             },
         ) + AB::Expr::from_canonical_usize(self.offset);
 

@@ -98,7 +98,7 @@ impl<F> PhantomChip<F> {
         Self {
             air: PhantomAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                phantom_opcode: VmOpcode::from_usize(offset + SystemOpcode::PHANTOM.as_usize()),
+                phantom_opcode: VmOpcode::from_usize(offset + SystemOpcode::PHANTOM.local_usize()),
             },
             rows: vec![],
             streams: OnceLock::new(),

@@ -48,8 +48,8 @@ impl UsizeOpcode for Bn254Fp12Opcode {
         Self(Fp12Opcode::from_usize(value))
     }
 
-    fn as_usize(&self) -> usize {
-        self.0.as_usize()
+    fn local_usize(&self) -> usize {
+        self.0.local_usize()
     }
 }
 
@@ -64,8 +64,8 @@ impl UsizeOpcode for Bls12381Fp12Opcode {
         Self(Fp12Opcode::from_usize(value - FP12_OPS))
     }
 
-    fn as_usize(&self) -> usize {
-        self.0.as_usize() + FP12_OPS
+    fn local_usize(&self) -> usize {
+        self.0.local_usize() + FP12_OPS
     }
 }
 

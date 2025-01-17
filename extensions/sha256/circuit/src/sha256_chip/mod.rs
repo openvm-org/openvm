@@ -116,7 +116,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
             ..
         } = instruction;
         let local_opcode = opcode.local_opcode_idx(self.offset);
-        debug_assert_eq!(local_opcode, Rv32Sha256Opcode::SHA256.as_usize());
+        debug_assert_eq!(local_opcode, Rv32Sha256Opcode::SHA256.local_usize());
         debug_assert_eq!(d, F::from_canonical_u32(RV32_REGISTER_AS));
         debug_assert_eq!(e, F::from_canonical_u32(RV32_MEMORY_AS));
 

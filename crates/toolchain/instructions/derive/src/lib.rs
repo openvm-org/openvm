@@ -49,8 +49,8 @@ pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
                         #name(<#inner_ty as UsizeOpcode>::from_usize(value))
                     }
 
-                    fn as_usize(&self) -> usize {
-                        self.0.as_usize()
+                    fn local_usize(&self) -> usize {
+                        self.0.local_usize()
                     }
                 }
             }.into()
@@ -67,7 +67,7 @@ pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
                             .unwrap_or_else(|| panic!("Failed to convert usize {} to opcode {}", value, stringify!(#name)))
                     }
 
-                    fn as_usize(&self) -> usize {
+                    fn local_usize(&self) -> usize {
                         *self as usize
                     }
                 }
