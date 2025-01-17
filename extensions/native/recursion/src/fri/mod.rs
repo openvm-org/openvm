@@ -151,7 +151,7 @@ pub fn verify_batch<C: Config>(
     opened_values: &NestedOpenedValues<C>,
     proof: &Array<C, DigestVariable<C>>,
 ) {
-    //println!("verify_batch");
+    //println!("poseidon2");
     //panic!();
     if builder.flags.static_only {
         verify_batch_static(

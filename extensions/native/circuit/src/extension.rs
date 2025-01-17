@@ -31,7 +31,7 @@ use strum::IntoEnumIterator;
 
 use crate::{
     adapters::{convert_adapter::ConvertAdapterChip, *},
-    chip::VerifyBatchChip,
+    chip::NativePoseidon2Chip,
     phantom::*,
     *,
 };
@@ -87,7 +87,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
     FriReducedOpening(FriReducedOpeningChip<F>),
-    VerifyBatch(VerifyBatchChip<F, 1>),
+    VerifyBatch(NativePoseidon2Chip<F, 1>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
@@ -199,7 +199,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             FriOpcode::iter().map(VmOpcode::with_default_offset),
         )?;
 
-        let verify_batch_chip = VerifyBatchChip::new(
+        let verify_batch_chip = NativePoseidon2Chip::new(
             execution_bus,
             program_bus,
             memory_bridge,

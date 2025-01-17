@@ -2,11 +2,11 @@ use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryW
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_poseidon2_air::Poseidon2SubCols;
 
-use crate::verify_batch::CHUNK;
+use crate::poseidon2::CHUNK;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct VerifyBatchCols<T, const SBOX_REGISTERS: usize> {
+pub struct NativePoseidon2Cols<T, const SBOX_REGISTERS: usize> {
     // poseidon2
     pub inner: Poseidon2SubCols<T, SBOX_REGISTERS>,
 

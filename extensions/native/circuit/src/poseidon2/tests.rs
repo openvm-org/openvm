@@ -23,7 +23,7 @@ use openvm_stark_sdk::{
 };
 use rand::{rngs::StdRng, Rng};
 
-use crate::verify_batch::{chip::VerifyBatchChip, CHUNK};
+use crate::poseidon2::{chip::NativePoseidon2Chip, CHUNK};
 
 fn compute_commit<F: Field>(
     dim: &[usize],
@@ -140,7 +140,7 @@ fn test<const N: usize>(cases: [Case; N]) {
     let address_space = 5;
 
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = VerifyBatchChip::<F, SBOX_REGISTERS>::new(
+    let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
@@ -373,7 +373,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
     let elem_range = || 1..=100;
 
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = VerifyBatchChip::<F, SBOX_REGISTERS>::new(
+    let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),

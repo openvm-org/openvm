@@ -19,17 +19,17 @@ use openvm_stark_backend::{
 
 use crate::{
     chip::{NUM_INITIAL_READS, NUM_SIMPLE_ACCESSES},
-    verify_batch::{
+    poseidon2::{
         columns::{
             InsideRowSpecificCols, SimplePoseidonSpecificCols, TopLevelSpecificCols,
-            VerifyBatchCols,
+            NativePoseidon2Cols,
         },
         CHUNK,
     },
 };
 
 #[derive(Clone, Debug)]
-pub struct VerifyBatchAir<F: Field, const SBOX_REGISTERS: usize> {
+pub struct NativePoseidon2Air<F: Field, const SBOX_REGISTERS: usize> {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub internal_bus: VerifyBatchBus,
@@ -39,33 +39,33 @@ pub struct VerifyBatchAir<F: Field, const SBOX_REGISTERS: usize> {
     pub(crate) address_space: F,
 }
 
-impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for VerifyBatchAir<F, SBOX_REGISTERS> {
+impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for NativePoseidon2Air<F, SBOX_REGISTERS> {
     fn width(&self) -> usize {
-        VerifyBatchCols::<F, SBOX_REGISTERS>::width()
+        NativePoseidon2Cols::<F, SBOX_REGISTERS>::width()
     }
 }
 
 impl<F: Field, const SBOX_REGISTERS: usize> BaseAirWithPublicValues<F>
-    for VerifyBatchAir<F, SBOX_REGISTERS>
+    for NativePoseidon2Air<F, SBOX_REGISTERS>
 {
 }
 
 impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
-    for VerifyBatchAir<F, SBOX_REGISTERS>
+    for NativePoseidon2Air<F, SBOX_REGISTERS>
 {
 }
 
 impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
-    for VerifyBatchAir<AB::F, SBOX_REGISTERS>
+    for NativePoseidon2Air<AB::F, SBOX_REGISTERS>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local: &VerifyBatchCols<AB::Var, SBOX_REGISTERS> = (*local).borrow();
+        let local: &NativePoseidon2Cols<AB::Var, SBOX_REGISTERS> = (*local).borrow();
         let next = main.row_slice(1);
-        let next: &VerifyBatchCols<AB::Var, SBOX_REGISTERS> = (*next).borrow();
+        let next: &NativePoseidon2Cols<AB::Var, SBOX_REGISTERS> = (*next).borrow();
 
-        let &VerifyBatchCols {
+        let &NativePoseidon2Cols {
             inner: _,
             incorporate_row,
             incorporate_sibling,

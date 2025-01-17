@@ -16,20 +16,20 @@ use openvm_stark_backend::{
 
 use crate::{
     chip::{SimplePoseidonRecord, NUM_INITIAL_READS},
-    verify_batch::{
+    poseidon2::{
         chip::{
             CellRecord, IncorporateRowRecord, IncorporateSiblingRecord, InsideRowRecord,
-            VerifyBatchChip, VerifyBatchRecord,
+            NativePoseidon2Chip, VerifyBatchRecord,
         },
         columns::{
             InsideRowSpecificCols, SimplePoseidonSpecificCols, TopLevelSpecificCols,
-            VerifyBatchCols,
+            NativePoseidon2Cols,
         },
         CHUNK,
     },
 };
 
-impl<F: Field, const SBOX_REGISTERS: usize> ChipUsageGetter for VerifyBatchChip<F, SBOX_REGISTERS> {
+impl<F: Field, const SBOX_REGISTERS: usize> ChipUsageGetter for NativePoseidon2Chip<F, SBOX_REGISTERS> {
     fn air_name(&self) -> String {
         "VerifyBatchAir".to_string()
     }
@@ -39,11 +39,11 @@ impl<F: Field, const SBOX_REGISTERS: usize> ChipUsageGetter for VerifyBatchChip<
     }
 
     fn trace_width(&self) -> usize {
-        VerifyBatchCols::<F, SBOX_REGISTERS>::width()
+        NativePoseidon2Cols::<F, SBOX_REGISTERS>::width()
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGISTERS> {
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_REGISTERS> {
     fn generate_subair_cols(&self, input: [F; 2 * CHUNK], cols: &mut [F]) {
         let inner_trace = self.subchip.generate_trace(vec![input]);
         let inner_width = self.air.subair.width();
@@ -73,7 +73,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         let read_sibling_array_start = memory.record_by_id(read_sibling_array_start);
 
         self.generate_subair_cols(p2_input, slice);
-        let cols: &mut VerifyBatchCols<F, SBOX_REGISTERS> = slice.borrow_mut();
+        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = slice.borrow_mut();
         cols.incorporate_row = F::ZERO;
         cols.incorporate_sibling = F::ONE;
         cols.inside_row = F::ZERO;
@@ -130,7 +130,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
             ..
         } = record;
         let instruction = &record.instruction;
-        let cols: &mut VerifyBatchCols<F, SBOX_REGISTERS> = slice.borrow_mut();
+        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = slice.borrow_mut();
         cols.end_top_level = F::ONE;
 
         let specific: &mut TopLevelSpecificCols<F> =
@@ -183,7 +183,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         let final_height_read = memory.record_by_id(final_height_read);
 
         self.generate_subair_cols(p2_input, slice);
-        let cols: &mut VerifyBatchCols<F, SBOX_REGISTERS> = slice.borrow_mut();
+        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = slice.borrow_mut();
         cols.incorporate_row = F::ONE;
         cols.incorporate_sibling = F::ZERO;
         cols.inside_row = F::ZERO;
@@ -237,7 +237,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         let InsideRowRecord { cells, p2_input } = record;
 
         self.generate_subair_cols(*p2_input, slice);
-        let cols: &mut VerifyBatchCols<F, SBOX_REGISTERS> = slice.borrow_mut();
+        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = slice.borrow_mut();
         cols.incorporate_row = F::ZERO;
         cols.incorporate_sibling = F::ZERO;
         cols.inside_row = F::ONE;
@@ -295,7 +295,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         slice: &mut [F],
         memory: &OfflineMemory<F>,
     ) -> usize {
-        let width = VerifyBatchCols::<F, SBOX_REGISTERS>::width();
+        let width = NativePoseidon2Cols::<F, SBOX_REGISTERS>::width();
         let mut used_cells = 0;
 
         let mut height = record.initial_height;
@@ -394,7 +394,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         let write_data_1 = memory.record_by_id(write_data_1);
 
         self.generate_subair_cols(p2_input, slice);
-        let cols: &mut VerifyBatchCols<F, SBOX_REGISTERS> = slice.borrow_mut();
+        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = slice.borrow_mut();
         cols.incorporate_row = F::ZERO;
         cols.incorporate_sibling = F::ZERO;
         cols.inside_row = F::ZERO;
@@ -473,7 +473,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
 }
 
 impl<SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<SC>
-    for VerifyBatchChip<Val<SC>, SBOX_REGISTERS>
+    for NativePoseidon2Chip<Val<SC>, SBOX_REGISTERS>
 where
     Val<SC>: PrimeField32,
 {

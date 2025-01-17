@@ -21,8 +21,8 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::verify_batch::{
-    air::{VerifyBatchAir, VerifyBatchBus},
+use crate::poseidon2::{
+    air::{NativePoseidon2Air, VerifyBatchBus},
     CHUNK,
 };
 
@@ -125,21 +125,21 @@ pub struct SimplePoseidonRecord<F: Field> {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(bound = "F: Field")]
-pub struct VerifyBatchRecordSet<F: Field> {
+pub struct NativePoseidon2RecordSet<F: Field> {
     pub verify_batch_records: Vec<VerifyBatchRecord<F>>,
     pub simple_permute_records: Vec<SimplePoseidonRecord<F>>,
 }
 
-pub struct VerifyBatchChip<F: Field, const SBOX_REGISTERS: usize> {
-    pub(super) air: VerifyBatchAir<F, SBOX_REGISTERS>,
-    pub(super) record_set: VerifyBatchRecordSet<F>,
+pub struct NativePoseidon2Chip<F: Field, const SBOX_REGISTERS: usize> {
+    pub(super) air: NativePoseidon2Air<F, SBOX_REGISTERS>,
+    pub(super) record_set: NativePoseidon2RecordSet<F>,
     pub(super) height: usize,
     pub(super) offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> Stateful<Vec<u8>>
-    for VerifyBatchChip<F, SBOX_REGISTERS>
+    for NativePoseidon2Chip<F, SBOX_REGISTERS>
 {
     fn load_state(&mut self, state: Vec<u8>) {
         self.record_set = bitcode::deserialize(&state).unwrap();
@@ -161,7 +161,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Stateful<Vec<u8>>
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGISTERS> {
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_REGISTERS> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
@@ -171,7 +171,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
         poseidon2_config: Poseidon2Config<F>,
     ) -> Self {
-        let air = VerifyBatchAir {
+        let air = NativePoseidon2Air {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
             internal_bus: VerifyBatchBus(7),
@@ -201,7 +201,7 @@ pub(super) const NUM_INITIAL_READS: usize = 7;
 pub(super) const NUM_SIMPLE_ACCESSES: u32 = 7;
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
-    for VerifyBatchChip<F, SBOX_REGISTERS>
+    for NativePoseidon2Chip<F, SBOX_REGISTERS>
 {
     fn execute(
         &mut self,
