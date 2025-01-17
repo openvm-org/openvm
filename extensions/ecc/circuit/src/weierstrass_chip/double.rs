@@ -205,12 +205,6 @@ where
         let limb_bits = self.air.expr.canonical_limb_bits();
         let Instruction { opcode, .. } = instruction.clone();
         let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
-        println!(
-            "ecdouble: {:?}, p={:?}, a={:?}",
-            Rv32WeierstrassOpcode::from_repr(local_opcode_idx),
-            self.air.a_biguint,
-            self.air.expr.prime
-        );
         let data: DynArray<_> = reads.into();
         let data = data.0;
         debug_assert_eq!(data.len(), 2 * num_limbs);
