@@ -597,8 +597,10 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             input_pointer,
             read_output_pointer,
             read_input_pointer,
-            read_data,
-            write_data,
+            read_data_1,
+            read_data_2,
+            write_data_1,
+            write_data_2,
         } = simple_permute_specific;
 
         self.execution_bridge
@@ -612,7 +614,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                     data_address_space.into(),
                 ],
                 ExecutionState::new(pc, start_timestamp),
-                AB::Expr::from_canonical_usize(4),
+                AB::Expr::from_canonical_usize(6),
             )
             .eval(builder, simple);
 
@@ -637,18 +639,42 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         self.memory_bridge
             .read(
                 MemoryAddress::new(data_address_space, input_pointer),
-                local.inner.inputs,
+                left_input,
                 start_timestamp + AB::F::TWO,
-                &read_data,
+                &read_data_1,
+            )
+            .eval(builder, simple);
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(
+                    data_address_space,
+                    input_pointer + AB::F::from_canonical_usize(CHUNK),
+                ),
+                right_input,
+                start_timestamp + AB::F::from_canonical_usize(3),
+                &read_data_2,
             )
             .eval(builder, simple);
 
         self.memory_bridge
             .write(
                 MemoryAddress::new(data_address_space, output_pointer),
-                local.inner.ending_full_rounds[BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS - 1].post,
-                start_timestamp + AB::F::from_canonical_usize(3),
-                &write_data,
+                left_output,
+                start_timestamp + AB::F::from_canonical_usize(4),
+                &write_data_1,
+            )
+            .eval(builder, simple);
+
+        self.memory_bridge
+            .write(
+                MemoryAddress::new(
+                    data_address_space,
+                    output_pointer + AB::F::from_canonical_usize(CHUNK),
+                ),
+                right_output,
+                start_timestamp + AB::F::from_canonical_usize(5),
+                &write_data_2,
             )
             .eval(builder, simple);
     }

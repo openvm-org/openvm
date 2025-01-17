@@ -86,7 +86,6 @@ pub enum NativeExecutor<F: PrimeField32> {
     Jal(NativeJalChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
-    Poseidon2(NativePoseidon2Chip<F>),
     FriReducedOpening(FriReducedOpeningChip<F>),
     VerifyBatch(VerifyBatchChip<F, 1>),
 }
@@ -219,20 +218,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 VmOpcode::with_default_offset(VerifyBatchOpcode::VERIFY_BATCH),
                 VmOpcode::with_default_offset(Poseidon2Opcode::PERM_POS2),
             ],
-        )?;
-
-        let poseidon2_chip = NativePoseidon2Chip::new(
-            execution_bus,
-            program_bus,
-            memory_bridge,
-            Poseidon2Config::default(),
-            Poseidon2Opcode::default_offset(),
-            builder.system_config().max_constraint_degree,
-            offline_memory.clone(),
-        );
-        inventory.add_executor(
-            poseidon2_chip,
-            Poseidon2Opcode::iter().map(VmOpcode::with_default_offset),
         )?;
 
         builder.add_phantom_sub_executor(

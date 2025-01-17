@@ -123,6 +123,8 @@ pub struct SimplePermuteSpecificCols<T> {
 
     pub read_output_pointer: MemoryReadAuxCols<T>,
     pub read_input_pointer: MemoryReadAuxCols<T>,
-    pub read_data: MemoryReadAuxCols<T>,
-    pub write_data: MemoryWriteAuxCols<T, { 2 * CHUNK }>,
+    pub read_data_1: MemoryReadAuxCols<T>,
+    pub read_data_2: MemoryReadAuxCols<T>,
+    pub write_data_1: MemoryWriteAuxCols<T, { CHUNK }>,
+    pub write_data_2: MemoryWriteAuxCols<T, { CHUNK }>,
 }

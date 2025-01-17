@@ -108,8 +108,10 @@ pub struct SimplePermuteRecord<F: Field> {
 
     pub read_input_pointer: RecordId,
     pub read_output_pointer: RecordId,
-    pub read_data: RecordId,
-    pub write_data: RecordId,
+    pub read_data_1: RecordId,
+    pub read_data_2: RecordId,
+    pub write_data_1: RecordId,
+    pub write_data_2: RecordId,
 
     pub input_pointer: F,
     pub output_pointer: F,
@@ -214,9 +216,29 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 memory.read_cell(register_address_space, output_register);
             let (read_input_pointer, input_pointer) =
                 memory.read_cell(register_address_space, input_register);
-            let (read_data, data) = memory.read(data_address_space, input_pointer);
-            let output = self.subchip.permute(data);
-            let (write_data, _) = memory.write(data_address_space, output_pointer, output);
+            let (read_data_1, data_1) = memory.read::<CHUNK>(data_address_space, input_pointer);
+            let (read_data_2, data_2) = memory.read::<CHUNK>(
+                data_address_space,
+                input_pointer + F::from_canonical_usize(CHUNK),
+            );
+            let p2_input = std::array::from_fn(|i| {
+                if i < CHUNK {
+                    data_1[i]
+                } else {
+                    data_2[i - CHUNK]
+                }
+            });
+            let output = self.subchip.permute(p2_input);
+            let (write_data_1, _) = memory.write::<CHUNK>(
+                data_address_space,
+                output_pointer,
+                std::array::from_fn(|i| output[i]),
+            );
+            let (write_data_2, _) = memory.write::<CHUNK>(
+                data_address_space,
+                output_pointer + F::from_canonical_usize(CHUNK),
+                std::array::from_fn(|i| output[CHUNK + i]),
+            );
 
             self.record_set
                 .simple_permute_records
@@ -225,11 +247,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                     instruction: instruction.clone(),
                     read_input_pointer,
                     read_output_pointer,
-                    read_data,
-                    write_data,
+                    read_data_1,
+                    read_data_2,
+                    write_data_1,
+                    write_data_2,
                     input_pointer,
                     output_pointer,
-                    p2_input: data,
+                    p2_input,
                 });
             self.height += 1;
         } else if instruction.opcode == VmOpcode::with_default_offset(VERIFY_BATCH) {

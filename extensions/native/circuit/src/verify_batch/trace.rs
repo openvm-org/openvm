@@ -363,8 +363,10 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
             from_state,
             read_input_pointer,
             read_output_pointer,
-            read_data,
-            write_data,
+            read_data_1,
+            read_data_2,
+            write_data_1,
+            write_data_2,
             input_pointer,
             output_pointer,
             p2_input,
@@ -378,8 +380,10 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
 
         let read_input_pointer = memory.record_by_id(read_input_pointer);
         let read_output_pointer = memory.record_by_id(read_output_pointer);
-        let read_data = memory.record_by_id(read_data);
-        let write_data = memory.record_by_id(write_data);
+        let read_data_1 = memory.record_by_id(read_data_1);
+        let read_data_2 = memory.record_by_id(read_data_2);
+        let write_data_1 = memory.record_by_id(write_data_1);
+        let write_data_2 = memory.record_by_id(write_data_2);
 
         self.generate_subair_cols(p2_input, slice);
         let cols: &mut VerifyBatchCols<F, SBOX_REGISTERS> = slice.borrow_mut();
@@ -405,8 +409,10 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> VerifyBatchChip<F, SBOX_REGIS
             input_pointer,
             read_output_pointer: aux_cols_factory.make_read_aux_cols(read_output_pointer),
             read_input_pointer: aux_cols_factory.make_read_aux_cols(read_input_pointer),
-            read_data: aux_cols_factory.make_read_aux_cols(read_data),
-            write_data: aux_cols_factory.make_write_aux_cols(write_data),
+            read_data_1: aux_cols_factory.make_read_aux_cols(read_data_1),
+            read_data_2: aux_cols_factory.make_read_aux_cols(read_data_2),
+            write_data_1: aux_cols_factory.make_write_aux_cols(write_data_1),
+            write_data_2: aux_cols_factory.make_write_aux_cols(write_data_2),
         };
     }
 

@@ -1,4 +1,4 @@
-use crate::NATIVE_POSEIDON2_CHUNK_SIZE;
+//use crate::NATIVE_POSEIDON2_CHUNK_SIZE;
 
 mod air;
 pub mod chip;
@@ -7,4 +7,4 @@ mod columns;
 mod tests;
 mod trace;
 
-const CHUNK: usize = NATIVE_POSEIDON2_CHUNK_SIZE;
+const CHUNK: usize = 8; //NATIVE_POSEIDON2_CHUNK_SIZE;
