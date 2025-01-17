@@ -132,9 +132,9 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 execution_bus,
                 program_bus,
                 memory_bridge,
-                NativeLoadStoreOpcode::default_offset(),
+                NativeLoadStore4Opcode::default_offset(),
             ),
-            NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset()),
+            NativeLoadStoreCoreChip::new(NativeLoadStore4Opcode::default_offset()),
             offline_memory.clone(),
         );
         block_load_store_chip
