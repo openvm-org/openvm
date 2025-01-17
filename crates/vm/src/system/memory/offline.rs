@@ -361,14 +361,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         self.split_to_make_boundary(address_space, pointer, records);
         self.split_to_make_boundary(address_space, pointer + size as u32, records);
 
-        let mut block_data = self
-            .block_data
-            .get(&(address_space, pointer))
-            .cloned()
-            .unwrap_or_else(|| Self::initial_block_data(pointer, self.initial_block_size));
-        if block_data.size == 0 {
-            block_data = Self::initial_block_data(pointer, self.initial_block_size);
-        }
+        let block_data = self.block_containing(address_space, pointer);
 
         if block_data.pointer == pointer && block_data.size == size {
             return;
