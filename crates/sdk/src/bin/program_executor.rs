@@ -10,7 +10,7 @@ struct ExecutorArgs {
 }
 
 fn main() {
-    let args = ExecutorArgs::parse();
+    let _args = ExecutorArgs::parse();
     // 1. get the exe from program dir
     println!("Hello, world!");
 }
