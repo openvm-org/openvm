@@ -1,8 +1,5 @@
 use openvm_native_circuit::execute_program;
-use openvm_native_compiler::{
-    asm::AsmBuilder,
-    ir::{Felt, RVar, Var},
-};
+use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, Field, FieldAlgebra};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
