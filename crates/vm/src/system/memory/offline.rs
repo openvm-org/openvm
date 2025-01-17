@@ -55,6 +55,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
     ///
     /// Panics if the initial block size is not a power of two.
     pub fn new(
+        initial_memory: MemoryImage<F>,
         initial_block_size: usize,
         memory_bus: MemoryBus,
         range_checker: SharedVariableRangeCheckerChip,
@@ -64,7 +65,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
         Self {
             block_data: AddressMap::from_mem_config(&config),
-            data: vec![],
+            data: Self::memory_image_to_paged_vec(initial_memory, config),
             as_offset: config.as_offset,
             initial_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
@@ -520,17 +521,16 @@ mod tests {
         type F = BabyBear;
 
         let initial_memory = AddressMap::new(0, 1, 16);
-        let mem_config = MemoryConfig {
-            as_offset: 0,
-            ..Default::default()
-        };
         let mut partition = OfflineMemory::<F>::new(
+            initial_memory,
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            mem_config,
+            MemoryConfig {
+                as_offset: 0,
+                ..Default::default()
+            },
         );
-        partition.set_initial_memory(initial_memory, mem_config);
         assert_eq!(
             partition.block_containing(0, 13),
             BlockData {
@@ -571,14 +571,13 @@ mod tests {
     #[test]
     fn test_write_read_initial_block_len_1() {
         let initial_memory = MemoryImage::default();
-        let mem_config = Default::default();
         let mut memory = OfflineMemory::<BabyBear>::new(
+            initial_memory,
             1,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            mem_config,
+            Default::default(),
         );
-        memory.set_initial_memory(initial_memory, mem_config);
         let address_space = 1;
 
         memory.write(address_space, 0, bbvec![1, 2, 3, 4]);
@@ -598,14 +597,13 @@ mod tests {
     fn test_records_initial_block_len_1() {
         let initial_memory = MemoryImage::default();
         // TODO: Ideally we don't need to instantiate all this stuff since we are just testing the data structure.
-        let mem_config = Default::default();
         let mut memory = OfflineMemory::<BabyBear>::new(
+            initial_memory,
             1,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            mem_config,
+            Default::default(),
         );
-        memory.set_initial_memory(initial_memory, mem_config);
 
         let adapter_records = memory.write(1, 0, bbvec![1, 2, 3, 4]);
 
@@ -744,14 +742,13 @@ mod tests {
     #[test]
     fn test_records_initial_block_len_8() {
         let initial_memory = MemoryImage::default();
-        let mem_config = Default::default();
         let mut memory = OfflineMemory::<BabyBear>::new(
+            initial_memory,
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            mem_config,
+            Default::default(),
         );
-        memory.set_initial_memory(initial_memory, mem_config);
 
         let adapter_records = memory.write(1, 0, bbvec![1, 2, 3, 4]);
         let write_record = memory.last_record();
@@ -860,17 +857,16 @@ mod tests {
     #[test]
     fn test_get_initial_block_len_1() {
         let initial_memory = MemoryImage::default();
-        let mem_config = MemoryConfig {
-            as_offset: 0,
-            ..Default::default()
-        };
         let mut memory = OfflineMemory::<BabyBear>::new(
+            initial_memory,
             1,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            mem_config,
+            MemoryConfig {
+                as_offset: 0,
+                ..Default::default()
+            },
         );
-        memory.set_initial_memory(initial_memory, mem_config);
 
         memory.write(1, 0, bbvec![4, 3, 2, 1]);
 
@@ -886,17 +882,16 @@ mod tests {
     #[test]
     fn test_get_initial_block_len_8() {
         let initial_memory = MemoryImage::default();
-        let mem_config = MemoryConfig {
-            as_offset: 0,
-            ..Default::default()
-        };
         let mut memory = OfflineMemory::<BabyBear>::new(
+            initial_memory,
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            mem_config,
+            MemoryConfig {
+                as_offset: 0,
+                ..Default::default()
+            },
         );
-        memory.set_initial_memory(initial_memory, mem_config);
 
         memory.write(1, 0, bbvec![4, 3, 2, 1]);
 
@@ -912,14 +907,13 @@ mod tests {
     #[test]
     fn test_finalize_empty() {
         let initial_memory = MemoryImage::default();
-        let mem_config = Default::default();
         let mut memory = OfflineMemory::<BabyBear>::new(
+            initial_memory,
             4,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            mem_config,
+            Default::default(),
         );
-        memory.set_initial_memory(initial_memory, mem_config);
 
         let (memory, records) = memory.finalize::<4>();
         assert_eq!(memory.len(), 0);
@@ -929,14 +923,13 @@ mod tests {
     #[test]
     fn test_finalize_block_len_8() {
         let initial_memory = MemoryImage::default();
-        let mem_config = Default::default();
         let mut memory = OfflineMemory::<BabyBear>::new(
+            initial_memory,
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            mem_config,
+            Default::default(),
         );
-        memory.set_initial_memory(initial_memory, mem_config);
         // Make block 0:4 in address space 1 active.
         memory.write(1, 0, bbvec![1, 2, 3, 4]);
 
@@ -1000,14 +993,13 @@ mod tests {
             initial_memory.insert(&(1, 16 + i), F::from_canonical_u32(i + 1));
         }
 
-        let mem_config = Default::default();
         let mut memory = OfflineMemory::<BabyBear>::new(
+            initial_memory,
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            mem_config,
+            Default::default(),
         );
-        memory.set_initial_memory(initial_memory, mem_config);
 
         // Verify initial state of block 0 (pointers 0–8)
         memory.read(1, 0, 8);
