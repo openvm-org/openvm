@@ -16,7 +16,7 @@ use openvm_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
-use openvm_instructions::{program::DEFAULT_PC_STEP, UsizeOpcode, VmOpcode};
+use openvm_instructions::{program::DEFAULT_PC_STEP, UsizeOpcode};
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
@@ -141,15 +141,12 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 address_bits,
                 bitwise_lu_chip.clone(),
             ),
-            BaseAluCoreChip::new(
-                bitwise_lu_chip.clone(),
-                Rv32BaseAlu256Opcode::CLASS_OFFSET,
-            ),
+            BaseAluCoreChip::new(bitwise_lu_chip.clone(), Rv32BaseAlu256Opcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         inventory.add_executor(
             base_alu_chip,
-            Rv32BaseAlu256Opcode::iter().map(VmOpcode::with_default_offset),
+            Rv32BaseAlu256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let less_than_chip = Rv32LessThan256Chip::new(
@@ -160,15 +157,12 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 address_bits,
                 bitwise_lu_chip.clone(),
             ),
-            LessThanCoreChip::new(
-                bitwise_lu_chip.clone(),
-                Rv32LessThan256Opcode::CLASS_OFFSET,
-            ),
+            LessThanCoreChip::new(bitwise_lu_chip.clone(), Rv32LessThan256Opcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         inventory.add_executor(
             less_than_chip,
-            Rv32LessThan256Opcode::iter().map(VmOpcode::with_default_offset),
+            Rv32LessThan256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let branch_equal_chip = Rv32BranchEqual256Chip::new(
@@ -184,7 +178,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         );
         inventory.add_executor(
             branch_equal_chip,
-            Rv32BranchEqual256Opcode::iter().map(VmOpcode::with_default_offset),
+            Rv32BranchEqual256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let branch_less_than_chip = Rv32BranchLessThan256Chip::new(
@@ -203,7 +197,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         );
         inventory.add_executor(
             branch_less_than_chip,
-            Rv32BranchLessThan256Opcode::iter().map(VmOpcode::with_default_offset),
+            Rv32BranchLessThan256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let multiplication_chip = Rv32Multiplication256Chip::new(
@@ -219,7 +213,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         );
         inventory.add_executor(
             multiplication_chip,
-            Rv32Mul256Opcode::iter().map(VmOpcode::with_default_offset),
+            Rv32Mul256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let shift_chip = Rv32Shift256Chip::new(
@@ -239,7 +233,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         );
         inventory.add_executor(
             shift_chip,
-            Rv32Shift256Opcode::iter().map(VmOpcode::with_default_offset),
+            Rv32Shift256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         Ok(inventory)

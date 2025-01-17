@@ -35,7 +35,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Keccak256TranspilerExtension {
             return None;
         }
         let instruction = from_r_type(
-            Rv32KeccakOpcode::KECCAK256.with_default_offset(),
+            Rv32KeccakOpcode::KECCAK256.global_opcode().as_usize(),
             2,
             &dec_insn,
         );

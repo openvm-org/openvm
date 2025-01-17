@@ -4,7 +4,7 @@ use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    UsizeOpcode, VmOpcode,
+    UsizeOpcode,
 };
 use openvm_native_compiler::NativeJalOpcode::{self, *};
 use openvm_stark_backend::{
@@ -37,10 +37,7 @@ fn set_and_execute(
 
     tester.execute_with_pc(
         chip,
-        &Instruction::from_usize(
-            VmOpcode::with_default_offset(JAL),
-            [a, imm as usize, 0, d, 0, 0, 0],
-        ),
+        &Instruction::from_usize(JAL.global_opcode(), [a, imm as usize, 0, d, 0, 0, 0]),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();

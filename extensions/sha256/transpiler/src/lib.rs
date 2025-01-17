@@ -36,7 +36,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Sha256TranspilerExtension {
             return None;
         }
         let instruction = from_r_type(
-            Rv32Sha256Opcode::SHA256.with_default_offset(),
+            Rv32Sha256Opcode::SHA256.global_opcode().as_usize(),
             RV32_MEMORY_AS as usize,
             &dec_insn,
         );

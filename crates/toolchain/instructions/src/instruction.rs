@@ -75,7 +75,7 @@ impl<F: Field> Instruction<F> {
 
     pub fn phantom(discriminant: PhantomDiscriminant, a: F, b: F, c_upper: u16) -> Self {
         Self {
-            opcode: VmOpcode(SystemOpcode::PHANTOM.with_default_offset()),
+            opcode: SystemOpcode::PHANTOM.global_opcode(),
             a,
             b,
             c: F::from_canonical_u32((discriminant.0 as u32) | ((c_upper as u32) << 16)),
@@ -85,7 +85,7 @@ impl<F: Field> Instruction<F> {
 
     pub fn debug(discriminant: PhantomDiscriminant) -> Self {
         Self {
-            opcode: VmOpcode(SystemOpcode::PHANTOM.with_default_offset()),
+            opcode: SystemOpcode::PHANTOM.global_opcode(),
             c: F::from_canonical_u32(discriminant.0 as u32),
             ..Default::default()
         }

@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, UsizeOpcode};
 use openvm_sha256_air::get_random_message;
 use openvm_sha256_transpiler::Rv32Sha256Opcode::{self, *};
 use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -54,7 +54,7 @@ fn set_and_execute(
 
     tester.execute(
         chip,
-        &Instruction::from_usize(VmOpcode::with_default_offset(opcode), [rd, rs1, rs2, 1, 2]),
+        &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2]),
     );
 
     let output = sha256_solve(message);

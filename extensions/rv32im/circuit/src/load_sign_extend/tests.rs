@@ -4,7 +4,7 @@ use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder},
     VmAdapterChip,
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -91,10 +91,7 @@ fn set_and_execute(
 
     tester.execute(
         chip,
-        &Instruction::from_usize(
-            VmOpcode::with_default_offset(opcode),
-            [a, b, imm as usize, 1, 2],
-        ),
+        &Instruction::from_usize(opcode.global_opcode(), [a, b, imm as usize, 1, 2]),
     );
 
     let write_data = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
@@ -126,8 +123,7 @@ fn rand_load_sign_extend_test() {
         range_checker_chip.clone(),
         Rv32LoadStoreOpcode::CLASS_OFFSET,
     );
-    let core =
-        LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::CLASS_OFFSET);
+    let core = LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::CLASS_OFFSET);
     let mut chip =
         Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
@@ -279,8 +275,7 @@ fn execute_roundtrip_sanity_test() {
         range_checker_chip.clone(),
         Rv32LoadStoreOpcode::CLASS_OFFSET,
     );
-    let core =
-        LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::CLASS_OFFSET);
+    let core = LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::CLASS_OFFSET);
     let mut chip =
         Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 

@@ -99,7 +99,7 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
         );
         inventory.add_executor(
             keccak_chip,
-            Rv32KeccakOpcode::iter().map(VmOpcode::with_default_offset),
+            Rv32KeccakOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
         Ok(inventory)

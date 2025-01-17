@@ -612,10 +612,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 offline_memory,
             );
             inventory
-                .add_executor(
-                    chip,
-                    [VmOpcode::with_default_offset(PublishOpcode::PUBLISH)],
-                )
+                .add_executor(chip, [PublishOpcode::PUBLISH.global_opcode()])
                 .unwrap();
         }
         if config.continuation_enabled {
@@ -637,7 +634,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory.add_periphery_chip(chip);
         }
         let streams = Arc::new(Mutex::new(Streams::default()));
-        let phantom_opcode = VmOpcode::with_default_offset(SystemOpcode::PHANTOM);
+        let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
         let mut phantom_chip =
             PhantomChip::new(EXECUTION_BUS, PROGRAM_BUS, SystemOpcode::CLASS_OFFSET);
         phantom_chip.set_streams(streams.clone());

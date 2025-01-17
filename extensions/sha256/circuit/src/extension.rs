@@ -94,7 +94,7 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
         );
         inventory.add_executor(
             sha256_chip,
-            Rv32Sha256Opcode::iter().map(VmOpcode::with_default_offset),
+            Rv32Sha256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         Ok(inventory)

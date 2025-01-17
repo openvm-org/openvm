@@ -163,7 +163,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 );
 
                 let &Instruction { opcode, c, .. } = instruction;
-                if opcode == VmOpcode::with_default_offset(SystemOpcode::TERMINATE) {
+                if opcode == SystemOpcode::TERMINATE.global_opcode() {
                     did_terminate = true;
                     self.chip_complex.connector_chip_mut().end(
                         ExecutionState::new(pc, timestamp),
@@ -173,7 +173,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 }
 
                 // Some phantom instruction handling is more convenient to do here than in PhantomChip.
-                if opcode == VmOpcode::with_default_offset(SystemOpcode::PHANTOM) {
+                if opcode == SystemOpcode::PHANTOM.global_opcode() {
                     // Note: the discriminant is the lower 16 bits of the c operand.
                     let discriminant = c.as_canonical_u32() as u16;
                     let phantom = SysPhantom::from_repr(discriminant);

@@ -13,7 +13,7 @@ use openvm_circuit::{
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP, PhantomDiscriminant, Poseidon2Opcode, UsizeOpcode, VmOpcode,
+    program::DEFAULT_PC_STEP, PhantomDiscriminant, Poseidon2Opcode, UsizeOpcode,
 };
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
@@ -124,7 +124,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         inventory.add_executor(
             load_store_chip,
-            NativeLoadStoreOpcode::iter().map(VmOpcode::with_default_offset),
+            NativeLoadStoreOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let mut block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
@@ -143,7 +143,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         inventory.add_executor(
             block_load_store_chip,
-            NativeLoadStore4Opcode::iter().map(VmOpcode::with_default_offset),
+            NativeLoadStore4Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let branch_equal_chip = NativeBranchEqChip::new(
@@ -153,7 +153,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         );
         inventory.add_executor(
             branch_equal_chip,
-            NativeBranchEqualOpcode::iter().map(VmOpcode::with_default_offset),
+            NativeBranchEqualOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let jal_chip = NativeJalChip::new(
@@ -161,10 +161,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             JalCoreChip::new(NativeJalOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
-        inventory.add_executor(
-            jal_chip,
-            NativeJalOpcode::iter().map(VmOpcode::with_default_offset),
-        )?;
+        inventory.add_executor(jal_chip, NativeJalOpcode::iter().map(|x| x.global_opcode()))?;
 
         let field_arithmetic_chip = FieldArithmeticChip::new(
             NativeAdapterChip::<F, 2, 1>::new(execution_bus, program_bus, memory_bridge),
@@ -173,7 +170,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         );
         inventory.add_executor(
             field_arithmetic_chip,
-            FieldArithmeticOpcode::iter().map(VmOpcode::with_default_offset),
+            FieldArithmeticOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let field_extension_chip = FieldExtensionChip::new(
@@ -183,7 +180,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         );
         inventory.add_executor(
             field_extension_chip,
-            FieldExtensionOpcode::iter().map(VmOpcode::with_default_offset),
+            FieldExtensionOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let fri_reduced_opening_chip = FriReducedOpeningChip::new(
@@ -195,7 +192,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         );
         inventory.add_executor(
             fri_reduced_opening_chip,
-            FriOpcode::iter().map(VmOpcode::with_default_offset),
+            FriOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let poseidon2_chip = NativePoseidon2Chip::new(
@@ -209,7 +206,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         );
         inventory.add_executor(
             poseidon2_chip,
-            Poseidon2Opcode::iter().map(VmOpcode::with_default_offset),
+            Poseidon2Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         builder.add_phantom_sub_executor(
@@ -348,10 +345,7 @@ impl<F: PrimeField32> VmExtension<F> for CastFExtension {
             CastFCoreChip::new(range_checker.clone(), CastfOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
-        inventory.add_executor(
-            castf_chip,
-            [VmOpcode::with_default_offset(CastfOpcode::CASTF)],
-        )?;
+        inventory.add_executor(castf_chip, [CastfOpcode::CASTF.global_opcode()])?;
 
         Ok(inventory)
     }

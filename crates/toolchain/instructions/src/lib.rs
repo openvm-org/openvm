@@ -24,8 +24,8 @@ pub trait UsizeOpcode {
     fn from_usize(value: usize) -> Self;
     fn local_usize(&self) -> usize;
 
-    fn with_default_offset(&self) -> usize {
-        self.local_usize() + Self::CLASS_OFFSET
+    fn global_opcode(&self) -> VmOpcode {
+        VmOpcode::from_usize(self.local_usize() + Self::CLASS_OFFSET)
     }
 }
 
@@ -46,11 +46,6 @@ impl VmOpcode {
     /// Create a new [VmOpcode] from a usize
     pub fn from_usize(value: usize) -> Self {
         Self(value)
-    }
-
-    /// Returns the corresponding [VmOpcode] from `local_opcode` with default offset
-    pub fn with_default_offset<Opcode: UsizeOpcode>(local_opcode: Opcode) -> VmOpcode {
-        Self(local_opcode.with_default_offset())
     }
 
     /// Convert the VmOpcode into a field element

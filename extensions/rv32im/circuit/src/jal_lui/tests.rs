@@ -4,7 +4,7 @@ use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip, BITWISE_OP
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -50,7 +50,7 @@ fn set_and_execute(
     tester.execute_with_pc(
         chip,
         &Instruction::large_from_isize(
-            VmOpcode::with_default_offset(opcode),
+            opcode.global_opcode(),
             a as isize,
             0,
             imm as isize,

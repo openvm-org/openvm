@@ -14,7 +14,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -83,10 +83,7 @@ fn set_and_execute(
 
     tester.execute(
         chip,
-        &Instruction::from_usize(
-            VmOpcode::with_default_offset(opcode),
-            [0, b, imm as usize, 1, 2],
-        ),
+        &Instruction::from_usize(opcode.global_opcode(), [0, b, imm as usize, 1, 2]),
     );
 
     let write_data = read_data;

@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use openvm_circuit::arch::{testing::VmChipTestBuilder, Streams};
-use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
 use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
@@ -157,7 +157,7 @@ fn set_and_execute(
     tester.execute_with_pc(
         chip,
         &Instruction::from_usize(
-            VmOpcode::with_default_offset(opcode),
+            opcode.global_opcode(),
             [data.a, data.b, data.c, data.d, data.e].map(|x| x.as_canonical_u32() as usize),
         ),
         0u32,
