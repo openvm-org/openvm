@@ -52,8 +52,9 @@ impl<C: Config> Builder<C> {
 
         // Check that the bits represent the number without overflow.
         // If F is BabyBear, then any element of F can be represented either as:
-        //    * 2^30 + ... + 2^x + y for y in [0, 2^(x - 1)) and x > 27
+        //    * 2^30 + ... + 2^x + y for y in [0, 2^(x - 1)) and 27 < x <= 30
         //    * 2^30 + ... + 2^27
+        //    * y for y in [0, 2^27)
         // To check that bits b[0], ..., b[30] represent b[0] + ... + b[30] * 2^30 without overflow,
         // we may check that:
         //    * if b_27 + ... + b_30 = 4, then b_0 + ... + b_26 * 2^26 = 0
