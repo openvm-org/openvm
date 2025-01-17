@@ -272,7 +272,7 @@ where
 
     // We need finalize for double, as it might have a constant (a of y^2 = x^3 + ax + b)
     fn finalize(&self, trace: &mut RowMajorMatrix<F>, num_records: usize) {
-        println!("finalizing double");
+        println!("finalizing double: {}", self.air.expr.prime);
         if num_records == 0 {
             return;
         }
