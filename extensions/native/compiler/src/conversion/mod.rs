@@ -19,20 +19,14 @@ use crate::{
 pub struct CompilerOptions {
     // The compiler will ensure that the heap pointer is aligned to be a multiple of `word_size`.
     pub word_size: usize,
-    pub compile_prints: bool,
     pub enable_cycle_tracker: bool,
-    pub field_arithmetic_enabled: bool,
-    pub field_extension_enabled: bool,
 }
 
 impl Default for CompilerOptions {
     fn default() -> Self {
         CompilerOptions {
             word_size: 8,
-            compile_prints: true,
             enable_cycle_tracker: false,
-            field_arithmetic_enabled: true,
-            field_extension_enabled: true,
         }
     }
 }
@@ -106,218 +100,6 @@ fn i32_f<F: PrimeField32>(x: i32) -> F {
         -F::from_canonical_u32((-x) as u32)
     } else {
         F::from_canonical_u32(x as u32)
-    }
-}
-
-fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
-    instruction: AsmInstruction<F, EF>,
-    options: &CompilerOptions,
-) -> Vec<Instruction<F>> {
-    match instruction {
-        AsmInstruction::AddF(dst, lhs, rhs) => vec![
-            // mem[dst] <- mem[lhs] + mem[rhs]
-            inst_med(
-                options.opcode_with_offset(FieldArithmeticOpcode::ADD),
-                i32_f(dst),
-                i32_f(lhs),
-                i32_f(rhs),
-                AS::Native,
-                AS::Native,
-                AS::Native,
-            ),
-        ],
-        AsmInstruction::AddFI(dst, lhs, rhs) => vec![
-            // mem[dst] <- mem[lhs] + rhs
-            inst_med(
-                options.opcode_with_offset(FieldArithmeticOpcode::ADD),
-                i32_f(dst),
-                i32_f(lhs),
-                rhs,
-                AS::Native,
-                AS::Native,
-                AS::Immediate,
-            ),
-        ],
-        AsmInstruction::SubF(dst, lhs, rhs) => vec![
-            // mem[dst] <- mem[lhs] - mem[rhs]
-            inst_med(
-                options.opcode_with_offset(FieldArithmeticOpcode::SUB),
-                i32_f(dst),
-                i32_f(lhs),
-                i32_f(rhs),
-                AS::Native,
-                AS::Native,
-                AS::Native,
-            ),
-        ],
-        AsmInstruction::SubFI(dst, lhs, rhs) => vec![
-            // mem[dst] <- mem[lhs] - rhs
-            inst_med(
-                options.opcode_with_offset(FieldArithmeticOpcode::SUB),
-                i32_f(dst),
-                i32_f(lhs),
-                rhs,
-                AS::Native,
-                AS::Native,
-                AS::Immediate,
-            ),
-        ],
-        AsmInstruction::SubFIN(dst, lhs, rhs) => vec![
-            // mem[dst] <- lhs - mem[rhs]
-            inst_med(
-                options.opcode_with_offset(FieldArithmeticOpcode::SUB),
-                i32_f(dst),
-                lhs,
-                i32_f(rhs),
-                AS::Native,
-                AS::Immediate,
-                AS::Native,
-            ),
-        ],
-        AsmInstruction::MulF(dst, lhs, rhs) => vec![
-            // mem[dst] <- mem[lhs] * mem[rhs]
-            inst_med(
-                options.opcode_with_offset(FieldArithmeticOpcode::MUL),
-                i32_f(dst),
-                i32_f(lhs),
-                i32_f(rhs),
-                AS::Native,
-                AS::Native,
-                AS::Native,
-            ),
-        ],
-        AsmInstruction::MulFI(dst, lhs, rhs) => vec![
-            // mem[dst] <- mem[lhs] * rhs
-            inst_med(
-                options.opcode_with_offset(FieldArithmeticOpcode::MUL),
-                i32_f(dst),
-                i32_f(lhs),
-                rhs,
-                AS::Native,
-                AS::Native,
-                AS::Immediate,
-            ),
-        ],
-        AsmInstruction::DivF(dst, lhs, rhs) => vec![
-            // mem[dst] <- mem[lhs] / mem[rhs]
-            inst_med(
-                options.opcode_with_offset(FieldArithmeticOpcode::DIV),
-                i32_f(dst),
-                i32_f(lhs),
-                i32_f(rhs),
-                AS::Native,
-                AS::Native,
-                AS::Native,
-            ),
-        ],
-        AsmInstruction::DivFI(dst, lhs, rhs) => vec![
-            // mem[dst] <- mem[lhs] / rhs
-            inst_med(
-                options.opcode_with_offset(FieldArithmeticOpcode::DIV),
-                i32_f(dst),
-                i32_f(lhs),
-                rhs,
-                AS::Native,
-                AS::Native,
-                AS::Immediate,
-            ),
-        ],
-        AsmInstruction::DivFIN(dst, lhs, rhs) => vec![
-            // mem[dst] <- lhs / mem[rhs]
-            inst_med(
-                options.opcode_with_offset(FieldArithmeticOpcode::DIV),
-                i32_f(dst),
-                lhs,
-                i32_f(rhs),
-                AS::Native,
-                AS::Immediate,
-                AS::Native,
-            ),
-        ],
-        _ => panic!(
-            "Illegal argument to convert_field_arithmetic_instruction: {:?}",
-            instruction
-        ),
-    }
-}
-
-pub fn convert_field_extension<F: PrimeField32, EF: ExtensionField<F>>(
-    instruction: AsmInstruction<F, EF>,
-    options: &CompilerOptions,
-) -> Vec<Instruction<F>> {
-    match instruction {
-        AsmInstruction::AddE(dst, lhs, rhs) => vec![inst(
-            options.opcode_with_offset(FieldExtensionOpcode::FE4ADD),
-            i32_f(dst),
-            i32_f(lhs),
-            i32_f(rhs),
-            AS::Native,
-            AS::Native,
-        )],
-        AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(
-            options.opcode_with_offset(FieldExtensionOpcode::FE4SUB),
-            i32_f(dst),
-            i32_f(lhs),
-            i32_f(rhs),
-            AS::Native,
-            AS::Native,
-        )],
-        AsmInstruction::MulE(dst, lhs, rhs) => vec![inst(
-            options.opcode_with_offset(FieldExtensionOpcode::BBE4MUL),
-            i32_f(dst),
-            i32_f(lhs),
-            i32_f(rhs),
-            AS::Native,
-            AS::Native,
-        )],
-        AsmInstruction::DivE(dst, lhs, rhs) => vec![inst(
-            options.opcode_with_offset(FieldExtensionOpcode::BBE4DIV),
-            i32_f(dst),
-            i32_f(lhs),
-            i32_f(rhs),
-            AS::Native,
-            AS::Native,
-        )],
-        _ => panic!(
-            "Illegal argument to convert_field_extension: {:?}",
-            instruction
-        ),
-    }
-}
-
-fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
-    instruction: AsmInstruction<F, EF>,
-    _options: &CompilerOptions,
-) -> Vec<Instruction<F>> {
-    let word_size_i32 = 1;
-
-    match instruction {
-        AsmInstruction::PrintV(src) => vec![Instruction::phantom(
-            PhantomDiscriminant(NativePhantom::Print as u16),
-            i32_f(src),
-            F::ZERO,
-            AS::Native as u16,
-        )],
-        AsmInstruction::PrintF(src) => vec![Instruction::phantom(
-            PhantomDiscriminant(NativePhantom::Print as u16),
-            i32_f(src),
-            F::ZERO,
-            AS::Native as u16,
-        )],
-        AsmInstruction::PrintE(src) => (0..EF::D as i32)
-            .map(|i| {
-                Instruction::phantom(
-                    PhantomDiscriminant(NativePhantom::Print as u16),
-                    i32_f(src + i * word_size_i32),
-                    F::ZERO,
-                    AS::Native as u16,
-                )
-            })
-            .collect(),
-        _ => panic!(
-            "Illegal argument to convert_print_instruction: {:?}",
-            instruction
-        ),
     }
 }
 
@@ -526,14 +308,29 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Native,
             AS::Native,
         )],
-        AsmInstruction::PrintV(..) | AsmInstruction::PrintF(..) | AsmInstruction::PrintE(..) => {
-            if options.compile_prints {
-                convert_print_instruction(instruction, options)
-            } else {
-                vec![]
-            }
-        }
-        AsmInstruction::ImmF(dst, val) => if options.field_arithmetic_enabled {
+        AsmInstruction::PrintV(src) => vec![Instruction::phantom(
+            PhantomDiscriminant(NativePhantom::Print as u16),
+            i32_f(src),
+            F::ZERO,
+            AS::Native as u16,
+        )],
+        AsmInstruction::PrintF(src) => vec![Instruction::phantom(
+            PhantomDiscriminant(NativePhantom::Print as u16),
+            i32_f(src),
+            F::ZERO,
+            AS::Native as u16,
+        )],
+        AsmInstruction::PrintE(src) => (0..EF::D as i32)
+            .map(|i| {
+                Instruction::phantom(
+                    PhantomDiscriminant(NativePhantom::Print as u16),
+                    i32_f(src + i),
+                    F::ZERO,
+                    AS::Native as u16,
+                )
+            })
+            .collect(),
+        AsmInstruction::ImmF(dst, val) => 
             vec![inst_med(
                 options.opcode_with_offset(FieldArithmeticOpcode::ADD),
                 i32_f(dst),
@@ -542,14 +339,8 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 AS::Native,
                 AS::Immediate,
                 AS::Native,
-            )]
-        } else {
-            panic!(
-                "Unsupported instruction {:?}, field arithmetic is disabled",
-                instruction
-            )
-        },
-        AsmInstruction::CopyF(dst, src) => if options.field_arithmetic_enabled {
+            )],
+        AsmInstruction::CopyF(dst, src) => 
             vec![inst_med(
                 options.opcode_with_offset(FieldArithmeticOpcode::ADD),
                 i32_f(dst),
@@ -558,45 +349,159 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 AS::Native,
                 AS::Native,
                 AS::Immediate
-            )]
-        } else {
-            panic!(
-                "Unsupported instruction {:?}, field arithmetic is disabled",
-                instruction
-            )
-        },
-        AsmInstruction::AddF(..)
-        | AsmInstruction::SubF(..)
-        | AsmInstruction::MulF(..)
-        | AsmInstruction::DivF(..)
-        | AsmInstruction::AddFI(..)
-        | AsmInstruction::SubFI(..)
-        | AsmInstruction::MulFI(..)
-        | AsmInstruction::DivFI(..)
-        | AsmInstruction::SubFIN(..)
-        | AsmInstruction::DivFIN(..) => {
-            if options.field_arithmetic_enabled {
-                convert_base_arithmetic_instruction(instruction, options)
-            } else {
-                panic!(
-                    "Unsupported instruction {:?}, field arithmetic is disabled",
-                    instruction
-                )
-            }
-        }
-        AsmInstruction::AddE(..)
-        | AsmInstruction::SubE(..)
-        | AsmInstruction::MulE(..)
-        | AsmInstruction::DivE(..) => {
-            if options.field_extension_enabled {
-                convert_field_extension(instruction, options)
-            } else {
-                panic!(
-                    "Unsupported instruction {:?}, field extension arithmetic is disabled",
-                    instruction
-                )
-            }
-        }
+            )],
+            AsmInstruction::AddF(dst, lhs, rhs) => vec![
+                // mem[dst] <- mem[lhs] + mem[rhs]
+                inst_med(
+                    options.opcode_with_offset(FieldArithmeticOpcode::ADD),
+                    i32_f(dst),
+                    i32_f(lhs),
+                    i32_f(rhs),
+                    AS::Native,
+                    AS::Native,
+                    AS::Native,
+                ),
+            ],
+            AsmInstruction::AddFI(dst, lhs, rhs) => vec![
+                // mem[dst] <- mem[lhs] + rhs
+                inst_med(
+                    options.opcode_with_offset(FieldArithmeticOpcode::ADD),
+                    i32_f(dst),
+                    i32_f(lhs),
+                    rhs,
+                    AS::Native,
+                    AS::Native,
+                    AS::Immediate,
+                ),
+            ],
+            AsmInstruction::SubF(dst, lhs, rhs) => vec![
+                // mem[dst] <- mem[lhs] - mem[rhs]
+                inst_med(
+                    options.opcode_with_offset(FieldArithmeticOpcode::SUB),
+                    i32_f(dst),
+                    i32_f(lhs),
+                    i32_f(rhs),
+                    AS::Native,
+                    AS::Native,
+                    AS::Native,
+                ),
+            ],
+            AsmInstruction::SubFI(dst, lhs, rhs) => vec![
+                // mem[dst] <- mem[lhs] - rhs
+                inst_med(
+                    options.opcode_with_offset(FieldArithmeticOpcode::SUB),
+                    i32_f(dst),
+                    i32_f(lhs),
+                    rhs,
+                    AS::Native,
+                    AS::Native,
+                    AS::Immediate,
+                ),
+            ],
+            AsmInstruction::SubFIN(dst, lhs, rhs) => vec![
+                // mem[dst] <- lhs - mem[rhs]
+                inst_med(
+                    options.opcode_with_offset(FieldArithmeticOpcode::SUB),
+                    i32_f(dst),
+                    lhs,
+                    i32_f(rhs),
+                    AS::Native,
+                    AS::Immediate,
+                    AS::Native,
+                ),
+            ],
+            AsmInstruction::MulF(dst, lhs, rhs) => vec![
+                // mem[dst] <- mem[lhs] * mem[rhs]
+                inst_med(
+                    options.opcode_with_offset(FieldArithmeticOpcode::MUL),
+                    i32_f(dst),
+                    i32_f(lhs),
+                    i32_f(rhs),
+                    AS::Native,
+                    AS::Native,
+                    AS::Native,
+                ),
+            ],
+            AsmInstruction::MulFI(dst, lhs, rhs) => vec![
+                // mem[dst] <- mem[lhs] * rhs
+                inst_med(
+                    options.opcode_with_offset(FieldArithmeticOpcode::MUL),
+                    i32_f(dst),
+                    i32_f(lhs),
+                    rhs,
+                    AS::Native,
+                    AS::Native,
+                    AS::Immediate,
+                ),
+            ],
+            AsmInstruction::DivF(dst, lhs, rhs) => vec![
+                // mem[dst] <- mem[lhs] / mem[rhs]
+                inst_med(
+                    options.opcode_with_offset(FieldArithmeticOpcode::DIV),
+                    i32_f(dst),
+                    i32_f(lhs),
+                    i32_f(rhs),
+                    AS::Native,
+                    AS::Native,
+                    AS::Native,
+                ),
+            ],
+            AsmInstruction::DivFI(dst, lhs, rhs) => vec![
+                // mem[dst] <- mem[lhs] / rhs
+                inst_med(
+                    options.opcode_with_offset(FieldArithmeticOpcode::DIV),
+                    i32_f(dst),
+                    i32_f(lhs),
+                    rhs,
+                    AS::Native,
+                    AS::Native,
+                    AS::Immediate,
+                ),
+            ],
+            AsmInstruction::DivFIN(dst, lhs, rhs) => vec![
+                // mem[dst] <- lhs / mem[rhs]
+                inst_med(
+                    options.opcode_with_offset(FieldArithmeticOpcode::DIV),
+                    i32_f(dst),
+                    lhs,
+                    i32_f(rhs),
+                    AS::Native,
+                    AS::Immediate,
+                    AS::Native,
+                ),
+            ],
+            AsmInstruction::AddE(dst, lhs, rhs) => vec![inst(
+                options.opcode_with_offset(FieldExtensionOpcode::FE4ADD),
+                i32_f(dst),
+                i32_f(lhs),
+                i32_f(rhs),
+                AS::Native,
+                AS::Native,
+            )],
+            AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(
+                options.opcode_with_offset(FieldExtensionOpcode::FE4SUB),
+                i32_f(dst),
+                i32_f(lhs),
+                i32_f(rhs),
+                AS::Native,
+                AS::Native,
+            )],
+            AsmInstruction::MulE(dst, lhs, rhs) => vec![inst(
+                options.opcode_with_offset(FieldExtensionOpcode::BBE4MUL),
+                i32_f(dst),
+                i32_f(lhs),
+                i32_f(rhs),
+                AS::Native,
+                AS::Native,
+            )],
+            AsmInstruction::DivE(dst, lhs, rhs) => vec![inst(
+                options.opcode_with_offset(FieldExtensionOpcode::BBE4DIV),
+                i32_f(dst),
+                i32_f(lhs),
+                i32_f(rhs),
+                AS::Native,
+                AS::Native,
+            )],
         AsmInstruction::Poseidon2Compress(dst, src1, src2) => vec![inst(
             options.opcode_with_offset(Poseidon2Opcode::COMP_POS2),
             i32_f(dst),
