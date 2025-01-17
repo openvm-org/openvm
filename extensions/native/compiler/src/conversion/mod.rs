@@ -330,7 +330,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 )
             })
             .collect(),
-        AsmInstruction::ImmF(dst, val) => 
+        AsmInstruction::ImmF(dst, val) =>
             vec![inst_med(
                 options.opcode_with_offset(FieldArithmeticOpcode::ADD),
                 i32_f(dst),
@@ -340,7 +340,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 AS::Immediate,
                 AS::Native,
             )],
-        AsmInstruction::CopyF(dst, src) => 
+        AsmInstruction::CopyF(dst, src) =>
             vec![inst_med(
                 options.opcode_with_offset(FieldArithmeticOpcode::ADD),
                 i32_f(dst),
