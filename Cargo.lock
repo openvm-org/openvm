@@ -1093,7 +1093,6 @@ dependencies = [
  "eyre",
  "goblin",
  "hex",
- "num-bigint-dig",
  "openvm-build",
  "openvm-circuit",
  "openvm-keccak256-circuit",
@@ -3226,23 +3225,7 @@ dependencies = [
  "num-integer",
  "num-traits",
  "rand",
-]
-
-[[package]]
-name = "num-bigint-dig"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc84195820f291c7697304f3cbdadd1cb7199c0efc917ff5eafd71225c136151"
-dependencies = [
- "byteorder",
- "lazy_static",
- "libm",
- "num-integer",
- "num-iter",
- "num-traits",
- "rand",
  "serde",
- "smallvec",
 ]
 
 [[package]]
@@ -3376,7 +3359,7 @@ dependencies = [
  "bytemuck",
  "chrono",
  "hex-literal",
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "num-traits",
  "openvm-platform",
  "openvm-rv32im-guest",
@@ -3391,7 +3374,7 @@ dependencies = [
  "derive_more 1.0.0",
  "halo2curves-axiom",
  "itertools 0.13.0",
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "num-traits",
  "openvm-algebra-transpiler",
  "openvm-circuit",
@@ -3427,7 +3410,7 @@ name = "openvm-algebra-guest"
 version = "0.2.0-alpha"
 dependencies = [
  "halo2curves-axiom",
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "openvm",
  "openvm-algebra-complex-macros",
  "openvm-algebra-moduli-setup",
@@ -3451,7 +3434,7 @@ name = "openvm-algebra-tests"
 version = "0.2.0-alpha"
 dependencies = [
  "eyre",
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "openvm",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
@@ -3494,7 +3477,7 @@ dependencies = [
  "hex",
  "k256",
  "metrics",
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
  "openvm-build",
@@ -3552,7 +3535,7 @@ dependencies = [
 name = "openvm-bigint-guest"
 version = "0.2.0-alpha"
 dependencies = [
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "num-traits",
  "openvm",
  "openvm-platform",
@@ -3565,7 +3548,6 @@ name = "openvm-bigint-integration-tests"
 version = "0.2.0-alpha"
 dependencies = [
  "eyre",
- "num-bigint-dig",
  "openvm",
  "openvm-bigint-circuit",
  "openvm-bigint-transpiler",
@@ -3680,7 +3662,7 @@ dependencies = [
  "derive-new",
  "itertools 0.13.0",
  "lazy_static",
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "num-traits",
  "openvm-circuit-primitives-derive",
  "openvm-stark-backend",
@@ -3723,7 +3705,7 @@ dependencies = [
  "eyre",
  "itertools 0.13.0",
  "lazy_static",
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "num-integer",
  "num-traits",
  "once_cell",
@@ -3759,7 +3741,6 @@ dependencies = [
  "k256",
  "lazy_static",
  "num-bigint 0.4.6",
- "num-bigint-dig",
  "num-traits",
  "openvm",
  "openvm-algebra-guest",
@@ -3822,7 +3803,7 @@ dependencies = [
  "backtrace",
  "derive-new",
  "itertools 0.13.0",
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "num-traits",
  "openvm-instructions-derive",
  "openvm-stark-backend",
@@ -3932,7 +3913,7 @@ dependencies = [
  "hex-literal",
  "itertools 0.13.0",
  "lazy_static",
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "num-traits",
  "openvm-circuit",
  "openvm-circuit-primitives",
@@ -4099,7 +4080,7 @@ dependencies = [
  "eyre",
  "halo2curves-axiom",
  "itertools 0.13.0",
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "num-traits",
  "once_cell",
  "openvm-algebra-circuit",
@@ -4132,7 +4113,6 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "num-bigint 0.4.6",
- "num-bigint-dig",
  "num-traits",
  "openvm",
  "openvm-algebra-complex-macros",
@@ -4153,7 +4133,6 @@ name = "openvm-pairing-integration-tests"
 version = "0.2.0-alpha"
 dependencies = [
  "eyre",
- "num-bigint-dig",
  "openvm",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
@@ -4547,7 +4526,7 @@ version = "0.2.0-alpha"
 dependencies = [
  "derive_more 1.0.0",
  "eyre",
- "num-bigint-dig",
+ "num-bigint 0.4.6",
  "openvm",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
@@ -4587,7 +4566,6 @@ dependencies = [
  "derive_more 1.0.0",
  "elf",
  "eyre",
- "num-bigint-dig",
  "openvm-algebra-transpiler",
  "openvm-build",
  "openvm-circuit",

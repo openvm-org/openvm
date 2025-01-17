@@ -1,6 +1,6 @@
 use std::{cell::RefCell, ops::Deref, rc::Rc};
 
-use num_bigint_dig::{BigInt, BigUint, Sign};
+use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::Zero;
 use openvm_circuit_primitives::{
     bigint::{
@@ -31,7 +31,7 @@ pub struct ExprBuilderConfig {
 
 impl ExprBuilderConfig {
     pub fn check_valid(&self) {
-        assert!(self.modulus.bits() <= self.num_limbs * self.limb_bits);
+        assert!(self.modulus.bits() <= (self.num_limbs * self.limb_bits) as u64);
     }
 }
 

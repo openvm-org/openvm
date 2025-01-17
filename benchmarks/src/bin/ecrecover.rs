@@ -2,7 +2,7 @@ use clap::Parser;
 use derive_more::derive::From;
 use eyre::Result;
 use k256::ecdsa::{SigningKey, VerifyingKey};
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_algebra_circuit::{
     ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery,
 };

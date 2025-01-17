@@ -195,7 +195,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         let modulus = Self::modulus_biguint();
-                        let inv = openvm::utils::uint_mod_inverse(&other.as_biguint(), &modulus);
+                        let inv = other.as_biguint().modinv(&modulus).unwrap();
                         *self = Self::from_biguint((self.as_biguint() * inv) % modulus);
                     }
                     #[cfg(target_os = "zkvm")]
@@ -287,7 +287,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         let modulus = Self::modulus_biguint();
-                        let inv = openvm::utils::uint_mod_inverse(&other.as_biguint(), &modulus);
+                        let inv = other.as_biguint().modinv(&modulus).unwrap();
                         Self::from_biguint((self.as_biguint() * inv) % modulus)
                     }
                     #[cfg(target_os = "zkvm")]
@@ -380,18 +380,18 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
 
                     #[cfg(not(target_os = "zkvm"))]
-                    fn modulus_biguint() -> num_bigint_dig::BigUint {
-                        num_bigint_dig::BigUint::from_bytes_le(&Self::MODULUS)
+                    fn modulus_biguint() -> num_bigint::BigUint {
+                        num_bigint::BigUint::from_bytes_le(&Self::MODULUS)
                     }
 
                     #[cfg(not(target_os = "zkvm"))]
-                    fn from_biguint(biguint: num_bigint_dig::BigUint) -> Self {
+                    fn from_biguint(biguint: num_bigint::BigUint) -> Self {
                         Self(openvm::utils::biguint_to_limbs(&biguint))
                     }
 
                     #[cfg(not(target_os = "zkvm"))]
-                    fn as_biguint(&self) -> num_bigint_dig::BigUint {
-                        num_bigint_dig::BigUint::from_bytes_le(self.as_le_bytes())
+                    fn as_biguint(&self) -> num_bigint::BigUint {
+                        num_bigint::BigUint::from_bytes_le(self.as_le_bytes())
                     }
 
                     fn neg_assign(&mut self) {

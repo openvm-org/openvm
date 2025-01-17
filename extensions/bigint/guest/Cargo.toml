@@ -15,7 +15,7 @@ strum_macros = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
-num-bigint-dig.workspace = true
+num-bigint.workspace = true
 num-traits.workspace = true
 
 [features]

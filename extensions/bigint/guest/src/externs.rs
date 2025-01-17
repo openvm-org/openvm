@@ -7,108 +7,108 @@ use super::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_wrapping_add_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::Add as u8,
-        result as *mut u8,
-        a as *const u8,
-        b as *const u8
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7 = Int256Funct7::Add as u8,
+        rd = In result as *mut u8,
+        rs1 = In a as *const u8,
+        rs2 = In b as *const u8
     );
 }
 
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_wrapping_sub_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::Sub as u8,
-        result as *mut u8,
-        a as *const u8,
-        b as *const u8
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7 = Int256Funct7::Sub as u8,
+        rd = In result as *mut u8,
+        rs1 = In a as *const u8,
+        rs2 = In b as *const u8
     );
 }
 
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_wrapping_mul_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::Mul as u8,
-        result as *mut u8,
-        a as *const u8,
-        b as *const u8
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7 = Int256Funct7::Mul as u8,
+        rd = In result as *mut u8,
+        rs1 = In a as *const u8,
+        rs2 = In b as *const u8
     );
 }
 
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_bitxor_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::Xor as u8,
-        result as *mut u8,
-        a as *const u8,
-        b as *const u8
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7 = Int256Funct7::Xor as u8,
+        rd = In result as *mut u8,
+        rs1 = In a as *const u8,
+        rs2 = In b as *const u8
     );
 }
 
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_bitand_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::And as u8,
-        result as *mut u8,
-        a as *const u8,
-        b as *const u8
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7 = Int256Funct7::And as u8,
+        rd = In result as *mut u8,
+        rs1 = In a as *const u8,
+        rs2 = In b as *const u8
     );
 }
 
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_bitor_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::Or as u8,
-        result as *mut u8,
-        a as *const u8,
-        b as *const u8
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7 = Int256Funct7::Or as u8,
+        rd = In result as *mut u8,
+        rs1 = In a as *const u8,
+        rs2 = In b as *const u8
     );
 }
 
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_wrapping_shl_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::Sll as u8,
-        result as *mut u8,
-        a as *const u8,
-        b as *const u8
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7 = Int256Funct7::Sll as u8,
+        rd = In result as *mut u8,
+        rs1 = In a as *const u8,
+        rs2 = In b as *const u8
     );
 }
 
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_wrapping_shr_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::Srl as u8,
-        result as *mut u8,
-        a as *const u8,
-        b as *const u8
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7 = Int256Funct7::Srl as u8,
+        rd = In result as *mut u8,
+        rs1 = In a as *const u8,
+        rs2 = In b as *const u8
     );
 }
 
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_arithmetic_shr_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::Sra as u8,
-        result as *mut u8,
-        a as *const u8,
-        b as *const u8
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7 = Int256Funct7::Sra as u8,
+        rd = In result as *mut u8,
+        rs1 = In a as *const u8,
+        rs2 = In b as *const u8
     );
 }
 
@@ -131,24 +131,24 @@ unsafe extern "C" fn zkvm_u256_eq_impl(a: *const u8, b: *const u8) -> bool {
 unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering {
     let mut cmp_result = MaybeUninit::<crate::U256>::uninit();
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::Sltu as u8,
-        cmp_result.as_mut_ptr(),
-        a as *const u8,
-        b as *const u8
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7 = Int256Funct7::Sltu as u8,
+        rd = In cmp_result.as_mut_ptr(),
+        rs1 = In a as *const u8,
+        rs2 = In b as *const u8
     );
     let mut cmp_result = cmp_result.assume_init();
     if cmp_result.as_le_bytes()[0] != 0 {
         return Ordering::Less;
     }
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::Sltu as u8,
-        &mut cmp_result as *mut _,
-        b as *const u8,
-        a as *const u8
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7 = Int256Funct7::Sltu as u8,
+        rd = In &mut cmp_result as *mut _,
+        rs1 = In b as *const u8,
+        rs2 = In a as *const u8
     );
     if cmp_result.as_le_bytes()[0] != 0 {
         return Ordering::Greater;
@@ -160,11 +160,11 @@ unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering 
 unsafe extern "C" fn zkvm_u256_clone_impl(result: *mut u8, a: *const u8) {
     let zero = &crate::U256::ZERO as *const _ as *const u8;
     custom_insn_r!(
-        OPCODE,
-        INT256_FUNCT3,
-        Int256Funct7::Add as u8,
-        result as *mut u8,
-        a as *const u8,
-        zero
+        opcode = OPCODE,
+        funct3 = INT256_FUNCT3,
+        funct7= Int256Funct7::Add as u8,
+        rd = In result as *mut u8,
+        rs1 = In a as *const u8,
+        rs2 = In zero
     );
 }
