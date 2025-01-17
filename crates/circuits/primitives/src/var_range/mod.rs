@@ -135,6 +135,7 @@ impl VariableRangeCheckerChip {
     pub fn add_count(&self, value: u32, max_bits: usize) {
         // index is 2^max_bits + value - 1 + 1 for the extra [0, 0] row
         // if each [value, max_bits] is valid, the sends multiset will be exactly the receives multiset
+        debug_assert!(value < (1 << max_bits), "value {} >= 2^{}", value, max_bits);
         let idx = (1 << max_bits) + (value as usize);
         assert!(
             idx < self.count.len(),
