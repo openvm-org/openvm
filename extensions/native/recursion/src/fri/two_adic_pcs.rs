@@ -175,15 +175,15 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let res = builder.exp_bits_big_endian(w, &index_bits_truncated);
 
                 // we now compute:
-                // tag_exp[log_max_height - i] = w ** (b[log_max_height - i] * 2^(log_max_height - 1) + ... + b[log_max_height - 1] * 2^(log_max_height - i))
+                // tag_exp[log_max_height - i] = g * w ** (b[log_max_height - i] * 2^(log_max_height - 1) + ... + b[log_max_height - 1] * 2^(log_max_height - i))
                 // using a square-and-divide algorithm.
-                // res is tag_exp[0]
+                // g * res is tag_exp[0]
                 let tag_exp: Array<C, Felt<C::F>> = builder.array(log_max_height);
                 let one_var: Felt<C::F> = builder.eval(C::F::ONE);
                 let max_gen_pow = config.get_two_adic_generator(builder, 1);
                 compile_zip!(builder, index_bits_truncated, tag_exp).for_each(
                     |ptr_vec, builder| {
-                        builder.iter_ptr_set(&tag_exp, ptr_vec[1], res);
+                        builder.iter_ptr_set(&tag_exp, ptr_vec[1], g * res);
 
                         let bit = builder.iter_ptr_get(&index_bits_truncated, ptr_vec[0]);
                         let div = builder.select_f(bit, max_gen_pow, one_var);
@@ -210,9 +210,8 @@ pub fn verify_two_adic_pcs<C: Config>(
 
                     builder.cycle_tracker_start("exp-reverse-bits-len");
                     let height_idx = builder.eval_expr(log_max_height - log_height);
-                    let two_adic_generator_exp = builder.get(&tag_exp, height_idx);
+                    let x = builder.get(&tag_exp, height_idx);
                     builder.cycle_tracker_end("exp-reverse-bits-len");
-                    let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
                     compile_zip!(builder, mat_points, mat_values).for_each(|ptr_vec, builder| {
                         let z: Ext<C::F, C::EF> = builder.iter_ptr_get(&mat_points, ptr_vec[0]);
