@@ -164,10 +164,32 @@ pub fn verify_two_adic_pcs<C: Config>(
                 );
                 builder.cycle_tracker_end("verify-batch");
 
+                builder.cycle_tracker_start("cache-generator-powers");
+                // b = index_bits
+                // w = generator of order 2^log_max_height
+                // we first compute `w ** (b[0] * 2^(log_max_height - 1) + ... + b[log_max_height - 1])` using a square-and-multiply algorithm.
+                let w = config.get_two_adic_generator(builder, log_max_height);
+                let res = builder.exp_bits_big_endian(w, &index_bits);
+
+                // we now compute:
+                // tag_exp[i] = w ** (b[log_max_height - i] * 2^(log_max_height - 1) + ... + b[log_max_height - 1] * 2^(log_max_height - i))
+                // using a square-and-divide algorithm.
+                let tag_exp: Array<C, Felt<C::F>> = builder.array(log_max_height);
+                let one_var: Felt<C::F> = builder.eval(C::F::ONE);
+                let max_gen_pow = config.get_two_adic_generator(builder, 1);
+                compile_zip!(builder, index_bits, tag_exp).for_each(|ptr_vec, builder| {
+                    builder.iter_ptr_set(&tag_exp, ptr_vec[1], res);
+
+                    let bit = builder.iter_ptr_get(&index_bits, ptr_vec[0]);
+                    let div = builder.select_f(bit, max_gen_pow, one_var);
+                    builder.assign(&res, res / div);
+                    builder.assign(&res, res * res);
+                });
+                builder.cycle_tracker_end("cache-generator-powers");
+
                 builder.cycle_tracker_start("compute-reduced-opening");
                 // `verify_challenges` requires `opened_values` to be in the original order.
                 let opened_values = batch_opening.opened_values;
-
                 compile_zip!(builder, opened_values, mats).for_each(|ptr_vec, builder| {
                     let mat_opening = builder.iter_ptr_get(&opened_values, ptr_vec[0]);
                     let mat = builder.iter_ptr_get(&mats, ptr_vec[1]);
@@ -180,16 +202,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                     let cur_ro = builder.get(&ro, log_height);
                     let cur_alpha_pow = builder.get(&alpha_pow, log_height);
 
-                    let bits_reduced: Usize<_> = builder.eval(log_max_height - log_height);
-                    let index_bits_shifted = index_bits.shift(builder, bits_reduced.clone());
-
-                    let two_adic_generator = config.get_two_adic_generator(builder, log_height);
                     builder.cycle_tracker_start("exp-reverse-bits-len");
-
-                    let index_bits_shifted_truncated =
-                        index_bits_shifted.slice(builder, 0, log_height);
-                    let two_adic_generator_exp = builder
-                        .exp_bits_big_endian(two_adic_generator, &index_bits_shifted_truncated);
+                    let two_adic_generator_exp = builder.get(&tag_exp, log_height);
                     builder.cycle_tracker_end("exp-reverse-bits-len");
                     let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
