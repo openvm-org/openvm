@@ -1,7 +1,8 @@
 use openvm_native_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
-    prelude::{Array, Builder, Config, Ext, Felt, Var},
+    prelude::{Array, ArrayLike, Builder, Config, Ext, Felt, Var},
 };
+use openvm_native_compiler_derive::compile_zip;
 use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
 
 use crate::{
@@ -146,11 +147,10 @@ impl<C: Config> DuplexChallengerVariable<C> {
         self.observe(builder, witness);
         let element_bits = self.sample_bits(builder, RVar::from(nb_bits));
         let element_bits_truncated = element_bits.slice(builder, 0, nb_bits);
-        builder
-            .iter(&element_bits_truncated)
-            .for_each(|element, builder| {
-                builder.assert_var_eq(element, C::N::ZERO);
-            });
+        compile_zip!(builder, element_bits_truncated).for_each(|ptr_vec, builder| {
+            let element = builder.iter_ptr_get(&element_bits_truncated, ptr_vec[0]);
+            builder.assert_var_eq(element, C::N::ZERO);
+        });
     }
 }
 
@@ -160,7 +160,8 @@ impl<C: Config> CanObserveVariable<C, Felt<C::F>> for DuplexChallengerVariable<C
     }
 
     fn observe_slice(&mut self, builder: &mut Builder<C>, values: Array<C, Felt<C::F>>) {
-        builder.iter(&values).for_each(|element, builder| {
+        compile_zip!(builder, values).for_each(|ptr_vec, builder| {
+            let element = builder.iter_ptr_get(&values, ptr_vec[0]);
             self.observe(builder, element);
         });
     }

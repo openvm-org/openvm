@@ -1,6 +1,7 @@
+use openvm_native_compiler_derive::compile_zip;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 
-use super::{Array, Builder, Config, DslIr, Ext, Felt, MemIndex, Ptr, Usize, Var};
+use super::{Array, ArrayLike, Builder, Config, DslIr, Ext, Felt, MemIndex, Ptr, Usize, Var};
 
 pub const DIGEST_SIZE: usize = 8;
 pub const HASH_RATE: usize = 8;
@@ -88,8 +89,10 @@ impl<C: Config> Builder<C> {
         let address = self.eval(state.ptr().address);
         let start: Var<_> = self.eval(address);
         let end: Var<_> = self.eval(address + C::N::from_canonical_usize(HASH_RATE));
-        self.iter(array).for_each(|subarray, builder| {
-            builder.iter(&subarray).for_each(|element, builder| {
+        compile_zip!(self, array).for_each(|idx_vec, builder| {
+            let subarray = builder.iter_ptr_get(&array, idx_vec[0]);
+            compile_zip!(builder, subarray).for_each(|ptr_vec, builder| {
+                let element = builder.iter_ptr_get(&subarray, ptr_vec[0]);
                 builder.cycle_tracker_start("poseidon2-hash-setup");
                 builder.store(
                     Ptr { address },
