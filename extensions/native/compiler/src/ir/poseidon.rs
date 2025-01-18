@@ -82,8 +82,8 @@ impl<C: Config> Builder<C> {
         self.cycle_tracker_start("poseidon2-hash");
         let perm_width = PERMUTATION_WIDTH;
         let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
-        self.range(0, perm_width).for_each(|i, builder| {
-            builder.set(&state, i, C::F::ZERO);
+        self.range(0, perm_width).for_each(|idx_vec, builder| {
+            builder.set(&state, idx_vec[0], C::F::ZERO);
         });
 
         let address = self.eval(state.ptr().address);
@@ -129,15 +129,16 @@ impl<C: Config> Builder<C> {
         let hash_rate = HASH_RATE;
         let perm_width = PERMUTATION_WIDTH;
         let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
-        self.range(hash_rate, perm_width).for_each(|i, builder| {
-            builder.set(&state, i, C::F::ZERO);
-        });
+        self.range(hash_rate, perm_width)
+            .for_each(|i_vec, builder| {
+                builder.set(&state, i_vec[0], C::F::ZERO);
+            });
 
         let idx: Var<_> = self.eval(C::N::ZERO);
-        self.range(0, array.len()).for_each(|i, builder| {
-            let subarray = builder.get(array, i);
-            builder.range(0, subarray.len()).for_each(|j, builder| {
-                let element = builder.get(&subarray, j);
+        self.range(0, array.len()).for_each(|i_vec, builder| {
+            let subarray = builder.get(array, i_vec[0]);
+            builder.range(0, subarray.len()).for_each(|j_vec, builder| {
+                let element = builder.get(&subarray, j_vec[0]);
                 let felts = builder.ext2felt(element);
                 for i in 0..4 {
                     let felt = builder.get(&felts, i);

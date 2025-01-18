@@ -43,7 +43,8 @@ impl<C: Config> NonLeafVerifierVariables<C> {
         let pvs = VmVerifierPvs::<Felt<C::F>>::uninit(builder);
         let leaf_verifier_commit = array::from_fn(|_| builder.uninit());
 
-        builder.range(0, proofs.len()).for_each(|i, builder| {
+        builder.range(0, proofs.len()).for_each(|i_vec, builder| {
+            let i = i_vec[0];
             let proof = builder.get(proofs, i);
             assert_required_air_for_agg_vm_present(builder, &proof);
             let proof_vm_pvs = self.verify_internal_or_leaf_verifier_proof(builder, &proof);

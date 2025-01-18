@@ -135,7 +135,8 @@ pub fn verify_two_adic_pcs<C: Config>(
             let batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
             // `verify_batch` requires `permed_opened_values` to be in the committed order.
             let permed_opened_values = builder.array(batch_opening.opened_values.len());
-            builder.range(0, mats.len()).for_each(|k, builder| {
+            builder.range(0, mats.len()).for_each(|k_vec, builder| {
+                let k = k_vec[0];
                 let mat_index = to_perm_index(builder, k);
 
                 let mat = builder.get(&mats, mat_index.clone());
@@ -198,7 +199,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                     builder.cycle_tracker_start("single-reduced-opening-eval");
 
                     if builder.flags.static_only {
-                        builder.range(0, ps_at_z.len()).for_each(|t, builder| {
+                        builder.range(0, ps_at_z.len()).for_each(|t_vec, builder| {
+                            let t = t_vec[0];
                             let p_at_x = builder.get(&mat_opening, t);
                             let p_at_z = builder.get(&ps_at_z, t);
                             let quotient = (p_at_z - p_at_x) / (z - x);

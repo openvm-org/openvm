@@ -13,10 +13,13 @@ impl<C: Config> StarkProofVariable<C> {
             )
         } else {
             let air_ids = builder.array(self.per_air.len());
-            builder.range(0, self.per_air.len()).for_each(|i, builder| {
-                let air_proof_data = builder.get(&self.per_air, i);
-                builder.set_value(&air_ids, i, air_proof_data.air_id);
-            });
+            builder
+                .range(0, self.per_air.len())
+                .for_each(|i_vec, builder| {
+                    let i = i_vec[0];
+                    let air_proof_data = builder.get(&self.per_air, i);
+                    builder.set_value(&air_ids, i, air_proof_data.air_id);
+                });
             air_ids
         }
     }

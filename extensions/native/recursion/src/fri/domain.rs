@@ -108,7 +108,7 @@ where
 
         let domains = builder.array(num_chunks);
 
-        builder.range(0, num_chunks).for_each(|i, builder| {
+        builder.range(0, num_chunks).for_each(|i_vec, builder| {
             let log_n = builder.eval(log_n);
             let domain = TwoAdicMultiplicativeCosetVariable {
                 log_n,
@@ -118,7 +118,7 @@ where
             };
             // ATTENTION: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
             // to `Usize::Var` because it calls `builder.eval`.
-            builder.set_value(&domains, i, domain);
+            builder.set_value(&domains, i_vec[0], domain);
             builder.assign(&domain_power, domain_power * g_dom);
         });
 

@@ -138,21 +138,25 @@ fn test_compiler_nested_array_loop() {
 
     let array: Array<C, Array<C, Var<_>>> = builder.dyn_array(outer_len);
 
-    builder.range(0, array.len()).for_each(|i, builder| {
+    builder.range(0, array.len()).for_each(|i_vec, builder| {
         let inner_array = builder.dyn_array::<Var<_>>(inner_len);
-        builder.range(0, inner_array.len()).for_each(|j, builder| {
-            builder.set(&inner_array, j, i + j); //(j * F::from_canonical_u16(300)));
-        });
-        builder.set(&array, i, inner_array);
+        builder
+            .range(0, inner_array.len())
+            .for_each(|j_vec, builder| {
+                builder.set(&inner_array, j_vec[0], i_vec[0] + j_vec[0]);
+            });
+        builder.set(&array, i_vec[0], inner_array);
     });
 
     // Test that the array is correctly initialized.
-    builder.range(0, array.len()).for_each(|i, builder| {
-        let inner_array = builder.get(&array, i);
-        builder.range(0, inner_array.len()).for_each(|j, builder| {
-            let val = builder.get(&inner_array, j);
-            builder.assert_var_eq(val, i + j); //*(j * F::from_canonical_u16(300)));
-        });
+    builder.range(0, array.len()).for_each(|i_vec, builder| {
+        let inner_array = builder.get(&array, i_vec[0]);
+        builder
+            .range(0, inner_array.len())
+            .for_each(|j_vec, builder| {
+                let val = builder.get(&inner_array, j_vec[0]);
+                builder.assert_var_eq(val, i_vec[0] + j_vec[0]);
+            });
     });
 
     builder.halt();

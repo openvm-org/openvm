@@ -235,9 +235,9 @@ impl<C: Config> Builder<C> {
     /// Assert that two arrays are equal.
     pub fn assert_var_array_eq(&mut self, lhs: &Array<C, Var<C::N>>, rhs: &Array<C, Var<C::N>>) {
         self.assert_var_eq(lhs.len(), rhs.len());
-        self.range(0, lhs.len()).for_each(|i, builder| {
-            let l = builder.get(lhs, i);
-            let r = builder.get(rhs, i);
+        self.range(0, lhs.len()).for_each(|idx_vec, builder| {
+            let l = builder.get(lhs, idx_vec[0]);
+            let r = builder.get(rhs, idx_vec[0]);
             builder.assert_var_eq(l, r);
         });
     }
@@ -275,14 +275,14 @@ impl<C: Config> Builder<C> {
         &mut self,
         start: impl Into<RVar<C::N>>,
         end: impl Into<RVar<C::N>>,
-    ) -> RangeBuilder<C> {
+    ) -> ZippedPointerIteratorBuilder<C> {
         let start = start.into();
-        let end = end.into();
-        RangeBuilder {
-            start,
-            end,
+        let end0 = end.into();
+        ZippedPointerIteratorBuilder {
+            starts: vec![start],
+            end0,
+            step_sizes: vec![1],
             builder: self,
-            step_size: 1,
         }
     }
 
@@ -509,8 +509,8 @@ impl<C: Config> Builder<C> {
     pub fn commit_public_values(&mut self, vals: &Array<C, Felt<C::F>>) {
         let nb_public_values = self.get_nb_public_values();
         let len = vals.len();
-        self.range(0, len).for_each(|i, builder| {
-            let val = builder.get(vals, i);
+        self.range(0, len).for_each(|idx_vec, builder| {
+            let val = builder.get(vals, idx_vec[0]);
             builder.commit_public_value_and_increment(val, nb_public_values);
         });
     }
