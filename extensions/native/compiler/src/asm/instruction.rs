@@ -108,9 +108,6 @@ pub enum AsmInstruction<F, EF> {
     /// Halt.
     Halt,
 
-    /// Break(label)
-    Break(F),
-
     /// Perform a Poseidon2 permutation on state starting at address `lhs`
     /// and store new state at `rhs`.
     /// (a, b) are pointers to (lhs, rhs).
@@ -159,7 +156,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
 
     pub fn fmt(&self, labels: &BTreeMap<F, String>, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
             AsmInstruction::LoadFI(dst, src, var_index, size, offset) => {
                 write!(
                     f,

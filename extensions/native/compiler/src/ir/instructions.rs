@@ -143,8 +143,6 @@ pub enum DslIr<C: Config> {
     IfEqI(Var<C::N>, C::N, TracedVec<DslIr<C>>, TracedVec<DslIr<C>>),
     /// Executes a not equal conditional branch with the parameters (lhs var, rhs imm, then body, else body).
     IfNeI(Var<C::N>, C::N, TracedVec<DslIr<C>>, TracedVec<DslIr<C>>),
-    /// Break out of a loop.
-    Break,
 
     // Assertions.
     /// Assert that two variables are equal (var == var).

@@ -1,5 +1,4 @@
 use alloc::{collections::BTreeMap, vec};
-use std::collections::BTreeSet;
 
 use openvm_circuit::arch::instructions::instruction::DebugInfo;
 use openvm_stark_backend::p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
@@ -29,10 +28,6 @@ pub(crate) const STACK_TOP: i32 = HEAP_START_ADDRESS - 64;
 // #[derive(Debug, Clone, Default)]
 pub struct AsmCompiler<F, EF> {
     basic_blocks: Vec<BasicBlock<F, EF>>,
-    break_label: Option<F>,
-    break_label_map: BTreeMap<F, F>,
-    break_counter: usize,
-    contains_break: BTreeSet<F>,
     function_labels: BTreeMap<String, F>,
     trap_label: F,
     word_size: usize,
@@ -74,23 +69,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     pub fn new(word_size: usize) -> Self {
         Self {
             basic_blocks: vec![BasicBlock::new()],
-            break_label: None,
-            break_label_map: BTreeMap::new(),
-            contains_break: BTreeSet::new(),
             function_labels: BTreeMap::new(),
-            break_counter: 0,
             trap_label: F::ONE,
             word_size,
         }
-    }
-
-    /// Creates a new break label.
-    pub fn new_break_label(&mut self) -> F {
-        let label = self.break_counter;
-        self.break_counter += 1;
-        let label = F::from_canonical_usize(label);
-        self.break_label = Some(label);
-        label
     }
 
     /// Builds the operations into assembly instructions.
@@ -364,12 +346,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                             debug_info,
                         );
                     }
-                }
-                DslIr::Break => {
-                    let label = self.break_label.expect("No break label set");
-                    let current_block = self.block_label();
-                    self.contains_break.insert(current_block);
-                    self.push(AsmInstruction::Break(label), debug_info);
                 }
                 DslIr::For(start, end, step_size, loop_var, block) => {
                     let for_compiler = ForCompiler {
@@ -856,8 +832,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
             });
 
         let loop_call_label = self.compiler.block_label();
-        let break_label = self.compiler.new_break_label();
-        self.compiler.break_label = Some(break_label);
 
         self.compiler.basic_block();
         let loop_label = self.compiler.block_label();
@@ -898,21 +872,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
             .push_to_block(loop_call_label, instr, debug_info.clone());
 
         self.compiler.basic_block();
-        let label = self.compiler.block_label();
-        self.compiler.break_label_map.insert(break_label, label);
-
-        for block in self.compiler.contains_break.iter() {
-            for instruction in self.compiler.basic_blocks[block.as_canonical_u32() as usize]
-                .0
-                .iter_mut()
-            {
-                if let AsmInstruction::Break(l) = instruction {
-                    if *l == break_label {
-                        *instruction = AsmInstruction::j(label);
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -944,10 +903,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> ForCo
         // Save the label of the for loop call.
         let loop_call_label = self.compiler.block_label();
 
-        // Initialize a break label for this loop.
-        let break_label = self.compiler.new_break_label();
-        self.compiler.break_label = Some(break_label);
-
         // A basic block for the loop body
         self.compiler.basic_block();
 
@@ -977,26 +932,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> ForCo
 
         // Initialize the after loop block.
         self.compiler.basic_block();
-
-        // Resolve the break label.
-        let label = self.compiler.block_label();
-        self.compiler.break_label_map.insert(break_label, label);
-
-        // Replace the break instruction with a jump to the after loop block.
-        for block in self.compiler.contains_break.iter() {
-            for instruction in self.compiler.basic_blocks[block.as_canonical_u32() as usize]
-                .0
-                .iter_mut()
-            {
-                if let AsmInstruction::Break(l) = instruction {
-                    if *l == break_label {
-                        *instruction = AsmInstruction::j(label);
-                    }
-                }
-            }
-        }
-
-        // self.compiler.contains_break.clear();
     }
 
     fn set_loop_var(&mut self, debug_info: Option<DebugInfo>) {

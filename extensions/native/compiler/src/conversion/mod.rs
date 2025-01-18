@@ -330,7 +330,6 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     options: &CompilerOptions,
 ) -> Program<F> {
     let instructions = match instruction {
-        AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
         AsmInstruction::LoadFI(dst, src, index, size, offset) => vec![
             // mem[dst] <- mem[mem[src] + index * size + offset]
             inst(
