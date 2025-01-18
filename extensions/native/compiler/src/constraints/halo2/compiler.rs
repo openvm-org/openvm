@@ -284,6 +284,10 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         let x = ext_chip.scalar_mul(ctx, exts[&b.0], tmp);
                         exts.insert(a.0, x);
                     }
+                    DslIr::DivF(a, b, c) => {
+                        let x = f_chip.div(ctx, felts[&b.0], felts[&c.0]);
+                        felts.insert(a.0, x);
+                    }
                     DslIr::DivFIN(a, b, c) => {
                         // a = b / c
                         let tmp = f_chip.load_constant(ctx, b);
