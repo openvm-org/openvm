@@ -95,10 +95,6 @@ impl std::error::Error for BreakLoop {}
 #[derive(Debug, Copy, Clone, Default)]
 pub struct BuilderFlags {
     pub debug: bool,
-    /// If true, `builder.break_loop` will take control flow instead of pushing an instruction.
-    pub(crate) static_loop: bool,
-    /// If true, panic when `builder.break_loop` is called.
-    pub(crate) disable_break: bool,
     /// If true, branching/looping/heap memory is disabled.
     pub static_only: bool,
 }
@@ -137,11 +133,6 @@ impl<C: Config> Builder<C> {
             flags: self.flags,
             is_sub_builder: true,
         }
-    }
-
-    /// Set whether all loops must be static and unrolled
-    pub fn set_static_loops(&mut self, static_loop: bool) {
-        self.flags.static_loop = static_loop;
     }
 
     /// Pushes an operation to the builder.
@@ -361,18 +352,6 @@ impl<C: Config> Builder<C> {
         } else {
             panic!("Cannot use zipped pointer iterator with mixed arrays");
         }
-    }
-
-    /// Break out of a loop.
-    pub fn break_loop(&mut self) -> Result<(), BreakLoop> {
-        if self.flags.disable_break {
-            panic!("BreakLoop was called but it was disabled")
-        }
-        if self.flags.static_loop {
-            return Err(BreakLoop);
-        }
-        self.operations.push(DslIr::Break);
-        Ok(())
     }
 
     pub fn print_debug(&mut self, val: usize) {
@@ -808,22 +787,16 @@ impl<C: Config> ZippedPointerIteratorBuilder<'_, C> {
             return;
         }
 
-        let old_disable_break = self.builder.flags.disable_break;
-        self.builder.flags.disable_break = true;
         self.for_each_dynamic(|ptrs, builder| {
             f(ptrs, builder);
             Ok(())
         });
-        self.builder.flags.disable_break = old_disable_break;
     }
 
     fn for_each_unrolled(
         &mut self,
         mut f: impl FnMut(Vec<RVar<C::N>>, &mut Builder<C>) -> Result<(), BreakLoop>,
     ) {
-        let old_static_loop = self.builder.flags.static_loop;
-        self.builder.flags.static_loop = true;
-
         let starts: Vec<usize> = self.starts.iter().map(|start| start.value()).collect();
         let end0 = self.end0.value();
 
@@ -833,7 +806,6 @@ impl<C: Config> ZippedPointerIteratorBuilder<'_, C> {
                 break;
             }
         }
-        self.builder.flags.static_loop = old_static_loop;
     }
 
     fn for_each_dynamic(
@@ -890,21 +862,16 @@ impl<C: Config, V: MemVariable<C>> IteratorBuilder<'_, C, V> {
             });
             return;
         }
-        let old_disable_break = self.builder.flags.disable_break;
-        self.builder.flags.disable_break = true;
         self.for_each_dynamic(|var, builder| {
             f(var, builder);
             Ok(())
         });
-        self.builder.flags.disable_break = old_disable_break;
     }
 
     fn for_each_unrolled(
         &mut self,
         mut f: impl FnMut(V, &mut Builder<C>) -> Result<(), BreakLoop>,
     ) {
-        let old_static_loop = self.builder.flags.static_loop;
-        self.builder.flags.static_loop = true;
         let start = self.start.value();
         let end = self.end.value();
         for i in (start..end).step_by(self.step_size) {
@@ -913,7 +880,6 @@ impl<C: Config, V: MemVariable<C>> IteratorBuilder<'_, C, V> {
                 break;
             }
         }
-        self.builder.flags.static_loop = old_static_loop;
     }
 
     fn for_each_dynamic(&mut self, mut f: impl FnMut(V, &mut Builder<C>) -> Result<(), BreakLoop>) {
@@ -958,7 +924,7 @@ pub struct RangeBuilder<'a, C: Config> {
     builder: &'a mut Builder<C>,
 }
 
-impl<'a, C: Config> RangeBuilder<'a, C> {
+impl<C: Config> RangeBuilder<'_, C> {
     pub const fn step_by(mut self, step_size: usize) -> Self {
         self.step_size = step_size;
         self
@@ -975,13 +941,10 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
             return;
         }
         // Otherwise, dynamic
-        let old_disable_break = self.builder.flags.disable_break;
-        self.builder.flags.disable_break = true;
         self.for_each_dynamic(|var, builder| {
             f(var, builder);
             Ok(())
         });
-        self.builder.flags.disable_break = old_disable_break;
     }
 
     /// Compiler unrolls for loops, and currently can only handle breaks
@@ -990,9 +953,6 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
         &mut self,
         mut f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
     ) {
-        let old_static_loop = self.builder.flags.static_loop;
-        self.builder.flags.static_loop = true;
-
         let start = self.start.value();
         let end = self.end.value();
         for i in (start..end).step_by(self.step_size) {
@@ -1000,7 +960,6 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
                 break;
             }
         }
-        self.builder.flags.static_loop = old_static_loop;
     }
 
     /// Internal function
