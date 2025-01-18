@@ -917,8 +917,7 @@ impl<C: Config> RangeBuilder<'_, C> {
         });
     }
 
-    /// Compiler unrolls for loops, and currently can only handle breaks
-    /// based on compile-time branching conditions.
+    /// Compiler unrolls constant loops.
     fn for_each_unrolled(&mut self, mut f: impl FnMut(RVar<C::N>, &mut Builder<C>)) {
         let start = self.start.value();
         let end = self.end.value();
