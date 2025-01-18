@@ -91,7 +91,7 @@ impl<C: Config> Builder<C> {
 
         // Implements a square-and-multiply algorithm.
         compile_zip!(self, power_bits).for_each(|ptr_vec, builder| {
-            let bit = builder.iter_ptr_get(&power_bits, ptr_vec[0]);
+            let bit = builder.iter_ptr_get(power_bits, ptr_vec[0]);
             builder.assign(&result, result * result);
             let mul = V::select(builder, bit, power_f, one_var);
             builder.assign(&result, result * mul);
