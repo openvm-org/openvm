@@ -83,15 +83,6 @@ impl<T> IntoIterator for TracedVec<T> {
     }
 }
 
-#[derive(Debug)]
-pub struct BreakLoop;
-impl std::fmt::Display for BreakLoop {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Break Loop")
-    }
-}
-impl std::error::Error for BreakLoop {}
-
 #[derive(Debug, Copy, Clone, Default)]
 pub struct BuilderFlags {
     pub debug: bool,
@@ -782,36 +773,26 @@ impl<C: Config> ZippedPointerIteratorBuilder<'_, C> {
         if self.starts.iter().all(|start| start.is_const()) && self.end0.is_const() {
             self.for_each_unrolled(|ptrs, builder| {
                 f(ptrs, builder);
-                Ok(())
             });
             return;
         }
 
         self.for_each_dynamic(|ptrs, builder| {
             f(ptrs, builder);
-            Ok(())
         });
     }
 
-    fn for_each_unrolled(
-        &mut self,
-        mut f: impl FnMut(Vec<RVar<C::N>>, &mut Builder<C>) -> Result<(), BreakLoop>,
-    ) {
+    fn for_each_unrolled(&mut self, mut f: impl FnMut(Vec<RVar<C::N>>, &mut Builder<C>)) {
         let starts: Vec<usize> = self.starts.iter().map(|start| start.value()).collect();
         let end0 = self.end0.value();
 
         for i in (starts[0]..end0).step_by(self.step_sizes[0]) {
             let ptrs = vec![i.into(); self.starts.len()];
-            if f(ptrs, self.builder).is_err() {
-                break;
-            }
+            f(ptrs, self.builder);
         }
     }
 
-    fn for_each_dynamic(
-        &mut self,
-        mut f: impl FnMut(Vec<RVar<C::N>>, &mut Builder<C>) -> Result<(), BreakLoop>,
-    ) {
+    fn for_each_dynamic(&mut self, mut f: impl FnMut(Vec<RVar<C::N>>, &mut Builder<C>)) {
         assert!(
             !self.builder.flags.static_only,
             "Cannot use dynamic loop in static mode"
@@ -830,8 +811,7 @@ impl<C: Config> ZippedPointerIteratorBuilder<'_, C> {
         f(
             loop_variables.iter().map(|&v| v.into()).collect(),
             &mut loop_body_builder,
-        )
-        .expect("BreakLoop should never be returned in a dynamic loop");
+        );
 
         let loop_instructions = loop_body_builder.operations;
         let op = DslIr::ZipFor(
@@ -858,31 +838,24 @@ impl<C: Config, V: MemVariable<C>> IteratorBuilder<'_, C, V> {
         if self.start.is_const() && self.end.is_const() {
             self.for_each_unrolled(|var, builder| {
                 f(var, builder);
-                Ok(())
             });
             return;
         }
         self.for_each_dynamic(|var, builder| {
             f(var, builder);
-            Ok(())
         });
     }
 
-    fn for_each_unrolled(
-        &mut self,
-        mut f: impl FnMut(V, &mut Builder<C>) -> Result<(), BreakLoop>,
-    ) {
+    fn for_each_unrolled(&mut self, mut f: impl FnMut(V, &mut Builder<C>)) {
         let start = self.start.value();
         let end = self.end.value();
         for i in (start..end).step_by(self.step_size) {
             let val = self.builder.get(self.array, i);
-            if f(val, self.builder).is_err() {
-                break;
-            }
+            f(val, self.builder);
         }
     }
 
-    fn for_each_dynamic(&mut self, mut f: impl FnMut(V, &mut Builder<C>) -> Result<(), BreakLoop>) {
+    fn for_each_dynamic(&mut self, mut f: impl FnMut(V, &mut Builder<C>)) {
         assert!(
             !self.builder.flags.static_only,
             "Cannot use dynamic loop in static mode"
@@ -902,8 +875,7 @@ impl<C: Config, V: MemVariable<C>> IteratorBuilder<'_, C, V> {
                 size: V::size_of(),
             },
         );
-        f(val, &mut loop_body_builder)
-            .expect("BreakLoop should never be returned in a dynamic loop");
+        f(val, &mut loop_body_builder);
         let loop_instructions = loop_body_builder.operations;
         let op = DslIr::For(
             self.start,
@@ -936,37 +908,27 @@ impl<C: Config> RangeBuilder<'_, C> {
         if self.start.is_const() && self.end.is_const() {
             self.for_each_unrolled(|var, builder| {
                 f(var, builder);
-                Ok(())
             });
             return;
         }
         // Otherwise, dynamic
         self.for_each_dynamic(|var, builder| {
             f(var, builder);
-            Ok(())
         });
     }
 
     /// Compiler unrolls for loops, and currently can only handle breaks
     /// based on compile-time branching conditions.
-    fn for_each_unrolled(
-        &mut self,
-        mut f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
-    ) {
+    fn for_each_unrolled(&mut self, mut f: impl FnMut(RVar<C::N>, &mut Builder<C>)) {
         let start = self.start.value();
         let end = self.end.value();
         for i in (start..end).step_by(self.step_size) {
-            if f(i.into(), self.builder).is_err() {
-                break;
-            }
+            f(i.into(), self.builder);
         }
     }
 
     /// Internal function
-    fn for_each_dynamic(
-        &mut self,
-        mut f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
-    ) {
+    fn for_each_dynamic(&mut self, mut f: impl FnMut(RVar<C::N>, &mut Builder<C>)) {
         assert!(
             !self.builder.flags.static_only,
             "Cannot use dynamic loop in static mode"
@@ -975,8 +937,7 @@ impl<C: Config> RangeBuilder<'_, C> {
         let loop_variable: Var<C::N> = self.builder.uninit();
         let mut loop_body_builder = self.builder.create_sub_builder();
 
-        f(loop_variable.into(), &mut loop_body_builder)
-            .expect("BreakLoop should never be returned in a dynamic loop");
+        f(loop_variable.into(), &mut loop_body_builder);
 
         let loop_instructions = loop_body_builder.operations;
 
