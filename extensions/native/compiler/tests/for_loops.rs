@@ -162,29 +162,6 @@ fn test_compiler_nested_array_loop() {
 }
 
 #[test]
-fn test_compiler_step_by() {
-    let mut builder = AsmBuilder::<F, EF>::default();
-
-    let n_val = BabyBear::from_canonical_u32(20);
-
-    let zero: Var<_> = builder.eval(F::ZERO);
-    let n: Var<_> = builder.eval(n_val);
-
-    let i_counter: Var<_> = builder.eval(F::ZERO);
-    builder.range(zero, n).step_by(2).for_each(|_, builder| {
-        builder.assign(&i_counter, i_counter + F::ONE);
-    });
-    // Assert that the outer loop ran n times, in two different ways.
-    let n_exp = n_val / F::TWO;
-    builder.assert_var_eq(i_counter, n_exp);
-
-    builder.halt();
-
-    let program = builder.compile_isa();
-    execute_program(program, vec![]);
-}
-
-#[test]
 fn test_compiler_bneinc() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
@@ -194,7 +171,7 @@ fn test_compiler_bneinc() {
     let n: Var<_> = builder.eval(n_val);
 
     let i_counter: Var<_> = builder.eval(F::ZERO);
-    builder.range(zero, n).step_by(1).for_each(|_, builder| {
+    builder.range(zero, n).for_each(|_, builder| {
         builder.assign(&i_counter, i_counter + F::ONE);
     });
 

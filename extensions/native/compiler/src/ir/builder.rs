@@ -808,11 +808,6 @@ pub struct RangeBuilder<'a, C: Config> {
 }
 
 impl<C: Config> RangeBuilder<'_, C> {
-    pub const fn step_by(mut self, step_size: usize) -> Self {
-        self.step_size = step_size;
-        self
-    }
-
     /// No breaks allowed.
     pub fn for_each(&mut self, mut f: impl FnMut(RVar<C::N>, &mut Builder<C>)) {
         // If constant loop, unroll it.
