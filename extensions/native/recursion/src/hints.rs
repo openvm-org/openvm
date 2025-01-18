@@ -129,7 +129,7 @@ impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         let len = builder.hint_var();
         let arr = builder.dyn_array(len);
-        compile_zip!(builder, arr).for_each(|idx_vec, builder| {
+        iter_zip!(builder, arr).for_each(|idx_vec, builder| {
             let hint = I::read(builder);
             let ptr = idx_vec[0];
             builder.iter_ptr_set(&arr, ptr, hint);
@@ -261,7 +261,7 @@ impl Hintable<InnerConfig> for Vec<Vec<InnerChallenge>> {
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let len = builder.hint_var();
         let arr = builder.dyn_array(len);
-        compile_zip!(builder, arr).for_each(|idx_vec, builder| {
+        iter_zip!(builder, arr).for_each(|idx_vec, builder| {
             let hint = Vec::<InnerChallenge>::read(builder);
             builder.iter_ptr_set(&arr, idx_vec[0], hint);
         });

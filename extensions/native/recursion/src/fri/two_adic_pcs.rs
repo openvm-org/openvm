@@ -51,7 +51,7 @@ pub fn verify_two_adic_pcs<C: Config>(
 
     builder.cycle_tracker_start("stage-d-verifier-verify");
     let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
-    compile_zip!(builder, proof.commit_phase_commits, betas).for_each(|ptr_vec, builder| {
+    iter_zip!(builder, proof.commit_phase_commits, betas).for_each(|ptr_vec, builder| {
         let comm_ptr = ptr_vec[0];
         let beta_ptr = ptr_vec[1];
         let comm = builder.iter_ptr_get(&proof.commit_phase_commits, comm_ptr);
@@ -60,7 +60,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         builder.iter_ptr_set(&betas, beta_ptr, sample);
     });
 
-    compile_zip!(builder, proof.final_poly).for_each(|ptr_vec, builder| {
+    iter_zip!(builder, proof.final_poly).for_each(|ptr_vec, builder| {
         let final_poly_elem = builder.iter_ptr_get(&proof.final_poly, ptr_vec[0]);
         let final_poly_elem_felts = builder.ext2felt(final_poly_elem);
         challenger.observe_slice(builder, final_poly_elem_felts);
@@ -78,7 +78,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     let log_max_height =
         builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(log_blowup));
 
-    compile_zip!(builder, proof.query_proofs).for_each(|ptr_vec, builder| {
+    iter_zip!(builder, proof.query_proofs).for_each(|ptr_vec, builder| {
         let query_proof = builder.iter_ptr_get(&proof.query_proofs, ptr_vec[0]);
         let index_bits = challenger.sample_bits(builder, log_max_height);
 
@@ -100,7 +100,7 @@ pub fn verify_two_adic_pcs<C: Config>(
             }
         }
 
-        compile_zip!(builder, query_proof.input_proof, rounds).for_each(|ptr_vec, builder| {
+        iter_zip!(builder, query_proof.input_proof, rounds).for_each(|ptr_vec, builder| {
             let batch_opening = builder.iter_ptr_get(&query_proof.input_proof, ptr_vec[0]);
             let round = builder.iter_ptr_get(&rounds, ptr_vec[1]);
             let batch_commit = round.batch_commit;
@@ -168,7 +168,7 @@ pub fn verify_two_adic_pcs<C: Config>(
             // `verify_challenges` requires `opened_values` to be in the original order.
             let opened_values = batch_opening.opened_values;
 
-            compile_zip!(builder, opened_values, mats).for_each(|ptr_vec, builder| {
+            iter_zip!(builder, opened_values, mats).for_each(|ptr_vec, builder| {
                 let mat_opening = builder.iter_ptr_get(&opened_values, ptr_vec[0]);
                 let mat = builder.iter_ptr_get(&mats, ptr_vec[1]);
                 let mat_points = mat.points;
@@ -192,7 +192,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 builder.cycle_tracker_end("exp-reverse-bits-len");
                 let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
-                compile_zip!(builder, mat_points, mat_values).for_each(|ptr_vec, builder| {
+                iter_zip!(builder, mat_points, mat_values).for_each(|ptr_vec, builder| {
                     let z: Ext<C::F, C::EF> = builder.iter_ptr_get(&mat_points, ptr_vec[0]);
                     let ps_at_z = builder.iter_ptr_get(&mat_values, ptr_vec[1]);
 

@@ -89,9 +89,9 @@ impl<C: Config> Builder<C> {
         let address = self.eval(state.ptr().address);
         let start: Var<_> = self.eval(address);
         let end: Var<_> = self.eval(address + C::N::from_canonical_usize(HASH_RATE));
-        compile_zip!(self, array).for_each(|idx_vec, builder| {
+        iter_zip!(self, array).for_each(|idx_vec, builder| {
             let subarray = builder.iter_ptr_get(array, idx_vec[0]);
-            compile_zip!(builder, subarray).for_each(|ptr_vec, builder| {
+            iter_zip!(builder, subarray).for_each(|ptr_vec, builder| {
                 let element = builder.iter_ptr_get(&subarray, ptr_vec[0]);
                 builder.cycle_tracker_start("poseidon2-hash-setup");
                 builder.store(

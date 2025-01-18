@@ -66,7 +66,7 @@ fn test_compiler_zip_fixed() {
     let ptr1_cache: Var<_> = builder.eval(F::ZERO);
     let ptr2_cache: Var<_> = builder.eval(F::ZERO);
 
-    compile_zip!(builder, arr1, arr2).for_each(|ptr_vec, builder| {
+    iter_zip!(builder, arr1, arr2).for_each(|ptr_vec, builder| {
         let val1 = builder.iter_ptr_get(&arr1, ptr_vec[0]);
         let val2 = builder.iter_ptr_get(&arr2, ptr_vec[1]);
         builder.assign(&x1, x1 + val1);
@@ -108,7 +108,7 @@ fn test_compiler_zip_dyn() {
     let ptr1_cache: Var<_> = builder.eval(F::ZERO);
     let ptr2_cache: Var<_> = builder.eval(F::ZERO);
 
-    compile_zip!(builder, arr1, arr2).for_each(|ptr_vec, builder| {
+    iter_zip!(builder, arr1, arr2).for_each(|ptr_vec, builder| {
         let val1: Var<_> = builder.iter_ptr_get(&arr1, ptr_vec[0]);
         let val2: Var<_> = builder.iter_ptr_get(&arr2, ptr_vec[1]);
         builder.assign(&x1, x1 + val1);

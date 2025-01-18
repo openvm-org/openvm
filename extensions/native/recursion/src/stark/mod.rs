@@ -175,7 +175,7 @@ where
         // Count the number of main trace commitments together to save a loop.
         let num_cached_mains: Usize<_> = builder.eval(RVar::zero());
         let num_common_main_traces: Usize<_> = builder.eval(RVar::zero());
-        compile_zip!(builder, m_advice_var.per_air).for_each(|ptr_vec, builder| {
+        iter_zip!(builder, m_advice_var.per_air).for_each(|ptr_vec, builder| {
             let air_advice = builder.iter_ptr_get(&m_advice_var.per_air, ptr_vec[0]);
             builder
                 .if_eq(air_advice.preprocessed_data.len(), RVar::one())
@@ -205,12 +205,12 @@ where
         } = commitments;
 
         // Observe main trace commitments
-        compile_zip!(builder, main_trace_commits).for_each(|ptr_vec, builder| {
+        iter_zip!(builder, main_trace_commits).for_each(|ptr_vec, builder| {
             let main_commit = builder.iter_ptr_get(&main_trace_commits, ptr_vec[0]);
             challenger.observe_digest(builder, main_commit);
         });
 
-        compile_zip!(builder, air_proofs).for_each(|ptr_vec, builder| {
+        iter_zip!(builder, air_proofs).for_each(|ptr_vec, builder| {
             let air_proof = builder.iter_ptr_get(&air_proofs, ptr_vec[0]);
             let log_degree = if builder.flags.static_only {
                 builder.eval(C::F::from_canonical_usize(air_proof.log_degree.value()))
@@ -259,7 +259,7 @@ where
                                 .get(&air_advice.num_exposed_values_after_challenge, phase_idx);
                             builder.assert_eq::<Usize<_>>(values_len, values.len());
 
-                            compile_zip!(builder, values).for_each(|ptr_vec, builder| {
+                            iter_zip!(builder, values).for_each(|ptr_vec, builder| {
                                 let value = builder.iter_ptr_get(&values, ptr_vec[0]);
                                 let felts = builder.ext2felt(value);
                                 challenger.observe_slice(builder, felts);
@@ -397,7 +397,7 @@ where
             let domain = builder.get(&domains, i);
             let trace_points = builder.get(&trace_points_per_domain, i);
 
-            compile_zip!(builder, cached_main_widths).for_each(|ptr_vec, builder| {
+            iter_zip!(builder, cached_main_widths).for_each(|ptr_vec, builder| {
                 let cached_main_width = builder.iter_ptr_get(&cached_main_widths, ptr_vec[0]);
                 let values_per_mat = builder.get(&opening.values.main, main_commit_idx.clone());
                 let batch_commit = builder.get(main_trace_commits, main_commit_idx.clone());
@@ -534,7 +534,7 @@ where
         let quotient_perm = builder.array(num_quotient_mats);
         let perm_offset_per_air = builder.array::<Usize<_>>(num_airs);
         let offset: Usize<_> = builder.eval(RVar::zero());
-        compile_zip!(builder, air_perm_by_height).for_each(|ptr_vec, builder| {
+        iter_zip!(builder, air_perm_by_height).for_each(|ptr_vec, builder| {
             let air_index = builder.iter_ptr_get(&air_perm_by_height, ptr_vec[0]);
             builder.set(&perm_offset_per_air, air_index.clone(), offset.clone());
             let qc_domains = builder.get(&quotient_chunk_domains, air_index);

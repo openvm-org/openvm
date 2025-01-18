@@ -391,7 +391,7 @@ impl<C: Config> Builder<C> {
         let arr = self.dyn_array(vlen);
 
         // Write the content hints directly into the array memory.
-        compile_zip!(self, arr).for_each(|ptr_vec, builder| {
+        iter_zip!(self, arr).for_each(|ptr_vec, builder| {
             let index = MemIndex {
                 index: 0.into(),
                 offset: 0,

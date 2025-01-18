@@ -90,7 +90,7 @@ impl<C: Config> Builder<C> {
         let one_var: V = self.eval(V::Expression::ONE);
 
         // Implements a square-and-multiply algorithm.
-        compile_zip!(self, power_bits).for_each(|ptr_vec, builder| {
+        iter_zip!(self, power_bits).for_each(|ptr_vec, builder| {
             let bit = builder.iter_ptr_get(power_bits, ptr_vec[0]);
             builder.assign(&result, result * result);
             let mul = V::select(builder, bit, power_f, one_var);
