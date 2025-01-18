@@ -222,31 +222,24 @@ fn test_compiler_break() {
         .may_break()
         .for_each(|i, builder| {
             builder.set(&array, i, i);
-
-            builder
-                .if_eq(i, RVar::from(break_len))
-                .then_may_break(|builder| builder.break_loop())
+            Ok(())
         });
 
     // Test that the array is correctly initialized.
-
     builder
         .range(0, array.len())
         .may_break()
         .for_each(|i, builder| {
             let value = builder.get(&array, i);
-            builder
-                .if_eq(i, RVar::from(break_len + 1))
-                .then_or_else_may_break(
-                    |builder| {
-                        builder.assert_var_eq(value, i);
-                        Ok(())
-                    },
-                    |builder| {
-                        builder.assert_var_eq(value, F::ZERO);
-                        builder.break_loop()
-                    },
-                )
+            builder.if_eq(i, RVar::from(break_len + 1)).then_or_else(
+                |builder| {
+                    builder.assert_var_eq(value, i);
+                },
+                |builder| {
+                    builder.assert_var_eq(value, F::ZERO);
+                },
+            );
+            Ok(())
         });
 
     // Test the break instructions in a nested loop.
@@ -260,9 +253,8 @@ fn test_compiler_break() {
 
             builder.range(0, i).may_break().for_each(|_, builder| {
                 builder.assign(&counter, counter + F::ONE);
-                builder
-                    .if_eq(counter, RVar::from(break_len))
-                    .then_may_break(|builder| builder.break_loop())
+                builder.if_eq(counter, RVar::from(break_len));
+                Ok(())
             });
 
             builder.set(&array, i, counter);
@@ -298,18 +290,13 @@ fn test_compiler_constant_break() {
     type C = AsmConfig<F, EF>;
 
     let len = 100;
-    let break_len = 10;
-
     let array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
     builder
         .range(0, array.len())
         .may_break()
         .for_each(|i, builder| {
             builder.set(&array, i, i);
-
-            builder
-                .if_eq(i, RVar::from(break_len))
-                .then_may_break(|builder| builder.break_loop())
+            Ok(())
         });
     builder.halt();
 
@@ -324,18 +311,13 @@ fn test_compiler_constant_var_break() {
     type C = AsmConfig<F, EF>;
 
     let len = 100;
-    let break_len: Var<_> = builder.eval(RVar::from(10));
-
     let array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
     builder
         .range(0, array.len())
         .may_break()
         .for_each(|i, builder| {
             builder.set(&array, i, i);
-
-            builder
-                .if_eq(i, RVar::from(break_len))
-                .then_may_break(|builder| builder.break_loop())
+            Ok(())
         });
     builder.halt();
 

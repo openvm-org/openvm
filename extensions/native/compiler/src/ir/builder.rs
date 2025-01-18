@@ -606,17 +606,6 @@ enum IfCondition<N> {
 
 impl<C: Config> IfBuilder<'_, C> {
     pub fn then(&mut self, mut f: impl FnMut(&mut Builder<C>)) {
-        self.then_may_break(|builder| {
-            f(builder);
-            Ok(())
-        })
-        .expect("Use then_may_break if you want to break inside a then closure");
-    }
-
-    pub fn then_may_break(
-        &mut self,
-        mut f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>,
-    ) -> Result<(), BreakLoop> {
         // Get the condition reduced from the expressions for lhs and rhs.
         let condition = self.condition();
         // Early return for const branches.
@@ -625,13 +614,13 @@ impl<C: Config> IfBuilder<'_, C> {
                 if lhs == rhs {
                     return f(self.builder);
                 }
-                return Ok(());
+                return;
             }
             IfCondition::NeConst(lhs, rhs) => {
                 if lhs != rhs {
                     return f(self.builder);
                 }
-                return Ok(());
+                return;
             }
             _ => (),
         }
@@ -642,7 +631,7 @@ impl<C: Config> IfBuilder<'_, C> {
 
         // Execute the `then` block and collect the instructions.
         let mut f_builder = self.builder.create_sub_builder();
-        f(&mut f_builder).expect("BreakLoop should never be returned in a dynamic if");
+        f(&mut f_builder);
         let then_instructions = f_builder.operations;
 
         // Dispatch instructions to the correct conditional block.
@@ -665,7 +654,6 @@ impl<C: Config> IfBuilder<'_, C> {
             }
             _ => unreachable!("Const if should have returned early"),
         }
-        Ok(())
     }
 
     pub fn then_or_else(
@@ -673,24 +661,6 @@ impl<C: Config> IfBuilder<'_, C> {
         mut then_f: impl FnMut(&mut Builder<C>),
         mut else_f: impl FnMut(&mut Builder<C>),
     ) {
-        self.then_or_else_may_break(
-            |builder| {
-                then_f(builder);
-                Ok(())
-            },
-            |builder| {
-                else_f(builder);
-                Ok(())
-            },
-        )
-        .expect("Use then_may_break if you want to break inside the then closure");
-    }
-
-    pub fn then_or_else_may_break(
-        &mut self,
-        mut then_f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>,
-        mut else_f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>,
-    ) -> Result<(), BreakLoop> {
         // Get the condition reduced from the expressions for lhs and rhs.
         let condition = self.condition();
         // Early return for const branches.
@@ -716,11 +686,11 @@ impl<C: Config> IfBuilder<'_, C> {
         let mut then_builder = self.builder.create_sub_builder();
 
         // Execute the `then` and `else_then` blocks and collect the instructions.
-        then_f(&mut then_builder).expect("BreakLoop should never be returned in a dynamic if");
+        then_f(&mut then_builder);
         let then_instructions = then_builder.operations;
 
         let mut else_builder = self.builder.create_sub_builder();
-        else_f(&mut else_builder).expect("BreakLoop should never be returned in a dynamic if");
+        else_f(&mut else_builder);
         let else_instructions = else_builder.operations;
 
         // Dispatch instructions to the correct conditional block.
@@ -743,7 +713,6 @@ impl<C: Config> IfBuilder<'_, C> {
             }
             _ => unreachable!("Const if should have returned early"),
         }
-        Ok(())
     }
 
     fn condition(&mut self) -> IfCondition<C::N> {

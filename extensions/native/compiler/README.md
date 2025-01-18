@@ -55,8 +55,6 @@ In **static programs**, only constant loops are allowed.
 developers' awareness.:
 
 - If you want to use `break` in a possibly constant loop, you need to use `.for_each_may_break` instead of `.for_each`.
-- If you want to use `break` in a branch inside a loop, you need to use `.then_may_break`/`.then_or_else_may_break`
-instead of `.for_each`/`.then_or_else`.
 - Inside a **constant loop**, you cannot use a **non-constant branch** to break.
 
 
