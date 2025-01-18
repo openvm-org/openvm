@@ -275,10 +275,10 @@ impl<C: Config> Builder<C> {
         &mut self,
         start: impl Into<RVar<C::N>>,
         end: impl Into<RVar<C::N>>,
-    ) -> ZippedPointerIteratorBuilder<C> {
+    ) -> IteratorBuilder<C> {
         let start = start.into();
         let end0 = end.into();
-        ZippedPointerIteratorBuilder {
+        IteratorBuilder {
             starts: vec![start],
             end0,
             step_sizes: vec![1],
@@ -289,17 +289,17 @@ impl<C: Config> Builder<C> {
     pub fn zip<'a>(
         &'a mut self,
         arrays: &'a [Box<dyn ArrayLike<C> + 'a>],
-    ) -> ZippedPointerIteratorBuilder<'a, C> {
+    ) -> IteratorBuilder<'a, C> {
         assert!(!arrays.is_empty());
         if arrays.iter().all(|array| array.is_fixed()) {
-            ZippedPointerIteratorBuilder {
+            IteratorBuilder {
                 starts: vec![RVar::zero(); arrays.len()],
                 end0: arrays[0].len().into(),
                 step_sizes: vec![1; arrays.len()],
                 builder: self,
             }
         } else if arrays.iter().all(|array| !array.is_fixed()) {
-            ZippedPointerIteratorBuilder {
+            IteratorBuilder {
                 starts: arrays
                     .iter()
                     .map(|array| array.ptr().address.into())
@@ -732,14 +732,14 @@ impl<C: Config> IfBuilder<'_, C> {
 }
 
 // iterates through zipped pointers
-pub struct ZippedPointerIteratorBuilder<'a, C: Config> {
+pub struct IteratorBuilder<'a, C: Config> {
     starts: Vec<RVar<C::N>>,
     end0: RVar<C::N>,
     step_sizes: Vec<usize>,
     builder: &'a mut Builder<C>,
 }
 
-impl<C: Config> ZippedPointerIteratorBuilder<'_, C> {
+impl<C: Config> IteratorBuilder<'_, C> {
     pub fn for_each(&mut self, mut f: impl FnMut(Vec<RVar<C::N>>, &mut Builder<C>)) {
         assert!(self.starts.len() == self.step_sizes.len());
         assert!(!self.starts.is_empty());
