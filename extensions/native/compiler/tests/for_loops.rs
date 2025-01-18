@@ -217,49 +217,34 @@ fn test_compiler_break() {
 
     let array: Array<C, Var<_>> = builder.dyn_array(len);
 
-    builder
-        .range(0, array.len())
-        .may_break()
-        .for_each(|i, builder| {
-            builder.set(&array, i, i);
-            Ok(())
-        });
+    builder.range(0, array.len()).for_each(|i, builder| {
+        builder.set(&array, i, i);
+    });
 
     // Test that the array is correctly initialized.
-    builder
-        .range(0, array.len())
-        .may_break()
-        .for_each(|i, builder| {
-            let value = builder.get(&array, i);
-            builder.if_eq(i, RVar::from(break_len + 1)).then_or_else(
-                |builder| {
-                    builder.assert_var_eq(value, i);
-                },
-                |builder| {
-                    builder.assert_var_eq(value, F::ZERO);
-                },
-            );
-            Ok(())
-        });
-
-    // Test the break instructions in a nested loop.
+    builder.range(0, array.len()).for_each(|i, builder| {
+        let value = builder.get(&array, i);
+        builder.if_eq(i, RVar::from(break_len + 1)).then_or_else(
+            |builder| {
+                builder.assert_var_eq(value, i);
+            },
+            |builder| {
+                builder.assert_var_eq(value, F::ZERO);
+            },
+        );
+    });
 
     let array: Array<C, Var<_>> = builder.dyn_array(len);
-    builder
-        .range(0, array.len())
-        .may_break()
-        .for_each(|i, builder| {
-            let counter: Var<_> = builder.eval(F::ZERO);
+    builder.range(0, array.len()).for_each(|i, builder| {
+        let counter: Var<_> = builder.eval(F::ZERO);
 
-            builder.range(0, i).may_break().for_each(|_, builder| {
-                builder.assign(&counter, counter + F::ONE);
-                builder.if_eq(counter, RVar::from(break_len));
-                Ok(())
-            });
-
-            builder.set(&array, i, counter);
-            Ok(())
+        builder.range(0, i).for_each(|_, builder| {
+            builder.assign(&counter, counter + F::ONE);
+            builder.if_eq(counter, RVar::from(break_len));
         });
+
+        builder.set(&array, i, counter);
+    });
 
     // Test that the array is correctly initialized.
 
@@ -291,13 +276,9 @@ fn test_compiler_constant_break() {
 
     let len = 100;
     let array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
-    builder
-        .range(0, array.len())
-        .may_break()
-        .for_each(|i, builder| {
-            builder.set(&array, i, i);
-            Ok(())
-        });
+    builder.range(0, array.len()).for_each(|i, builder| {
+        builder.set(&array, i, i);
+    });
     builder.halt();
 
     let program = builder.compile_isa();
@@ -312,13 +293,9 @@ fn test_compiler_constant_var_break() {
 
     let len = 100;
     let array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
-    builder
-        .range(0, array.len())
-        .may_break()
-        .for_each(|i, builder| {
-            builder.set(&array, i, i);
-            Ok(())
-        });
+    builder.range(0, array.len()).for_each(|i, builder| {
+        builder.set(&array, i, i);
+    });
     builder.halt();
 
     let program = builder.compile_isa();

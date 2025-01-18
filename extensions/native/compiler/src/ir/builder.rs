@@ -959,10 +959,6 @@ pub struct RangeBuilder<'a, C: Config> {
 }
 
 impl<'a, C: Config> RangeBuilder<'a, C> {
-    pub const fn may_break(self) -> RangeBuilderWithBreaks<'a, C> {
-        RangeBuilderWithBreaks(self)
-    }
-
     pub const fn step_by(mut self, step_size: usize) -> Self {
         self.step_size = step_size;
         self
@@ -1033,33 +1029,5 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
             loop_instructions,
         );
         self.builder.operations.push(op);
-    }
-}
-
-/// A builder for the DSL that handles for loops with breaks.
-pub struct RangeBuilderWithBreaks<'a, C: Config>(RangeBuilder<'a, C>);
-
-impl<C: Config> RangeBuilderWithBreaks<'_, C> {
-    pub const fn step_by(mut self, step_size: usize) -> Self {
-        self.0 = self.0.step_by(step_size);
-        self
-    }
-
-    /// Does not unroll for loops unless builder flag `static_loop` is set.
-    pub fn for_each(
-        &mut self,
-        f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
-    ) {
-        let old_disable_break = self.0.builder.flags.disable_break;
-        self.0.builder.flags.disable_break = false;
-        // To handle breaks based on dynamic branching conditions, we do not
-        // unroll constant loops unless the builder is in static_loop mode.
-        if self.0.start.is_const() && self.0.end.is_const() && self.0.builder.flags.static_loop {
-            self.0.for_each_unrolled(f);
-        } else {
-            // Dynamic
-            self.0.for_each_dynamic(f);
-        }
-        self.0.builder.flags.disable_break = old_disable_break;
     }
 }
