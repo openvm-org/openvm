@@ -179,9 +179,8 @@ impl Sdk {
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
         pv_handler: Option<&impl StaticVerifierPvHandler>,
-        omit_accumulator_pv: bool,
     ) -> Result<AggProvingKey> {
-        let agg_pk = AggProvingKey::keygen(config, reader, pv_handler, omit_accumulator_pv);
+        let agg_pk = AggProvingKey::keygen(config, reader, pv_handler);
         Ok(agg_pk)
     }
 
@@ -192,14 +191,13 @@ impl Sdk {
         app_exe: Arc<NonRootCommittedExe>,
         agg_pk: AggProvingKey,
         inputs: StdIn,
-        omit_accumulator_pv: bool,
     ) -> Result<EvmProof>
     where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
         let e2e_prover = ContinuationProver::new(reader, app_pk, app_exe, agg_pk);
-        let proof = e2e_prover.generate_proof_for_evm(inputs, omit_accumulator_pv);
+        let proof = e2e_prover.generate_proof_for_evm(inputs);
         Ok(proof)
     }
 

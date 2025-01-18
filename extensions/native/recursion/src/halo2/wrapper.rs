@@ -43,22 +43,17 @@ const MIN_ROWS: usize = 20;
 
 impl Halo2WrapperProvingKey {
     /// Auto select k to let Wrapper circuit only have 1 advice column.
-    pub fn keygen_auto_tune(
-        reader: &impl Halo2ParamsReader,
-        dummy_snark: Snark,
-        hash_prev_accumulator: bool,
-    ) -> Self {
-        let k = Self::select_k(dummy_snark.clone(), hash_prev_accumulator);
+    pub fn keygen_auto_tune(reader: &impl Halo2ParamsReader, dummy_snark: Snark) -> Self {
+        let k = Self::select_k(dummy_snark.clone());
         tracing::info!("Selected k: {}", k);
         let params = reader.read_params(k);
-        Self::keygen(&params, dummy_snark, hash_prev_accumulator)
+        Self::keygen(&params, dummy_snark)
     }
-    pub fn keygen(params: &Halo2Params, dummy_snark: Snark, hash_prev_accumulator: bool) -> Self {
+    pub fn keygen(params: &Halo2Params, dummy_snark: Snark) -> Self {
         let k = params.k();
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
-        let mut circuit =
-            generate_wrapper_circuit_object(Keygen, k as usize, dummy_snark, hash_prev_accumulator);
+        let mut circuit = generate_wrapper_circuit_object(Keygen, k as usize, dummy_snark);
         circuit.calculate_params(Some(MIN_ROWS));
         let config_params = circuit.builder.config_params.clone();
         tracing::info!(
@@ -105,17 +100,11 @@ impl Halo2WrapperProvingKey {
             None,
         ))
     }
-    pub fn prove_for_evm(
-        &self,
-        params: &Halo2Params,
-        snark_to_verify: Snark,
-        hash_prev_accumulator: bool,
-    ) -> EvmProof {
+    pub fn prove_for_evm(&self, params: &Halo2Params, snark_to_verify: Snark) -> EvmProof {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
         let k = self.pinning.metadata.config_params.k;
-        let prover_circuit =
-            self.generate_circuit_object_for_proving(k, snark_to_verify, hash_prev_accumulator);
+        let prover_circuit = self.generate_circuit_object_for_proving(k, snark_to_verify);
         let pvs = prover_circuit.instances();
         let proof = gen_evm_proof_shplonk(params, &self.pinning.pk, prover_circuit, pvs.clone());
         #[cfg(feature = "bench-metrics")]
@@ -130,19 +119,17 @@ impl Halo2WrapperProvingKey {
         &self,
         k: usize,
         snark_to_verify: Snark,
-        hash_prev_accumulator: bool,
     ) -> AggregationCircuit {
         assert_eq!(
             snark_to_verify.instances.len(),
             1,
             "Snark should only have 1 instance column"
         );
-        let accumulator_pv_len = if hash_prev_accumulator { 0 } else { 12 };
         assert_eq!(
             self.pinning.metadata.num_pvs[0],
-            snark_to_verify.instances[0].len() + accumulator_pv_len,
+            snark_to_verify.instances[0].len() + 12,
         );
-        generate_wrapper_circuit_object(Prover, k, snark_to_verify, hash_prev_accumulator)
+        generate_wrapper_circuit_object(Prover, k, snark_to_verify)
             .use_params(
                 self.pinning
                     .metadata
@@ -154,16 +141,11 @@ impl Halo2WrapperProvingKey {
             .use_break_points(self.pinning.metadata.break_points.clone())
     }
 
-    pub(crate) fn select_k(dummy_snark: Snark, hash_prev_accumulator: bool) -> usize {
+    pub(crate) fn select_k(dummy_snark: Snark) -> usize {
         let mut k = 20;
         let mut first_run = true;
         loop {
-            let mut circuit = generate_wrapper_circuit_object(
-                Keygen,
-                k,
-                dummy_snark.clone(),
-                hash_prev_accumulator,
-            );
+            let mut circuit = generate_wrapper_circuit_object(Keygen, k, dummy_snark.clone());
             circuit.calculate_params(Some(MIN_ROWS));
             assert_eq!(
                 circuit.builder.config_params.num_advice_per_phase.len(),
@@ -190,7 +172,6 @@ fn generate_wrapper_circuit_object(
     stage: CircuitBuilderStage,
     k: usize,
     snark: Snark,
-    hash_prev_accumulator: bool,
 ) -> AggregationCircuit {
     let config_params = AggregationConfigParams {
         degree: k as u32,
@@ -204,7 +185,7 @@ fn generate_wrapper_circuit_object(
         [snark],
         VerifierUniversality::None,
     );
-    circuit.expose_previous_instances(hash_prev_accumulator);
+    circuit.expose_previous_instances(false);
     circuit
 }
 

@@ -27,11 +27,7 @@ impl Halo2Prover {
             wrapper_srs,
         }
     }
-    pub fn prove_for_evm(
-        &self,
-        root_proof: &Proof<RootSC>,
-        hash_prev_accumulator: bool,
-    ) -> EvmProof {
+    pub fn prove_for_evm(&self, root_proof: &Proof<RootSC>) -> EvmProof {
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
         let snark = info_span!("prove", group = "halo2_outer").in_scope(|| {
@@ -42,7 +38,7 @@ impl Halo2Prover {
         info_span!("prove_for_evm", group = "halo2_wrapper").in_scope(|| {
             self.halo2_pk
                 .wrapper
-                .prove_for_evm(&self.wrapper_srs, snark, hash_prev_accumulator)
+                .prove_for_evm(&self.wrapper_srs, snark)
         })
     }
 }

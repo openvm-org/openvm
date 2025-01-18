@@ -265,7 +265,6 @@ fn test_e2e_proof_generation_and_verification() {
             agg_config_for_test(),
             &params_reader,
             None::<&RootVerifierProvingKey>,
-            false,
         )
         .unwrap();
     let evm_verifier = Sdk
@@ -279,7 +278,6 @@ fn test_e2e_proof_generation_and_verification() {
             app_committed_exe_for_test(app_log_blowup),
             agg_pk,
             StdIn::default(),
-            false,
         )
         .unwrap();
     assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof));
