@@ -74,51 +74,6 @@ impl<C: Config> Builder<C> {
         ));
     }
 
-    /// Applies the Poseidon2 permutation to the given array.
-    ///
-    /// [Reference](https://docs.rs/p3-symmetric/latest/p3_symmetric/struct.PaddingFreeSponge.html)
-    pub fn poseidon2_hash(&mut self, array: &Array<C, Felt<C::F>>) -> Array<C, Felt<C::F>> {
-        let perm_width = PERMUTATION_WIDTH;
-        let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
-        self.range(0, perm_width).for_each(|i, builder| {
-            builder.set(&state, i, C::F::ZERO);
-        });
-
-        let break_flag: Var<_> = self.eval(C::N::ZERO);
-        let last_index: Usize<_> = self.eval(array.len() - C::N::ONE);
-        let hash_rate: Var<_> = self.eval(C::N::from_canonical_usize(HASH_RATE));
-
-        self.range(0, array.len())
-            .may_break()
-            .step_by(HASH_RATE)
-            .for_each(|i, builder| {
-                builder
-                    .if_eq(break_flag, C::N::ONE)
-                    .then_may_break(|builder| builder.break_loop())?;
-                // Insert elements of the chunk.
-                builder
-                    .range(0, hash_rate)
-                    .may_break()
-                    .for_each(|j, builder| {
-                        let index = builder.eval_expr(i + j);
-                        let element = builder.get(array, index);
-                        builder.set_value(&state, j, element);
-                        builder
-                            .if_eq(index, last_index.clone())
-                            .then_may_break(|builder| {
-                                builder.assign(&break_flag, C::N::ONE);
-                                builder.break_loop()
-                            })
-                    });
-
-                builder.poseidon2_permute_mut(&state);
-                Ok(())
-            });
-
-        state.truncate(self, Usize::from(DIGEST_SIZE));
-        state
-    }
-
     pub fn poseidon2_hash_x(
         &mut self,
         array: &Array<C, Array<C, Felt<C::F>>>,
