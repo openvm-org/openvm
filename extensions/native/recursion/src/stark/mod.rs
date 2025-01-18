@@ -7,7 +7,7 @@ use openvm_native_compiler::{
     ir::{Array, ArrayLike, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
     prelude::RVar,
 };
-use openvm_native_compiler_derive::compile_zip;
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::{
     air_builders::{
         symbolic::symbolic_expression::SymbolicExpression,
@@ -206,12 +206,12 @@ where
 
         // Observe main trace commitments
         iter_zip!(builder, main_trace_commits).for_each(|ptr_vec, builder| {
-            let main_commit = builder.iter_ptr_get(&main_trace_commits, ptr_vec[0]);
+            let main_commit = builder.iter_ptr_get(main_trace_commits, ptr_vec[0]);
             challenger.observe_digest(builder, main_commit);
         });
 
         iter_zip!(builder, air_proofs).for_each(|ptr_vec, builder| {
-            let air_proof = builder.iter_ptr_get(&air_proofs, ptr_vec[0]);
+            let air_proof = builder.iter_ptr_get(air_proofs, ptr_vec[0]);
             let log_degree = if builder.flags.static_only {
                 builder.eval(C::F::from_canonical_usize(air_proof.log_degree.value()))
             } else {
@@ -398,7 +398,7 @@ where
             let trace_points = builder.get(&trace_points_per_domain, i);
 
             iter_zip!(builder, cached_main_widths).for_each(|ptr_vec, builder| {
-                let cached_main_width = builder.iter_ptr_get(&cached_main_widths, ptr_vec[0]);
+                let cached_main_width = builder.iter_ptr_get(cached_main_widths, ptr_vec[0]);
                 let values_per_mat = builder.get(&opening.values.main, main_commit_idx.clone());
                 let batch_commit = builder.get(main_trace_commits, main_commit_idx.clone());
                 builder.assign(&main_commit_idx, main_commit_idx.clone() + RVar::one());
@@ -535,7 +535,7 @@ where
         let perm_offset_per_air = builder.array::<Usize<_>>(num_airs);
         let offset: Usize<_> = builder.eval(RVar::zero());
         iter_zip!(builder, air_perm_by_height).for_each(|ptr_vec, builder| {
-            let air_index = builder.iter_ptr_get(&air_perm_by_height, ptr_vec[0]);
+            let air_index = builder.iter_ptr_get(air_perm_by_height, ptr_vec[0]);
             builder.set(&perm_offset_per_air, air_index.clone(), offset.clone());
             let qc_domains = builder.get(&quotient_chunk_domains, air_index);
             builder.assign(&offset, offset.clone() + qc_domains.len());

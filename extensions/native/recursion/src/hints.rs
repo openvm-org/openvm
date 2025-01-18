@@ -5,7 +5,7 @@ use openvm_native_compiler::ir::{
     unsafe_array_transmute, Array, ArrayLike, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
     DIGEST_SIZE,
 };
-use openvm_native_compiler_derive::compile_zip;
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::{
     keygen::types::TraceWidth,
     p3_commit::ExtensionMmcs,

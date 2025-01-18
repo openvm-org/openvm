@@ -4,7 +4,7 @@ use openvm_native_compiler::{
     ir::{Array, Var},
     prelude::ArrayLike,
 };
-use openvm_native_compiler_derive::compile_zip;
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 

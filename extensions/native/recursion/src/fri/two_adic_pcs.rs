@@ -1,5 +1,5 @@
 use openvm_native_compiler::prelude::*;
-use openvm_native_compiler_derive::compile_zip;
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::{
     p3_commit::TwoAdicMultiplicativeCoset,
     p3_field::{FieldAlgebra, TwoAdicField},

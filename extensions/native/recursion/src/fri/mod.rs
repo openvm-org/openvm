@@ -6,7 +6,7 @@ use openvm_native_compiler::{
     },
     prelude::MemVariable,
 };
-use openvm_native_compiler_derive::compile_zip;
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::{Field, FieldAlgebra, TwoAdicField};
 pub use two_adic_pcs::*;
 

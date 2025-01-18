@@ -2,7 +2,7 @@ use openvm_native_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
     prelude::{Array, ArrayLike, Builder, Config, Ext, Felt, Var},
 };
-use openvm_native_compiler_derive::compile_zip;
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
 
 use crate::{
