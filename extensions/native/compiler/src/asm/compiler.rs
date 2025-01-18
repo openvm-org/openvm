@@ -347,16 +347,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         );
                     }
                 }
-                DslIr::For(start, end, step_size, loop_var, block) => {
-                    let for_compiler = ForCompiler {
-                        compiler: self,
-                        start,
-                        end,
-                        step_size,
-                        loop_var,
-                    };
-                    for_compiler.for_each(move |_, builder| builder.build(block), debug_info);
-                }
                 DslIr::ZipFor(starts, end0, step_sizes, loop_vars, block) => {
                     let zip_for_compiler = ZipForCompiler {
                         compiler: self,
@@ -791,7 +781,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> IfCom
     }
 }
 
-// Zipped for loop -- loop extends over the first entry in starts and ends
+// Zipped for loop -- loop extends over the first entry in starts and end0
+// ATTENTION: starting with starts[0] > end0 will lead to undefined behavior.
 pub struct ZipForCompiler<'a, F: Field, EF> {
     compiler: &'a mut AsmCompiler<F, EF>,
     starts: Vec<RVar<F>>,
@@ -872,96 +863,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
             .push_to_block(loop_call_label, instr, debug_info.clone());
 
         self.compiler.basic_block();
-    }
-}
-
-/// A builder for a for loop.
-///
-/// SAFETY: Starting with end < start will lead to undefined behavior.
-pub struct ForCompiler<'a, F: Field, EF> {
-    compiler: &'a mut AsmCompiler<F, EF>,
-    start: RVar<F>,
-    end: RVar<F>,
-    step_size: F,
-    loop_var: Var<F>,
-}
-
-impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> ForCompiler<'_, F, EF> {
-    pub(super) fn for_each(
-        mut self,
-        f: impl FnOnce(Var<F>, &mut AsmCompiler<F, EF>),
-        debug_info: Option<DebugInfo>,
-    ) {
-        // The function block structure:
-        // - Setting the loop range
-        // - Executing the loop body and incrementing the loop variable
-        // - the loop condition
-
-        // Set the loop variable to the start of the range.
-        self.set_loop_var(debug_info.clone());
-
-        // Save the label of the for loop call.
-        let loop_call_label = self.compiler.block_label();
-
-        // A basic block for the loop body
-        self.compiler.basic_block();
-
-        // Save the loop body label for the loop condition.
-        let loop_label = self.compiler.block_label();
-
-        // The loop body.
-        f(self.loop_var, self.compiler);
-
-        // Increment the loop variable.
-        self.compiler.push(
-            AsmInstruction::AddFI(self.loop_var.fp(), self.loop_var.fp(), self.step_size),
-            debug_info.clone(),
-        );
-
-        // Add a basic block for the loop condition.
-        self.compiler.basic_block();
-
-        // Jump to loop body if the loop condition still holds.
-        self.jump_to_loop_body(loop_label, debug_info.clone());
-
-        // Add a jump instruction to the loop condition in the loop call block.
-        let label = self.compiler.block_label();
-        let instr = AsmInstruction::j(label);
-        self.compiler
-            .push_to_block(loop_call_label, instr, debug_info.clone());
-
-        // Initialize the after loop block.
-        self.compiler.basic_block();
-    }
-
-    fn set_loop_var(&mut self, debug_info: Option<DebugInfo>) {
-        match self.start {
-            RVar::Const(start) => {
-                self.compiler.push(
-                    AsmInstruction::ImmF(self.loop_var.fp(), start),
-                    debug_info.clone(),
-                );
-            }
-            RVar::Val(var) => {
-                self.compiler.push(
-                    AsmInstruction::CopyF(self.loop_var.fp(), var.fp()),
-                    debug_info.clone(),
-                );
-            }
-        }
-    }
-
-    fn jump_to_loop_body(&mut self, loop_label: F, debug_info: Option<DebugInfo>) {
-        match self.end {
-            RVar::Const(end) => {
-                let instr = AsmInstruction::BneI(loop_label, self.loop_var.fp(), end);
-                self.compiler.push(instr, debug_info.clone());
-            }
-            RVar::Val(end) => {
-                let instr = AsmInstruction::Bne(loop_label, self.loop_var.fp(), end.fp());
-                self.compiler.push(instr, debug_info.clone());
-            }
-        }
     }
 }
 

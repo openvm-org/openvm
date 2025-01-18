@@ -112,9 +112,6 @@ pub enum DslIr<C: Config> {
     // =======
 
     // Control flow.
-    /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
-    For(RVar<C::N>, RVar<C::N>, C::N, Var<C::N>, TracedVec<DslIr<C>>),
-
     /// Executes a zipped iterator for loop over pointers with the parameters
     /// (start step values, end step value of first pointer, step sizes, step variables, body).
     ZipFor(
