@@ -101,7 +101,6 @@ pub fn verify_two_adic_pcs<C: Config>(
                 }
             }
 
-            let alpha_c_pow: Ext<C::F, C::EF> = builder.constant(C::EF::ONE);
             compile_zip!(builder, query_proof.input_proof, rounds).for_each(|ptr_vec, builder| {
                 let batch_opening = builder.iter_ptr_get(&query_proof.input_proof, ptr_vec[0]);
                 let round = builder.iter_ptr_get(&rounds, ptr_vec[1]);
@@ -193,9 +192,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     builder.cycle_tracker_end("exp-reverse-bits-len");
                     let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
-                    if builder.flags.static_only {
-                        builder.assign(&alpha_c_pow, C::EF::ONE.cons());
-                    }
+                    let mut alpha_pow_vec = Vec::new();
                     compile_zip!(builder, mat_points, mat_values).for_each(|ptr_vec, builder| {
                         let z: Ext<C::F, C::EF> = builder.iter_ptr_get(&mat_points, ptr_vec[0]);
                         let ps_at_z = builder.iter_ptr_get(&mat_values, ptr_vec[1]);
@@ -204,17 +201,29 @@ pub fn verify_two_adic_pcs<C: Config>(
                         if builder.flags.static_only {
                             let n: Ext<C::F, C::EF> = builder.constant(C::EF::ZERO);
                             builder.range(0, ps_at_z.len()).for_each(|t, builder| {
-                                let reverse_idx = RVar::from(ps_at_z.len().value() - 1 - t.value());
-                                let p_at_x = builder.get(&mat_opening, reverse_idx);
-                                let p_at_z = builder.get(&ps_at_z, reverse_idx);
+                                let p_at_x = builder.get(&mat_opening, t);
+                                let p_at_z = builder.get(&ps_at_z, t);
 
-                                builder.assign(&n, (p_at_z - p_at_x) + n * alpha);
                                 if ptr_vec[0].value() == 0 {
-                                    builder.assign(&alpha_c_pow, alpha_c_pow * alpha);
+                                    if t.value() == 0 {
+                                        alpha_pow_vec.push(builder.constant(C::EF::ONE));
+                                    } else {
+                                        let next: Ext<_, _> = builder.uninit();
+                                        alpha_pow_vec.push(next);
+                                        builder.assign(
+                                            &alpha_pow_vec[t.value()],
+                                            alpha_pow_vec[t.value() - 1] * alpha,
+                                        );
+                                    }
                                 }
+                                builder
+                                    .assign(&n, (p_at_z - p_at_x) * alpha_pow_vec[t.value()] + n);
                             });
                             builder.assign(&cur_ro, cur_ro + cur_alpha_pow * n / (z - x));
-                            builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha_c_pow);
+                            builder.assign(
+                                &cur_alpha_pow,
+                                cur_alpha_pow * alpha_pow_vec[ps_at_z.len().value() - 1],
+                            );
                         } else {
                             let mat_ro = builder.fri_single_reduced_opening_eval(
                                 alpha,
