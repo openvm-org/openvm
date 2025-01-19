@@ -199,12 +199,6 @@ pub fn verify_two_adic_pcs<C: Config>(
 
                         builder.cycle_tracker_start("single-reduced-opening-eval");
                         if builder.flags.static_only {
-                            if ptr_vec[0].value() == 0 {
-                                builder.range(0, ps_at_z.len()).for_each(|_, builder| {
-                                    builder.assign(&alpha_c_pow, alpha_c_pow * alpha);
-                                });
-                            }
-
                             let n: Ext<C::F, C::EF> = builder.constant(C::EF::ZERO);
                             builder.range(0, ps_at_z.len()).for_each(|t, builder| {
                                 let reverse_idx =
@@ -213,6 +207,9 @@ pub fn verify_two_adic_pcs<C: Config>(
                                 let p_at_z = builder.get(&ps_at_z, reverse_idx);
 
                                 builder.assign(&n, n * alpha + (p_at_z - p_at_x));
+                                if ptr_vec[0].value() == 0 {
+                                    builder.assign(&alpha_c_pow, alpha_c_pow * alpha);
+                                }
                             });
                             builder.assign(&cur_ro, cur_ro + cur_alpha_pow * n / (z - x));
                             builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha_c_pow);
