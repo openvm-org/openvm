@@ -219,10 +219,18 @@ pub fn verify_two_adic_pcs<C: Config>(
                                 builder
                                     .assign(&n, (p_at_z - p_at_x) * alpha_pow_cache[t.value()] + n);
                             });
+                            if ps_at_z.len().value() > alpha_pow_cache.len() {
+                                let next: Ext<_, _> = builder.uninit();
+                                alpha_pow_cache.push(next);
+                                builder.assign(
+                                    &alpha_pow_cache[ps_at_z.len().value()],
+                                    alpha_pow_cache[ps_at_z.len().value() - 1] * alpha,
+                                );
+                            }
                             builder.assign(&cur_ro, cur_ro + cur_alpha_pow * n / (z - x));
                             builder.assign(
                                 &cur_alpha_pow,
-                                cur_alpha_pow * alpha_pow_cache[ps_at_z.len().value() - 1] * alpha,
+                                cur_alpha_pow * alpha_pow_cache[ps_at_z.len().value()],
                             );
                         } else {
                             let mat_ro = builder.fri_single_reduced_opening_eval(
