@@ -192,21 +192,30 @@ pub fn verify_two_adic_pcs<C: Config>(
                     builder.cycle_tracker_end("exp-reverse-bits-len");
                     let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
+                    let alpha_c_pow: Ext<C::F, C::EF> = builder.constant(C::EF::ONE);
                     compile_zip!(builder, mat_points, mat_values).for_each(|ptr_vec, builder| {
                         let z: Ext<C::F, C::EF> = builder.iter_ptr_get(&mat_points, ptr_vec[0]);
                         let ps_at_z = builder.iter_ptr_get(&mat_values, ptr_vec[1]);
 
                         builder.cycle_tracker_start("single-reduced-opening-eval");
                         if builder.flags.static_only {
+                            if ptr_vec[0].value() == 0 {
+                                builder.range(0, ps_at_z.len()).for_each(|_, builder| {
+                                    builder.assign(&alpha_c_pow, alpha_c_pow * alpha);
+                                });
+                            }
+
                             let n: Ext<C::F, C::EF> = builder.constant(C::EF::ZERO);
                             builder.range(0, ps_at_z.len()).for_each(|t, builder| {
-                                let p_at_x = builder.get(&mat_opening, t);
-                                let p_at_z = builder.get(&ps_at_z, t);
+                                let reverse_idx =
+                                    builder.eval_expr(ps_at_z.len() - RVar::from(1) - t);
+                                let p_at_x = builder.get(&mat_opening, reverse_idx);
+                                let p_at_z = builder.get(&ps_at_z, reverse_idx);
 
-                                builder.assign(&n, cur_alpha_pow * (p_at_z - p_at_x) + n);
-                                builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
+                                builder.assign(&n, n * alpha + (p_at_z - p_at_x));
                             });
-                            builder.assign(&cur_ro, cur_ro + n / (z - x));
+                            builder.assign(&cur_ro, cur_ro + cur_alpha_pow * n / (z - x));
+                            builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha_c_pow);
                         } else {
                             let mat_ro = builder.fri_single_reduced_opening_eval(
                                 alpha,
