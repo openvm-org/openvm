@@ -208,7 +208,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                                 let p_at_x = builder.get(&mat_opening, reverse_idx);
                                 let p_at_z = builder.get(&ps_at_z, reverse_idx);
 
-                                builder.assign(&n, n * alpha + (p_at_z - p_at_x));
+                                builder.assign(&n, (p_at_z - p_at_x) + n * alpha);
                                 if ptr_vec[0].value() == 0 {
                                     builder.assign(&alpha_c_pow, alpha_c_pow * alpha);
                                 }
