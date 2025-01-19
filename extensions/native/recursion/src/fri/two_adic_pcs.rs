@@ -219,7 +219,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                                 builder
                                     .assign(&n, (p_at_z - p_at_x) * alpha_pow_cache[t.value()] + n);
                             });
-                            if ps_at_z.len().value() > alpha_pow_cache.len() {
+                            if ps_at_z.len().value() >= alpha_pow_cache.len() {
                                 let next: Ext<_, _> = builder.uninit();
                                 alpha_pow_cache.push(next);
                                 builder.assign(
