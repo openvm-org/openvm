@@ -50,6 +50,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     let alpha = challenger.sample_ext(builder);
 
     builder.cycle_tracker_start("stage-d-verifier-verify");
+    builder.cycle_tracker_start("sample-challenges");
     let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
     compile_zip!(builder, proof.commit_phase_commits, betas).for_each(|ptr_vec, builder| {
         let comm_ptr = ptr_vec[0];
@@ -77,10 +78,11 @@ pub fn verify_two_adic_pcs<C: Config>(
 
     let log_max_height =
         builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(log_blowup));
-
+    builder.cycle_tracker_end("sample-challenges");
     builder
         .iter(&proof.query_proofs)
         .for_each(|query_proof, builder| {
+            builder.cycle_tracker_start("initialize-opening-vals");
             let index_bits = challenger.sample_bits(builder, log_max_height);
 
             let ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
@@ -100,8 +102,10 @@ pub fn verify_two_adic_pcs<C: Config>(
                     builder.set_value(&alpha_pow, j, one_ef);
                 }
             }
+            builder.cycle_tracker_end("initialize-opening-vals");
 
             compile_zip!(builder, query_proof.input_proof, rounds).for_each(|ptr_vec, builder| {
+                builder.cycle_tracker_start("setup-and-permute-openings");
                 let batch_opening = builder.iter_ptr_get(&query_proof.input_proof, ptr_vec[0]);
                 let round = builder.iter_ptr_get(&rounds, ptr_vec[1]);
                 let batch_commit = round.batch_commit;
@@ -152,6 +156,7 @@ pub fn verify_two_adic_pcs<C: Config>(
 
                 let bits_reduced: Usize<_> = builder.eval(log_max_height - log_batch_max_height);
                 let index_bits_shifted_v1 = index_bits.shift(builder, bits_reduced);
+                builder.cycle_tracker_end("setup-and-permute-openings");
 
                 builder.cycle_tracker_start("verify-batch");
                 verify_batch::<C>(
