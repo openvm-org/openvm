@@ -35,10 +35,10 @@ impl Hintable<C> for InnerCommitPhaseStep {
     type HintVariable = FriCommitPhaseProofStepVariable<C>;
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
-        let sibling_value = builder.hint_ext();
+        let opened_rows = Vec::<Vec<InnerChallenge>>::read(builder);
         let opening_proof = Vec::<InnerDigest>::read(builder);
         Self::HintVariable {
-            sibling_value,
+            opened_rows,
             opening_proof,
         }
     }
@@ -46,7 +46,7 @@ impl Hintable<C> for InnerCommitPhaseStep {
     fn write(&self) -> Vec<Vec<<C as Config>::F>> {
         let mut stream = Vec::new();
 
-        stream.extend(Hintable::<C>::write(&vec![self.sibling_value]));
+        stream.extend(Hintable::<C>::write(&self.opened_rows));
         stream.extend(Vec::<InnerDigest>::write(&self.opening_proof));
 
         stream

@@ -55,76 +55,187 @@ where
     let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
     let x = builder.exp_bits_big_endian(two_adic_generator_ef, &index_bits_truncated);
 
+    let log_folded_height = builder.eval_expr(log_max_height);
+
+    let get_idx = |builder: &mut Builder<C>, start: Var<C::N>, end: Var<C::N>| {
+        let idx: Var<C::N> = builder.eval(C::N::ZERO);
+        builder.range(start, end).for_each(|i, builder| {
+            let bit = builder.get(&index_bits, i);
+            builder.assign(&idx, idx * C::N::TWO + bit);
+        });
+        idx
+    };
+
+    let assert_opened_row = |builder: &mut Builder<C>,
+                             opened_rows: &Array<C, Array<C, Ext<C::F, C::EF>>>,
+                             row_idx: RVar<C::N>,
+                             col_idx_start: Var<C::N>,
+                             col_idx_end: SymbolicVar<C::N>,
+                             expected_val: Ext<C::F, C::EF>| {
+        let col_idx_end = builder.eval(col_idx_end);
+        let col_idx = get_idx(builder, col_idx_start, col_idx_end);
+        let row = builder.get(opened_rows, row_idx);
+        let opened_val = builder.get(&row, col_idx);
+        builder.assert_ext_eq(opened_val, expected_val);
+    };
+
+    let index_bits_offset: Var<C::N> = builder.eval(C::N::ZERO);
+
     builder
         .range(0, commit_phase_commits.len())
         .for_each(|i, builder| {
-            let log_folded_height = builder.eval_expr(log_max_height - i - C::N::ONE);
-            let log_folded_height_plus_one = builder.eval_expr(log_folded_height + C::N::ONE);
-            let commit = builder.get(commit_phase_commits, i);
-            let step = builder.get(&proof.commit_phase_openings, i);
-            let beta = builder.get(betas, i);
+            // TODO[osama]: you will need to adjust arity_bits for the last round
+            let cur_arity_bits: Var<C::N> = builder.eval(RVar::from(config.arity_bits));
 
-            let reduced_opening = builder.get(reduced_openings, log_folded_height_plus_one);
+            let last_round_idx: Var<C::N> = builder.eval(commit_phase_commits.len() - C::N::ONE);
+            builder.if_eq(i, last_round_idx).then(|builder| {
+                builder.assign(&cur_arity_bits, log_folded_height);
+            });
+
+            let beta = builder.get(betas, i);
+            let commit = builder.get(commit_phase_commits, i);
+            let opening = builder.get(&proof.commit_phase_openings, i);
+
+            let reduced_opening = builder.get(reduced_openings, log_folded_height);
             builder.assign(&folded_eval, folded_eval + reduced_opening);
 
-            let index_bit = builder.get(index_bits, i);
-            let index_sibling_mod_2: Var<C::N> =
-                builder.eval(SymbolicVar::from(C::N::ONE) - index_bit);
-            let i_plus_one = builder.eval_expr(i + RVar::one());
-            let index_pair = index_bits.shift(builder, i_plus_one);
+            let index_row = index_bits.shift(builder, cur_arity_bits);
 
-            let evals: Array<C, Ext<C::F, C::EF>> = builder.array(2);
-            let eval_0: Ext<C::F, C::EF>;
-            let eval_1: Ext<C::F, C::EF>;
-            if builder.flags.static_only {
-                [eval_0, eval_1] = cond_eval(
+            assert_opened_row(
+                builder,
+                &opening.opened_rows,
+                RVar::from(0),
+                index_bits_offset,
+                index_bits_offset + RVar::from(cur_arity_bits),
+                folded_eval,
+            );
+
+            let opened_row_index: Var<C::N> = builder.eval(C::N::ONE);
+            builder.range(1, cur_arity_bits).for_each(|j, builder| {
+                let lh: Var<C::N> = builder.eval(log_folded_height - j);
+                let ro = builder.get(reduced_openings, lh);
+
+                // TODO[osama]: the following should be inside an if condition testing if a new polynomial enters
+
+                let opened_row = builder.get(&opening.opened_rows, opened_row_index);
+                builder.assign(&opened_row_index, opened_row_index + C::N::ONE);
+
+                // Make sure the opened row is of the correct length
+                let log_row_len: Var<C::N> =
+                    builder.eval(lh + RVar::from(cur_arity_bits) - log_folded_height);
+                let row_len: Var<C::N> = builder.sll(C::N::ONE, log_row_len);
+                builder.assert_eq::<Var<C::N>>(opened_row.len(), row_len);
+
+                builder.assign(&index_bits_offset, index_bits_offset + C::N::ONE);
+
+                assert_opened_row(
                     builder,
-                    index_sibling_mod_2,
-                    step.sibling_value,
-                    folded_eval,
+                    &opening.opened_rows,
+                    opened_row_index.into(),
+                    index_bits_offset,
+                    index_bits_offset + log_row_len,
+                    ro,
                 );
-                builder.set_value(&evals, 0, eval_0);
-                builder.set_value(&evals, 1, eval_1);
-            } else {
-                builder.set_value(&evals, 0, folded_eval);
-                builder.set_value(&evals, 1, folded_eval);
-                // This is faster than branching.
-                builder.set_value(&evals, index_sibling_mod_2, step.sibling_value);
-                eval_0 = builder.get(&evals, 0);
-                eval_1 = builder.get(&evals, 1);
-            }
+            });
 
-            let dims = DimensionsVariable::<C> {
-                height: builder.sll(C::N::ONE, log_folded_height),
+            let log_height: Var<C::N> =
+                builder.eval(log_folded_height - RVar::from(cur_arity_bits));
+            let dim = DimensionsVariable::<C> {
+                height: builder.sll(C::N::ONE, log_height),
             };
-            let dims_slice: Array<C, DimensionsVariable<C>> = builder.array(1);
-            builder.set_value(&dims_slice, 0, dims);
+            let dims_slice: Array<C, DimensionsVariable<C>> =
+                builder.array(opening.opened_rows.len());
+            builder
+                .range(0, opening.opened_rows.len())
+                .for_each(|i, builder| {
+                    builder.set_value(&dims_slice, i, dim.clone());
+                });
 
-            let opened_values = builder.array(1);
-            builder.set_value(&opened_values, 0, evals);
-            builder.cycle_tracker_start("verify-batch-ext");
+            builder.assign(&index_bits_offset, index_bits_offset + C::N::ONE);
+            let index_row = index_bits.shift(builder, index_bits_offset);
+
             verify_batch::<C>(
                 builder,
                 &commit,
                 dims_slice,
-                index_pair,
-                &NestedOpenedValues::Ext(opened_values),
-                &step.opening_proof,
-            );
-            builder.cycle_tracker_end("verify-batch-ext");
-
-            let two_adic_generator_one = config.get_two_adic_generator(builder, Usize::from(1));
-
-            let [xs_0, xs_1]: [Ext<_, _>; 2] =
-                cond_eval(builder, index_sibling_mod_2, x * two_adic_generator_one, x);
-
-            builder.assign(
-                &folded_eval,
-                eval_0 + (beta - xs_0) * (eval_1 - eval_0) / (xs_1 - xs_0),
+                index_row,
+                &NestedOpenedValues::Ext(opening.opened_rows),
+                &opening.opening_proof,
             );
 
-            builder.assign(&x, x * x);
+            // TODO[osama]: Do the folding logic
         });
+
+    // builder
+    //     .range(0, commit_phase_commits.len())
+    //     .for_each(|i, builder| {
+    //         let log_folded_height = builder.eval_expr(log_max_height - i - C::N::ONE);
+    //         let log_folded_height_plus_one = builder.eval_expr(log_folded_height + C::N::ONE);
+    //         let commit = builder.get(commit_phase_commits, i);
+    //         let step = builder.get(&proof.commit_phase_openings, i);
+    //         let beta = builder.get(betas, i);
+
+    //         let reduced_opening = builder.get(reduced_openings, log_folded_height_plus_one);
+    //         builder.assign(&folded_eval, folded_eval + reduced_opening);
+
+    //         let index_bit = builder.get(index_bits, i);
+    //         let index_sibling_mod_2: Var<C::N> =
+    //             builder.eval(SymbolicVar::from(C::N::ONE) - index_bit);
+    //         let i_plus_one = builder.eval_expr(i + RVar::one());
+    //         let index_pair = index_bits.shift(builder, i_plus_one);
+
+    //         let evals: Array<C, Ext<C::F, C::EF>> = builder.array(2);
+    //         let eval_0: Ext<C::F, C::EF>;
+    //         let eval_1: Ext<C::F, C::EF>;
+    //         if builder.flags.static_only {
+    //             [eval_0, eval_1] = cond_eval(
+    //                 builder,
+    //                 index_sibling_mod_2,
+    //                 step.sibling_value,
+    //                 folded_eval,
+    //             );
+    //             builder.set_value(&evals, 0, eval_0);
+    //             builder.set_value(&evals, 1, eval_1);
+    //         } else {
+    //             builder.set_value(&evals, 0, folded_eval);
+    //             builder.set_value(&evals, 1, folded_eval);
+    //             // This is faster than branching.
+    //             builder.set_value(&evals, index_sibling_mod_2, step.sibling_value);
+    //             eval_0 = builder.get(&evals, 0);
+    //             eval_1 = builder.get(&evals, 1);
+    //         }
+
+    //         let dims = DimensionsVariable::<C> {
+    //             height: builder.sll(C::N::ONE, log_folded_height),
+    //         };
+    //         let dims_slice: Array<C, DimensionsVariable<C>> = builder.array(1);
+    //         builder.set_value(&dims_slice, 0, dims);
+
+    //         let opened_values = builder.array(1);
+    //         builder.set_value(&opened_values, 0, evals);
+    //         builder.cycle_tracker_start("verify-batch-ext");
+    //         verify_batch::<C>(
+    //             builder,
+    //             &commit,
+    //             dims_slice,
+    //             index_pair,
+    //             &NestedOpenedValues::Ext(opened_values),
+    //             &step.opening_proof,
+    //         );
+    //         builder.cycle_tracker_end("verify-batch-ext");
+
+    //         let two_adic_generator_one = config.get_two_adic_generator(builder, Usize::from(1));
+
+    //         let [xs_0, xs_1]: [Ext<_, _>; 2] =
+    //             cond_eval(builder, index_sibling_mod_2, x * two_adic_generator_one, x);
+
+    //         builder.assign(
+    //             &folded_eval,
+    //             eval_0 + (beta - xs_0) * (eval_1 - eval_0) / (xs_1 - xs_0),
+    //         );
+
+    //         builder.assign(&x, x * x);
+    //     });
 
     builder.cycle_tracker_end("verify-query");
     folded_eval

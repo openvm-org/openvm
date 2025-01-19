@@ -1,4 +1,4 @@
-use openvm_native_compiler::ir::{Builder, Witness};
+use openvm_native_compiler::ir::{Builder, Var, Witness};
 use openvm_stark_sdk::p3_bn254_fr::Bn254Fr;
 
 use super::types::BatchOpeningVariable;
@@ -21,16 +21,16 @@ impl Witnessable<C> for OuterCommitPhaseStep {
     type WitnessVariable = FriCommitPhaseProofStepVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
-        let sibling_value = self.sibling_value.read(builder);
+        let opened_rows = self.opened_rows.read(builder);
         let opening_proof = to_digest_val_vec(&self.opening_proof).read(builder);
         Self::WitnessVariable {
-            sibling_value,
+            opened_rows,
             opening_proof,
         }
     }
 
     fn write(&self, witness: &mut Witness<OuterConfig>) {
-        self.sibling_value.write(witness);
+        self.opened_rows.write(witness);
         to_digest_val_vec(&self.opening_proof).write(witness);
     }
 }
