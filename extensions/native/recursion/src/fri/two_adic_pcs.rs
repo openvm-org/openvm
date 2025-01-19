@@ -222,7 +222,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                             builder.assign(&cur_ro, cur_ro + cur_alpha_pow * n / (z - x));
                             builder.assign(
                                 &cur_alpha_pow,
-                                cur_alpha_pow * alpha_pow_vec[ps_at_z.len().value() - 1],
+                                cur_alpha_pow * alpha_pow_vec[ps_at_z.len().value() - 1] * alpha,
                             );
                         } else {
                             let mat_ro = builder.fri_single_reduced_opening_eval(
