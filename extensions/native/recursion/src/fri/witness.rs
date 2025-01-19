@@ -1,4 +1,4 @@
-use openvm_native_compiler::ir::{Builder, Var, Witness};
+use openvm_native_compiler::ir::{Builder, Witness};
 use openvm_stark_sdk::p3_bn254_fr::Bn254Fr;
 
 use super::types::BatchOpeningVariable;
@@ -64,11 +64,13 @@ impl Witnessable<C> for OuterFriProof {
         let commit_phase_commits = self.commit_phase_commits.read(builder);
         let query_proofs = self.query_proofs.read(builder);
         let final_poly = self.final_poly.read(builder);
+        let log_max_height = builder.hint_var();
         let pow_witness = self.pow_witness.read(builder);
         Self::WitnessVariable {
             commit_phase_commits,
             query_proofs,
             final_poly,
+            log_max_height,
             pow_witness,
         }
     }
@@ -77,6 +79,7 @@ impl Witnessable<C> for OuterFriProof {
         self.commit_phase_commits.write(witness);
         <Vec<_> as Witnessable<C>>::write(&self.query_proofs, witness);
         self.final_poly.write(witness);
+        self.log_max_height.write(witness);
         self.pow_witness.write(witness);
     }
 }

@@ -2,6 +2,7 @@ use openvm_native_compiler::{
     asm::AsmConfig,
     ir::{Builder, Config, DIGEST_SIZE},
 };
+use openvm_stark_backend::p3_field::FieldAlgebra;
 
 use super::types::BatchOpeningVariable;
 use crate::{
@@ -88,11 +89,13 @@ impl Hintable<C> for InnerFriProof {
         let commit_phase_commits = Vec::<InnerDigest>::read(builder);
         let query_proofs = Vec::<InnerQueryProof>::read(builder);
         let final_poly = builder.hint_exts();
+        let log_max_height = builder.hint_var();
         let pow_witness = builder.hint_felt();
         Self::HintVariable {
             commit_phase_commits,
             query_proofs,
             final_poly,
+            log_max_height,
             pow_witness,
         }
     }
@@ -109,6 +112,7 @@ impl Hintable<C> for InnerFriProof {
         ));
         stream.extend(Vec::<InnerQueryProof>::write(&self.query_proofs));
         stream.extend(self.final_poly.write());
+        stream.extend(<C as Config>::F::from_canonical_usize(self.log_max_height).write());
         stream.push(vec![self.pow_witness]);
 
         stream
