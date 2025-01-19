@@ -201,8 +201,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                         if builder.flags.static_only {
                             let n: Ext<C::F, C::EF> = builder.constant(C::EF::ZERO);
                             builder.range(0, ps_at_z.len()).for_each(|t, builder| {
-                                let reverse_idx =
-                                    builder.eval_expr(ps_at_z.len() - RVar::from(1) - t);
+                                let reverse_idx = RVar::from(ps_at_z.len().value() - 1 - t.value());
                                 let p_at_x = builder.get(&mat_opening, reverse_idx);
                                 let p_at_z = builder.get(&ps_at_z, reverse_idx);
 
