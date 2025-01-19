@@ -2,6 +2,7 @@ use openvm_native_compiler::{
     asm::AsmConfig,
     ir::{Builder, Config, DIGEST_SIZE},
 };
+use openvm_stark_backend::p3_field::FieldAlgebra;
 
 use super::types::BatchOpeningVariable;
 use crate::{
@@ -35,10 +36,10 @@ impl Hintable<C> for InnerCommitPhaseStep {
     type HintVariable = FriCommitPhaseProofStepVariable<C>;
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
-        let sibling_value = builder.hint_ext();
+        let opened_rows = Vec::<Vec<InnerChallenge>>::read(builder);
         let opening_proof = Vec::<InnerDigest>::read(builder);
         Self::HintVariable {
-            sibling_value,
+            opened_rows,
             opening_proof,
         }
     }
@@ -46,7 +47,7 @@ impl Hintable<C> for InnerCommitPhaseStep {
     fn write(&self) -> Vec<Vec<<C as Config>::F>> {
         let mut stream = Vec::new();
 
-        stream.extend(Hintable::<C>::write(&vec![self.sibling_value]));
+        stream.extend(Hintable::<C>::write(&self.opened_rows));
         stream.extend(Vec::<InnerDigest>::write(&self.opening_proof));
 
         stream
@@ -88,11 +89,13 @@ impl Hintable<C> for InnerFriProof {
         let commit_phase_commits = Vec::<InnerDigest>::read(builder);
         let query_proofs = Vec::<InnerQueryProof>::read(builder);
         let final_poly = builder.hint_exts();
+        let log_max_height = builder.hint_var();
         let pow_witness = builder.hint_felt();
         Self::HintVariable {
             commit_phase_commits,
             query_proofs,
             final_poly,
+            log_max_height,
             pow_witness,
         }
     }
@@ -109,6 +112,7 @@ impl Hintable<C> for InnerFriProof {
         ));
         stream.extend(Vec::<InnerQueryProof>::write(&self.query_proofs));
         stream.extend(self.final_poly.write());
+        stream.extend(<C as Config>::F::from_canonical_usize(self.log_max_height).write());
         stream.push(vec![self.pow_witness]);
 
         stream

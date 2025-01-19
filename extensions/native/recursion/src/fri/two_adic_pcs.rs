@@ -75,8 +75,7 @@ pub fn verify_two_adic_pcs<C: Config>(
 
     challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
 
-    let log_max_height =
-        builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(log_blowup));
+    let log_max_height = builder.eval_expr(proof.log_max_height);
 
     builder
         .iter(&proof.query_proofs)
