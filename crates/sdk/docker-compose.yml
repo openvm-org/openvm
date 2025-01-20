@@ -1,0 +1,36 @@
+version: "3.8"
+services:
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    network_mode: host
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/scrape-config.yml"
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus-config:/etc/prometheus
+      - prom_data:/prometheus
+    network_mode: host
+
+  prometheus-gateway:
+    image: prom/pushgateway
+    container_name: prometheus-gateway
+    restart: unless-stopped
+    ports:
+      - 9091:9091
+    network_mode: host
+
+volumes:
+  grafana-storage: {}
+  prom_data:

@@ -48,7 +48,7 @@ pub mod static_verifier;
 pub mod keygen;
 pub mod verifier;
 
-mod recorder;
+mod metrics;
 mod stdin;
 
 pub use stdin::*;
@@ -57,8 +57,8 @@ pub mod fs;
 use crate::{
     config::AggConfig,
     keygen::AggProvingKey,
+    metrics::install_prometheus_gateway,
     prover::{AppProver, ContinuationProver},
-    recorder::{install_prometheus_recorder, PrometheusRecorder},
 };
 
 pub(crate) type SC = BabyBearPoseidon2Config;
@@ -69,25 +69,18 @@ pub type NonRootCommittedExe = VmCommittedExe<SC>;
 
 pub struct Sdk;
 
-pub struct SdkWithProfiler<'a> {
+pub struct SdkWithPrometheusMetrics {
     sdk: Sdk,
-    profiler: &'a PrometheusRecorder,
 }
 
-impl<'a> SdkWithProfiler<'a> {
+impl SdkWithPrometheusMetrics {
     pub fn new() -> Self {
-        Self {
-            sdk: Sdk,
-            profiler: install_prometheus_recorder(),
-        }
-    }
-
-    pub fn get_profiler(&self) -> &'a PrometheusRecorder {
-        &self.profiler
+        install_prometheus_gateway();
+        Self { sdk: Sdk }
     }
 }
 
-impl<'a> Deref for SdkWithProfiler<'a> {
+impl Deref for SdkWithPrometheusMetrics {
     type Target = Sdk;
 
     fn deref(&self) -> &Self::Target {
