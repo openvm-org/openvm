@@ -222,8 +222,6 @@ impl BabyBearChip {
                 max_bits,
             },
         );
-        // let (_, r) = signed_div_mod(&self.range, ctx, diff, BabyBear::ORDER_U32, max_bits);
-        // self.gate().assert_is_const(ctx, &r, &Fr::ZERO);
         debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() / b.to_baby_bear());
         c
     }
@@ -259,7 +257,7 @@ impl BabyBearChip {
             [0],
         );
         let div = ctx.get(-2);
-        // Constrain that `abs(div) <= 2 ** (2 ** a_num_bits / b`).bits().
+        // Constrain that `abs(div) <= 2 ** (2 ** a_num_bits / b).bits()`.
         let bound = (BigUint::from(1u32) << (a_num_bits as u32)) / &b;
         let shifted_div =
             self.range
@@ -271,7 +269,7 @@ impl BabyBearChip {
         // In particular, 2 * bound + 1 has at most Fr::CAPACITY - RESERVED_HIGH_BITS - BABYBEAR_ORDER_BITS + 1 bits.
         // Most notably, suppose we could fake |p * shifted_div - p * shifted_div'| < p, with both shifted_div and shifted_div'
         // distinct and satisfying the range check. We note that |shifted_div-shifted_div'| < 1 << (Fr::CAPACITY - RESERVED_HIGH_BITS - BABYBEAR_ORDER_BITS + 1)
-        // In particular, even if we multiply by babybear, we have 0 < p * |shifted_div-shifted_div' < 1 << (Fr::CAPACITY - RESERVED_HIGH_BITS + 2)
+        // In particular, even if we multiply by babybear, we have 0 < p * |shifted_div-shifted_div'| < 1 << (Fr::CAPACITY - RESERVED_HIGH_BITS + 2)
         // its pretty clear that this has no overlap with (-p, p), so we are safe.
         self.range
             .range_check(ctx, shifted_div, (bound * 2u32 + 1u32).bits() as usize);
@@ -321,7 +319,7 @@ where
     );
     let rem = ctx.get(-4);
     let div = ctx.get(-2);
-    // Constrain that `abs(div) <= 2 ** (2 ** a_num_bits / b`).bits().
+    // Constrain that `abs(div) <= 2 ** (2 ** a_num_bits / b).bits()`.
     let bound = (BigUint::from(1u32) << (a_num_bits as u32)) / &b;
     let shifted_div = range
         .gate()
@@ -332,7 +330,7 @@ where
     // In particular, 2 * bound + 1 has at most Fr::CAPACITY - RESERVED_HIGH_BITS - BABYBEAR_ORDER_BITS + 1 bits.
     // Most notably, suppose we could fake |p * shifted_div - p * shifted_div'| < p, with both shifted_div and shifted_div'
     // distinct and satisfying the range check. We note that |shifted_div-shifted_div'| < 1 << (Fr::CAPACITY - RESERVED_HIGH_BITS - BABYBEAR_ORDER_BITS + 1)
-    // In particular, even if we multiply by babybear, we have 0 < p * |shifted_div-shifted_div' < 1 << (Fr::CAPACITY - RESERVED_HIGH_BITS + 2)
+    // In particular, even if we multiply by babybear, we have 0 < p * |shifted_div-shifted_div'| < 1 << (Fr::CAPACITY - RESERVED_HIGH_BITS + 2)
     // its pretty clear that this has no overlap with (-p, p), so we are safe.
     range.range_check(ctx, shifted_div, (bound * 2u32 + 1u32).bits() as usize);
     // Constrain that remainder is less than divisor (i.e. `r < b`).

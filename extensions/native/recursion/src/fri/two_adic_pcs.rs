@@ -202,7 +202,6 @@ pub fn verify_two_adic_pcs<C: Config>(
                             builder.range(0, ps_at_z.len()).for_each(|t, builder| {
                                 let p_at_x = builder.get(&mat_opening, t);
                                 let p_at_z = builder.get(&ps_at_z, t);
-                                // let quotient = (p_at_z - p_at_x) / (z - x);
 
                                 builder.assign(&n, cur_alpha_pow * (p_at_z - p_at_x) + n);
                                 builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
