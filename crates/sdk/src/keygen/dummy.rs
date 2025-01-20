@@ -68,23 +68,27 @@ pub(super) fn compute_root_proof_heights(
     (air_heights, internal_heights)
 }
 
-pub(super) fn dummy_minimal_proof(
-    leaf_vm_pk: &Arc<VmProvingKey<SC, NativeConfig>>,
-    num_public_values: usize,
+pub(super) fn dummy_minimal_proof<VC: VmConfig<F>>(
+    app_vm_pk: Arc<VmProvingKey<SC, VC>>,
     app_fri_params: FriParameters,
-) -> Proof<SC> {
+    num_public_values: usize,
+) -> Proof<SC>
+where
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
+{
     // let leaf_fri_params = standard_fri_params_with_100_bits_conjectured_security(1);
     let app_vm_pk = Arc::new(dummy_riscv_app_vm_pk(num_public_values, app_fri_params));
     let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), None);
-    let leaf_exe = dummy_app_committed_exe(leaf_vm_pk.fri_params);
-    let mut leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, 1);
-    let leaf_input = leaf_inputs.pop().unwrap();
-    let prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(
-        leaf_vm_pk.clone(),
-        leaf_exe,
-    );
+    app_proof.per_segment[0].clone()
+    // let app_exe = dummy_app_committed_exe(app_vm_pk.fri_params);
+    // let mut leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, 1);
+    // let leaf_input = leaf_inputs.pop().unwrap();
+    // let root_prover =
+    //     VmLocalProver::<SC, VC, BabyBearPoseidon2Engine>::new(app_vm_pk.clone(), app_exe);
 
-    SingleSegmentVmProver::prove(&prover, leaf_input.write_to_stream())
+    // // SingleSegmentVmProver::prove(&prover, leaf_input.write_to_stream())
+    // let proof = ContinuationVmProver::prove(&app_prover, vec![])
 }
 
 pub(super) fn dummy_internal_proof(

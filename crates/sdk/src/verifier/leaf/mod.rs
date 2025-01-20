@@ -24,7 +24,7 @@ use crate::{
             get_program_commit, types::VmVerifierPvs,
         },
         leaf::types::UserPublicValuesRootProof,
-        utils::VariableP2Compressor,
+        utils::{verify_user_public_values_root, VariableP2Compressor},
     },
     C, F,
 };
@@ -56,6 +56,7 @@ impl LeafVmVerifierConfig {
             builder.cycle_tracker_start("ReadProofsFromInput");
             let proofs: Array<C, StarkProofVariable<_>> =
                 <Vec<Proof<BabyBearPoseidon2Config>> as Hintable<C>>::read(&mut builder);
+            println!("proofs: {:?}", proofs.len());
             // At least 1 proof should be provided.
             builder.assert_ne::<Usize<_>>(proofs.len(), RVar::zero());
             builder.cycle_tracker_end("ReadProofsFromInput");
@@ -88,8 +89,11 @@ impl LeafVmVerifierConfig {
             builder.cycle_tracker_start("ExtractPublicValuesCommit");
             let is_terminate = builder.cast_felt_to_var(pvs.connector.is_terminate);
             builder.if_eq(is_terminate, F::ONE).then(|builder| {
-                let (pv_commit, expected_memory_root) =
-                    self.verify_user_public_values_root(builder);
+                let (pv_commit, expected_memory_root) = verify_user_public_values_root(
+                    builder,
+                    self.app_system_config.num_public_values,
+                    self.app_system_config.memory_config,
+                );
                 builder.assert_eq::<[_; DIGEST_SIZE]>(pvs.memory.final_root, expected_memory_root);
                 builder.assign(&pvs.public_values_commit, pv_commit);
             });
@@ -102,37 +106,5 @@ impl LeafVmVerifierConfig {
         }
 
         builder.compile_isa_with_options(self.compiler_options)
-    }
-
-    /// Read the public values root proof from the input stream and verify it.
-    /// This verification must be consistent `openvm_circuit::system::memory::tree::public_values`.
-    /// Returns the public values commit and the corresponding memory state root.
-    fn verify_user_public_values_root(
-        &self,
-        builder: &mut Builder<C>,
-    ) -> ([Felt<F>; DIGEST_SIZE], [Felt<F>; DIGEST_SIZE]) {
-        let memory_dimensions = self.app_system_config.memory_config.memory_dimensions();
-        let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
-        let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
-        let pv_height = log2_strict_usize(self.app_system_config.num_public_values / DIGEST_SIZE);
-        let proof_len = memory_dimensions.overall_height() - pv_height;
-        let idx_prefix = pv_start_idx >> pv_height;
-
-        // Read the public values root proof from the input stream.
-        let root_proof = UserPublicValuesRootProof::<F>::read(builder);
-        builder.assert_eq::<Usize<_>>(root_proof.sibling_hashes.len(), Usize::from(proof_len));
-        let mut curr_commit = root_proof.public_values_commit;
-        // Share the same state array to avoid unnecessary allocations.
-        let compressor = VariableP2Compressor::new(builder);
-        for i in 0..proof_len {
-            let sibling_hash = builder.get(&root_proof.sibling_hashes, i);
-            let (l_hash, r_hash) = if idx_prefix & (1 << i) != 0 {
-                (sibling_hash, curr_commit)
-            } else {
-                (curr_commit, sibling_hash)
-            };
-            curr_commit = compressor.compress(builder, &l_hash, &r_hash);
-        }
-        (root_proof.public_values_commit, curr_commit)
     }
 }

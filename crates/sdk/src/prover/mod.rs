@@ -83,18 +83,19 @@ pub struct SingleSegmentContinuationProver<VC> {
 impl<VC> SingleSegmentContinuationProver<VC> {
     pub fn new(
         reader: &impl Halo2ParamsReader,
-        app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
-        minimal_pk: MinimalProvingKey,
+        minimal_pk: MinimalProvingKey<VC>,
     ) -> Self
     where
         VC: VmConfig<F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
     {
         let MinimalProvingKey {
             minimal_stark_pk,
             halo2_pk,
         } = minimal_pk;
-        let minimal_prover = MinimalProver::new(app_pk, app_committed_exe, minimal_stark_pk);
+        let minimal_prover = MinimalProver::new(app_committed_exe, minimal_stark_pk);
         Self {
             minimal_prover,
             halo2_prover: Halo2Prover::new(reader, halo2_pk),

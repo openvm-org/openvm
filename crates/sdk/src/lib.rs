@@ -210,37 +210,45 @@ impl Sdk {
         Ok(evm_verifier)
     }
 
-    pub fn minimal_keygen(
+    pub fn minimal_keygen<VC: VmConfig<F>>(
         &self,
-        config: MinimalConfig,
+        app_config: AppConfig<VC>,
+        minimal_config: MinimalConfig<VC>,
         reader: &impl Halo2ParamsReader,
-    ) -> Result<MinimalProvingKey> {
-        let minimal_pk = MinimalProvingKey::keygen(config, reader);
+    ) -> Result<MinimalProvingKey<VC>>
+    where
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let minimal_pk = MinimalProvingKey::keygen(app_config, minimal_config, reader);
         Ok(minimal_pk)
     }
 
     pub fn generate_minimal_evm_proof<VC: VmConfig<F>>(
         &self,
         reader: &impl Halo2ParamsReader,
-        app_pk: Arc<AppProvingKey<VC>>,
         app_exe: Arc<NonRootCommittedExe>,
-        minimal_pk: MinimalProvingKey,
+        minimal_pk: MinimalProvingKey<VC>,
         inputs: StdIn,
     ) -> Result<EvmProof>
     where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let e2e_prover = SingleSegmentContinuationProver::new(reader, app_pk, app_exe, minimal_pk);
+        let e2e_prover = SingleSegmentContinuationProver::new(reader, app_exe, minimal_pk);
         let proof = e2e_prover.generate_proof_for_evm(inputs);
         Ok(proof)
     }
 
-    pub fn generate_minimal_snark_verifier_contract(
+    pub fn generate_minimal_snark_verifier_contract<VC: VmConfig<F>>(
         &self,
         reader: &impl Halo2ParamsReader,
-        minimal_pk: &MinimalProvingKey,
-    ) -> Result<EvmVerifier> {
+        minimal_pk: &MinimalProvingKey<VC>,
+    ) -> Result<EvmVerifier>
+    where
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
         let params =
             reader.read_params(minimal_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
         let evm_verifier = minimal_pk.halo2_pk.wrapper.generate_evm_verifier(&params);

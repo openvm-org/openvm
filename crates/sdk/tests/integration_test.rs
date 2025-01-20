@@ -113,12 +113,17 @@ fn agg_stark_config_for_test() -> AggStarkConfig {
     }
 }
 
-fn minimal_config_for_test() -> MinimalConfig {
+fn minimal_config_for_test(app_log_blowup: usize) -> MinimalConfig<NativeConfig> {
     MinimalConfig {
         minimal_stark_config: MinimalStarkConfig {
             max_num_user_public_values: NUM_PUB_VALUES,
-            leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(
-                LEAF_LOG_BLOWUP,
+            app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
+            app_vm_config: NativeConfig::new(
+                SystemConfig::default()
+                    .with_max_segment_len(200)
+                    .with_continuations()
+                    .with_public_values(16),
+                Native,
             ),
             root_fri_params: standard_fri_params_with_100_bits_conjectured_security(
                 ROOT_LOG_BLOWUP,
@@ -304,51 +309,60 @@ fn test_e2e_proof_generation_and_verification() {
     assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof));
 }
 
-#[test]
-fn test_e2e_minimal_proof_generation_and_verification() {
-    let app_log_blowup = 1;
-    let app_config = small_test_app_config(app_log_blowup);
-    let app_pk = Sdk.app_keygen(app_config).unwrap();
-    let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
-    let minimal_pk = Sdk
-        .minimal_keygen(minimal_config_for_test(), &params_reader)
-        .unwrap();
-    let evm_verifier = Sdk
-        .generate_minimal_snark_verifier_contract(&params_reader, &minimal_pk)
-        .unwrap();
-
-    let evm_proof = Sdk
-        .generate_minimal_evm_proof(
-            &params_reader,
-            Arc::new(app_pk),
-            app_committed_exe_for_test(app_log_blowup),
-            minimal_pk,
-            StdIn::default(),
-        )
-        .unwrap();
-    assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof));
-}
-
 // #[test]
 // fn test_e2e_minimal_proof_generation_and_verification() {
 //     let app_log_blowup = 1;
 //     let app_config = small_test_app_config(app_log_blowup);
+//     let app_pk = Sdk.app_keygen(app_config).unwrap();
 //     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
-//     let minimal_pk = Sdk.minimal_keygen(app_config, minimal_agg_config, &params_reader).unwrap();
+//     println!("minimal_keygen");
+//     let minimal_pk = Sdk
+//         .minimal_keygen(minimal_config_for_test(), &params_reader)
+//         .unwrap();
+//     println!("generate_minimal_snark_verifier_contract");
 //     let evm_verifier = Sdk
 //         .generate_minimal_snark_verifier_contract(&params_reader, &minimal_pk)
 //         .unwrap();
 
+//     println!("generate_minimal_evm_proof");
 //     let evm_proof = Sdk
 //         .generate_minimal_evm_proof(
 //             &params_reader,
+//             Arc::new(app_pk),
 //             app_committed_exe_for_test(app_log_blowup),
 //             minimal_pk,
 //             StdIn::default(),
 //         )
 //         .unwrap();
+//     println!("verify_evm_proof");
 //     assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof));
 // }
+
+#[test]
+fn test_e2e_minimal_proof_generation_and_verification() {
+    let app_log_blowup = 1;
+    let app_config = small_test_app_config(app_log_blowup);
+    let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
+    println!("minimal_keygen");
+    let minimal_pk = Sdk
+        .minimal_keygen(app_config, minimal_config_for_test(3), &params_reader)
+        .unwrap();
+    println!("generate_minimal_snark_verifier_contract");
+    let evm_verifier = Sdk
+        .generate_minimal_snark_verifier_contract(&params_reader, &minimal_pk)
+        .unwrap();
+    println!("generate_minimal_evm_proof");
+    let evm_proof = Sdk
+        .generate_minimal_evm_proof(
+            &params_reader,
+            app_committed_exe_for_test(app_log_blowup),
+            minimal_pk,
+            StdIn::default(),
+        )
+        .unwrap();
+    println!("verify_evm_proof");
+    assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof));
+}
 
 #[test]
 fn test_sdk_guest_build_and_transpile() {

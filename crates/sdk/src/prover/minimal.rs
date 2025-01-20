@@ -26,30 +26,32 @@ pub struct MinimalProver<VC> {
     minimal_stark_prover: MinimalStarkProver,
 }
 
-impl<VC> MinimalProver<VC> {
+impl<VC> MinimalProver<VC>
+where
+    VC: VmConfig<F>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
+{
     pub fn new(
-        app_pk: Arc<AppProvingKey<VC>>,
         app_exe: Arc<NonRootCommittedExe>,
-        minimal_stark_pk: MinimalStarkProvingKey,
-    ) -> Self
-    where
-        VC: VmConfig<F>,
-    {
+        minimal_stark_pk: MinimalStarkProvingKey<VC>,
+    ) -> Self {
+        let app_vm_pk = minimal_stark_pk.app_vm_pk.clone();
         assert_eq!(
-            app_pk.leaf_fri_params, minimal_stark_pk.leaf_vm_pk.fri_params,
+            app_vm_pk.fri_params, minimal_stark_pk.root_verifier_pk.vm_pk.fri_params,
             "App VM is incompatible with Minimal VM because of leaf FRI parameters"
         );
         assert_eq!(
-            app_pk.app_vm_pk.vm_config.system().num_public_values,
+            app_vm_pk.vm_config.system().num_public_values,
             minimal_stark_pk.num_public_values(),
             "App VM is incompatible with Minimal VM because of the number of public values"
         );
 
         Self {
-            app_prover: AppProver::new(app_pk.app_vm_pk.clone(), app_exe),
+            app_prover: AppProver::new(app_vm_pk.clone(), app_exe),
             minimal_stark_prover: MinimalStarkProver::new(
                 minimal_stark_pk,
-                app_pk.leaf_committed_exe.clone(),
+                // app_pk.leaf_committed_exe.clone(),
             ),
         }
     }
@@ -75,38 +77,31 @@ impl<VC> MinimalProver<VC> {
 }
 
 pub struct MinimalStarkProver {
-    leaf_prover: LeafProver,
+    // leaf_prover: LeafProver,
     root_prover: RootVerifierLocalProver,
 }
 
 impl MinimalStarkProver {
-    pub fn new(
-        minimal_verifier_pk: MinimalStarkProvingKey,
-        leaf_committed_exe: Arc<NonRootCommittedExe>,
-    ) -> Self {
+    pub fn new<VC: VmConfig<F>>(minimal_verifier_pk: MinimalStarkProvingKey<VC>) -> Self
+    where
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
         println!(
             "Creating MinimalStarkProver vmconfig: {:?}",
             minimal_verifier_pk.root_verifier_pk.vm_pk.vm_config
         );
-
-        let leaf_prover = LeafProver::new(minimal_verifier_pk.leaf_vm_pk, leaf_committed_exe);
         let root_prover = RootVerifierLocalProver::new(minimal_verifier_pk.root_verifier_pk);
-        Self {
-            leaf_prover,
-            root_prover,
-        }
+        Self { root_prover }
     }
 
     pub fn generate_agg_proof(&self, app_proofs: ContinuationVmProof<SC>) -> Proof<RootSC> {
-        let leaf_proof = self.leaf_prover.generate_proof(&app_proofs);
-        let public_values = app_proofs.user_public_values.public_values;
-
-        // Validate proof heights before root proof generation
         let root_input = RootVmVerifierInput {
-            proofs: leaf_proof.clone(),
-            public_values: public_values.clone(),
+            proofs: app_proofs.per_segment.clone(),
+            public_values: app_proofs.user_public_values.public_values.clone(),
         };
 
+        // Validate proof heights before root proof generation
         let actual_air_heights = self.root_prover.execute_for_air_heights(root_input.clone());
         assert!(
             heights_le(
@@ -116,10 +111,7 @@ impl MinimalStarkProver {
             "Proof heights exceed root verifier capacity"
         );
 
-        self.generate_root_proof_impl(RootVmVerifierInput {
-            proofs: leaf_proof,
-            public_values,
-        })
+        self.generate_root_proof_impl(root_input)
     }
 
     fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<RootSC> {
@@ -175,3 +167,5 @@ impl SingleSegmentVmProver<RootSC> for MinimalStarkProver {
         e.prove(&self.root_prover.root_verifier_pk.vm_pk.vm_pk, proof_input)
     }
 }
+
+pub struct MinimalRootVerifierProver {}

@@ -1,10 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use derivative::Derivative;
-use dummy::{
-    compute_root_proof_heights, dummy_internal_proof_riscv_app_vm, dummy_leaf_proof_riscv_app_vm,
-    dummy_minimal_proof,
-};
+use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm, dummy_minimal_proof};
 use openvm_circuit::{
     arch::{VirtualMachine, VmConfig},
     system::program::trace::VmCommittedExe,
@@ -75,15 +72,16 @@ pub struct AggStarkProvingKey {
 
 /// Minimal proving key for App->Root->Static Verifier->Wrapper
 #[derive(Clone, Serialize, Deserialize)]
-pub struct MinimalProvingKey {
-    pub minimal_stark_pk: MinimalStarkProvingKey,
+pub struct MinimalProvingKey<VC> {
+    pub minimal_stark_pk: MinimalStarkProvingKey<VC>,
     pub halo2_pk: Halo2ProvingKey,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct MinimalStarkProvingKey {
-    pub leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-    // pub leaf_committed_exe: Arc<NonRootCommittedExe>,
+pub struct MinimalStarkProvingKey<VC> {
+    // pub leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
+    pub app_vm_pk: Arc<VmProvingKey<SC, VC>>,
+    // pub app_committed_exe: Arc<NonRootCommittedExe>,
     pub root_verifier_pk: RootVerifierProvingKey,
 }
 
@@ -307,51 +305,91 @@ impl RootVerifierProvingKey {
     }
 }
 
-impl MinimalStarkProvingKey {
-    pub fn keygen(config: MinimalStarkConfig) -> Self {
+impl AggProvingKey {
+    /// Attention:
+    /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.
+    /// - Please make sure SRS(KZG parameters) is already downloaded.
+    #[tracing::instrument(level = "info", fields(group = "agg_keygen"), skip_all)]
+    pub fn keygen(config: AggConfig, reader: &impl Halo2ParamsReader) -> Self {
+        let AggConfig {
+            agg_stark_config,
+            halo2_config,
+        } = config;
+        let (agg_stark_pk, dummy_internal_proof) =
+            AggStarkProvingKey::dummy_proof_and_keygen(agg_stark_config);
+        let dummy_root_proof = agg_stark_pk
+            .root_verifier_pk
+            .generate_dummy_root_proof(vec![dummy_internal_proof]);
+        // FIXME: Halo2VerifierProvingKey is not Send + Sync because Array/Usize use Rc<RefCell>.
+        let verifier = agg_stark_pk.root_verifier_pk.keygen_static_verifier(
+            &reader.read_params(halo2_config.verifier_k),
+            dummy_root_proof,
+        );
+        let dummy_snark = verifier.generate_dummy_snark(reader);
+        let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {
+            Halo2WrapperProvingKey::keygen(&reader.read_params(wrapper_k), dummy_snark)
+        } else {
+            Halo2WrapperProvingKey::keygen_auto_tune(reader, dummy_snark)
+        };
+        let halo2_pk = Halo2ProvingKey { verifier, wrapper };
+        Self {
+            agg_stark_pk,
+            halo2_pk,
+        }
+    }
+}
+
+impl<VC> MinimalStarkProvingKey<VC>
+where
+    VC: VmConfig<F>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
+{
+    pub fn keygen(config: MinimalStarkConfig<VC>) -> Self {
         tracing::info_span!("minimal_stark_keygen", group = "minimal_stark_keygen")
             .in_scope(|| Self::dummy_proof_and_keygen(config).0)
     }
 
-    pub fn dummy_proof_and_keygen(config: MinimalStarkConfig) -> (Self, Proof<SC>) {
-        let leaf_vm_config = config.leaf_vm_config();
+    pub fn dummy_proof_and_keygen(config: MinimalStarkConfig<VC>) -> (Self, Proof<SC>) {
+        // let leaf_vm_config = config.leaf_vm_config();
         let root_vm_config = config.root_verifier_vm_config();
 
-        println!("MinimalStarkConfig: {:?}", config);
+        // println!("MinimalStarkConfig: {:?}", config);
 
-        let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params);
-        let leaf_vm_pk = Arc::new({
-            let vm = VirtualMachine::new(leaf_engine, leaf_vm_config.clone());
+        let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params);
+        let app_vm_pk = Arc::new({
+            let vm = VirtualMachine::new(app_engine, config.app_vm_config.clone());
             let vm_pk = vm.keygen();
-            assert!(vm_pk.max_constraint_degree <= config.leaf_fri_params.max_constraint_degree());
+            assert!(vm_pk.max_constraint_degree <= config.app_fri_params.max_constraint_degree());
             VmProvingKey {
-                fri_params: config.leaf_fri_params,
-                vm_config: leaf_vm_config,
+                fri_params: config.app_fri_params,
+                vm_config: config.app_vm_config.clone(),
                 vm_pk,
             }
         });
-        // let leaf_vm_vk = leaf_vm_pk.vm_pk.get_vk();
+        // // let leaf_vm_vk = leaf_vm_pk.vm_pk.get_vk();
 
-        // Generate dummy app proof for root verifier setup
-        let leaf_proof = dummy_leaf_proof_riscv_app_vm(
-            leaf_vm_pk.clone(),
-            config.max_num_user_public_values,
-            config.leaf_fri_params,
-        );
-        // let leaf_proof = dummy_minimal_proof(
-        //     &leaf_vm_pk,
+        // // Generate dummy app proof for root verifier setup
+        // let leaf_proof = dummy_leaf_proof_riscv_app_vm(
+        //     leaf_vm_pk.clone(),
         //     config.max_num_user_public_values,
-        //     config.leaf_fri_params,
+        //     config.app_fri_params,
         // );
+        let dummy_proof = dummy_minimal_proof(
+            app_vm_pk.clone(),
+            config.app_fri_params,
+            config.max_num_user_public_values,
+        );
 
         let root_verifier_pk = {
             let root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
             let minimal_root_program = MinimalVmVerifierConfig {
-                leaf_fri_params: config.leaf_fri_params,
                 num_public_values: config.max_num_user_public_values,
+                app_fri_params: config.root_fri_params,
+                app_system_config: config.app_vm_config.system().clone(),
                 compiler_options: config.compiler_options,
             }
-            .build_program(&leaf_vm_pk.vm_pk.get_vk());
+            .build_program(&app_vm_pk.vm_pk.get_vk());
             let root_committed_exe = Arc::new(VmCommittedExe::<RootSC>::commit(
                 minimal_root_program.into(),
                 root_engine.config.pcs(),
@@ -364,7 +402,7 @@ impl MinimalStarkProvingKey {
             let (air_heights, _internal_heights) = compute_root_proof_heights(
                 root_vm_config.clone(),
                 root_committed_exe.exe.clone(),
-                &leaf_proof,
+                &dummy_proof,
             );
             let root_air_perm = AirIdPermutation::compute(&air_heights);
             root_air_perm.permute(&mut vm_pk.per_air);
@@ -382,10 +420,10 @@ impl MinimalStarkProvingKey {
 
         (
             Self {
-                leaf_vm_pk,
+                app_vm_pk: app_vm_pk.clone(),
                 root_verifier_pk,
             },
-            leaf_proof,
+            dummy_proof,
         )
     }
 
@@ -399,30 +437,74 @@ impl MinimalStarkProvingKey {
     }
 }
 
-impl MinimalProvingKey {
+impl<VC> MinimalProvingKey<VC> {
     /// Attention:
     /// - This function is very expensive.
     /// - Please make sure SRS(KZG parameters) is already downloaded.
     #[tracing::instrument(level = "info", fields(group = "minimal_keygen"), skip_all)]
-    pub fn keygen(config: MinimalConfig, reader: &impl Halo2ParamsReader) -> Self {
+    pub fn keygen(
+        app_config: AppConfig<VC>,
+        minimal_config: MinimalConfig<VC>,
+        reader: &impl Halo2ParamsReader,
+    ) -> Self
+    where
+        VC: VmConfig<F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        // let app_engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params.fri_params);
+        // let app_vm_pk = {
+        //     let vm = VirtualMachine::new(app_engine, app_config.app_vm_config.clone());
+        //     let vm_pk = vm.keygen();
+        //     assert!(
+        //         vm_pk.max_constraint_degree
+        //             <= app_config.app_fri_params.fri_params.max_constraint_degree()
+        //     );
+        //     VmProvingKey {
+        //         fri_params: app_config.app_fri_params.fri_params,
+        //         vm_config: app_config.app_vm_config.clone(),
+        //         vm_pk,
+        //     }
+        // };
+        // let root_committed_exe = {
+        //     let root_engine = BabyBearPoseidon2RootEngine::new(
+        //         minimal_config.minimal_stark_config.root_fri_params,
+        //     );
+        //     let root_program = MinimalVmVerifierConfig {
+        //         num_public_values: minimal_config
+        //             .minimal_stark_config
+        //             .max_num_user_public_values,
+        //         app_fri_params: minimal_config.minimal_stark_config.root_fri_params,
+        //         app_system_config: app_config.app_vm_config.system().clone(),
+        //         compiler_options: minimal_config.minimal_stark_config.compiler_options,
+        //     }
+        //     .build_program(&app_vm_pk.vm_pk.get_vk());
+        //     Arc::new(VmCommittedExe::<RootSC>::commit(
+        //         root_program.into(),
+        //         root_engine.config.pcs(),
+        //     ))
+        // };
+
         let MinimalConfig {
             minimal_stark_config,
             halo2_config,
-        } = config;
-        let (minimal_stark_pk, leaf_internal_proof) =
+        } = minimal_config;
+        let (minimal_stark_pk, dummy_proof) =
             MinimalStarkProvingKey::dummy_proof_and_keygen(minimal_stark_config);
         let dummy_root_proof = minimal_stark_pk
             .root_verifier_pk
-            .generate_dummy_root_proof(leaf_internal_proof);
-        let verifier = minimal_stark_pk.root_verifier_pk.keygen_static_verifier(
-            &reader.read_params(halo2_config.verifier_k),
-            dummy_root_proof,
-        );
+            .generate_dummy_root_proof(vec![dummy_proof]);
+
+        // TODO: Remove; this is only for testing. cache the halo2 proving key to speed up test.
         let halo2_pk_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("target")
             .join("halo2_pk.bin");
         let halo2_pk = if !halo2_pk_path.exists() {
             println!("Generating Halo2 proving key");
+            let verifier = minimal_stark_pk.root_verifier_pk.keygen_static_verifier(
+                &reader.read_params(halo2_config.verifier_k),
+                dummy_root_proof,
+            );
             let dummy_snark = verifier.generate_dummy_snark(reader);
             let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {
                 Halo2WrapperProvingKey::keygen(&reader.read_params(wrapper_k), dummy_snark)
@@ -439,42 +521,9 @@ impl MinimalProvingKey {
             let bytes = std::fs::read(halo2_pk_path).unwrap();
             bitcode::deserialize(&bytes).unwrap()
         };
+
         Self {
             minimal_stark_pk,
-            halo2_pk,
-        }
-    }
-}
-
-impl AggProvingKey {
-    /// Attention:
-    /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.
-    /// - Please make sure SRS(KZG parameters) is already downloaded.
-    #[tracing::instrument(level = "info", fields(group = "agg_keygen"), skip_all)]
-    pub fn keygen(config: AggConfig, reader: &impl Halo2ParamsReader) -> Self {
-        let AggConfig {
-            agg_stark_config,
-            halo2_config,
-        } = config;
-        let (agg_stark_pk, dummy_internal_proof) =
-            AggStarkProvingKey::dummy_proof_and_keygen(agg_stark_config);
-        let dummy_root_proof = agg_stark_pk
-            .root_verifier_pk
-            .generate_dummy_root_proof(dummy_internal_proof);
-        // FIXME: Halo2VerifierProvingKey is not Send + Sync because Array/Usize use Rc<RefCell>.
-        let verifier = agg_stark_pk.root_verifier_pk.keygen_static_verifier(
-            &reader.read_params(halo2_config.verifier_k),
-            dummy_root_proof,
-        );
-        let dummy_snark = verifier.generate_dummy_snark(reader);
-        let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {
-            Halo2WrapperProvingKey::keygen(&reader.read_params(wrapper_k), dummy_snark)
-        } else {
-            Halo2WrapperProvingKey::keygen_auto_tune(reader, dummy_snark)
-        };
-        let halo2_pk = Halo2ProvingKey { verifier, wrapper };
-        Self {
-            agg_stark_pk,
             halo2_pk,
         }
     }

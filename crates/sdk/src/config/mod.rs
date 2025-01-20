@@ -44,15 +44,16 @@ pub struct AggStarkConfig {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct MinimalConfig {
-    pub minimal_stark_config: MinimalStarkConfig,
+pub struct MinimalConfig<VC> {
+    pub minimal_stark_config: MinimalStarkConfig<VC>,
     pub halo2_config: Halo2Config,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct MinimalStarkConfig {
+pub struct MinimalStarkConfig<VC> {
     pub max_num_user_public_values: usize,
-    pub leaf_fri_params: FriParameters,
+    pub app_fri_params: FriParameters,
+    pub app_vm_config: VC,
     pub root_fri_params: FriParameters,
     /// Sets the profiling mode of all aggregation VMs
     pub profiling: bool,

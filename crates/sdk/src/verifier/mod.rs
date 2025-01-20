@@ -1,11 +1,14 @@
 use internal::types::InternalVmVerifierPvs;
+use openvm_circuit::arch::VmConfig;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
+use openvm_stark_backend::Chip;
 use openvm_stark_sdk::config::FriParameters;
 
 use crate::{
     config::{AggStarkConfig, MinimalStarkConfig},
     verifier::common::types::VmVerifierPvs,
+    F, SC,
 };
 
 pub mod common;
@@ -38,10 +41,15 @@ impl AggStarkConfig {
     }
 }
 
-impl MinimalStarkConfig {
-    pub fn leaf_vm_config(&self) -> NativeConfig {
-        leaf_vm_config(&self.leaf_fri_params, self.profiling)
-    }
+impl<VC> MinimalStarkConfig<VC>
+where
+    VC: VmConfig<F>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
+{
+    // pub fn leaf_vm_config(&self) -> NativeConfig {
+    //     leaf_vm_config(&self.leaf_fri_params, self.profiling)
+    // }
 
     pub fn root_verifier_vm_config(&self) -> NativeConfig {
         root_verifier_vm_config(

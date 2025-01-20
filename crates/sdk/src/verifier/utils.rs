@@ -1,8 +1,15 @@
 use std::array;
 
+use openvm_circuit::{
+    arch::MemoryConfig, system::memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
+};
 use openvm_native_compiler::prelude::*;
 use openvm_native_recursion::{hints::Hintable, types::InnerConfig};
+use openvm_stark_backend::p3_util::log2_strict_usize;
 use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
+
+use super::leaf::types::UserPublicValuesRootProof;
+use crate::{C, F};
 
 pub(crate) fn assign_array_to_slice<C: Config>(
     builder: &mut Builder<C>,
@@ -161,4 +168,37 @@ impl<C: Config> VariableP2Hasher<C> {
 pub(crate) fn heights_le(a: &[usize], b: &[usize]) -> bool {
     assert_eq!(a.len(), b.len());
     a.iter().zip(b.iter()).all(|(a, b)| a <= b)
+}
+
+/// Read the public values root proof from the input stream and verify it.
+/// This verification must be consistent `openvm_circuit::system::memory::tree::public_values`.
+/// Returns the public values commit and the corresponding memory state root.
+pub(crate) fn verify_user_public_values_root(
+    builder: &mut Builder<C>,
+    num_public_values: usize,
+    memory_config: MemoryConfig,
+) -> ([Felt<F>; DIGEST_SIZE], [Felt<F>; DIGEST_SIZE]) {
+    let memory_dimensions = memory_config.memory_dimensions();
+    let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
+    let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
+    let pv_height = log2_strict_usize(num_public_values / DIGEST_SIZE);
+    let proof_len = memory_dimensions.overall_height() - pv_height;
+    let idx_prefix = pv_start_idx >> pv_height;
+
+    // Read the public values root proof from the input stream.
+    let root_proof = UserPublicValuesRootProof::<F>::read(builder);
+    builder.assert_eq::<Usize<_>>(root_proof.sibling_hashes.len(), Usize::from(proof_len));
+    let mut curr_commit = root_proof.public_values_commit;
+    // Share the same state array to avoid unnecessary allocations.
+    let compressor = VariableP2Compressor::new(builder);
+    for i in 0..proof_len {
+        let sibling_hash = builder.get(&root_proof.sibling_hashes, i);
+        let (l_hash, r_hash) = if idx_prefix & (1 << i) != 0 {
+            (sibling_hash, curr_commit)
+        } else {
+            (curr_commit, sibling_hash)
+        };
+        curr_commit = compressor.compress(builder, &l_hash, &r_hash);
+    }
+    (root_proof.public_values_commit, curr_commit)
 }
