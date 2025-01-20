@@ -68,6 +68,8 @@ impl RootVerifierProvingKey {
     }
 }
 
+/// Custom public values handler for static verifier. Implement this trait on a struct and pass it in to `RootVerifierProvingKey::keygen_static_verifier`.
+/// If this trait is not implemented, `None` should be passed in for pv_handler to use the default handler.
 pub trait StaticVerifierPvHandler {
     fn handle_public_values(
         &self,
