@@ -1,5 +1,5 @@
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester};
-use openvm_instructions::{instruction::Instruction, Poseidon2Opcode, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, Poseidon2Opcode, UsizeOpcode};
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField64};
 use openvm_stark_sdk::{
@@ -24,9 +24,9 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
                 std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
             Instruction {
                 opcode: if rng.gen_bool(0.5) {
-                    VmOpcode::from_usize(Poseidon2Opcode::PERM_POS2 as usize)
+                    Poseidon2Opcode::PERM_POS2.global_opcode()
                 } else {
-                    VmOpcode::from_usize(Poseidon2Opcode::COMP_POS2 as usize)
+                    Poseidon2Opcode::COMP_POS2.global_opcode()
                 },
                 a,
                 b,

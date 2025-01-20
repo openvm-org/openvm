@@ -140,7 +140,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
                 let dec_insn = BType::new(instruction_u32);
                 Some(Instruction::new(
                     VmOpcode::from_usize(
-                        BranchEqualOpcode::BEQ as usize + Rv32BranchEqual256Opcode::CLASS_OFFSET,
+                        BranchEqualOpcode::BEQ.local_usize()
+                            + Rv32BranchEqual256Opcode::CLASS_OFFSET,
                     ),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),

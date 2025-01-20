@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
 use openvm_native_compiler::CastfOpcode;
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError, Chip,
@@ -45,7 +45,7 @@ fn prepare_castf_rand_write_execute(
     tester.execute(
         chip,
         &Instruction::from_usize(
-            VmOpcode::from_usize(CastfOpcode::CASTF as usize),
+            CastfOpcode::CASTF.global_opcode(),
             [address_x, address_y, 0, as_x, as_y],
         ),
     );

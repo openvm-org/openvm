@@ -10,7 +10,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -150,7 +150,7 @@ fn run_rv32_shift_negative_test(
 
     tester.execute(
         &mut chip,
-        &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 1]),
+        &Instruction::from_usize(opcode.global_opcode(), [0, 0, 0, 1, 1]),
     );
 
     let bit_shift = prank_vals

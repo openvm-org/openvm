@@ -4,7 +4,7 @@ use openvm_circuit::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
     system::native_adapter::{NativeAdapterChip, NativeAdapterCols},
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
 use openvm_native_compiler::FieldArithmeticOpcode;
 use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
@@ -86,7 +86,7 @@ fn new_field_arithmetic_air_test() {
         tester.execute(
             &mut chip,
             &Instruction::from_usize(
-                VmOpcode::from_usize(opcode as usize),
+                opcode.global_opcode(),
                 [result_address, address1, address2, result_as, as1, as2],
             ),
         );
@@ -136,7 +136,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
     tester.execute(
         &mut chip,
         &Instruction::from_usize(
-            VmOpcode::from_usize(FieldArithmeticOpcode::DIV as usize),
+            FieldArithmeticOpcode::DIV.global_opcode(),
             [5, 6, 7, 1, 1, 1],
         ),
     );
@@ -180,7 +180,7 @@ fn new_field_arithmetic_air_test_panic() {
     tester.execute(
         &mut chip,
         &Instruction::from_usize(
-            VmOpcode::from_usize(FieldArithmeticOpcode::DIV as usize),
+            FieldArithmeticOpcode::DIV.global_opcode(),
             [0, 0, 0, 1, 1, 1],
         ),
     );

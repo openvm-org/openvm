@@ -187,7 +187,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             execution_bus,
             program_bus,
             memory_bridge,
-            FriOpcode::CLASS_OFFSET,
             offline_memory.clone(),
         );
         inventory.add_executor(
