@@ -6,6 +6,7 @@ use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
+use openvm_instructions::{Poseidon2Opcode, UsizeOpcode};
 use openvm_poseidon2_air::{Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS};
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
@@ -23,7 +24,6 @@ pub struct NativePoseidon2Air<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub(super) subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
-    pub(super) offset: usize,
 }
 
 impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for NativePoseidon2Air<F, SBOX_REGISTERS> {
@@ -163,7 +163,8 @@ impl<F: Field, const SBOX_REGISTERS: usize> NativePoseidon2Air<F, SBOX_REGISTERS
 
         self.execution_bridge
             .execute_and_increment_pc(
-                cols.memory.opcode_flag - AB::F::ONE + AB::F::from_canonical_usize(self.offset),
+                cols.memory.opcode_flag - AB::F::ONE
+                    + AB::F::from_canonical_usize(Poseidon2Opcode::CLASS_OFFSET),
                 [
                     cols.memory.rd_ptr,
                     cols.memory.rs_ptr[0],

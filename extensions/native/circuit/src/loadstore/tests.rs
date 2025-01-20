@@ -38,7 +38,7 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeLoadStoreChip<F, 1>) {
         tester.memory_bridge(),
         NativeLoadStoreOpcode::CLASS_OFFSET,
     );
-    let mut inner = NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::CLASS_OFFSET);
+    let mut inner = NativeLoadStoreCoreChip::new();
     inner.set_streams(Arc::new(Mutex::new(Streams::default())));
     let chip = NativeLoadStoreChip::<F, 1>::new(adapter, inner, tester.offline_memory_mutex_arc());
     (rng, tester, chip)

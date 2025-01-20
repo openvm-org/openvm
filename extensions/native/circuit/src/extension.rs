@@ -117,7 +117,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 memory_bridge,
                 NativeLoadStoreOpcode::CLASS_OFFSET,
             ),
-            NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+            NativeLoadStoreCoreChip::new(),
             offline_memory.clone(),
         );
         load_store_chip.core.set_streams(builder.streams().clone());
@@ -134,7 +134,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 memory_bridge,
                 NativeLoadStore4Opcode::CLASS_OFFSET,
             ),
-            NativeLoadStoreCoreChip::new(NativeLoadStore4Opcode::CLASS_OFFSET),
+            NativeLoadStoreCoreChip::new(),
             offline_memory.clone(),
         );
         block_load_store_chip
@@ -158,14 +158,14 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         let jal_chip = NativeJalChip::new(
             JalNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_bridge),
-            JalCoreChip::new(NativeJalOpcode::CLASS_OFFSET),
+            JalCoreChip::new(),
             offline_memory.clone(),
         );
         inventory.add_executor(jal_chip, NativeJalOpcode::iter().map(|x| x.global_opcode()))?;
 
         let field_arithmetic_chip = FieldArithmeticChip::new(
             NativeAdapterChip::<F, 2, 1>::new(execution_bus, program_bus, memory_bridge),
-            FieldArithmeticCoreChip::new(FieldArithmeticOpcode::CLASS_OFFSET),
+            FieldArithmeticCoreChip::new(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -175,7 +175,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         let field_extension_chip = FieldExtensionChip::new(
             NativeVectorizedAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            FieldExtensionCoreChip::new(FieldExtensionOpcode::CLASS_OFFSET),
+            FieldExtensionCoreChip::new(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -200,7 +200,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             program_bus,
             memory_bridge,
             Poseidon2Config::default(),
-            Poseidon2Opcode::CLASS_OFFSET,
             builder.system_config().max_constraint_degree,
             offline_memory.clone(),
         );

@@ -270,9 +270,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 memory_bridge,
                 pointer_max_bits,
                 range_checker.clone(),
-                Rv32LoadStoreOpcode::CLASS_OFFSET,
             ),
-            LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
+            LoadStoreCoreChip::new(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -289,9 +288,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 memory_bridge,
                 pointer_max_bits,
                 range_checker.clone(),
-                Rv32LoadStoreOpcode::CLASS_OFFSET,
             ),
-            LoadSignExtendCoreChip::new(range_checker.clone(), Rv32LoadStoreOpcode::CLASS_OFFSET),
+            LoadSignExtendCoreChip::new(range_checker.clone()),
             offline_memory.clone(),
         );
         inventory.add_executor(

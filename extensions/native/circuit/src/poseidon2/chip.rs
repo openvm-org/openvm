@@ -58,7 +58,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2BaseChip<F, SB
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         poseidon2_config: Poseidon2Config<F>,
-        offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
@@ -67,7 +66,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2BaseChip<F, SB
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 subchip.air.clone(),
-                offset,
             )),
             subchip,
             records: vec![],
@@ -94,7 +92,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
             e,
             ..
         } = instruction;
-        let local_opcode = Poseidon2Opcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let local_opcode =
+            Poseidon2Opcode::from_usize(opcode.local_opcode_idx(Poseidon2Opcode::CLASS_OFFSET));
 
         let rd = memory.read_cell(d, a);
         let rs1 = memory.read_cell(d, b);
@@ -165,7 +164,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Poseidon2Opcode::from_usize(opcode - self.air.offset)
+            Poseidon2Opcode::from_usize(opcode - Poseidon2Opcode::CLASS_OFFSET)
         )
     }
 }

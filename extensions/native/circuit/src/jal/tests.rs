@@ -6,7 +6,7 @@ use openvm_instructions::{
     program::{DEFAULT_PC_STEP, PC_BITS},
     UsizeOpcode,
 };
-use openvm_native_compiler::NativeJalOpcode::{self, *};
+use openvm_native_compiler::NativeJalOpcode::*;
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
@@ -59,7 +59,7 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeJalChip<F>) {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let inner = JalCoreChip::new(NativeJalOpcode::CLASS_OFFSET);
+    let inner = JalCoreChip::new();
     let chip = NativeJalChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
     (rng, tester, chip)
 }

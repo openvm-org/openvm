@@ -39,9 +39,7 @@ pub struct FieldExtensionCoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct FieldExtensionCoreAir {
-    offset: usize,
-}
+pub struct FieldExtensionCoreAir {}
 
 impl<F: Field> BaseAir<F> for FieldExtensionCoreAir {
     fn width(&self) -> usize {
@@ -123,7 +121,8 @@ where
             writes: [cols.x.map(Into::into)].into(),
             instruction: MinimalInstruction {
                 is_valid,
-                opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
+                opcode: expected_opcode
+                    + AB::Expr::from_canonical_usize(FieldExtensionOpcode::CLASS_OFFSET),
             }
             .into(),
         }
@@ -143,10 +142,16 @@ pub struct FieldExtensionCoreChip {
 }
 
 impl FieldExtensionCoreChip {
-    pub fn new(offset: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            air: FieldExtensionCoreAir { offset },
+            air: FieldExtensionCoreAir {},
         }
+    }
+}
+
+impl Default for FieldExtensionCoreChip {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -166,7 +171,7 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
+        let local_opcode_idx = opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET);
 
         let data: [[F; EXT_DEG]; 2] = reads.into();
         let y: [F; EXT_DEG] = data[0];
@@ -193,7 +198,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            FieldExtensionOpcode::from_usize(opcode - self.air.offset)
+            FieldExtensionOpcode::from_usize(opcode - FieldExtensionOpcode::CLASS_OFFSET)
         )
     }
 

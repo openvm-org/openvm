@@ -38,7 +38,7 @@ fn new_field_arithmetic_air_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        FieldArithmeticCoreChip::new(0),
+        FieldArithmeticCoreChip::new(),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -127,7 +127,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        FieldArithmeticCoreChip::new(0),
+        FieldArithmeticCoreChip::new(),
         tester.offline_memory_mutex_arc(),
     );
     tester.write_cell(1, 6, BabyBear::from_canonical_u32(111));
@@ -172,7 +172,7 @@ fn new_field_arithmetic_air_test_panic() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        FieldArithmeticCoreChip::new(0),
+        FieldArithmeticCoreChip::new(),
         tester.offline_memory_mutex_arc(),
     );
     tester.write_cell(1, 0, BabyBear::ZERO);

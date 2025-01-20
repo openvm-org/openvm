@@ -45,7 +45,6 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         poseidon2_config: Poseidon2Config<F>,
-        offset: usize,
         max_constraint_degree: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
@@ -55,7 +54,6 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
                 program_bus,
                 memory_bridge,
                 poseidon2_config,
-                offset,
                 offline_memory,
             ))
         } else {
@@ -64,7 +62,6 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
                 program_bus,
                 memory_bridge,
                 poseidon2_config,
-                offset,
                 offline_memory,
             ))
         }

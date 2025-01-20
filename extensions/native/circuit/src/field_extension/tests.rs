@@ -35,7 +35,7 @@ fn new_field_extension_air_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        FieldExtensionCoreChip::new(0),
+        FieldExtensionCoreChip::new(),
         tester.offline_memory_mutex_arc(),
     );
     let trace_width = chip.trace_width();

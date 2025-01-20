@@ -23,9 +23,7 @@ pub struct JalCoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct JalCoreAir {
-    offset: usize,
-}
+pub struct JalCoreAir {}
 
 impl<F: Field> BaseAir<F> for JalCoreAir {
     fn width(&self) -> usize {
@@ -57,7 +55,9 @@ where
             writes: [[from_pc.into() + AB::Expr::from_canonical_u32(DEFAULT_PC_STEP)]].into(),
             instruction: ImmInstruction {
                 is_valid: cols.is_valid.into(),
-                opcode: AB::Expr::from_canonical_usize(NativeJalOpcode::JAL as usize + self.offset),
+                opcode: AB::Expr::from_canonical_usize(
+                    NativeJalOpcode::JAL.global_opcode().as_usize(),
+                ),
                 immediate: cols.imm.into(),
             }
             .into(),
@@ -75,10 +75,14 @@ pub struct JalCoreChip {
 }
 
 impl JalCoreChip {
-    pub fn new(offset: usize) -> Self {
-        Self {
-            air: JalCoreAir { offset },
-        }
+    pub fn new() -> Self {
+        Self { air: JalCoreAir {} }
+    }
+}
+
+impl Default for JalCoreChip {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -98,7 +102,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, b, .. } = instruction;
         assert_eq!(
-            NativeJalOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
+            NativeJalOpcode::from_usize(opcode.local_opcode_idx(NativeJalOpcode::CLASS_OFFSET)),
             NativeJalOpcode::JAL
         );
 
@@ -113,7 +117,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            NativeJalOpcode::from_usize(opcode - self.air.offset)
+            NativeJalOpcode::from_usize(opcode - NativeJalOpcode::CLASS_OFFSET)
         )
     }
 

@@ -121,9 +121,8 @@ fn rand_load_sign_extend_test() {
         tester.memory_bridge(),
         tester.address_bits(),
         range_checker_chip.clone(),
-        Rv32LoadStoreOpcode::CLASS_OFFSET,
     );
-    let core = LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::CLASS_OFFSET);
+    let core = LoadSignExtendCoreChip::new(range_checker_chip);
     let mut chip =
         Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
@@ -165,12 +164,8 @@ fn run_negative_loadstore_test(
         tester.memory_bridge(),
         tester.address_bits(),
         range_checker_chip.clone(),
-        Rv32LoadStoreOpcode::CLASS_OFFSET,
     );
-    let core = LoadSignExtendCoreChip::new(
-        range_checker_chip.clone(),
-        Rv32LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let core = LoadSignExtendCoreChip::new(range_checker_chip.clone());
     let adapter_width = BaseAir::<F>::width(adapter.air());
     let mut chip =
         Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
@@ -273,9 +268,8 @@ fn execute_roundtrip_sanity_test() {
         tester.memory_bridge(),
         tester.address_bits(),
         range_checker_chip.clone(),
-        Rv32LoadStoreOpcode::CLASS_OFFSET,
     );
-    let core = LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::CLASS_OFFSET);
+    let core = LoadSignExtendCoreChip::new(range_checker_chip);
     let mut chip =
         Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 

@@ -52,7 +52,6 @@ fn tester_with_random_poseidon2_ops(
         tester.program_bus(),
         tester.memory_bridge(),
         Poseidon2Config::default(),
-        0,
         max_constraint_degree,
         tester.offline_memory_mutex_arc(),
     );

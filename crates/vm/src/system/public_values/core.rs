@@ -26,15 +26,13 @@ pub(crate) type AdapterInterfaceReads<F> = <AdapterInterface<F> as VmAdapterInte
 pub struct PublicValuesCoreAir {
     /// Number of custom public values to publish.
     pub num_custom_pvs: usize,
-    offset: usize,
     encoder: Encoder,
 }
 
 impl PublicValuesCoreAir {
-    pub fn new(num_custom_pvs: usize, offset: usize, max_degree: u32) -> Self {
+    pub fn new(num_custom_pvs: usize, max_degree: u32) -> Self {
         Self {
             num_custom_pvs,
-            offset,
             encoder: Encoder::new(num_custom_pvs, max_degree, true),
         }
     }
@@ -90,7 +88,7 @@ impl<AB: InteractionBuilder + AirBuilderWithPublicValues> VmCoreAir<AB, AdapterI
             writes: [],
             instruction: MinimalInstruction {
                 is_valid: is_valid.into(),
-                opcode: AB::Expr::from_canonical_usize(PUBLISH.local_usize() + self.offset),
+                opcode: AB::Expr::from_canonical_usize(PUBLISH.global_opcode().as_usize()),
             },
         }
     }
@@ -114,9 +112,9 @@ impl<F: PrimeField32> PublicValuesCoreChip<F> {
     /// **Note:** `max_degree` is the maximum degree of the constraint polynomials to represent the flags.
     /// If you want the overall AIR's constraint degree to be `<= max_constraint_degree`, then typically
     /// you should set `max_degree` to `max_constraint_degree - 1`.
-    pub fn new(num_custom_pvs: usize, offset: usize, max_degree: u32) -> Self {
+    pub fn new(num_custom_pvs: usize, max_degree: u32) -> Self {
         Self {
-            air: PublicValuesCoreAir::new(num_custom_pvs, offset, max_degree),
+            air: PublicValuesCoreAir::new(num_custom_pvs, max_degree),
             custom_pvs: Mutex::new(vec![None; num_custom_pvs]),
         }
     }
@@ -158,7 +156,10 @@ impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChi
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", PublishOpcode::from_usize(opcode - self.air.offset))
+        format!(
+            "{:?}",
+            PublishOpcode::from_usize(opcode - PublishOpcode::CLASS_OFFSET)
+        )
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {

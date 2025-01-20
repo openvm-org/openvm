@@ -87,7 +87,6 @@ impl<F: PrimeField32> Sha256VmChip<F> {
                 memory_bridge,
                 bitwise_lookup_chip.bus(),
                 address_bits,
-                offset,
                 Sha256Air::new(bitwise_lookup_chip.bus(), self_bus_idx),
                 Encoder::new(PaddingFlags::COUNT, 2, false),
             ),

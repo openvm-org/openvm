@@ -606,7 +606,6 @@ impl<F: PrimeField32> SystemComplex<F> {
                 NativeAdapterChip::new(EXECUTION_BUS, PROGRAM_BUS, memory_bridge),
                 PublicValuesCoreChip::new(
                     config.num_public_values,
-                    PublishOpcode::CLASS_OFFSET,
                     config.max_constraint_degree as u32 - 1,
                 ),
                 offline_memory,
