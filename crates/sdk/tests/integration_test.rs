@@ -83,7 +83,9 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
             builder.assign(&b, c);
         });
         builder.halt();
-        builder.compile_isa()
+        let mut program = builder.compile_isa();
+        program.max_num_public_values = NUM_PUB_VALUES;
+        program
     };
     Sdk.commit_app_exe(
         standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
@@ -128,7 +130,7 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
             SystemConfig::default()
                 .with_max_segment_len(200)
                 .with_continuations()
-                .with_public_values(32),
+                .with_public_values(NUM_PUB_VALUES),
             Native,
         ),
         leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP)
