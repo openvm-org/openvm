@@ -148,7 +148,7 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        LessThanCoreChip::new(bitwise_chip.clone(), 0),
+        LessThanCoreChip::new(bitwise_chip.clone(), LessThanOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -277,7 +277,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        BranchEqualCoreChip::new(0, 4),
+        BranchEqualCoreChip::new(BranchEqualOpcode::CLASS_OFFSET, 4),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -322,7 +322,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
+        BranchLessThanCoreChip::new(bitwise_chip.clone(), BranchLessThanOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 

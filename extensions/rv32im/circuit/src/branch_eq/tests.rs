@@ -139,7 +139,7 @@ fn run_rv32_beq_negative_test(
             vec![if cmp_result { Some(imm) } else { None }],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        BranchEqualCoreChip::new(0, 4),
+        BranchEqualCoreChip::new(BranchEqualOpcode::CLASS_OFFSET, 4),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -260,7 +260,8 @@ fn rv32_bne_invalid_inv_marker_negative_test() {
 
 #[test]
 fn execute_pc_increment_sanity_test() {
-    let core = BranchEqualCoreChip::<RV32_REGISTER_NUM_LIMBS>::new(0, 4);
+    let core =
+        BranchEqualCoreChip::<RV32_REGISTER_NUM_LIMBS>::new(BranchEqualOpcode::CLASS_OFFSET, 4);
 
     let mut instruction = Instruction::<F> {
         opcode: BranchEqualOpcode::BEQ.global_opcode(),

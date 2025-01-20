@@ -252,7 +252,11 @@ fn run_rv32_divrem_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        DivRemCoreChip::new(bitwise_chip.clone(), range_tuple_chip.clone(), 0),
+        DivRemCoreChip::new(
+            bitwise_chip.clone(),
+            range_tuple_chip.clone(),
+            DivRemOpcode::CLASS_OFFSET,
+        ),
         tester.offline_memory_mutex_arc(),
     );
 

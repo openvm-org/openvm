@@ -85,11 +85,13 @@ fn tester_with_random_poseidon2_ops(
 
         tester.write_cell(d, a, BabyBear::from_canonical_usize(dst));
         tester.write_cell(d, b, BabyBear::from_canonical_usize(lhs));
-        if opcode == Poseidon2Opcode::COMP_POS2 {
+        if opcode == Poseidon2Opcode::COMP_POS2.global_opcode().as_usize() {
             tester.write_cell(d, c, BabyBear::from_canonical_usize(rhs));
         }
 
-        match opcode {
+        let local_opcode = Poseidon2Opcode::from_usize(opcode - Poseidon2Opcode::CLASS_OFFSET);
+
+        match local_opcode {
             Poseidon2Opcode::COMP_POS2 => {
                 let data_left: [_; NATIVE_POSEIDON2_CHUNK_SIZE] = std::array::from_fn(|i| data[i]);
                 let data_right: [_; NATIVE_POSEIDON2_CHUNK_SIZE] =
@@ -104,7 +106,7 @@ fn tester_with_random_poseidon2_ops(
 
         tester.execute(&mut chip, &instruction);
 
-        match opcode {
+        match local_opcode {
             Poseidon2Opcode::COMP_POS2 => {
                 let expected: [_; NATIVE_POSEIDON2_CHUNK_SIZE] = std::array::from_fn(|i| hash[i]);
                 let actual = tester.read::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, dst);

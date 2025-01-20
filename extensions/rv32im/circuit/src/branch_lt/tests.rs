@@ -97,7 +97,7 @@ fn run_rv32_branch_lt_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
+        BranchLessThanCoreChip::new(bitwise_chip.clone(), BranchLessThanOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -490,8 +490,10 @@ fn rv32_blt_unsigned_wrong_b_msb_sign_negative_test() {
 fn execute_pc_increment_sanity_test() {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let core =
-        BranchLessThanCoreChip::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(bitwise_chip, 0);
+    let core = BranchLessThanCoreChip::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(
+        bitwise_chip,
+        BranchLessThanOpcode::CLASS_OFFSET,
+    );
 
     let mut instruction = Instruction::<F> {
         opcode: BranchLessThanOpcode::BLT.global_opcode(),
