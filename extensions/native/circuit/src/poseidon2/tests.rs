@@ -59,7 +59,9 @@ fn tester_with_random_poseidon2_ops(
     let mut rng = create_seeded_rng();
 
     for instruction in random_instructions(num_ops) {
-        let opcode = Poseidon2Opcode::from_usize(instruction.opcode.as_usize());
+        let opcode = instruction
+            .opcode
+            .local_opcode_idx(Poseidon2Opcode::CLASS_OFFSET);
         let [a, b, c, d, e] = [
             instruction.a,
             instruction.b,

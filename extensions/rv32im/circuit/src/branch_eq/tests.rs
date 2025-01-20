@@ -83,7 +83,7 @@ fn run_rv32_branch_eq_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        BranchEqualCoreChip::new(0, 4),
+        BranchEqualCoreChip::new(BranchEqualOpcode::CLASS_OFFSET, 4),
         tester.offline_memory_mutex_arc(),
     );
 

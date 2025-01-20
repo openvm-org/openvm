@@ -108,7 +108,11 @@ fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        DivRemCoreChip::new(bitwise_chip.clone(), range_tuple_checker.clone(), 0),
+        DivRemCoreChip::new(
+            bitwise_chip.clone(),
+            range_tuple_checker.clone(),
+            DivRemOpcode::CLASS_OFFSET,
+        ),
         tester.offline_memory_mutex_arc(),
     );
 

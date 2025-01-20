@@ -198,7 +198,7 @@ fn run_rv32_blt_negative_test(
             vec![if cmp_result { Some(imm) } else { None }],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
+        BranchLessThanCoreChip::new(bitwise_chip.clone(), BranchLessThanOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 

@@ -40,7 +40,7 @@ fn build_keccak256_test(
         tester.memory_bridge(),
         tester.address_bits(),
         bitwise_chip.clone(),
-        0,
+        Rv32KeccakOpcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 

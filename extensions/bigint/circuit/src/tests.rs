@@ -99,7 +99,13 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         tester.offline_memory_mutex_arc(),
     );
 
-    run_int_256_rand_execute(opcode as usize, num_ops, &mut chip, &mut tester, None);
+    run_int_256_rand_execute(
+        opcode.global_opcode().as_usize(),
+        num_ops,
+        &mut chip,
+        &mut tester,
+        None,
+    );
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -146,7 +152,13 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         tester.offline_memory_mutex_arc(),
     );
 
-    run_int_256_rand_execute(opcode as usize, num_ops, &mut chip, &mut tester, None);
+    run_int_256_rand_execute(
+        opcode.global_opcode().as_usize(),
+        num_ops,
+        &mut chip,
+        &mut tester,
+        None,
+    );
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -227,7 +239,13 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         tester.offline_memory_mutex_arc(),
     );
 
-    run_int_256_rand_execute(opcode as usize, num_ops, &mut chip, &mut tester, None);
+    run_int_256_rand_execute(
+        opcode.global_opcode().as_usize(),
+        num_ops,
+        &mut chip,
+        &mut tester,
+        None,
+    );
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -271,7 +289,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
     };
 
     run_int_256_rand_execute(
-        opcode as usize,
+        opcode.global_opcode().as_usize(),
         num_ops,
         &mut chip,
         &mut tester,
@@ -327,7 +345,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     };
 
     run_int_256_rand_execute(
-        opcode as usize,
+        opcode.global_opcode().as_usize(),
         num_ops,
         &mut chip,
         &mut tester,
