@@ -123,6 +123,10 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        self.offset
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

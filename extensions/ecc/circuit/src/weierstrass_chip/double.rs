@@ -157,6 +157,10 @@ where
         };
         ctx.into()
     }
+
+    fn start_offset(&self) -> usize {
+        self.offset
+    }
 }
 
 pub struct EcDoubleCoreChip {

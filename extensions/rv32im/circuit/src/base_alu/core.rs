@@ -41,7 +41,6 @@ pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 #[derive(Copy, Clone, Debug)]
 pub struct BaseAluCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: BitwiseOperationLookupBus,
-    offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -138,12 +137,15 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        let expected_opcode = flags.iter().zip(BaseAluOpcode::iter()).fold(
-            AB::Expr::ZERO,
-            |acc, (flag, local_opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
-            },
-        ) + AB::Expr::from_canonical_usize(self.offset);
+        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
+            self,
+            flags.iter().zip(BaseAluOpcode::iter()).fold(
+                AB::Expr::ZERO,
+                |acc, (flag, local_opcode)| {
+                    acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
+                },
+            ),
+        );
 
         AdapterAirContext {
             to_pc: None,
@@ -155,6 +157,10 @@ where
             }
             .into(),
         }
+    }
+
+    fn start_offset(&self) -> usize {
+        BaseAluOpcode::CLASS_OFFSET
     }
 }
 
@@ -176,14 +182,10 @@ pub struct BaseAluCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, LIMB_BITS> {
-    pub fn new(
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-        offset: usize,
-    ) -> Self {
+    pub fn new(bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>) -> Self {
         Self {
             air: BaseAluCoreAir {
                 bus: bitwise_lookup_chip.bus(),
-                offset,
             },
             bitwise_lookup_chip,
         }
@@ -209,7 +211,8 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let local_opcode =
+            BaseAluOpcode::from_usize(opcode.local_opcode_idx(BaseAluOpcode::CLASS_OFFSET));
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let b = data[0].map(|x| x.as_canonical_u32());
@@ -242,7 +245,10 @@ where
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.air.offset))
+        format!(
+            "{:?}",
+            BaseAluOpcode::from_usize(opcode - BaseAluOpcode::CLASS_OFFSET)
+        )
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {

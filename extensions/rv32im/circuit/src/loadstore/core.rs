@@ -246,6 +246,10 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        OpcodeClass::CLASS_OFFSET
+    }
 }
 
 #[derive(Debug)]

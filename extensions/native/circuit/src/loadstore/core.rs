@@ -105,6 +105,10 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        NativeLoadStoreOpcode::CLASS_OFFSET
+    }
 }
 
 #[derive(Debug)]

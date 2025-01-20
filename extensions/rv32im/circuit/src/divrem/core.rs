@@ -303,6 +303,10 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        self.offset
+    }
 }
 
 pub struct DivRemCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {

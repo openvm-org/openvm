@@ -121,11 +121,14 @@ where
             writes: [cols.x.map(Into::into)].into(),
             instruction: MinimalInstruction {
                 is_valid,
-                opcode: expected_opcode
-                    + AB::Expr::from_canonical_usize(FieldExtensionOpcode::CLASS_OFFSET),
+                opcode: VmCoreAir::<AB, I>::expr_to_global_expr(self, expected_opcode),
             }
             .into(),
         }
+    }
+
+    fn start_offset(&self) -> usize {
+        FieldExtensionOpcode::CLASS_OFFSET
     }
 }
 

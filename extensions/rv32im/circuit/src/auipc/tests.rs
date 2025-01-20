@@ -67,7 +67,7 @@ fn rand_auipc_test() {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone(), Rv32AuipcOpcode::CLASS_OFFSET);
+    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone());
     let mut chip = Rv32AuipcChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
@@ -107,7 +107,7 @@ fn run_negative_auipc_test(
         tester.memory_bridge(),
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone(), Rv32AuipcOpcode::CLASS_OFFSET);
+    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone());
     let mut chip = Rv32AuipcChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     set_and_execute(
@@ -252,7 +252,7 @@ fn execute_roundtrip_sanity_test() {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let inner = Rv32AuipcCoreChip::new(bitwise_chip, Rv32AuipcOpcode::CLASS_OFFSET);
+    let inner = Rv32AuipcCoreChip::new(bitwise_chip);
     let mut chip = Rv32AuipcChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;

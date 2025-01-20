@@ -141,7 +141,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 address_bits,
                 bitwise_lu_chip.clone(),
             ),
-            BaseAluCoreChip::new(bitwise_lu_chip.clone(), Rv32BaseAlu256Opcode::CLASS_OFFSET),
+            BaseAluCoreChip::new(bitwise_lu_chip.clone()),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -208,7 +208,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 address_bits,
                 bitwise_lu_chip.clone(),
             ),
-            MultiplicationCoreChip::new(range_tuple_chip, Rv32Mul256Opcode::CLASS_OFFSET),
+            MultiplicationCoreChip::new(range_tuple_chip),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -224,11 +224,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 address_bits,
                 bitwise_lu_chip.clone(),
             ),
-            ShiftCoreChip::new(
-                bitwise_lu_chip.clone(),
-                range_checker_chip,
-                Rv32Shift256Opcode::CLASS_OFFSET,
-            ),
+            ShiftCoreChip::new(bitwise_lu_chip.clone(), range_checker_chip),
             offline_memory.clone(),
         );
         inventory.add_executor(

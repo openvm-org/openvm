@@ -32,7 +32,6 @@ pub struct MultiplicationCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
 #[derive(Copy, Clone, Debug)]
 pub struct MultiplicationCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: RangeTupleCheckerBus<2>,
-    offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -88,7 +87,7 @@ where
         }
 
         // TODO: revisit after opcode change, this core chip currently supports a single opcode
-        let expected_opcode = AB::Expr::from_canonical_usize(MulOpcode::MUL as usize + self.offset);
+        let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, MulOpcode::MUL);
 
         AdapterAirContext {
             to_pc: None,
@@ -101,6 +100,10 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        MulOpcode::CLASS_OFFSET
+    }
 }
 
 #[derive(Debug)]
@@ -110,7 +113,7 @@ pub struct MultiplicationCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationCoreChip<NUM_LIMBS, LIMB_BITS> {
-    pub fn new(range_tuple_chip: SharedRangeTupleCheckerChip<2>, offset: usize) -> Self {
+    pub fn new(range_tuple_chip: SharedRangeTupleCheckerChip<2>) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
         // < NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1 bytes
         // (with LIMB_BITS bits).
@@ -128,7 +131,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationCoreChip<NUM_
         Self {
             air: MultiplicationCoreAir {
                 bus: *range_tuple_chip.bus(),
-                offset,
             },
             range_tuple_chip,
         }
@@ -164,7 +166,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
         assert_eq!(
-            MulOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
+            MulOpcode::from_usize(opcode.local_opcode_idx(MulOpcode::CLASS_OFFSET)),
             MulOpcode::MUL
         );
 
@@ -188,7 +190,10 @@ where
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", MulOpcode::from_usize(opcode - self.air.offset))
+        format!(
+            "{:?}",
+            MulOpcode::from_usize(opcode - MulOpcode::CLASS_OFFSET)
+        )
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {

@@ -92,6 +92,10 @@ impl<AB: InteractionBuilder + AirBuilderWithPublicValues> VmCoreAir<AB, AdapterI
             },
         }
     }
+
+    fn start_offset(&self) -> usize {
+        PublishOpcode::CLASS_OFFSET
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

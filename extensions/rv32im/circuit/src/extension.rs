@@ -237,7 +237,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
 
         let base_alu_chip = Rv32BaseAluChip::new(
             Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            BaseAluCoreChip::new(bitwise_lu_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
+            BaseAluCoreChip::new(bitwise_lu_chip.clone()),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -254,11 +254,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
 
         let shift_chip = Rv32ShiftChip::new(
             Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            ShiftCoreChip::new(
-                bitwise_lu_chip.clone(),
-                range_checker.clone(),
-                ShiftOpcode::CLASS_OFFSET,
-            ),
+            ShiftCoreChip::new(bitwise_lu_chip.clone(), range_checker.clone()),
             offline_memory.clone(),
         );
         inventory.add_executor(shift_chip, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
@@ -322,7 +318,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
 
         let jal_lui_chip = Rv32JalLuiChip::new(
             Rv32CondRdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            Rv32JalLuiCoreChip::new(bitwise_lu_chip.clone(), Rv32JalLuiOpcode::CLASS_OFFSET),
+            Rv32JalLuiCoreChip::new(bitwise_lu_chip.clone()),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -332,18 +328,14 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
 
         let jalr_chip = Rv32JalrChip::new(
             Rv32JalrAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            Rv32JalrCoreChip::new(
-                bitwise_lu_chip.clone(),
-                range_checker.clone(),
-                Rv32JalrOpcode::CLASS_OFFSET,
-            ),
+            Rv32JalrCoreChip::new(bitwise_lu_chip.clone(), range_checker.clone()),
             offline_memory.clone(),
         );
         inventory.add_executor(jalr_chip, Rv32JalrOpcode::iter().map(|x| x.global_opcode()))?;
 
         let auipc_chip = Rv32AuipcChip::new(
             Rv32RdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            Rv32AuipcCoreChip::new(bitwise_lu_chip.clone(), Rv32AuipcOpcode::CLASS_OFFSET),
+            Rv32AuipcCoreChip::new(bitwise_lu_chip.clone()),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -411,18 +403,14 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
 
         let mul_chip = Rv32MultiplicationChip::new(
             Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            MultiplicationCoreChip::new(range_tuple_checker.clone(), MulOpcode::CLASS_OFFSET),
+            MultiplicationCoreChip::new(range_tuple_checker.clone()),
             offline_memory.clone(),
         );
         inventory.add_executor(mul_chip, MulOpcode::iter().map(|x| x.global_opcode()))?;
 
         let mul_h_chip = Rv32MulHChip::new(
             Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            MulHCoreChip::new(
-                bitwise_lu_chip.clone(),
-                range_tuple_checker.clone(),
-                MulHOpcode::CLASS_OFFSET,
-            ),
+            MulHCoreChip::new(bitwise_lu_chip.clone(), range_tuple_checker.clone()),
             offline_memory.clone(),
         );
         inventory.add_executor(mul_h_chip, MulHOpcode::iter().map(|x| x.global_opcode()))?;
@@ -483,7 +471,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
                 pointer_max_bits,
                 range_checker.clone(),
             ),
-            Rv32HintStoreCoreChip::new(bitwise_lu_chip.clone(), Rv32HintStoreOpcode::CLASS_OFFSET),
+            Rv32HintStoreCoreChip::new(bitwise_lu_chip.clone()),
             offline_memory.clone(),
         );
         hintstore_chip.core.set_streams(builder.streams().clone());

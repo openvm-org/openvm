@@ -170,6 +170,10 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        Rv32LoadStoreOpcode::CLASS_OFFSET
+    }
 }
 
 pub struct LoadSignExtendCoreChip<const NUM_CELLS: usize, const LIMB_BITS: usize> {

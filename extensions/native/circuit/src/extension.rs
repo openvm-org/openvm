@@ -341,7 +341,7 @@ impl<F: PrimeField32> VmExtension<F> for CastFExtension {
 
         let castf_chip = CastFChip::new(
             ConvertAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            CastFCoreChip::new(range_checker.clone(), CastfOpcode::CLASS_OFFSET),
+            CastFCoreChip::new(range_checker.clone()),
             offline_memory.clone(),
         );
         inventory.add_executor(castf_chip, [CastfOpcode::CASTF.global_opcode()])?;

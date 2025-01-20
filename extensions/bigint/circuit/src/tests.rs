@@ -95,7 +95,7 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        BaseAluCoreChip::new(bitwise_chip.clone(), 0),
+        BaseAluCoreChip::new(bitwise_chip.clone()),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -182,7 +182,7 @@ fn run_mul_256_rand_test(num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        MultiplicationCoreChip::new(range_tuple_checker.clone(), 0),
+        MultiplicationCoreChip::new(range_tuple_checker.clone()),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -223,7 +223,6 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         ShiftCoreChip::new(
             bitwise_chip.clone(),
             tester.memory_controller().borrow().range_checker.clone(),
-            0,
         ),
         tester.offline_memory_mutex_arc(),
     );

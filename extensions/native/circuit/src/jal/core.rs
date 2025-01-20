@@ -63,6 +63,10 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        NativeJalOpcode::CLASS_OFFSET
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

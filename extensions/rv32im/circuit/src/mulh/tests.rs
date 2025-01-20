@@ -92,7 +92,7 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_checker.clone(), 0),
+        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_checker.clone()),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -165,7 +165,7 @@ fn run_rv32_mulh_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_chip.clone(), 0),
+        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_chip.clone()),
         tester.offline_memory_mutex_arc(),
     );
 
