@@ -7,7 +7,7 @@ use openvm_build::GuestOptions;
 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
     config::{AggConfig, AppConfig, SdkVmConfig},
-    Sdk, StdIn,
+    SdkWithPrometheusMetrics, StdIn,
 };
 use openvm_stark_sdk::config::FriParameters;
 use openvm_transpiler::elf::Elf;
@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// ```
     // ANCHOR: build
     // 1. Build the VmConfig with the extensions needed.
-    let sdk = Sdk;
+    let sdk = SdkWithPrometheusMetrics::new();
 
     // 2a. Build the ELF with guest options and a target filter.
     let guest_opts = GuestOptions::default();
