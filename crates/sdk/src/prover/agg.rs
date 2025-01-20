@@ -173,19 +173,6 @@ impl AggStarkProver {
 }
 
 impl LeafProvingController {
-    // pub fn new(
-    //     leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-    //     leaf_committed_exe: Arc<NonRootCommittedExe>,
-    // ) -> Self {
-    //     let prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(
-    //         leaf_vm_pk,
-    //         leaf_committed_exe,
-    //     );
-    //     Self {
-    //         prover,
-    //         num_children: DEFAULT_NUM_CHILDREN_LEAF,
-    //     }
-    // }
     pub fn with_num_children(mut self, num_children_leaf: usize) -> Self {
         self.num_children = num_children_leaf;
         self
