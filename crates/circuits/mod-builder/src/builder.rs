@@ -1,5 +1,6 @@
-use std::{cell::RefCell, ops::Deref, rc::Rc};
+use std::{cell::RefCell, iter, ops::Deref, rc::Rc};
 
+use itertools::zip_eq;
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::Zero;
 use openvm_circuit_primitives::{
@@ -209,6 +210,9 @@ pub struct FieldExpr {
     pub check_carry_mod_to_zero: CheckCarryModToZeroSubAir,
 
     pub range_bus: VariableRangeCheckerBus,
+
+    // any values other than the prime modulus that need to be checked at setup
+    pub setup_values: Vec<BigUint>,
 }
 
 impl FieldExpr {
@@ -229,7 +233,19 @@ impl FieldExpr {
             builder,
             check_carry_mod_to_zero: subair,
             range_bus,
+            setup_values: vec![],
         }
+    }
+
+    pub fn new_with_setup_values(
+        builder: ExprBuilder,
+        range_bus: VariableRangeCheckerBus,
+        needs_setup: bool,
+        setup_values: Vec<BigUint>,
+    ) -> Self {
+        let mut ret = Self::new(builder, range_bus, needs_setup);
+        ret.setup_values = setup_values;
+        ret
     }
 }
 
@@ -290,6 +306,22 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
             builder.assert_bool(is_setup.clone());
             builder.when_first_row().assert_one(is_setup.clone());
+
+            /*
+            for (lhs, rhs) in zip_eq(
+                inputs.iter().flatten(),
+                iter::empty().chain(self.builder.prime_limbs.clone()).chain(
+                    self.setup_values.iter().flat_map(|value| {
+                        big_uint_to_num_limbs(value, self.builder.limb_bits, self.builder.num_limbs)
+                    }),
+                ),
+            ) {
+                builder
+                    .when(is_setup.clone())
+                    .assert_eq(*lhs, AB::F::from_canonical_usize(rhs));
+            }
+            */
+
             for i in 0..inputs[0].len().max(self.builder.prime_limbs.len()) {
                 let lhs = if i < inputs[0].len() {
                     inputs[0][i].into()

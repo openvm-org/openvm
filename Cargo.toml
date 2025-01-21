@@ -56,6 +56,7 @@ members = [
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
     "extensions/ecc/sw-setup",
+    "extensions/ecc/te-setup",
     "extensions/ecc/tests",
     "extensions/pairing/circuit",
     "extensions/pairing/transpiler",
@@ -153,6 +154,7 @@ openvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false
 openvm-ecc-transpiler = { path = "extensions/ecc/transpiler", default-features = false }
 openvm-ecc-guest = { path = "extensions/ecc/guest", default-features = false }
 openvm-ecc-sw-setup = { path = "extensions/ecc/sw-setup", default-features = false }
+openvm-ecc-te-setup = { path = "extensions/ecc/te-setup", default-features = false }
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }

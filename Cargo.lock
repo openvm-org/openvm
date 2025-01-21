@@ -3766,6 +3766,7 @@ dependencies = [
  "openvm-algebra-guest",
  "openvm-algebra-moduli-setup",
  "openvm-ecc-sw-setup",
+ "openvm-ecc-te-setup",
  "openvm-platform",
  "openvm-rv32im-guest",
  "rand",
@@ -3778,6 +3779,7 @@ name = "openvm-ecc-integration-tests"
 version = "0.2.0-alpha"
 dependencies = [
  "eyre",
+ "num-bigint-dig",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
  "openvm-circuit",
@@ -3799,6 +3801,17 @@ name = "openvm-ecc-sw-setup"
 version = "0.2.0-alpha"
 dependencies = [
  "openvm-macros-common",
+ "quote",
+ "syn 2.0.95",
+]
+
+[[package]]
+name = "openvm-ecc-te-setup"
+version = "0.2.0-alpha"
+dependencies = [
+ "num-bigint-dig",
+ "openvm-macros-common",
+ "proc-macro2",
  "quote",
  "syn 2.0.95",
 ]

@@ -286,24 +286,40 @@ where
         &self.air
     }
 
+    // TODO: add support to pad with setup row.
     fn finalize(&self, trace: &mut RowMajorMatrix<F>, num_records: usize) {
         if !self.should_finalize || num_records == 0 {
             return;
         }
-        // We will copy over the core part of last row to padded rows (all rows after num_records).
-        let core_width = <Self::Air as BaseAir<F>>::width(&self.air);
-        let adapter_width = trace.width() - core_width;
-        let last_row = trace
-            .rows()
-            .nth(num_records - 1)
-            .unwrap()
-            .collect::<Vec<_>>();
-        let last_row_core = last_row.split_at(adapter_width).1;
-        for row in trace.rows_mut().skip(num_records) {
-            let core_row = row.split_at_mut(adapter_width).1;
-            // The same as last row, except "is_valid" (the first element of core part) is zero.
-            core_row.copy_from_slice(last_row_core);
-            core_row[0] = F::ZERO;
+
+        if self.air.num_flags() == 0 {
+            // We will copy over the core part of last row to padded rows (all rows after num_records).
+            let core_width = <Self::Air as BaseAir<F>>::width(&self.air);
+            let adapter_width = trace.width() - core_width;
+            let last_row = trace
+                .rows()
+                .nth(num_records - 1)
+                .unwrap()
+                .collect::<Vec<_>>();
+            let last_row_core = last_row.split_at(adapter_width).1;
+            for row in trace.rows_mut().skip(num_records) {
+                let core_row = row.split_at_mut(adapter_width).1;
+                // The same as last row, except "is_valid" (the first element of core part) is zero.
+                core_row.copy_from_slice(last_row_core);
+                core_row[0] = F::ZERO;
+            }
+        } else {
+            // We will copy over the core part of first row to padded rows (all rows after num_records).
+            let core_width = <Self::Air as BaseAir<F>>::width(&self.air);
+            let adapter_width = trace.width() - core_width;
+            let first_row = trace.rows().nth(0).unwrap().collect::<Vec<_>>();
+            let first_row_core = first_row.split_at(adapter_width).1;
+            for row in trace.rows_mut().skip(num_records) {
+                let core_row = row.split_at_mut(adapter_width).1;
+                // The same as first row, except "is_valid" (the first element of core part) is zero.
+                core_row.copy_from_slice(first_row_core);
+                core_row[0] = F::ZERO;
+            }
         }
     }
 }

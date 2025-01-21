@@ -16,7 +16,7 @@ use openvm_ecc_guest::{
     k256::{SECP256K1_MODULUS, SECP256K1_ORDER},
     p256::{CURVE_A as P256_A, CURVE_B as P256_B, P256_MODULUS, P256_ORDER},
 };
-use openvm_ecc_transpiler::{EccPhantom, Rv32WeierstrassOpcode};
+use openvm_ecc_transpiler::{EccPhantom, Rv32EdwardsOpcode, Rv32WeierstrassOpcode};
 use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
-use super::{EcAddNeChip, EcDoubleChip};
+use super::{EcAddNeChip, EcDoubleChip, TeEcAddChip};
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -36,6 +36,19 @@ pub struct CurveConfig {
     /// The scalar field modulus of the curve.
     #[serde_as(as = "DisplayFromStr")]
     pub scalar: BigUint,
+    // curve-specific coefficients
+    pub coeffs: CurveCoeffs,
+}
+
+#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
+pub enum CurveCoeffs {
+    SwCurve(SwCurveConfig),
+    TeCurve(TeCurveConfig),
+}
+
+#[serde_as]
+#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
+pub struct SwCurveConfig {
     /// The coefficient a of y^2 = x^3 + ax + b.
     #[serde_as(as = "DisplayFromStr")]
     pub a: BigUint,
@@ -44,18 +57,33 @@ pub struct CurveConfig {
     pub b: BigUint,
 }
 
+#[serde_as]
+#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
+pub struct TeCurveConfig {
+    /// The coefficient a of ax^2 + y^2 = 1 + dx^2y^2
+    #[serde_as(as = "DisplayFromStr")]
+    pub a: BigUint,
+    /// The coefficient d of ax^2 + y^2 = 1 + dx^2y^2
+    #[serde_as(as = "DisplayFromStr")]
+    pub d: BigUint,
+}
+
 pub static SECP256K1_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
     modulus: SECP256K1_MODULUS.clone(),
     scalar: SECP256K1_ORDER.clone(),
-    a: BigUint::zero(),
-    b: BigUint::from_u8(7u8).unwrap(),
+    coeffs: CurveCoeffs::SwCurve(SwCurveConfig {
+        a: BigUint::zero(),
+        b: BigUint::from_u8(7u8).unwrap(),
+    }),
 });
 
 pub static P256_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
     modulus: P256_MODULUS.clone(),
     scalar: P256_ORDER.clone(),
-    a: BigUint::from_bytes_le(P256_A.as_le_bytes()),
-    b: BigUint::from_bytes_le(P256_B.as_le_bytes()),
+    coeffs: CurveCoeffs::SwCurve(SwCurveConfig {
+        a: BigUint::from_bytes_le(P256_A.as_le_bytes()),
+        b: BigUint::from_bytes_le(P256_B.as_le_bytes()),
+    }),
 });
 
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -66,11 +94,15 @@ pub struct WeierstrassExtension {
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, Stateful)]
 pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
-    EcAddNeRv32_32(EcAddNeChip<F, 2, 32>),
-    EcDoubleRv32_32(EcDoubleChip<F, 2, 32>),
+    SwEcAddNeRv32_32(EcAddNeChip<F, 2, 32>),
+    SwEcDoubleRv32_32(EcDoubleChip<F, 2, 32>),
     // 48 limbs prime
-    EcAddNeRv32_48(EcAddNeChip<F, 6, 16>),
-    EcDoubleRv32_48(EcDoubleChip<F, 6, 16>),
+    SwEcAddNeRv32_48(EcAddNeChip<F, 6, 16>),
+    SwEcDoubleRv32_48(EcDoubleChip<F, 6, 16>),
+    // 32 limbs prime
+    TeEcAddRv32_32(TeEcAddChip<F, 2, 32>),
+    // 48 limbs prime
+    TeEcAddRv32_48(TeEcAddChip<F, 6, 16>),
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From, Stateful)]
@@ -107,14 +139,22 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
         let offline_memory = builder.system_base().offline_memory();
         let range_checker = builder.system_base().range_checker_chip.clone();
         let pointer_bits = builder.system_config().memory_config.pointer_max_bits;
-        let ec_add_ne_opcodes = (Rv32WeierstrassOpcode::EC_ADD_NE as usize)
+
+        let sw_add_ne_opcodes = (Rv32WeierstrassOpcode::EC_ADD_NE as usize)
             ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize);
-        let ec_double_opcodes = (Rv32WeierstrassOpcode::EC_DOUBLE as usize)
+        let sw_double_opcodes = (Rv32WeierstrassOpcode::EC_DOUBLE as usize)
             ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize);
 
+        let te_add_opcodes =
+            (Rv32EdwardsOpcode::EC_ADD as usize)..=(Rv32EdwardsOpcode::SETUP_EC_ADD as usize);
+
         for (i, curve) in self.supported_curves.iter().enumerate() {
-            let class_offset =
+            let sw_class_offset =
                 Rv32WeierstrassOpcode::default_offset() + i * Rv32WeierstrassOpcode::COUNT;
+            // right now this is the same as sw_class_offset
+            let te_class_offset =
+                Rv32EdwardsOpcode::default_offset() + i * Rv32EdwardsOpcode::COUNT;
+
             let bytes = curve.modulus.bits().div_ceil(8);
             let config32 = ExprBuilderConfig {
                 modulus: curve.modulus.clone(),
@@ -128,85 +168,141 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
             };
             // TODO: Better support for different limb sizes. Currently only 32 or 48 limbs are supported.
             if bytes <= 32 {
-                let add_ne_chip = EcAddNeChip::new(
-                    Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
-                    config32.clone(),
-                    class_offset,
-                    range_checker.clone(),
-                    offline_memory.clone(),
-                );
-                inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_32(add_ne_chip),
-                    ec_add_ne_opcodes
-                        .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
-                )?;
-                let double_chip = EcDoubleChip::new(
-                    Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
-                    range_checker.clone(),
-                    config32.clone(),
-                    class_offset,
-                    curve.a.clone(),
-                    offline_memory.clone(),
-                );
-                inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_32(double_chip),
-                    ec_double_opcodes
-                        .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
-                )?;
+                match curve.coeffs.clone() {
+                    CurveCoeffs::SwCurve(SwCurveConfig { a, b: _ }) => {
+                        let sw_add_ne_chip = EcAddNeChip::new(
+                            Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
+                                execution_bus,
+                                program_bus,
+                                memory_bridge,
+                                pointer_bits,
+                                bitwise_lu_chip.clone(),
+                            ),
+                            config32.clone(),
+                            sw_class_offset,
+                            range_checker.clone(),
+                            offline_memory.clone(),
+                        );
+                        inventory.add_executor(
+                            WeierstrassExtensionExecutor::SwEcAddNeRv32_32(sw_add_ne_chip),
+                            sw_add_ne_opcodes
+                                .clone()
+                                .map(|x| VmOpcode::from_usize(x + sw_class_offset)),
+                        )?;
+                        let sw_double_chip = EcDoubleChip::new(
+                            Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
+                                execution_bus,
+                                program_bus,
+                                memory_bridge,
+                                pointer_bits,
+                                bitwise_lu_chip.clone(),
+                            ),
+                            range_checker.clone(),
+                            config32.clone(),
+                            sw_class_offset,
+                            a.clone(),
+                            offline_memory.clone(),
+                        );
+                        inventory.add_executor(
+                            WeierstrassExtensionExecutor::SwEcDoubleRv32_32(sw_double_chip),
+                            sw_double_opcodes
+                                .clone()
+                                .map(|x| VmOpcode::from_usize(x + sw_class_offset)),
+                        )?;
+                    }
+
+                    CurveCoeffs::TeCurve(TeCurveConfig { a, d }) => {
+                        let te_add_chip = TeEcAddChip::new(
+                            Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
+                                execution_bus,
+                                program_bus,
+                                memory_bridge,
+                                pointer_bits,
+                                bitwise_lu_chip.clone(),
+                            ),
+                            config32.clone(),
+                            sw_class_offset,
+                            a.clone(),
+                            d.clone(),
+                            range_checker.clone(),
+                            offline_memory.clone(),
+                        );
+                        inventory.add_executor(
+                            WeierstrassExtensionExecutor::TeEcAddRv32_32(te_add_chip),
+                            sw_add_ne_opcodes
+                                .clone()
+                                .map(|x| VmOpcode::from_usize(x + sw_class_offset)),
+                        )?;
+                    }
+                }
             } else if bytes <= 48 {
-                let add_ne_chip = EcAddNeChip::new(
-                    Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
-                    config48.clone(),
-                    class_offset,
-                    range_checker.clone(),
-                    offline_memory.clone(),
-                );
-                inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_48(add_ne_chip),
-                    ec_add_ne_opcodes
-                        .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
-                )?;
-                let double_chip = EcDoubleChip::new(
-                    Rv32VecHeapAdapterChip::<F, 1, 6, 6, 16, 16>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
-                    range_checker.clone(),
-                    config48.clone(),
-                    class_offset,
-                    curve.a.clone(),
-                    offline_memory.clone(),
-                );
-                inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_48(double_chip),
-                    ec_double_opcodes
-                        .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
-                )?;
+                match curve.coeffs.clone() {
+                    CurveCoeffs::SwCurve(SwCurveConfig { a, b: _ }) => {
+                        let sw_add_ne_chip = EcAddNeChip::new(
+                            Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
+                                execution_bus,
+                                program_bus,
+                                memory_bridge,
+                                pointer_bits,
+                                bitwise_lu_chip.clone(),
+                            ),
+                            config48.clone(),
+                            sw_class_offset,
+                            range_checker.clone(),
+                            offline_memory.clone(),
+                        );
+                        inventory.add_executor(
+                            WeierstrassExtensionExecutor::SwEcAddNeRv32_48(sw_add_ne_chip),
+                            sw_add_ne_opcodes
+                                .clone()
+                                .map(|x| VmOpcode::from_usize(x + sw_class_offset)),
+                        )?;
+                        let sw_double_chip = EcDoubleChip::new(
+                            Rv32VecHeapAdapterChip::<F, 1, 6, 6, 16, 16>::new(
+                                execution_bus,
+                                program_bus,
+                                memory_bridge,
+                                pointer_bits,
+                                bitwise_lu_chip.clone(),
+                            ),
+                            range_checker.clone(),
+                            config48.clone(),
+                            sw_class_offset,
+                            a.clone(),
+                            offline_memory.clone(),
+                        );
+                        inventory.add_executor(
+                            WeierstrassExtensionExecutor::SwEcDoubleRv32_48(sw_double_chip),
+                            sw_double_opcodes
+                                .clone()
+                                .map(|x| VmOpcode::from_usize(x + sw_class_offset)),
+                        )?;
+                    }
+
+                    CurveCoeffs::TeCurve(TeCurveConfig { a, d }) => {
+                        let te_add_chip = TeEcAddChip::new(
+                            Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
+                                execution_bus,
+                                program_bus,
+                                memory_bridge,
+                                pointer_bits,
+                                bitwise_lu_chip.clone(),
+                            ),
+                            config48.clone(),
+                            te_class_offset,
+                            a.clone(),
+                            d.clone(),
+                            range_checker.clone(),
+                            offline_memory.clone(),
+                        );
+                        inventory.add_executor(
+                            WeierstrassExtensionExecutor::TeEcAddRv32_48(te_add_chip),
+                            te_add_opcodes
+                                .clone()
+                                .map(|x| VmOpcode::from_usize(x + te_class_offset)),
+                        )?;
+                    }
+                }
             } else {
                 panic!("Modulus too large");
             }
@@ -235,7 +331,7 @@ pub(crate) mod phantom {
     use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
 
-    use super::CurveConfig;
+    use super::{CurveCoeffs, CurveConfig, SwCurveConfig, TeCurveConfig};
 
     #[derive(derive_new::new)]
     pub struct DecompressHintSubEx {
@@ -302,12 +398,19 @@ pub(crate) mod phantom {
     }
 
     fn decompress_point(x: BigUint, is_y_odd: bool, curve: &CurveConfig) -> BigUint {
-        let alpha = ((&x * &x * &x) + (&x * &curve.a) + &curve.b) % &curve.modulus;
-        let beta = mod_sqrt(alpha, &curve.modulus);
-        if is_y_odd == beta.is_odd() {
-            beta
-        } else {
-            &curve.modulus - &beta
+        match curve.coeffs.clone() {
+            CurveCoeffs::SwCurve(SwCurveConfig { a, b }) => {
+                let alpha = ((&x * &x * &x) + (&x * &a) + &b) % &curve.modulus;
+                let beta = mod_sqrt(alpha, &curve.modulus);
+                if is_y_odd == beta.is_odd() {
+                    beta
+                } else {
+                    &curve.modulus - &beta
+                }
+            }
+            CurveCoeffs::TeCurve(TeCurveConfig { a: _, d: _ }) => {
+                unimplemented!("should not call decompress_point for Twisted Edwards curves");
+            }
         }
     }
 
