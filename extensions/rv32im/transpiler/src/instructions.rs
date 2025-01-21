@@ -263,6 +263,7 @@ pub enum DivRemOpcode {
 #[allow(non_camel_case_types)]
 pub enum Rv32HintStoreOpcode {
     HINT_STOREW,
+    HINT_BUFFER,
 }
 
 // =================================================================================================

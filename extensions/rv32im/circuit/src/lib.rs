@@ -35,3 +35,4 @@ pub use extension::*;
 
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;
+mod hintstore_new;
