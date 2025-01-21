@@ -13,7 +13,7 @@ use {
     openvm_platform::custom_insn_r,
 };
 #[cfg(not(target_os = "zkvm"))]
-use {num_bigint_dig::BigUint, num_traits::One, openvm::utils::biguint_to_limbs};
+use {num_bigint::BigUint, num_traits::One, openvm::utils::biguint_to_limbs};
 
 use crate::impl_bin_op;
 

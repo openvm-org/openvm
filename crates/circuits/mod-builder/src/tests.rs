@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_circuit_primitives::{bigint::utils::*, TraceSubRowGenerator};
 use openvm_stark_backend::{
     p3_air::BaseAir, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
@@ -64,7 +64,7 @@ fn test_div() {
 
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
-    let y_inv = big_uint_mod_inverse(&y, &prime);
+    let y_inv = y.modinv(&prime).unwrap();
     let expected = (&x * &y_inv) % prime;
     let inputs = vec![x, y];
 

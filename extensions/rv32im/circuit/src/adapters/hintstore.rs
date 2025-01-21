@@ -2,7 +2,6 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
-    sync::Arc,
 };
 
 use openvm_circuit::{
@@ -19,7 +18,9 @@ use openvm_circuit::{
         program::ProgramBus,
     },
 };
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -40,7 +41,7 @@ use crate::adapters::RV32_CELL_BITS;
 /// It writes to the memory at the intermediate pointer.
 pub struct Rv32HintStoreAdapterChip<F: Field> {
     pub air: Rv32HintStoreAdapterAir,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     _marker: PhantomData<F>,
 }
 
@@ -50,7 +51,7 @@ impl<F: PrimeField32> Rv32HintStoreAdapterChip<F> {
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         pointer_max_bits: usize,
-        range_checker_chip: Arc<VariableRangeCheckerChip>,
+        range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 16);
         Self {
@@ -89,7 +90,7 @@ pub struct Rv32HintStoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1_aux_cols: MemoryReadAuxCols<T>,
 
     pub imm: T,
     pub imm_sign: T,

@@ -46,7 +46,7 @@ fn public_values_happy_path_1() {
         custom_pv_vars: to_field_vec(vec![1, 0]),
         _marker: Default::default(),
     };
-    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 0, 2));
+    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 2));
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 12]);
 
@@ -63,7 +63,7 @@ fn public_values_neg_pv_not_match() {
         custom_pv_vars: to_field_vec(vec![1, 0]),
         _marker: Default::default(),
     };
-    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 0, 2));
+    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 2));
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 56456]);
 
@@ -83,7 +83,7 @@ fn public_values_neg_index_out_of_bound() {
         custom_pv_vars: to_field_vec(vec![0, 0]),
         _marker: Default::default(),
     };
-    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 0, 2));
+    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 2));
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 0]);
 
@@ -121,7 +121,7 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
     let width = rows[0].width();
     let flatten_rows: Vec<_> = rows.into_iter().flat_map(|r| r.flatten()).collect();
     let trace = RowMajorMatrix::new(flatten_rows, width);
-    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 0, 2));
+    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 2));
     let pvs = to_field_vec(vec![0, 0, actual_pv]);
 
     disable_debug_builder();

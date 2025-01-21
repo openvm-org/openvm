@@ -407,7 +407,7 @@ impl KeccakVmAir {
         &self,
         builder: &mut AB,
         local: &KeccakVmCols<AB::Var>,
-        register_aux: &[MemoryReadAuxCols<AB::Var, RV32_REGISTER_NUM_LIMBS>; KECCAK_REGISTER_READS],
+        register_aux: &[MemoryReadAuxCols<AB::Var>; KECCAK_REGISTER_READS],
     ) -> AB::Expr {
         let instruction = local.instruction;
         // Only receive opcode if:
@@ -514,7 +514,7 @@ impl KeccakVmAir {
         builder: &mut AB,
         local: &KeccakVmCols<AB::Var>,
         start_read_timestamp: AB::Expr,
-        mem_aux: &[MemoryReadAuxCols<AB::Var, KECCAK_WORD_SIZE>; KECCAK_ABSORB_READS],
+        mem_aux: &[MemoryReadAuxCols<AB::Var>; KECCAK_ABSORB_READS],
     ) -> AB::Expr {
         let partial_block = &local.mem_oc.partial_block;
         // Only read input from memory when it is an opcode-related row

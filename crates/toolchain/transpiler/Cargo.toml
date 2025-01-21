@@ -16,7 +16,6 @@ eyre.workspace = true
 thiserror.workspace = true
 elf = "0.7.4"
 rrs-lib.workspace = true
-num-bigint-dig.workspace = true
 tracing.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 

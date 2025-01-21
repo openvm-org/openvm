@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
 use itertools::Itertools;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
     Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::{
-    var_range::VariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
+    var_range::SharedVariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
 };
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
@@ -158,6 +156,10 @@ where
         };
         ctx.into()
     }
+
+    fn start_offset(&self) -> usize {
+        self.offset
+    }
 }
 
 #[serde_as]
@@ -170,7 +172,7 @@ pub struct FieldExpressionRecord {
 
 pub struct FieldExpressionCoreChip {
     pub air: FieldExpressionCoreAir,
-    pub range_checker: Arc<VariableRangeCheckerChip>,
+    pub range_checker: SharedVariableRangeCheckerChip,
 
     pub name: String,
 
@@ -184,7 +186,7 @@ impl FieldExpressionCoreChip {
         offset: usize,
         local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         name: &str,
         should_finalize: bool,
     ) -> Self {
@@ -277,7 +279,7 @@ where
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         self.air.expr.generate_subrow(
-            (&self.range_checker, record.inputs, record.flags),
+            (self.range_checker.as_ref(), record.inputs, record.flags),
             row_slice,
         );
     }

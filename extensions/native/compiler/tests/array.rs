@@ -128,14 +128,18 @@ fn test_fixed_array_const() {
     let fixed_array = builder.vec(vec![Usize::from(1); len]);
 
     // Put values statically
-    builder.range(0, fixed_array.len()).for_each(|i, builder| {
-        builder.set_value(&fixed_array, i, Usize::from(2));
-    });
+    builder
+        .range(0, fixed_array.len())
+        .for_each(|idx_vec, builder| {
+            builder.set_value(&fixed_array, idx_vec[0], Usize::from(2));
+        });
     // Assert values set.
-    builder.range(0, fixed_array.len()).for_each(|i, builder| {
-        let value = builder.get(&fixed_array, i);
-        builder.assert_eq::<Usize<_>>(value, Usize::from(2));
-    });
+    builder
+        .range(0, fixed_array.len())
+        .for_each(|idx_vec, builder| {
+            let value = builder.get(&fixed_array, idx_vec[0]);
+            builder.assert_eq::<Usize<_>>(value, Usize::from(2));
+        });
     let fixed_2d = builder.uninit_fixed_array(1);
     builder.set_value(&fixed_2d, RVar::zero(), fixed_array);
 
@@ -158,18 +162,22 @@ fn test_fixed_array_var() {
     let fixed_array = builder.uninit_fixed_array(len);
 
     // Put values statically
-    builder.range(0, fixed_array.len()).for_each(|i, builder| {
-        let one: Var<_> = builder.eval(F::ONE);
-        // `len` instructions
-        builder.set(&fixed_array, i, Usize::Var(one));
-    });
+    builder
+        .range(0, fixed_array.len())
+        .for_each(|i_vec, builder| {
+            let one: Var<_> = builder.eval(F::ONE);
+            // `len` instructions
+            builder.set(&fixed_array, i_vec[0], Usize::Var(one));
+        });
     // Assert values set.
-    builder.range(0, fixed_array.len()).for_each(|i, builder| {
-        let value: Usize<_> = builder.get(&fixed_array, i);
-        // `len` instructions to initialize variables. FIXME: this is not optimal.
-        // `len` instructions of `assert_eq`
-        builder.assert_eq::<Var<_>>(value, RVar::from(2));
-    });
+    builder
+        .range(0, fixed_array.len())
+        .for_each(|i_vec, builder| {
+            let value: Usize<_> = builder.get(&fixed_array, i_vec[0]);
+            // `len` instructions to initialize variables. FIXME: this is not optimal.
+            // `len` instructions of `assert_eq`
+            builder.assert_eq::<Var<_>>(value, RVar::from(2));
+        });
     let fixed_2d = builder.uninit_fixed_array(1);
     builder.set_value(&fixed_2d, RVar::zero(), fixed_array);
 

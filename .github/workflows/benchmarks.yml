@@ -11,6 +11,7 @@ on:
       - "crates/circuits/**"
       - "crates/toolchain/**"
       - "crates/prof/**"
+      - "crates/sdk/**"
       - "crates/vm/**"
       - "extensions/**"
       - ".github/workflows/benchmark-call.yml"

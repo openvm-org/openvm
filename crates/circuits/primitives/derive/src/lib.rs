@@ -310,3 +310,91 @@ pub fn chip_usage_getter_derive(input: TokenStream) -> TokenStream {
         Data::Union(_) => unimplemented!("Unions are not supported"),
     }
 }
+
+#[proc_macro_derive(BytesStateful)]
+pub fn bytes_stateful_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let generics = &ast.generics;
+    let (impl_generics, ty_generics, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(inner) => {
+            // Check if the struct has only one unnamed field
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
+            // Assume F is already generic of the field.
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: ::openvm_stark_backend::Stateful<Vec<u8>> });
+
+            quote! {
+                impl #impl_generics ::openvm_stark_backend::Stateful<Vec<u8>> for #name #ty_generics #where_clause {
+                    fn load_state(&mut self, state: Vec<u8>) {
+                        self.0.load_state(state)
+                    }
+
+                    fn store_state(&self) -> Vec<u8> {
+                        self.0.store_state()
+                    }
+                }
+            }
+            .into()
+        }
+        Data::Enum(e) => {
+            let variants = e
+                .variants
+                .iter()
+                .map(|variant| {
+                    let variant_name = &variant.ident;
+
+                    let mut fields = variant.fields.iter();
+                    let field = fields.next().unwrap();
+                    assert!(fields.next().is_none(), "Only one field is supported");
+                    (variant_name, field)
+                })
+                .collect::<Vec<_>>();
+            // Use full path ::openvm_stark_backend... so it can be used either within or outside the vm crate.
+            let (load_state_arms, store_state_arms): (Vec<_>, Vec<_>) =
+                multiunzip(variants.iter().map(|(variant_name, field)| {
+                    let field_ty = &field.ty;
+                    let load_state_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_stark_backend::Stateful<Vec<u8>>>::load_state(x, state)
+                    };
+                    let store_state_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_stark_backend::Stateful<Vec<u8>>>::store_state(x)
+                    };
+
+                    (load_state_arm, store_state_arm)
+                }));
+            quote! {
+                impl #impl_generics ::openvm_stark_backend::Stateful<Vec<u8>> for #name #ty_generics {
+                    fn load_state(&mut self, state: Vec<u8>) {
+                        match self {
+                            #(#load_state_arms,)*
+                        }
+                    }
+
+                    fn store_state(&self) -> Vec<u8> {
+                        match self {
+                            #(#store_state_arms,)*
+                        }
+                    }
+                }
+            }
+            .into()
+        }
+        _ => unimplemented!(),
+    }
+}

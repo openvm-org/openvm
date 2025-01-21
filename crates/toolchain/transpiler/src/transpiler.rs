@@ -50,7 +50,7 @@ impl<F: PrimeField32> Transpiler<F> {
     pub fn transpile(
         &self,
         instructions_u32: &[u32],
-    ) -> Result<Vec<Instruction<F>>, TranspilerError> {
+    ) -> Result<Vec<Option<Instruction<F>>>, TranspilerError> {
         let mut instructions = Vec::new();
         let mut ptr = 0;
         while ptr < instructions_u32.len() {
@@ -66,9 +66,9 @@ impl<F: PrimeField32> Transpiler<F> {
             if options.len() > 1 {
                 return Err(TranspilerError::AmbiguousNextInstruction);
             }
-            let (instruction, advance) = options.pop().unwrap().unwrap();
-            instructions.push(instruction);
-            ptr += advance;
+            let transpiler_output = options.pop().unwrap().unwrap();
+            instructions.extend(transpiler_output.instructions);
+            ptr += transpiler_output.used_u32s;
         }
         Ok(instructions)
     }

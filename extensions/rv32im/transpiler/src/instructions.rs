@@ -3,12 +3,12 @@
 // Enum types that do not start with Rv32 can be used for generic big integers, but the default
 // offset is reserved for RV32IM.
 //
-// Create a new wrapper struct U256BaseAluOpcode(pub BaseAluOpcode) with the UsizeOpcode macro to
+// Create a new wrapper struct U256BaseAluOpcode(pub BaseAluOpcode) with the LocalOpcode macro to
 // specify a different offset.
 // =================================================================================================
 
-use openvm_instructions::UsizeOpcode;
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions::LocalOpcode;
+use openvm_instructions_derive::LocalOpcode;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr};
 
@@ -23,7 +23,7 @@ use strum::{EnumCount, EnumIter, FromRepr};
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -48,7 +48,7 @@ pub enum BaseAluOpcode {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -71,7 +71,7 @@ pub enum ShiftOpcode {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -94,7 +94,7 @@ pub enum LessThanOpcode {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -124,7 +124,7 @@ pub enum Rv32LoadStoreOpcode {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -147,7 +147,7 @@ pub enum BranchEqualOpcode {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -162,7 +162,7 @@ pub enum BranchLessThanOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x230]
 #[repr(usize)]
@@ -173,7 +173,7 @@ pub enum Rv32JalLuiOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x235]
 #[repr(usize)]
@@ -183,7 +183,7 @@ pub enum Rv32JalrOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x240]
 #[repr(usize)]
@@ -193,7 +193,7 @@ pub enum Rv32AuipcOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x250]
 #[repr(usize)]
@@ -213,7 +213,7 @@ pub enum MulOpcode {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -237,7 +237,7 @@ pub enum MulHOpcode {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -256,7 +256,7 @@ pub enum DivRemOpcode {
 // =================================================================================================
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x300]
 #[repr(usize)]

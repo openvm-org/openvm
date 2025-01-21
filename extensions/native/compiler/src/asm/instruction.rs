@@ -108,9 +108,6 @@ pub enum AsmInstruction<F, EF> {
     /// Halt.
     Halt,
 
-    /// Break(label)
-    Break(F),
-
     /// Perform a Poseidon2 permutation on state starting at address `lhs`
     /// and store new state at `rhs`.
     /// (a, b) are pointers to (lhs, rhs).
@@ -121,6 +118,14 @@ pub enum AsmInstruction<F, EF> {
 
     /// (a, b, res, len, alpha, alpha_pow)
     FriReducedOpening(i32, i32, i32, i32, i32, i32),
+
+    /// (dim, opened, opened_length, sibling, index, commit)
+    /// opened values are field elements
+    VerifyBatchFelt(i32, i32, i32, i32, i32, i32),
+
+    /// (dim, opened, opened_length, sibling, index, commit)
+    /// opened values are extension field elements
+    VerifyBatchExt(i32, i32, i32, i32, i32, i32),
 
     /// Print a variable.
     PrintV(i32),
@@ -159,7 +164,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
 
     pub fn fmt(&self, labels: &BTreeMap<F, String>, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
             AsmInstruction::LoadFI(dst, src, var_index, size, offset) => {
                 write!(
                     f,
@@ -359,6 +363,20 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                     f,
                     "fri_mat_opening ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
                     a, b, res, len, alpha, alpha_pow
+                )
+            }
+            AsmInstruction::VerifyBatchFelt(dim, opened, opened_length, sibling, index, commit) => {
+                write!(
+                    f,
+                    "verify_batch_felt ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
+                    dim, opened, opened_length, sibling, index, commit
+                )
+            }
+            AsmInstruction::VerifyBatchExt(dim, opened, opened_length, sibling, index, commit) => {
+                write!(
+                    f,
+                    "verify_batch_ext ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
+                    dim, opened, opened_length, sibling, index, commit
                 )
             }
         }

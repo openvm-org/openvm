@@ -29,8 +29,10 @@ pub struct Rv32WeierstrassConfig {
 
 impl Rv32WeierstrassConfig {
     pub fn new(curves: Vec<CurveConfig>) -> Self {
-        let mut primes: Vec<_> = curves.iter().map(|c| c.modulus.clone()).collect();
-        primes.extend(curves.iter().map(|c| c.scalar.clone()));
+        let primes: Vec<_> = curves
+            .iter()
+            .flat_map(|c| [c.modulus.clone(), c.scalar.clone()])
+            .collect();
         Self {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),

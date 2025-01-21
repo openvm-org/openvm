@@ -1,5 +1,5 @@
 #[cfg(not(target_os = "zkvm"))]
-use num_bigint_dig::BigInt;
+use num_bigint::BigInt;
 
 #[inline]
 #[cfg(not(target_os = "zkvm"))]

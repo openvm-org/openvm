@@ -94,7 +94,7 @@ fn test_publish() {
 }
 
 #[test]
-fn test_num2bits_v() {
+fn test_num2bits_v_circuit() {
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;
     let mut value_u32 = 1345237507;

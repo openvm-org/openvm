@@ -4,10 +4,10 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use num_bigint_dig::{BigInt, BigUint, Sign};
+use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{FromPrimitive, One, Zero};
 use openvm_circuit_primitives::bigint::{
-    check_carry_to_zero::get_carry_max_abs_and_bits, utils::big_uint_mod_inverse, OverflowInt,
+    check_carry_to_zero::get_carry_max_abs_and_bits, OverflowInt,
 };
 use openvm_stark_backend::{p3_air::AirBuilder, p3_field::FieldAlgebra, p3_util::log2_ceil_usize};
 
@@ -327,9 +327,10 @@ impl SymbolicExpr {
         let (max_pos_abs, max_neg_abs) = self.max_abs(prime);
         let max_abs = max(max_pos_abs, max_neg_abs);
         let max_q_abs = (&max_abs + prime - BigUint::one()) / prime;
-        let q_bits = max_q_abs.bits();
+        let q_bits = max_q_abs.bits() as usize;
+        let p_bits = prime.bits() as usize;
         let q_limbs = q_bits.div_ceil(limb_bits);
-        let p_limbs = prime.bits().div_ceil(limb_bits);
+        let p_limbs = p_bits.div_ceil(limb_bits);
         let qp_limbs = q_limbs + p_limbs - 1;
 
         let expr_limbs = self.expr_limbs(num_limbs);
@@ -526,7 +527,7 @@ impl SymbolicExpr {
             SymbolicExpr::Div(lhs, rhs) => {
                 let left = lhs.compute(inputs, variables, flags, prime);
                 let right = rhs.compute(inputs, variables, flags, prime);
-                let right_inv = big_uint_mod_inverse(&right, prime);
+                let right_inv = right.modinv(prime).unwrap();
                 (left * right_inv) % prime
             }
             SymbolicExpr::IntAdd(lhs, s) => {

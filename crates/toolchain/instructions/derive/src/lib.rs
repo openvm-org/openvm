@@ -5,8 +5,8 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Expr, ExprLit, Fields, Lit, Meta};
 
-#[proc_macro_derive(UsizeOpcode, attributes(opcode_offset))]
-pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(LocalOpcode, attributes(opcode_offset))]
+pub fn local_opcode_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let name = &ast.ident;
 
@@ -40,34 +40,30 @@ pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
             let inner_ty = inner.ty;
 
             quote! {
-                impl UsizeOpcode for #name {
-                    fn default_offset() -> usize {
-                        #offset
-                    }
+                impl LocalOpcode for #name {
+                    const CLASS_OFFSET: usize = #offset;
 
                     fn from_usize(value: usize) -> Self {
-                        #name(<#inner_ty as UsizeOpcode>::from_usize(value))
+                        #name(<#inner_ty as LocalOpcode>::from_usize(value))
                     }
 
-                    fn as_usize(&self) -> usize {
-                        self.0.as_usize()
+                    fn local_usize(&self) -> usize {
+                        self.0.local_usize()
                     }
                 }
             }.into()
         },
         Data::Enum(_) => {
             quote! {
-                impl UsizeOpcode for #name {
-                    fn default_offset() -> usize {
-                        #offset
-                    }
+                impl LocalOpcode for #name {
+                    const CLASS_OFFSET: usize = #offset;
 
                     fn from_usize(value: usize) -> Self {
                         Self::from_repr(value.try_into().unwrap())
                             .unwrap_or_else(|| panic!("Failed to convert usize {} to opcode {}", value, stringify!(#name)))
                     }
 
-                    fn as_usize(&self) -> usize {
+                    fn local_usize(&self) -> usize {
                         *self as usize
                     }
                 }

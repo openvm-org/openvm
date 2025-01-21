@@ -33,6 +33,7 @@ use crate::{
     config::{AggConfig, AggStarkConfig, AppConfig},
     keygen::perm::AirIdPermutation,
     prover::vm::types::VmProvingKey,
+    static_verifier::StaticVerifierPvHandler,
     verifier::{
         internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
     },
@@ -296,7 +297,11 @@ impl AggProvingKey {
     /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.
     /// - Please make sure SRS(KZG parameters) is already downloaded.
     #[tracing::instrument(level = "info", fields(group = "agg_keygen"), skip_all)]
-    pub fn keygen(config: AggConfig, reader: &impl Halo2ParamsReader) -> Self {
+    pub fn keygen(
+        config: AggConfig,
+        reader: &impl Halo2ParamsReader,
+        pv_handler: Option<&impl StaticVerifierPvHandler>,
+    ) -> Self {
         let AggConfig {
             agg_stark_config,
             halo2_config,
@@ -310,6 +315,7 @@ impl AggProvingKey {
         let verifier = agg_stark_pk.root_verifier_pk.keygen_static_verifier(
             &reader.read_params(halo2_config.verifier_k),
             dummy_root_proof,
+            pv_handler,
         );
         let dummy_snark = verifier.generate_dummy_snark(reader);
         let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {

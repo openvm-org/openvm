@@ -69,7 +69,7 @@ pub struct Rv32JalrWriteRecord {
 pub struct Rv32JalrAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
-    pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1_aux_cols: MemoryReadAuxCols<T>,
     pub rd_ptr: T,
     pub rd_aux_cols: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
     pub needs_write: T,

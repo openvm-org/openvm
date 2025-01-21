@@ -2,10 +2,11 @@ use std::{array, fmt::Debug};
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 
 use crate::system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MemoryLogEntry<T> {
     Read {
         address_space: u32,

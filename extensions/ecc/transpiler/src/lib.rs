@@ -1,16 +1,16 @@
 use openvm_ecc_guest::{SwBaseFunct7, TeBaseFunct7, SW_FUNCT3, SW_OPCODE, TE_FUNCT3, TE_OPCODE};
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
     VmOpcode,
 };
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions_derive::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_transpiler::{util::from_r_type, TranspilerExtension};
+use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x600]
 #[allow(non_camel_case_types)]
@@ -43,7 +43,7 @@ pub enum EccPhantom {
 pub struct EccTranspilerExtension;
 
 impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         self.process_weierstrass_instruction(instruction_stream)
             .or(self.process_edwards_instruction(instruction_stream))
     }
@@ -53,7 +53,7 @@ impl EccTranspilerExtension {
     fn process_edwards_instruction<F: PrimeField32>(
         &self,
         instruction_stream: &[u32],
-    ) -> Option<(Instruction<F>, usize)> {
+    ) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -100,13 +100,13 @@ impl EccTranspilerExtension {
                 Some(from_r_type(global_opcode, 2, &dec_insn))
             }
         };
-        instruction.map(|instruction| (instruction, 1))
+        instruction.map(TranspilerOutput::one_to_one)
     }
 
     fn process_weierstrass_instruction<F: PrimeField32>(
         &self,
         instruction_stream: &[u32],
-    ) -> Option<(Instruction<F>, usize)> {
+    ) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -133,15 +133,12 @@ impl EccTranspilerExtension {
             let curve_idx_shift = curve_idx * Rv32WeierstrassOpcode::COUNT;
             if let Some(SwBaseFunct7::HintDecompress) = SwBaseFunct7::from_repr(base_funct7) {
                 assert_eq!(dec_insn.rd, 0);
-                return Some((
-                    Instruction::phantom(
-                        PhantomDiscriminant(EccPhantom::HintDecompress as u16),
-                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
-                        curve_idx as u16,
-                    ),
-                    1,
-                ));
+                return Some(TranspilerOutput::one_to_one(Instruction::phantom(
+                    PhantomDiscriminant(EccPhantom::HintDecompress as u16),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    curve_idx as u16,
+                )));
             }
             if base_funct7 == SwBaseFunct7::SwSetup as u8 {
                 let local_opcode = match dec_insn.rs2 {
@@ -149,7 +146,7 @@ impl EccTranspilerExtension {
                     _ => Rv32WeierstrassOpcode::SETUP_EC_ADD_NE,
                 };
                 Some(Instruction::new(
-                    VmOpcode::from_usize(local_opcode.with_default_offset() + curve_idx_shift),
+                    VmOpcode::from_usize(local_opcode.global_opcode().as_usize() + curve_idx_shift),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
@@ -162,12 +159,12 @@ impl EccTranspilerExtension {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
                     Some(SwBaseFunct7::SwAddNe) => {
                         Rv32WeierstrassOpcode::EC_ADD_NE as usize
-                            + Rv32WeierstrassOpcode::default_offset()
+                            + Rv32WeierstrassOpcode::CLASS_OFFSET
                     }
                     Some(SwBaseFunct7::SwDouble) => {
                         assert!(dec_insn.rs2 == 0);
                         Rv32WeierstrassOpcode::EC_DOUBLE as usize
-                            + Rv32WeierstrassOpcode::default_offset()
+                            + Rv32WeierstrassOpcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };
@@ -175,6 +172,6 @@ impl EccTranspilerExtension {
                 Some(from_r_type(global_opcode, 2, &dec_insn))
             }
         };
-        instruction.map(|instruction| (instruction, 1))
+        instruction.map(TranspilerOutput::one_to_one)
     }
 }

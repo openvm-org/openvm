@@ -4,7 +4,7 @@ use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -212,8 +212,8 @@ where
             + opcode_when(&[StoreW0]) * AB::Expr::from_canonical_u8(STOREW as u8)
             + opcode_when(&[StoreH0, StoreH2]) * AB::Expr::from_canonical_u8(STOREH as u8)
             + opcode_when(&[StoreB0, StoreB1, StoreB2, StoreB3])
-                * AB::Expr::from_canonical_u8(STOREB as u8)
-            + AB::Expr::from_canonical_usize(self.offset);
+                * AB::Expr::from_canonical_u8(STOREB as u8);
+        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(self, expected_opcode);
 
         let load_shift_amount = opcode_when(&[LoadBu1]) * AB::Expr::ONE
             + opcode_when(&[LoadHu2, LoadBu2]) * AB::Expr::TWO
@@ -237,6 +237,10 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        self.offset
+    }
 }
 
 #[derive(Debug)]
@@ -247,7 +251,7 @@ pub struct LoadStoreCoreChip<const NUM_CELLS: usize> {
 impl<const NUM_CELLS: usize> LoadStoreCoreChip<NUM_CELLS> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: LoadStoreCoreAir::<NUM_CELLS> { offset },
+            air: LoadStoreCoreAir { offset },
         }
     }
 }

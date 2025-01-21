@@ -33,7 +33,7 @@ use openvm_circuit::{
     },
 };
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, UsizeOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_rv32im_circuit::adapters::read_rv32_register;

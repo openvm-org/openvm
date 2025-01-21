@@ -73,7 +73,7 @@ pub struct ConvertAdapterCols<T, const READ_SIZE: usize, const WRITE_SIZE: usize
     pub a_as: T,
     pub b_as: T,
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; 1],
-    pub reads_aux: [MemoryReadAuxCols<T, READ_SIZE>; 1],
+    pub reads_aux: [MemoryReadAuxCols<T>; 1],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]

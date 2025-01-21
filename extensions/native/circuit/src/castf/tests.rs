@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::CastfOpcode;
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError, Chip,
@@ -45,7 +45,7 @@ fn prepare_castf_rand_write_execute(
     tester.execute(
         chip,
         &Instruction::from_usize(
-            VmOpcode::from_usize(CastfOpcode::CASTF as usize),
+            CastfOpcode::CASTF.global_opcode(),
             [address_x, address_y, 0, as_x, as_y],
         ),
     );
@@ -65,7 +65,7 @@ fn castf_rand_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        CastFCoreChip::new(tester.range_checker(), 0),
+        CastFCoreChip::new(tester.range_checker()),
         tester.offline_memory_mutex_arc(),
     );
     let num_tests: usize = 3;
@@ -89,7 +89,7 @@ fn negative_castf_overflow_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        CastFCoreChip::new(range_checker_chip.clone(), 0),
+        CastFCoreChip::new(range_checker_chip.clone()),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -127,7 +127,7 @@ fn negative_castf_memread_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        CastFCoreChip::new(range_checker_chip.clone(), 0),
+        CastFCoreChip::new(range_checker_chip.clone()),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -165,7 +165,7 @@ fn negative_castf_memwrite_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        CastFCoreChip::new(range_checker_chip.clone(), 0),
+        CastFCoreChip::new(range_checker_chip.clone()),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -203,7 +203,7 @@ fn negative_castf_as_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        CastFCoreChip::new(range_checker_chip.clone(), 0),
+        CastFCoreChip::new(range_checker_chip.clone()),
         tester.offline_memory_mutex_arc(),
     );
 

@@ -6,9 +6,11 @@ use std::{
 
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::{InstructionExecutor, Stateful};
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
 };
@@ -18,7 +20,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: AffinePoint<Fp2>: 4 field elements
 // Output: (AffinePoint<Fp2>, Fp2, Fp2) -> 8 field elements
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, Stateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, BytesStateful)]
 pub struct MillerDoubleStepChip<
     F: PrimeField32,
     const INPUT_BLOCKS: usize,
@@ -43,7 +45,7 @@ impl<
         adapter: Rv32VecHeapAdapterChip<F, 1, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         config: ExprBuilderConfig,
         offset: usize,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let expr = miller_double_step_expr(config, range_checker.bus());
@@ -95,7 +97,7 @@ mod tests {
         BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
     use openvm_ecc_guest::AffinePoint;
-    use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
     use openvm_mod_circuit_builder::test_utils::{
         biguint_to_limbs, bls12381_fq_to_biguint, bn254_fq_to_biguint,
     };
@@ -141,7 +143,7 @@ mod tests {
         let mut chip = MillerDoubleStepChip::new(
             adapter,
             config,
-            PairingOpcode::default_offset(),
+            PairingOpcode::CLASS_OFFSET,
             tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );
@@ -208,7 +210,7 @@ mod tests {
         let mut chip = MillerDoubleStepChip::new(
             adapter,
             config,
-            PairingOpcode::default_offset(),
+            PairingOpcode::CLASS_OFFSET,
             tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );

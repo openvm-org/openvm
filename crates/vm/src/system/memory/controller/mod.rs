@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_zero::IsZeroSubAir,
     utils::next_power_of_two_or_zero,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     TraceSubRowGenerator,
 };
 use openvm_stark_backend::{
@@ -48,7 +48,7 @@ use crate::{
 };
 
 pub mod dimensions;
-mod interface;
+pub mod interface;
 
 pub const CHUNK: usize = 8;
 /// The offset of the Merkle AIR in AIRs of MemoryController.
@@ -91,7 +91,7 @@ pub struct MemoryController<F> {
 
     #[getset(get = "pub")]
     pub(crate) mem_config: MemoryConfig,
-    pub range_checker: Arc<VariableRangeCheckerChip>,
+    pub range_checker: SharedVariableRangeCheckerChip,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
 
@@ -226,7 +226,7 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn with_volatile_memory(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
     ) -> Self {
         let range_checker_bus = range_checker.bus();
         let initial_memory = MemoryImage::default();
@@ -267,7 +267,7 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn with_persistent_memory(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         merkle_bus: MemoryMerkleBus,
         compression_bus: DirectCompressionBus,
     ) -> Self {
@@ -694,20 +694,24 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
         self.offline_memory.clone()
     }
+    pub fn get_memory_logs(&self) -> Vec<MemoryLogEntry<F>> {
+        // TODO: can we avoid clone?
+        self.memory.log.clone()
+    }
+    pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {
+        self.memory.log = logs;
+    }
 }
 
 pub struct MemoryAuxColsFactory<T> {
-    pub(crate) range_checker: Arc<VariableRangeCheckerChip>,
+    pub(crate) range_checker: SharedVariableRangeCheckerChip,
     pub(crate) timestamp_lt_air: AssertLtSubAir,
     pub(crate) _marker: PhantomData<T>,
 }
 
 // NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in parallelized trace generation.
 impl<F: PrimeField32> MemoryAuxColsFactory<F> {
-    pub fn make_read_aux_cols<const N: usize>(
-        &self,
-        read: &MemoryRecord<F>,
-    ) -> MemoryReadAuxCols<F, N> {
+    pub fn make_read_aux_cols(&self, read: &MemoryRecord<F>) -> MemoryReadAuxCols<F> {
         assert!(
             !read.address_space.is_zero(),
             "cannot make `MemoryReadAuxCols` for address space 0"
@@ -756,7 +760,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         debug_assert!(prev_timestamp < timestamp);
         let mut decomp = [F::ZERO; AUX_LEN];
         self.timestamp_lt_air.generate_subrow(
-            (&self.range_checker, prev_timestamp, timestamp),
+            (self.range_checker.as_ref(), prev_timestamp, timestamp),
             &mut decomp,
         );
         LessThanAuxCols::new(decomp)
@@ -765,9 +769,10 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
 
-    use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+    use openvm_circuit_primitives::var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+    };
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
@@ -787,7 +792,7 @@ mod tests {
         let memory_bus = MemoryBus(MEMORY_BUS);
         let memory_config = MemoryConfig::default();
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
-        let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
 
         let mut memory_controller = MemoryController::with_volatile_memory(
             memory_bus,

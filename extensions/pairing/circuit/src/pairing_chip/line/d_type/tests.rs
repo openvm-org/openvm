@@ -7,7 +7,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_ecc_guest::AffinePoint;
-use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_mod_circuit_builder::{
     test_utils::{
         biguint_to_limbs, bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint,
@@ -56,7 +56,7 @@ fn test_mul_013_by_013() {
             limb_bits: LIMB_BITS,
         },
         BN254_XI_ISIZE,
-        PairingOpcode::default_offset(),
+        PairingOpcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
@@ -151,7 +151,7 @@ fn test_mul_by_01234() {
             limb_bits: LIMB_BITS,
         },
         BN254_XI_ISIZE,
-        PairingOpcode::default_offset(),
+        PairingOpcode::CLASS_OFFSET,
         tester.range_checker(),
         tester.offline_memory_mutex_arc(),
     );
@@ -239,7 +239,7 @@ fn test_evaluate_line() {
     let mut chip = EvaluateLineChip::new(
         adapter,
         config,
-        PairingOpcode::default_offset(),
+        PairingOpcode::CLASS_OFFSET,
         tester.range_checker(),
         tester.offline_memory_mutex_arc(),
     );

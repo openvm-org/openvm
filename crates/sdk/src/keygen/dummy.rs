@@ -3,8 +3,8 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         instructions::{
-            exe::VmExe, instruction::Instruction, program::Program, SystemOpcode::TERMINATE,
-            VmOpcode,
+            exe::VmExe, instruction::Instruction, program::Program, LocalOpcode,
+            SystemOpcode::TERMINATE,
         },
         SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights, VmConfig, VmExecutor,
     },
@@ -208,7 +208,7 @@ fn dummy_app_committed_exe(fri_params: FriParameters) -> Arc<NonRootCommittedExe
 
 fn dummy_app_program() -> Program<F> {
     let mut ret = Program::from_instructions(&[Instruction::from_isize(
-        VmOpcode::with_default_offset(TERMINATE),
+        TERMINATE.global_opcode(),
         0,
         0,
         0,

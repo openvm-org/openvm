@@ -16,20 +16,20 @@ fn test_io() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
     let vars = builder.hint_vars();
-    builder.range(0, vars.len()).for_each(|i, builder| {
-        let el = builder.get(&vars, i);
+    builder.range(0, vars.len()).for_each(|i_vec, builder| {
+        let el = builder.get(&vars, i_vec[0]);
         builder.print_v(el);
     });
 
     let felts = builder.hint_felts();
-    builder.range(0, felts.len()).for_each(|i, builder| {
-        let el = builder.get(&felts, i);
+    builder.range(0, felts.len()).for_each(|i_vec, builder| {
+        let el = builder.get(&felts, i_vec[0]);
         builder.print_f(el);
     });
 
     let exts = builder.hint_exts();
-    builder.range(0, exts.len()).for_each(|i, builder| {
-        let el = builder.get(&exts, i);
+    builder.range(0, exts.len()).for_each(|i_vec, builder| {
+        let el = builder.get(&exts, i_vec[0]);
         builder.print_e(el);
     });
 

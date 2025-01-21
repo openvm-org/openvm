@@ -6,9 +6,11 @@ use std::{
 
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::{InstructionExecutor, Stateful};
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
 };
@@ -18,7 +20,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: line0.b, line0.c, line1.b, line1.c <Fp2>: 2 x 4 field elements
 // Output: 5 Fp2 coefficients -> 10 field elements
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, Stateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, BytesStateful)]
 pub struct EcLineMul023By023Chip<
     F: PrimeField32,
     const INPUT_BLOCKS: usize,
@@ -41,7 +43,7 @@ impl<
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         config: ExprBuilderConfig,
         xi: [isize; 2],
         offset: usize,

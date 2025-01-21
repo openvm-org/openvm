@@ -158,12 +158,12 @@ pub struct Rv32VecHeapTwoReadsAdapterCols<
     pub rs2_val: [T; RV32_REGISTER_NUM_LIMBS],
     pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
 
-    pub rs1_read_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
-    pub rs2_read_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
-    pub rd_read_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1_read_aux: MemoryReadAuxCols<T>,
+    pub rs2_read_aux: MemoryReadAuxCols<T>,
+    pub rd_read_aux: MemoryReadAuxCols<T>,
 
-    pub reads1_aux: [MemoryReadAuxCols<T, READ_SIZE>; BLOCKS_PER_READ1],
-    pub reads2_aux: [MemoryReadAuxCols<T, READ_SIZE>; BLOCKS_PER_READ2],
+    pub reads1_aux: [MemoryReadAuxCols<T>; BLOCKS_PER_READ1],
+    pub reads2_aux: [MemoryReadAuxCols<T>; BLOCKS_PER_READ2],
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; BLOCKS_PER_WRITE],
 }
 

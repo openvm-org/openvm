@@ -146,8 +146,6 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
         let mut felts = HashMap::<u32, AssignedBabyBear>::new();
         let mut exts = HashMap::<u32, AssignedBabyBearExt4>::new();
 
-        let mut vkey_hash = None;
-        let mut committed_values_digest = None;
         #[cfg(feature = "bench-metrics")]
         let mut old_stats = stats_snapshot(ctx, range.clone());
         for (instruction, backtrace) in operations {
@@ -286,6 +284,10 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         let x = ext_chip.scalar_mul(ctx, exts[&b.0], tmp);
                         exts.insert(a.0, x);
                     }
+                    DslIr::DivF(a, b, c) => {
+                        let x = f_chip.div(ctx, felts[&b.0], felts[&c.0]);
+                        felts.insert(a.0, x);
+                    }
                     DslIr::DivFIN(a, b, c) => {
                         // a = b / c
                         let tmp = f_chip.load_constant(ctx, b);
@@ -395,14 +397,6 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     DslIr::WitnessExt(a, b) => {
                         let x = ext_chip.load_witness(ctx, halo2_state.exts[&b]);
                         exts.insert(a.0, x);
-                    }
-                    DslIr::CircuitCommitVkeyHash(a) => {
-                        assert!(vkey_hash.is_none());
-                        vkey_hash = Some(vars[&a.0]);
-                    }
-                    DslIr::CircuitCommitCommittedValuesDigest(a) => {
-                        assert!(committed_values_digest.is_none());
-                        committed_values_digest = Some(vars[&a.0]);
                     }
                     DslIr::CircuitFelts2Ext(a, b) => {
                         let x = AssignedBabyBearExt4(

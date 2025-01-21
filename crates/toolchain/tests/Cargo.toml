@@ -47,7 +47,7 @@ derive_more = { workspace = true, features = ["from"] }
 openvm-circuit-derive.workspace = true
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
-num-bigint-dig.workspace = true
+num-bigint.workspace = true
 
 [features]
 default = ["parallel"]

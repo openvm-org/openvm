@@ -7,8 +7,9 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::not, SubAir,
 };
-use openvm_instructions::riscv::{
-    RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
+use openvm_instructions::{
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
 use openvm_sha256_air::{
     compose, Sha256Air, SHA256_BLOCK_U8S, SHA256_HASH_WORDS, SHA256_ROUNDS_PER_ROW,
@@ -36,7 +37,6 @@ pub struct Sha256VmAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     /// Maximum number of bits allowed for an address pointer
     pub ptr_max_bits: usize,
-    pub(super) offset: usize,
     pub(super) sha256_subair: Sha256Air,
     pub(super) padding_encoder: Encoder,
 }
@@ -527,7 +527,7 @@ impl Sha256VmAir {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_usize(Rv32Sha256Opcode::SHA256 as usize + self.offset),
+                AB::Expr::from_canonical_usize(Rv32Sha256Opcode::SHA256.global_opcode().as_usize()),
                 [
                     local_cols.rd_ptr.into(),
                     local_cols.rs1_ptr.into(),

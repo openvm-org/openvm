@@ -4,7 +4,7 @@ use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip, BITWISE_OP
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -50,7 +50,7 @@ fn set_and_execute(
     tester.execute_with_pc(
         chip,
         &Instruction::large_from_isize(
-            VmOpcode::with_default_offset(opcode),
+            opcode.global_opcode(),
             a as isize,
             0,
             imm as isize,
@@ -90,7 +90,7 @@ fn rand_jal_lui_test() {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone(), Rv32JalLuiOpcode::default_offset());
+    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone());
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
@@ -133,7 +133,7 @@ fn run_negative_jal_lui_test(
         tester.memory_bridge(),
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone(), Rv32JalLuiOpcode::default_offset());
+    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone());
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     set_and_execute(
@@ -315,7 +315,7 @@ fn execute_roundtrip_sanity_test() {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let core = Rv32JalLuiCoreChip::new(bitwise_chip, Rv32JalLuiOpcode::default_offset());
+    let core = Rv32JalLuiCoreChip::new(bitwise_chip);
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
     let num_tests: usize = 10;
     for _ in 0..num_tests {

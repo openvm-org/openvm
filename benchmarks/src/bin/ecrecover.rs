@@ -2,7 +2,7 @@ use clap::Parser;
 use derive_more::derive::From;
 use eyre::Result;
 use k256::ecdsa::{SigningKey, VerifyingKey};
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_algebra_circuit::{
     ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery,
 };
@@ -13,9 +13,9 @@ use openvm_circuit::{
         instructions::exe::VmExe, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
         VmConfig, VmInventoryError,
     },
+    circuit_derive::{Chip, ChipUsageGetter},
     derive::{AnyEnum, InstructionExecutor, VmConfig},
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_circuit::{
     CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
     SECP256K1_CONFIG,

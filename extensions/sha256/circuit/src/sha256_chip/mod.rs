@@ -16,7 +16,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
-    UsizeOpcode,
+    LocalOpcode,
 };
 use openvm_rv32im_circuit::adapters::read_rv32_register;
 use openvm_sha256_air::{Sha256Air, SHA256_BLOCK_BITS};
@@ -87,7 +87,6 @@ impl<F: PrimeField32> Sha256VmChip<F> {
                 memory_bridge,
                 bitwise_lookup_chip.bus(),
                 address_bits,
-                offset,
                 Sha256Air::new(bitwise_lookup_chip.bus(), self_bus_idx),
                 Encoder::new(PaddingFlags::COUNT, 2, false),
             ),
@@ -116,7 +115,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
             ..
         } = instruction;
         let local_opcode = opcode.local_opcode_idx(self.offset);
-        debug_assert_eq!(local_opcode, Rv32Sha256Opcode::SHA256.as_usize());
+        debug_assert_eq!(local_opcode, Rv32Sha256Opcode::SHA256.local_usize());
         debug_assert_eq!(d, F::from_canonical_u32(RV32_REGISTER_AS));
         debug_assert_eq!(e, F::from_canonical_u32(RV32_MEMORY_AS));
 

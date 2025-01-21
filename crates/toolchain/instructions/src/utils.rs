@@ -1,4 +1,4 @@
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::Num;
 use openvm_stark_backend::p3_field::Field;
 

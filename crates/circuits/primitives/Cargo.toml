@@ -15,7 +15,7 @@ openvm-circuit-primitives-derive = { workspace = true }
 rand.workspace = true
 derive-new.workspace = true
 itertools.workspace = true
-num-bigint-dig.workspace = true
+num-bigint.workspace = true
 num-traits.workspace = true
 lazy_static.workspace = true
 tracing.workspace = true

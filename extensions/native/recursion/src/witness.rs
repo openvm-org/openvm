@@ -19,10 +19,9 @@ use p3_symmetric::Hash;
 use crate::{
     config::outer::{OuterChallenge, OuterConfig, OuterVal},
     digest::{DigestVal, DigestVariable},
-    types::VerifierInput,
     vars::{
         AdjacentOpenedValuesVariable, AirProofDataVariable, CommitmentsVariable,
-        OpenedValuesVariable, OpeningProofVariable, StarkProofVariable, VerifierInputVariable,
+        OpenedValuesVariable, OpeningProofVariable, StarkProofVariable,
     },
 };
 
@@ -143,30 +142,6 @@ impl Witnessable<C> for DigestVal<C> {
     }
 }
 impl VectorWitnessable<C> for DigestVal<C> {}
-
-impl Witnessable<OuterConfig> for VerifierInput<BabyBearPoseidon2RootConfig> {
-    type WitnessVariable = VerifierInputVariable<OuterConfig>;
-
-    fn read(&self, builder: &mut Builder<OuterConfig>) -> Self::WitnessVariable {
-        let proof = self.proof.read(builder);
-        // This reads nothing because it's a constant.
-        let log_degree_per_air = self.log_degree_per_air.read(builder);
-        // This also reads nothing because log_degree_per_air is a constant.
-        let air_perm_by_height = builder.array(0);
-
-        VerifierInputVariable {
-            proof,
-            log_degree_per_air,
-            air_perm_by_height,
-        }
-    }
-
-    fn write(&self, witness: &mut Witness<C>) {
-        self.proof.write(witness);
-        // This writes nothing because it's a constant in static mode.
-        <Vec<_> as Witnessable<C>>::write(&self.log_degree_per_air, witness);
-    }
-}
 
 impl VectorWitnessable<C> for AirProofData<BabyBearPoseidon2RootConfig> {}
 

@@ -16,25 +16,19 @@ openvm-stark-backend = { workspace = true }
 openvm-native-compiler-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-instructions-derive = { workspace = true }
-openvm-circuit-primitives = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
 # disable jemalloc to be compatible with stark-backend
 snark-verifier-sdk = { workspace = true, optional = true }
 
-tracing.workspace = true
 itertools.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 backtrace = { workspace = true, features = ["serde"] }
 strum_macros = "0.26.4"
-num-bigint-dig.workspace = true
 num-bigint.workspace = true
 num-integer.workspace = true
-num-traits.workspace = true
 metrics = { workspace = true, optional = true }
-cfg-if = { workspace = true }
 strum = { workspace = true }
 
 [dev-dependencies]

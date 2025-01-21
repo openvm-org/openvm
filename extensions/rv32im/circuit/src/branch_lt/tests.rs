@@ -11,7 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -65,7 +65,7 @@ fn run_rv32_branch_lt_rand_execute<E: InstructionExecutor<F>>(
     tester.execute_with_pc(
         chip,
         &Instruction::from_isize(
-            VmOpcode::from_usize(opcode as usize),
+            opcode.global_opcode(),
             rs1 as isize,
             rs2 as isize,
             imm as isize,
@@ -97,7 +97,7 @@ fn run_rv32_branch_lt_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
+        BranchLessThanCoreChip::new(bitwise_chip.clone(), BranchLessThanOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -198,16 +198,13 @@ fn run_rv32_blt_negative_test(
             vec![if cmp_result { Some(imm) } else { None }],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
+        BranchLessThanCoreChip::new(bitwise_chip.clone(), BranchLessThanOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(
         &mut chip,
-        &Instruction::from_usize(
-            VmOpcode::from_usize(opcode as usize),
-            [0, 0, imm as usize, 1, 1],
-        ),
+        &Instruction::from_usize(opcode.global_opcode(), [0, 0, imm as usize, 1, 1]),
     );
 
     let trace_width = chip.trace_width();
@@ -493,11 +490,13 @@ fn rv32_blt_unsigned_wrong_b_msb_sign_negative_test() {
 fn execute_pc_increment_sanity_test() {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let core =
-        BranchLessThanCoreChip::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(bitwise_chip, 0);
+    let core = BranchLessThanCoreChip::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(
+        bitwise_chip,
+        BranchLessThanOpcode::CLASS_OFFSET,
+    );
 
     let mut instruction = Instruction::<F> {
-        opcode: VmOpcode::from_usize(BranchLessThanOpcode::BLT.as_usize()),
+        opcode: BranchLessThanOpcode::BLT.global_opcode(),
         c: F::from_canonical_u8(8),
         ..Default::default()
     };
@@ -510,7 +509,7 @@ fn execute_pc_increment_sanity_test() {
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
 
-    instruction.opcode = VmOpcode::from_usize(BranchLessThanOpcode::BGE.as_usize());
+    instruction.opcode = BranchLessThanOpcode::BGE.global_opcode();
     let result = <BranchLessThanCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> as VmCoreChip<
         F,
         BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,

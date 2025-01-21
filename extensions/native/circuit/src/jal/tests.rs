@@ -4,9 +4,9 @@ use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    UsizeOpcode, VmOpcode,
+    LocalOpcode,
 };
-use openvm_native_compiler::NativeJalOpcode::{self, *};
+use openvm_native_compiler::NativeJalOpcode::*;
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
@@ -37,10 +37,7 @@ fn set_and_execute(
 
     tester.execute_with_pc(
         chip,
-        &Instruction::from_usize(
-            VmOpcode::with_default_offset(JAL),
-            [a, imm as usize, 0, d, 0, 0, 0],
-        ),
+        &Instruction::from_usize(JAL.global_opcode(), [a, imm as usize, 0, d, 0, 0, 0]),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
@@ -62,7 +59,7 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeJalChip<F>) {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let inner = JalCoreChip::new(NativeJalOpcode::default_offset());
+    let inner = JalCoreChip::new();
     let chip = NativeJalChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
     (rng, tester, chip)
 }

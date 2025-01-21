@@ -26,7 +26,6 @@ openvm-platform = { workspace = true }
 openvm = { workspace = true }
 openvm-toolchain-tests = { workspace = true }
 eyre.workspace = true
-num-bigint-dig.workspace = true
 rand.workspace = true
 
 [features]

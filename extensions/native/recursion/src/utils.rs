@@ -23,7 +23,7 @@ pub fn const_fri_config<C: Config>(
             shift: C::F::ONE,
         };
         let domain_value: TwoAdicMultiplicativeCosetVariable<_> = builder.constant(constant_domain);
-        // FIXME: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
+        // ATTENTION: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
         // to `Usize::Var` because it calls `builder.eval`.
         builder.set_value(&subgroups, i, domain_value);
     }

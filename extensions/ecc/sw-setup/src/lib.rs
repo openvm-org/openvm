@@ -429,7 +429,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                     let modulus_bytes = <<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
                     let mut one = [0u8; <<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
                     one[0] = 1;
-                    let curve_a_bytes = <#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A.as_le_bytes();
+                    let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A);
                     // p1 should be (p, a)
                     let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.

@@ -24,144 +24,184 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     type InstructionResult = Instruction<F>;
 
     fn process_add(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(BaseAluOpcode::ADD.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::ADD.global_opcode().as_usize(), 1, &dec_insn)
     }
 
     fn process_addi(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(BaseAluOpcode::ADD.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::ADD.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_sub(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(BaseAluOpcode::SUB.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::SUB.global_opcode().as_usize(), 1, &dec_insn)
     }
 
     fn process_xor(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(BaseAluOpcode::XOR.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::XOR.global_opcode().as_usize(), 1, &dec_insn)
     }
 
     fn process_xori(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(BaseAluOpcode::XOR.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::XOR.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_or(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(BaseAluOpcode::OR.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::OR.global_opcode().as_usize(), 1, &dec_insn)
     }
 
     fn process_ori(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(BaseAluOpcode::OR.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::OR.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_and(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(BaseAluOpcode::AND.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::AND.global_opcode().as_usize(), 1, &dec_insn)
     }
 
     fn process_andi(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(BaseAluOpcode::AND.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::AND.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_sll(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(ShiftOpcode::SLL.with_default_offset(), 1, &dec_insn)
+        from_r_type(ShiftOpcode::SLL.global_opcode().as_usize(), 1, &dec_insn)
     }
 
     fn process_slli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        from_i_type_shamt(ShiftOpcode::SLL.with_default_offset(), &dec_insn)
+        from_i_type_shamt(ShiftOpcode::SLL.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_srl(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(ShiftOpcode::SRL.with_default_offset(), 1, &dec_insn)
+        from_r_type(ShiftOpcode::SRL.global_opcode().as_usize(), 1, &dec_insn)
     }
 
     fn process_srli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        from_i_type_shamt(ShiftOpcode::SRL.with_default_offset(), &dec_insn)
+        from_i_type_shamt(ShiftOpcode::SRL.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_sra(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(ShiftOpcode::SRA.with_default_offset(), 1, &dec_insn)
+        from_r_type(ShiftOpcode::SRA.global_opcode().as_usize(), 1, &dec_insn)
     }
 
     fn process_srai(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        from_i_type_shamt(ShiftOpcode::SRA.with_default_offset(), &dec_insn)
+        from_i_type_shamt(ShiftOpcode::SRA.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_slt(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(LessThanOpcode::SLT.with_default_offset(), 1, &dec_insn)
+        from_r_type(LessThanOpcode::SLT.global_opcode().as_usize(), 1, &dec_insn)
     }
 
     fn process_slti(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(LessThanOpcode::SLT.with_default_offset(), &dec_insn)
+        from_i_type(LessThanOpcode::SLT.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_sltu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(LessThanOpcode::SLTU.with_default_offset(), 1, &dec_insn)
+        from_r_type(
+            LessThanOpcode::SLTU.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+        )
     }
 
     fn process_sltui(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(LessThanOpcode::SLTU.with_default_offset(), &dec_insn)
+        from_i_type(LessThanOpcode::SLTU.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_lb(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_load(Rv32LoadStoreOpcode::LOADB.with_default_offset(), &dec_insn)
+        from_load(
+            Rv32LoadStoreOpcode::LOADB.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_lh(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_load(Rv32LoadStoreOpcode::LOADH.with_default_offset(), &dec_insn)
+        from_load(
+            Rv32LoadStoreOpcode::LOADH.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_lw(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_load(Rv32LoadStoreOpcode::LOADW.with_default_offset(), &dec_insn)
+        from_load(
+            Rv32LoadStoreOpcode::LOADW.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_lbu(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_load(Rv32LoadStoreOpcode::LOADBU.with_default_offset(), &dec_insn)
+        from_load(
+            Rv32LoadStoreOpcode::LOADBU.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_lhu(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_load(Rv32LoadStoreOpcode::LOADHU.with_default_offset(), &dec_insn)
+        from_load(
+            Rv32LoadStoreOpcode::LOADHU.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_sb(&mut self, dec_insn: SType) -> Self::InstructionResult {
-        from_s_type(Rv32LoadStoreOpcode::STOREB.with_default_offset(), &dec_insn)
+        from_s_type(
+            Rv32LoadStoreOpcode::STOREB.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_sh(&mut self, dec_insn: SType) -> Self::InstructionResult {
-        from_s_type(Rv32LoadStoreOpcode::STOREH.with_default_offset(), &dec_insn)
+        from_s_type(
+            Rv32LoadStoreOpcode::STOREH.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_sw(&mut self, dec_insn: SType) -> Self::InstructionResult {
-        from_s_type(Rv32LoadStoreOpcode::STOREW.with_default_offset(), &dec_insn)
+        from_s_type(
+            Rv32LoadStoreOpcode::STOREW.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_beq(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(BranchEqualOpcode::BEQ.with_default_offset(), &dec_insn)
+        from_b_type(BranchEqualOpcode::BEQ.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_bne(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(BranchEqualOpcode::BNE.with_default_offset(), &dec_insn)
+        from_b_type(BranchEqualOpcode::BNE.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_blt(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(BranchLessThanOpcode::BLT.with_default_offset(), &dec_insn)
+        from_b_type(
+            BranchLessThanOpcode::BLT.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_bge(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(BranchLessThanOpcode::BGE.with_default_offset(), &dec_insn)
+        from_b_type(
+            BranchLessThanOpcode::BGE.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_bltu(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(BranchLessThanOpcode::BLTU.with_default_offset(), &dec_insn)
+        from_b_type(
+            BranchLessThanOpcode::BLTU.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_bgeu(&mut self, dec_insn: BType) -> Self::InstructionResult {
-        from_b_type(BranchLessThanOpcode::BGEU.with_default_offset(), &dec_insn)
+        from_b_type(
+            BranchLessThanOpcode::BGEU.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_jal(&mut self, dec_insn: JType) -> Self::InstructionResult {
-        from_j_type(Rv32JalLuiOpcode::JAL.with_default_offset(), &dec_insn)
+        from_j_type(Rv32JalLuiOpcode::JAL.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_jalr(&mut self, dec_insn: IType) -> Self::InstructionResult {
         Instruction::new(
-            VmOpcode::with_default_offset(Rv32JalrOpcode::JALR),
+            Rv32JalrOpcode::JALR.global_opcode(),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
             F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
@@ -177,7 +217,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
             return nop();
         }
         // we need to set f to 1 because this is handled by the same chip as jal
-        let mut result = from_u_type(Rv32JalLuiOpcode::LUI.with_default_offset(), &dec_insn);
+        let mut result = from_u_type(Rv32JalLuiOpcode::LUI.global_opcode().as_usize(), &dec_insn);
         result.f = F::ONE;
         result
     }
@@ -187,7 +227,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
             return nop();
         }
         Instruction::new(
-            VmOpcode::with_default_offset(Rv32AuipcOpcode::AUIPC),
+            Rv32AuipcOpcode::AUIPC.global_opcode(),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
             F::ZERO,
             F::from_canonical_u32(((dec_insn.imm as u32) & 0xfffff000) >> 8),
@@ -199,35 +239,35 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_mul(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulOpcode::MUL.with_default_offset(), 0, &dec_insn)
+        from_r_type(MulOpcode::MUL.global_opcode().as_usize(), 0, &dec_insn)
     }
 
     fn process_mulh(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULH.with_default_offset(), 0, &dec_insn)
+        from_r_type(MulHOpcode::MULH.global_opcode().as_usize(), 0, &dec_insn)
     }
 
     fn process_mulhu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULHU.with_default_offset(), 0, &dec_insn)
+        from_r_type(MulHOpcode::MULHU.global_opcode().as_usize(), 0, &dec_insn)
     }
 
     fn process_mulhsu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULHSU.with_default_offset(), 0, &dec_insn)
+        from_r_type(MulHOpcode::MULHSU.global_opcode().as_usize(), 0, &dec_insn)
     }
 
     fn process_div(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::DIV.with_default_offset(), 0, &dec_insn)
+        from_r_type(DivRemOpcode::DIV.global_opcode().as_usize(), 0, &dec_insn)
     }
 
     fn process_divu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::DIVU.with_default_offset(), 0, &dec_insn)
+        from_r_type(DivRemOpcode::DIVU.global_opcode().as_usize(), 0, &dec_insn)
     }
 
     fn process_rem(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::REM.with_default_offset(), 0, &dec_insn)
+        from_r_type(DivRemOpcode::REM.global_opcode().as_usize(), 0, &dec_insn)
     }
 
     fn process_remu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::REMU.with_default_offset(), 0, &dec_insn)
+        from_r_type(DivRemOpcode::REMU.global_opcode().as_usize(), 0, &dec_insn)
     }
 
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {

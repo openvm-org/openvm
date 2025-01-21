@@ -51,7 +51,6 @@ prettytable-rs = "0.10"
 textwrap = "0.16.0"
 ctrlc = "3.4.2"
 toml = { workspace = true }
-num-bigint-dig = { workspace = true, features = ["serde"] }
 
 [features]
 default = ["parallel", "mimalloc"]

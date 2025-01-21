@@ -34,7 +34,12 @@ pub fn get_package(manifest_dir: impl AsRef<Path>) -> Package {
         .manifest_path(&manifest_path)
         .no_deps()
         .exec()
-        .expect("cargo metadata command failed");
+        .unwrap_or_else(|e| {
+            panic!(
+                "cargo metadata command failed for manifest path: {}: {e:?}",
+                manifest_path.display()
+            )
+        });
     let mut matching: Vec<Package> = manifest_meta
         .packages
         .into_iter()

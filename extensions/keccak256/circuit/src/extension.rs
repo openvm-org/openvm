@@ -6,9 +6,9 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, Stateful, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_instructions::*;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
@@ -49,12 +49,12 @@ impl Default for Keccak256Rv32Config {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, Stateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
 pub enum Keccak256Executor<F: PrimeField32> {
     Keccak256(KeccakVmChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, Stateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
 pub enum Keccak256Periphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),
@@ -94,12 +94,12 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
             memory_bridge,
             address_bits,
             bitwise_lu_chip,
-            Rv32KeccakOpcode::default_offset(),
+            Rv32KeccakOpcode::CLASS_OFFSET,
             offline_memory,
         );
         inventory.add_executor(
             keccak_chip,
-            Rv32KeccakOpcode::iter().map(VmOpcode::with_default_offset),
+            Rv32KeccakOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
         Ok(inventory)

@@ -1,9 +1,9 @@
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_mod_circuit_builder::{
     test_utils::{
         biguint_to_limbs, bls12381_fq12_random, bn254_fq12_random, bn254_fq12_to_biguint_vec,
@@ -111,7 +111,7 @@ fn test_fp12_add_bn254() {
     test_fp12_fn::<12, BN254_NUM_LIMBS, BN254_LIMB_BITS, BN254_BLOCK_SIZE>(
         tester,
         expr,
-        Bn254Fp12Opcode::default_offset(),
+        Bn254Fp12Opcode::CLASS_OFFSET,
         Fp12Opcode::ADD as usize,
         "Bn254Fp12Add",
         x,
@@ -139,7 +139,7 @@ fn test_fp12_sub_bn254() {
     test_fp12_fn::<12, BN254_NUM_LIMBS, BN254_LIMB_BITS, BN254_BLOCK_SIZE>(
         tester,
         expr,
-        Bn254Fp12Opcode::default_offset(),
+        Bn254Fp12Opcode::CLASS_OFFSET,
         Fp12Opcode::SUB as usize,
         "Bn254Fp12Sub",
         x,
@@ -169,7 +169,7 @@ fn test_fp12_mul_bn254() {
     test_fp12_fn::<12, BN254_NUM_LIMBS, BN254_LIMB_BITS, BN254_BLOCK_SIZE>(
         tester,
         expr,
-        Bn254Fp12Opcode::default_offset(),
+        Bn254Fp12Opcode::CLASS_OFFSET,
         Fp12Opcode::MUL as usize,
         "Bn254Fp12Mul",
         x,
@@ -197,7 +197,7 @@ fn test_fp12_add_bls12381() {
     test_fp12_fn::<36, BLS12_381_NUM_LIMBS, BLS12_381_LIMB_BITS, BLS12_381_BLOCK_SIZE>(
         tester,
         expr,
-        Bls12381Fp12Opcode::default_offset(),
+        Bls12381Fp12Opcode::CLASS_OFFSET,
         Fp12Opcode::ADD as usize,
         "Bls12381Fp12Add",
         x,
@@ -225,7 +225,7 @@ fn test_fp12_sub_bls12381() {
     test_fp12_fn::<36, BLS12_381_NUM_LIMBS, BLS12_381_LIMB_BITS, BLS12_381_BLOCK_SIZE>(
         tester,
         expr,
-        Bls12381Fp12Opcode::default_offset(),
+        Bls12381Fp12Opcode::CLASS_OFFSET,
         Fp12Opcode::SUB as usize,
         "Bls12381Fp12Sub",
         x,
@@ -257,7 +257,7 @@ fn test_fp12_mul_bls12381() {
     test_fp12_fn::<36, BLS12_381_NUM_LIMBS, BLS12_381_LIMB_BITS, BLS12_381_BLOCK_SIZE>(
         tester,
         expr,
-        Bls12381Fp12Opcode::default_offset(),
+        Bls12381Fp12Opcode::CLASS_OFFSET,
         Fp12Opcode::MUL as usize,
         "Bls12381Fp12Mul",
         x,

@@ -339,14 +339,6 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     opcode: ConstraintOpcode::WitnessE,
                     args: vec![vec![a.id()], vec![b.to_string()]],
                 }),
-                DslIr::CircuitCommitVkeyHash(a) => constraints.push(Constraint {
-                    opcode: ConstraintOpcode::CommitVkeyHash,
-                    args: vec![vec![a.id()]],
-                }),
-                DslIr::CircuitCommitCommittedValuesDigest(a) => constraints.push(Constraint {
-                    opcode: ConstraintOpcode::CommitCommittedValuesDigest,
-                    args: vec![vec![a.id()]],
-                }),
                 DslIr::CircuitFelts2Ext(a, b) => constraints.push(Constraint {
                     opcode: ConstraintOpcode::CircuitFelts2Ext,
                     args: vec![

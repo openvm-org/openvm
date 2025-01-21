@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
-use openvm_native_compiler::FriOpcode::{self, FRI_REDUCED_OPENING};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_native_compiler::FriOpcode::FRI_REDUCED_OPENING;
 use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra},
     utils::disable_debug_builder,
@@ -39,14 +39,11 @@ fn fri_mat_opening_air_test() {
     let address_space_range = || 1usize..=2;
     let length_range = || 1..=49;
 
-    let offset = FriOpcode::default_offset();
-
     let mut tester = VmChipTestBuilder::default();
     let mut chip = FriReducedOpeningChip::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
-        offset,
         tester.offline_memory_mutex_arc(),
     );
 
@@ -112,7 +109,7 @@ fn fri_mat_opening_air_test() {
         tester.execute(
             &mut chip,
             &Instruction::from_usize(
-                VmOpcode::from_usize(FRI_REDUCED_OPENING as usize + offset),
+                FRI_REDUCED_OPENING.global_opcode(),
                 [
                     a_pointer_pointer,
                     b_pointer_pointer,

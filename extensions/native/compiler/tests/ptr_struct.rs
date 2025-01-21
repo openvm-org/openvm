@@ -64,7 +64,8 @@ fn test_compiler_array() {
     }
 
     // Put values dynamically
-    builder.range(0, dyn_len).for_each(|i, builder| {
+    builder.range(0, dyn_len).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         builder.set(
             &var_array,
             i,
@@ -75,7 +76,8 @@ fn test_compiler_array() {
     });
 
     // Assert values set.
-    builder.range(0, dyn_len).for_each(|i, builder| {
+    builder.range(0, dyn_len).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         let var_value = builder.get(&var_array, i);
         builder.assert_var_eq(var_value, i * RVar::from_field(F::from_canonical_u32(2)));
         let felt_value = builder.get(&felt_array, i);
@@ -87,7 +89,8 @@ fn test_compiler_array() {
     // Test the derived macro and mixed size allocations.
     let point_array = builder.dyn_array::<Point<_>>(len);
 
-    builder.range(0, dyn_len).for_each(|i, builder| {
+    builder.range(0, dyn_len).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         let x: Var<_> = builder.eval(F::TWO);
         let x_ptr: Ptr<F> = builder.uninit();
         builder.store(
@@ -129,7 +132,8 @@ fn test_compiler_array() {
         builder.set(&point_array, i, point);
     });
 
-    builder.range(0, dyn_len).for_each(|i, builder| {
+    builder.range(0, dyn_len).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         let point = builder.get(&point_array, i);
         let x: Var<_> = builder.uninit();
         builder.load(
@@ -168,12 +172,14 @@ fn test_compiler_array() {
 
     let array = builder.dyn_array::<Array<_, Var<_>>>(len);
 
-    builder.range(0, array.len()).for_each(|i, builder| {
+    builder.range(0, array.len()).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         builder.set(&array, i, var_array.clone());
     });
 
     // TODO: this part of the test is extremely slow.
-    builder.range(0, array.len()).for_each(|i, builder| {
+    builder.range(0, array.len()).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         let point_array_back = builder.get(&array, i);
         builder.assert_eq::<Array<_, _>>(point_array_back, var_array.clone());
     });

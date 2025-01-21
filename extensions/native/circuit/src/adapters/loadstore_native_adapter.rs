@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionBridge,
+        instructions::LocalOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionBridge,
         ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
@@ -106,8 +106,8 @@ pub struct NativeLoadStoreAdapterCols<T, const NUM_CELLS: usize> {
     pub data_write_as: T,
     pub data_write_pointer: T,
 
-    pub pointer_read_aux_cols: MemoryReadAuxCols<T, 1>,
-    pub data_read_aux_cols: MemoryReadAuxCols<T, NUM_CELLS>,
+    pub pointer_read_aux_cols: MemoryReadAuxCols<T>,
+    pub data_read_aux_cols: MemoryReadAuxCols<T>,
     pub data_write_aux_cols: MemoryWriteAuxCols<T, NUM_CELLS>,
 }
 
@@ -238,22 +238,20 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         let (data_read_as, data_write_as) = {
             match local_opcode {
-                LOADW | LOADW4 => (e, d),
-                STOREW | STOREW4 | HINT_STOREW | HINT_STOREW4 => (d, e),
+                LOADW => (e, d),
+                STOREW | HINT_STOREW => (d, e),
             }
         };
         let (data_read_ptr, data_write_ptr) = {
             match local_opcode {
-                LOADW | LOADW4 => (read_cell.1 + b, a),
-                STOREW | STOREW4 | HINT_STOREW | HINT_STOREW4 => (a, read_cell.1 + b),
+                LOADW => (read_cell.1 + b, a),
+                STOREW | HINT_STOREW => (a, read_cell.1 + b),
             }
         };
 
         let data_read = match local_opcode {
-            HINT_STOREW | HINT_STOREW4 => None,
-            LOADW | LOADW4 | STOREW | STOREW4 => {
-                Some(memory.read::<NUM_CELLS>(data_read_as, data_read_ptr))
-            }
+            HINT_STOREW => None,
+            LOADW | STOREW => Some(memory.read::<NUM_CELLS>(data_read_as, data_read_ptr)),
         };
         let record = NativeLoadStoreReadRecord {
             pointer_read: read_cell.0,

@@ -51,9 +51,9 @@ pub struct Rv32HeapBranchAdapterCols<T, const NUM_READS: usize, const READ_SIZE:
 
     pub rs_ptr: [T; NUM_READS],
     pub rs_val: [[T; RV32_REGISTER_NUM_LIMBS]; NUM_READS],
-    pub rs_read_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; NUM_READS],
+    pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
 
-    pub heap_read_aux: [MemoryReadAuxCols<T, READ_SIZE>; NUM_READS],
+    pub heap_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]

@@ -70,7 +70,7 @@ pub struct NativeVectorizedAdapterCols<T, const N: usize> {
     pub b_pointer: T,
     pub c_pointer: T,
     pub c_as: T,
-    pub reads_aux: [MemoryReadAuxCols<T, N>; 2],
+    pub reads_aux: [MemoryReadAuxCols<T>; 2],
     pub writes_aux: [MemoryWriteAuxCols<T, N>; 1],
 }
 

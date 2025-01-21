@@ -59,8 +59,8 @@ pub struct Rv32IsEqualModAdapterCols<
 
     pub rs_ptr: [T; NUM_READS],
     pub rs_val: [[T; RV32_REGISTER_NUM_LIMBS]; NUM_READS],
-    pub rs_read_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; NUM_READS],
-    pub heap_read_aux: [[MemoryReadAuxCols<T, BLOCK_SIZE>; BLOCKS_PER_READ]; NUM_READS],
+    pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
+    pub heap_read_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
 
     pub rd_ptr: T,
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,

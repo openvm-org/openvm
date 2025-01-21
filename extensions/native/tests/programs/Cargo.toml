@@ -1,0 +1,20 @@
+[workspace]
+[package]
+name = "openvm-native-integration-test-program"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../crates/toolchain/openvm" }
+openvm-native-guest-macro = { path = "../../guest-macro", default-features = false }
+
+[features]
+default = []
+std = ["openvm/std"]
+
+[build-dependencies]
+openvm-native-compiler = { path = "../../compiler", default-features = false }
+openvm-native-transpiler = { path = "../../transpiler", default-features = false }
+openvm-instructions = { path = "../../../../crates/toolchain/instructions", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "8c9f94", default-features = false }     # FIXME
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "8c9f94", default-features = false }

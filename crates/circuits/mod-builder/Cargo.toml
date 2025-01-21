@@ -18,7 +18,7 @@ halo2curves-axiom = { workspace = true, optional = true }
 openvm-pairing-guest = { workspace = true, optional = true }
 
 rand.workspace = true
-num-bigint-dig.workspace = true
+num-bigint.workspace = true
 num-traits.workspace = true
 tracing.workspace = true
 

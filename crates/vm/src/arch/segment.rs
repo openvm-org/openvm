@@ -10,12 +10,12 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
-    Chip,
+    Chip, Stateful,
 };
 
 use super::{
-    ExecutionError, Streams, SystemBase, SystemConfig, VmChipComplex, VmComplexTraceHeights,
-    VmConfig,
+    ExecutionError, Streams, SystemBase, SystemConfig, VmChipComplex, VmChipComplexState,
+    VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -85,6 +85,31 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         }
     }
 
+    /// Creates a new execution segment just for proving.
+    pub fn new_for_proving(
+        config: &VC,
+        program: Program<F>,
+        vm_chip_complex_state: VmChipComplexState<F>,
+    ) -> Self {
+        let mut chip_complex = config.create_chip_complex().unwrap();
+        let program = if !config.system().profiling {
+            program.strip_debug_infos()
+        } else {
+            program
+        };
+        chip_complex.set_program(program);
+        chip_complex.load_state(vm_chip_complex_state);
+        let air_names = chip_complex.air_names();
+        Self {
+            chip_complex,
+            final_memory: None,
+            air_names,
+            #[cfg(feature = "bench-metrics")]
+            metrics: Default::default(),
+            since_last_segment_check: 0,
+        }
+    }
+
     pub fn system_config(&self) -> &SystemConfig {
         self.chip_complex.config()
     }
@@ -138,7 +163,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 );
 
                 let &Instruction { opcode, c, .. } = instruction;
-                if opcode == VmOpcode::with_default_offset(SystemOpcode::TERMINATE) {
+                if opcode == SystemOpcode::TERMINATE.global_opcode() {
                     did_terminate = true;
                     self.chip_complex.connector_chip_mut().end(
                         ExecutionState::new(pc, timestamp),
@@ -148,7 +173,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 }
 
                 // Some phantom instruction handling is more convenient to do here than in PhantomChip.
-                if opcode == VmOpcode::with_default_offset(SystemOpcode::PHANTOM) {
+                if opcode == SystemOpcode::PHANTOM.global_opcode() {
                     // Note: the discriminant is the lower 16 bits of the c operand.
                     let discriminant = c.as_canonical_u32() as u16;
                     let phantom = SysPhantom::from_repr(discriminant);
@@ -273,5 +298,8 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     /// Includes constant trace heights.
     pub fn current_trace_heights(&self) -> Vec<usize> {
         self.chip_complex.current_trace_heights()
+    }
+    pub fn store_chip_complex_state(&self) -> VmChipComplexState<F> {
+        self.chip_complex.store_state()
     }
 }

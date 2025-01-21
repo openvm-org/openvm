@@ -2,7 +2,7 @@ use std::{ops::Mul, str::FromStr};
 
 use afs_compiler::{asm::AsmBuilder, conversion::CompilerOptions};
 use ax_sdk::utils::create_seeded_rng;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use rand::Rng;

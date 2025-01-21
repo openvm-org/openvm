@@ -8,7 +8,7 @@ use openvm_circuit::arch::{
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError,
@@ -40,7 +40,7 @@ fn build_keccak256_test(
         tester.memory_bridge(),
         tester.address_bits(),
         bitwise_chip.clone(),
-        0,
+        Rv32KeccakOpcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
@@ -65,7 +65,7 @@ fn build_keccak256_test(
         tester.execute(
             &mut chip,
             &Instruction::from_isize(
-                VmOpcode::from_usize(Rv32KeccakOpcode::KECCAK256 as usize),
+                Rv32KeccakOpcode::KECCAK256.global_opcode(),
                 a as isize,
                 b as isize,
                 c as isize,

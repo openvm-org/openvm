@@ -1,6 +1,6 @@
 use std::{array, cell::RefCell, rc::Rc, sync::Arc};
 
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
 use openvm_circuit::utils::generate_long_number;
 use openvm_circuit_primitives::{

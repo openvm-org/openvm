@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -138,12 +138,15 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        let expected_opcode = flags.iter().zip(BaseAluOpcode::iter()).fold(
-            AB::Expr::ZERO,
-            |acc, (flag, local_opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
-            },
-        ) + AB::Expr::from_canonical_usize(self.offset);
+        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
+            self,
+            flags.iter().zip(BaseAluOpcode::iter()).fold(
+                AB::Expr::ZERO,
+                |acc, (flag, local_opcode)| {
+                    acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
+                },
+            ),
+        );
 
         AdapterAirContext {
             to_pc: None,
@@ -155,6 +158,10 @@ where
             }
             .into(),
         }
+    }
+
+    fn start_offset(&self) -> usize {
+        self.offset
     }
 }
 

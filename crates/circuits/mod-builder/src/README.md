@@ -17,7 +17,7 @@ There are two independent properties of the chip built by `ExprBuilder`: whether
 
 
 1. For the first type (modular and Fp2), there are two flags (e.g. `add_flag` and `sub_flag`) and `setup = is_valid - sum(all_flags)`. That is, when doing setup both flags are 0.
-2. For the second type (EcAdd and EcDouble), the chip only supports one operation so technically it doesn't need a flag. But for impelementation simplicity, we still create a dummy flag for it, and it's always 1 unless it's doing setup. And this `setup = is_valid - sum(all_flags)` still holds.
+2. For the second type (EcAdd and EcDouble), the chip only supports one operation so technically it doesn't need a flag. But for implementation simplicity, we still create a dummy flag for it, and it's always 1 unless it's doing setup. And this `setup = is_valid - sum(all_flags)` still holds.
 3. No chip is in the third type right now.
 4. For the fourth type, there is no setup needed and no flags for selecting operations. Only `is_valid` is needed.
 

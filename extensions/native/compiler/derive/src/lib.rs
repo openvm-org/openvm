@@ -169,24 +169,24 @@ pub fn hintable_derive(input: TokenStream) -> TokenStream {
     }
 }
 
-struct CompileZipArgs {
+struct IterZipArgs {
     builder: Expr,
     args: Punctuated<Expr, Token![,]>,
 }
 
-impl Parse for CompileZipArgs {
+impl Parse for IterZipArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let builder = input.parse()?;
         let _: Token![,] = input.parse()?;
         let args = Punctuated::parse_terminated(input)?;
 
-        Ok(CompileZipArgs { builder, args })
+        Ok(IterZipArgs { builder, args })
     }
 }
 
 #[proc_macro]
-pub fn compile_zip(input: TokenStream) -> TokenStream {
-    let CompileZipArgs { builder, args } = parse_macro_input!(input as CompileZipArgs);
+pub fn iter_zip(input: TokenStream) -> TokenStream {
+    let IterZipArgs { builder, args } = parse_macro_input!(input as IterZipArgs);
     let array_elements = args.iter().map(|arg| {
         quote! {
             Box::new(#arg.clone()) as Box<dyn ArrayLike<_>>

@@ -12,12 +12,12 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 use serde::{Deserialize, Serialize};
@@ -40,7 +40,6 @@ pub struct Rv32HintStoreCoreRecord<F> {
 #[derive(Debug, Clone)]
 pub struct Rv32HintStoreCoreAir {
     pub bus: BitwiseOperationLookupBus,
-    pub offset: usize,
 }
 
 impl<F: Field> BaseAir<F> for Rv32HintStoreCoreAir {
@@ -70,8 +69,7 @@ where
         builder.assert_bool(cols.is_valid);
 
         let expected_opcode =
-            AB::Expr::from_canonical_usize(Rv32HintStoreOpcode::HINT_STOREW as usize)
-                + AB::Expr::from_canonical_usize(self.offset);
+            VmCoreAir::<AB, I>::opcode_to_global_expr(self, Rv32HintStoreOpcode::HINT_STOREW);
 
         for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
             self.bus
@@ -90,6 +88,10 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        Rv32HintStoreOpcode::CLASS_OFFSET
+    }
 }
 
 pub struct Rv32HintStoreCoreChip<F: Field> {
@@ -99,14 +101,10 @@ pub struct Rv32HintStoreCoreChip<F: Field> {
 }
 
 impl<F: PrimeField32> Rv32HintStoreCoreChip<F> {
-    pub fn new(
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        offset: usize,
-    ) -> Self {
+    pub fn new(bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>) -> Self {
         Self {
             air: Rv32HintStoreCoreAir {
                 bus: bitwise_lookup_chip.bus(),
-                offset,
             },
             streams: OnceLock::new(),
             bitwise_lookup_chip,
@@ -153,7 +151,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv32HintStoreOpcode::from_usize(opcode - self.air.offset)
+            Rv32HintStoreOpcode::from_usize(opcode - Rv32HintStoreOpcode::CLASS_OFFSET)
         )
     }
 

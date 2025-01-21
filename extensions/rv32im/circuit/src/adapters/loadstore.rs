@@ -2,7 +2,6 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
-    sync::Arc,
 };
 
 use openvm_circuit::{
@@ -22,14 +21,14 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     utils::select,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    UsizeOpcode,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -94,8 +93,7 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
 /// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
 pub struct Rv32LoadStoreAdapterChip<F: Field> {
     pub air: Rv32LoadStoreAdapterAir,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
-    offset: usize,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     _marker: PhantomData<F>,
 }
 
@@ -105,8 +103,7 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         pointer_max_bits: usize,
-        range_checker_chip: Arc<VariableRangeCheckerChip>,
-        offset: usize,
+        range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 15);
         Self {
@@ -117,7 +114,6 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
                 pointer_max_bits,
             },
             range_checker_chip,
-            offset,
             _marker: PhantomData,
         }
     }
@@ -153,11 +149,11 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rs1_aux_cols: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1_aux_cols: MemoryReadAuxCols<T>,
 
     /// Will write to rd when Load and read from rs2 when Store
     pub rd_rs2_ptr: T,
-    pub read_data_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    pub read_data_aux: MemoryReadAuxCols<T>,
     pub imm: T,
     pub imm_sign: T,
     /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
@@ -356,7 +352,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
 
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
 
         let rs1_val = compose(rs1_record.1);
@@ -422,7 +420,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             opcode, a, d, e, ..
         } = *instruction;
 
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
 
         let (write_id, _) = match local_opcode {
             STOREW | STOREH | STOREB => {

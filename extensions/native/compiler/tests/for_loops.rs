@@ -1,10 +1,10 @@
 use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmConfig},
-    ir::{Array, RVar, SymbolicVar, Var},
+    ir::{Array, Var},
     prelude::ArrayLike,
 };
-use openvm_native_compiler_derive::compile_zip;
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -50,51 +50,6 @@ fn test_compiler_for_loops() {
 }
 
 #[test]
-fn test_compiler_iter_fixed() {
-    let mut builder = AsmBuilder::<F, EF>::default();
-    let zero: Var<_> = builder.eval(F::ZERO);
-    let one: Var<_> = builder.eval(F::ONE);
-    let two: Var<_> = builder.eval(F::TWO);
-    let arr = builder.vec(vec![zero, one, two]);
-    let x: Var<_> = builder.eval(F::ZERO);
-    let count: Var<_> = builder.eval(F::ZERO);
-    builder.iter(&arr).for_each(|val: Var<_>, builder| {
-        builder.assign(&x, x + val);
-        builder.assign(&count, count + F::ONE);
-    });
-    builder.assert_var_eq(count, F::from_canonical_usize(3));
-    builder.assert_var_eq(x, F::from_canonical_usize(3));
-    builder.halt();
-
-    let program = builder.compile_isa();
-    execute_program(program, vec![]);
-}
-
-#[test]
-fn test_compiler_iter_dyn() {
-    let mut builder = AsmBuilder::<F, EF>::default();
-    let zero: Var<_> = builder.eval(F::ZERO);
-    let one: Var<_> = builder.eval(F::ONE);
-    let two: Var<_> = builder.eval(F::TWO);
-    let arr = builder.dyn_array(3);
-    builder.set(&arr, 0, zero);
-    builder.set(&arr, 1, one);
-    builder.set(&arr, 2, two);
-    let x: Var<_> = builder.eval(F::ZERO);
-    let count: Var<_> = builder.eval(F::ZERO);
-    builder.iter(&arr).for_each(|val: Var<_>, builder| {
-        builder.assign(&x, x + val);
-        builder.assign(&count, count + F::ONE);
-    });
-    builder.assert_var_eq(count, F::from_canonical_usize(3));
-    builder.assert_var_eq(x, F::from_canonical_usize(3));
-    builder.halt();
-
-    let program = builder.compile_isa();
-    execute_program(program, vec![]);
-}
-
-#[test]
 fn test_compiler_zip_fixed() {
     let mut builder = AsmBuilder::<F, EF>::default();
     let zero: Var<_> = builder.eval(F::ZERO);
@@ -111,7 +66,7 @@ fn test_compiler_zip_fixed() {
     let ptr1_cache: Var<_> = builder.eval(F::ZERO);
     let ptr2_cache: Var<_> = builder.eval(F::ZERO);
 
-    compile_zip!(builder, arr1, arr2).for_each(|ptr_vec, builder| {
+    iter_zip!(builder, arr1, arr2).for_each(|ptr_vec, builder| {
         let val1 = builder.iter_ptr_get(&arr1, ptr_vec[0]);
         let val2 = builder.iter_ptr_get(&arr2, ptr_vec[1]);
         builder.assign(&x1, x1 + val1);
@@ -153,7 +108,7 @@ fn test_compiler_zip_dyn() {
     let ptr1_cache: Var<_> = builder.eval(F::ZERO);
     let ptr2_cache: Var<_> = builder.eval(F::ZERO);
 
-    compile_zip!(builder, arr1, arr2).for_each(|ptr_vec, builder| {
+    iter_zip!(builder, arr1, arr2).for_each(|ptr_vec, builder| {
         let val1: Var<_> = builder.iter_ptr_get(&arr1, ptr_vec[0]);
         let val2: Var<_> = builder.iter_ptr_get(&arr2, ptr_vec[1]);
         builder.assign(&x1, x1 + val1);
@@ -183,182 +138,26 @@ fn test_compiler_nested_array_loop() {
 
     let array: Array<C, Array<C, Var<_>>> = builder.dyn_array(outer_len);
 
-    builder.range(0, array.len()).for_each(|i, builder| {
+    builder.range(0, array.len()).for_each(|i_vec, builder| {
         let inner_array = builder.dyn_array::<Var<_>>(inner_len);
-        builder.range(0, inner_array.len()).for_each(|j, builder| {
-            builder.set(&inner_array, j, i + j); //(j * F::from_canonical_u16(300)));
-        });
-        builder.set(&array, i, inner_array);
-    });
-
-    // Test that the array is correctly initialized.
-    builder.range(0, array.len()).for_each(|i, builder| {
-        let inner_array = builder.get(&array, i);
-        builder.range(0, inner_array.len()).for_each(|j, builder| {
-            let val = builder.get(&inner_array, j);
-            builder.assert_var_eq(val, i + j); //*(j * F::from_canonical_u16(300)));
-        });
-    });
-
-    builder.halt();
-
-    let program = builder.compile_isa();
-    execute_program(program, vec![]);
-    //execute_program(program, vec![]);
-}
-
-#[test]
-fn test_compiler_break() {
-    let mut builder = AsmBuilder::<F, EF>::default();
-    type C = AsmConfig<F, EF>;
-
-    let len = 100;
-    let break_len = 10;
-
-    let array: Array<C, Var<_>> = builder.dyn_array(len);
-
-    builder
-        .range(0, array.len())
-        .may_break()
-        .for_each(|i, builder| {
-            builder.set(&array, i, i);
-
-            builder
-                .if_eq(i, RVar::from(break_len))
-                .then_may_break(|builder| builder.break_loop())
-        });
-
-    // Test that the array is correctly initialized.
-
-    builder
-        .range(0, array.len())
-        .may_break()
-        .for_each(|i, builder| {
-            let value = builder.get(&array, i);
-            builder
-                .if_eq(i, RVar::from(break_len + 1))
-                .then_or_else_may_break(
-                    |builder| {
-                        builder.assert_var_eq(value, i);
-                        Ok(())
-                    },
-                    |builder| {
-                        builder.assert_var_eq(value, F::ZERO);
-                        builder.break_loop()
-                    },
-                )
-        });
-
-    // Test the break instructions in a nested loop.
-
-    let array: Array<C, Var<_>> = builder.dyn_array(len);
-    builder
-        .range(0, array.len())
-        .may_break()
-        .for_each(|i, builder| {
-            let counter: Var<_> = builder.eval(F::ZERO);
-
-            builder.range(0, i).may_break().for_each(|_, builder| {
-                builder.assign(&counter, counter + F::ONE);
-                builder
-                    .if_eq(counter, RVar::from(break_len))
-                    .then_may_break(|builder| builder.break_loop())
-            });
-
-            builder.set(&array, i, counter);
-            Ok(())
-        });
-
-    // Test that the array is correctly initialized.
-
-    let is_break: Var<_> = builder.eval(F::ONE);
-    builder.range(0, array.len()).for_each(|i, builder| {
-        let exp_value: Var<_> = builder.eval(
-            i * is_break
-                + (SymbolicVar::<F>::ONE - is_break)
-                    * SymbolicVar::from(F::from_canonical_usize(break_len)),
-        );
-        let value = builder.get(&array, i);
-        builder.assert_var_eq(value, exp_value);
         builder
-            .if_eq(i, RVar::from(break_len))
-            .then(|builder| builder.assign(&is_break, F::ZERO));
+            .range(0, inner_array.len())
+            .for_each(|j_vec, builder| {
+                builder.set(&inner_array, j_vec[0], i_vec[0] + j_vec[0]);
+            });
+        builder.set(&array, i_vec[0], inner_array);
     });
 
-    builder.halt();
-
-    let program = builder.compile_isa();
-    execute_program(program, vec![]);
-}
-
-#[test]
-fn test_compiler_constant_break() {
-    let mut builder = AsmBuilder::<F, EF>::default();
-    builder.set_static_loops(true);
-    type C = AsmConfig<F, EF>;
-
-    let len = 100;
-    let break_len = 10;
-
-    let array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
-    builder
-        .range(0, array.len())
-        .may_break()
-        .for_each(|i, builder| {
-            builder.set(&array, i, i);
-
-            builder
-                .if_eq(i, RVar::from(break_len))
-                .then_may_break(|builder| builder.break_loop())
-        });
-    builder.halt();
-
-    let program = builder.compile_isa();
-    execute_program(program, vec![]);
-}
-
-#[test]
-#[should_panic]
-fn test_compiler_constant_var_break() {
-    let mut builder = AsmBuilder::<F, EF>::default();
-    type C = AsmConfig<F, EF>;
-
-    let len = 100;
-    let break_len: Var<_> = builder.eval(RVar::from(10));
-
-    let array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
-    builder
-        .range(0, array.len())
-        .may_break()
-        .for_each(|i, builder| {
-            builder.set(&array, i, i);
-
-            builder
-                .if_eq(i, RVar::from(break_len))
-                .then_may_break(|builder| builder.break_loop())
-        });
-    builder.halt();
-
-    let program = builder.compile_isa();
-    execute_program(program, vec![]);
-}
-
-#[test]
-fn test_compiler_step_by() {
-    let mut builder = AsmBuilder::<F, EF>::default();
-
-    let n_val = BabyBear::from_canonical_u32(20);
-
-    let zero: Var<_> = builder.eval(F::ZERO);
-    let n: Var<_> = builder.eval(n_val);
-
-    let i_counter: Var<_> = builder.eval(F::ZERO);
-    builder.range(zero, n).step_by(2).for_each(|_, builder| {
-        builder.assign(&i_counter, i_counter + F::ONE);
+    // Test that the array is correctly initialized.
+    builder.range(0, array.len()).for_each(|i_vec, builder| {
+        let inner_array = builder.get(&array, i_vec[0]);
+        builder
+            .range(0, inner_array.len())
+            .for_each(|j_vec, builder| {
+                let val = builder.get(&inner_array, j_vec[0]);
+                builder.assert_var_eq(val, i_vec[0] + j_vec[0]);
+            });
     });
-    // Assert that the outer loop ran n times, in two different ways.
-    let n_exp = n_val / F::TWO;
-    builder.assert_var_eq(i_counter, n_exp);
 
     builder.halt();
 
@@ -376,7 +175,7 @@ fn test_compiler_bneinc() {
     let n: Var<_> = builder.eval(n_val);
 
     let i_counter: Var<_> = builder.eval(F::ZERO);
-    builder.range(zero, n).step_by(1).for_each(|_, builder| {
+    builder.range(zero, n).for_each(|_, builder| {
         builder.assign(&i_counter, i_counter + F::ONE);
     });
 
