@@ -50,13 +50,6 @@ impl<F: PrimeField32> VerifyBatchRecord<F> {
     pub fn opened_element_size_inv(&self) -> F {
         self.instruction.g
     }
-
-    fn compress(&self, left: [F; CHUNK], right: [F; CHUNK]) -> ([F; 2 * CHUNK], [F; CHUNK]) {
-        let concatenated =
-            std::array::from_fn(|i| if i < CHUNK { left[i] } else { right[i - CHUNK] });
-        let permuted = self.subchip.permute(concatenated);
-        (concatenated, std::array::from_fn(|i| permuted[i]))
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

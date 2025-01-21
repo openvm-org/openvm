@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, sync::Arc};
+use std::{array::from_fn, borrow::Borrow, sync::Arc};
 
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState},
