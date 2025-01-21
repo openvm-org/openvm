@@ -1,9 +1,11 @@
 use std::ops::{Add, Mul};
 
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField};
 
 use super::{
-    Array, Builder, CanSelect, Config, DslIr, Ext, Felt, MemIndex, RVar, SymbolicExt, Var, Variable,
+    Array, ArrayLike, Builder, CanSelect, Config, DslIr, Ext, Felt, MemIndex, RVar, SymbolicExt,
+    Var, Variable,
 };
 
 pub const NUM_LIMBS: usize = 32;
@@ -88,7 +90,8 @@ impl<C: Config> Builder<C> {
         let one_var: V = self.eval(V::Expression::ONE);
 
         // Implements a square-and-multiply algorithm.
-        self.iter(power_bits).for_each(|bit, builder| {
+        iter_zip!(self, power_bits).for_each(|ptr_vec, builder| {
+            let bit = builder.iter_ptr_get(power_bits, ptr_vec[0]);
             builder.assign(&result, result * result);
             let mul = V::select(builder, bit, power_f, one_var);
             builder.assign(&result, result * mul);

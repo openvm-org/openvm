@@ -1,5 +1,4 @@
 use alloc::{collections::BTreeMap, vec};
-use std::collections::BTreeSet;
 
 use openvm_circuit::arch::instructions::instruction::DebugInfo;
 use openvm_stark_backend::p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
@@ -29,10 +28,6 @@ pub(crate) const STACK_TOP: i32 = HEAP_START_ADDRESS - 64;
 // #[derive(Debug, Clone, Default)]
 pub struct AsmCompiler<F, EF> {
     basic_blocks: Vec<BasicBlock<F, EF>>,
-    break_label: Option<F>,
-    break_label_map: BTreeMap<F, F>,
-    break_counter: usize,
-    contains_break: BTreeSet<F>,
     function_labels: BTreeMap<String, F>,
     trap_label: F,
     word_size: usize,
@@ -74,23 +69,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     pub fn new(word_size: usize) -> Self {
         Self {
             basic_blocks: vec![BasicBlock::new()],
-            break_label: None,
-            break_label_map: BTreeMap::new(),
-            contains_break: BTreeSet::new(),
             function_labels: BTreeMap::new(),
-            break_counter: 0,
             trap_label: F::ONE,
             word_size,
         }
-    }
-
-    /// Creates a new break label.
-    pub fn new_break_label(&mut self) -> F {
-        let label = self.break_counter;
-        self.break_counter += 1;
-        let label = F::from_canonical_usize(label);
-        self.break_label = Some(label);
-        label
     }
 
     /// Builds the operations into assembly instructions.
@@ -365,22 +347,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         );
                     }
                 }
-                DslIr::Break => {
-                    let label = self.break_label.expect("No break label set");
-                    let current_block = self.block_label();
-                    self.contains_break.insert(current_block);
-                    self.push(AsmInstruction::Break(label), debug_info);
-                }
-                DslIr::For(start, end, step_size, loop_var, block) => {
-                    let for_compiler = ForCompiler {
-                        compiler: self,
-                        start,
-                        end,
-                        step_size,
-                        loop_var,
-                    };
-                    for_compiler.for_each(move |_, builder| builder.build(block), debug_info);
-                }
                 DslIr::ZipFor(starts, end0, step_sizes, loop_vars, block) => {
                     let zip_for_compiler = ZipForCompiler {
                         compiler: self,
@@ -511,9 +477,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     debug_info,
                 ),
                 DslIr::HintBitsF(var, len) => {
-                    self.push(AsmInstruction::HintBits(var.fp(), len), debug_info);
-                }
-                DslIr::HintBitsV(var, len) => {
                     self.push(AsmInstruction::HintBits(var.fp(), len), debug_info);
                 }
                 DslIr::Poseidon2PermuteBabyBear(dst, src) => match (dst, src) {
@@ -844,7 +807,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> IfCom
     }
 }
 
-// Zipped for loop -- loop extends over the first entry in starts and ends
+// Zipped for loop -- loop extends over the first entry in starts and end0
+// ATTENTION: starting with starts[0] > end0 will lead to undefined behavior.
 pub struct ZipForCompiler<'a, F: Field, EF> {
     compiler: &'a mut AsmCompiler<F, EF>,
     starts: Vec<RVar<F>>,
@@ -885,8 +849,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
             });
 
         let loop_call_label = self.compiler.block_label();
-        let break_label = self.compiler.new_break_label();
-        self.compiler.break_label = Some(break_label);
 
         self.compiler.basic_block();
         let loop_label = self.compiler.block_label();
@@ -927,135 +889,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
             .push_to_block(loop_call_label, instr, debug_info.clone());
 
         self.compiler.basic_block();
-        let label = self.compiler.block_label();
-        self.compiler.break_label_map.insert(break_label, label);
-
-        for block in self.compiler.contains_break.iter() {
-            for instruction in self.compiler.basic_blocks[block.as_canonical_u32() as usize]
-                .0
-                .iter_mut()
-            {
-                if let AsmInstruction::Break(l) = instruction {
-                    if *l == break_label {
-                        *instruction = AsmInstruction::j(label);
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// A builder for a for loop.
-///
-/// SAFETY: Starting with end < start will lead to undefined behavior.
-pub struct ForCompiler<'a, F: Field, EF> {
-    compiler: &'a mut AsmCompiler<F, EF>,
-    start: RVar<F>,
-    end: RVar<F>,
-    step_size: F,
-    loop_var: Var<F>,
-}
-
-impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> ForCompiler<'_, F, EF> {
-    pub(super) fn for_each(
-        mut self,
-        f: impl FnOnce(Var<F>, &mut AsmCompiler<F, EF>),
-        debug_info: Option<DebugInfo>,
-    ) {
-        // The function block structure:
-        // - Setting the loop range
-        // - Executing the loop body and incrementing the loop variable
-        // - the loop condition
-
-        // Set the loop variable to the start of the range.
-        self.set_loop_var(debug_info.clone());
-
-        // Save the label of the for loop call.
-        let loop_call_label = self.compiler.block_label();
-
-        // Initialize a break label for this loop.
-        let break_label = self.compiler.new_break_label();
-        self.compiler.break_label = Some(break_label);
-
-        // A basic block for the loop body
-        self.compiler.basic_block();
-
-        // Save the loop body label for the loop condition.
-        let loop_label = self.compiler.block_label();
-
-        // The loop body.
-        f(self.loop_var, self.compiler);
-
-        // Increment the loop variable.
-        self.compiler.push(
-            AsmInstruction::AddFI(self.loop_var.fp(), self.loop_var.fp(), self.step_size),
-            debug_info.clone(),
-        );
-
-        // Add a basic block for the loop condition.
-        self.compiler.basic_block();
-
-        // Jump to loop body if the loop condition still holds.
-        self.jump_to_loop_body(loop_label, debug_info.clone());
-
-        // Add a jump instruction to the loop condition in the loop call block.
-        let label = self.compiler.block_label();
-        let instr = AsmInstruction::j(label);
-        self.compiler
-            .push_to_block(loop_call_label, instr, debug_info.clone());
-
-        // Initialize the after loop block.
-        self.compiler.basic_block();
-
-        // Resolve the break label.
-        let label = self.compiler.block_label();
-        self.compiler.break_label_map.insert(break_label, label);
-
-        // Replace the break instruction with a jump to the after loop block.
-        for block in self.compiler.contains_break.iter() {
-            for instruction in self.compiler.basic_blocks[block.as_canonical_u32() as usize]
-                .0
-                .iter_mut()
-            {
-                if let AsmInstruction::Break(l) = instruction {
-                    if *l == break_label {
-                        *instruction = AsmInstruction::j(label);
-                    }
-                }
-            }
-        }
-
-        // self.compiler.contains_break.clear();
-    }
-
-    fn set_loop_var(&mut self, debug_info: Option<DebugInfo>) {
-        match self.start {
-            RVar::Const(start) => {
-                self.compiler.push(
-                    AsmInstruction::ImmF(self.loop_var.fp(), start),
-                    debug_info.clone(),
-                );
-            }
-            RVar::Val(var) => {
-                self.compiler.push(
-                    AsmInstruction::CopyF(self.loop_var.fp(), var.fp()),
-                    debug_info.clone(),
-                );
-            }
-        }
-    }
-
-    fn jump_to_loop_body(&mut self, loop_label: F, debug_info: Option<DebugInfo>) {
-        match self.end {
-            RVar::Const(end) => {
-                let instr = AsmInstruction::BneI(loop_label, self.loop_var.fp(), end);
-                self.compiler.push(instr, debug_info.clone());
-            }
-            RVar::Val(end) => {
-                let instr = AsmInstruction::Bne(loop_label, self.loop_var.fp(), end.fp());
-                self.compiler.push(instr, debug_info.clone());
-            }
-        }
     }
 }
 

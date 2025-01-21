@@ -1,7 +1,8 @@
 use openvm_native_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
-    prelude::{Array, Builder, Config, Ext, Felt, Var},
+    prelude::{Array, ArrayLike, Builder, Config, Ext, Felt, Var},
 };
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
 
 use crate::{
@@ -25,9 +26,11 @@ impl<C: Config> DuplexChallengerVariable<C> {
     pub fn new(builder: &mut Builder<C>) -> Self {
         let sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
 
-        builder.range(0, sponge_state.len()).for_each(|i, builder| {
-            builder.set(&sponge_state, i, C::F::ZERO);
-        });
+        builder
+            .range(0, sponge_state.len())
+            .for_each(|i_vec, builder| {
+                builder.set(&sponge_state, i_vec[0], C::F::ZERO);
+            });
 
         DuplexChallengerVariable::<C> {
             sponge_state,
@@ -39,10 +42,13 @@ impl<C: Config> DuplexChallengerVariable<C> {
     #[allow(dead_code)]
     pub fn copy(&self, builder: &mut Builder<C>) -> Self {
         let sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            let element = builder.get(&self.sponge_state, i);
-            builder.set(&sponge_state, i, element);
-        });
+        builder
+            .range(0, PERMUTATION_WIDTH)
+            .for_each(|i_vec, builder| {
+                let i = i_vec[0];
+                let element = builder.get(&self.sponge_state, i);
+                builder.set(&sponge_state, i, element);
+            });
         let nb_inputs = builder.eval(self.nb_inputs);
         let nb_outputs = builder.eval(self.nb_outputs);
         DuplexChallengerVariable::<C> {
@@ -57,20 +63,26 @@ impl<C: Config> DuplexChallengerVariable<C> {
     pub fn assert_eq(&self, builder: &mut Builder<C>, other: &Self) {
         builder.assert_var_eq(self.nb_inputs, other.nb_inputs);
         builder.assert_var_eq(self.nb_outputs, other.nb_outputs);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            let element = builder.get(&self.sponge_state, i);
-            let other_element = builder.get(&other.sponge_state, i);
-            builder.assert_felt_eq(element, other_element);
-        });
+        builder
+            .range(0, PERMUTATION_WIDTH)
+            .for_each(|i_vec, builder| {
+                let i = i_vec[0];
+                let element = builder.get(&self.sponge_state, i);
+                let other_element = builder.get(&other.sponge_state, i);
+                builder.assert_felt_eq(element, other_element);
+            });
     }
 
     #[allow(dead_code)]
     pub fn reset(&mut self, builder: &mut Builder<C>) {
         let zero: Var<_> = builder.eval(C::N::ZERO);
         let zero_felt: Felt<_> = builder.eval(C::F::ZERO);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            builder.set(&self.sponge_state, i, zero_felt);
-        });
+        builder
+            .range(0, PERMUTATION_WIDTH)
+            .for_each(|i_vec, builder| {
+                let i = i_vec[0];
+                builder.set(&self.sponge_state, i, zero_felt);
+            });
         builder.assign(&self.nb_inputs, zero);
         builder.assign(&self.nb_outputs, zero);
     }
@@ -136,9 +148,11 @@ impl<C: Config> DuplexChallengerVariable<C> {
         let rand_f = self.sample(builder);
         let bits = builder.num2bits_f(rand_f, C::N::bits() as u32);
 
-        builder.range(nb_bits, bits.len()).for_each(|i, builder| {
-            builder.set(&bits, i, C::N::ZERO);
-        });
+        builder
+            .range(nb_bits, bits.len())
+            .for_each(|i_vec, builder| {
+                builder.set(&bits, i_vec[0], C::N::ZERO);
+            });
         bits
     }
 
@@ -146,11 +160,10 @@ impl<C: Config> DuplexChallengerVariable<C> {
         self.observe(builder, witness);
         let element_bits = self.sample_bits(builder, RVar::from(nb_bits));
         let element_bits_truncated = element_bits.slice(builder, 0, nb_bits);
-        builder
-            .iter(&element_bits_truncated)
-            .for_each(|element, builder| {
-                builder.assert_var_eq(element, C::N::ZERO);
-            });
+        iter_zip!(builder, element_bits_truncated).for_each(|ptr_vec, builder| {
+            let element = builder.iter_ptr_get(&element_bits_truncated, ptr_vec[0]);
+            builder.assert_var_eq(element, C::N::ZERO);
+        });
     }
 }
 
@@ -160,7 +173,8 @@ impl<C: Config> CanObserveVariable<C, Felt<C::F>> for DuplexChallengerVariable<C
     }
 
     fn observe_slice(&mut self, builder: &mut Builder<C>, values: Array<C, Felt<C::F>>) {
-        builder.iter(&values).for_each(|element, builder| {
+        iter_zip!(builder, values).for_each(|ptr_vec, builder| {
+            let element = builder.iter_ptr_get(&values, ptr_vec[0]);
             self.observe(builder, element);
         });
     }

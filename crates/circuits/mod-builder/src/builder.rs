@@ -289,7 +289,12 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         if self.builder.needs_setup() {
             let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
             builder.assert_bool(is_setup.clone());
-            builder.when_first_row().assert_one(is_setup.clone());
+            // TODO[jpw]: currently we enforce at the program code level that:
+            // - a valid program must call the correct setup opcodes to be correct
+            // - it would be better if we can constraint this in the circuit,
+            //   however this has the challenge that when the same chip is used
+            //   across continuation segments,
+            //   only the first segment will have setup called
             for i in 0..inputs[0].len().max(self.builder.prime_limbs.len()) {
                 let lhs = if i < inputs[0].len() {
                     inputs[0][i].into()

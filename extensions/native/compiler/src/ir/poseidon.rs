@@ -1,6 +1,7 @@
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 
-use super::{Array, Builder, Config, DslIr, Ext, Felt, MemIndex, Ptr, Usize, Var};
+use super::{Array, ArrayLike, Builder, Config, DslIr, Ext, Felt, MemIndex, Ptr, Usize, Var};
 
 pub const DIGEST_SIZE: usize = 8;
 pub const HASH_RATE: usize = 8;
@@ -74,51 +75,6 @@ impl<C: Config> Builder<C> {
         ));
     }
 
-    /// Applies the Poseidon2 permutation to the given array.
-    ///
-    /// [Reference](https://docs.rs/p3-symmetric/latest/p3_symmetric/struct.PaddingFreeSponge.html)
-    pub fn poseidon2_hash(&mut self, array: &Array<C, Felt<C::F>>) -> Array<C, Felt<C::F>> {
-        let perm_width = PERMUTATION_WIDTH;
-        let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
-        self.range(0, perm_width).for_each(|i, builder| {
-            builder.set(&state, i, C::F::ZERO);
-        });
-
-        let break_flag: Var<_> = self.eval(C::N::ZERO);
-        let last_index: Usize<_> = self.eval(array.len() - C::N::ONE);
-        let hash_rate: Var<_> = self.eval(C::N::from_canonical_usize(HASH_RATE));
-
-        self.range(0, array.len())
-            .may_break()
-            .step_by(HASH_RATE)
-            .for_each(|i, builder| {
-                builder
-                    .if_eq(break_flag, C::N::ONE)
-                    .then_may_break(|builder| builder.break_loop())?;
-                // Insert elements of the chunk.
-                builder
-                    .range(0, hash_rate)
-                    .may_break()
-                    .for_each(|j, builder| {
-                        let index = builder.eval_expr(i + j);
-                        let element = builder.get(array, index);
-                        builder.set_value(&state, j, element);
-                        builder
-                            .if_eq(index, last_index.clone())
-                            .then_may_break(|builder| {
-                                builder.assign(&break_flag, C::N::ONE);
-                                builder.break_loop()
-                            })
-                    });
-
-                builder.poseidon2_permute_mut(&state);
-                Ok(())
-            });
-
-        state.truncate(self, Usize::from(DIGEST_SIZE));
-        state
-    }
-
     pub fn poseidon2_hash_x(
         &mut self,
         array: &Array<C, Array<C, Felt<C::F>>>,
@@ -126,15 +82,17 @@ impl<C: Config> Builder<C> {
         self.cycle_tracker_start("poseidon2-hash");
         let perm_width = PERMUTATION_WIDTH;
         let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
-        self.range(0, perm_width).for_each(|i, builder| {
-            builder.set(&state, i, C::F::ZERO);
+        self.range(0, perm_width).for_each(|idx_vec, builder| {
+            builder.set(&state, idx_vec[0], C::F::ZERO);
         });
 
         let address = self.eval(state.ptr().address);
         let start: Var<_> = self.eval(address);
         let end: Var<_> = self.eval(address + C::N::from_canonical_usize(HASH_RATE));
-        self.iter(array).for_each(|subarray, builder| {
-            builder.iter(&subarray).for_each(|element, builder| {
+        iter_zip!(self, array).for_each(|idx_vec, builder| {
+            let subarray = builder.iter_ptr_get(array, idx_vec[0]);
+            iter_zip!(builder, subarray).for_each(|ptr_vec, builder| {
+                let element = builder.iter_ptr_get(&subarray, ptr_vec[0]);
                 builder.cycle_tracker_start("poseidon2-hash-setup");
                 builder.store(
                     Ptr { address },
@@ -171,15 +129,16 @@ impl<C: Config> Builder<C> {
         let hash_rate = HASH_RATE;
         let perm_width = PERMUTATION_WIDTH;
         let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
-        self.range(hash_rate, perm_width).for_each(|i, builder| {
-            builder.set(&state, i, C::F::ZERO);
-        });
+        self.range(hash_rate, perm_width)
+            .for_each(|i_vec, builder| {
+                builder.set(&state, i_vec[0], C::F::ZERO);
+            });
 
         let idx: Var<_> = self.eval(C::N::ZERO);
-        self.range(0, array.len()).for_each(|i, builder| {
-            let subarray = builder.get(array, i);
-            builder.range(0, subarray.len()).for_each(|j, builder| {
-                let element = builder.get(&subarray, j);
+        self.range(0, array.len()).for_each(|i_vec, builder| {
+            let subarray = builder.get(array, i_vec[0]);
+            builder.range(0, subarray.len()).for_each(|j_vec, builder| {
+                let element = builder.get(&subarray, j_vec[0]);
                 let felts = builder.ext2felt(element);
                 for i in 0..4 {
                     let felt = builder.get(&felts, i);
