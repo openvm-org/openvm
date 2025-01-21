@@ -7,7 +7,7 @@ use openvm_circuit::{
     },
     utils::{u32_into_limbs, u32_sign_extend},
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,

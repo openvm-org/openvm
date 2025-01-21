@@ -5,7 +5,7 @@ use openvm_circuit::{
     system::memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 use openvm_circuit_primitives::utils::not;
-use openvm_instructions::UsizeOpcode;
+use openvm_instructions::LocalOpcode;
 use openvm_native_compiler::{
     Poseidon2Opcode::{COMP_POS2, PERM_POS2},
     VerifyBatchOpcode::VERIFY_BATCH,

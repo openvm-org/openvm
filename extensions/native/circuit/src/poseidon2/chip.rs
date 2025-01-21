@@ -4,7 +4,7 @@ use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, SystemPort},
     system::memory::{MemoryController, OfflineMemory, RecordId},
 };
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{
     Poseidon2Opcode::{COMP_POS2, PERM_POS2},
     VerifyBatchOpcode::VERIFY_BATCH,

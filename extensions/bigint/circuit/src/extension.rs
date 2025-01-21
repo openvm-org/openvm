@@ -16,7 +16,7 @@ use openvm_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
-use openvm_instructions::{program::DEFAULT_PC_STEP, UsizeOpcode};
+use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,

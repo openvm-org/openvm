@@ -7,7 +7,7 @@ use std::{
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
     air_builders::{debug::DebugConstraintBuilder, symbolic::SymbolicRapBuilder},
     config::{StarkGenericConfig, Val},
@@ -172,7 +172,7 @@ where
         self.start_offset_expr() + local_expr.into()
     }
 
-    fn opcode_to_global_expr(&self, local_opcode: impl UsizeOpcode) -> AB::Expr {
+    fn opcode_to_global_expr(&self, local_opcode: impl LocalOpcode) -> AB::Expr {
         self.expr_to_global_expr(AB::Expr::from_canonical_usize(local_opcode.local_usize()))
     }
 }

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         instructions::{
-            exe::VmExe, instruction::Instruction, program::Program, SystemOpcode::TERMINATE,
-            UsizeOpcode,
+            exe::VmExe, instruction::Instruction, program::Program, LocalOpcode,
+            SystemOpcode::TERMINATE,
         },
         SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights, VmConfig, VmExecutor,
     },

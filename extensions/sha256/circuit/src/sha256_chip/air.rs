@@ -9,7 +9,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    UsizeOpcode,
+    LocalOpcode,
 };
 use openvm_sha256_air::{
     compose, Sha256Air, SHA256_BLOCK_U8S, SHA256_HASH_WORDS, SHA256_ROUNDS_PER_ROW,

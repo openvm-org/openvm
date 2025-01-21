@@ -2,7 +2,7 @@ use backtrace::Backtrace;
 use openvm_stark_backend::p3_field::Field;
 use serde::{Deserialize, Serialize};
 
-use crate::{utils::isize_to_field, PhantomDiscriminant, SystemOpcode, UsizeOpcode, VmOpcode};
+use crate::{utils::isize_to_field, LocalOpcode, PhantomDiscriminant, SystemOpcode, VmOpcode};
 
 /// Number of operands of an instruction.
 pub const NUM_OPERANDS: usize = 7;

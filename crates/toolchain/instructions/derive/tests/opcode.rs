@@ -1,9 +1,9 @@
-use openvm_instructions::UsizeOpcode;
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions::LocalOpcode;
+use openvm_instructions_derive::LocalOpcode;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x0]
 #[repr(usize)]
@@ -13,7 +13,7 @@ pub enum TestOpcode {
     C,
 }
 
-#[derive(UsizeOpcode)]
+#[derive(LocalOpcode)]
 #[opcode_offset = 0x123]
 pub struct WrapperOpcode(TestOpcode);
 

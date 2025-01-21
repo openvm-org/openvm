@@ -22,7 +22,7 @@ use openvm_circuit_primitives::{
     SubAir, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::FriOpcode::FRI_REDUCED_OPENING;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},

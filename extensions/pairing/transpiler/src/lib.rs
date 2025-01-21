@@ -1,7 +1,7 @@
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
 };
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions_derive::LocalOpcode;
 use openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
@@ -9,7 +9,7 @@ use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x750]
 #[repr(usize)]
@@ -25,7 +25,7 @@ pub enum PairingOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x700]
 #[repr(usize)]
@@ -39,7 +39,7 @@ const FP12_OPS: usize = 4;
 
 pub struct Bn254Fp12Opcode(Fp12Opcode);
 
-impl UsizeOpcode for Bn254Fp12Opcode {
+impl LocalOpcode for Bn254Fp12Opcode {
     const CLASS_OFFSET: usize = Fp12Opcode::CLASS_OFFSET;
 
     fn from_usize(value: usize) -> Self {
@@ -53,7 +53,7 @@ impl UsizeOpcode for Bn254Fp12Opcode {
 
 pub struct Bls12381Fp12Opcode(Fp12Opcode);
 
-impl UsizeOpcode for Bls12381Fp12Opcode {
+impl LocalOpcode for Bls12381Fp12Opcode {
     const CLASS_OFFSET: usize = Fp12Opcode::CLASS_OFFSET + FP12_OPS;
 
     fn from_usize(value: usize) -> Self {

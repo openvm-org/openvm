@@ -4,7 +4,7 @@ use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
     VirtualMachine,
 };
-use openvm_instructions::{instruction::Instruction, program::Program, SystemOpcode, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
 use openvm_native_compiler::{
     FieldArithmeticOpcode, Poseidon2Opcode, Poseidon2Opcode::*, VerifyBatchOpcode::VERIFY_BATCH,
 };

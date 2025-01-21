@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,

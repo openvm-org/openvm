@@ -4,7 +4,7 @@ use std::{
 };
 
 use openvm_instructions::{
-    instruction::Instruction, program::Program, SystemOpcode::TERMINATE, UsizeOpcode,
+    instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
 };
 use openvm_stark_backend::{
     config::StarkGenericConfig, engine::StarkEngine, p3_field::FieldAlgebra,

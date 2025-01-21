@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionBridge,
+        instructions::LocalOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionBridge,
         ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{

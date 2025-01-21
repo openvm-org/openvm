@@ -24,11 +24,10 @@ use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
-    PhantomDiscriminant,
+    LocalOpcode, PhantomDiscriminant,
     PublishOpcode::PUBLISH,
     SysPhantom,
     SystemOpcode::*,
-    UsizeOpcode,
 };
 use openvm_keccak256_circuit::{
     utils::keccak256, Keccak256, Keccak256Executor, Keccak256Periphery,

@@ -14,7 +14,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,

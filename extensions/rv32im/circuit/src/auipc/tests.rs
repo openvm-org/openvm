@@ -4,7 +4,7 @@ use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,

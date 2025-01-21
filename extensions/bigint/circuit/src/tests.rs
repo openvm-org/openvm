@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
-use openvm_instructions::{program::PC_BITS, riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_instructions::{program::PC_BITS, riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_rv32_adapters::{
     rv32_heap_branch_default, rv32_write_heap_default, Rv32HeapAdapterChip,
     Rv32HeapBranchAdapterChip,

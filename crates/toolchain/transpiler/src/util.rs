@@ -5,7 +5,7 @@ use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
     utils::isize_to_field,
-    SystemOpcode, UsizeOpcode, VmOpcode,
+    LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};

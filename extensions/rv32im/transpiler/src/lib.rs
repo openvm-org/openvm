@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant, SystemOpcode,
-    UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
+    SystemOpcode,
 };
 use openvm_rv32im_guest::{
     PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_STORE_W_FUNCT3, PHANTOM_FUNCT3, REVEAL_FUNCT3,

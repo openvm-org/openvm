@@ -7,7 +7,7 @@ use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -73,11 +73,11 @@ pub struct LoadStoreCoreRecord<F, const NUM_CELLS: usize> {
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadStoreCoreAir<OpcodeClass: UsizeOpcode, const NUM_CELLS: usize> {
+pub struct LoadStoreCoreAir<OpcodeClass: LocalOpcode, const NUM_CELLS: usize> {
     _marker: PhantomData<OpcodeClass>,
 }
 
-impl<F: Field, OpcodeClass: UsizeOpcode + Sync, const NUM_CELLS: usize> BaseAir<F>
+impl<F: Field, OpcodeClass: LocalOpcode + Sync, const NUM_CELLS: usize> BaseAir<F>
     for LoadStoreCoreAir<OpcodeClass, NUM_CELLS>
 {
     fn width(&self) -> usize {
@@ -85,12 +85,12 @@ impl<F: Field, OpcodeClass: UsizeOpcode + Sync, const NUM_CELLS: usize> BaseAir<
     }
 }
 
-impl<F: Field, OpcodeClass: UsizeOpcode + Sync, const NUM_CELLS: usize> BaseAirWithPublicValues<F>
+impl<F: Field, OpcodeClass: LocalOpcode + Sync, const NUM_CELLS: usize> BaseAirWithPublicValues<F>
     for LoadStoreCoreAir<OpcodeClass, NUM_CELLS>
 {
 }
 
-impl<AB, I, OpcodeClass: UsizeOpcode + Sync, const NUM_CELLS: usize> VmCoreAir<AB, I>
+impl<AB, I, OpcodeClass: LocalOpcode + Sync, const NUM_CELLS: usize> VmCoreAir<AB, I>
     for LoadStoreCoreAir<OpcodeClass, NUM_CELLS>
 where
     AB: InteractionBuilder,
@@ -253,11 +253,11 @@ where
 }
 
 #[derive(Debug)]
-pub struct LoadStoreCoreChip<OpcodeClass: UsizeOpcode, const NUM_CELLS: usize> {
+pub struct LoadStoreCoreChip<OpcodeClass: LocalOpcode, const NUM_CELLS: usize> {
     pub air: LoadStoreCoreAir<OpcodeClass, NUM_CELLS>,
 }
 
-impl<OpcodeClass: UsizeOpcode, const NUM_CELLS: usize> LoadStoreCoreChip<OpcodeClass, NUM_CELLS> {
+impl<OpcodeClass: LocalOpcode, const NUM_CELLS: usize> LoadStoreCoreChip<OpcodeClass, NUM_CELLS> {
     pub fn new() -> Self {
         Self {
             air: LoadStoreCoreAir::<OpcodeClass, NUM_CELLS> {
@@ -267,7 +267,7 @@ impl<OpcodeClass: UsizeOpcode, const NUM_CELLS: usize> LoadStoreCoreChip<OpcodeC
     }
 }
 
-impl<OpcodeClass: UsizeOpcode, const NUM_CELLS: usize> Default
+impl<OpcodeClass: LocalOpcode, const NUM_CELLS: usize> Default
     for LoadStoreCoreChip<OpcodeClass, NUM_CELLS>
 {
     fn default() -> Self {
@@ -278,7 +278,7 @@ impl<OpcodeClass: UsizeOpcode, const NUM_CELLS: usize> Default
 impl<
         F: PrimeField32,
         I: VmAdapterInterface<F>,
-        OpcodeClass: UsizeOpcode + Clone + Sync,
+        OpcodeClass: LocalOpcode + Clone + Sync,
         const NUM_CELLS: usize,
     > VmCoreChip<F, I> for LoadStoreCoreChip<OpcodeClass, NUM_CELLS>
 where

@@ -5,7 +5,7 @@ use std::{
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::UsizeOpcode;
+use openvm_instructions::LocalOpcode;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,

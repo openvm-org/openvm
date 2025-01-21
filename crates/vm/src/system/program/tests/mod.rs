@@ -3,7 +3,7 @@ use std::{iter, sync::Arc};
 use openvm_instructions::{
     instruction::Instruction,
     program::{Program, DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
-    UsizeOpcode,
+    LocalOpcode,
 };
 use openvm_native_compiler::{
     FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,

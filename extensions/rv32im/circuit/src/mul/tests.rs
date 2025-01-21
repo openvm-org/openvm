@@ -8,7 +8,7 @@ use openvm_circuit::{
     utils::generate_long_number,
 };
 use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip};
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,

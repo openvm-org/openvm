@@ -3,7 +3,7 @@ use openvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_mod_circuit_builder::{
     test_utils::{
         biguint_to_limbs, bls12381_fq12_random, bn254_fq12_random, bn254_fq12_to_biguint_vec,

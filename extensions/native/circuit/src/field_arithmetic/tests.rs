@@ -4,7 +4,7 @@ use openvm_circuit::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
     system::native_adapter::{NativeAdapterChip, NativeAdapterCols},
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldArithmeticOpcode;
 use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},

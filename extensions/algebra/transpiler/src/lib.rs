@@ -3,16 +3,16 @@ use openvm_algebra_guest::{
     MODULAR_ARITHMETIC_FUNCT3, OPCODE,
 };
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, UsizeOpcode, VmOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, VmOpcode,
 };
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions_derive::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x500]
 #[repr(usize)]
@@ -29,7 +29,7 @@ pub enum Rv32ModularArithmeticOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x710]
 #[repr(usize)]

@@ -17,7 +17,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_instructions::{
-    program::Program, PhantomDiscriminant, PublishOpcode, SystemOpcode, UsizeOpcode, VmOpcode,
+    program::Program, LocalOpcode, PhantomDiscriminant, PublishOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},

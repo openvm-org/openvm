@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_sha256_air::get_random_message;
 use openvm_sha256_transpiler::Rv32Sha256Opcode::{self, *};
 use openvm_stark_backend::p3_field::FieldAlgebra;

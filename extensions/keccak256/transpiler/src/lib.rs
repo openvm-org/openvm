@@ -1,5 +1,5 @@
-use openvm_instructions::UsizeOpcode;
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions::LocalOpcode;
+use openvm_instructions_derive::LocalOpcode;
 use openvm_keccak256_guest::{KECCAK256_FUNCT3, KECCAK256_FUNCT7, OPCODE};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
@@ -7,7 +7,7 @@ use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x310]
 #[repr(usize)]

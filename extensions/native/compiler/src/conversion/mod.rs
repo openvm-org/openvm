@@ -2,7 +2,7 @@ use openvm_circuit::arch::instructions::program::Program;
 use openvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::{DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
-    PhantomDiscriminant, PublishOpcode, SysPhantom, SystemOpcode, UsizeOpcode, VmOpcode,
+    LocalOpcode, PhantomDiscriminant, PublishOpcode, SysPhantom, SystemOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::{ExtensionField, PrimeField32, PrimeField64};
@@ -32,7 +32,7 @@ impl Default for CompilerOptions {
 }
 
 impl CompilerOptions {
-    pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> VmOpcode {
+    pub fn opcode_with_offset<Opcode: LocalOpcode>(&self, opcode: Opcode) -> VmOpcode {
         let offset = Opcode::CLASS_OFFSET;
         VmOpcode::from_usize(offset + opcode.local_usize())
     }

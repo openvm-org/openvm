@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAdapterChip,
     VmChipWrapper, VmCoreChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,

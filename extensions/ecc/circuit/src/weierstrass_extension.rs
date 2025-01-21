@@ -17,7 +17,7 @@ use openvm_ecc_guest::{
     p256::{CURVE_A as P256_A, CURVE_B as P256_B, P256_MODULUS, P256_ORDER},
 };
 use openvm_ecc_transpiler::{EccPhantom, Rv32WeierstrassOpcode};
-use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
+use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;

@@ -4,7 +4,7 @@ use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    UsizeOpcode,
+    LocalOpcode,
 };
 use openvm_native_compiler::NativeJalOpcode::*;
 use openvm_stark_backend::{

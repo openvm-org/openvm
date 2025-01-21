@@ -81,7 +81,7 @@ mod tests {
         BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
     use openvm_ecc_guest::algebra::field::FieldExtension;
-    use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
     use openvm_mod_circuit_builder::{
         test_utils::{biguint_to_limbs, bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec},
         ExprBuilderConfig,

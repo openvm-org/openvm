@@ -28,7 +28,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    UsizeOpcode,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{

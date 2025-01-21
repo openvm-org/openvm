@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use openvm_circuit_primitives::{encoder::Encoder, SubAir};
 use openvm_instructions::{
-    instruction::Instruction, PublishOpcode, PublishOpcode::PUBLISH, UsizeOpcode,
+    instruction::Instruction, LocalOpcode, PublishOpcode, PublishOpcode::PUBLISH,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,

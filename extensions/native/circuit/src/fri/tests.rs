@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FriOpcode::FRI_REDUCED_OPENING;
 use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra},

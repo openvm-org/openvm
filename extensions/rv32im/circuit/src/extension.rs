@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
-use openvm_instructions::{program::DEFAULT_PC_STEP, PhantomDiscriminant, UsizeOpcode};
+use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
     MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,

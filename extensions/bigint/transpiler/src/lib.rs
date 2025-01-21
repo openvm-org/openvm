@@ -1,9 +1,9 @@
 use openvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, LocalOpcode,
     VmOpcode,
 };
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions_derive::LocalOpcode;
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
@@ -16,7 +16,7 @@ use strum::IntoEnumIterator;
 // Intrinsics: 256-bit Integers
 // =================================================================================================
 
-#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x400]
 pub struct Rv32BaseAlu256Opcode(pub BaseAluOpcode);
 
@@ -26,7 +26,7 @@ impl Rv32BaseAlu256Opcode {
     }
 }
 
-#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x405]
 pub struct Rv32Shift256Opcode(pub ShiftOpcode);
 
@@ -36,7 +36,7 @@ impl Rv32Shift256Opcode {
     }
 }
 
-#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x408]
 pub struct Rv32LessThan256Opcode(pub LessThanOpcode);
 
@@ -46,7 +46,7 @@ impl Rv32LessThan256Opcode {
     }
 }
 
-#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x420]
 pub struct Rv32BranchEqual256Opcode(pub BranchEqualOpcode);
 
@@ -56,7 +56,7 @@ impl Rv32BranchEqual256Opcode {
     }
 }
 
-#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x425]
 pub struct Rv32BranchLessThan256Opcode(pub BranchLessThanOpcode);
 
@@ -66,7 +66,7 @@ impl Rv32BranchLessThan256Opcode {
     }
 }
 
-#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x450]
 pub struct Rv32Mul256Opcode(pub MulOpcode);
 

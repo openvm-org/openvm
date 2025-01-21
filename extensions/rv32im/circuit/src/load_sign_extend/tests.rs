@@ -4,7 +4,7 @@ use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder},
     VmAdapterChip,
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,

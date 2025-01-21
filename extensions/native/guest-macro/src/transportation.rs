@@ -2,7 +2,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    UsizeOpcode, VmOpcode,
+    LocalOpcode, VmOpcode,
 };
 use openvm_native_compiler::{
     asm::A0, conversion::AS, CastfOpcode, FieldArithmeticOpcode, NativeJalOpcode,

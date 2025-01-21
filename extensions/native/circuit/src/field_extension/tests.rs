@@ -7,7 +7,7 @@ use openvm_circuit::arch::testing::{
     memory::{gen_address_space, gen_pointer},
     VmChipTestBuilder,
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldExtensionOpcode;
 use openvm_stark_backend::{
     p3_field::{extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra},

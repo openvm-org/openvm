@@ -1,8 +1,8 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::needless_range_loop)]
 
-use openvm_instructions::UsizeOpcode;
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions::LocalOpcode;
+use openvm_instructions_derive::LocalOpcode;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
@@ -36,7 +36,7 @@ pub mod prelude {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -50,7 +50,7 @@ pub enum NativeLoadStoreOpcode {
     HINT_STOREW,
 }
 
-#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x108]
 pub struct NativeLoadStore4Opcode(pub NativeLoadStoreOpcode);
 
@@ -62,7 +62,7 @@ impl NativeLoadStore4Opcode {
 
 pub const BLOCK_LOAD_STORE_SIZE: usize = 4;
 
-#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x110]
 pub struct NativeBranchEqualOpcode(pub BranchEqualOpcode);
 
@@ -73,7 +73,7 @@ impl NativeBranchEqualOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x115]
 #[repr(usize)]
@@ -82,7 +82,7 @@ pub enum NativeJalOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x125]
 #[repr(usize)]
@@ -101,7 +101,7 @@ pub enum CastfOpcode {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -125,7 +125,7 @@ pub enum FieldArithmeticOpcode {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -160,7 +160,7 @@ pub enum NativePhantom {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -174,7 +174,7 @@ pub enum Poseidon2Opcode {
 
 /// Opcodes for FRI opening proofs.
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x160]
 #[repr(usize)]
@@ -187,7 +187,7 @@ pub enum FriOpcode {
 
 /// Opcodes for verify batch.
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x170]
 #[repr(usize)]

@@ -8,7 +8,7 @@ use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::CastfOpcode;
 use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::{

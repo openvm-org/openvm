@@ -2,7 +2,7 @@
 
 #![allow(non_camel_case_types)]
 
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions_derive::LocalOpcode;
 use openvm_stark_backend::p3_field::Field;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumCount, EnumIter, FromRepr};
@@ -17,7 +17,7 @@ pub mod utils;
 
 pub use phantom::*;
 
-pub trait UsizeOpcode {
+pub trait LocalOpcode {
     const CLASS_OFFSET: usize;
     /// Convert from the discriminant of the enum to the typed enum variant.
     /// Default implementation uses `from_repr`.
@@ -65,7 +65,7 @@ impl std::fmt::Display for VmOpcode {
 // =================================================================================================
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0]
 #[repr(usize)]
@@ -75,7 +75,7 @@ pub enum SystemOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x020]
 #[repr(usize)]
@@ -88,7 +88,7 @@ pub enum PublishOpcode {
 // =================================================================================================
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0xdeadaf]
 #[repr(usize)]

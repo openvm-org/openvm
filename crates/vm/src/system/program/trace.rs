@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use derivative::Derivative;
 use itertools::Itertools;
-use openvm_instructions::{exe::VmExe, program::Program, SystemOpcode, UsizeOpcode};
+use openvm_instructions::{exe::VmExe, program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::{
     config::{Com, Domain, StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,

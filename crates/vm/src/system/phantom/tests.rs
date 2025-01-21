@@ -5,7 +5,7 @@ use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::PhantomChip;
-use crate::arch::{instructions::UsizeOpcode, testing::VmChipTestBuilder, ExecutionState};
+use crate::arch::{instructions::LocalOpcode, testing::VmChipTestBuilder, ExecutionState};
 type F = BabyBear;
 
 #[test]

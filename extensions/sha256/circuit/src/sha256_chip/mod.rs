@@ -16,7 +16,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
-    UsizeOpcode,
+    LocalOpcode,
 };
 use openvm_rv32im_circuit::adapters::read_rv32_register;
 use openvm_sha256_air::{Sha256Air, SHA256_BLOCK_BITS};

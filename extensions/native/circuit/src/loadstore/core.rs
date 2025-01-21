@@ -5,7 +5,7 @@ use std::{
 };
 
 use openvm_circuit::arch::{
-    instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionError, Result,
+    instructions::LocalOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionError, Result,
     Streams, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;

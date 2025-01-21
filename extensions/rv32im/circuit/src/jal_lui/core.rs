@@ -14,7 +14,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    UsizeOpcode,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
 use openvm_stark_backend::{

@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::NativeJalOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,

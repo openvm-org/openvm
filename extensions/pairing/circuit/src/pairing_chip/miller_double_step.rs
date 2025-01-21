@@ -97,7 +97,7 @@ mod tests {
         BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
     use openvm_ecc_guest::AffinePoint;
-    use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
     use openvm_mod_circuit_builder::test_utils::{
         biguint_to_limbs, bls12381_fq_to_biguint, bn254_fq_to_biguint,
     };

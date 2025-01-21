@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use openvm_circuit::arch::{testing::VmChipTestBuilder, Streams};
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
