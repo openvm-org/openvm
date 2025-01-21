@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
@@ -27,6 +29,40 @@ use crate::{
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;
 
+const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
+// a heuristic number for the maximum number of cells per chip in a segment
+// a few reasons for this number:
+//  1. `VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>` is
+//    the chip with the most cells in a segment from the reth-benchmark.
+//  2. `VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>`:
+//    its trace width is 36 and its after challenge trace width is 80.
+const DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT: usize = DEFAULT_MAX_SEGMENT_LEN * 120;
+
+pub trait SegmentationStrategy {
+    fn should_segment(&self, trace_heights: &[usize], trace_cells: &[usize]) -> bool;
+}
+
+/// Default segmentation strategy: segment if any chip's height or cells exceed the limits.
+pub struct DefaultSegmentationStrategy;
+
+impl SegmentationStrategy for DefaultSegmentationStrategy {
+    fn should_segment(&self, trace_heights: &[usize], trace_cells: &[usize]) -> bool {
+        for (i, &height) in trace_heights.iter().enumerate() {
+            if height > DEFAULT_MAX_SEGMENT_LEN {
+                tracing::info!("Should segment because chip {} has height {}", i, height);
+                return true;
+            }
+        }
+        for (i, &num_cells) in trace_cells.iter().enumerate() {
+            if num_cells > DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT {
+                tracing::info!("Should segment because chip {} has {} cells", i, num_cells,);
+                return true;
+            }
+        }
+        false
+    }
+}
+
 pub struct ExecutionSegment<F, VC>
 where
     F: PrimeField32,
@@ -37,8 +73,6 @@ where
 
     pub since_last_segment_check: usize,
 
-    /// Air names for debug purposes only.
-    pub(crate) air_names: Vec<String>,
     /// Metrics collected for this execution segment alone.
     #[cfg(feature = "bench-metrics")]
     pub(crate) metrics: VmMetrics,
@@ -70,12 +104,10 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         if let Some(initial_memory) = initial_memory {
             chip_complex.set_initial_memory(initial_memory);
         }
-        let air_names = chip_complex.air_names();
 
         Self {
             chip_complex,
             final_memory: None,
-            air_names,
             #[cfg(feature = "bench-metrics")]
             metrics: VmMetrics {
                 fn_bounds,
@@ -99,11 +131,9 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         };
         chip_complex.set_program(program);
         chip_complex.load_state(vm_chip_complex_state);
-        let air_names = chip_complex.air_names();
         Self {
             chip_complex,
             final_memory: None,
-            air_names,
             #[cfg(feature = "bench-metrics")]
             metrics: Default::default(),
             since_last_segment_check: 0,
@@ -125,6 +155,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     pub fn execute_from_pc(
         &mut self,
         mut pc: u32,
+        segment_strategy: Option<Arc<dyn SegmentationStrategy>>,
     ) -> Result<ExecutionSegmentState, ExecutionError> {
         let mut timestamp = self.chip_complex.memory_controller().timestamp();
         let mut prev_backtrace: Option<Backtrace> = None;
@@ -226,7 +257,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             #[cfg(feature = "bench-metrics")]
             self.update_instruction_metrics(pc, opcode, dsl_instr);
 
-            if self.should_segment() {
+            if self.should_segment(segment_strategy.clone()) {
                 self.chip_complex
                     .connector_chip_mut()
                     .end(ExecutionState::new(pc, timestamp), None);
@@ -269,26 +300,21 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
-    fn should_segment(&mut self) -> bool {
+    fn should_segment(&mut self, segment_strategy: Option<Arc<dyn SegmentationStrategy>>) -> bool {
+        if segment_strategy.is_none() {
+            return false;
+        }
+        let segment_strategy = segment_strategy.unwrap();
         // Avoid checking segment too often.
         if self.since_last_segment_check != SEGMENT_CHECK_INTERVAL {
             self.since_last_segment_check += 1;
             return false;
         }
         self.since_last_segment_check = 0;
-        let heights = self.chip_complex.dynamic_trace_heights();
-        for (i, height) in heights.enumerate() {
-            if height > self.system_config().max_segment_len {
-                tracing::info!(
-                    "Should segment because chip {} has height {}",
-                    self.air_names[i],
-                    height
-                );
-                return true;
-            }
-        }
-
-        false
+        segment_strategy.should_segment(
+            &self.chip_complex.current_trace_heights(),
+            &self.chip_complex.current_trace_cells(),
+        )
     }
 
     pub fn current_trace_cells(&self) -> Vec<usize> {

@@ -18,7 +18,6 @@ use super::{
 };
 use crate::system::memory::BOUNDARY_AIR_OFFSET;
 
-const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
 // allows log_blowup = 1
 const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
@@ -86,8 +85,6 @@ pub struct SystemConfig {
     /// cannot read public values directly, but they can decommit the public values from the memory
     /// merkle root.
     pub num_public_values: usize,
-    /// When continuations are enabled, a heuristic used to determine when to segment execution.
-    pub max_segment_len: usize,
     /// Whether to collect detailed profiling metrics.
     /// **Warning**: this slows down the runtime.
     pub profiling: bool,
@@ -110,7 +107,6 @@ impl SystemConfig {
             continuation_enabled: false,
             memory_config,
             num_public_values,
-            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             profiling: false,
         }
     }
@@ -132,11 +128,6 @@ impl SystemConfig {
 
     pub fn with_public_values(mut self, num_public_values: usize) -> Self {
         self.num_public_values = num_public_values;
-        self
-    }
-
-    pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        self.max_segment_len = max_segment_len;
         self
     }
 

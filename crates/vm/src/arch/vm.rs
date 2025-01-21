@@ -15,7 +15,10 @@ use openvm_stark_backend::{
 use thiserror::Error;
 use tracing::info_span;
 
-use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
+use super::{
+    DefaultSegmentationStrategy, ExecutionError, SegmentationStrategy, VmComplexTraceHeights,
+    VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
+};
 use crate::{
     arch::segment::ExecutionSegment,
     system::{
@@ -58,6 +61,7 @@ impl<F> From<Vec<Vec<F>>> for Streams<F> {
 pub struct VmExecutor<F, VC> {
     pub config: VC,
     pub overridden_heights: Option<VmComplexTraceHeights>,
+    pub segmentation_strategy: Arc<dyn SegmentationStrategy>,
     _marker: PhantomData<F>,
 }
 
@@ -94,11 +98,17 @@ where
         config: VC,
         overridden_heights: Option<VmComplexTraceHeights>,
     ) -> Self {
+        let segmentation_strategy = Arc::new(DefaultSegmentationStrategy);
         Self {
             config,
             overridden_heights,
+            segmentation_strategy,
             _marker: Default::default(),
         }
+    }
+
+    pub fn set_custom_segmentation_strategy(&mut self, strategy: Arc<dyn SegmentationStrategy>) {
+        self.segmentation_strategy = strategy;
     }
 
     pub fn continuation_enabled(&self) -> bool {
@@ -128,7 +138,9 @@ where
         loop {
             // Used to add `segment` label to metrics
             let _span = info_span!("execute_segment", segment = segments.len()).entered();
-            let state = metrics_span("execute_time_ms", || segment.execute_from_pc(pc))?;
+            let state = metrics_span("execute_time_ms", || {
+                segment.execute_from_pc(pc, Some(self.segmentation_strategy.clone()))
+            })?;
             pc = state.pc;
 
             if state.is_terminated {
@@ -351,7 +363,9 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        metrics_span("execute_time_ms", || segment.execute_from_pc(pc_start))?;
+        metrics_span("execute_time_ms", || {
+            segment.execute_from_pc(pc_start, None)
+        })?;
         Ok(segment)
     }
 }
