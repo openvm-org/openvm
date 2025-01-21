@@ -1,6 +1,6 @@
-use std::{borrow::Cow, cmp::max, collections::VecDeque, iter::repeat, ops::Neg, str::FromStr};
+use std::{cmp::max, collections::VecDeque, iter::repeat, ops::Neg, str::FromStr};
 
-use num_bigint_dig::{algorithms::mod_inverse, BigInt, BigUint, Sign};
+use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{FromPrimitive, Num, One, ToPrimitive, Zero};
 use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::PrimeField64};
 
@@ -72,13 +72,6 @@ pub fn big_uint_sub(x: BigUint, y: BigUint) -> BigInt {
         std::cmp::Ordering::Equal => BigInt::zero(),
         std::cmp::Ordering::Greater => BigInt::from_biguint(Sign::Plus, x - y),
     }
-}
-
-pub fn big_uint_mod_inverse(x: &BigUint, modulus: &BigUint) -> BigUint {
-    mod_inverse(Cow::Borrowed(x), Cow::Borrowed(modulus))
-        .unwrap()
-        .to_biguint()
-        .unwrap()
 }
 
 // little endian.

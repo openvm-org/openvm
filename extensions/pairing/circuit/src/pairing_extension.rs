@@ -1,5 +1,5 @@
 use derive_more::derive::From;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
@@ -11,7 +11,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_ecc_circuit::CurveConfig;
-use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
+use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_pairing_guest::{
     bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER, BLS12_381_XI_ISIZE},
@@ -119,8 +119,8 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
         for curve in self.supported_curves.iter() {
             let pairing_idx = *curve as usize;
             let pairing_class_offset =
-                PairingOpcode::default_offset() + pairing_idx * PairingOpcode::COUNT;
-            let fp12_class_offset = Fp12Opcode::default_offset() + pairing_idx * Fp12Opcode::COUNT;
+                PairingOpcode::CLASS_OFFSET + pairing_idx * PairingOpcode::COUNT;
+            let fp12_class_offset = Fp12Opcode::CLASS_OFFSET + pairing_idx * Fp12Opcode::COUNT;
             match curve {
                 PairingCurve::Bn254 => {
                     let bn_config = ExprBuilderConfig {

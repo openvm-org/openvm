@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
     Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
@@ -155,6 +155,10 @@ where
             instruction: instruction.into(),
         };
         ctx.into()
+    }
+
+    fn start_offset(&self) -> usize {
+        self.offset
     }
 }
 

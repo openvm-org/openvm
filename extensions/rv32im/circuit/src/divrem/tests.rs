@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::DivRemOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -78,7 +78,7 @@ fn run_rv32_divrem_rand_write_execute<E: InstructionExecutor<F>>(
         run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(is_signed, &b, &c);
     tester.execute(
         chip,
-        &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [rd, rs1, rs2, 1, 0]),
+        &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
     );
 
     assert_eq!(
@@ -108,7 +108,11 @@ fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        DivRemCoreChip::new(bitwise_chip.clone(), range_tuple_checker.clone(), 0),
+        DivRemCoreChip::new(
+            bitwise_chip.clone(),
+            range_tuple_checker.clone(),
+            DivRemOpcode::CLASS_OFFSET,
+        ),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -248,7 +252,11 @@ fn run_rv32_divrem_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        DivRemCoreChip::new(bitwise_chip.clone(), range_tuple_chip.clone(), 0),
+        DivRemCoreChip::new(
+            bitwise_chip.clone(),
+            range_tuple_chip.clone(),
+            DivRemOpcode::CLASS_OFFSET,
+        ),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -259,11 +267,11 @@ fn run_rv32_divrem_negative_test(
     };
     tester.execute(
         &mut chip,
-        &Instruction::from_usize(VmOpcode::from_usize(div_opcode as usize), [0, 0, 0, 1, 1]),
+        &Instruction::from_usize(div_opcode.global_opcode(), [0, 0, 0, 1, 1]),
     );
     tester.execute(
         &mut chip,
-        &Instruction::from_usize(VmOpcode::from_usize(rem_opcode as usize), [0, 0, 0, 1, 1]),
+        &Instruction::from_usize(rem_opcode.global_opcode(), [0, 0, 0, 1, 1]),
     );
 
     let (q, r, b_sign, c_sign, q_sign, case) =

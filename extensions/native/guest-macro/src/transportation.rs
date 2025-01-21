@@ -2,7 +2,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    VmOpcode,
+    LocalOpcode, VmOpcode,
 };
 use openvm_native_compiler::{
     asm::A0, conversion::AS, CastfOpcode, FieldArithmeticOpcode, NativeJalOpcode,
@@ -208,7 +208,7 @@ pub fn instructions_to_asm_call<F: PrimeField32>(
     }
 
     let mut jal_instruction: MacroInstruction<F> = MacroInstruction::new(
-        VmOpcode::with_default_offset(NativeJalOpcode::JAL),
+        NativeJalOpcode::JAL.global_opcode(),
         [
             Operand::from(A0),
             Operand::arbitrary(),
@@ -264,7 +264,7 @@ fn transport_usize_to_felt<F: Field>(
     for i in (0..RV32_REGISTER_NUM_LIMBS).rev() {
         // add [{rust_name} + i] to [edsl_fp]
         result.push(MacroInstruction::new(
-            VmOpcode::with_default_offset(FieldArithmeticOpcode::ADD),
+            FieldArithmeticOpcode::ADD.global_opcode(),
             [
                 Operand::from(edsl_fp),
                 Operand::from(if i == RV32_REGISTER_NUM_LIMBS - 1 {
@@ -284,7 +284,7 @@ fn transport_usize_to_felt<F: Field>(
         ));
         if i > 0 {
             result.push(MacroInstruction::new(
-                VmOpcode::with_default_offset(FieldArithmeticOpcode::MUL),
+                FieldArithmeticOpcode::MUL.global_opcode(),
                 [
                     Operand::from(edsl_fp),
                     Operand::from(edsl_fp),
@@ -319,7 +319,7 @@ fn transport_felt_to_usize<F: Field>(
     edsl_fp: usize,
 ) -> Vec<MacroInstruction<F>> {
     vec![MacroInstruction::new(
-        VmOpcode::with_default_offset(CastfOpcode::CASTF),
+        CastfOpcode::CASTF.global_opcode(),
         [
             Variable(rust_name, 0),
             Operand::from(edsl_fp),

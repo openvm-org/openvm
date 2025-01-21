@@ -3,7 +3,7 @@ use std::{iter, sync::Arc};
 use openvm_instructions::{
     instruction::Instruction,
     program::{Program, DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
-    VmOpcode,
+    LocalOpcode,
 };
 use openvm_native_compiler::{
     FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,
@@ -89,12 +89,12 @@ fn test_program_1() {
     // see core/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[n]_0
-        Instruction::large_from_isize(VmOpcode::with_default_offset(STOREW), n, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW.global_opcode(), n, 0, 0, 0, 1, 0, 1),
         // word[1]_1 <- word[1]_1
-        Instruction::large_from_isize(VmOpcode::with_default_offset(STOREW), 1, 1, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW.global_opcode(), 1, 1, 0, 0, 1, 0, 1),
         // if word[0]_1 == 0 then pc += 3*DEFAULT_PC_STEP
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BEQ)),
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
             0,
             0,
             3 * DEFAULT_PC_STEP as isize,
@@ -102,10 +102,10 @@ fn test_program_1() {
             0,
         ),
         // word[0]_1 <- word[0]_1 - word[1]_1
-        Instruction::from_isize(VmOpcode::with_default_offset(SUB), 0, 0, 1, 1, 1),
+        Instruction::from_isize(SUB.global_opcode(), 0, 0, 1, 1, 1),
         // word[2]_1 <- pc + DEFAULT_PC_STEP, pc -= 2*DEFAULT_PC_STEP
         Instruction::from_isize(
-            VmOpcode::with_default_offset(JAL),
+            JAL.global_opcode(),
             2,
             -2 * (DEFAULT_PC_STEP as isize),
             0,
@@ -113,7 +113,7 @@ fn test_program_1() {
             0,
         ),
         // terminate
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
@@ -126,10 +126,10 @@ fn test_program_without_field_arithmetic() {
     // see core/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[5]_0
-        Instruction::large_from_isize(VmOpcode::with_default_offset(STOREW), 5, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW.global_opcode(), 5, 0, 0, 0, 1, 0, 1),
         // if word[0]_1 != 4 then pc += 3*DEFAULT_PC_STEP
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BNE)),
+            NativeBranchEqualOpcode(BNE).global_opcode(),
             0,
             4,
             3 * DEFAULT_PC_STEP as isize,
@@ -138,7 +138,7 @@ fn test_program_without_field_arithmetic() {
         ),
         // word[2]_1 <- pc + DEFAULT_PC_STEP, pc -= 2*DEFAULT_PC_STEP
         Instruction::from_isize(
-            VmOpcode::with_default_offset(JAL),
+            JAL.global_opcode(),
             2,
             -2 * DEFAULT_PC_STEP as isize,
             0,
@@ -146,10 +146,10 @@ fn test_program_without_field_arithmetic() {
             0,
         ),
         // terminate
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= DEFAULT_PC_STEP
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BEQ)),
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
             0,
             5,
             -(DEFAULT_PC_STEP as isize),
@@ -167,18 +167,9 @@ fn test_program_without_field_arithmetic() {
 #[should_panic(expected = "assertion `left == right` failed")]
 fn test_program_negative() {
     let instructions = vec![
-        Instruction::large_from_isize(VmOpcode::with_default_offset(STOREW), -1, 0, 0, 0, 1, 0, 1),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(LOADW), -1, 0, 0, 1, 1, 0, 1),
-        Instruction::large_from_isize(
-            VmOpcode::with_default_offset(TERMINATE),
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-        ),
+        Instruction::large_from_isize(STOREW.global_opcode(), -1, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(LOADW.global_opcode(), -1, 0, 0, 1, 1, 0, 1),
+        Instruction::large_from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0, 0, 0),
     ];
     let bus = ProgramBus(READ_INSTRUCTION_BUS);
     let program = Program::from_instructions(&instructions);
@@ -223,7 +214,7 @@ fn test_program_with_undefined_instructions() {
     let instructions = vec![
         // word[0]_1 <- word[n]_0
         Some(Instruction::large_from_isize(
-            VmOpcode::with_default_offset(STOREW),
+            STOREW.global_opcode(),
             n,
             0,
             0,
@@ -234,7 +225,7 @@ fn test_program_with_undefined_instructions() {
         )),
         // word[1]_1 <- word[1]_1
         Some(Instruction::large_from_isize(
-            VmOpcode::with_default_offset(STOREW),
+            STOREW.global_opcode(),
             1,
             1,
             0,
@@ -245,7 +236,7 @@ fn test_program_with_undefined_instructions() {
         )),
         // if word[0]_1 == n then pc += 3*DEFAULT_PC_STEP
         Some(Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BEQ)),
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
             0,
             n,
             3 * DEFAULT_PC_STEP as isize,
@@ -256,7 +247,7 @@ fn test_program_with_undefined_instructions() {
         None,
         // terminate
         Some(Instruction::from_isize(
-            VmOpcode::with_default_offset(TERMINATE),
+            TERMINATE.global_opcode(),
             0,
             0,
             0,

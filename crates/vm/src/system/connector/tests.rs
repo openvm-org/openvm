@@ -4,7 +4,7 @@ use std::{
 };
 
 use openvm_instructions::{
-    instruction::Instruction, program::Program, SystemOpcode::TERMINATE, VmOpcode,
+    instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
 };
 use openvm_stark_backend::{
     config::StarkGenericConfig, engine::StarkEngine, p3_field::FieldAlgebra,
@@ -75,7 +75,7 @@ fn test_impl(
 
     {
         let instructions = vec![Instruction::from_isize(
-            VmOpcode::with_default_offset(TERMINATE),
+            TERMINATE.global_opcode(),
             0,
             0,
             exit_code as isize,

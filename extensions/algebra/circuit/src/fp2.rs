@@ -167,7 +167,7 @@ impl Fp2 {
 #[cfg(test)]
 mod tests {
     use halo2curves_axiom::bn256::Fq2;
-    use num_bigint_dig::BigUint;
+    use num_bigint::BigUint;
     use openvm_circuit_primitives::TraceSubRowGenerator;
     use openvm_mod_circuit_builder::{test_utils::*, FieldExpr, FieldExprCols};
     use openvm_pairing_guest::bn254::BN254_MODULUS;

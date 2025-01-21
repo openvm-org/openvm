@@ -11,7 +11,7 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -60,7 +60,6 @@ pub struct LoadSignExtendCoreRecord<F, const NUM_CELLS: usize> {
 #[derive(Debug, Clone)]
 pub struct LoadSignExtendCoreAir<const NUM_CELLS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
-    pub offset: usize,
 }
 
 impl<F: Field, const NUM_CELLS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -115,7 +114,7 @@ where
 
         let expected_opcode = (is_loadb0 + is_loadb1) * AB::F::from_canonical_u8(LOADB as u8)
             + is_loadh * AB::F::from_canonical_u8(LOADH as u8)
-            + AB::Expr::from_canonical_usize(self.offset);
+            + AB::Expr::from_canonical_usize(Rv32LoadStoreOpcode::CLASS_OFFSET);
 
         let limb_mask = data_most_sig_bit * AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1);
 
@@ -171,6 +170,10 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        Rv32LoadStoreOpcode::CLASS_OFFSET
+    }
 }
 
 pub struct LoadSignExtendCoreChip<const NUM_CELLS: usize, const LIMB_BITS: usize> {
@@ -179,11 +182,10 @@ pub struct LoadSignExtendCoreChip<const NUM_CELLS: usize, const LIMB_BITS: usize
 }
 
 impl<const NUM_CELLS: usize, const LIMB_BITS: usize> LoadSignExtendCoreChip<NUM_CELLS, LIMB_BITS> {
-    pub fn new(range_checker_chip: SharedVariableRangeCheckerChip, offset: usize) -> Self {
+    pub fn new(range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
         Self {
             air: LoadSignExtendCoreAir::<NUM_CELLS, LIMB_BITS> {
                 range_bus: range_checker_chip.bus(),
-                offset,
             },
             range_checker_chip,
         }
@@ -206,8 +208,11 @@ where
         _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode =
-            Rv32LoadStoreOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            instruction
+                .opcode
+                .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
 
         let (data, shift_amount) = reads.into();
         let shift_amount = shift_amount.as_canonical_u32();
@@ -249,7 +254,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv32LoadStoreOpcode::from_usize(opcode - self.air.offset)
+            Rv32LoadStoreOpcode::from_usize(opcode - Rv32LoadStoreOpcode::CLASS_OFFSET)
         )
     }
 

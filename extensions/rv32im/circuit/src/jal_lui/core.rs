@@ -14,7 +14,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    UsizeOpcode,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
@@ -39,7 +39,6 @@ pub struct Rv32JalLuiCoreCols<T> {
 #[derive(Debug, Clone)]
 pub struct Rv32JalLuiCoreAir {
     pub bus: BitwiseOperationLookupBus,
-    offset: usize,
 }
 
 impl<F: Field> BaseAir<F> for Rv32JalLuiCoreAir {
@@ -114,9 +113,11 @@ where
 
         let to_pc = from_pc + is_lui * AB::F::from_canonical_u32(DEFAULT_PC_STEP) + is_jal * imm;
 
-        let expected_opcode = is_lui * AB::F::from_canonical_u32(LUI as u32)
-            + is_jal * AB::F::from_canonical_u32(JAL as u32)
-            + AB::F::from_canonical_usize(self.offset);
+        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
+            self,
+            is_lui * AB::F::from_canonical_u32(LUI as u32)
+                + is_jal * AB::F::from_canonical_u32(JAL as u32),
+        );
 
         AdapterAirContext {
             to_pc: Some(to_pc),
@@ -129,6 +130,10 @@ where
             }
             .into(),
         }
+    }
+
+    fn start_offset(&self) -> usize {
+        Rv32JalLuiOpcode::CLASS_OFFSET
     }
 }
 
@@ -147,14 +152,10 @@ pub struct Rv32JalLuiCoreChip {
 }
 
 impl Rv32JalLuiCoreChip {
-    pub fn new(
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        offset: usize,
-    ) -> Self {
+    pub fn new(bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>) -> Self {
         Self {
             air: Rv32JalLuiCoreAir {
                 bus: bitwise_lookup_chip.bus(),
-                offset,
             },
             bitwise_lookup_chip,
         }
@@ -175,8 +176,11 @@ where
         from_pc: u32,
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode =
-            Rv32JalLuiOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
+        let local_opcode = Rv32JalLuiOpcode::from_usize(
+            instruction
+                .opcode
+                .local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET),
+        );
         let imm = instruction.c;
 
         let signed_imm = match local_opcode {
@@ -223,7 +227,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv32JalLuiOpcode::from_usize(opcode - self.air.offset)
+            Rv32JalLuiOpcode::from_usize(opcode - Rv32JalLuiOpcode::CLASS_OFFSET)
         )
     }
 

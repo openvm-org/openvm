@@ -28,7 +28,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    UsizeOpcode,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -94,7 +94,6 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
 pub struct Rv32LoadStoreAdapterChip<F: Field> {
     pub air: Rv32LoadStoreAdapterAir,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    offset: usize,
     _marker: PhantomData<F>,
 }
 
@@ -105,7 +104,6 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
         memory_bridge: MemoryBridge,
         pointer_max_bits: usize,
         range_checker_chip: SharedVariableRangeCheckerChip,
-        offset: usize,
     ) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 15);
         Self {
@@ -116,7 +114,6 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
                 pointer_max_bits,
             },
             range_checker_chip,
-            offset,
             _marker: PhantomData,
         }
     }
@@ -355,7 +352,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
 
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
 
         let rs1_val = compose(rs1_record.1);
@@ -421,7 +420,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             opcode, a, d, e, ..
         } = *instruction;
 
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
 
         let (write_id, _) = match local_opcode {
             STOREW | STOREH | STOREB => {

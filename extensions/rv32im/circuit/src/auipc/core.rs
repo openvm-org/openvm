@@ -11,7 +11,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -37,7 +37,6 @@ pub struct Rv32AuipcCoreCols<T> {
 #[derive(Debug, Clone)]
 pub struct Rv32AuipcCoreAir {
     pub bus: BitwiseOperationLookupBus,
-    pub offset: usize,
 }
 
 impl<F: Field> BaseAir<F> for Rv32AuipcCoreAir {
@@ -110,18 +109,22 @@ where
                 .eval(builder, is_valid);
         }
 
-        let expected_opcode = AB::F::from_canonical_usize(AUIPC as usize + self.offset);
+        let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, AUIPC);
         AdapterAirContext {
             to_pc: None,
             reads: [].into(),
             writes: [rd_data.map(|x| x.into())].into(),
             instruction: ImmInstruction {
                 is_valid: is_valid.into(),
-                opcode: expected_opcode.into(),
+                opcode: expected_opcode,
                 immediate: imm,
             }
             .into(),
         }
+    }
+
+    fn start_offset(&self) -> usize {
+        Rv32AuipcOpcode::CLASS_OFFSET
     }
 }
 
@@ -138,14 +141,10 @@ pub struct Rv32AuipcCoreChip {
 }
 
 impl Rv32AuipcCoreChip {
-    pub fn new(
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        offset: usize,
-    ) -> Self {
+    pub fn new(bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>) -> Self {
         Self {
             air: Rv32AuipcCoreAir {
                 bus: bitwise_lookup_chip.bus(),
-                offset,
             },
             bitwise_lookup_chip,
         }
@@ -166,8 +165,11 @@ where
         from_pc: u32,
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode =
-            Rv32AuipcOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
+        let local_opcode = Rv32AuipcOpcode::from_usize(
+            instruction
+                .opcode
+                .local_opcode_idx(Rv32AuipcOpcode::CLASS_OFFSET),
+        );
         let imm = instruction.c.as_canonical_u32();
         let rd_data = run_auipc(local_opcode, from_pc, imm);
         let rd_data_field = rd_data.map(F::from_canonical_u32);
@@ -201,7 +203,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv32AuipcOpcode::from_usize(opcode - self.air.offset)
+            Rv32AuipcOpcode::from_usize(opcode - Rv32AuipcOpcode::CLASS_OFFSET)
         )
     }
 

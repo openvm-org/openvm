@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
-    SystemOpcode, UsizeOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant,
+    SysPhantom, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -98,7 +98,7 @@ impl<F> PhantomChip<F> {
         Self {
             air: PhantomAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                phantom_opcode: VmOpcode::from_usize(offset + SystemOpcode::PHANTOM.as_usize()),
+                phantom_opcode: VmOpcode::from_usize(offset + SystemOpcode::PHANTOM.local_usize()),
             },
             rows: vec![],
             streams: OnceLock::new(),

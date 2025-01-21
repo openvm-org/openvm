@@ -1,16 +1,16 @@
 use openvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
     VmOpcode,
 };
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions_derive::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x600]
 #[allow(non_camel_case_types)]
@@ -72,7 +72,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                     _ => Rv32WeierstrassOpcode::SETUP_EC_ADD_NE,
                 };
                 Some(Instruction::new(
-                    VmOpcode::from_usize(local_opcode.with_default_offset() + curve_idx_shift),
+                    VmOpcode::from_usize(local_opcode.global_opcode().as_usize() + curve_idx_shift),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
@@ -85,12 +85,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
                     Some(SwBaseFunct7::SwAddNe) => {
                         Rv32WeierstrassOpcode::EC_ADD_NE as usize
-                            + Rv32WeierstrassOpcode::default_offset()
+                            + Rv32WeierstrassOpcode::CLASS_OFFSET
                     }
                     Some(SwBaseFunct7::SwDouble) => {
                         assert!(dec_insn.rs2 == 0);
                         Rv32WeierstrassOpcode::EC_DOUBLE as usize
-                            + Rv32WeierstrassOpcode::default_offset()
+                            + Rv32WeierstrassOpcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };

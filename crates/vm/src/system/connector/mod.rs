@@ -5,7 +5,7 @@ use std::{
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::UsizeOpcode;
+use openvm_instructions::LocalOpcode;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -127,7 +127,7 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         self.program_bus.send_instruction(
             builder,
             end.pc,
-            AB::Expr::from_canonical_usize(TERMINATE.with_default_offset()),
+            AB::Expr::from_canonical_usize(TERMINATE.global_opcode().as_usize()),
             [AB::Expr::ZERO, AB::Expr::ZERO, end.exit_code.into()],
             (AB::Expr::ONE - prep_local[0]) * end.is_terminate,
         );

@@ -1,7 +1,7 @@
 use core::mem::transmute;
 
 use halo2curves_axiom::bls12_381::{Fq12, MillerLoopResult};
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::Pow;
 use openvm_algebra_guest::ExpBytes;
 

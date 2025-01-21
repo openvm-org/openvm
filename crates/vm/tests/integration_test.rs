@@ -24,12 +24,10 @@ use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
-    PhantomDiscriminant,
-    Poseidon2Opcode::*,
+    LocalOpcode, PhantomDiscriminant,
     PublishOpcode::PUBLISH,
     SysPhantom,
     SystemOpcode::*,
-    VmOpcode,
 };
 use openvm_keccak256_circuit::{
     utils::keccak256, Keccak256, Keccak256Executor, Keccak256Periphery,
@@ -54,7 +52,6 @@ use openvm_stark_sdk::{
     },
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
-    utils::create_seeded_rng,
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -70,40 +67,6 @@ where
     rng.gen_range(0..MAX_MEMORY - len) / len * len
 }
 
-// log_blowup = 3 for poseidon2 chip
-fn air_test_with_compress_poseidon2(
-    poseidon2_max_constraint_degree: usize,
-    program: Program<BabyBear>,
-    continuation_enabled: bool,
-) {
-    let fri_params = if matches!(std::env::var("OPENVM_FAST_TEST"), Ok(x) if &x == "1") {
-        FriParameters {
-            log_blowup: 3,
-            log_final_poly_len: 0,
-            num_queries: 2,
-            proof_of_work_bits: 0,
-        }
-    } else {
-        standard_fri_params_with_100_bits_conjectured_security(3)
-    };
-    let engine = BabyBearPoseidon2Engine::new(fri_params);
-
-    let config = if continuation_enabled {
-        NativeConfig::aggregation(0, poseidon2_max_constraint_degree).with_continuations()
-    } else {
-        NativeConfig::aggregation(0, poseidon2_max_constraint_degree)
-    };
-    let vm = VirtualMachine::new(engine, config);
-
-    let pk = vm.keygen();
-    let result = vm.execute_and_generate(program, vec![]).unwrap();
-    let proofs = vm.prove(&pk, result);
-    for proof in proofs {
-        vm.verify_single(&pk.get_vk(), &proof)
-            .expect("Verification failed");
-    }
-}
-
 #[test]
 fn test_vm_1() {
     let n = 6;
@@ -117,10 +80,10 @@ fn test_vm_1() {
      */
     let instructions = vec![
         // word[0]_1 <- word[n]_0
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, n, 0, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 1, 0, 0, 0),
         // if word[0]_1 == 0 then pc += 3 * DEFAULT_PC_STEP
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BEQ)),
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
             0,
             0,
             3 * DEFAULT_PC_STEP as isize,
@@ -128,10 +91,10 @@ fn test_vm_1() {
             0,
         ),
         // word[0]_1 <- word[0]_1 - word[1]_0
-        Instruction::large_from_isize(VmOpcode::with_default_offset(SUB), 0, 0, 1, 1, 1, 0, 0),
+        Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 1, 1, 0, 0),
         // word[2]_1 <- pc + DEFAULT_PC_STEP, pc -= 2 * DEFAULT_PC_STEP
         Instruction::from_isize(
-            VmOpcode::with_default_offset(JAL),
+            JAL.global_opcode(),
             2,
             -2 * DEFAULT_PC_STEP as isize,
             0,
@@ -139,7 +102,7 @@ fn test_vm_1() {
             0,
         ),
         // terminate
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
@@ -152,8 +115,8 @@ fn test_vm_override_executor_height() {
     let fri_params = FriParameters::standard_fast();
     let e = BabyBearPoseidon2Engine::new(fri_params);
     let program = Program::<BabyBear>::from_instructions(&[
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 4, 0, 1, 0, 0, 0),
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 1, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ]);
     let committed_exe = Arc::new(VmCommittedExe::<BabyBearPoseidon2Config>::commit(
         program.into(),
@@ -258,17 +221,17 @@ fn test_vm_1_optional_air() {
     {
         let n = 6;
         let instructions = vec![
-            Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, n, 0, 1, 0, 0, 0),
-            Instruction::large_from_isize(VmOpcode::with_default_offset(SUB), 0, 0, 1, 1, 1, 0, 0),
+            Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 1, 0, 0, 0),
+            Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 1, 1, 0, 0),
             Instruction::from_isize(
-                VmOpcode::with_default_offset(NativeBranchEqualOpcode(BNE)),
+                NativeBranchEqualOpcode(BNE).global_opcode(),
                 0,
                 0,
                 -(DEFAULT_PC_STEP as isize),
                 1,
                 0,
             ),
-            Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+            Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
 
         let program = Program::from_instructions(&instructions);
@@ -299,8 +262,8 @@ fn test_vm_public_values() {
 
     {
         let instructions = vec![
-            Instruction::from_usize(VmOpcode::with_default_offset(PUBLISH), [0, 12, 2, 0, 0, 0]),
-            Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+            Instruction::from_usize(PUBLISH.global_opcode(), [0, 12, 2, 0, 0, 0]),
+            Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
 
         let program = Program::from_instructions(&instructions);
@@ -334,7 +297,7 @@ fn test_vm_initial_memory() {
     // Program that fails if mem[(1, 0)] != 101.
     let program = Program::from_instructions(&[
         Instruction::<BabyBear>::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BEQ)),
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
             7,
             101,
             2 * DEFAULT_PC_STEP as isize,
@@ -342,21 +305,14 @@ fn test_vm_initial_memory() {
             0,
         ),
         Instruction::<BabyBear>::from_isize(
-            VmOpcode::with_default_offset(PHANTOM),
+            PHANTOM.global_opcode(),
             0,
             0,
             SysPhantom::DebugPanic as isize,
             0,
             0,
         ),
-        Instruction::<BabyBear>::from_isize(
-            VmOpcode::with_default_offset(TERMINATE),
-            0,
-            0,
-            0,
-            0,
-            0,
-        ),
+        Instruction::<BabyBear>::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ]);
 
     let init_memory: BTreeMap<_, _> = [((1, 7), BabyBear::from_canonical_u32(101))]
@@ -387,17 +343,17 @@ fn test_vm_1_persistent() {
 
     let n = 6;
     let instructions = vec![
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, n, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(SUB), 0, 0, 1, 1, 1, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 1, 0, 0, 0),
+        Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 1, 1, 0, 0),
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BNE)),
+            NativeBranchEqualOpcode(BNE).global_opcode(),
             0,
             0,
             -(DEFAULT_PC_STEP as isize),
             1,
             0,
         ),
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
@@ -446,23 +402,23 @@ fn gen_continuation_test_program<F: PrimeField32>(n: isize) -> Program<F> {
     // Register [3]_1 is used as a temporary register.
     Program::from_instructions(&[
         // [0]_1 <- 0
-        Instruction::from_isize(VmOpcode::with_default_offset(ADD), 0, 0, 0, 1, 0),
+        Instruction::from_isize(ADD.global_opcode(), 0, 0, 0, 1, 0),
         // [1]_1 <- 0
-        Instruction::from_isize(VmOpcode::with_default_offset(ADD), 1, 0, 0, 1, 0),
+        Instruction::from_isize(ADD.global_opcode(), 1, 0, 0, 1, 0),
         // [2]_1 <- 1
-        Instruction::from_isize(VmOpcode::with_default_offset(ADD), 2, 0, 1, 1, 0),
+        Instruction::from_isize(ADD.global_opcode(), 2, 0, 1, 1, 0),
         // loop_start
         // [3]_1 <- [1]_1 + [2]_1
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 3, 1, 2, 1, 1, 1, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 1, 2, 1, 1, 1, 0),
         // [1]_1 <- [2]_1
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 1, 2, 0, 1, 1, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 1, 2, 0, 1, 1, 0, 0),
         // [2]_1 <- [3]_1
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 2, 3, 0, 1, 1, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 3, 0, 1, 1, 0, 0),
         // [0]_1 <- [0]_1 + 1
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 0, 1, 1, 1, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 1, 1, 0, 0),
         // if [0]_1 != n, pc <- pc - 3
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BNE)),
+            NativeBranchEqualOpcode(BNE).global_opcode(),
             n,
             0,
             -4 * DEFAULT_PC_STEP as isize,
@@ -470,9 +426,9 @@ fn gen_continuation_test_program<F: PrimeField32>(n: isize) -> Program<F> {
             1,
         ),
         // [0]_3 <- [1]_1
-        Instruction::from_isize(VmOpcode::with_default_offset(ADD), 0, 1, 0, 3, 1),
+        Instruction::from_isize(ADD.global_opcode(), 0, 1, 0, 3, 1),
         Instruction::from_isize(
-            VmOpcode::with_default_offset(TERMINATE),
+            TERMINATE.global_opcode(),
             0,
             0,
             ExitCode::Success as isize,
@@ -566,10 +522,10 @@ fn test_vm_without_field_arithmetic() {
      */
     let instructions = vec![
         // word[0]_1 <- word[5]_0
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 5, 0, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 5, 0, 1, 0, 0, 0),
         // if word[0]_1 != 4 then pc += 3 * DEFAULT_PC_STEP
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BNE)),
+            NativeBranchEqualOpcode(BNE).global_opcode(),
             0,
             4,
             3 * DEFAULT_PC_STEP as isize,
@@ -578,7 +534,7 @@ fn test_vm_without_field_arithmetic() {
         ),
         // word[2]_1 <- pc + DEFAULT_PC_STEP, pc -= 2 * DEFAULT_PC_STEP
         Instruction::from_isize(
-            VmOpcode::with_default_offset(JAL),
+            JAL.global_opcode(),
             2,
             -2 * DEFAULT_PC_STEP as isize,
             0,
@@ -586,10 +542,10 @@ fn test_vm_without_field_arithmetic() {
             0,
         ),
         // terminate
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= 1
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BEQ)),
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
             0,
             5,
             -(DEFAULT_PC_STEP as isize),
@@ -606,33 +562,33 @@ fn test_vm_without_field_arithmetic() {
 #[test]
 fn test_vm_fibonacci_old() {
     let instructions = vec![
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 9, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 2, 1, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 3, 1, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 0, 0, 2, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 1, 1, 0, 2, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 9, 0, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 1, 0, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 1, 0, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 0, 2, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 1, 1, 0, 2, 0, 0, 0),
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BEQ)),
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
             2,
             0,
             7 * DEFAULT_PC_STEP as isize,
             1,
             1,
         ),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 2, 2, 3, 1, 1, 1, 0),
-        Instruction::from_isize(VmOpcode::with_default_offset(LOADW), 4, -2, 2, 1, 2),
-        Instruction::from_isize(VmOpcode::with_default_offset(LOADW), 5, -1, 2, 1, 2),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 6, 4, 5, 1, 1, 1, 0),
-        Instruction::from_isize(VmOpcode::with_default_offset(STOREW), 6, 0, 2, 1, 2),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 2, 3, 1, 1, 1, 0),
+        Instruction::from_isize(LOADW.global_opcode(), 4, -2, 2, 1, 2),
+        Instruction::from_isize(LOADW.global_opcode(), 5, -1, 2, 1, 2),
+        Instruction::large_from_isize(ADD.global_opcode(), 6, 4, 5, 1, 1, 1, 0),
+        Instruction::from_isize(STOREW.global_opcode(), 6, 0, 2, 1, 2),
         Instruction::from_isize(
-            VmOpcode::with_default_offset(JAL),
+            JAL.global_opcode(),
             7,
             -6 * DEFAULT_PC_STEP as isize,
             0,
             1,
             0,
         ),
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
@@ -646,30 +602,30 @@ fn test_vm_fibonacci_old_cycle_tracker() {
     let instructions = vec![
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16)),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16)),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 9, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 2, 1, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 3, 1, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 0, 0, 2, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 1, 1, 0, 2, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 9, 0, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 1, 0, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 1, 0, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 0, 2, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 1, 1, 0, 2, 0, 0, 0),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtEnd as u16)),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16)),
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BEQ)),
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
             2,
             0,
             9 * DEFAULT_PC_STEP as isize,
             1,
             1,
         ), // Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 2, 2, 3, 1, 1, 1, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 2, 3, 1, 1, 1, 0),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16)),
-        Instruction::from_isize(VmOpcode::with_default_offset(LOADW), 4, -2, 2, 1, 2),
-        Instruction::from_isize(VmOpcode::with_default_offset(LOADW), 5, -1, 2, 1, 2),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 6, 4, 5, 1, 1, 1, 0),
-        Instruction::from_isize(VmOpcode::with_default_offset(STOREW), 6, 0, 2, 1, 2),
+        Instruction::from_isize(LOADW.global_opcode(), 4, -2, 2, 1, 2),
+        Instruction::from_isize(LOADW.global_opcode(), 5, -1, 2, 1, 2),
+        Instruction::large_from_isize(ADD.global_opcode(), 6, 4, 5, 1, 1, 1, 0),
+        Instruction::from_isize(STOREW.global_opcode(), 6, 0, 2, 1, 2),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtEnd as u16)),
         Instruction::from_isize(
-            VmOpcode::with_default_offset(JAL),
+            JAL.global_opcode(),
             7,
             -8 * DEFAULT_PC_STEP as isize,
             0,
@@ -678,7 +634,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         ),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtEnd as u16)),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtEnd as u16)),
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
@@ -689,20 +645,20 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 #[test]
 fn test_vm_field_extension_arithmetic() {
     let instructions = vec![
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 1, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 2, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 3, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 4, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 5, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 6, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 7, 0, 2, 1, 0, 0, 0),
-        Instruction::from_isize(VmOpcode::with_default_offset(FE4ADD), 8, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(FE4ADD), 8, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(FE4SUB), 12, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(BBE4MUL), 12, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(BBE4DIV), 12, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 1, 0, 0, 0),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
@@ -713,20 +669,20 @@ fn test_vm_field_extension_arithmetic() {
 #[test]
 fn test_vm_max_access_adapter_8() {
     let instructions = vec![
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 1, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 2, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 3, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 4, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 5, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 6, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 7, 0, 2, 1, 0, 0, 0),
-        Instruction::from_isize(VmOpcode::with_default_offset(FE4ADD), 8, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(FE4ADD), 8, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(FE4SUB), 12, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(BBE4MUL), 12, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(BBE4DIV), 12, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 1, 0, 0, 0),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
@@ -755,20 +711,20 @@ fn test_vm_max_access_adapter_8() {
 #[test]
 fn test_vm_field_extension_arithmetic_persistent() {
     let instructions = vec![
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 1, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 2, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 3, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 4, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 5, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 6, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 7, 0, 2, 1, 0, 0, 0),
-        Instruction::from_isize(VmOpcode::with_default_offset(FE4ADD), 8, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(FE4ADD), 8, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(FE4SUB), 12, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(BBE4MUL), 12, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(BBE4DIV), 12, 0, 4, 1, 1),
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 1, 0, 0, 0),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
@@ -783,47 +739,38 @@ fn test_vm_field_extension_arithmetic_persistent() {
 #[test]
 fn test_vm_hint() {
     let instructions = vec![
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 16, 0, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(
-            VmOpcode::with_default_offset(ADD),
-            20,
-            16,
-            16777220,
-            1,
-            1,
-            0,
-            0,
-        ),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 32, 20, 0, 1, 1, 0, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 20, 20, 1, 1, 1, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 16, 0, 0, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 20, 16, 16777220, 1, 1, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 32, 20, 0, 1, 1, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 20, 20, 1, 1, 1, 0, 0),
         Instruction::from_isize(
-            VmOpcode::with_default_offset(PHANTOM),
+            PHANTOM.global_opcode(),
             0,
             0,
             NativePhantom::HintInput as isize,
             0,
             0,
         ),
-        Instruction::from_isize(VmOpcode::with_default_offset(HINT_STOREW), 32, 0, 0, 1, 2),
-        Instruction::from_isize(VmOpcode::with_default_offset(LOADW), 38, 0, 32, 1, 2),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 44, 20, 0, 1, 1, 0, 0),
-        Instruction::from_isize(VmOpcode::with_default_offset(MUL), 24, 38, 1, 1, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 20, 20, 24, 1, 1, 1, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 50, 16, 0, 1, 1, 0, 0),
+        Instruction::from_isize(HINT_STOREW.global_opcode(), 32, 0, 0, 1, 2),
+        Instruction::from_isize(LOADW.global_opcode(), 38, 0, 32, 1, 2),
+        Instruction::large_from_isize(ADD.global_opcode(), 44, 20, 0, 1, 1, 0, 0),
+        Instruction::from_isize(MUL.global_opcode(), 24, 38, 1, 1, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 20, 20, 24, 1, 1, 1, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 50, 16, 0, 1, 1, 0, 0),
         Instruction::from_isize(
-            VmOpcode::with_default_offset(JAL),
+            JAL.global_opcode(),
             24,
             6 * DEFAULT_PC_STEP as isize,
             0,
             1,
             0,
         ),
-        Instruction::from_isize(VmOpcode::with_default_offset(MUL), 0, 50, 1, 1, 0),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 0, 44, 0, 1, 1, 1, 0),
-        Instruction::from_isize(VmOpcode::with_default_offset(HINT_STOREW), 0, 0, 0, 1, 2),
-        Instruction::large_from_isize(VmOpcode::with_default_offset(ADD), 50, 50, 1, 1, 1, 0, 0),
+        Instruction::from_isize(MUL.global_opcode(), 0, 50, 1, 1, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 44, 0, 1, 1, 1, 0),
+        Instruction::from_isize(HINT_STOREW.global_opcode(), 0, 0, 0, 1, 2),
+        Instruction::large_from_isize(ADD.global_opcode(), 50, 50, 1, 1, 1, 0, 0),
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BNE)),
+            NativeBranchEqualOpcode(BNE).global_opcode(),
             50,
             38,
             -4 * (DEFAULT_PC_STEP as isize),
@@ -831,14 +778,14 @@ fn test_vm_hint() {
             1,
         ),
         Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BNE)),
+            NativeBranchEqualOpcode(BNE).global_opcode(),
             50,
             38,
             -5 * (DEFAULT_PC_STEP as isize),
             1,
             1,
         ),
-        Instruction::from_isize(VmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
@@ -850,107 +797,11 @@ fn test_vm_hint() {
     air_test_with_min_segments(config, program, input_stream, 1);
 }
 
-#[test]
-fn test_vm_compress_poseidon2_as2() {
-    let mut rng = create_seeded_rng();
-
-    let mut instructions = vec![];
-
-    let lhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
-    for i in 0..CHUNK as isize {
-        // [lhs_ptr + i]_2 <- rnd()
-        instructions.push(Instruction::large_from_isize(
-            VmOpcode::with_default_offset(ADD),
-            lhs_ptr + i,
-            rng.gen_range(1..1 << 20),
-            0,
-            2,
-            0,
-            0,
-            0,
-        ));
-    }
-    let rhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
-    for i in 0..CHUNK as isize {
-        // [rhs_ptr + i]_2 <- rnd()
-        instructions.push(Instruction::large_from_isize(
-            VmOpcode::with_default_offset(ADD),
-            rhs_ptr + i,
-            rng.gen_range(1..1 << 20),
-            0,
-            2,
-            0,
-            0,
-            0,
-        ));
-    }
-    let dst_ptr = gen_pointer(&mut rng, CHUNK) as isize;
-
-    // [11]_1 <- lhs_ptr
-    instructions.push(Instruction::large_from_isize(
-        VmOpcode::with_default_offset(ADD),
-        11,
-        lhs_ptr,
-        0,
-        1,
-        0,
-        0,
-        0,
-    ));
-
-    // [22]_1 <- rhs_ptr
-    instructions.push(Instruction::large_from_isize(
-        VmOpcode::with_default_offset(ADD),
-        22,
-        rhs_ptr,
-        0,
-        1,
-        0,
-        0,
-        0,
-    ));
-    // [33]_1 <- dst_ptr
-    instructions.push(Instruction::large_from_isize(
-        VmOpcode::with_default_offset(ADD),
-        33,
-        0,
-        dst_ptr,
-        1,
-        0,
-        0,
-        0,
-    ));
-
-    instructions.push(Instruction::from_isize(
-        VmOpcode::with_default_offset(COMP_POS2),
-        33,
-        11,
-        22,
-        1,
-        2,
-    ));
-    instructions.push(Instruction::from_isize(
-        VmOpcode::with_default_offset(TERMINATE),
-        0,
-        0,
-        0,
-        0,
-        0,
-    ));
-
-    let program = Program::from_instructions(&instructions);
-
-    air_test_with_compress_poseidon2(7, program.clone(), false);
-    air_test_with_compress_poseidon2(3, program.clone(), false);
-    air_test_with_compress_poseidon2(7, program.clone(), true);
-    air_test_with_compress_poseidon2(3, program.clone(), true);
-}
-
 /// Add instruction to write input to memory, call KECCAK256 opcode, then check against expected output
 fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     let mut instructions = vec![];
     instructions.push(Instruction::from_isize(
-        VmOpcode::with_default_offset(JAL),
+        JAL.global_opcode(),
         0,
         2 * DEFAULT_PC_STEP as isize,
         0,
@@ -958,7 +809,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
         0,
     )); // skip fail
     instructions.push(Instruction::from_isize(
-        VmOpcode::with_default_offset(PHANTOM),
+        PHANTOM.global_opcode(),
         0,
         0,
         SysPhantom::DebugPanic as isize,
@@ -971,7 +822,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     // src = word[b]_1 <- 0
     let src = 0;
     instructions.push(Instruction::large_from_isize(
-        VmOpcode::with_default_offset(ADD),
+        ADD.global_opcode(),
         b,
         src,
         0,
@@ -983,7 +834,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     // dst word[a]_1 <- 3 // use weird offset
     let dst = 8;
     instructions.push(Instruction::large_from_isize(
-        VmOpcode::with_default_offset(ADD),
+        ADD.global_opcode(),
         a,
         dst,
         0,
@@ -994,7 +845,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     ));
     // word[c]_1 <- len // emulate stack
     instructions.push(Instruction::large_from_isize(
-        VmOpcode::with_default_offset(ADD),
+        ADD.global_opcode(),
         c,
         input.len() as isize,
         0,
@@ -1009,7 +860,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
 
     for (i, byte) in input.iter().enumerate() {
         instructions.push(Instruction::large_from_isize(
-            VmOpcode::with_default_offset(ADD),
+            ADD.global_opcode(),
             src + i as isize,
             *byte as isize,
             0,
@@ -1022,7 +873,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     // dst = word[a]_1, src = word[b]_1, len = word[c]_1,
     // read and write io to address space 2
     instructions.push(Instruction::from_isize(
-        VmOpcode::with_default_offset(KECCAK256),
+        KECCAK256.global_opcode(),
         a,
         b,
         c,
@@ -1033,7 +884,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     // read expected result to check correctness
     for (i, expected_byte) in expected.into_iter().enumerate() {
         instructions.push(Instruction::from_isize(
-            VmOpcode::with_default_offset(NativeBranchEqualOpcode(BNE)),
+            NativeBranchEqualOpcode(BNE).global_opcode(),
             dst + i as isize,
             expected_byte as isize,
             (-(instructions.len() as isize) + 1) * DEFAULT_PC_STEP as isize, // jump to fail
@@ -1078,7 +929,7 @@ fn test_vm_keccak() {
         .flat_map(|input| instructions_for_keccak256_test(input))
         .collect::<Vec<_>>();
     instructions.push(Instruction::from_isize(
-        VmOpcode::with_default_offset(TERMINATE),
+        TERMINATE.global_opcode(),
         0,
         0,
         0,
@@ -1100,7 +951,7 @@ fn test_vm_keccak_non_full_round() {
         .flat_map(|input| instructions_for_keccak256_test(input))
         .collect::<Vec<_>>();
     instructions.push(Instruction::from_isize(
-        VmOpcode::with_default_offset(TERMINATE),
+        TERMINATE.global_opcode(),
         0,
         0,
         0,

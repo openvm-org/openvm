@@ -7,7 +7,6 @@ use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth},
     p3_util::log2_strict_usize,
-    prover::types::Proof,
 };
 
 use crate::{
@@ -94,9 +93,4 @@ impl<C: Config> StarkVerificationAdvice<C> {
 
 pub struct VerifierSinglePreprocessedDataInProgram<C: Config> {
     pub commit: DigestVal<C>,
-}
-
-pub struct VerifierInput<SC: StarkGenericConfig> {
-    pub proof: Proof<SC>,
-    pub log_degree_per_air: Vec<usize>,
 }

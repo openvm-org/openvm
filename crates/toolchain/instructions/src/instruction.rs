@@ -2,7 +2,7 @@ use backtrace::Backtrace;
 use openvm_stark_backend::p3_field::Field;
 use serde::{Deserialize, Serialize};
 
-use crate::{utils::isize_to_field, PhantomDiscriminant, SystemOpcode, UsizeOpcode, VmOpcode};
+use crate::{utils::isize_to_field, LocalOpcode, PhantomDiscriminant, SystemOpcode, VmOpcode};
 
 /// Number of operands of an instruction.
 pub const NUM_OPERANDS: usize = 7;
@@ -75,7 +75,7 @@ impl<F: Field> Instruction<F> {
 
     pub fn phantom(discriminant: PhantomDiscriminant, a: F, b: F, c_upper: u16) -> Self {
         Self {
-            opcode: VmOpcode(SystemOpcode::PHANTOM.with_default_offset()),
+            opcode: SystemOpcode::PHANTOM.global_opcode(),
             a,
             b,
             c: F::from_canonical_u32((discriminant.0 as u32) | ((c_upper as u32) << 16)),
@@ -85,7 +85,7 @@ impl<F: Field> Instruction<F> {
 
     pub fn debug(discriminant: PhantomDiscriminant) -> Self {
         Self {
-            opcode: VmOpcode(SystemOpcode::PHANTOM.with_default_offset()),
+            opcode: SystemOpcode::PHANTOM.global_opcode(),
             c: F::from_canonical_u32(discriminant.0 as u32),
             ..Default::default()
         }

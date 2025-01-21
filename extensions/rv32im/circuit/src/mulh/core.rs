@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -44,7 +44,6 @@ pub struct MulHCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 pub struct MulHCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_tuple_bus: RangeTupleCheckerBus<2>,
-    offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -157,12 +156,15 @@ where
             )
             .eval(builder, cols.opcode_mulh_flag + cols.opcode_mulhsu_flag);
 
-        let expected_opcode = flags.iter().zip(MulHOpcode::iter()).fold(
-            AB::Expr::ZERO,
-            |acc, (flag, local_opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
-            },
-        ) + AB::Expr::from_canonical_usize(self.offset);
+        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
+            self,
+            flags.iter().zip(MulHOpcode::iter()).fold(
+                AB::Expr::ZERO,
+                |acc, (flag, local_opcode)| {
+                    acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
+                },
+            ),
+        );
 
         AdapterAirContext {
             to_pc: None,
@@ -174,6 +176,10 @@ where
             }
             .into(),
         }
+    }
+
+    fn start_offset(&self) -> usize {
+        MulHOpcode::CLASS_OFFSET
     }
 }
 
@@ -187,7 +193,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCoreChip<NUM_LIMBS, LIM
     pub fn new(
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         range_tuple_chip: SharedRangeTupleCheckerChip<2>,
-        offset: usize,
     ) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
         // < 2 * NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1
@@ -207,7 +212,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCoreChip<NUM_LIMBS, LIM
             air: MulHCoreAir {
                 bitwise_lookup_bus: bitwise_lookup_chip.bus(),
                 range_tuple_bus: *range_tuple_chip.bus(),
-                offset,
             },
             bitwise_lookup_chip,
             range_tuple_chip,
@@ -247,7 +251,7 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let b = data[0].map(|x| x.as_canonical_u32());
@@ -284,7 +288,10 @@ where
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", MulHOpcode::from_usize(opcode - self.air.offset))
+        format!(
+            "{:?}",
+            MulHOpcode::from_usize(opcode - MulHOpcode::CLASS_OFFSET)
+        )
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {

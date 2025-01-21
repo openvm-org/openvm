@@ -5,7 +5,7 @@ use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
     utils::isize_to_field,
-    SystemOpcode, VmOpcode,
+    LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
@@ -149,7 +149,7 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
 /// Create a new [`Instruction`] that exits with code 2. This is equivalent to program panic but with a special exit code for debugging.
 pub fn unimp<F: PrimeField32>() -> Instruction<F> {
     Instruction {
-        opcode: VmOpcode::with_default_offset(SystemOpcode::TERMINATE),
+        opcode: SystemOpcode::TERMINATE.global_opcode(),
         c: F::TWO,
         ..Default::default()
     }
@@ -157,7 +157,7 @@ pub fn unimp<F: PrimeField32>() -> Instruction<F> {
 
 pub fn nop<F: PrimeField32>() -> Instruction<F> {
     Instruction {
-        opcode: VmOpcode::with_default_offset(SystemOpcode::PHANTOM),
+        opcode: SystemOpcode::PHANTOM.global_opcode(),
         ..Default::default()
     }
 }

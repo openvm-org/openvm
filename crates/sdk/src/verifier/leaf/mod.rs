@@ -62,7 +62,8 @@ impl LeafVmVerifierConfig {
 
             builder.cycle_tracker_start("VerifyProofs");
             let pvs = VmVerifierPvs::<Felt<F>>::uninit(&mut builder);
-            builder.range(0, proofs.len()).for_each(|i, builder| {
+            builder.range(0, proofs.len()).for_each(|i_vec, builder| {
+                let i = i_vec[0];
                 let proof = builder.get(&proofs, i);
                 assert_required_air_for_app_vm_present(builder, &proof);
                 StarkVerifier::verify::<DuplexChallengerVariable<C>>(

@@ -11,7 +11,7 @@ mod tests;
 
 use std::sync::Mutex;
 
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;

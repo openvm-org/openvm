@@ -1,5 +1,5 @@
 use derive_more::derive::From;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     self,
@@ -11,7 +11,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
-use openvm_instructions::{UsizeOpcode, VmOpcode};
+use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -88,8 +88,8 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
         for (i, modulus) in self.supported_modulus.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8);
-            let class_offset = Rv32ModularArithmeticOpcode::default_offset()
-                + i * Rv32ModularArithmeticOpcode::COUNT;
+            let start_offset =
+                Rv32ModularArithmeticOpcode::CLASS_OFFSET + i * Rv32ModularArithmeticOpcode::COUNT;
 
             let config32 = ExprBuilderConfig {
                 modulus: modulus.clone(),
@@ -120,7 +120,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                 let addsub_chip = ModularAddSubChip::new(
                     adapter_chip_32.clone(),
                     config32.clone(),
-                    class_offset,
+                    start_offset,
                     range_checker.clone(),
                     offline_memory.clone(),
                 );
@@ -128,12 +128,12 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     ModularExtensionExecutor::ModularAddSubRv32_32(addsub_chip),
                     addsub_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let muldiv_chip = ModularMulDivChip::new(
                     adapter_chip_32.clone(),
                     config32.clone(),
-                    class_offset,
+                    start_offset,
                     range_checker.clone(),
                     offline_memory.clone(),
                 );
@@ -141,7 +141,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     ModularExtensionExecutor::ModularMulDivRv32_32(muldiv_chip),
                     muldiv_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let isequal_chip = ModularIsEqualChip::new(
                     Rv32IsEqualModAdapterChip::new(
@@ -154,7 +154,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     ModularIsEqualCoreChip::new(
                         modulus.clone(),
                         bitwise_lu_chip.clone(),
-                        class_offset,
+                        start_offset,
                     ),
                     offline_memory.clone(),
                 );
@@ -162,13 +162,13 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     ModularExtensionExecutor::ModularIsEqualRv32_32(isequal_chip),
                     iseq_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= 48 {
                 let addsub_chip = ModularAddSubChip::new(
                     adapter_chip_48.clone(),
                     config48.clone(),
-                    class_offset,
+                    start_offset,
                     range_checker.clone(),
                     offline_memory.clone(),
                 );
@@ -176,12 +176,12 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     ModularExtensionExecutor::ModularAddSubRv32_48(addsub_chip),
                     addsub_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let muldiv_chip = ModularMulDivChip::new(
                     adapter_chip_48.clone(),
                     config48.clone(),
-                    class_offset,
+                    start_offset,
                     range_checker.clone(),
                     offline_memory.clone(),
                 );
@@ -189,7 +189,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     ModularExtensionExecutor::ModularMulDivRv32_48(muldiv_chip),
                     muldiv_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let isequal_chip = ModularIsEqualChip::new(
                     Rv32IsEqualModAdapterChip::new(
@@ -202,7 +202,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     ModularIsEqualCoreChip::new(
                         modulus.clone(),
                         bitwise_lu_chip.clone(),
-                        class_offset,
+                        start_offset,
                     ),
                     offline_memory.clone(),
                 );
@@ -210,7 +210,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     ModularExtensionExecutor::ModularIsEqualRv32_48(isequal_chip),
                     iseq_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {
                 panic!("Modulus too large");

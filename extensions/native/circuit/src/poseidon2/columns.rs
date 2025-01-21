@@ -1,60 +1,134 @@
-use openvm_circuit::{
-    arch::ExecutionState,
-    system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
-};
-use openvm_circuit_primitives::AlignedBorrow;
+use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_poseidon2_air::Poseidon2SubCols;
-use openvm_stark_backend::p3_field::FieldAlgebra;
 
-use super::NATIVE_POSEIDON2_CHUNK_SIZE;
+use crate::poseidon2::CHUNK;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct NativePoseidon2Cols<T, const SBOX_REGISTERS: usize> {
+    // poseidon2
     pub inner: Poseidon2SubCols<T, SBOX_REGISTERS>,
-    pub memory: NativePoseidon2MemoryCols<T>,
+
+    // flags - at most 1 is true, if none is true then row is disabled
+    pub incorporate_row: T,
+    pub incorporate_sibling: T,
+    pub inside_row: T,
+    pub simple: T,
+
+    pub end_inside_row: T,
+    pub end_top_level: T,
+    pub start_top_level: T,
+
+    pub very_first_timestamp: T,
+    pub start_timestamp: T,
+
+    // instruction (g)
+    pub opened_element_size_inv: T,
+
+    // initial/final opened index for a subsegment with same height
+    pub initial_opened_index: T,
+
+    pub opened_base_pointer: T,
+
+    // cannot be shared, should be 0 on rows that are not inside row
+    pub is_exhausted: [T; CHUNK],
+
+    pub specific: [T; max3(
+        TopLevelSpecificCols::<usize>::width(),
+        InsideRowSpecificCols::<usize>::width(),
+        SimplePoseidonSpecificCols::<usize>::width(),
+    )],
+}
+
+const fn max(a: usize, b: usize) -> usize {
+    [a, b][(a < b) as usize]
+}
+const fn max3(a: usize, b: usize, c: usize) -> usize {
+    max(a, max(b, c))
+}
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct TopLevelSpecificCols<T> {
+    pub pc: T,
+    pub end_timestamp: T,
+
+    // instruction (a, b, c, d, e, f)
+    pub dim_register: T,
+    pub opened_register: T,
+    pub opened_length_register: T,
+    pub sibling_register: T,
+    pub index_register: T,
+    pub commit_register: T,
+
+    pub final_opened_index: T,
+
+    pub height: T,
+    pub opened_length: T,
+
+    pub dim_base_pointer: T,
+    pub sibling_base_pointer: T,
+    pub index_base_pointer: T,
+
+    pub dim_base_pointer_read: MemoryReadAuxCols<T>,
+    pub opened_base_pointer_read: MemoryReadAuxCols<T>,
+    pub opened_length_read: MemoryReadAuxCols<T>,
+    pub sibling_base_pointer_read: MemoryReadAuxCols<T>,
+    pub index_base_pointer_read: MemoryReadAuxCols<T>,
+    pub commit_pointer_read: MemoryReadAuxCols<T>,
+
+    pub proof_index: T,
+
+    pub read_initial_height_or_root_is_on_right: MemoryReadAuxCols<T>,
+    pub read_final_height_or_sibling_array_start: MemoryReadAuxCols<T>,
+
+    // incorporate sibling only
+    pub root_is_on_right: T,
+    pub sibling_array_start: T,
+    pub reads: [MemoryReadAuxCols<T>; CHUNK],
+
+    pub commit_pointer: T,
+    pub commit_read: MemoryReadAuxCols<T>,
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, AlignedBorrow)]
-pub struct NativePoseidon2MemoryCols<T> {
-    pub from_state: ExecutionState<T>,
-    // 1 if PERMUTE, 2 if COMPRESS, 0 otherwise
-    pub opcode_flag: T,
-
-    pub ptr_as: T,
-    pub chunk_as: T,
-
-    // rs_ptr[1] if COMPRESS, original value of instruction field c if PERMUTE
-    pub c: T,
-
-    pub rs_ptr: [T; 2],
-    pub rd_ptr: T,
-    pub rs_val: [T; 2],
-    pub rd_val: T,
-    pub rs_read_aux: [MemoryReadAuxCols<T>; 2],
-    pub rd_read_aux: MemoryReadAuxCols<T>,
-
-    pub chunk_read_aux: [MemoryReadAuxCols<T>; 2],
-    pub chunk_write_aux: [MemoryWriteAuxCols<T, NATIVE_POSEIDON2_CHUNK_SIZE>; 2],
+#[derive(AlignedBorrow)]
+pub struct InsideRowSpecificCols<T> {
+    pub cells: [VerifyBatchCellCols<T>; CHUNK],
 }
 
-impl<F: FieldAlgebra + Copy> NativePoseidon2MemoryCols<F> {
-    pub fn blank() -> Self {
-        Self {
-            from_state: ExecutionState::default(),
-            opcode_flag: F::ZERO,
-            ptr_as: F::ZERO,
-            chunk_as: F::ZERO,
-            c: F::ZERO,
-            rs_ptr: [F::ZERO; 2],
-            rd_ptr: F::ZERO,
-            rs_val: [F::ZERO; 2],
-            rd_val: F::ZERO,
-            rs_read_aux: [MemoryReadAuxCols::disabled(); 2],
-            rd_read_aux: MemoryReadAuxCols::disabled(),
-            chunk_read_aux: [MemoryReadAuxCols::disabled(); 2],
-            chunk_write_aux: [MemoryWriteAuxCols::disabled(); 2],
-        }
-    }
+#[repr(C)]
+#[derive(AlignedBorrow, Copy, Clone)]
+pub struct VerifyBatchCellCols<T> {
+    pub read: MemoryReadAuxCols<T>,
+    pub opened_index: T,
+    pub read_row_pointer_and_length: MemoryReadAuxCols<T>,
+    pub row_pointer: T,
+    pub row_end: T,
+    pub is_first_in_row: T,
+}
+
+#[repr(C)]
+#[derive(AlignedBorrow, Copy, Clone)]
+pub struct SimplePoseidonSpecificCols<T> {
+    pub pc: T,
+    pub is_compress: T,
+    // instruction (a, b, c, d, e)
+    pub output_register: T,
+    pub input_register_1: T,
+    pub input_register_2: T,
+    pub register_address_space: T,
+    pub data_address_space: T,
+
+    pub output_pointer: T,
+    pub input_pointer_1: T,
+    pub input_pointer_2: T,
+
+    pub read_output_pointer: MemoryReadAuxCols<T>,
+    pub read_input_pointer_1: MemoryReadAuxCols<T>,
+    pub read_input_pointer_2: MemoryReadAuxCols<T>,
+    pub read_data_1: MemoryReadAuxCols<T>,
+    pub read_data_2: MemoryReadAuxCols<T>,
+    pub write_data_1: MemoryWriteAuxCols<T, { CHUNK }>,
+    pub write_data_2: MemoryWriteAuxCols<T, { CHUNK }>,
 }

@@ -3,7 +3,7 @@ use std::{
     ops::{Add, AddAssign, Mul, MulAssign, Sub},
 };
 
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_stark_backend::p3_util::log2_ceil_usize;
 
 pub mod check_carry_mod_to_zero;

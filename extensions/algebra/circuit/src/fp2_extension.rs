@@ -1,5 +1,5 @@
 use derive_more::derive::From;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
@@ -10,7 +10,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
-use openvm_instructions::{UsizeOpcode, VmOpcode};
+use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -79,7 +79,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
         for (i, modulus) in self.supported_modulus.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8);
-            let class_offset = Fp2Opcode::default_offset() + i * Fp2Opcode::COUNT;
+            let start_offset = Fp2Opcode::CLASS_OFFSET + i * Fp2Opcode::COUNT;
 
             let config32 = ExprBuilderConfig {
                 modulus: modulus.clone(),
@@ -110,7 +110,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                 let addsub_chip = Fp2AddSubChip::new(
                     adapter_chip_32.clone(),
                     config32.clone(),
-                    class_offset,
+                    start_offset,
                     range_checker.clone(),
                     offline_memory.clone(),
                 );
@@ -118,12 +118,12 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     Fp2ExtensionExecutor::Fp2AddSubRv32_32(addsub_chip),
                     addsub_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
                     adapter_chip_32.clone(),
                     config32.clone(),
-                    class_offset,
+                    start_offset,
                     range_checker.clone(),
                     offline_memory.clone(),
                 );
@@ -131,13 +131,13 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     Fp2ExtensionExecutor::Fp2MulDivRv32_32(muldiv_chip),
                     muldiv_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= 48 {
                 let addsub_chip = Fp2AddSubChip::new(
                     adapter_chip_48.clone(),
                     config48.clone(),
-                    class_offset,
+                    start_offset,
                     range_checker.clone(),
                     offline_memory.clone(),
                 );
@@ -145,12 +145,12 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     Fp2ExtensionExecutor::Fp2AddSubRv32_48(addsub_chip),
                     addsub_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
                     adapter_chip_48.clone(),
                     config48.clone(),
-                    class_offset,
+                    start_offset,
                     range_checker.clone(),
                     offline_memory.clone(),
                 );
@@ -158,7 +158,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     Fp2ExtensionExecutor::Fp2MulDivRv32_48(muldiv_chip),
                     muldiv_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {
                 panic!("Modulus too large");

@@ -22,7 +22,7 @@ use openvm_circuit_primitives::{
     SubAir, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::FriOpcode::FRI_REDUCED_OPENING;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -85,7 +85,6 @@ pub struct FriReducedOpeningCols<T> {
 pub struct FriReducedOpeningAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    offset: usize,
 }
 
 impl<F: Field> BaseAir<F> for FriReducedOpeningAir {
@@ -197,7 +196,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriReducedOpeningAir {
         let total_accesses = num_loop_accesses.clone() + num_initial_accesses + num_final_accesses;
         self.execution_bridge
             .execute(
-                AB::F::from_canonical_usize((FRI_REDUCED_OPENING as usize) + self.offset),
+                AB::F::from_canonical_usize(FRI_REDUCED_OPENING.global_opcode().as_usize()),
                 [
                     a_ptr_ptr,
                     b_ptr_ptr,
@@ -324,13 +323,11 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
-        offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let air = FriReducedOpeningAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
-            offset,
         };
         Self {
             records: vec![],
@@ -425,7 +422,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        assert_eq!(opcode, (FRI_REDUCED_OPENING as usize) + self.air.offset);
+        assert_eq!(opcode, FRI_REDUCED_OPENING.global_opcode().as_usize());
         String::from("FRI_REDUCED_OPENING")
     }
 }

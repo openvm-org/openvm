@@ -3,7 +3,7 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
@@ -16,7 +16,7 @@ use openvm_circuit_primitives::{
     SubAir, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -231,6 +231,10 @@ where
             }
             .into(),
         }
+    }
+
+    fn start_offset(&self) -> usize {
+        self.offset
     }
 }
 

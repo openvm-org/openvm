@@ -1,3 +1,7 @@
+use openvm_bigint_transpiler::{
+    Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode, Rv32BranchLessThan256Opcode,
+    Rv32LessThan256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
+};
 use openvm_circuit::{
     arch::{
         testing::VmChipTestBuilder, InstructionExecutor, BITWISE_OP_LOOKUP_BUS,
@@ -9,7 +13,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
-use openvm_instructions::{program::PC_BITS, riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_instructions::{program::PC_BITS, riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_rv32_adapters::{
     rv32_heap_branch_default, rv32_write_heap_default, Rv32HeapAdapterChip,
     Rv32HeapBranchAdapterChip,
@@ -20,7 +24,7 @@ use openvm_rv32im_circuit::{
     MultiplicationCoreChip, ShiftCoreChip,
 };
 use openvm_rv32im_transpiler::{
-    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
@@ -95,11 +99,17 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        BaseAluCoreChip::new(bitwise_chip.clone(), 0),
+        BaseAluCoreChip::new(bitwise_chip.clone(), Rv32BaseAlu256Opcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
-    run_int_256_rand_execute(opcode as usize, num_ops, &mut chip, &mut tester, None);
+    run_int_256_rand_execute(
+        opcode.local_usize() + Rv32BaseAlu256Opcode::CLASS_OFFSET,
+        num_ops,
+        &mut chip,
+        &mut tester,
+        None,
+    );
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -142,11 +152,17 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        LessThanCoreChip::new(bitwise_chip.clone(), 0),
+        LessThanCoreChip::new(bitwise_chip.clone(), Rv32LessThan256Opcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
-    run_int_256_rand_execute(opcode as usize, num_ops, &mut chip, &mut tester, None);
+    run_int_256_rand_execute(
+        opcode.local_usize() + Rv32LessThan256Opcode::CLASS_OFFSET,
+        num_ops,
+        &mut chip,
+        &mut tester,
+        None,
+    );
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -182,12 +198,12 @@ fn run_mul_256_rand_test(num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        MultiplicationCoreChip::new(range_tuple_checker.clone(), 0),
+        MultiplicationCoreChip::new(range_tuple_checker.clone(), Rv32Mul256Opcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
     run_int_256_rand_execute(
-        MulOpcode::MUL as usize,
+        Rv32Mul256Opcode::CLASS_OFFSET,
         num_ops,
         &mut chip,
         &mut tester,
@@ -223,12 +239,18 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         ShiftCoreChip::new(
             bitwise_chip.clone(),
             tester.memory_controller().borrow().range_checker.clone(),
-            0,
+            Rv32Shift256Opcode::CLASS_OFFSET,
         ),
         tester.offline_memory_mutex_arc(),
     );
 
-    run_int_256_rand_execute(opcode as usize, num_ops, &mut chip, &mut tester, None);
+    run_int_256_rand_execute(
+        opcode.local_usize() + Rv32Shift256Opcode::CLASS_OFFSET,
+        num_ops,
+        &mut chip,
+        &mut tester,
+        None,
+    );
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -260,7 +282,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        BranchEqualCoreChip::new(0, 4),
+        BranchEqualCoreChip::new(Rv32BranchEqual256Opcode::CLASS_OFFSET, 4),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -268,11 +290,12 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         x.iter()
             .zip(y.iter())
             .fold(true, |acc, (x, y)| acc && (x == y))
-            ^ (opcode == BranchEqualOpcode::BNE as usize)
+            ^ (opcode
+                == BranchEqualOpcode::BNE.local_usize() + Rv32BranchEqual256Opcode::CLASS_OFFSET)
     };
 
     run_int_256_rand_execute(
-        opcode as usize,
+        opcode.local_usize() + Rv32BranchEqual256Opcode::CLASS_OFFSET,
         num_ops,
         &mut chip,
         &mut tester,
@@ -305,12 +328,16 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
+        BranchLessThanCoreChip::new(
+            bitwise_chip.clone(),
+            Rv32BranchLessThan256Opcode::CLASS_OFFSET,
+        ),
         tester.offline_memory_mutex_arc(),
     );
 
     let branch_fn = |opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]| {
-        let opcode = BranchLessThanOpcode::from_usize(opcode);
+        let opcode =
+            BranchLessThanOpcode::from_usize(opcode - Rv32BranchLessThan256Opcode::CLASS_OFFSET);
         let (is_ge, is_signed) = match opcode {
             BranchLessThanOpcode::BLT => (false, true),
             BranchLessThanOpcode::BLTU => (false, false),
@@ -328,7 +355,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     };
 
     run_int_256_rand_execute(
-        opcode as usize,
+        opcode.local_usize() + Rv32BranchLessThan256Opcode::CLASS_OFFSET,
         num_ops,
         &mut chip,
         &mut tester,

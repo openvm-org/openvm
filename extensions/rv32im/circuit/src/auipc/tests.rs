@@ -4,7 +4,7 @@ use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -38,7 +38,7 @@ fn set_and_execute(
 
     tester.execute_with_pc(
         chip,
-        &Instruction::from_usize(VmOpcode::with_default_offset(opcode), [a, 0, imm, 1, 0]),
+        &Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
@@ -67,7 +67,7 @@ fn rand_auipc_test() {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone(), Rv32AuipcOpcode::default_offset());
+    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone());
     let mut chip = Rv32AuipcChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
@@ -107,7 +107,7 @@ fn run_negative_auipc_test(
         tester.memory_bridge(),
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone(), Rv32AuipcOpcode::default_offset());
+    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone());
     let mut chip = Rv32AuipcChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     set_and_execute(
@@ -252,7 +252,7 @@ fn execute_roundtrip_sanity_test() {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let inner = Rv32AuipcCoreChip::new(bitwise_chip, Rv32AuipcOpcode::default_offset());
+    let inner = Rv32AuipcCoreChip::new(bitwise_chip);
     let mut chip = Rv32AuipcChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;

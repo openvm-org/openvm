@@ -17,7 +17,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_instructions::{
-    program::Program, PhantomDiscriminant, PublishOpcode, SystemOpcode, UsizeOpcode, VmOpcode,
+    program::Program, LocalOpcode, PhantomDiscriminant, PublishOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -606,16 +606,12 @@ impl<F: PrimeField32> SystemComplex<F> {
                 NativeAdapterChip::new(EXECUTION_BUS, PROGRAM_BUS, memory_bridge),
                 PublicValuesCoreChip::new(
                     config.num_public_values,
-                    PublishOpcode::default_offset(),
                     config.max_constraint_degree as u32 - 1,
                 ),
                 offline_memory,
             );
             inventory
-                .add_executor(
-                    chip,
-                    [VmOpcode::with_default_offset(PublishOpcode::PUBLISH)],
-                )
+                .add_executor(chip, [PublishOpcode::PUBLISH.global_opcode()])
                 .unwrap();
         }
         if config.continuation_enabled {
@@ -637,9 +633,9 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory.add_periphery_chip(chip);
         }
         let streams = Arc::new(Mutex::new(Streams::default()));
-        let phantom_opcode = VmOpcode::with_default_offset(SystemOpcode::PHANTOM);
+        let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
         let mut phantom_chip =
-            PhantomChip::new(EXECUTION_BUS, PROGRAM_BUS, SystemOpcode::default_offset());
+            PhantomChip::new(EXECUTION_BUS, PROGRAM_BUS, SystemOpcode::CLASS_OFFSET);
         phantom_chip.set_streams(streams.clone());
         inventory
             .add_executor(RefCell::new(phantom_chip), [phantom_opcode])

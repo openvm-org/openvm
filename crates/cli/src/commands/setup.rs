@@ -11,6 +11,7 @@ use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
     config::AggConfig,
     fs::{write_agg_pk_to_file, write_evm_verifier_to_file},
+    keygen::RootVerifierProvingKey,
     Sdk,
 };
 
@@ -41,7 +42,7 @@ impl EvmProvingSetupCmd {
         let agg_config = AggConfig::default();
 
         println!("Generating proving key...");
-        let agg_pk = Sdk.agg_keygen(agg_config, &params_reader)?;
+        let agg_pk = Sdk.agg_keygen(agg_config, &params_reader, None::<&RootVerifierProvingKey>)?;
 
         println!("Generating verifier contract...");
         let verifier = Sdk.generate_snark_verifier_contract(&params_reader, &agg_pk)?;

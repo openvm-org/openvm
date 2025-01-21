@@ -134,7 +134,7 @@ mod tests {
     use openvm_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
-    use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
     use openvm_mod_circuit_builder::{
         test_utils::{biguint_to_limbs, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
         ExprBuilderConfig,
@@ -172,7 +172,7 @@ mod tests {
         let mut chip = Fp2MulDivChip::new(
             adapter,
             config,
-            Fp2Opcode::default_offset(),
+            Fp2Opcode::CLASS_OFFSET,
             tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );

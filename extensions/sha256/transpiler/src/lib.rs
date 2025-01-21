@@ -1,5 +1,5 @@
-use openvm_instructions::{riscv::RV32_MEMORY_AS, UsizeOpcode};
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions::{riscv::RV32_MEMORY_AS, LocalOpcode};
+use openvm_instructions_derive::LocalOpcode;
 use openvm_sha256_guest::{OPCODE, SHA256_FUNCT3, SHA256_FUNCT7};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
@@ -7,7 +7,7 @@ use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x320]
 #[repr(usize)]
@@ -36,7 +36,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Sha256TranspilerExtension {
             return None;
         }
         let instruction = from_r_type(
-            Rv32Sha256Opcode::SHA256.with_default_offset(),
+            Rv32Sha256Opcode::SHA256.global_opcode().as_usize(),
             RV32_MEMORY_AS as usize,
             &dec_insn,
         );

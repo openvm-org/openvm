@@ -17,7 +17,7 @@ serde-big-array = "0.5.1"
 strum_macros = { workspace = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
-num-bigint-dig.workspace = true
+num-bigint.workspace = true
 halo2curves-axiom = { workspace = true, optional = true }
 
 [dev-dependencies]

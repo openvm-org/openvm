@@ -44,6 +44,7 @@ metrics.workspace = true
 tracing.workspace = true
 itertools.workspace = true
 getset.workspace = true
+clap = { workspace = true, features = ["derive"] }
 
 [features]
 default = ["parallel"]

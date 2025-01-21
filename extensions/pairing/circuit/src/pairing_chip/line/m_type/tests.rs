@@ -7,7 +7,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_ecc_guest::AffinePoint;
-use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_mod_circuit_builder::{test_utils::*, ExprBuilderConfig};
 use openvm_pairing_guest::{
     bls12_381::{BLS12_381_LIMB_BITS, BLS12_381_MODULUS, BLS12_381_NUM_LIMBS, BLS12_381_XI_ISIZE},
@@ -50,7 +50,7 @@ fn test_mul_023_by_023() {
             limb_bits: BLS12_381_LIMB_BITS,
         },
         BLS12_381_XI_ISIZE,
-        PairingOpcode::default_offset(),
+        PairingOpcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
@@ -149,7 +149,7 @@ fn test_mul_by_02345() {
             limb_bits: BLS12_381_LIMB_BITS,
         },
         BLS12_381_XI_ISIZE,
-        PairingOpcode::default_offset(),
+        PairingOpcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
