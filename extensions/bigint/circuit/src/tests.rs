@@ -1,3 +1,4 @@
+use openvm_bigint_transpiler::{Rv32BaseAlu256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode};
 use openvm_circuit::{
     arch::{
         testing::VmChipTestBuilder, InstructionExecutor, BITWISE_OP_LOOKUP_BUS,
@@ -20,7 +21,7 @@ use openvm_rv32im_circuit::{
     MultiplicationCoreChip, ShiftCoreChip,
 };
 use openvm_rv32im_transpiler::{
-    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
@@ -95,7 +96,7 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        BaseAluCoreChip::new(bitwise_chip.clone()),
+        BaseAluCoreChip::new(bitwise_chip.clone(), Rv32BaseAlu256Opcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -194,12 +195,12 @@ fn run_mul_256_rand_test(num_ops: usize) {
             tester.address_bits(),
             bitwise_chip.clone(),
         ),
-        MultiplicationCoreChip::new(range_tuple_checker.clone()),
+        MultiplicationCoreChip::new(range_tuple_checker.clone(), Rv32Mul256Opcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
     run_int_256_rand_execute(
-        MulOpcode::MUL.global_opcode().as_usize(),
+        Rv32Mul256Opcode::CLASS_OFFSET,
         num_ops,
         &mut chip,
         &mut tester,
@@ -235,6 +236,7 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         ShiftCoreChip::new(
             bitwise_chip.clone(),
             tester.memory_controller().borrow().range_checker.clone(),
+            Rv32Shift256Opcode::CLASS_OFFSET,
         ),
         tester.offline_memory_mutex_arc(),
     );

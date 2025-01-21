@@ -57,7 +57,7 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        MultiplicationCoreChip::new(range_tuple_checker.clone()),
+        MultiplicationCoreChip::new(range_tuple_checker.clone(), MulOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -132,7 +132,7 @@ fn run_rv32_mul_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        MultiplicationCoreChip::new(range_tuple_chip.clone()),
+        MultiplicationCoreChip::new(range_tuple_chip.clone(), MulOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 

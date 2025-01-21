@@ -237,7 +237,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
 
         let base_alu_chip = Rv32BaseAluChip::new(
             Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            BaseAluCoreChip::new(bitwise_lu_chip.clone()),
+            BaseAluCoreChip::new(bitwise_lu_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -254,7 +254,11 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
 
         let shift_chip = Rv32ShiftChip::new(
             Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            ShiftCoreChip::new(bitwise_lu_chip.clone(), range_checker.clone()),
+            ShiftCoreChip::new(
+                bitwise_lu_chip.clone(),
+                range_checker.clone(),
+                ShiftOpcode::CLASS_OFFSET,
+            ),
             offline_memory.clone(),
         );
         inventory.add_executor(shift_chip, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
@@ -403,7 +407,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
 
         let mul_chip = Rv32MultiplicationChip::new(
             Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            MultiplicationCoreChip::new(range_tuple_checker.clone()),
+            MultiplicationCoreChip::new(range_tuple_checker.clone(), MulOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         inventory.add_executor(mul_chip, MulOpcode::iter().map(|x| x.global_opcode()))?;

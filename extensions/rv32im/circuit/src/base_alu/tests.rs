@@ -54,7 +54,7 @@ fn run_rv32_alu_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        BaseAluCoreChip::new(bitwise_chip.clone()),
+        BaseAluCoreChip::new(bitwise_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -143,7 +143,7 @@ fn run_rv32_alu_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        BaseAluCoreChip::new(bitwise_chip.clone()),
+        BaseAluCoreChip::new(bitwise_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
