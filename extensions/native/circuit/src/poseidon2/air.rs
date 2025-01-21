@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, sync::Arc};
+use std::{array::from_fn, borrow::Borrow, sync::Arc};
 
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState},
@@ -85,16 +85,16 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             specific,
         } = local;
 
-        let left_input = std::array::from_fn::<_, CHUNK, _>(|i| local.inner.inputs[i]);
-        let right_input = std::array::from_fn::<_, CHUNK, _>(|i| local.inner.inputs[i + CHUNK]);
-        let left_output = std::array::from_fn::<_, CHUNK, _>(|i| {
+        let left_input = from_fn::<_, CHUNK, _>(|i| local.inner.inputs[i]);
+        let right_input = from_fn::<_, CHUNK, _>(|i| local.inner.inputs[i + CHUNK]);
+        let left_output = from_fn::<_, CHUNK, _>(|i| {
             local.inner.ending_full_rounds[BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS - 1].post[i]
         });
-        let right_output = std::array::from_fn::<_, CHUNK, _>(|i| {
+        let right_output = from_fn::<_, CHUNK, _>(|i| {
             local.inner.ending_full_rounds[BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS - 1].post[i + CHUNK]
         });
-        let next_left_input = std::array::from_fn::<_, CHUNK, _>(|i| next.inner.inputs[i]);
-        let next_right_input = std::array::from_fn::<_, CHUNK, _>(|i| next.inner.inputs[i + CHUNK]);
+        let next_left_input = from_fn::<_, CHUNK, _>(|i| next.inner.inputs[i]);
+        let next_right_input = from_fn::<_, CHUNK, _>(|i| next.inner.inputs[i + CHUNK]);
 
         builder.assert_bool(incorporate_row);
         builder.assert_bool(incorporate_sibling);
