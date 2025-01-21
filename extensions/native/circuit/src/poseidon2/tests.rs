@@ -85,7 +85,7 @@ fn tester_with_random_poseidon2_ops(
 
         tester.write_cell(d, a, BabyBear::from_canonical_usize(dst));
         tester.write_cell(d, b, BabyBear::from_canonical_usize(lhs));
-        if opcode == Poseidon2Opcode::COMP_POS2.global_opcode().as_usize() {
+        if opcode == Poseidon2Opcode::COMP_POS2.local_usize() {
             tester.write_cell(d, c, BabyBear::from_canonical_usize(rhs));
         }
 

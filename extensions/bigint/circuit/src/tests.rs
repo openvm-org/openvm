@@ -101,7 +101,7 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
     );
 
     run_int_256_rand_execute(
-        opcode.global_opcode().as_usize(),
+        opcode.local_usize() + Rv32BaseAlu256Opcode::CLASS_OFFSET,
         num_ops,
         &mut chip,
         &mut tester,
@@ -154,7 +154,7 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     );
 
     run_int_256_rand_execute(
-        opcode.global_opcode().as_usize(),
+        opcode.local_usize() + Rv32BaseAlu256Opcode::CLASS_OFFSET,
         num_ops,
         &mut chip,
         &mut tester,
@@ -242,7 +242,7 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
     );
 
     run_int_256_rand_execute(
-        opcode.global_opcode().as_usize(),
+        opcode.local_usize() + Rv32BaseAlu256Opcode::CLASS_OFFSET,
         num_ops,
         &mut chip,
         &mut tester,
@@ -291,7 +291,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
     };
 
     run_int_256_rand_execute(
-        opcode.global_opcode().as_usize(),
+        opcode.local_usize() + Rv32BaseAlu256Opcode::CLASS_OFFSET,
         num_ops,
         &mut chip,
         &mut tester,
@@ -347,7 +347,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     };
 
     run_int_256_rand_execute(
-        opcode.global_opcode().as_usize(),
+        opcode.local_usize() + Rv32BaseAlu256Opcode::CLASS_OFFSET,
         num_ops,
         &mut chip,
         &mut tester,
