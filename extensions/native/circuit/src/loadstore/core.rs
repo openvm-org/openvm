@@ -47,7 +47,9 @@ pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeLoadStoreCoreAir<const NUM_CELLS: usize> {}
+pub struct NativeLoadStoreCoreAir<const NUM_CELLS: usize> {
+    pub offset: usize,
+}
 
 impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for NativeLoadStoreCoreAir<NUM_CELLS> {
     fn width(&self) -> usize {
@@ -107,7 +109,7 @@ where
     }
 
     fn start_offset(&self) -> usize {
-        NativeLoadStoreOpcode::CLASS_OFFSET
+        self.offset
     }
 }
 
@@ -118,9 +120,9 @@ pub struct NativeLoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
 }
 
 impl<F: Field, const NUM_CELLS: usize> NativeLoadStoreCoreChip<F, NUM_CELLS> {
-    pub fn new() -> Self {
+    pub fn new(offset: usize) -> Self {
         Self {
-            air: NativeLoadStoreCoreAir::<NUM_CELLS> {},
+            air: NativeLoadStoreCoreAir::<NUM_CELLS> { offset },
             streams: OnceLock::new(),
         }
     }
@@ -131,7 +133,7 @@ impl<F: Field, const NUM_CELLS: usize> NativeLoadStoreCoreChip<F, NUM_CELLS> {
 
 impl<F: Field, const NUM_CELLS: usize> Default for NativeLoadStoreCoreChip<F, NUM_CELLS> {
     fn default() -> Self {
-        Self::new()
+        Self::new(NativeLoadStoreOpcode::CLASS_OFFSET)
     }
 }
 
@@ -151,9 +153,8 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = *instruction;
-        let local_opcode = NativeLoadStoreOpcode::from_usize(
-            opcode.local_opcode_idx(NativeLoadStoreOpcode::CLASS_OFFSET),
-        );
+        let local_opcode =
+            NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
         let (pointer_read, data_read) = reads.into();
 
         let data_write = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
@@ -181,7 +182,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            NativeLoadStoreOpcode::from_usize(opcode - NativeLoadStoreOpcode::CLASS_OFFSET)
+            NativeLoadStoreOpcode::from_usize(opcode - self.air.offset)
         )
     }
 

@@ -117,7 +117,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 memory_bridge,
                 NativeLoadStoreOpcode::CLASS_OFFSET,
             ),
-            NativeLoadStoreCoreChip::new(),
+            NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         load_store_chip.core.set_streams(builder.streams().clone());
@@ -134,7 +134,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 memory_bridge,
                 NativeLoadStore4Opcode::CLASS_OFFSET,
             ),
-            NativeLoadStoreCoreChip::new(),
+            NativeLoadStoreCoreChip::new(NativeLoadStore4Opcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         block_load_store_chip
