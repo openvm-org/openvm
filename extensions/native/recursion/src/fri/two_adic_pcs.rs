@@ -99,6 +99,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 builder.set_value(&alpha_pow, j, one_ef);
             }
         }
+        let mut alpha_pow_cache = Vec::new();
 
         iter_zip!(builder, query_proof.input_proof, rounds).for_each(|ptr_vec, builder| {
             let batch_opening = builder.iter_ptr_get(&query_proof.input_proof, ptr_vec[0]);
@@ -206,10 +207,33 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let p_at_x = builder.get(&mat_opening, t);
                             let p_at_z = builder.get(&ps_at_z, t);
 
-                            builder.assign(&n, cur_alpha_pow * (p_at_z - p_at_x) + n);
-                            builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
+                            if ptr_vec[0].value() == 0 {
+                                if t.value() == 0 && alpha_pow_cache.is_empty() {
+                                    alpha_pow_cache.push(builder.constant(C::EF::ONE));
+                                } else if t.value() >= alpha_pow_cache.len() {
+                                    let next: Ext<_, _> = builder.uninit();
+                                    alpha_pow_cache.push(next);
+                                    builder.assign(
+                                        &alpha_pow_cache[t.value()],
+                                        alpha_pow_cache[t.value() - 1] * alpha,
+                                    );
+                                }
+                            }
+                            builder.assign(&n, (p_at_z - p_at_x) * alpha_pow_cache[t.value()] + n);
                         });
-                        builder.assign(&cur_ro, cur_ro + n / (z - x));
+                        if ps_at_z.len().value() >= alpha_pow_cache.len() {
+                            let next: Ext<_, _> = builder.uninit();
+                            alpha_pow_cache.push(next);
+                            builder.assign(
+                                &alpha_pow_cache[ps_at_z.len().value()],
+                                alpha_pow_cache[ps_at_z.len().value() - 1] * alpha,
+                            );
+                        }
+                        builder.assign(&cur_ro, cur_ro + cur_alpha_pow * n / (z - x));
+                        builder.assign(
+                            &cur_alpha_pow,
+                            cur_alpha_pow * alpha_pow_cache[ps_at_z.len().value()],
+                        );
                     } else {
                         let mat_ro = builder.fri_single_reduced_opening_eval(
                             alpha,
