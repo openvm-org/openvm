@@ -148,6 +148,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let opened_value = builder.get(&batch_opening.opened_values, mat_index);
                 builder.set_value(&permed_opened_values, k, opened_value);
             });
+
             let permed_opened_values = NestedOpenedValues::Felt(permed_opened_values);
 
             let bits_reduced: Usize<_> = builder.eval(log_max_height - log_batch_max_height);
@@ -199,15 +200,16 @@ pub fn verify_two_adic_pcs<C: Config>(
                     builder.cycle_tracker_start("single-reduced-opening-eval");
 
                     if builder.flags.static_only {
+                        let n: Ext<C::F, C::EF> = builder.constant(C::EF::ZERO);
                         builder.range(0, ps_at_z.len()).for_each(|t_vec, builder| {
                             let t = t_vec[0];
                             let p_at_x = builder.get(&mat_opening, t);
                             let p_at_z = builder.get(&ps_at_z, t);
-                            let quotient = (p_at_z - p_at_x) / (z - x);
 
-                            builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
+                            builder.assign(&n, cur_alpha_pow * (p_at_z - p_at_x) + n);
                             builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
                         });
+                        builder.assign(&cur_ro, cur_ro + n / (z - x));
                     } else {
                         let mat_ro = builder.fri_single_reduced_opening_eval(
                             alpha,
