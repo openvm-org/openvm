@@ -104,6 +104,12 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
             timestamp_delta += 1;
             timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
         };
+        
+        builder.assert_bool(local_cols.is_single);
+        builder.assert_bool(local_cols.is_buffer);
+        builder.assert_bool(local_cols.is_buffer_start);
+        builder.when(local_cols.is_buffer_start).assert_one(local_cols.is_buffer);
+        builder.assert_bool(local_cols.is_single + local_cols.is_buffer);
 
         let is_valid = local_cols.is_single + local_cols.is_buffer;
         let is_start = AB::Expr::ONE - local_cols.is_buffer + local_cols.is_buffer_start;
@@ -181,6 +187,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
             self.bitwise_operation_lookup_bus
                 .send_range(local_cols.data[i * 2], local_cols.data[i * 2 + 1])
                 .eval(builder, is_valid.clone());
+        }
 
         let mem_ptr = local_cols.mem_ptr_limbs[0]
             + local_cols.mem_ptr_limbs[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
