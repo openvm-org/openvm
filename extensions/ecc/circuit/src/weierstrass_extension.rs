@@ -113,7 +113,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
             ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize);
 
         for (i, curve) in self.supported_curves.iter().enumerate() {
-            let class_offset =
+            let start_offset =
                 Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8);
             let config32 = ExprBuilderConfig {
@@ -137,7 +137,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                         bitwise_lu_chip.clone(),
                     ),
                     config32.clone(),
-                    class_offset,
+                    start_offset,
                     range_checker.clone(),
                     offline_memory.clone(),
                 );
@@ -145,7 +145,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     WeierstrassExtensionExecutor::EcAddNeRv32_32(add_ne_chip),
                     ec_add_ne_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let double_chip = EcDoubleChip::new(
                     Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
@@ -157,7 +157,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     ),
                     range_checker.clone(),
                     config32.clone(),
-                    class_offset,
+                    start_offset,
                     curve.a.clone(),
                     offline_memory.clone(),
                 );
@@ -165,7 +165,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     WeierstrassExtensionExecutor::EcDoubleRv32_32(double_chip),
                     ec_double_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= 48 {
                 let add_ne_chip = EcAddNeChip::new(
@@ -177,7 +177,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                         bitwise_lu_chip.clone(),
                     ),
                     config48.clone(),
-                    class_offset,
+                    start_offset,
                     range_checker.clone(),
                     offline_memory.clone(),
                 );
@@ -185,7 +185,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     WeierstrassExtensionExecutor::EcAddNeRv32_48(add_ne_chip),
                     ec_add_ne_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let double_chip = EcDoubleChip::new(
                     Rv32VecHeapAdapterChip::<F, 1, 6, 6, 16, 16>::new(
@@ -197,7 +197,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     ),
                     range_checker.clone(),
                     config48.clone(),
-                    class_offset,
+                    start_offset,
                     curve.a.clone(),
                     offline_memory.clone(),
                 );
@@ -205,7 +205,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     WeierstrassExtensionExecutor::EcDoubleRv32_48(double_chip),
                     ec_double_opcodes
                         .clone()
-                        .map(|x| VmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {
                 panic!("Modulus too large");
