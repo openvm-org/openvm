@@ -169,9 +169,7 @@ where
 
         let output = AdapterRuntimeContext::without_pc(data_write);
         let record = NativeLoadStoreCoreRecord {
-            opcode: NativeLoadStoreOpcode::from_usize(
-                opcode.local_opcode_idx(NativeLoadStoreOpcode::CLASS_OFFSET),
-            ),
+            opcode: NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
             pointer_read,
             data_read,
             data_write,
