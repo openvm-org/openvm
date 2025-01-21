@@ -93,7 +93,7 @@ where
             builder.assert_bool(flag);
 
             is_valid += flag.into();
-            expected_opcode += flag * AB::F::from_canonical_usize(opcode as usize);
+            expected_opcode += flag * AB::F::from_canonical_usize(opcode.local_usize());
 
             for (j, result_part) in result.into_iter().enumerate() {
                 expected_result[j] += flag * result_part;

@@ -70,8 +70,14 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             (Some(imm), c)
         };
 
-        let (instruction, rd) =
-            rv32_rand_write_register_or_imm(&mut tester, b, c, c_imm, opcode as usize, &mut rng);
+        let (instruction, rd) = rv32_rand_write_register_or_imm(
+            &mut tester,
+            b,
+            c,
+            c_imm,
+            opcode.global_opcode().as_usize(),
+            &mut rng,
+        );
         tester.execute(&mut chip, &instruction);
 
         let (cmp, _, _, _) =
@@ -83,13 +89,25 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
 
     // Test special case where b = c
     let b = [101, 128, 202, 255];
-    let (instruction, _) =
-        rv32_rand_write_register_or_imm(&mut tester, b, b, None, opcode as usize, &mut rng);
+    let (instruction, _) = rv32_rand_write_register_or_imm(
+        &mut tester,
+        b,
+        b,
+        None,
+        opcode.global_opcode().as_usize(),
+        &mut rng,
+    );
     tester.execute(&mut chip, &instruction);
 
     let b = [36, 0, 0, 0];
-    let (instruction, _) =
-        rv32_rand_write_register_or_imm(&mut tester, b, b, Some(36), opcode as usize, &mut rng);
+    let (instruction, _) = rv32_rand_write_register_or_imm(
+        &mut tester,
+        b,
+        b,
+        Some(36),
+        opcode.global_opcode().as_usize(),
+        &mut rng,
+    );
     tester.execute(&mut chip, &instruction);
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();

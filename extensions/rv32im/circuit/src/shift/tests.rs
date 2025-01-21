@@ -73,8 +73,14 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             (Some(imm), c)
         };
 
-        let (instruction, rd) =
-            rv32_rand_write_register_or_imm(&mut tester, b, c, c_imm, opcode as usize, &mut rng);
+        let (instruction, rd) = rv32_rand_write_register_or_imm(
+            &mut tester,
+            b,
+            c,
+            c_imm,
+            opcode.global_opcode().as_usize(),
+            &mut rng,
+        );
         tester.execute(&mut chip, &instruction);
 
         let (a, _, _) = run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);

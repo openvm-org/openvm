@@ -89,7 +89,7 @@ fn tester_with_random_poseidon2_ops(
             tester.write_cell(d, c, BabyBear::from_canonical_usize(rhs));
         }
 
-        let local_opcode = Poseidon2Opcode::from_usize(opcode - Poseidon2Opcode::CLASS_OFFSET);
+        let local_opcode = Poseidon2Opcode::from_usize(opcode);
 
         match local_opcode {
             Poseidon2Opcode::COMP_POS2 => {

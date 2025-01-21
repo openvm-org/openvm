@@ -199,7 +199,7 @@ fn run_mul_256_rand_test(num_ops: usize) {
     );
 
     run_int_256_rand_execute(
-        MulOpcode::MUL as usize,
+        MulOpcode::MUL.global_opcode().as_usize(),
         num_ops,
         &mut chip,
         &mut tester,
@@ -285,7 +285,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         x.iter()
             .zip(y.iter())
             .fold(true, |acc, (x, y)| acc && (x == y))
-            ^ (opcode == BranchEqualOpcode::BNE as usize)
+            ^ (opcode == BranchEqualOpcode::BNE.global_opcode().as_usize())
     };
 
     run_int_256_rand_execute(
@@ -327,7 +327,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     );
 
     let branch_fn = |opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]| {
-        let opcode = BranchLessThanOpcode::from_usize(opcode);
+        let opcode = BranchLessThanOpcode::from_usize(opcode - BranchLessThanOpcode::CLASS_OFFSET);
         let (is_ge, is_signed) = match opcode {
             BranchLessThanOpcode::BLT => (false, true),
             BranchLessThanOpcode::BLTU => (false, false),
