@@ -84,13 +84,15 @@ where
         });
         builder.assert_bool(is_valid.clone());
 
-        let expected_opcode = flags.iter().zip(NativeLoadStoreOpcode::iter()).fold(
-            AB::Expr::ZERO,
-            |acc, (flag, local_opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_usize(local_opcode.local_usize())
-            },
-        ) + AB::Expr::from_canonical_usize(
-            NativeLoadStoreOpcode::CLASS_OFFSET,
+        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
+            self,
+            flags.iter().zip(NativeLoadStoreOpcode::iter()).fold(
+                AB::Expr::ZERO,
+                |acc, (flag, local_opcode)| {
+                    acc + (*flag).into()
+                        * AB::Expr::from_canonical_usize(local_opcode.local_usize())
+                },
+            ),
         );
 
         AdapterAirContext {
