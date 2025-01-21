@@ -179,6 +179,7 @@ pub fn verify_two_adic_pcs<C: Config>(
             // tag_exp[log_max_height - i] = g * w ** (b[log_max_height - i] * 2^(log_max_height - 1) + ... + b[log_max_height - 1] * 2^(log_max_height - i))
             // using a square-and-divide algorithm.
             // g * res is tag_exp[0]
+            // `tag_exp` is used below as a rotated evaluation point in a coset of the trace domain.
             let tag_exp: Array<C, Felt<C::F>> = builder.array(log_max_height);
             let one_var: Felt<C::F> = builder.eval(C::F::ONE);
             let max_gen_pow = config.get_two_adic_generator(builder, 1);
