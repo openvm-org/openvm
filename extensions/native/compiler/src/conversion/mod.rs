@@ -2,8 +2,7 @@ use openvm_circuit::arch::instructions::program::Program;
 use openvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::{DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
-    PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SysPhantom, SystemOpcode, UsizeOpcode,
-    VmOpcode,
+    PhantomDiscriminant, PublishOpcode, SysPhantom, SystemOpcode, UsizeOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::{ExtensionField, PrimeField32, PrimeField64};
@@ -12,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     asm::{AsmInstruction, AssemblyCode},
     FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
-    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom,
+    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom, Poseidon2Opcode,
     VerifyBatchOpcode,
 };
 

@@ -25,7 +25,6 @@ use openvm_instructions::{
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
     PhantomDiscriminant,
-    Poseidon2Opcode::*,
     PublishOpcode::PUBLISH,
     SysPhantom,
     SystemOpcode::*,
@@ -54,7 +53,6 @@ use openvm_stark_sdk::{
     },
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
-    utils::create_seeded_rng,
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -68,40 +66,6 @@ where
 {
     const MAX_MEMORY: usize = 1 << 29;
     rng.gen_range(0..MAX_MEMORY - len) / len * len
-}
-
-// log_blowup = 3 for poseidon2 chip
-fn air_test_with_compress_poseidon2(
-    poseidon2_max_constraint_degree: usize,
-    program: Program<BabyBear>,
-    continuation_enabled: bool,
-) {
-    let fri_params = if matches!(std::env::var("OPENVM_FAST_TEST"), Ok(x) if &x == "1") {
-        FriParameters {
-            log_blowup: 3,
-            log_final_poly_len: 0,
-            num_queries: 2,
-            proof_of_work_bits: 0,
-        }
-    } else {
-        standard_fri_params_with_100_bits_conjectured_security(3)
-    };
-    let engine = BabyBearPoseidon2Engine::new(fri_params);
-
-    let config = if continuation_enabled {
-        NativeConfig::aggregation(0, poseidon2_max_constraint_degree).with_continuations()
-    } else {
-        NativeConfig::aggregation(0, poseidon2_max_constraint_degree)
-    };
-    let vm = VirtualMachine::new(engine, config);
-
-    let pk = vm.keygen();
-    let result = vm.execute_and_generate(program, vec![]).unwrap();
-    let proofs = vm.prove(&pk, result);
-    for proof in proofs {
-        vm.verify_single(&pk.get_vk(), &proof)
-            .expect("Verification failed");
-    }
 }
 
 #[test]
@@ -848,102 +812,6 @@ fn test_vm_hint() {
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
     let config = NativeConfig::default();
     air_test_with_min_segments(config, program, input_stream, 1);
-}
-
-#[test]
-fn test_vm_compress_poseidon2_as2() {
-    let mut rng = create_seeded_rng();
-
-    let mut instructions = vec![];
-
-    let lhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
-    for i in 0..CHUNK as isize {
-        // [lhs_ptr + i]_2 <- rnd()
-        instructions.push(Instruction::large_from_isize(
-            VmOpcode::with_default_offset(ADD),
-            lhs_ptr + i,
-            rng.gen_range(1..1 << 20),
-            0,
-            2,
-            0,
-            0,
-            0,
-        ));
-    }
-    let rhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
-    for i in 0..CHUNK as isize {
-        // [rhs_ptr + i]_2 <- rnd()
-        instructions.push(Instruction::large_from_isize(
-            VmOpcode::with_default_offset(ADD),
-            rhs_ptr + i,
-            rng.gen_range(1..1 << 20),
-            0,
-            2,
-            0,
-            0,
-            0,
-        ));
-    }
-    let dst_ptr = gen_pointer(&mut rng, CHUNK) as isize;
-
-    // [11]_1 <- lhs_ptr
-    instructions.push(Instruction::large_from_isize(
-        VmOpcode::with_default_offset(ADD),
-        11,
-        lhs_ptr,
-        0,
-        1,
-        0,
-        0,
-        0,
-    ));
-
-    // [22]_1 <- rhs_ptr
-    instructions.push(Instruction::large_from_isize(
-        VmOpcode::with_default_offset(ADD),
-        22,
-        rhs_ptr,
-        0,
-        1,
-        0,
-        0,
-        0,
-    ));
-    // [33]_1 <- dst_ptr
-    instructions.push(Instruction::large_from_isize(
-        VmOpcode::with_default_offset(ADD),
-        33,
-        0,
-        dst_ptr,
-        1,
-        0,
-        0,
-        0,
-    ));
-
-    instructions.push(Instruction::from_isize(
-        VmOpcode::with_default_offset(COMP_POS2),
-        33,
-        11,
-        22,
-        1,
-        2,
-    ));
-    instructions.push(Instruction::from_isize(
-        VmOpcode::with_default_offset(TERMINATE),
-        0,
-        0,
-        0,
-        0,
-        0,
-    ));
-
-    let program = Program::from_instructions(&instructions);
-
-    air_test_with_compress_poseidon2(7, program.clone(), false);
-    air_test_with_compress_poseidon2(3, program.clone(), false);
-    air_test_with_compress_poseidon2(7, program.clone(), true);
-    air_test_with_compress_poseidon2(3, program.clone(), true);
 }
 
 /// Add instruction to write input to memory, call KECCAK256 opcode, then check against expected output

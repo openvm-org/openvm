@@ -10,14 +10,21 @@ use openvm_circuit::{
 };
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use openvm_native_recursion::{halo2::utils::CacheHalo2ParamsReader, types::InnerConfig};
+use openvm_native_recursion::{
+    config::outer::OuterConfig, halo2::utils::CacheHalo2ParamsReader, types::InnerConfig,
+    vars::StarkProofVariable,
+};
 use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use openvm_sdk::{
+    commit::AppExecutionCommit,
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
-    keygen::AppProvingKey,
+    keygen::{AppProvingKey, RootVerifierProvingKey},
+    static_verifier::StaticVerifierPvHandler,
     verifier::{
-        common::types::VmVerifierPvs,
+        common::types::{SpecialAirIds, VmVerifierPvs},
         leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
+        root::types::RootVmVerifierPvs,
+        utils::compress_babybear_var_to_bn254,
     },
     Sdk, StdIn,
 };
@@ -29,6 +36,7 @@ use openvm_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::{p3_field::FieldAlgebra, Chip},
     p3_baby_bear::BabyBear,
+    p3_bn254_fr::Bn254Fr,
 };
 use openvm_transpiler::transpiler::Transpiler;
 
@@ -75,7 +83,9 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
             builder.assign(&b, c);
         });
         builder.halt();
-        builder.compile_isa()
+        let mut program = builder.compile_isa();
+        program.max_num_public_values = NUM_PUB_VALUES;
+        program
     };
     Sdk.commit_app_exe(
         standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
@@ -119,7 +129,7 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
             SystemConfig::default()
                 .with_max_segment_len(200)
                 .with_continuations()
-                .with_public_values(16),
+                .with_public_values(NUM_PUB_VALUES),
             Native,
         ),
         leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP)
@@ -254,13 +264,110 @@ fn test_public_values_and_leaf_verification() {
 }
 
 #[test]
+fn test_static_verifier_custom_pv_handler() {
+    // Define custom public values handler and implement StaticVerifierPvHandler trait on it
+    pub struct CustomPvHandler {
+        pub exe_commit: Bn254Fr,
+        pub leaf_verifier_commit: Bn254Fr,
+    }
+
+    impl StaticVerifierPvHandler for CustomPvHandler {
+        fn handle_public_values(
+            &self,
+            builder: &mut Builder<OuterConfig>,
+            input: &StarkProofVariable<OuterConfig>,
+            _root_verifier_pk: &RootVerifierProvingKey,
+            special_air_ids: &SpecialAirIds,
+        ) -> usize {
+            let pv_air = builder.get(&input.per_air, special_air_ids.public_values_air_id);
+            let public_values: Vec<_> = pv_air
+                .public_values
+                .vec()
+                .into_iter()
+                .map(|x| builder.cast_felt_to_var(x))
+                .collect();
+            let pvs = RootVmVerifierPvs::from_flatten(public_values);
+            let exe_commit = compress_babybear_var_to_bn254(builder, pvs.exe_commit);
+            let leaf_commit = compress_babybear_var_to_bn254(builder, pvs.leaf_verifier_commit);
+            let num_public_values = pvs.public_values.len();
+
+            println!("num_public_values: {}", num_public_values);
+            println!("self.exe_commit: {:?}", self.exe_commit);
+            println!("self.leaf_verifier_commit: {:?}", self.leaf_verifier_commit);
+
+            let expected_exe_commit: Var<Bn254Fr> = builder.constant(self.exe_commit);
+            let expected_leaf_commit: Var<Bn254Fr> = builder.constant(self.leaf_verifier_commit);
+
+            builder.assert_var_eq(exe_commit, expected_exe_commit);
+            builder.assert_var_eq(leaf_commit, expected_leaf_commit);
+
+            num_public_values
+        }
+    }
+
+    // Test setup
+    println!("test setup");
+    let app_log_blowup = 1;
+    let app_config = small_test_app_config(app_log_blowup);
+    let app_pk = Sdk.app_keygen(app_config.clone()).unwrap();
+    let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
+    println!("app_config: {:?}", app_config.app_vm_config);
+    println!(
+        "app_committed_exe max_num_public_values: {:?}",
+        app_committed_exe.exe.program.max_num_public_values
+    );
+    let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
+
+    // Generate PK using custom PV handler
+    println!("generate PK using custom PV handler");
+    let commits = AppExecutionCommit::compute(
+        &app_config.app_vm_config,
+        &app_committed_exe,
+        &app_pk.leaf_committed_exe,
+    );
+    let exe_commit = commits.exe_commit_to_bn254();
+    let leaf_verifier_commit = commits.app_config_commit_to_bn254();
+
+    let pv_handler = CustomPvHandler {
+        exe_commit,
+        leaf_verifier_commit,
+    };
+    let agg_pk = Sdk
+        .agg_keygen(agg_config_for_test(), &params_reader, Some(&pv_handler))
+        .unwrap();
+
+    // Generate verifier contract
+    println!("generate verifier contract");
+    let evm_verifier = Sdk
+        .generate_snark_verifier_contract(&params_reader, &agg_pk)
+        .unwrap();
+
+    // Generate and verify proof
+    println!("generate and verify proof");
+    let evm_proof = Sdk
+        .generate_evm_proof(
+            &params_reader,
+            Arc::new(app_pk),
+            app_committed_exe,
+            agg_pk,
+            StdIn::default(),
+        )
+        .unwrap();
+    assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof));
+}
+
+#[test]
 fn test_e2e_proof_generation_and_verification() {
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
     let app_pk = Sdk.app_keygen(app_config).unwrap();
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
     let agg_pk = Sdk
-        .agg_keygen(agg_config_for_test(), &params_reader)
+        .agg_keygen(
+            agg_config_for_test(),
+            &params_reader,
+            None::<&RootVerifierProvingKey>,
+        )
         .unwrap();
     let evm_verifier = Sdk
         .generate_snark_verifier_contract(&params_reader, &agg_pk)

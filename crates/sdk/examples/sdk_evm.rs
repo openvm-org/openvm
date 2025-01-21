@@ -7,6 +7,7 @@ use openvm_build::GuestOptions;
 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
     config::{AggConfig, AppConfig, SdkVmConfig},
+    keygen::RootVerifierProvingKey,
     Sdk, StdIn,
 };
 use openvm_stark_sdk::config::FriParameters;
@@ -89,7 +90,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const DEFAULT_PARAMS_DIR: &str = concat!(env!("HOME"), "/.openvm/params/");
     let halo2_params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
     let agg_config = AggConfig::default();
-    let agg_pk = sdk.agg_keygen(agg_config, &halo2_params_reader)?;
+    let agg_pk = sdk.agg_keygen(
+        agg_config,
+        &halo2_params_reader,
+        None::<&RootVerifierProvingKey>,
+    )?;
 
     // 9. Generate the SNARK verifier smart contract
     let verifier = sdk.generate_snark_verifier_contract(&halo2_params_reader, &agg_pk)?;

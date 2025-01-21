@@ -127,8 +127,7 @@ impl Halo2WrapperProvingKey {
         );
         assert_eq!(
             self.pinning.metadata.num_pvs[0],
-            // 12 is the number of public values for the accumulator
-            snark_to_verify.instances[0].len() + 12
+            snark_to_verify.instances[0].len() + 12,
         );
         generate_wrapper_circuit_object(Prover, k, snark_to_verify)
             .use_params(

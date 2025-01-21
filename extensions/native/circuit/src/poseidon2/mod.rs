@@ -1,4 +1,4 @@
-mod air;
+pub mod air;
 pub mod chip;
 mod columns;
 #[cfg(test)]

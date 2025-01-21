@@ -1,6 +1,9 @@
 use crate::ir::{Array, Builder, Config, DslIr, Ext, Felt, Usize, Var};
 
 impl<C: Config> Builder<C> {
+    /// - Requires `dimensions.len() == opened_values.len()`
+    /// - `proof` is an array of arrays where inner arrays are of length `CHUNK`
+    /// - `commit.len() = CHUNK`
     pub fn verify_batch_felt(
         &mut self,
         dimensions: &Array<C, Usize<C::F>>,
@@ -17,6 +20,11 @@ impl<C: Config> Builder<C> {
             commit.clone(),
         ));
     }
+
+    /// Version of [`verify_batch_felt`] where `opened_values` are extension field elements.
+    /// - Requires `dimensions.len() == opened_values.len()`
+    /// - `proof` is an array of arrays where inner arrays are of length `CHUNK`
+    /// - `commit.len() = CHUNK`
     pub fn verify_batch_ext(
         &mut self,
         dimensions: &Array<C, Usize<C::F>>,

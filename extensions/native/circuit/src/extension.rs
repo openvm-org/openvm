@@ -1,3 +1,4 @@
+use air::VerifyBatchBus;
 use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
 use jal_native_adapter::JalNativeAdapterChip;
@@ -12,12 +13,10 @@ use openvm_circuit::{
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
-use openvm_instructions::{
-    program::DEFAULT_PC_STEP, PhantomDiscriminant, Poseidon2Opcode, UsizeOpcode, VmOpcode,
-};
+use openvm_instructions::{program::DEFAULT_PC_STEP, PhantomDiscriminant, UsizeOpcode, VmOpcode};
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
-    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom,
+    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom, Poseidon2Opcode,
     VerifyBatchOpcode, BLOCK_LOAD_STORE_SIZE,
 };
 use openvm_poseidon2_air::Poseidon2Config;
@@ -199,17 +198,16 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             FriOpcode::iter().map(VmOpcode::with_default_offset),
         )?;
 
-        let verify_batch_chip = NativePoseidon2Chip::new(
-            execution_bus,
-            program_bus,
-            memory_bridge,
+        let poseidon2_chip = NativePoseidon2Chip::new(
+            builder.system_port(),
             VerifyBatchOpcode::default_offset(),
             Poseidon2Opcode::default_offset(),
             offline_memory.clone(),
             Poseidon2Config::default(),
+            VerifyBatchBus(builder.new_bus_idx()),
         );
         inventory.add_executor(
-            verify_batch_chip,
+            poseidon2_chip,
             [
                 VmOpcode::with_default_offset(VerifyBatchOpcode::VERIFY_BATCH),
                 VmOpcode::with_default_offset(Poseidon2Opcode::PERM_POS2),

@@ -5,8 +5,10 @@ use openvm_circuit::{
     system::memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 use openvm_circuit_primitives::utils::not;
-use openvm_instructions::Poseidon2Opcode::{COMP_POS2, PERM_POS2};
-use openvm_native_compiler::VerifyBatchOpcode::VERIFY_BATCH;
+use openvm_native_compiler::{
+    Poseidon2Opcode::{COMP_POS2, PERM_POS2},
+    VerifyBatchOpcode::VERIFY_BATCH,
+};
 use openvm_poseidon2_air::{Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS};
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
@@ -83,16 +85,16 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             specific,
         } = local;
 
-        let left_input = std::array::from_fn::<_, CHUNK, _>(|i| local.inner.inputs[i]);
-        let right_input = std::array::from_fn::<_, CHUNK, _>(|i| local.inner.inputs[i + CHUNK]);
-        let left_output = std::array::from_fn::<_, CHUNK, _>(|i| {
+        let left_input = from_fn::<_, CHUNK, _>(|i| local.inner.inputs[i]);
+        let right_input = from_fn::<_, CHUNK, _>(|i| local.inner.inputs[i + CHUNK]);
+        let left_output = from_fn::<_, CHUNK, _>(|i| {
             local.inner.ending_full_rounds[BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS - 1].post[i]
         });
-        let right_output = std::array::from_fn::<_, CHUNK, _>(|i| {
+        let right_output = from_fn::<_, CHUNK, _>(|i| {
             local.inner.ending_full_rounds[BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS - 1].post[i + CHUNK]
         });
-        let next_left_input = std::array::from_fn::<_, CHUNK, _>(|i| next.inner.inputs[i]);
-        let next_right_input = std::array::from_fn::<_, CHUNK, _>(|i| next.inner.inputs[i + CHUNK]);
+        let next_left_input = from_fn::<_, CHUNK, _>(|i| next.inner.inputs[i]);
+        let next_right_input = from_fn::<_, CHUNK, _>(|i| next.inner.inputs[i + CHUNK]);
 
         builder.assert_bool(incorporate_row);
         builder.assert_bool(incorporate_sibling);
@@ -472,7 +474,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .when(AB::Expr::ONE - end_top_level)
             .assert_one(next.incorporate_sibling);
 
-        let row_hash = std::array::from_fn(|i| {
+        let row_hash = from_fn(|i| {
             (start_top_level * left_output[i])
                 + ((AB::Expr::ONE - start_top_level) * right_input[i])
         });

@@ -149,6 +149,29 @@ pub enum NativePhantom {
     HintBits,
 }
 
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    UsizeOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x150]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Poseidon2Opcode {
+    PERM_POS2,
+    COMP_POS2,
+}
+
 /// Opcodes for FRI opening proofs.
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
