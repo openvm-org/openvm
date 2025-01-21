@@ -362,9 +362,9 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
             (Array::Dyn(_, lhs_len), Array::Dyn(_, rhs_len)) => {
                 builder.assert_eq::<Usize<_>>(lhs_len.clone(), rhs_len);
 
-                builder.range(0, lhs_len).for_each(|i, builder| {
-                    let a = builder.get(&lhs, i);
-                    let b = builder.get(&rhs, i);
+                builder.range(0, lhs_len).for_each(|idx_vec, builder| {
+                    let a = builder.get(&lhs, idx_vec[0]);
+                    let b = builder.get(&rhs, idx_vec[0]);
                     builder.assert_eq::<T>(a, b);
                 });
             }

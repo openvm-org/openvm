@@ -6,7 +6,7 @@ use openvm_native_compiler::{
     },
     prelude::MemVariable,
 };
-use openvm_native_compiler_derive::compile_zip;
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::{Field, FieldAlgebra, TwoAdicField};
 pub use two_adic_pcs::*;
 
@@ -57,7 +57,8 @@ where
 
     builder
         .range(0, commit_phase_commits.len())
-        .for_each(|i, builder| {
+        .for_each(|i_vec, builder| {
+            let i = i_vec[0];
             let log_folded_height = builder.eval_expr(log_max_height - i - C::N::ONE);
             let log_folded_height_plus_one = builder.eval_expr(log_folded_height + C::N::ONE);
             let commit = builder.get(commit_phase_commits, i);
@@ -224,7 +225,8 @@ pub fn verify_batch_static<C: Config>(
         .into_outer_digest();
 
     // For each sibling in the proof, reconstruct the root.
-    builder.range(0, proof.len()).for_each(|i, builder| {
+    builder.range(0, proof.len()).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         let sibling: OuterDigestVariable<C> = if let DigestVariable::Var(d) = builder.get(proof, i)
         {
             d.vec().try_into().unwrap()
@@ -294,7 +296,7 @@ where
     builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
     let dims_shifted = dims.shift(builder, start_dim_idx.clone());
     let opened_values_shifted = opened_values.shift(builder, start_dim_idx);
-    compile_zip!(builder, dims_shifted, opened_values_shifted).for_each(|ptr_vec, builder| {
+    iter_zip!(builder, dims_shifted, opened_values_shifted).for_each(|ptr_vec, builder| {
         let height = builder.iter_ptr_get(&dims_shifted, ptr_vec[0]).height;
         builder
             .if_eq(height, curr_height_padded.clone())

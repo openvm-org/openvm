@@ -2,7 +2,7 @@ use std::{cell::RefCell, iter, rc::Rc};
 
 use itertools::{zip_eq, Itertools};
 use num_bigint::BigUint;
-use num_traits::One;
+use num_traits::{One, Zero};
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
     Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
@@ -277,15 +277,40 @@ where
         }
         let core_width = <Self::Air as BaseAir<F>>::width(&self.air);
         let adapter_width = trace.width() - core_width;
-        // We will be setting is_valid = 0. That forces is_double to be 0 (otherwise setup will be -1).
-        // So the computation is like doing setup.
-        // Thus we will copy over the first row (which is a setup row) and set is_valid = 0.
-        let first_row = trace.rows().nth(0).unwrap().collect::<Vec<_>>();
-        let (_, first_row_core) = first_row.split_at(adapter_width);
+        let dummy_row = self.generate_dummy_trace_row(adapter_width, core_width);
         for row in trace.rows_mut().skip(num_records) {
-            let (_, core_row) = row.split_at_mut(adapter_width);
-            core_row.copy_from_slice(first_row_core);
-            core_row[0] = F::ZERO; // is_valid = 0
+            row.copy_from_slice(&dummy_row);
         }
+    }
+}
+
+impl EcDoubleCoreChip {
+    // We will be setting is_valid = 0. That forces is_double to be 0 (otherwise setup will be -1).
+    // We generate a dummy row with is_double = 0, then we set is_valid = 0.
+    fn generate_dummy_trace_row<F: PrimeField32>(
+        &self,
+        adapter_width: usize,
+        core_width: usize,
+    ) -> Vec<F> {
+        let record = EcDoubleCoreRecord {
+            x: BigUint::zero(),
+            y: BigUint::zero(),
+            is_double_flag: false,
+        };
+        let mut row = vec![F::ZERO; adapter_width + core_width];
+        let core_row = &mut row[adapter_width..];
+        // We **do not** want this trace row to update the range checker
+        // so we must create a temporary range checker
+        let tmp_range_checker = SharedVariableRangeCheckerChip::new(self.range_checker.bus());
+        self.air.expr.generate_subrow(
+            (
+                tmp_range_checker.as_ref(),
+                vec![record.x, record.y],
+                vec![record.is_double_flag],
+            ),
+            core_row,
+        );
+        core_row[0] = F::ZERO; // is_valid = 0
+        row
     }
 }

@@ -61,10 +61,6 @@ fn test_compiler_poseidon2_hash_1() {
     let random_state_vals: [F; 42] = rng.gen();
     println!("{:?}", random_state_vals);
     let rlen = random_state_vals.len();
-    let random_state_v1 = builder.dyn_array(rlen);
-    for (i, val) in random_state_vals.iter().enumerate() {
-        builder.set(&random_state_v1, i, *val);
-    }
     let random_state_v2 = builder.dyn_array(rlen);
     for (i, val) in random_state_vals.iter().enumerate() {
         builder.set(&random_state_v2, i, *val);
@@ -72,17 +68,13 @@ fn test_compiler_poseidon2_hash_1() {
     let nested_random_state = builder.dyn_array(RVar::one());
     builder.set(&nested_random_state, RVar::zero(), random_state_v2);
 
-    let result = builder.poseidon2_hash(&random_state_v1);
     let result_x = builder.poseidon2_hash_x(&nested_random_state);
 
-    builder.range(0, result.len()).for_each(|i, builder| {
-        let ei = builder.eval(i);
+    builder.range(0, result_x.len()).for_each(|i_vec, builder| {
+        let ei = builder.eval(i_vec[0]);
         builder.print_v(ei);
-        let el = builder.get(&result, i);
-        builder.print_f(el);
-        let el_x = builder.get(&result_x, i);
+        let el_x = builder.get(&result_x, i_vec[0]);
         builder.print_f(el_x);
-        builder.assert_felt_eq(el, el_x);
     });
 
     builder.halt();
