@@ -5,8 +5,10 @@ use openvm_circuit::{
     system::memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
 use openvm_circuit_primitives::utils::not;
-use openvm_instructions::Poseidon2Opcode::{COMP_POS2, PERM_POS2};
-use openvm_native_compiler::VerifyBatchOpcode::VERIFY_BATCH;
+use openvm_native_compiler::{
+    Poseidon2Opcode::{COMP_POS2, PERM_POS2},
+    VerifyBatchOpcode::VERIFY_BATCH,
+};
 use openvm_poseidon2_air::{Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS};
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,

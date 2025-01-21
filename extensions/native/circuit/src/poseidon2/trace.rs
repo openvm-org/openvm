@@ -2,7 +2,8 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::system::memory::{MemoryAuxColsFactory, OfflineMemory};
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
-use openvm_instructions::{instruction::Instruction, Poseidon2Opcode::COMP_POS2, VmOpcode};
+use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_native_compiler::Poseidon2Opcode::COMP_POS2;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
@@ -28,7 +29,6 @@ use crate::{
         CHUNK,
     },
 };
-
 impl<F: Field, const SBOX_REGISTERS: usize> ChipUsageGetter
     for NativePoseidon2Chip<F, SBOX_REGISTERS>
 {

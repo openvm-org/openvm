@@ -1,10 +1,16 @@
 use std::cmp::min;
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester};
-use openvm_instructions::{
-    instruction::Instruction, Poseidon2Opcode, Poseidon2Opcode::*, UsizeOpcode, VmOpcode,
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
+    VirtualMachine,
 };
-use openvm_native_compiler::{VerifyBatchOpcode, VerifyBatchOpcode::VERIFY_BATCH};
+use openvm_instructions::{
+    instruction::Instruction, program::Program, SystemOpcode, UsizeOpcode, VmOpcode,
+};
+use openvm_native_compiler::{
+    FieldArithmeticOpcode, Poseidon2Opcode, Poseidon2Opcode::*, VerifyBatchOpcode,
+    VerifyBatchOpcode::VERIFY_BATCH,
+};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -15,7 +21,9 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     config::{
         baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
+        baby_bear_poseidon2::BabyBearPoseidon2Engine,
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        FriParameters,
     },
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
@@ -23,7 +31,10 @@ use openvm_stark_sdk::{
 };
 use rand::{rngs::StdRng, Rng};
 
-use crate::poseidon2::{chip::NativePoseidon2Chip, CHUNK};
+use crate::{
+    poseidon2::{chip::NativePoseidon2Chip, CHUNK},
+    NativeConfig,
+};
 
 fn compute_commit<F: Field>(
     dim: &[usize],
@@ -462,4 +473,134 @@ fn verify_batch_chip_simple_3() {
 fn verify_batch_chip_simple_50() {
     let tester = tester_with_random_poseidon2_ops(50);
     tester.test(get_engine).expect("Verification failed");
+}
+
+// log_blowup = 3 for poseidon2 chip
+fn air_test_with_compress_poseidon2(
+    poseidon2_max_constraint_degree: usize,
+    program: Program<BabyBear>,
+    continuation_enabled: bool,
+) {
+    let fri_params = if matches!(std::env::var("OPENVM_FAST_TEST"), Ok(x) if &x == "1") {
+        FriParameters {
+            log_blowup: 3,
+            log_final_poly_len: 0,
+            num_queries: 2,
+            proof_of_work_bits: 0,
+        }
+    } else {
+        standard_fri_params_with_100_bits_conjectured_security(3)
+    };
+    let engine = BabyBearPoseidon2Engine::new(fri_params);
+
+    let config = if continuation_enabled {
+        NativeConfig::aggregation(0, poseidon2_max_constraint_degree).with_continuations()
+    } else {
+        NativeConfig::aggregation(0, poseidon2_max_constraint_degree)
+    };
+    let vm = VirtualMachine::new(engine, config);
+
+    let pk = vm.keygen();
+    let result = vm.execute_and_generate(program, vec![]).unwrap();
+    let proofs = vm.prove(&pk, result);
+    for proof in proofs {
+        vm.verify_single(&pk.get_vk(), &proof)
+            .expect("Verification failed");
+    }
+}
+
+#[test]
+fn test_vm_compress_poseidon2_as2() {
+    let mut rng = create_seeded_rng();
+
+    let mut instructions = vec![];
+
+    let lhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
+    for i in 0..CHUNK as isize {
+        // [lhs_ptr + i]_2 <- rnd()
+        instructions.push(Instruction::large_from_isize(
+            VmOpcode::with_default_offset(FieldArithmeticOpcode::ADD),
+            lhs_ptr + i,
+            rng.gen_range(1..1 << 20),
+            0,
+            2,
+            0,
+            0,
+            0,
+        ));
+    }
+    let rhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
+    for i in 0..CHUNK as isize {
+        // [rhs_ptr + i]_2 <- rnd()
+        instructions.push(Instruction::large_from_isize(
+            VmOpcode::with_default_offset(FieldArithmeticOpcode::ADD),
+            rhs_ptr + i,
+            rng.gen_range(1..1 << 20),
+            0,
+            2,
+            0,
+            0,
+            0,
+        ));
+    }
+    let dst_ptr = gen_pointer(&mut rng, CHUNK) as isize;
+
+    // [11]_1 <- lhs_ptr
+    instructions.push(Instruction::large_from_isize(
+        VmOpcode::with_default_offset(FieldArithmeticOpcode::ADD),
+        11,
+        lhs_ptr,
+        0,
+        1,
+        0,
+        0,
+        0,
+    ));
+
+    // [22]_1 <- rhs_ptr
+    instructions.push(Instruction::large_from_isize(
+        VmOpcode::with_default_offset(FieldArithmeticOpcode::ADD),
+        22,
+        rhs_ptr,
+        0,
+        1,
+        0,
+        0,
+        0,
+    ));
+    // [33]_1 <- dst_ptr
+    instructions.push(Instruction::large_from_isize(
+        VmOpcode::with_default_offset(FieldArithmeticOpcode::ADD),
+        33,
+        0,
+        dst_ptr,
+        1,
+        0,
+        0,
+        0,
+    ));
+
+    instructions.push(Instruction::from_isize(
+        VmOpcode::with_default_offset(COMP_POS2),
+        33,
+        11,
+        22,
+        1,
+        2,
+    ));
+    instructions.push(Instruction::from_isize(
+        VmOpcode::with_default_offset(SystemOpcode::TERMINATE),
+        0,
+        0,
+        0,
+        0,
+        0,
+    ));
+
+    let program = Program::from_instructions(&instructions);
+
+    air_test_with_compress_poseidon2(7, program.clone(), false);
+    air_test_with_compress_poseidon2(3, program.clone(), false);
+    air_test_with_compress_poseidon2(7, program.clone(), true);
+    air_test_with_compress_poseidon2(3, program.clone(), true);
 }

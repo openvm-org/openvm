@@ -7,13 +7,11 @@ use openvm_circuit::{
         program::ProgramBus,
     },
 };
-use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, VmOpcode};
+use openvm_native_compiler::{
     Poseidon2Opcode::{COMP_POS2, PERM_POS2},
-    VmOpcode,
+    VerifyBatchOpcode::VERIFY_BATCH,
 };
-use openvm_native_compiler::VerifyBatchOpcode::VERIFY_BATCH;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip};
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},

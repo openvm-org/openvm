@@ -82,32 +82,10 @@ pub enum SystemOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x120]
+#[opcode_offset = 0x020]
 #[repr(usize)]
 pub enum PublishOpcode {
     PUBLISH,
-}
-
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    EnumCount,
-    EnumIter,
-    FromRepr,
-    UsizeOpcode,
-    Serialize,
-    Deserialize,
-)]
-#[opcode_offset = 0x150]
-#[repr(usize)]
-pub enum Poseidon2Opcode {
-    PERM_POS2,
-    COMP_POS2,
 }
 
 // =================================================================================================
