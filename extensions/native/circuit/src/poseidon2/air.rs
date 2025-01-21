@@ -474,7 +474,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .when(AB::Expr::ONE - end_top_level)
             .assert_one(next.incorporate_sibling);
 
-        let row_hash = std::array::from_fn(|i| {
+        let row_hash = from_fn(|i| {
             (start_top_level * left_output[i])
                 + ((AB::Expr::ONE - start_top_level) * right_input[i])
         });
