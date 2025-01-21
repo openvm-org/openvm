@@ -49,7 +49,7 @@ where
             let executor = self.chip_complex.inventory.get_executor(opcode).unwrap();
             let opcode_name = executor.get_opcode_name(opcode.as_usize());
             self.metrics.update_trace_cells(
-                &self.air_names,
+                &self.chip_complex.air_names(),
                 self.current_trace_cells(),
                 opcode_name,
                 dsl_instr,

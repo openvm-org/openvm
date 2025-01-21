@@ -98,7 +98,7 @@ where
         config: VC,
         overridden_heights: Option<VmComplexTraceHeights>,
     ) -> Self {
-        let segmentation_strategy = Arc::new(DefaultSegmentationStrategy);
+        let segmentation_strategy = Arc::new(DefaultSegmentationStrategy::default());
         Self {
             config,
             overridden_heights,

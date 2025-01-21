@@ -67,8 +67,7 @@ impl NativeConfig {
                     ..Default::default()
                 },
                 num_public_values,
-            )
-            .with_max_segment_len((1 << 24) - 100),
+            ),
             native: Default::default(),
         }
     }

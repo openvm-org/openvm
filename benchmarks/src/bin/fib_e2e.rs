@@ -24,10 +24,7 @@ async fn main() -> Result<()> {
     // Must be larger than RangeTupleCheckerAir.height == 524288
     let max_segment_length = args.max_segment_length.unwrap_or(1_000_000);
 
-    let app_config = args.app_config(Rv32ImConfig::with_public_values_and_segment_len(
-        NUM_PUBLIC_VALUES,
-        max_segment_length,
-    ));
+    let app_config = args.app_config(Rv32ImConfig::with_public_values(NUM_PUBLIC_VALUES));
     let agg_config = args.agg_config();
 
     let sdk = Sdk;

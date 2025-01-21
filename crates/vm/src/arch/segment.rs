@@ -43,18 +43,30 @@ pub trait SegmentationStrategy {
 }
 
 /// Default segmentation strategy: segment if any chip's height or cells exceed the limits.
-pub struct DefaultSegmentationStrategy;
+pub struct DefaultSegmentationStrategy {
+    max_segment_len: usize,
+    max_cells_per_chip_in_segment: usize,
+}
+
+impl Default for DefaultSegmentationStrategy {
+    fn default() -> Self {
+        Self {
+            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+            max_cells_per_chip_in_segment: DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT,
+        }
+    }
+}
 
 impl SegmentationStrategy for DefaultSegmentationStrategy {
     fn should_segment(&self, trace_heights: &[usize], trace_cells: &[usize]) -> bool {
         for (i, &height) in trace_heights.iter().enumerate() {
-            if height > DEFAULT_MAX_SEGMENT_LEN {
+            if height > self.max_segment_len {
                 tracing::info!("Should segment because chip {} has height {}", i, height);
                 return true;
             }
         }
         for (i, &num_cells) in trace_cells.iter().enumerate() {
-            if num_cells > DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT {
+            if num_cells > self.max_cells_per_chip_in_segment {
                 tracing::info!("Should segment because chip {} has {} cells", i, num_cells,);
                 return true;
             }

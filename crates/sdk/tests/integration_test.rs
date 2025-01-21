@@ -127,7 +127,6 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
             .into(),
         app_vm_config: NativeConfig::new(
             SystemConfig::default()
-                .with_max_segment_len(200)
                 .with_continuations()
                 .with_public_values(NUM_PUB_VALUES),
             Native,

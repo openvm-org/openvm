@@ -443,7 +443,7 @@ fn test_vm_continuations() {
     let n = 200000;
     let program = gen_continuation_test_program(n);
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::default(), 0).with_max_segment_len(200000),
+        system: SystemConfig::new(3, MemoryConfig::default(), 0),
         native: Default::default(),
     }
     .with_continuations();
@@ -473,7 +473,7 @@ fn test_vm_continuations_recover_state() {
     let n = 2000;
     let program = gen_continuation_test_program(n);
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::default(), 0).with_max_segment_len(500),
+        system: SystemConfig::new(3, MemoryConfig::default(), 0),
         native: Default::default(),
     }
     .with_continuations();
