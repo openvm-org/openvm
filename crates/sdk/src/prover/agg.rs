@@ -21,7 +21,7 @@ use crate::{
     NonRootCommittedExe, RootSC, F, SC,
 };
 
-const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
+pub const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
 const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 2;
 const DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS: usize = 4;
 

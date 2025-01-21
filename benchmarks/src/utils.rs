@@ -16,7 +16,9 @@ use openvm_sdk::{
         DEFAULT_INTERNAL_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP, DEFAULT_ROOT_LOG_BLOWUP,
     },
     keygen::{leaf_keygen, AppProvingKey},
-    prover::{vm::local::VmLocalProver, AppProver, LeafProvingController},
+    prover::{
+        vm::local::VmLocalProver, AppProver, LeafProvingController, DEFAULT_NUM_CHILDREN_LEAF,
+    },
     StdIn,
 };
 use openvm_stark_backend::utils::metrics_span;
@@ -238,7 +240,9 @@ where
             leaf_vm_pk,
             app_pk.leaf_committed_exe,
         );
-        let leaf_controller = LeafProvingController { num_children: 1 };
+        let leaf_controller = LeafProvingController {
+            num_children: DEFAULT_NUM_CHILDREN_LEAF,
+        };
         leaf_controller.generate_proof(&leaf_prover, &app_proof);
     }
     Ok(())
