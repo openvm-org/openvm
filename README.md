@@ -7,7 +7,7 @@
 | [Contributor Docs](./docs)
 | [Crate Docs](https://docs.openvm.dev/openvm)
 
-[tg-badge]: https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white
+[tg-badge]: https://img.shields.io/endpoint?color=neon&logo=telegram&label=chat&url=https://tg.sumanjay.workers.dev/openvm
 
 OpenVM is a performant and modular zkVM framework built for customization and extensibility.
 
