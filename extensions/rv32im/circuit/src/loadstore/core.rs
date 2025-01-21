@@ -1,7 +1,4 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
@@ -73,25 +70,19 @@ pub struct LoadStoreCoreRecord<F, const NUM_CELLS: usize> {
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadStoreCoreAir<OpcodeClass: LocalOpcode, const NUM_CELLS: usize> {
-    _marker: PhantomData<OpcodeClass>,
+pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
+    pub offset: usize,
 }
 
-impl<F: Field, OpcodeClass: LocalOpcode + Sync, const NUM_CELLS: usize> BaseAir<F>
-    for LoadStoreCoreAir<OpcodeClass, NUM_CELLS>
-{
+impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreCoreAir<NUM_CELLS> {
     fn width(&self) -> usize {
         LoadStoreCoreCols::<F, NUM_CELLS>::width()
     }
 }
 
-impl<F: Field, OpcodeClass: LocalOpcode + Sync, const NUM_CELLS: usize> BaseAirWithPublicValues<F>
-    for LoadStoreCoreAir<OpcodeClass, NUM_CELLS>
-{
-}
+impl<F: Field, const NUM_CELLS: usize> BaseAirWithPublicValues<F> for LoadStoreCoreAir<NUM_CELLS> {}
 
-impl<AB, I, OpcodeClass: LocalOpcode + Sync, const NUM_CELLS: usize> VmCoreAir<AB, I>
-    for LoadStoreCoreAir<OpcodeClass, NUM_CELLS>
+impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for LoadStoreCoreAir<NUM_CELLS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -221,8 +212,8 @@ where
             + opcode_when(&[StoreW0]) * AB::Expr::from_canonical_u8(STOREW as u8)
             + opcode_when(&[StoreH0, StoreH2]) * AB::Expr::from_canonical_u8(STOREH as u8)
             + opcode_when(&[StoreB0, StoreB1, StoreB2, StoreB3])
-                * AB::Expr::from_canonical_u8(STOREB as u8)
-            + AB::Expr::from_canonical_usize(OpcodeClass::CLASS_OFFSET);
+                * AB::Expr::from_canonical_u8(STOREB as u8);
+        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(self, expected_opcode);
 
         let load_shift_amount = opcode_when(&[LoadBu1]) * AB::Expr::ONE
             + opcode_when(&[LoadHu2, LoadBu2]) * AB::Expr::TWO
@@ -248,45 +239,31 @@ where
     }
 
     fn start_offset(&self) -> usize {
-        OpcodeClass::CLASS_OFFSET
+        self.offset
     }
 }
 
 #[derive(Debug)]
-pub struct LoadStoreCoreChip<OpcodeClass: LocalOpcode, const NUM_CELLS: usize> {
-    pub air: LoadStoreCoreAir<OpcodeClass, NUM_CELLS>,
+pub struct LoadStoreCoreChip<const NUM_CELLS: usize> {
+    pub air: LoadStoreCoreAir<NUM_CELLS>,
 }
 
-impl<OpcodeClass: LocalOpcode, const NUM_CELLS: usize> LoadStoreCoreChip<OpcodeClass, NUM_CELLS> {
-    pub fn new() -> Self {
+impl<const NUM_CELLS: usize> LoadStoreCoreChip<NUM_CELLS> {
+    pub fn new(offset: usize) -> Self {
         Self {
-            air: LoadStoreCoreAir::<OpcodeClass, NUM_CELLS> {
-                _marker: PhantomData,
-            },
+            air: LoadStoreCoreAir { offset },
         }
     }
 }
 
-impl<OpcodeClass: LocalOpcode, const NUM_CELLS: usize> Default
-    for LoadStoreCoreChip<OpcodeClass, NUM_CELLS>
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<
-        F: PrimeField32,
-        I: VmAdapterInterface<F>,
-        OpcodeClass: LocalOpcode + Clone + Sync,
-        const NUM_CELLS: usize,
-    > VmCoreChip<F, I> for LoadStoreCoreChip<OpcodeClass, NUM_CELLS>
+impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
+    for LoadStoreCoreChip<NUM_CELLS>
 where
     I::Reads: Into<([[F; NUM_CELLS]; 2], F)>,
     I::Writes: From<[[F; NUM_CELLS]; 1]>,
 {
     type Record = LoadStoreCoreRecord<F, NUM_CELLS>;
-    type Air = LoadStoreCoreAir<OpcodeClass, NUM_CELLS>;
+    type Air = LoadStoreCoreAir<NUM_CELLS>;
 
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
@@ -295,11 +272,8 @@ where
         _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            instruction
-                .opcode
-                .local_opcode_idx(OpcodeClass::CLASS_OFFSET),
-        );
+        let local_opcode =
+            Rv32LoadStoreOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
 
         let (reads, shift_amount) = reads.into();
         let shift = shift_amount.as_canonical_u32();
@@ -323,7 +297,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv32LoadStoreOpcode::from_usize(opcode - OpcodeClass::CLASS_OFFSET)
+            Rv32LoadStoreOpcode::from_usize(opcode - self.air.offset)
         )
     }
 
