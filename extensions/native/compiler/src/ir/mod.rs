@@ -22,6 +22,7 @@ mod symbolic;
 mod types;
 mod utils;
 mod var;
+mod verify_batch;
 
 pub trait Config: Clone + Default {
     type N: PrimeField;

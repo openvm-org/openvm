@@ -1,81 +1,197 @@
-use std::{
-    array::from_fn,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
-    system::{
-        memory::{
-            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryController, OfflineMemory, RecordId,
-        },
-        program::ProgramBus,
-    },
+    arch::{ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, SystemPort},
+    system::memory::{MemoryController, OfflineMemory, RecordId},
 };
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, Poseidon2Opcode, UsizeOpcode,
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, UsizeOpcode};
+use openvm_native_compiler::{
+    Poseidon2Opcode::{COMP_POS2, PERM_POS2},
+    VerifyBatchOpcode::VERIFY_BATCH,
 };
-use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip};
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     Stateful,
 };
 use serde::{Deserialize, Serialize};
 
-use super::{
-    NativePoseidon2Air, NativePoseidon2MemoryCols, NATIVE_POSEIDON2_CHUNK_SIZE,
-    NATIVE_POSEIDON2_WIDTH,
+use crate::poseidon2::{
+    air::{NativePoseidon2Air, VerifyBatchBus},
+    CHUNK,
 };
 
-pub struct NativePoseidon2BaseChip<F: Field, const SBOX_REGISTERS: usize> {
-    pub air: Arc<NativePoseidon2Air<F, SBOX_REGISTERS>>,
-    pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
-    pub records: Vec<Option<NativePoseidon2ChipRecord<F>>>,
-    pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NativePoseidon2ChipRecord<F> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
+pub struct VerifyBatchRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
-    pub opcode: Poseidon2Opcode,
-    pub input: [F; NATIVE_POSEIDON2_WIDTH],
-    pub c: F,
-    pub rd: RecordId,
-    pub rs1: RecordId,
-    pub rs2: Option<RecordId>,
+    pub instruction: Instruction<F>,
 
-    pub read1: RecordId,
-    pub read2: RecordId,
+    pub dim_base_pointer: F,
+    pub opened_base_pointer: F,
+    pub opened_length: usize,
+    pub sibling_base_pointer: F,
+    pub index_base_pointer: F,
+    pub commit_pointer: F,
 
-    pub write1: RecordId,
-    pub write2: Option<RecordId>,
+    pub dim_base_pointer_read: RecordId,
+    pub opened_base_pointer_read: RecordId,
+    pub opened_length_read: RecordId,
+    pub sibling_base_pointer_read: RecordId,
+    pub index_base_pointer_read: RecordId,
+    pub commit_pointer_read: RecordId,
+
+    pub commit_read: RecordId,
+    pub initial_height: usize,
+    pub top_level: Vec<TopLevelRecord<F>>,
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2BaseChip<F, SBOX_REGISTERS> {
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
-        poseidon2_config: Poseidon2Config<F>,
-        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-    ) -> Self {
-        let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
-        Self {
-            air: Arc::new(NativePoseidon2Air::new(
-                ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-                subchip.air.clone(),
-            )),
-            subchip,
-            records: vec![],
-            offline_memory,
-        }
+impl<F: PrimeField32> VerifyBatchRecord<F> {
+    pub fn opened_element_size_inv(&self) -> F {
+        self.instruction.g
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
+pub struct TopLevelRecord<F: Field> {
+    // must be present in first record
+    pub incorporate_row: Option<IncorporateRowRecord<F>>,
+    // must be present in all bust last record
+    pub incorporate_sibling: Option<IncorporateSiblingRecord<F>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
+pub struct IncorporateSiblingRecord<F: Field> {
+    pub read_sibling_array_start: RecordId,
+    pub read_root_is_on_right: RecordId,
+    pub root_is_on_right: bool,
+    pub reads: [RecordId; CHUNK],
+    pub p2_input: [F; 2 * CHUNK],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
+pub struct IncorporateRowRecord<F: Field> {
+    pub chunks: Vec<InsideRowRecord<F>>,
+    pub initial_opened_index: usize,
+    pub final_opened_index: usize,
+    pub initial_height_read: RecordId,
+    pub final_height_read: RecordId,
+    pub p2_input: [F; 2 * CHUNK],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
+pub struct InsideRowRecord<F: Field> {
+    pub cells: Vec<CellRecord>,
+    pub p2_input: [F; 2 * CHUNK],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CellRecord {
+    pub read: RecordId,
+    pub opened_index: usize,
+    pub read_row_pointer_and_length: Option<RecordId>,
+    pub row_pointer: usize,
+    pub row_end: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
+pub struct SimplePoseidonRecord<F: Field> {
+    pub from_state: ExecutionState<u32>,
+    pub instruction: Instruction<F>,
+
+    pub read_input_pointer_1: RecordId,
+    pub read_input_pointer_2: Option<RecordId>,
+    pub read_output_pointer: RecordId,
+    pub read_data_1: RecordId,
+    pub read_data_2: RecordId,
+    pub write_data_1: RecordId,
+    pub write_data_2: Option<RecordId>,
+
+    pub input_pointer_1: F,
+    pub input_pointer_2: F,
+    pub output_pointer: F,
+    pub p2_input: [F; 2 * CHUNK],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(bound = "F: Field")]
+pub struct NativePoseidon2RecordSet<F: Field> {
+    pub verify_batch_records: Vec<VerifyBatchRecord<F>>,
+    pub simple_permute_records: Vec<SimplePoseidonRecord<F>>,
+}
+
+pub struct NativePoseidon2Chip<F: Field, const SBOX_REGISTERS: usize> {
+    pub(super) air: NativePoseidon2Air<F, SBOX_REGISTERS>,
+    pub(super) record_set: NativePoseidon2RecordSet<F>,
+    pub(super) height: usize,
+    pub(super) offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+    pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> Stateful<Vec<u8>>
+    for NativePoseidon2Chip<F, SBOX_REGISTERS>
+{
+    fn load_state(&mut self, state: Vec<u8>) {
+        self.record_set = bitcode::deserialize(&state).unwrap();
+        self.height = self.record_set.simple_permute_records.len();
+        for record in self.record_set.verify_batch_records.iter() {
+            for top_level in record.top_level.iter() {
+                if let Some(incorporate_row) = &top_level.incorporate_row {
+                    self.height += 1 + incorporate_row.chunks.len();
+                }
+                if top_level.incorporate_sibling.is_some() {
+                    self.height += 1;
+                }
+            }
+        }
+    }
+
+    fn store_state(&self) -> Vec<u8> {
+        bitcode::serialize(&self.record_set).unwrap()
+    }
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_REGISTERS> {
+    pub fn new(
+        port: SystemPort,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+        poseidon2_config: Poseidon2Config<F>,
+        verify_batch_bus: VerifyBatchBus,
+    ) -> Self {
+        let air = NativePoseidon2Air {
+            execution_bridge: ExecutionBridge::new(port.execution_bus, port.program_bus),
+            memory_bridge: port.memory_bridge,
+            internal_bus: verify_batch_bus,
+            subair: Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
+            address_space: F::from_canonical_u32(5),
+        };
+        Self {
+            record_set: Default::default(),
+            air,
+            height: 0,
+            offline_memory,
+            subchip: Poseidon2SubChip::new(poseidon2_config.constants),
+        }
+    }
+
+    fn compress(&self, left: [F; CHUNK], right: [F; CHUNK]) -> ([F; 2 * CHUNK], [F; CHUNK]) {
+        let concatenated =
+            std::array::from_fn(|i| if i < CHUNK { left[i] } else { right[i - CHUNK] });
+        let permuted = self.subchip.permute(concatenated);
+        (concatenated, std::array::from_fn(|i| permuted[i]))
+    }
+}
+
+pub(super) const NUM_INITIAL_READS: usize = 7;
+pub(super) const NUM_SIMPLE_ACCESSES: u32 = 7;
+
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
-    for NativePoseidon2BaseChip<F, SBOX_REGISTERS>
+    for NativePoseidon2Chip<F, SBOX_REGISTERS>
 {
     fn execute(
         &mut self,
@@ -83,78 +199,327 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
         instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
-        let &Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            ..
-        } = instruction;
-        let local_opcode =
-            Poseidon2Opcode::from_usize(opcode.local_opcode_idx(Poseidon2Opcode::CLASS_OFFSET));
+        if instruction.opcode == PERM_POS2.global_opcode()
+            || instruction.opcode == COMP_POS2.global_opcode()
+        {
+            let &Instruction {
+                a: output_register,
+                b: input_register_1,
+                c: input_register_2,
+                d: register_address_space,
+                e: data_address_space,
+                ..
+            } = instruction;
 
-        let rd = memory.read_cell(d, a);
-        let rs1 = memory.read_cell(d, b);
-        let rs2 = match local_opcode {
-            Poseidon2Opcode::PERM_POS2 => {
+            let (read_output_pointer, output_pointer) =
+                memory.read_cell(register_address_space, output_register);
+            let (read_input_pointer_1, input_pointer_1) =
+                memory.read_cell(register_address_space, input_register_1);
+            let (read_input_pointer_2, input_pointer_2) =
+                if instruction.opcode == PERM_POS2.global_opcode() {
+                    memory.increment_timestamp();
+                    (None, input_pointer_1 + F::from_canonical_usize(CHUNK))
+                } else {
+                    let (read_input_pointer_2, input_pointer_2) =
+                        memory.read_cell(register_address_space, input_register_2);
+                    (Some(read_input_pointer_2), input_pointer_2)
+                };
+            let (read_data_1, data_1) = memory.read::<CHUNK>(data_address_space, input_pointer_1);
+            let (read_data_2, data_2) = memory.read::<CHUNK>(data_address_space, input_pointer_2);
+            let p2_input = std::array::from_fn(|i| {
+                if i < CHUNK {
+                    data_1[i]
+                } else {
+                    data_2[i - CHUNK]
+                }
+            });
+            let output = self.subchip.permute(p2_input);
+            let (write_data_1, _) = memory.write::<CHUNK>(
+                data_address_space,
+                output_pointer,
+                std::array::from_fn(|i| output[i]),
+            );
+            let write_data_2 = if instruction.opcode == PERM_POS2.global_opcode() {
+                Some(
+                    memory
+                        .write::<CHUNK>(
+                            data_address_space,
+                            output_pointer + F::from_canonical_usize(CHUNK),
+                            std::array::from_fn(|i| output[CHUNK + i]),
+                        )
+                        .0,
+                )
+            } else {
                 memory.increment_timestamp();
                 None
+            };
+
+            assert_eq!(
+                memory.timestamp(),
+                from_state.timestamp + NUM_SIMPLE_ACCESSES
+            );
+
+            self.record_set
+                .simple_permute_records
+                .push(SimplePoseidonRecord {
+                    from_state,
+                    instruction: instruction.clone(),
+                    read_input_pointer_1,
+                    read_input_pointer_2,
+                    read_output_pointer,
+                    read_data_1,
+                    read_data_2,
+                    write_data_1,
+                    write_data_2,
+                    input_pointer_1,
+                    input_pointer_2,
+                    output_pointer,
+                    p2_input,
+                });
+            self.height += 1;
+        } else if instruction.opcode == VERIFY_BATCH.global_opcode() {
+            let &Instruction {
+                a: dim_register,
+                b: opened_register,
+                c: opened_length_register,
+                d: sibling_register,
+                e: index_register,
+                f: commit_register,
+                g: opened_element_size_inv,
+                ..
+            } = instruction;
+            let address_space = self.air.address_space;
+            // calc inverse fast assuming opened_element_size in {1, 4}
+            let mut opened_element_size = F::ONE;
+            while opened_element_size * opened_element_size_inv != F::ONE {
+                opened_element_size += F::ONE;
             }
-            Poseidon2Opcode::COMP_POS2 => Some(memory.read_cell(d, c)),
-        };
 
-        let read1 = memory.read::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, rs1.1);
-        let read2 = memory.read::<NATIVE_POSEIDON2_CHUNK_SIZE>(
-            e,
-            match rs2 {
-                Some(rs2) => rs2.1,
-                None => rs1.1 + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
-            },
-        );
+            let (dim_base_pointer_read, dim_base_pointer) =
+                memory.read_cell(address_space, dim_register);
+            let (opened_base_pointer_read, opened_base_pointer) =
+                memory.read_cell(address_space, opened_register);
+            let (opened_length_read, opened_length) =
+                memory.read_cell(address_space, opened_length_register);
+            let (sibling_base_pointer_read, sibling_base_pointer) =
+                memory.read_cell(address_space, sibling_register);
+            let (index_base_pointer_read, index_base_pointer) =
+                memory.read_cell(address_space, index_register);
+            let (commit_pointer_read, commit_pointer) =
+                memory.read_cell(address_space, commit_register);
+            let (commit_read, commit) = memory.read(address_space, commit_pointer);
 
-        let mut input_state: [F; NATIVE_POSEIDON2_WIDTH] = [F::ZERO; NATIVE_POSEIDON2_WIDTH];
-        input_state[..NATIVE_POSEIDON2_CHUNK_SIZE].copy_from_slice(&read1.1);
-        input_state[NATIVE_POSEIDON2_CHUNK_SIZE..].copy_from_slice(&read2.1);
+            let opened_length = opened_length.as_canonical_u32() as usize;
 
-        let output_state = self.subchip.permute(input_state);
+            let initial_height = memory
+                .unsafe_read_cell(address_space, dim_base_pointer)
+                .as_canonical_u32();
+            let mut height = initial_height;
+            let mut proof_index = 0;
+            let mut opened_index = 0;
+            let mut top_level = vec![];
 
-        let output1: [F; NATIVE_POSEIDON2_CHUNK_SIZE] = from_fn(|i| output_state[i]);
-        let output2: [F; NATIVE_POSEIDON2_CHUNK_SIZE] =
-            from_fn(|i| output_state[NATIVE_POSEIDON2_CHUNK_SIZE + i]);
+            let mut root = [F::ZERO; CHUNK];
 
-        let (write1, _) = memory.write::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, rd.1, output1);
-        let write2 = match local_opcode {
-            Poseidon2Opcode::PERM_POS2 => Some(
-                memory
-                    .write::<NATIVE_POSEIDON2_CHUNK_SIZE>(
-                        e,
-                        rd.1 + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
-                        output2,
-                    )
-                    .0,
-            ),
-            Poseidon2Opcode::COMP_POS2 => {
-                memory.increment_timestamp();
-                None
+            while height >= 1 {
+                let incorporate_row = if opened_index < opened_length
+                    && memory.unsafe_read_cell(
+                        address_space,
+                        dim_base_pointer + F::from_canonical_usize(opened_index),
+                    ) == F::from_canonical_u32(height)
+                {
+                    let initial_opened_index = opened_index;
+                    for _ in 0..NUM_INITIAL_READS {
+                        memory.increment_timestamp();
+                    }
+                    let mut chunks = vec![];
+
+                    let mut row_pointer = 0;
+                    let mut row_end = 0;
+
+                    let mut prev_rolling_hash: Option<[F; 2 * CHUNK]> = None;
+                    let mut rolling_hash = [F::ZERO; 2 * CHUNK];
+
+                    let mut is_first_in_segment = true;
+
+                    loop {
+                        let mut cells = vec![];
+                        for chunk_elem in rolling_hash.iter_mut().take(CHUNK) {
+                            let read_row_pointer_and_length = if is_first_in_segment
+                                || row_pointer == row_end
+                            {
+                                if is_first_in_segment {
+                                    is_first_in_segment = false;
+                                } else {
+                                    opened_index += 1;
+                                    if opened_index == opened_length
+                                        || memory.unsafe_read_cell(
+                                            address_space,
+                                            dim_base_pointer
+                                                + F::from_canonical_usize(opened_index),
+                                        ) != F::from_canonical_u32(height)
+                                    {
+                                        break;
+                                    }
+                                }
+                                let (result, [new_row_pointer, row_len]) = memory.read(
+                                    address_space,
+                                    opened_base_pointer + F::from_canonical_usize(2 * opened_index),
+                                );
+                                row_pointer = new_row_pointer.as_canonical_u32() as usize;
+                                row_end = row_pointer
+                                    + (opened_element_size * row_len).as_canonical_u32() as usize;
+                                Some(result)
+                            } else {
+                                memory.increment_timestamp();
+                                None
+                            };
+                            let (read, value) = memory
+                                .read_cell(address_space, F::from_canonical_usize(row_pointer));
+                            cells.push(CellRecord {
+                                read,
+                                opened_index,
+                                read_row_pointer_and_length,
+                                row_pointer,
+                                row_end,
+                            });
+                            *chunk_elem = value;
+                            row_pointer += 1;
+                        }
+                        if cells.is_empty() {
+                            break;
+                        }
+                        let cells_len = cells.len();
+                        chunks.push(InsideRowRecord {
+                            cells,
+                            p2_input: rolling_hash,
+                        });
+                        self.height += 1;
+                        prev_rolling_hash = Some(rolling_hash);
+                        self.subchip.permute_mut(&mut rolling_hash);
+                        if cells_len < CHUNK {
+                            for _ in 0..CHUNK - cells_len {
+                                memory.increment_timestamp();
+                                memory.increment_timestamp();
+                            }
+                            break;
+                        }
+                    }
+                    let final_opened_index = opened_index - 1;
+                    let (initial_height_read, height_check) = memory.read_cell(
+                        address_space,
+                        dim_base_pointer + F::from_canonical_usize(initial_opened_index),
+                    );
+                    assert_eq!(height_check, F::from_canonical_u32(height));
+                    let (final_height_read, height_check) = memory.read_cell(
+                        address_space,
+                        dim_base_pointer + F::from_canonical_usize(final_opened_index),
+                    );
+                    assert_eq!(height_check, F::from_canonical_u32(height));
+
+                    let hash: [F; CHUNK] = std::array::from_fn(|i| rolling_hash[i]);
+
+                    let (p2_input, new_root) = if height == initial_height {
+                        (prev_rolling_hash.unwrap(), hash)
+                    } else {
+                        self.compress(root, hash)
+                    };
+                    root = new_root;
+
+                    self.height += 1;
+                    Some(IncorporateRowRecord {
+                        chunks,
+                        initial_opened_index,
+                        final_opened_index,
+                        initial_height_read,
+                        final_height_read,
+                        p2_input,
+                    })
+                } else {
+                    None
+                };
+
+                let incorporate_sibling = if height == 1 {
+                    None
+                } else {
+                    for _ in 0..NUM_INITIAL_READS {
+                        memory.increment_timestamp();
+                    }
+
+                    let (read_root_is_on_right, root_is_on_right) = memory.read_cell(
+                        address_space,
+                        index_base_pointer + F::from_canonical_usize(proof_index),
+                    );
+                    let root_is_on_right = root_is_on_right == F::ONE;
+
+                    let (read_sibling_array_start, sibling_array_start) = memory.read_cell(
+                        address_space,
+                        sibling_base_pointer + F::from_canonical_usize(2 * proof_index),
+                    );
+                    let sibling_array_start = sibling_array_start.as_canonical_u32() as usize;
+
+                    let mut sibling = [F::ZERO; CHUNK];
+                    let mut reads = vec![];
+                    for (i, sibling_elem) in sibling.iter_mut().enumerate().take(CHUNK) {
+                        let (read, value) = memory.read_cell(
+                            address_space,
+                            F::from_canonical_usize(sibling_array_start + i),
+                        );
+                        *sibling_elem = value;
+                        reads.push(read);
+                    }
+
+                    let (p2_input, new_root) = if root_is_on_right {
+                        self.compress(sibling, root)
+                    } else {
+                        self.compress(root, sibling)
+                    };
+                    root = new_root;
+
+                    self.height += 1;
+                    Some(IncorporateSiblingRecord {
+                        read_sibling_array_start,
+                        read_root_is_on_right,
+                        root_is_on_right,
+                        reads: std::array::from_fn(|i| reads[i]),
+                        p2_input,
+                    })
+                };
+
+                top_level.push(TopLevelRecord {
+                    incorporate_row,
+                    incorporate_sibling,
+                });
+
+                height /= 2;
+                proof_index += 1;
             }
-        };
 
-        self.records.push(Some(NativePoseidon2ChipRecord {
-            from_state,
-            opcode: local_opcode,
-            input: input_state,
-            c,
-            rd: rd.0,
-            rs1: rs1.0,
-            rs2: rs2.map(|rs2| rs2.0),
-            read1: read1.0,
-            read2: read2.0,
-            write1,
-            write2,
-        }));
-
+            assert_eq!(commit, root);
+            self.record_set
+                .verify_batch_records
+                .push(VerifyBatchRecord {
+                    from_state,
+                    instruction: instruction.clone(),
+                    dim_base_pointer,
+                    opened_base_pointer,
+                    opened_length,
+                    sibling_base_pointer,
+                    index_base_pointer,
+                    commit_pointer,
+                    dim_base_pointer_read,
+                    opened_base_pointer_read,
+                    opened_length_read,
+                    sibling_base_pointer_read,
+                    index_base_pointer_read,
+                    commit_pointer_read,
+                    commit_read,
+                    initial_height: initial_height as usize,
+                    top_level,
+                });
+        } else {
+            unreachable!()
+        }
         Ok(ExecutionState {
             pc: from_state.pc + DEFAULT_PC_STEP,
             timestamp: memory.timestamp(),
@@ -162,72 +527,14 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Poseidon2Opcode::from_usize(opcode - Poseidon2Opcode::CLASS_OFFSET)
-        )
-    }
-}
-
-impl<F: PrimeField32 + Sync> NativePoseidon2ChipRecord<F> {
-    pub fn to_memory_cols(&self, memory: &OfflineMemory<F>) -> NativePoseidon2MemoryCols<F> {
-        let aux_cols_factory = memory.aux_cols_factory();
-        let rs1 = memory.record_by_id(self.rs1);
-        let (rs2_ptr, rs2_val, rs2_read_aux) = match self.rs2 {
-            Some(rs2) => {
-                let rs2 = memory.record_by_id(rs2);
-                (
-                    rs2.pointer,
-                    rs2.data[0],
-                    aux_cols_factory.make_read_aux_cols(rs2),
-                )
-            }
-            None => (
-                F::ZERO,
-                rs1.data[0] + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
-                MemoryReadAuxCols::disabled(),
-            ),
-        };
-        let rd = memory.record_by_id(self.rd);
-        let read1 = memory.record_by_id(self.read1);
-        let read2 = memory.record_by_id(self.read2);
-        NativePoseidon2MemoryCols {
-            from_state: self.from_state.map(F::from_canonical_u32),
-            opcode_flag: match self.opcode {
-                Poseidon2Opcode::PERM_POS2 => F::ONE,
-                Poseidon2Opcode::COMP_POS2 => F::TWO,
-            },
-            ptr_as: rd.address_space,
-            chunk_as: read1.address_space,
-            c: self.c,
-            rs_ptr: [rs1.pointer, rs2_ptr],
-            rd_ptr: rd.pointer,
-            rs_val: [rs1.data[0], rs2_val],
-            rd_val: rd.data[0],
-            rs_read_aux: [aux_cols_factory.make_read_aux_cols(rs1), rs2_read_aux],
-            rd_read_aux: aux_cols_factory.make_read_aux_cols(rd),
-            chunk_read_aux: [
-                aux_cols_factory.make_read_aux_cols(read1),
-                aux_cols_factory.make_read_aux_cols(read2),
-            ],
-            chunk_write_aux: [
-                aux_cols_factory.make_write_aux_cols(memory.record_by_id(self.write1)),
-                self.write2.map_or(MemoryWriteAuxCols::disabled(), |w| {
-                    aux_cols_factory.make_write_aux_cols(memory.record_by_id(w))
-                }),
-            ],
+        if opcode == VERIFY_BATCH.global_opcode().as_usize() {
+            String::from("VERIFY_BATCH")
+        } else if opcode == PERM_POS2.global_opcode().as_usize() {
+            String::from("PERM_POS2")
+        } else if opcode == COMP_POS2.global_opcode().as_usize() {
+            String::from("COMP_POS2")
+        } else {
+            unreachable!("unsupported opcode: {}", opcode)
         }
-    }
-}
-
-impl<F: Field, const SBOX_REGISTERS: usize> Stateful<Vec<u8>>
-    for NativePoseidon2BaseChip<F, SBOX_REGISTERS>
-{
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap()
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
     }
 }

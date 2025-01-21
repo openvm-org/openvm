@@ -1,8 +1,25 @@
 use std::array;
 
 use openvm_native_compiler::prelude::*;
-use openvm_native_recursion::{hints::Hintable, types::InnerConfig};
-use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
+use openvm_native_recursion::{config::outer::OuterConfig, hints::Hintable, types::InnerConfig};
+use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_sdk::{
+    openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
+};
+
+pub fn compress_babybear_var_to_bn254(
+    builder: &mut Builder<OuterConfig>,
+    var: [Var<Bn254Fr>; DIGEST_SIZE],
+) -> Var<Bn254Fr> {
+    let mut ret = SymbolicVar::ZERO;
+    let order = Bn254Fr::from_canonical_u32(BabyBear::ORDER_U32);
+    let mut base = Bn254Fr::ONE;
+    var.iter().for_each(|&x| {
+        ret += x * base;
+        base *= order;
+    });
+    builder.eval(ret)
+}
 
 pub(crate) fn assign_array_to_slice<C: Config>(
     builder: &mut Builder<C>,

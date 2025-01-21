@@ -5,7 +5,7 @@ use openvm_native_compiler::ir::{
     unsafe_array_transmute, Array, ArrayLike, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
     DIGEST_SIZE,
 };
-use openvm_native_compiler_derive::compile_zip;
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::{
     keygen::types::TraceWidth,
     p3_commit::ExtensionMmcs,
@@ -25,11 +25,10 @@ use p3_merkle_tree::MerkleTreeMmcs;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 
 use crate::{
-    types::{InnerConfig, VerifierInput},
+    types::InnerConfig,
     vars::{
         AdjacentOpenedValuesVariable, AirProofDataVariable, CommitmentsVariable,
         OpenedValuesVariable, OpeningProofVariable, StarkProofVariable, TraceWidthVariable,
-        VerifierInputVariable,
     },
 };
 
@@ -129,7 +128,7 @@ impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         let len = builder.hint_var();
         let arr = builder.dyn_array(len);
-        compile_zip!(builder, arr).for_each(|idx_vec, builder| {
+        iter_zip!(builder, arr).for_each(|idx_vec, builder| {
             let hint = I::read(builder);
             let ptr = idx_vec[0];
             builder.iter_ptr_set(&arr, ptr, hint);
@@ -147,50 +146,6 @@ impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
             let comm = I::write(i);
             stream.extend(comm);
         });
-
-        stream
-    }
-}
-
-impl Hintable<InnerConfig> for VerifierInput<BabyBearPoseidon2Config> {
-    type HintVariable = VerifierInputVariable<InnerConfig>;
-
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let proof = Proof::<BabyBearPoseidon2Config>::read(builder);
-
-        let raw_log_degree_per_air = Vec::<usize>::read(builder);
-        // A hacky way to cast ptr.
-        let log_degree_per_air = if let Array::Dyn(ptr, len) = raw_log_degree_per_air {
-            Array::Dyn(ptr, len)
-        } else {
-            unreachable!();
-        };
-
-        let raw_air_perm_by_height = Vec::<usize>::read(builder);
-        // A hacky way to transmute from Array of Var to Array of Usize.
-        let air_perm_by_height = if let Array::Dyn(ptr, len) = raw_air_perm_by_height {
-            Array::Dyn(ptr, len)
-        } else {
-            unreachable!();
-        };
-
-        VerifierInputVariable {
-            proof,
-            log_degree_per_air,
-            air_perm_by_height,
-        }
-    }
-
-    fn write(&self) -> Vec<Vec<InnerVal>> {
-        let mut stream = Vec::new();
-        // Explict enforce consistency when matrixs have the same height.
-        let air_perm_by_height: Vec<_> = (0..self.log_degree_per_air.len())
-            .sorted_by_key(|i| Reverse(self.log_degree_per_air[*i]))
-            .collect();
-
-        stream.extend(self.proof.write());
-        stream.extend(self.log_degree_per_air.write());
-        stream.extend(air_perm_by_height.write());
 
         stream
     }
@@ -261,7 +216,7 @@ impl Hintable<InnerConfig> for Vec<Vec<InnerChallenge>> {
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let len = builder.hint_var();
         let arr = builder.dyn_array(len);
-        compile_zip!(builder, arr).for_each(|idx_vec, builder| {
+        iter_zip!(builder, arr).for_each(|idx_vec, builder| {
             let hint = Vec::<InnerChallenge>::read(builder);
             builder.iter_ptr_set(&arr, idx_vec[0], hint);
         });
