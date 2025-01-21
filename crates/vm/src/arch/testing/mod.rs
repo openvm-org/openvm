@@ -30,7 +30,7 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
-use super::{ExecutionBus, InstructionExecutor};
+use super::{ExecutionBus, InstructionExecutor, SystemPort};
 use crate::{
     arch::{ExecutionState, MemoryConfig},
     system::{
@@ -163,6 +163,14 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.write(1usize, register, [F::from_canonical_usize(pointer)]);
         for (i, &write) in writes.iter().enumerate() {
             self.write(2usize, pointer + i * NUM_LIMBS, write);
+        }
+    }
+
+    pub fn system_port(&self) -> SystemPort {
+        SystemPort {
+            execution_bus: self.execution.bus,
+            program_bus: self.program.bus,
+            memory_bridge: self.memory_bridge(),
         }
     }
 

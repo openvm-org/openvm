@@ -31,10 +31,13 @@ use openvm_stark_sdk::{
 };
 use rand::{rngs::StdRng, Rng};
 
+use super::air::VerifyBatchBus;
 use crate::{
     poseidon2::{chip::NativePoseidon2Chip, CHUNK},
     NativeConfig,
 };
+
+const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus(7);
 
 fn compute_commit<F: Field>(
     dim: &[usize],
@@ -152,13 +155,12 @@ fn test<const N: usize>(cases: [Case; N]) {
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
+        tester.system_port(),
         VerifyBatchOpcode::default_offset(),
         Poseidon2Opcode::default_offset(),
         tester.offline_memory_mutex_arc(),
         Poseidon2Config::default(),
+        VERIFY_BATCH_BUS,
     );
 
     let mut rng = create_seeded_rng();
@@ -385,13 +387,12 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
+        tester.system_port(),
         VerifyBatchOpcode::default_offset(),
         Poseidon2Opcode::default_offset(),
         tester.offline_memory_mutex_arc(),
         Poseidon2Config::default(),
+        VERIFY_BATCH_BUS,
     );
 
     let mut rng = create_seeded_rng();

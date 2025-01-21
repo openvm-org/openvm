@@ -1,11 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
-    system::{
-        memory::{offline_checker::MemoryBridge, MemoryController, OfflineMemory, RecordId},
-        program::ProgramBus,
-    },
+    arch::{ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, SystemPort},
+    system::memory::{MemoryController, OfflineMemory, RecordId},
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, VmOpcode};
 use openvm_native_compiler::{
@@ -161,18 +158,17 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Stateful<Vec<u8>>
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_REGISTERS> {
     pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
+        port: SystemPort,
         verify_batch_offset: usize,
         perm_pos2_offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
         poseidon2_config: Poseidon2Config<F>,
+        verify_batch_bus: VerifyBatchBus,
     ) -> Self {
         let air = NativePoseidon2Air {
-            execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-            memory_bridge,
-            internal_bus: VerifyBatchBus(7),
+            execution_bridge: ExecutionBridge::new(port.execution_bus, port.program_bus),
+            memory_bridge: port.memory_bridge,
+            internal_bus: verify_batch_bus,
             subair: Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
             verify_batch_offset,
             simple_offset: perm_pos2_offset,

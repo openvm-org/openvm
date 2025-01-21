@@ -1,3 +1,4 @@
+use air::VerifyBatchBus;
 use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
 use jal_native_adapter::JalNativeAdapterChip;
@@ -198,13 +199,12 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         )?;
 
         let poseidon2_chip = NativePoseidon2Chip::new(
-            execution_bus,
-            program_bus,
-            memory_bridge,
+            builder.system_port(),
             VerifyBatchOpcode::default_offset(),
             Poseidon2Opcode::default_offset(),
             offline_memory.clone(),
             Poseidon2Config::default(),
+            VerifyBatchBus(builder.new_bus_idx()),
         );
         inventory.add_executor(
             poseidon2_chip,
