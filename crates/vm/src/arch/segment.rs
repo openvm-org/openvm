@@ -39,7 +39,12 @@ const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 const DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT: usize = DEFAULT_MAX_SEGMENT_LEN * 120;
 
 pub trait SegmentationStrategy {
-    fn should_segment(&self, trace_heights: &[usize], trace_cells: &[usize]) -> bool;
+    fn should_segment(
+        &self,
+        air_names: &[String],
+        trace_heights: &[usize],
+        trace_cells: &[usize],
+    ) -> bool;
 }
 
 /// Default segmentation strategy: segment if any chip's height or cells exceed the limits.
@@ -67,16 +72,31 @@ impl DefaultSegmentationStrategy {
 }
 
 impl SegmentationStrategy for DefaultSegmentationStrategy {
-    fn should_segment(&self, trace_heights: &[usize], trace_cells: &[usize]) -> bool {
+    fn should_segment(
+        &self,
+        air_names: &[String],
+        trace_heights: &[usize],
+        trace_cells: &[usize],
+    ) -> bool {
         for (i, &height) in trace_heights.iter().enumerate() {
             if height > self.max_segment_len {
-                tracing::info!("Should segment because chip {} has height {}", i, height);
+                tracing::info!(
+                    "Should segment because chip {} (name: {}) has height {}",
+                    i,
+                    air_names[i],
+                    height
+                );
                 return true;
             }
         }
         for (i, &num_cells) in trace_cells.iter().enumerate() {
             if num_cells > self.max_cells_per_chip_in_segment {
-                tracing::info!("Should segment because chip {} has {} cells", i, num_cells,);
+                tracing::info!(
+                    "Should segment because chip {} (name: {}) has {} cells",
+                    i,
+                    air_names[i],
+                    num_cells
+                );
                 return true;
             }
         }
@@ -333,7 +353,11 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         }
         self.since_last_segment_check = 0;
         segment_strategy.should_segment(
-            &self.chip_complex.current_trace_heights(),
+            &self.chip_complex.air_names(),
+            &self
+                .chip_complex
+                .dynamic_trace_heights()
+                .collect::<Vec<_>>(),
             &self.chip_complex.current_trace_cells(),
         )
     }
