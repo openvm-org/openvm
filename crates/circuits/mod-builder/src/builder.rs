@@ -328,11 +328,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
                 .take(expected.len())
                 .collect();
 
-            if format!("{:?}", flags[0].into()) == "0" {
-                println!("lhs: {:?}", reads);
-                println!("rhs: {:?}", expected);
-            }
-
             for (lhs, rhs) in zip_eq(&reads, expected) {
                 builder
                     .when(is_setup.clone())
