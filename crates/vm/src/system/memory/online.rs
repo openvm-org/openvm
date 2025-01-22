@@ -1,10 +1,13 @@
-use std::{array, fmt::Debug};
+use std::fmt::Debug;
 
 use openvm_stark_backend::p3_field::PrimeField32;
-use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
-use crate::system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId};
+use super::paged_vec::{AddressMap, PAGE_SIZE};
+use crate::{
+    arch::MemoryConfig,
+    system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MemoryLogEntry<T> {
@@ -21,25 +24,22 @@ pub enum MemoryLogEntry<T> {
     IncrementTimestampBy(u32),
 }
 
-/// (address_space, pointer)
-pub(crate) type Address = (u32, u32);
-
 /// A simple data structure to read to/write from memory.
 ///
 /// Stores a log of memory accesses to reconstruct aspects of memory state for trace generation.
 #[derive(Debug)]
 pub struct Memory<F> {
-    pub(super) data: FxHashMap<Address, F>,
+    pub(super) data: AddressMap<F, PAGE_SIZE>,
     pub(super) log: Vec<MemoryLogEntry<F>>,
     timestamp: u32,
 }
 
 impl<F: PrimeField32> Memory<F> {
-    pub fn new(access_capacity: usize) -> Self {
+    pub fn new(mem_config: &MemoryConfig) -> Self {
         Self {
-            data: MemoryImage::default(),
+            data: AddressMap::from_mem_config(mem_config),
             timestamp: INITIAL_TIMESTAMP + 1,
-            log: Vec::with_capacity(access_capacity),
+            log: Vec::with_capacity(mem_config.access_capacity),
         }
     }
 
@@ -67,11 +67,7 @@ impl<F: PrimeField32> Memory<F> {
     ) -> (RecordId, [F; N]) {
         assert!(N.is_power_of_two());
 
-        let prev_data = array::from_fn(|i| {
-            self.data
-                .insert((address_space, pointer + i as u32), values[i])
-                .unwrap_or(F::ZERO)
-        });
+        let prev_data = self.data.set_range(&(address_space, pointer), &values);
 
         self.log.push(MemoryLogEntry::Write {
             address_space,
@@ -112,12 +108,14 @@ impl<F: PrimeField32> Memory<F> {
         self.timestamp
     }
 
+    #[inline(always)]
     pub fn get(&self, address_space: u32, pointer: u32) -> F {
         *self.data.get(&(address_space, pointer)).unwrap_or(&F::ZERO)
     }
 
+    #[inline(always)]
     fn range_array<const N: usize>(&self, address_space: u32, pointer: u32) -> [F; N] {
-        array::from_fn(|i| self.get(address_space, pointer + i as u32))
+        self.data.get_range(&(address_space, pointer))
     }
 }
 
@@ -127,6 +125,7 @@ mod tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::Memory;
+    use crate::arch::MemoryConfig;
 
     macro_rules! bba {
         [$($x:expr),*] => {
@@ -136,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_write_read() {
-        let mut memory = Memory::new(0);
+        let mut memory = Memory::new(&MemoryConfig::default());
         let address_space = 1;
 
         memory.write(address_space, 0, bba![1, 2, 3, 4]);

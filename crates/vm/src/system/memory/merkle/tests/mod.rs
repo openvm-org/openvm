@@ -24,6 +24,7 @@ use crate::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
             MemoryMerkleBus, MemoryMerkleChip,
         },
+        paged_vec::{AddressMap, PAGE_SIZE},
         tree::MemoryNode,
         Equipartition, MemoryImage,
     },
@@ -48,21 +49,24 @@ fn test<const CHUNK: usize>(
     let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
 
     // checking validity of test data
-    for (&(address_space, pointer), value) in final_memory {
+    for ((address_space, pointer), value) in final_memory.items() {
         let label = pointer / CHUNK as u32;
         assert!(address_space - as_offset < (1 << as_height));
-        assert!(label < (1 << address_height));
-        if initial_memory.get(&(address_space, pointer)) != Some(value) {
+        assert!(pointer < ((CHUNK << address_height).div_ceil(PAGE_SIZE) * PAGE_SIZE) as u32);
+        if initial_memory.get(&(address_space, pointer)) != Some(&value) {
             assert!(touched_labels.contains(&(address_space, label)));
         }
     }
-    for key in initial_memory.keys() {
-        assert!(final_memory.contains_key(key));
+    for key in initial_memory.items().map(|(key, _)| key) {
+        assert!(final_memory.get(&key).is_some());
     }
     for &(address_space, label) in touched_labels.iter() {
         let mut contains_some_key = false;
         for i in 0..CHUNK {
-            if final_memory.contains_key(&(address_space, label * CHUNK as u32 + i as u32)) {
+            if final_memory
+                .get(&(address_space, label * CHUNK as u32 + i as u32))
+                .is_some()
+            {
                 contains_some_key = true;
                 break;
             }
@@ -173,12 +177,12 @@ fn memory_to_partition<F: Default + Copy, const N: usize>(
     memory: &MemoryImage<F>,
 ) -> Equipartition<F, N> {
     let mut memory_partition = Equipartition::new();
-    for (&(address_space, pointer), value) in memory {
+    for ((address_space, pointer), value) in memory.items() {
         let label = (address_space, pointer / N as u32);
         let chunk = memory_partition
             .entry(label)
             .or_insert_with(|| [F::default(); N]);
-        chunk[(pointer % N as u32) as usize] = *value;
+        chunk[(pointer % N as u32) as usize] = value;
     }
     memory_partition
 }
@@ -192,8 +196,8 @@ fn random_test<const CHUNK: usize>(
     let mut rng = create_seeded_rng();
     let mut next_u32 = || rng.next_u64() as u32;
 
-    let mut initial_memory = MemoryImage::default();
-    let mut final_memory = MemoryImage::default();
+    let mut initial_memory = AddressMap::new(1, 2, CHUNK << height);
+    let mut final_memory = AddressMap::new(1, 2, CHUNK << height);
     let mut seen = HashSet::new();
     let mut touched_labels = BTreeSet::new();
 
@@ -210,15 +214,15 @@ fn random_test<const CHUNK: usize>(
             if is_initial && num_initial_addresses != 0 {
                 num_initial_addresses -= 1;
                 let value = BabyBear::from_canonical_u32(next_u32() % max_value);
-                initial_memory.insert((address_space, pointer), value);
-                final_memory.insert((address_space, pointer), value);
+                initial_memory.insert(&(address_space, pointer), value);
+                final_memory.insert(&(address_space, pointer), value);
             }
             if is_touched && num_touched_addresses != 0 {
                 num_touched_addresses -= 1;
                 touched_labels.insert((address_space, label));
                 if value_changes || !is_initial {
                     let value = BabyBear::from_canonical_u32(next_u32() % max_value);
-                    final_memory.insert((address_space, pointer), value);
+                    final_memory.insert(&(address_space, pointer), value);
                 }
             }
         }
@@ -260,7 +264,11 @@ fn expand_test_no_accesses() {
     };
     let mut hash_test_chip = HashTestChip::new();
 
-    let memory = MemoryImage::default();
+    let memory = AddressMap::new(
+        memory_dimensions.as_offset,
+        1 << memory_dimensions.as_height,
+        1 << memory_dimensions.address_height,
+    );
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,
         &memory,
@@ -293,7 +301,11 @@ fn expand_test_negative() {
 
     let mut hash_test_chip = HashTestChip::new();
 
-    let memory = MemoryImage::default();
+    let memory = AddressMap::new(
+        memory_dimensions.as_offset,
+        1 << memory_dimensions.as_height,
+        1 << memory_dimensions.address_height,
+    );
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,
         &memory,

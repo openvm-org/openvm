@@ -6,6 +6,7 @@ pub mod merkle;
 mod offline;
 pub mod offline_checker;
 pub mod online;
+pub mod paged_vec;
 mod persistent;
 #[cfg(test)]
 mod tests;
@@ -14,6 +15,7 @@ mod volatile;
 
 pub use controller::*;
 pub use offline::*;
+pub use paged_vec::*;
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {

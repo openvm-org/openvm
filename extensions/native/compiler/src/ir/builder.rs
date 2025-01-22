@@ -1,6 +1,7 @@
 use std::{iter::Zip, vec::IntoIter};
 
 use backtrace::Backtrace;
+use itertools::izip;
 use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use serde::{Deserialize, Serialize};
@@ -276,12 +277,21 @@ impl<C: Config> Builder<C> {
         start: impl Into<RVar<C::N>>,
         end: impl Into<RVar<C::N>>,
     ) -> IteratorBuilder<C> {
+        self.range_with_step(start, end, C::N::ONE)
+    }
+    /// Evaluate a block of operations over a range from start to end with a custom step.
+    pub fn range_with_step(
+        &mut self,
+        start: impl Into<RVar<C::N>>,
+        end: impl Into<RVar<C::N>>,
+        step: C::N,
+    ) -> IteratorBuilder<C> {
         let start = start.into();
         let end0 = end.into();
         IteratorBuilder {
             starts: vec![start],
             end0,
-            step_sizes: vec![1],
+            step_sizes: vec![step],
             builder: self,
         }
     }
@@ -295,7 +305,7 @@ impl<C: Config> Builder<C> {
             IteratorBuilder {
                 starts: vec![RVar::zero(); arrays.len()],
                 end0: arrays[0].len().into(),
-                step_sizes: vec![1; arrays.len()],
+                step_sizes: vec![C::N::ONE; arrays.len()],
                 builder: self,
             }
         } else if arrays.iter().all(|array| !array.is_fixed()) {
@@ -311,7 +321,10 @@ impl<C: Config> Builder<C> {
                         self.eval(arrays[0].ptr().address + len * RVar::from(size));
                     end.into()
                 },
-                step_sizes: arrays.iter().map(|array| array.element_size_of()).collect(),
+                step_sizes: arrays
+                    .iter()
+                    .map(|array| C::N::from_canonical_usize(array.element_size_of()))
+                    .collect(),
                 builder: self,
             }
         } else {
@@ -735,7 +748,7 @@ impl<C: Config> IfBuilder<'_, C> {
 pub struct IteratorBuilder<'a, C: Config> {
     starts: Vec<RVar<C::N>>,
     end0: RVar<C::N>,
-    step_sizes: Vec<usize>,
+    step_sizes: Vec<C::N>,
     builder: &'a mut Builder<C>,
 }
 
@@ -757,12 +770,20 @@ impl<C: Config> IteratorBuilder<'_, C> {
     }
 
     fn for_each_unrolled(&mut self, mut f: impl FnMut(Vec<RVar<C::N>>, &mut Builder<C>)) {
-        let starts: Vec<usize> = self.starts.iter().map(|start| start.value()).collect();
-        let end0 = self.end0.value();
-
-        for i in (starts[0]..end0).step_by(self.step_sizes[0]) {
-            let ptrs = vec![i.into(); self.starts.len()];
-            f(ptrs, self.builder);
+        let mut ptrs: Vec<_> = self
+            .starts
+            .iter()
+            .map(|start| start.field_value())
+            .collect();
+        let end0 = self.end0.field_value();
+        while ptrs[0] != end0 {
+            f(
+                ptrs.iter().map(|ptr| RVar::Const(*ptr)).collect(),
+                self.builder,
+            );
+            for (ptr, step_size) in izip!(&mut ptrs, &self.step_sizes) {
+                *ptr += *step_size;
+            }
         }
     }
 
@@ -772,11 +793,6 @@ impl<C: Config> IteratorBuilder<'_, C> {
             "Cannot use dynamic loop in static mode"
         );
 
-        let step_sizes = self
-            .step_sizes
-            .iter()
-            .map(|s| C::N::from_canonical_usize(*s))
-            .collect();
         let loop_variables: Vec<Var<C::N>> = (0..self.starts.len())
             .map(|_| self.builder.uninit())
             .collect();
@@ -791,7 +807,7 @@ impl<C: Config> IteratorBuilder<'_, C> {
         let op = DslIr::ZipFor(
             self.starts.clone(),
             self.end0,
-            step_sizes,
+            self.step_sizes.clone(),
             loop_variables,
             loop_instructions,
         );

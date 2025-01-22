@@ -25,11 +25,14 @@ use openvm_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
-use super::{merkle::DirectCompressionBus, volatile::VolatileBoundaryChip};
+use super::{
+    merkle::DirectCompressionBus,
+    paged_vec::{AddressMap, PAGE_SIZE},
+    volatile::VolatileBoundaryChip,
+};
 use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
     system::memory::{
@@ -41,7 +44,7 @@ use crate::{
             MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
             MemoryWriteAuxCols, AUX_LEN,
         },
-        online::{Address, Memory, MemoryLogEntry},
+        online::{Memory, MemoryLogEntry},
         persistent::PersistentBoundaryChip,
         tree::MemoryNode,
     },
@@ -59,7 +62,7 @@ pub const BOUNDARY_AIR_OFFSET: usize = 0;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct RecordId(pub usize);
 
-pub type MemoryImage<F> = FxHashMap<Address, F>;
+pub type MemoryImage<F> = AddressMap<F, PAGE_SIZE>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimestampedValues<T, const N: usize> {
@@ -229,7 +232,7 @@ impl<F: PrimeField32> MemoryController<F> {
         range_checker: SharedVariableRangeCheckerChip,
     ) -> Self {
         let range_checker_bus = range_checker.bus();
-        let initial_memory = MemoryImage::default();
+        let initial_memory = AddressMap::from_mem_config(&mem_config);
         Self {
             memory_bus,
             mem_config,
@@ -241,13 +244,13 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: Memory::new(mem_config.access_capacity),
+            memory: Memory::new(&mem_config),
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
                 initial_memory,
                 1,
                 memory_bus,
                 range_checker.clone(),
-                mem_config.clk_max_bits,
+                mem_config,
             ))),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
@@ -285,19 +288,19 @@ impl<F: PrimeField32> MemoryController<F> {
                 compression_bus,
             ),
             merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus, compression_bus),
-            initial_memory: MemoryImage::default(),
+            initial_memory: AddressMap::from_mem_config(&mem_config),
         };
         Self {
             memory_bus,
             mem_config,
             interface_chip,
-            memory: Memory::new(0), // it is expected that the memory will be set later
+            memory: Memory::new(&mem_config), // it is expected that the memory will be set later
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
-                MemoryImage::default(),
+                AddressMap::from_mem_config(&mem_config),
                 CHUNK,
                 memory_bus,
                 range_checker.clone(),
-                mem_config.clk_max_bits,
+                mem_config,
             ))),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
@@ -346,7 +349,7 @@ impl<F: PrimeField32> MemoryController<F> {
             panic!("Cannot set initial memory after first timestamp");
         }
         let mut offline_memory = self.offline_memory.lock().unwrap();
-        offline_memory.set_initial_memory(memory.clone());
+        offline_memory.set_initial_memory(memory.clone(), self.mem_config);
 
         self.memory = Memory::from_image(memory.clone(), self.mem_config.access_capacity);
 

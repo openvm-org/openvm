@@ -4,22 +4,25 @@ use openvm_circuit_primitives::{
     assert_less_than::AssertLtSubAir, var_range::SharedVariableRangeCheckerChip,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 
-use crate::system::memory::{
-    adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
-    offline_checker::{MemoryBridge, MemoryBus},
-    online::Address,
-    MemoryAuxColsFactory, MemoryImage, RecordId, TimestampedEquipartition, TimestampedValues,
+use super::{AddressMap, PagedVec, PAGE_SIZE};
+use crate::{
+    arch::MemoryConfig,
+    system::memory::{
+        adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
+        offline_checker::{MemoryBridge, MemoryBus},
+        MemoryAuxColsFactory, MemoryImage, RecordId, TimestampedEquipartition, TimestampedValues,
+    },
 };
 
 pub const INITIAL_TIMESTAMP: u32 = 0;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
 struct BlockData {
     pointer: u32,
-    size: usize,
     timestamp: u32,
+    size: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,8 +37,9 @@ pub struct MemoryRecord<T> {
 }
 
 pub struct OfflineMemory<F> {
-    block_data: FxHashMap<Address, BlockData>,
-    data: FxHashMap<Address, F>,
+    block_data: AddressMap<BlockData, PAGE_SIZE>,
+    data: Vec<PagedVec<F, PAGE_SIZE>>,
+    as_offset: u32,
     initial_block_size: usize,
     timestamp: u32,
     timestamp_max_bits: usize,
@@ -55,25 +59,42 @@ impl<F: PrimeField32> OfflineMemory<F> {
         initial_block_size: usize,
         memory_bus: MemoryBus,
         range_checker: SharedVariableRangeCheckerChip,
-        timestamp_max_bits: usize,
+        config: MemoryConfig,
     ) -> Self {
         assert!(initial_block_size.is_power_of_two());
 
         Self {
-            block_data: FxHashMap::default(),
-            data: initial_memory,
+            block_data: AddressMap::from_mem_config(&config),
+            data: Self::memory_image_to_paged_vec(initial_memory, config),
+            as_offset: config.as_offset,
             initial_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
-            timestamp_max_bits,
+            timestamp_max_bits: config.clk_max_bits,
             memory_bus,
             range_checker,
             log: vec![],
         }
     }
 
-    pub fn set_initial_memory(&mut self, initial_memory: MemoryImage<F>) {
+    pub fn set_initial_memory(&mut self, initial_memory: MemoryImage<F>, config: MemoryConfig) {
         assert_eq!(self.timestamp, INITIAL_TIMESTAMP + 1);
-        self.data = initial_memory;
+        self.as_offset = config.as_offset;
+        self.data = Self::memory_image_to_paged_vec(initial_memory, config);
+    }
+
+    fn memory_image_to_paged_vec(
+        memory_image: MemoryImage<F>,
+        config: MemoryConfig,
+    ) -> Vec<PagedVec<F, PAGE_SIZE>> {
+        let mut paged_vec =
+            vec![
+                PagedVec::new((1usize << config.pointer_max_bits).div_ceil(PAGE_SIZE));
+                1 << config.as_height
+            ];
+        for ((addr_space, pointer), value) in memory_image.items() {
+            paged_vec[(addr_space - config.as_offset) as usize].set(pointer as usize, value);
+        }
+        paged_vec
     }
 
     pub(super) fn set_log_capacity(&mut self, access_capacity: usize) {
@@ -121,17 +142,13 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
         debug_assert!(prev_timestamp < self.timestamp);
 
-        let prev_data = (0..len)
-            .map(|i| {
-                self.data
-                    .insert((address_space, pointer + i as u32), values[i])
-                    .unwrap_or(F::ZERO)
-            })
-            .collect();
+        let pointer = pointer as usize;
+        let prev_data = self.data[(address_space - self.as_offset) as usize]
+            .set_range(pointer..pointer + len, &values);
 
         let record = MemoryRecord {
             address_space: F::from_canonical_u32(address_space),
-            pointer: F::from_canonical_u32(pointer),
+            pointer: F::from_canonical_usize(pointer),
             timestamp: self.timestamp,
             prev_timestamp,
             data: values,
@@ -150,7 +167,6 @@ impl<F: PrimeField32> OfflineMemory<F> {
         len: usize,
     ) -> Vec<AccessAdapterRecord<F>> {
         assert!(len.is_power_of_two());
-
         if address_space == 0 {
             let pointer = F::from_canonical_u32(pointer);
             self.log.push(Some(MemoryRecord {
@@ -198,13 +214,13 @@ impl<F: PrimeField32> OfflineMemory<F> {
         // Grab all aligned pointers that need to be re-accessed.
         let to_access: FxHashSet<_> = self
             .block_data
-            .keys()
-            .map(|&(address_space, pointer)| (address_space, (pointer / N as u32) * N as u32))
+            .items()
+            .map(|((address_space, pointer), _)| (address_space, (pointer / N as u32) * N as u32))
             .collect();
 
         for &(address_space, pointer) in to_access.iter() {
             let block = self.block_data.get(&(address_space, pointer)).unwrap();
-            if block.pointer != pointer || block.size != N {
+            if block.size > 0 && (block.pointer != pointer || block.size != N) {
                 self.access(address_space, pointer, N, &mut adapter_records);
             }
         }
@@ -212,6 +228,9 @@ impl<F: PrimeField32> OfflineMemory<F> {
         let mut equipartition = TimestampedEquipartition::<F, N>::new();
         for (address_space, pointer) in to_access {
             let block = self.block_data.get(&(address_space, pointer)).unwrap();
+            if block.size == 0 {
+                continue;
+            }
 
             debug_assert_eq!(block.pointer % N as u32, 0);
             debug_assert_eq!(block.size, N);
@@ -235,6 +254,11 @@ impl<F: PrimeField32> OfflineMemory<F> {
         query: u32,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) {
+        let lim = (self.data[(address_space - self.as_offset) as usize].memory_size()) as u32;
+        if query == lim {
+            return;
+        }
+        assert!(query < lim);
         let original_block = self.block_containing(address_space, query);
         if original_block.pointer == query {
             return;
@@ -270,7 +294,8 @@ impl<F: PrimeField32> OfflineMemory<F> {
                     timestamp,
                 };
                 for i in 0..half_size_u32 {
-                    self.block_data.insert((address_space, mid_ptr + i), block);
+                    self.block_data
+                        .insert(&(address_space, mid_ptr + i), block.clone());
                 }
             }
             if query >= cur_ptr + half_size_u32 {
@@ -281,7 +306,8 @@ impl<F: PrimeField32> OfflineMemory<F> {
                     timestamp,
                 };
                 for i in 0..half_size_u32 {
-                    self.block_data.insert((address_space, cur_ptr + i), block);
+                    self.block_data
+                        .insert(&(address_space, cur_ptr + i), block.clone());
                 }
             }
             if mid_ptr <= query {
@@ -306,10 +332,17 @@ impl<F: PrimeField32> OfflineMemory<F> {
         let mut prev_timestamp = None;
 
         for i in 0..size as u32 {
+            let block = self.block_data.get(&(address_space, pointer + i));
+            if block.is_none() || block.unwrap().size == 0 {
+                self.block_data.insert(
+                    &(address_space, pointer + i),
+                    Self::initial_block_data(pointer + i, self.initial_block_size),
+                );
+            }
             let block = self
                 .block_data
-                .entry((address_space, pointer + i))
-                .or_insert_with(|| Self::initial_block_data(pointer + i, self.initial_block_size));
+                .get_mut(&(address_space, pointer + i))
+                .unwrap();
             debug_assert!(i == 0 || prev_timestamp == Some(block.timestamp));
             prev_timestamp = Some(block.timestamp);
             block.timestamp = self.timestamp;
@@ -327,11 +360,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         self.split_to_make_boundary(address_space, pointer, records);
         self.split_to_make_boundary(address_space, pointer + size as u32, records);
 
-        let block_data = self
-            .block_data
-            .get(&(address_space, pointer))
-            .copied()
-            .unwrap_or_else(|| Self::initial_block_data(pointer, self.initial_block_size));
+        let block_data = self.block_containing(address_space, pointer);
 
         if block_data.pointer == pointer && block_data.size == size {
             return;
@@ -364,9 +393,12 @@ impl<F: PrimeField32> OfflineMemory<F> {
         let left_block = self.block_data.get(&(address_space, pointer));
 
         let left_timestamp = left_block.map(|b| b.timestamp).unwrap_or(INITIAL_TIMESTAMP);
-        let size = left_block
+        let mut size = left_block
             .map(|b| b.size)
             .unwrap_or(self.initial_block_size);
+        if size == 0 {
+            size = self.initial_block_size;
+        }
 
         let right_timestamp = self
             .block_data
@@ -377,7 +409,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         let timestamp = max(left_timestamp, right_timestamp);
         for i in 0..2 * size as u32 {
             self.block_data.insert(
-                (address_space, pointer + i),
+                &(address_space, pointer + i),
                 BlockData {
                     pointer,
                     size: 2 * size,
@@ -399,10 +431,11 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
     fn block_containing(&mut self, address_space: u32, pointer: u32) -> BlockData {
         if let Some(block_data) = self.block_data.get(&(address_space, pointer)) {
-            *block_data
-        } else {
-            Self::initial_block_data(pointer, self.initial_block_size)
+            if block_data.size > 0 {
+                return block_data.clone();
+            }
         }
+        Self::initial_block_data(pointer, self.initial_block_size)
     }
 
     fn initial_block_data(pointer: u32, initial_block_size: usize) -> BlockData {
@@ -415,7 +448,10 @@ impl<F: PrimeField32> OfflineMemory<F> {
     }
 
     pub fn get(&self, address_space: u32, pointer: u32) -> F {
-        *self.data.get(&(address_space, pointer)).unwrap_or(&F::ZERO)
+        self.data[(address_space - self.as_offset) as usize]
+            .get(pointer as usize)
+            .cloned()
+            .unwrap_or_default()
     }
 
     fn range_array<const N: usize>(&self, address_space: u32, pointer: u32) -> [F; N] {
@@ -423,9 +459,8 @@ impl<F: PrimeField32> OfflineMemory<F> {
     }
 
     fn range_vec(&self, address_space: u32, pointer: u32, len: usize) -> Vec<F> {
-        (0..len)
-            .map(|i| self.get(address_space, pointer + i as u32))
-            .collect()
+        let pointer = pointer as usize;
+        self.data[(address_space - self.as_offset) as usize].range_vec(pointer..pointer + len)
     }
 
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
@@ -453,10 +488,14 @@ mod tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::{BlockData, MemoryRecord, OfflineMemory};
-    use crate::system::memory::{
-        adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
-        offline_checker::MemoryBus,
-        MemoryImage, TimestampedValues,
+    use crate::{
+        arch::MemoryConfig,
+        system::memory::{
+            adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
+            offline_checker::MemoryBus,
+            paged_vec::AddressMap,
+            MemoryImage, TimestampedValues,
+        },
     };
 
     macro_rules! bb {
@@ -481,13 +520,16 @@ mod tests {
     fn test_partition() {
         type F = BabyBear;
 
-        let initial_memory = MemoryImage::default();
+        let initial_memory = AddressMap::new(0, 1, 16);
         let mut partition = OfflineMemory::<F>::new(
             initial_memory,
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
+            MemoryConfig {
+                as_offset: 0,
+                ..Default::default()
+            },
         );
         assert_eq!(
             partition.block_containing(0, 13),
@@ -534,7 +576,7 @@ mod tests {
             1,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
+            Default::default(),
         );
         let address_space = 1;
 
@@ -560,7 +602,7 @@ mod tests {
             1,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
+            Default::default(),
         );
 
         let adapter_records = memory.write(1, 0, bbvec![1, 2, 3, 4]);
@@ -705,7 +747,7 @@ mod tests {
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
+            Default::default(),
         );
 
         let adapter_records = memory.write(1, 0, bbvec![1, 2, 3, 4]);
@@ -820,7 +862,10 @@ mod tests {
             1,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
+            MemoryConfig {
+                as_offset: 0,
+                ..Default::default()
+            },
         );
 
         memory.write(1, 0, bbvec![4, 3, 2, 1]);
@@ -842,7 +887,10 @@ mod tests {
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
+            MemoryConfig {
+                as_offset: 0,
+                ..Default::default()
+            },
         );
 
         memory.write(1, 0, bbvec![4, 3, 2, 1]);
@@ -864,7 +912,7 @@ mod tests {
             4,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
+            Default::default(),
         );
 
         let (memory, records) = memory.finalize::<4>();
@@ -880,7 +928,7 @@ mod tests {
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
+            Default::default(),
         );
         // Make block 0:4 in address space 1 active.
         memory.write(1, 0, bbvec![1, 2, 3, 4]);
@@ -941,8 +989,8 @@ mod tests {
         // Initialize initial memory with blocks at indices 0 and 2
         let mut initial_memory = MemoryImage::default();
         for i in 0..8 {
-            initial_memory.insert((1, i), F::from_canonical_u32(i + 1));
-            initial_memory.insert((1, 16 + i), F::from_canonical_u32(i + 1));
+            initial_memory.insert(&(1, i), F::from_canonical_u32(i + 1));
+            initial_memory.insert(&(1, 16 + i), F::from_canonical_u32(i + 1));
         }
 
         let mut memory = OfflineMemory::<BabyBear>::new(
@@ -950,7 +998,7 @@ mod tests {
             8,
             MemoryBus(0),
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29)),
-            29,
+            Default::default(),
         );
 
         // Verify initial state of block 0 (pointers 0–8)

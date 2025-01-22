@@ -98,13 +98,13 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         // Construct a BTreeMap that includes the address space in the label calculation,
         // representing the entire memory tree.
         let mut memory_partition = BTreeMap::new();
-        for (&(address_space, pointer), value) in memory {
+        for ((address_space, pointer), value) in memory.items() {
             let label = (address_space, pointer / CHUNK as u32);
             let index = memory_dimensions.label_to_index(label);
             let chunk = memory_partition
                 .entry(index)
                 .or_insert_with(|| [F::ZERO; CHUNK]);
-            chunk[(pointer % CHUNK as u32) as usize] = *value;
+            chunk[(pointer % CHUNK as u32) as usize] = value;
         }
         Self::from_memory(
             &memory_partition,
