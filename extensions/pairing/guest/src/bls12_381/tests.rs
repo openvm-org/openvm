@@ -8,61 +8,18 @@ use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
 use rand::{rngs::StdRng, SeedableRng};
 
-use super::{Fp, Fp12, Fp2};
+use super::{convert_bls12381_fp12_to_halo2_fq12, Fp, Fp12, Fp2};
 use crate::{
-    bls12_381::{Bls12_381, G2Affine as OpenVmG2Affine},
+    bls12_381::{
+        convert_bls12381_halo2_fq12_to_fp12, convert_bls12381_halo2_fq2_to_fp2,
+        convert_bls12381_halo2_fq_to_fp, convert_g2_affine_halo2_to_openvm, Bls12_381,
+        G2Affine as OpenVmG2Affine,
+    },
     pairing::{
         fp2_invert_assign, fp6_invert_assign, fp6_square_assign, FinalExp, MultiMillerLoop,
         PairingCheck, PairingIntrinsics,
     },
 };
-
-fn convert_bls12381_halo2_fq_to_fp(x: Fq) -> Fp {
-    let bytes = x.to_bytes();
-    Fp::from_le_bytes(&bytes)
-}
-
-fn convert_bls12381_halo2_fq2_to_fp2(x: Fq2) -> Fp2 {
-    Fp2::new(
-        convert_bls12381_halo2_fq_to_fp(x.c0),
-        convert_bls12381_halo2_fq_to_fp(x.c1),
-    )
-}
-
-fn convert_bls12381_halo2_fq12_to_fp12(x: Fq12) -> Fp12 {
-    Fp12 {
-        c: x.to_coeffs().map(convert_bls12381_halo2_fq2_to_fp2),
-    }
-}
-
-fn convert_bls12381_fp_to_halo2_fq(x: Fp) -> Fq {
-    let bytes =
-        x.0.chunks(8)
-            .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
-    Fq::from_raw_unchecked(bytes)
-}
-
-fn convert_bls12381_fp2_to_halo2_fq2(x: Fp2) -> Fq2 {
-    Fq2 {
-        c0: convert_bls12381_fp_to_halo2_fq(x.c0.clone()),
-        c1: convert_bls12381_fp_to_halo2_fq(x.c1.clone()),
-    }
-}
-
-fn convert_bls12381_fp12_to_halo2_fq12(x: Fp12) -> Fq12 {
-    let c = x.to_coeffs();
-    Fq12::from_coeffs(c.map(convert_bls12381_fp2_to_halo2_fq2))
-}
-
-fn convert_g2_affine_halo2_to_openvm(p: G2Affine) -> OpenVmG2Affine {
-    OpenVmG2Affine::from_xy_unchecked(
-        convert_bls12381_halo2_fq2_to_fp2(p.x),
-        convert_bls12381_halo2_fq2_to_fp2(p.y),
-    )
-}
 
 #[test]
 fn test_bls12381_frobenius_coeffs() {
@@ -307,7 +264,7 @@ fn test_bls12381_pairing_check_hint_host() {
     let mut rng = StdRng::seed_from_u64(83);
     let h2c_p = G1Affine::random(&mut rng);
     let h2c_q = G2Affine::random(&mut rng);
-
+    println!("h2c_p: {:?}", h2c_p);
     let p = AffinePoint {
         x: convert_bls12381_halo2_fq_to_fp(h2c_p.x),
         y: convert_bls12381_halo2_fq_to_fp(h2c_p.y),

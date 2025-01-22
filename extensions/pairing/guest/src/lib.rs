@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(target_os = "zkvm", no_std)]
 use strum_macros::FromRepr;
 
 /// This is custom-1 defined in RISC-V spec document

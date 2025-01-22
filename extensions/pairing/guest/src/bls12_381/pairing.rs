@@ -6,12 +6,6 @@ use openvm_algebra_guest::{
     DivUnsafe, Field,
 };
 use openvm_ecc_guest::AffinePoint;
-#[cfg(not(target_os = "zkvm"))]
-use {
-    crate::curve_const::bls12_381::{FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR},
-    num_bigint::BigUint,
-    openvm_algebra_guest::ExpBytes,
-};
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
@@ -25,6 +19,15 @@ use super::{Bls12_381, Fp, Fp12, Fp2};
 use crate::pairing::{
     Evaluatable, EvaluatedLine, FromLineMType, LineMulMType, MillerStep, MultiMillerLoop,
     PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
+};
+#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+use crate::{
+    bls12_381::{
+        convert_bls12381_fp2_to_halo2_fq2, convert_bls12381_fp_to_halo2_fq,
+        convert_bls12381_halo2_fq12_to_fp12,
+    },
+    halo2curves_shims::bls12_381::Bls12_381 as Halo2CurvesBls12_381,
+    pairing::FinalExp,
 };
 
 // TODO[jpw]: make macro
@@ -281,68 +284,35 @@ impl PairingCheck for Bls12_381 {
     ) -> (Self::Fp12, Self::Fp12) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            let f = Self::multi_miller_loop(P, Q);
+            #[cfg(not(feature = "halo2curves"))]
+            panic!("`halo2curves` feature must be enabled to use pairing check hint");
 
-            // 1. get p-th root inverse
-            let mut exp = FINAL_EXP_FACTOR.clone() * BigUint::from(27u32);
-            let mut root = f.exp_bytes(true, &exp.to_bytes_be());
-            let root_pth_inv: Fp12;
-            if root == Fp12::ONE {
-                root_pth_inv = Fp12::ONE;
-            } else {
-                let exp_inv = exp.modinv(&POLY_FACTOR.clone()).unwrap();
-                exp = exp_inv % POLY_FACTOR.clone();
-                root_pth_inv = root.exp_bytes(false, &exp.to_bytes_be());
+            #[cfg(feature = "halo2curves")]
+            {
+                let p_halo2 = P
+                    .iter()
+                    .map(|p| {
+                        AffinePoint::new(
+                            convert_bls12381_fp_to_halo2_fq(p.x.clone()),
+                            convert_bls12381_fp_to_halo2_fq(p.y.clone()),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let q_halo2 = Q
+                    .iter()
+                    .map(|q| {
+                        AffinePoint::new(
+                            convert_bls12381_fp2_to_halo2_fq2(q.x.clone()),
+                            convert_bls12381_fp2_to_halo2_fq2(q.y.clone()),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let fq12 = Halo2CurvesBls12_381::multi_miller_loop(&p_halo2, &q_halo2);
+                let (c_fq12, s_fq12) = Halo2CurvesBls12_381::final_exp_hint(&fq12);
+                let c = convert_bls12381_halo2_fq12_to_fp12(c_fq12);
+                let s = convert_bls12381_halo2_fq12_to_fp12(s_fq12);
+                (c, s)
             }
-
-            // 2.1. get order of 3rd primitive root
-            let three = BigUint::from(3u32);
-            let mut order_3rd_power: u32 = 0;
-            exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
-
-            root = f.exp_bytes(true, &exp.to_bytes_be());
-            let three_be = three.to_bytes_be();
-            // NOTE[yj]: we can probably remove this first check as an optimization since we initizlize order_3rd_power to 0
-            if root == Fp12::ONE {
-                order_3rd_power = 0;
-            }
-            root = root.exp_bytes(true, &three_be);
-            if root == Fp12::ONE {
-                order_3rd_power = 1;
-            }
-            root = root.exp_bytes(true, &three_be);
-            if root == Fp12::ONE {
-                order_3rd_power = 2;
-            }
-            root = root.exp_bytes(true, &three_be);
-            if root == Fp12::ONE {
-                order_3rd_power = 3;
-            }
-
-            // 2.2. get 27th root inverse
-            let root_27th_inv: Fp12;
-            if order_3rd_power == 0 {
-                root_27th_inv = Fp12::ONE;
-            } else {
-                let order_3rd = three.pow(order_3rd_power);
-                exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
-                root = f.exp_bytes(true, &exp.to_bytes_be());
-                let exp_inv = exp.modinv(&order_3rd).unwrap();
-                exp = exp_inv % order_3rd;
-                root_27th_inv = root.exp_bytes(false, &exp.to_bytes_be());
-            }
-
-            // 2.3. shift the Miller loop result so that millerLoop * scalingFactor
-            // is of order finalExpFactor
-            let s = root_pth_inv * root_27th_inv;
-            let f = f * s.clone();
-
-            // 3. get the witness residue
-            // lambda = q - u, the optimal exponent
-            exp = LAMBDA.clone().modinv(&FINAL_EXP_FACTOR.clone()).unwrap();
-            let c = f.exp_bytes(true, &exp.to_bytes_be());
-
-            (c, s)
         }
         #[cfg(target_os = "zkvm")]
         {

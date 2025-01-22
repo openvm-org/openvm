@@ -18,9 +18,11 @@ use crate::pairing::PairingIntrinsics;
 mod fp12;
 mod fp2;
 pub mod pairing;
+mod utils;
 
 pub use fp12::*;
 pub use fp2::*;
+pub(crate) use utils::*;
 
 #[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
 pub mod tests;

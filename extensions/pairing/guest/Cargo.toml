@@ -39,6 +39,7 @@ subtle = "2.6.1"
 
 [features]
 default = []
+test = ["std"]
 std = ["openvm/std"]
 # TODO[yj]: Switch to PSE `halo2curves`
 halo2curves = ["bls12_381", "bn254", "dep:halo2curves-axiom"]
