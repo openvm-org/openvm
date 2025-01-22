@@ -108,10 +108,12 @@ impl<F: PrimeField32> Memory<F> {
         self.timestamp
     }
 
+    #[inline(always)]
     pub fn get(&self, address_space: u32, pointer: u32) -> F {
         *self.data.get(&(address_space, pointer)).unwrap_or(&F::ZERO)
     }
 
+    #[inline(always)]
     fn range_array<const N: usize>(&self, address_space: u32, pointer: u32) -> [F; N] {
         self.data.get_range(&(address_space, pointer))
     }

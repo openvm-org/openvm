@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{mem::MaybeUninit, ops::Range, ptr};
 
 use serde::{Deserialize, Serialize};
 
@@ -45,7 +45,8 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         }
     }
 
-    pub fn get_range(&self, range: Range<usize>) -> Vec<T> {
+    #[inline(always)]
+    pub fn range_vec(&self, range: Range<usize>) -> Vec<T> {
         let mut result = Vec::with_capacity(range.len());
         for page_idx in (range.start / PAGE_SIZE)..range.end.div_ceil(PAGE_SIZE) {
             let in_page_start = range.start.saturating_sub(page_idx * PAGE_SIZE);
@@ -81,6 +82,63 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
 
     pub fn is_empty(&self) -> bool {
         self.pages.iter().all(|page| page.is_none())
+    }
+}
+
+impl<T: Default + Copy, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
+    #[inline(always)]
+    pub fn range_array<const N: usize>(&self, from: usize) -> [T; N] {
+        // Step 1: Create an uninitialized array of MaybeUninit<T>
+        let mut result: [MaybeUninit<T>; N] = unsafe {
+            // SAFETY: An uninitialized `[MaybeUninit<T>; N]` is valid.
+            MaybeUninit::uninit().assume_init()
+        };
+
+        // Step 2: Get a mutable slice of T references from the MaybeUninit array.
+        let result_slice = unsafe {
+            // SAFETY: We are converting a pointer from MaybeUninit<T> to T.
+            // This is safe because we will fully initialize every element before reading.
+            std::slice::from_raw_parts_mut(result.as_mut_ptr() as *mut T, N)
+        };
+
+        let start_page = from / PAGE_SIZE;
+        let end_page = (from + N - 1) / PAGE_SIZE;
+
+        if start_page == end_page {
+            if let Some(page) = self.pages[start_page].as_ref() {
+                // Copy data from the page into result_slice.
+                let page_offset = from - start_page * PAGE_SIZE;
+                let src = &page[page_offset..page_offset + N];
+                result_slice.copy_from_slice(src);
+            } else {
+                // If no page available, fill with default values.
+                result_slice.fill(T::default());
+            }
+        } else {
+            debug_assert!(start_page + 1 == end_page);
+            let first_part = PAGE_SIZE - (from - start_page * PAGE_SIZE);
+            if let Some(page) = self.pages[start_page].as_ref() {
+                let page_offset = from - start_page * PAGE_SIZE;
+                let src = &page[page_offset..];
+                result_slice[..first_part].copy_from_slice(src);
+            } else {
+                result_slice[..first_part].fill(T::default());
+            }
+            if let Some(page) = self.pages[end_page].as_ref() {
+                let second_part = N - first_part;
+                let src = &page[0..second_part];
+                result_slice[first_part..].copy_from_slice(src);
+            } else {
+                result_slice[first_part..].fill(T::default());
+            }
+        }
+
+        // Step 4: Convert the fully initialized array of MaybeUninit<T> to [T; N].
+        // SAFETY: We have initialized every element of `result`.
+        unsafe {
+            // Transmute the array; at this point each element is initialized.
+            ptr::read(&result as *const _ as *const [T; N])
+        }
     }
 }
 
@@ -172,14 +230,6 @@ impl<T: Clone + Default, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
     pub fn insert(&mut self, address: &Address, data: T) -> Option<T> {
         self.paged_vecs[(address.0 - self.as_offset) as usize].set(address.1 as usize, data)
     }
-    pub fn get_range<const N: usize>(&self, address: &Address) -> [T; N] {
-        unsafe {
-            self.paged_vecs[(address.0 - self.as_offset) as usize]
-                .get_range((address.1 as usize)..(address.1 as usize + N))
-                .try_into()
-                .unwrap_unchecked()
-        }
-    }
     pub fn set_range<const N: usize>(&mut self, address: &Address, values: &[T; N]) -> [T; N] {
         unsafe {
             self.paged_vecs[(address.0 - self.as_offset) as usize]
@@ -203,6 +253,12 @@ impl<T: Clone + Default, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
             vec.insert(&address, data);
         }
         vec
+    }
+}
+
+impl<T: Copy + Default, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
+    pub fn get_range<const N: usize>(&self, address: &Address) -> [T; N] {
+        self.paged_vecs[(address.0 - self.as_offset) as usize].range_array(address.1 as usize)
     }
 }
 
@@ -242,14 +298,14 @@ mod tests {
         v.set(7, 8);
 
         // Verify all values
-        assert_eq!(v.get_range(0..8), [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(v.range_vec(0..8), [1, 2, 3, 4, 5, 6, 7, 8]);
     }
 
     #[test]
     fn test_range_cross_page_boundary() {
         let mut v = PagedVec::<_, 4>::new(2);
         v.set_range(2..8, &[10, 11, 12, 13, 14, 15]);
-        assert_eq!(v.get_range(2..8), [10, 11, 12, 13, 14, 15]);
+        assert_eq!(v.range_vec(2..8), [10, 11, 12, 13, 14, 15]);
     }
 
     #[test]
@@ -267,7 +323,7 @@ mod tests {
         v.set(5, 10);
 
         // Should include both set values and defaults
-        assert_eq!(v.get_range(1..7), [0, 5, 0, 0, 10, 0]);
+        assert_eq!(v.range_vec(1..7), [0, 5, 0, 0, 10, 0]);
     }
 
     #[test]
@@ -302,19 +358,19 @@ mod tests {
 
         // Initial set_range
         v.set_range(0..5, &[1, 2, 3, 4, 5]);
-        assert_eq!(v.get_range(0..5), [1, 2, 3, 4, 5]);
+        assert_eq!(v.range_vec(0..5), [1, 2, 3, 4, 5]);
 
         // Overlap from beginning
         v.set_range(0..3, &[10, 20, 30]);
-        assert_eq!(v.get_range(0..5), [10, 20, 30, 4, 5]);
+        assert_eq!(v.range_vec(0..5), [10, 20, 30, 4, 5]);
 
         // Overlap in middle
         v.set_range(2..4, &[42, 43]);
-        assert_eq!(v.get_range(0..5), [10, 20, 42, 43, 5]);
+        assert_eq!(v.range_vec(0..5), [10, 20, 42, 43, 5]);
 
         // Overlap at end
         v.set_range(4..6, &[91, 92]);
-        assert_eq!(v.get_range(0..6), [10, 20, 42, 43, 91, 92]);
+        assert_eq!(v.range_vec(0..6), [10, 20, 42, 43, 91, 92]);
     }
 
     #[test]
@@ -326,11 +382,11 @@ mod tests {
 
         // Overlap end of first page and start of second
         v.set_range(2..6, &[21, 22, 23, 24]);
-        assert_eq!(v.get_range(0..8), [1, 2, 21, 22, 23, 24, 7, 8]);
+        assert_eq!(v.range_vec(0..8), [1, 2, 21, 22, 23, 24, 7, 8]);
 
         // Overlap multiple pages
         v.set_range(1..7, &[31, 32, 33, 34, 35, 36]);
-        assert_eq!(v.get_range(0..8), [1, 31, 32, 33, 34, 35, 36, 8]);
+        assert_eq!(v.range_vec(0..8), [1, 31, 32, 33, 34, 35, 36, 8]);
     }
 
     #[test]
