@@ -277,7 +277,7 @@ pub fn te_init(input: TokenStream) -> TokenStream {
                     let mut zero = [0u8; <<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
                     let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_A);
                     let curve_d_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_D);
-                    let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref(), curve_d_bytes.as_ref()].concat();
+                    let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
                     let p2 = [curve_d_bytes.as_ref(), zero.as_ref()].concat();
                     let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(

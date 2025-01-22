@@ -1,4 +1,4 @@
-use std::{cell::RefCell, iter, ops::Deref, rc::Rc};
+use std::{cell::RefCell, ops::Deref, rc::Rc};
 
 use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::Zero;

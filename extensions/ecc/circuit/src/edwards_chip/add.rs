@@ -16,7 +16,7 @@ use openvm_ecc_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::instruction::Instruction;
 use openvm_mod_circuit_builder::{
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExprCols, FieldVariable,
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExprCols,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,

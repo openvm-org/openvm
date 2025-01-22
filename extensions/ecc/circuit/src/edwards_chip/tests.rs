@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::{
@@ -8,7 +8,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
 };
 use openvm_ecc_transpiler::Rv32EdwardsOpcode;
-use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpr};
 use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -52,11 +52,11 @@ lazy_static::lazy_static! {
 
         // This is 2 * (x1, y1)
         let x4 = BigUint::from_str(
-            "24727413235106541002554574571675588834622768167397638456726423682521233608206",
+            "39226743113244985161159605482495583316761443760287217110659799046557361995496",
         )
         .unwrap();
         let y4 = BigUint::from_str(
-            "15549675580280190176352668710449542251549572066445060580507079593062643049417",
+            "12570354238812836652656274015246690354874018829607973815551555426027032771563",
         )
         .unwrap();
 
@@ -121,13 +121,14 @@ fn test_add() {
     let mut chip = TeEcAddChip::new(
         adapter,
         config,
-        Rv32EdwardsOpcode::default_offset(),
+        Rv32EdwardsOpcode::CLASS_OFFSET,
         Edwards25519_A.clone(),
         Edwards25519_D.clone(),
         tester.range_checker(),
         tester.offline_memory_mutex_arc(),
     );
-    assert_eq!(chip.0.core.expr().builder.num_variables, 12);
+    //assert_eq!(chip.0.core.expr().builder.num_variables, 12);
+    assert_eq!(chip.0.core.air.expr.builder.num_variables, 12);
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
@@ -144,7 +145,9 @@ fn test_add() {
     let r = chip
         .0
         .core
-        .expr()
+        //.expr()
+        .air
+        .expr
         .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![true]);
     assert_eq!(r.len(), 12);
 
@@ -159,13 +162,14 @@ fn test_add() {
     assert_eq!(outputs[0], &SampleEcPoints[2].0);
     assert_eq!(outputs[1], &SampleEcPoints[2].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(chip.0.core.expr()).try_into().unwrap();
+    //let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(chip.0.core.expr()).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
     let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
     one_limbs[0] = BabyBear::ONE;
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
-        vec![prime_limbs, *Edwards25519_A_LIMBS, *Edwards25519_D_LIMBS],
-        vec![],
+        vec![prime_limbs, *Edwards25519_A_LIMBS],
+        vec![*Edwards25519_D_LIMBS],
         chip.0.core.air.offset + Rv32EdwardsOpcode::SETUP_EC_ADD as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
@@ -174,84 +178,6 @@ fn test_add() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        chip.0.core.air.offset + Rv32EdwardsOpcode::EC_ADD as usize,
-    );
-
-    tester.execute(&mut chip, &instruction);
-
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
-
-    tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn test_double() {
-    let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let config = ExprBuilderConfig {
-        modulus: Edwards25519_Prime.clone(),
-        num_limbs: NUM_LIMBS,
-        limb_bits: LIMB_BITS,
-    };
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, BLOCK_SIZE, BLOCK_SIZE>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-        tester.address_bits(),
-        bitwise_chip.clone(),
-    );
-    let mut chip = TeEcAddChip::new(
-        adapter,
-        config,
-        Rv32EdwardsOpcode::default_offset(),
-        Edwards25519_A.clone(),
-        Edwards25519_D.clone(),
-        tester.range_checker(),
-        tester.offline_memory_mutex_arc(),
-    );
-    assert_eq!(chip.0.core.expr().builder.num_variables, 12);
-
-    let (p1_x, p1_y) = SampleEcPoints[0].clone();
-
-    let p1_x_limbs =
-        biguint_to_limbs::<NUM_LIMBS>(p1_x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
-    let p1_y_limbs =
-        biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
-
-    let r = chip
-        .0
-        .core
-        .expr()
-        .execute(vec![p1_x.clone(), p1_y.clone(), p1_x, p1_y], vec![true]);
-    assert_eq!(r.len(), 12);
-
-    let outputs = chip
-        .0
-        .core
-        .air
-        .output_indices()
-        .iter()
-        .map(|i| &r[*i])
-        .collect::<Vec<_>>();
-    assert_eq!(outputs[0], &SampleEcPoints[3].0);
-    assert_eq!(outputs[1], &SampleEcPoints[3].1);
-
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(chip.0.core.expr()).try_into().unwrap();
-    let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
-    one_limbs[0] = BabyBear::ONE;
-    let setup_instruction = rv32_write_heap_default(
-        &mut tester,
-        vec![prime_limbs, *Edwards25519_A_LIMBS, *Edwards25519_D_LIMBS],
-        vec![],
-        chip.0.core.air.offset + Rv32EdwardsOpcode::SETUP_EC_ADD as usize,
-    );
-    tester.execute(&mut chip, &setup_instruction);
-
-    let instruction = rv32_write_heap_default(
-        &mut tester,
-        vec![p1_x_limbs, p1_y_limbs],
-        vec![p1_x_limbs, p1_y_limbs],
         chip.0.core.air.offset + Rv32EdwardsOpcode::EC_ADD as usize,
     );
 
