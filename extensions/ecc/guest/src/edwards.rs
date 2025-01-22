@@ -4,17 +4,10 @@ use openvm_algebra_guest::{Field, IntMod};
 
 pub trait TwistedEdwardsPoint: Sized {
     /// The `a` coefficient in the twisted Edwards curve equation `ax^2 + y^2 = 1 + d x^2 y^2`.
-    const CURVE_A_BYTES: &[u8];
+    const CURVE_A: Self::Coordinate;
     /// The `d` coefficient in the twisted Edwards curve equation `ax^2 + y^2 = 1 + d x^2 y^2`.
-    const CURVE_D_BYTES: &[u8];
+    const CURVE_D: Self::Coordinate;
     const IDENTITY: Self;
-
-    fn curve_a() -> Self::Coordinate {
-        Self::Coordinate::from_le_bytes(Self::CURVE_A_BYTES)
-    }
-    fn curve_d() -> Self::Coordinate {
-        Self::Coordinate::from_le_bytes(Self::CURVE_D_BYTES)
-    }
 
     type Coordinate: IntMod + Field;
     const ZERO: Self::Coordinate = <Self::Coordinate as IntMod>::ZERO;
@@ -52,8 +45,8 @@ pub trait TwistedEdwardsPoint: Sized {
     where
         for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
     {
-        let lhs = &Self::curve_a() * &x * &x + &y * &y;
-        let rhs = &Self::curve_d() * &x * &x * &y * &y + &Self::ONE;
+        let lhs = Self::CURVE_A * &x * &x + &y * &y;
+        let rhs = Self::CURVE_D * &x * &x * &y * &y + &Self::ONE;
         if lhs != rhs {
             return None;
         }

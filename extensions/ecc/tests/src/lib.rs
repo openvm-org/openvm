@@ -3,7 +3,7 @@ mod tests {
     use std::str::FromStr;
 
     use eyre::Result;
-    use num_bigint_dig::BigUint;
+    use num_bigint::BigUint;
     use openvm_algebra_circuit::ModularExtension;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{

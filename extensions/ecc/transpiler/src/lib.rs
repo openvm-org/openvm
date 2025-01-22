@@ -23,7 +23,7 @@ pub enum Rv32WeierstrassOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x600] // same as for weierstrass
 #[allow(non_camel_case_types)]
@@ -80,7 +80,7 @@ impl EccTranspilerExtension {
             if base_funct7 == TeBaseFunct7::TeSetup as u8 {
                 let local_opcode = Rv32EdwardsOpcode::SETUP_EC_ADD;
                 Some(Instruction::new(
-                    VmOpcode::from_usize(local_opcode.with_default_offset() + curve_idx_shift),
+                    VmOpcode::from_usize(local_opcode.global_opcode().as_usize() + curve_idx_shift),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
@@ -92,7 +92,7 @@ impl EccTranspilerExtension {
             } else {
                 let global_opcode = match TeBaseFunct7::from_repr(base_funct7) {
                     Some(TeBaseFunct7::TeAdd) => {
-                        Rv32EdwardsOpcode::EC_ADD as usize + Rv32EdwardsOpcode::default_offset()
+                        Rv32EdwardsOpcode::EC_ADD as usize + Rv32EdwardsOpcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };

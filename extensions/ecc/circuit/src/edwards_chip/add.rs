@@ -1,18 +1,18 @@
-use std::{cell::RefCell, iter, rc::Rc, sync::Arc};
+use std::{cell::RefCell, iter, rc::Rc};
 
 use itertools::{zip_eq, Itertools};
-use num_bigint_dig::BigUint;
-use num_traits::One;
+use num_bigint::BigUint;
+use num_traits::{One, Zero};
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
     Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_num_limbs,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     SubAir, TraceSubRowGenerator,
 };
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::instruction::Instruction;
 use openvm_mod_circuit_builder::{
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
@@ -51,9 +51,6 @@ impl TeEcAddCoreAir {
         let builder = ExprBuilder::new(config, range_bus.range_max_bits);
         let builder = Rc::new(RefCell::new(builder));
 
-        // TODO: do the setup row, if needed
-        // might have to define a CoreChip and CoreAir
-
         let x1 = ExprBuilder::new_input(builder.clone());
         let y1 = ExprBuilder::new_input(builder.clone());
         let x2 = ExprBuilder::new_input(builder.clone());
@@ -76,11 +73,9 @@ impl TeEcAddCoreAir {
 
         let builder = builder.borrow().clone();
 
-        let expr = FieldExpr::new_with_setup_values(
-            builder,
-            range_bus,
-            true,
-            vec![a_biguint.clone(), d_biguint.clone()],
+        let expr = FieldExpr::new(
+            builder, range_bus, true,
+            //vec![a_biguint.clone(), d_biguint.clone()],
         );
         Self {
             expr,
@@ -117,8 +112,7 @@ where
     ) -> AdapterAirContext<AB::Expr, I> {
         assert_eq!(local.len(), BaseAir::<AB::F>::width(&self.expr));
 
-        // TODO
-        //self.expr.eval(builder, local);
+        self.expr.eval(builder, local);
 
         let FieldExprCols {
             is_valid,
@@ -131,7 +125,6 @@ where
         assert_eq!(vars.len(), 12);
         assert_eq!(flags.len(), 1);
 
-        //let reads: Vec<AB::Expr> = inputs.into_iter().flatten().map(Into::into).collect();
         let reads: Vec<AB::Expr> = inputs
             .clone()
             .into_iter()
@@ -148,35 +141,15 @@ where
         let is_setup = is_valid - flags[0];
         builder.assert_bool(is_setup.clone());
         let local_opcode_idx = flags[0]
-            * AB::Expr::from_canonical_usize(Rv32WeierstrassOpcode::EC_DOUBLE as usize)
+            * AB::Expr::from_canonical_usize(Rv32EdwardsOpcode::EC_ADD as usize)
             + is_setup.clone()
-                * AB::Expr::from_canonical_usize(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize);
+                * AB::Expr::from_canonical_usize(Rv32EdwardsOpcode::SETUP_EC_ADD as usize);
 
-        let dbg = iter::empty()
-            .chain(self.expr.builder.prime_limbs.clone())
-            .chain(big_uint_to_num_limbs(
-                &self.a_biguint,
-                self.expr.builder.limb_bits,
-                self.expr.builder.num_limbs,
-            ))
-            .chain(big_uint_to_num_limbs(
-                &self.d_biguint,
-                self.expr.builder.limb_bits,
-                self.expr.builder.num_limbs,
-            ))
-            .collect_vec();
-        println!("dbg: {:?}", dbg);
-
-        // when is_setup, assert `reads` equals `(modulus, a)`
+        // when is_setup, assert `reads` equals `(modulus, a, d, 0)`
         for (lhs, &rhs) in zip_eq(
-            //&reads,
-            inputs
-                .into_iter()
-                .flatten()
-                .map(Into::into)
-                .take(1 * self.expr.builder.num_limbs),
-            iter::empty().chain(&self.expr.builder.prime_limbs),
-            /*
+            &reads,
+            iter::empty()
+                .chain(&self.expr.builder.prime_limbs)
                 .chain(&big_uint_to_num_limbs(
                     &self.a_biguint,
                     self.expr.builder.limb_bits,
@@ -186,13 +159,12 @@ where
                     &self.d_biguint,
                     self.expr.builder.limb_bits,
                     self.expr.builder.num_limbs,
+                ))
+                .chain(&big_uint_to_num_limbs(
+                    &BigUint::zero(),
+                    self.expr.builder.limb_bits,
+                    self.expr.builder.num_limbs,
                 )),
-            .chain(&big_uint_to_num_limbs(
-                &BigUint::default(),
-                self.expr.builder.limb_bits,
-                self.expr.builder.num_limbs,
-            )),
-            */
         ) {
             builder
                 .when(is_setup.clone())
@@ -212,17 +184,21 @@ where
         };
         ctx.into()
     }
+
+    fn start_offset(&self) -> usize {
+        self.offset
+    }
 }
 
 pub struct TeEcAddCoreChip {
     pub air: TeEcAddCoreAir,
-    pub range_checker: Arc<VariableRangeCheckerChip>,
+    pub range_checker: SharedVariableRangeCheckerChip,
 }
 
 impl TeEcAddCoreChip {
     pub fn new(
         config: ExprBuilderConfig,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         a_biguint: BigUint,
         d_biguint: BigUint,
         offset: usize,
@@ -243,7 +219,7 @@ pub struct TeEcAddCoreRecord {
     pub x2: BigUint,
     #[serde_as(as = "DisplayFromStr")]
     pub y2: BigUint,
-    pub is_double_flag: bool,
+    pub is_add_flag: bool,
 }
 
 impl<F: PrimeField32, I> VmCoreChip<F, I> for TeEcAddCoreChip
@@ -291,7 +267,7 @@ where
         let x2_biguint = limbs_to_biguint(&x2, limb_bits);
         let y2_biguint = limbs_to_biguint(&y2, limb_bits);
 
-        let is_double_flag = local_opcode_idx == Rv32WeierstrassOpcode::EC_DOUBLE as usize;
+        let is_add_flag = local_opcode_idx == Rv32EdwardsOpcode::EC_ADD as usize;
 
         let vars = self.air.expr.execute(
             vec![
@@ -300,7 +276,7 @@ where
                 x2_biguint.clone(),
                 y2_biguint.clone(),
             ],
-            vec![is_double_flag],
+            vec![is_add_flag],
         );
         assert_eq!(vars.len(), 12);
 
@@ -323,7 +299,7 @@ where
                 y1: y1_biguint,
                 x2: x2_biguint,
                 y2: y2_biguint,
-                is_double_flag,
+                is_add_flag,
             },
         ))
     }
@@ -335,9 +311,9 @@ where
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         self.air.expr.generate_subrow(
             (
-                &self.range_checker,
+                self.range_checker.as_ref(),
                 vec![record.x1, record.y1, record.x2, record.y2],
-                vec![record.is_double_flag],
+                vec![record.is_add_flag],
             ),
             row_slice,
         );
@@ -354,15 +330,42 @@ where
         }
         let core_width = <Self::Air as BaseAir<F>>::width(&self.air);
         let adapter_width = trace.width() - core_width;
-        // We will be setting is_valid = 0. That forces is_double to be 0 (otherwise setup will be -1).
-        // So the computation is like doing setup.
-        // Thus we will copy over the first row (which is a setup row) and set is_valid = 0.
-        let first_row = trace.rows().nth(0).unwrap().collect::<Vec<_>>();
-        let first_row_core = first_row.split_at(adapter_width).1;
+        let dummy_row = self.generate_dummy_trace_row(adapter_width, core_width);
         for row in trace.rows_mut().skip(num_records) {
-            let core_row = row.split_at_mut(adapter_width).1;
-            core_row.copy_from_slice(first_row_core);
-            core_row[0] = F::ZERO; // is_valid = 0
+            row.copy_from_slice(&dummy_row);
         }
+    }
+}
+
+impl TeEcAddCoreChip {
+    // We will be setting is_valid = 0. That forces is_add to be 0 (otherwise setup will be -1).
+    // We generate a dummy row with is_add = 0, then we set is_valid = 0.
+    fn generate_dummy_trace_row<F: PrimeField32>(
+        &self,
+        adapter_width: usize,
+        core_width: usize,
+    ) -> Vec<F> {
+        let record = TeEcAddCoreRecord {
+            x1: BigUint::zero(),
+            y1: BigUint::zero(),
+            x2: BigUint::zero(),
+            y2: BigUint::zero(),
+            is_add_flag: false,
+        };
+        let mut row = vec![F::ZERO; adapter_width + core_width];
+        let core_row = &mut row[adapter_width..];
+        // We **do not** want this trace row to update the range checker
+        // so we must create a temporary range checker
+        let tmp_range_checker = SharedVariableRangeCheckerChip::new(self.range_checker.bus());
+        self.air.expr.generate_subrow(
+            (
+                tmp_range_checker.as_ref(),
+                vec![record.x1, record.y1, record.x2, record.y2],
+                vec![record.is_add_flag],
+            ),
+            core_row,
+        );
+        core_row[0] = F::ZERO; // is_valid = 0
+        row
     }
 }

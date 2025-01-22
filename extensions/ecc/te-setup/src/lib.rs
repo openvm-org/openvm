@@ -2,9 +2,6 @@
 
 extern crate proc_macro;
 
-use core::str::FromStr;
-
-use num_bigint_dig::BigUint;
 use openvm_macros_common::MacroArgs;
 use proc_macro::TokenStream;
 use quote::format_ident;
@@ -63,22 +60,6 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
         let intmod_type = intmod_type.expect("mod_type parameter is required");
         let const_a = const_a.expect("constant a coefficient is required");
         let const_d = const_d.expect("constant d coefficient is required");
-
-        fn string_expr_to_bytes(s: syn::Expr) -> proc_macro2::TokenStream {
-            if let syn::Expr::Lit(syn::ExprLit { attrs: _, lit }) = s {
-                if let syn::Lit::Str(s) = lit {
-                    let bytes = BigUint::from_str(&s.value()).unwrap().to_bytes_le();
-                    quote::quote! { &[#(#bytes),*] }
-                } else {
-                    panic!("expected a string literal");
-                }
-            } else {
-                panic!("expected a constant expression");
-            }
-        }
-
-        let const_a_bytes = string_expr_to_bytes(const_a);
-        let const_d_bytes = string_expr_to_bytes(const_d);
 
         macro_rules! create_extern_func {
             ($name:ident) => {
@@ -153,8 +134,9 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
             }
 
             impl ::openvm_ecc_guest::edwards::TwistedEdwardsPoint for #struct_name {
-                const CURVE_A_BYTES: &[u8] = #const_a_bytes;
-                const CURVE_D_BYTES: &[u8] = #const_d_bytes;
+                const CURVE_A: Self::Coordinate = #const_a;
+                const CURVE_D: Self::Coordinate = #const_d;
+
                 const IDENTITY: Self = Self::identity();
                 type Coordinate = #intmod_type;
 
@@ -286,17 +268,17 @@ pub fn te_init(input: TokenStream) -> TokenStream {
 
         let setup_function = syn::Ident::new(&format!("setup_te_{}", str_path), span.into());
         setups.push(quote::quote_spanned! { span.into() =>
+
             #[allow(non_snake_case)]
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
                 {
                     let modulus_bytes = <<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
-                    //let mut one = [0u8; <<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
-                    //one[0] = 1;
-                    let curve_a_bytes = <#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_A_BYTES;
-                    let curve_d_bytes = <#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_D_BYTES;
-                    // p1 should be (p, a, d)
+                    let mut zero = [0u8; <<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
+                    let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_A);
+                    let curve_d_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_D);
                     let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref(), curve_d_bytes.as_ref()].concat();
+                    let p2 = [curve_d_bytes.as_ref(), zero.as_ref()].concat();
                     let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(
                         opcode = ::openvm_ecc_guest::TE_OPCODE,
@@ -306,7 +288,7 @@ pub fn te_init(input: TokenStream) -> TokenStream {
                                 * (::openvm_ecc_guest::TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS as usize),
                         rd = In uninit.as_mut_ptr(),
                         rs1 = In p1.as_ptr(),
-                        rs2 = In uninit.as_mut_ptr(),
+                        rs2 = In p2.as_ptr(),
                     );
                 }
             }
