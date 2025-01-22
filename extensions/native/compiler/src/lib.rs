@@ -16,7 +16,7 @@ pub mod conversion;
 pub mod ir;
 
 pub mod prelude {
-    pub use openvm_native_compiler_derive::{DslVariable, Hintable};
+    pub use openvm_native_compiler_derive::DslVariable;
 
     pub use crate::{asm::AsmCompiler, ir::*};
 }
