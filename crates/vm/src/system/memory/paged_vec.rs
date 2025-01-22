@@ -140,6 +140,59 @@ impl<T: Default + Copy, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
             ptr::read(&result as *const _ as *const [T; N])
         }
     }
+
+    #[inline(always)]
+    pub fn set_range_array<const N: usize>(&mut self, from: usize, values: &[T; N]) -> [T; N] {
+        // Step 1: Create an uninitialized array for old values.
+        let mut result: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+        let result_slice = unsafe {
+            // SAFETY: We will fully initialize `result_slice` before reading.
+            std::slice::from_raw_parts_mut(result.as_mut_ptr() as *mut T, N)
+        };
+
+        let start_page = from / PAGE_SIZE;
+        let end_page = (from + N - 1) / PAGE_SIZE;
+
+        if start_page == end_page {
+            // Ensure the page exists; if not, allocate and fill with defaults.
+            if self.pages[start_page].is_none() {
+                self.pages[start_page] = Some(vec![T::default(); PAGE_SIZE]);
+            }
+            let page = self.pages[start_page].as_mut().unwrap();
+            let page_offset = from - start_page * PAGE_SIZE;
+
+            // Copy old values from the page into result_slice.
+            result_slice.copy_from_slice(&page[page_offset..page_offset + N]);
+            // Write the new values from input into the page.
+            page[page_offset..page_offset + N].copy_from_slice(&values[..]);
+        } else {
+            debug_assert!(start_page + 1 == end_page);
+            let first_part = PAGE_SIZE - (from - start_page * PAGE_SIZE);
+
+            // Handle the first page.
+            if self.pages[start_page].is_none() {
+                self.pages[start_page] = Some(vec![T::default(); PAGE_SIZE]);
+            }
+            let page0 = self.pages[start_page].as_mut().unwrap();
+            let page_offset = from - start_page * PAGE_SIZE;
+
+            result_slice[..first_part].copy_from_slice(&page0[page_offset..]);
+            page0[page_offset..].copy_from_slice(&values[..first_part]);
+
+            // Handle the second page.
+            let second_part = N - first_part;
+            if self.pages[end_page].is_none() {
+                self.pages[end_page] = Some(vec![T::default(); PAGE_SIZE]);
+            }
+            let page1 = self.pages[end_page].as_mut().unwrap();
+
+            result_slice[first_part..].copy_from_slice(&page1[0..second_part]);
+            page1[0..second_part].copy_from_slice(&values[first_part..]);
+        }
+
+        // Step 4: Convert the fully initialized result array to [T; N].
+        unsafe { ptr::read(&result as *const _ as *const [T; N]) }
+    }
 }
 
 impl<T, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
@@ -230,14 +283,6 @@ impl<T: Clone + Default, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
     pub fn insert(&mut self, address: &Address, data: T) -> Option<T> {
         self.paged_vecs[(address.0 - self.as_offset) as usize].set(address.1 as usize, data)
     }
-    pub fn set_range<const N: usize>(&mut self, address: &Address, values: &[T; N]) -> [T; N] {
-        unsafe {
-            self.paged_vecs[(address.0 - self.as_offset) as usize]
-                .set_range((address.1 as usize)..(address.1 as usize + N), values)
-                .try_into()
-                .unwrap_unchecked()
-        }
-    }
     pub fn is_empty(&self) -> bool {
         self.paged_vecs.iter().all(|page| page.is_empty())
     }
@@ -259,6 +304,10 @@ impl<T: Clone + Default, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
 impl<T: Copy + Default, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
     pub fn get_range<const N: usize>(&self, address: &Address) -> [T; N] {
         self.paged_vecs[(address.0 - self.as_offset) as usize].range_array(address.1 as usize)
+    }
+    pub fn set_range<const N: usize>(&mut self, address: &Address, values: &[T; N]) -> [T; N] {
+        self.paged_vecs[(address.0 - self.as_offset) as usize]
+            .set_range_array(address.1 as usize, values)
     }
 }
 
