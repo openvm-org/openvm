@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use openvm_instructions::{exe::VmExe, program::Program};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -15,6 +17,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::arch::{
+    segment::DefaultSegmentationStrategy,
     vm::{VirtualMachine, VmExecutor},
     Streams, VmConfig, VmMemoryState,
 };
@@ -43,6 +46,36 @@ where
     setup_tracing();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let vm = VirtualMachine::new(engine, config);
+    let pk = vm.keygen();
+    let mut result = vm.execute_and_generate(exe, input).unwrap();
+    let final_memory = result.final_memory.take();
+    let proofs = vm.prove(&pk, result);
+
+    assert!(proofs.len() >= min_segments);
+    vm.verify(&pk.get_vk(), proofs)
+        .expect("segment proofs should verify");
+    final_memory
+}
+
+/// Executes the VM and returns the final memory state.
+pub fn air_test_with_custom_segmentation<VC>(
+    config: VC,
+    exe: impl Into<VmExe<BabyBear>>,
+    input: impl Into<Streams<BabyBear>>,
+    min_segments: usize,
+    max_segment_len: usize,
+) -> Option<VmMemoryState<BabyBear>>
+where
+    VC: VmConfig<BabyBear>,
+    VC::Executor: Chip<BabyBearPoseidon2Config>,
+    VC::Periphery: Chip<BabyBearPoseidon2Config>,
+{
+    setup_tracing();
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let mut vm = VirtualMachine::new(engine, config);
+    vm.executor.set_custom_segmentation_strategy(Arc::new(
+        DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_len),
+    ));
     let pk = vm.keygen();
     let mut result = vm.execute_and_generate(exe, input).unwrap();
     let final_memory = result.final_memory.take();

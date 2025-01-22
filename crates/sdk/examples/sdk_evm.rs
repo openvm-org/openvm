@@ -105,6 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app_pk,
         app_committed_exe,
         agg_pk,
+        None,
         stdin,
     )?;
 

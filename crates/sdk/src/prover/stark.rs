@@ -10,8 +10,8 @@ use crate::{
 };
 
 pub struct StarkProver<VC> {
-    app_prover: AppProver<VC>,
-    agg_prover: AggStarkProver,
+    pub app_prover: AppProver<VC>,
+    pub agg_prover: AggStarkProver,
 }
 impl<VC> StarkProver<VC> {
     pub fn new(

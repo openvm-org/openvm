@@ -57,6 +57,15 @@ impl Default for DefaultSegmentationStrategy {
     }
 }
 
+impl DefaultSegmentationStrategy {
+    pub fn new_with_max_segment_len(max_segment_len: usize) -> Self {
+        Self {
+            max_segment_len,
+            max_cells_per_chip_in_segment: max_segment_len * 120,
+        }
+    }
+}
+
 impl SegmentationStrategy for DefaultSegmentationStrategy {
     fn should_segment(&self, trace_heights: &[usize], trace_cells: &[usize]) -> bool {
         for (i, &height) in trace_heights.iter().enumerate() {

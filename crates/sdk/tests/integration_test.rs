@@ -3,8 +3,8 @@ use std::{borrow::Borrow, path::PathBuf, sync::Arc};
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, SingleSegmentVmExecutor,
-        SystemConfig, VmConfig, VmExecutor,
+        hasher::poseidon2::vm_poseidon2_hasher, DefaultSegmentationStrategy, ExecutionError,
+        SingleSegmentVmExecutor, SystemConfig, VmConfig, VmExecutor,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -153,7 +153,11 @@ fn test_public_values_and_leaf_verification() {
     let leaf_committed_exe = app_pk.leaf_committed_exe.clone();
 
     let app_engine = BabyBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
-    let app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
+
+    let segmentation_strategy =
+        Arc::new(DefaultSegmentationStrategy::new_with_max_segment_len(200));
+    let mut app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
+    app_vm.set_custom_segmentation_strategy(segmentation_strategy);
     let app_vm_result = app_vm
         .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
         .unwrap();
@@ -349,6 +353,7 @@ fn test_static_verifier_custom_pv_handler() {
             Arc::new(app_pk),
             app_committed_exe,
             agg_pk,
+            Some(200),
             StdIn::default(),
         )
         .unwrap();
@@ -378,6 +383,7 @@ fn test_e2e_proof_generation_and_verification() {
             Arc::new(app_pk),
             app_committed_exe_for_test(app_log_blowup),
             agg_pk,
+            Some(200),
             StdIn::default(),
         )
         .unwrap();

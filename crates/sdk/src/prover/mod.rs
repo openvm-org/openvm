@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use openvm_circuit::arch::VmConfig;
+use openvm_circuit::arch::{DefaultSegmentationStrategy, VmConfig};
 use openvm_native_recursion::halo2::EvmProof;
 use openvm_stark_sdk::openvm_stark_backend::Chip;
 
@@ -29,8 +29,8 @@ use crate::{
 };
 
 pub struct ContinuationProver<VC> {
-    stark_prover: StarkProver<VC>,
-    halo2_prover: Halo2Prover,
+    pub stark_prover: StarkProver<VC>,
+    pub halo2_prover: Halo2Prover,
 }
 
 impl<VC> ContinuationProver<VC> {
@@ -56,6 +56,16 @@ impl<VC> ContinuationProver<VC> {
 
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
         self.stark_prover.set_program_name(program_name);
+        self
+    }
+
+    pub fn set_max_segment_len(&mut self, max_segment_len: usize) -> &mut Self {
+        self.stark_prover
+            .app_prover
+            .app_prover
+            .set_custom_segmentation_strategy(Arc::new(
+                DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_len),
+            ));
         self
     }
 

@@ -3,8 +3,8 @@ use std::{marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, SingleSegmentVmExecutor, Streams, VirtualMachine,
-        VmComplexTraceHeights, VmConfig,
+        hasher::poseidon2::vm_poseidon2_hasher, segment::SegmentationStrategy,
+        SingleSegmentVmExecutor, Streams, VirtualMachine, VmComplexTraceHeights, VmConfig,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -25,6 +25,7 @@ pub struct VmLocalProver<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> {
     pub pk: Arc<VmProvingKey<SC, VC>>,
     pub committed_exe: Arc<VmCommittedExe<SC>>,
     overridden_heights: Option<VmComplexTraceHeights>,
+    segmentation_strategy: Option<Arc<dyn SegmentationStrategy>>,
     _marker: PhantomData<E>,
 }
 
@@ -34,6 +35,7 @@ impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
             pk,
             committed_exe,
             overridden_heights: None,
+            segmentation_strategy: None,
             _marker: PhantomData,
         }
     }
@@ -47,12 +49,17 @@ impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
             pk,
             committed_exe,
             overridden_heights,
+            segmentation_strategy: None,
             _marker: PhantomData,
         }
     }
 
     pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
         self.overridden_heights = Some(overridden_heights);
+    }
+
+    pub fn set_custom_segmentation_strategy(&mut self, strategy: Arc<dyn SegmentationStrategy>) {
+        self.segmentation_strategy = Some(strategy);
     }
 
     pub fn vm_config(&self) -> &VC {
@@ -74,11 +81,15 @@ where
     fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> ContinuationVmProof<SC> {
         assert!(self.pk.vm_config.system().continuation_enabled);
         let e = E::new(self.pk.fri_params);
-        let vm = VirtualMachine::new_with_overridden_trace_heights(
+        let mut vm = VirtualMachine::new_with_overridden_trace_heights(
             e,
             self.pk.vm_config.clone(),
             self.overridden_heights.clone(),
         );
+        if let Some(segmentation_strategy) = self.segmentation_strategy.clone() {
+            vm.executor
+                .set_custom_segmentation_strategy(segmentation_strategy);
+        }
         let results = vm
             .execute_and_generate_with_cached_program(self.committed_exe.clone(), input)
             .unwrap();

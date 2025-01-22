@@ -190,13 +190,17 @@ impl Sdk {
         app_pk: Arc<AppProvingKey<VC>>,
         app_exe: Arc<NonRootCommittedExe>,
         agg_pk: AggProvingKey,
+        max_segment_len: Option<usize>,
         inputs: StdIn,
     ) -> Result<EvmProof>
     where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let e2e_prover = ContinuationProver::new(reader, app_pk, app_exe, agg_pk);
+        let mut e2e_prover = ContinuationProver::new(reader, app_pk, app_exe, agg_pk);
+        if let Some(max_segment_len) = max_segment_len {
+            e2e_prover.set_max_segment_len(max_segment_len);
+        }
         let proof = e2e_prover.generate_proof_for_evm(inputs);
         Ok(proof)
     }

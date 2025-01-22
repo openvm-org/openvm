@@ -17,8 +17,7 @@ use crate::{
 #[derive(Getters)]
 pub struct AppProver<VC> {
     pub program_name: Option<String>,
-    #[getset(get = "pub")]
-    app_prover: VmLocalProver<SC, VC, BabyBearPoseidon2Engine>,
+    pub app_prover: VmLocalProver<SC, VC, BabyBearPoseidon2Engine>,
 }
 
 impl<VC> AppProver<VC> {
