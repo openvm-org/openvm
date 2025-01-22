@@ -323,18 +323,27 @@ impl<
         Self::ReadRecord,
     )> {
         let Instruction { b, c, d, e, .. } = *instruction;
+        println!("instruction: {:?}", instruction);
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
+        println!("reading registers");
         let mut rs_vals = [0; NUM_READS];
         let rs_records: [_; NUM_READS] = from_fn(|i| {
             let addr = if i == 0 { b } else { c };
+            if i == 0 {
+                println!("reading register b: {:?}", addr);
+            } else {
+                println!("reading register c: {:?}", addr);
+            }
             let (record, val) = read_rv32_register(memory, d, addr);
+            println!("val: {:?}", val);
             rs_vals[i] = val;
             record
         });
 
+        println!("reading operands data");
         let read_records = rs_vals.map(|address| {
             debug_assert!(address < (1 << self.air.address_bits));
             from_fn(|i| {
@@ -348,6 +357,8 @@ impl<
             let mut read_it = read.iter().flatten();
             from_fn(|_| *(read_it.next().unwrap()))
         });
+        println!("b: {:?}", rs_records[0]);
+        println!("c: {:?}", rs_records[1]);
         let record = Rv32IsEqualModReadRecord {
             rs: rs_records,
             reads: read_records.map(|r| r.map(|x| x.0)),

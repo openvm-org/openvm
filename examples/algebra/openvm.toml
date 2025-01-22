@@ -2,7 +2,6 @@
 [app_vm_config.rv32m]
 [app_vm_config.io]
 [app_vm_config.modular]
-supported_modulus = ["998244353","1000000007"]
-
-[app_vm_config.fp2]
-supported_modulus = ["998244353","1000000007"]
+supported_modulus = [
+    "875597534642899606784368692118018719973065508781036741540935024101872394795853278954847377898236",
+]
