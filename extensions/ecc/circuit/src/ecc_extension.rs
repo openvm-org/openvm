@@ -37,6 +37,7 @@ pub struct CurveConfig {
     #[serde_as(as = "DisplayFromStr")]
     pub scalar: BigUint,
     // curve-specific coefficients
+    #[serde_as(as = "_")]
     pub coeffs: CurveCoeffs,
 }
 

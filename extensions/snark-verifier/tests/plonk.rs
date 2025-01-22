@@ -268,9 +268,7 @@ fn test_plonk_zkvm() -> eyre::Result<()> {
             BN254_MODULUS.clone(),
             BN254_ORDER.clone(),
         ]))
-        .ecc(EccExtension::new(vec![
-            PairingCurve::Bn254.curve_config()
-        ]))
+        .ecc(EccExtension::new(vec![PairingCurve::Bn254.curve_config()]))
         .fp2(Fp2Extension::new(vec![BN254_MODULUS.clone()]))
         .pairing(PairingExtension::new(vec![PairingCurve::Bn254]))
         .build();
