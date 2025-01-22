@@ -13,7 +13,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Strea
     let config = NativeConfig::new(system_config, Native);
     let mut executor = VmExecutor::<BabyBear, NativeConfig>::new(config);
     executor.set_custom_segmentation_strategy(Arc::new(
-        DefaultSegmentationStrategy::new_with_max_segment_len(500),
+        DefaultSegmentationStrategy::new_with_max_segment_len((1 << 25) - 100),
     ));
 
     executor.execute(program, input_stream).unwrap();
