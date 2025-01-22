@@ -12,8 +12,8 @@ mod tests {
         utils::{air_test, air_test_with_min_segments},
     };
     use openvm_ecc_circuit::{
-        CurveConfig, CurveCoeffs, CurveConfig, Rv32WeierstrassConfig, TeCurveConfig, WeierstrassExtension,
-        P256_CONFIG, SECP256K1_CONFIG,
+        CurveCoeffs, CurveConfig, EccExtension, Rv32EccConfig, TeCurveConfig, P256_CONFIG,
+        SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -31,7 +31,7 @@ mod tests {
 
     #[test]
     fn test_ec() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        let config = Rv32EccConfig::new(vec![SECP256K1_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec",
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn test_ec_nonzero_a() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
+        let config = Rv32EccConfig::new(vec![P256_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec_nonzero_a",
@@ -75,8 +75,7 @@ mod tests {
 
     #[test]
     fn test_ec_two_curves() -> Result<()> {
-        let config =
-            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+        let config = Rv32EccConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec_two_curves",
@@ -101,7 +100,7 @@ mod tests {
         use halo2curves_axiom::{group::Curve, secp256k1::Secp256k1Affine};
 
         let config =
-            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(),
+            Rv32EccConfig::new(vec![SECP256K1_CONFIG.clone(),
                 CurveConfig {
                     struct_name: "CurvePoint5mod8".to_string(),
                     modulus: BigUint::from_str("115792089237316195423570985008687907853269984665640564039457584007913129639501")
@@ -109,8 +108,10 @@ mod tests {
                     // unused, set to 10e9 + 7
                     scalar: BigUint::from_str("1000000007")
                         .unwrap(),
-                    a: BigUint::ZERO,
-                    b: BigUint::from_str("3").unwrap(),
+                    coeffs: CurveCoeffs::SwCurve(SwCurveConfig {
+                        a: BigUint::ZERO,
+                        b: BigUint::from_str("3").unwrap(),
+                    }),
                 },
                 CurveConfig {
                     struct_name: "CurvePoint1mod4".to_string(),
@@ -118,10 +119,12 @@ mod tests {
                         .unwrap(),
                     scalar: BigUint::from_radix_be(&hex!("ffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3d"), 256)
                         .unwrap(),
-                    a: BigUint::from_radix_be(&hex!("fffffffffffffffffffffffffffffffefffffffffffffffffffffffe"), 256)
-                        .unwrap(),
-                    b: BigUint::from_radix_be(&hex!("b4050a850c04b3abf54132565044b0b7d7bfd8ba270b39432355ffb4"), 256)
-                        .unwrap(),
+                    coeffs: CurveCoeffs::SwCurve(SwCurveConfig {
+                        a: BigUint::from_radix_be(&hex!("fffffffffffffffffffffffffffffffefffffffffffffffffffffffe"), 256)
+                            .unwrap(),
+                        b: BigUint::from_radix_be(&hex!("b4050a850c04b3abf54132565044b0b7d7bfd8ba270b39432355ffb4"), 256)
+                            .unwrap(),
+                    }),
                 },
             ]);
 
@@ -174,7 +177,7 @@ mod tests {
                 SECP256K1_CONFIG.scalar.clone(),
             ]))
             .keccak(Default::default())
-            .ecc(WeierstrassExtension::new(vec![SECP256K1_CONFIG.clone()]))
+            .ecc(EccExtension::new(vec![SECP256K1_CONFIG.clone()]))
             .build();
 
         let elf = build_example_program_at_path_with_features(
@@ -214,7 +217,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
         let config =
-            Rv32WeierstrassConfig::new(vec![CurveConfig {
+            Rv32EccConfig::new(vec![CurveConfig {
             modulus: BigUint::from_str(
                 "57896044618658097711785492504343953926634992332820282019728792003956564819949",
             ).unwrap(),

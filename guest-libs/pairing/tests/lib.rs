@@ -15,7 +15,7 @@ mod bn254 {
         arch::SystemConfig,
         utils::{air_test, air_test_impl, air_test_with_min_segments},
     };
-    use openvm_ecc_circuit::{Rv32WeierstrassConfig, WeierstrassExtension};
+    use openvm_ecc_circuit::{EccExtension, Rv32WeierstrassConfig};
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
@@ -54,7 +54,7 @@ mod bn254 {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes_with_names),
-            weierstrass: WeierstrassExtension::new(vec![]),
+            weierstrass: EccExtension::new(vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bn254]),
         }
     }
@@ -462,7 +462,7 @@ mod bls12_381 {
         arch::{instructions::exe::VmExe, SystemConfig},
         utils::{air_test, air_test_impl, air_test_with_min_segments},
     };
-    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
+    use openvm_ecc_circuit::EccExtension;
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
@@ -503,7 +503,7 @@ mod bls12_381 {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes_with_names),
-            weierstrass: WeierstrassExtension::new(vec![]),
+            weierstrass: EccExtension::new(vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bls12_381]),
         }
     }
