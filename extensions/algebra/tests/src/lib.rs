@@ -68,6 +68,8 @@ mod tests {
         let config = Rv32ModularWithFp2Config::new(vec![
             BigUint::from_str("998244353").unwrap(),
             BigUint::from_str("1000000007").unwrap(),
+            BigUint::from_str("1000000009").unwrap(),
+            BigUint::from_str("987898789").unwrap(),
         ]);
         air_test(config, openvm_exe);
         Ok(())
