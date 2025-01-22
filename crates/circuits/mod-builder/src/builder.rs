@@ -1,5 +1,6 @@
-use std::{cell::RefCell, ops::Deref, rc::Rc};
+use std::{cell::RefCell, iter, ops::Deref, rc::Rc};
 
+use itertools::{zip_eq, Itertools};
 use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::Zero;
 use openvm_circuit_primitives::{
@@ -310,18 +311,32 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             //   however this has the challenge that when the same chip is used
             //   across continuation segments,
             //   only the first segment will have setup called
-            for i in 0..inputs[0].len().max(self.builder.prime_limbs.len()) {
-                let lhs = if i < inputs[0].len() {
-                    inputs[0][i].into()
-                } else {
-                    AB::Expr::ZERO
-                };
-                let rhs = if i < self.builder.prime_limbs.len() {
-                    AB::Expr::from_canonical_usize(self.builder.prime_limbs[i])
-                } else {
-                    AB::Expr::ZERO
-                };
-                builder.when(is_setup.clone()).assert_eq(lhs, rhs);
+
+            let expected = iter::empty()
+                .chain(self.builder.prime_limbs.clone())
+                .chain(self.setup_values.iter().flat_map(|x| {
+                    big_uint_to_num_limbs(x, self.builder.limb_bits, self.builder.num_limbs)
+                        .into_iter()
+                }))
+                .collect_vec();
+
+            let reads: Vec<AB::Expr> = inputs
+                .clone()
+                .into_iter()
+                .flatten()
+                .map(Into::into)
+                .take(expected.len())
+                .collect();
+
+            if format!("{:?}", flags[0].into()) == "0" {
+                println!("lhs: {:?}", reads);
+                println!("rhs: {:?}", expected);
+            }
+
+            for (lhs, rhs) in zip_eq(&reads, expected) {
+                builder
+                    .when(is_setup.clone())
+                    .assert_eq(lhs.clone(), AB::F::from_canonical_usize(rhs));
             }
         }
 
