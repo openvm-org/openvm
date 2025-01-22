@@ -7,7 +7,8 @@ use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
 mod fp12;
 mod fp2;
 mod pairing;
-mod utils;
+#[cfg(not(target_os = "zkvm"))]
+pub(crate) mod utils;
 
 pub use fp12::*;
 pub use fp2::*;
@@ -17,7 +18,6 @@ use lazy_static::lazy_static;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint::BigUint;
 use openvm_ecc_sw_setup::sw_declare;
-pub(crate) use utils::*;
 
 use crate::pairing::PairingIntrinsics;
 
