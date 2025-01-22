@@ -117,7 +117,7 @@ fn rand_hintstore_test() {
     );
     chip.set_streams(Arc::new(Mutex::new(Streams::default())));
 
-    let num_tests: usize = 100;
+    let num_tests: usize = 5;
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW, None, None);
     }

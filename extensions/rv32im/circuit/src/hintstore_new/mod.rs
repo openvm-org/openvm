@@ -46,7 +46,7 @@ use crate::adapters::{compose, decompose};
 mod tests;
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct HintStoreNewCols<T> {
     // common
     pub is_single: T,
@@ -114,21 +114,24 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
         builder.assert_bool(local_cols.is_single + local_cols.is_buffer);
 
         let is_valid = local_cols.is_single + local_cols.is_buffer;
-        let is_start = AB::Expr::ONE - local_cols.is_buffer + local_cols.is_buffer_start;
+        let is_start = local_cols.is_single + local_cols.is_buffer_start;
+        // should only be used when is_buffer is truer
         let is_end = AB::Expr::ONE - next_cols.is_buffer + next_cols.is_buffer_start;
 
         let mut rem_words = AB::Expr::ZERO;
         let mut next_rem_words = AB::Expr::ZERO;
         let mut mem_ptr = AB::Expr::ZERO;
         let mut next_mem_ptr = AB::Expr::ZERO;
-        for i in RV32_REGISTER_NUM_LIMBS - 1..0 {
+        for i in (0..RV32_REGISTER_NUM_LIMBS).rev() {
             rem_words = rem_words * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
                 + local_cols.rem_words_limbs[i];
             next_rem_words = next_rem_words * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
                 + next_cols.rem_words_limbs[i];
-            mem_ptr = mem_ptr * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
+        }
+        for i in (0..RV32_REGISTER_NUM_LIMBS / 2).rev() {
+            mem_ptr = mem_ptr * AB::F::from_canonical_u32(1 << (2 * RV32_CELL_BITS))
                 + local_cols.mem_ptr_limbs[i];
-            next_mem_ptr = next_mem_ptr * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
+            next_mem_ptr = next_mem_ptr * AB::F::from_canonical_u32(1 << (2 * RV32_CELL_BITS))
                 + next_cols.mem_ptr_limbs[i];
         }
 
@@ -157,6 +160,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                 &local_cols.rs1_aux_cols,
             )
             .eval(builder, local_cols.is_buffer_start.clone());
+
 
         builder
             .when(local_cols.is_single)
@@ -230,6 +234,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                 },
             )
             .eval(builder, is_valid.clone());
+        // above is fine
 
         // buffer transition
 
@@ -255,6 +260,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                 timestamp + AB::F::from_canonical_usize(timestamp_delta),
                 next_cols.from_state.timestamp,
             );
+        // above is fine
     }
 }
 
@@ -475,6 +481,7 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
             used_u32s += width;
             mem_ptr += RV32_REGISTER_NUM_LIMBS as u32;
             rem_words -= 1;
+            println!("cols = {:?}", cols);
         }
 
         used_u32s
