@@ -1,5 +1,3 @@
-use alloc::vec::Vec;
-
 use group::ff::Field;
 use halo2curves_axiom::bls12_381::{
     Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, MillerLoopResult, FROBENIUS_COEFF_FQ12_C1,

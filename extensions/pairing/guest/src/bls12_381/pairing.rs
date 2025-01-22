@@ -285,7 +285,7 @@ impl PairingCheck for Bls12_381 {
         #[cfg(not(target_os = "zkvm"))]
         {
             #[cfg(not(feature = "halo2curves"))]
-            panic!("`halo2curves` feature must be enabled to use pairing check hint");
+            panic!("`halo2curves` feature must be enabled to use pairing check hint on host");
 
             #[cfg(feature = "halo2curves")]
             {

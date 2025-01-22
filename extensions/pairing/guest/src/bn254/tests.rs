@@ -1,5 +1,3 @@
-use alloc::vec::Vec;
-
 use group::{ff::Field, prime::PrimeCurveAffine};
 use halo2curves_axiom::bn256::{
     Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1,
@@ -10,59 +8,16 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};
 use crate::{
-    bn254::{Bn254, G2Affine as OpenVmG2Affine},
+    bn254::{
+        convert_bn254_fp12_to_halo2_fq12, convert_bn254_halo2_fq12_to_fp12,
+        convert_bn254_halo2_fq2_to_fp2, convert_bn254_halo2_fq_to_fp,
+        convert_g2_affine_halo2_to_openvm, Bn254, G2Affine as OpenVmG2Affine,
+    },
     pairing::{
         fp2_invert_assign, fp6_invert_assign, fp6_square_assign, FinalExp, MultiMillerLoop,
         PairingCheck, PairingIntrinsics,
     },
 };
-
-fn convert_bn254_halo2_fq_to_fp(x: Fq) -> Fp {
-    let bytes = x.to_bytes();
-    Fp::from_le_bytes(&bytes)
-}
-
-fn convert_bn254_halo2_fq2_to_fp2(x: Fq2) -> Fp2 {
-    Fp2::new(
-        convert_bn254_halo2_fq_to_fp(x.c0),
-        convert_bn254_halo2_fq_to_fp(x.c1),
-    )
-}
-
-fn convert_bn254_halo2_fq12_to_fp12(x: Fq12) -> Fp12 {
-    Fp12 {
-        c: x.to_coeffs().map(convert_bn254_halo2_fq2_to_fp2),
-    }
-}
-
-fn convert_bn254_fp_to_halo2_fq(x: Fp) -> Fq {
-    let bytes =
-        x.0.chunks(8)
-            .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
-    Fq::from_raw(bytes)
-}
-
-fn convert_bn254_fp2_to_halo2_fq2(x: Fp2) -> Fq2 {
-    Fq2 {
-        c0: convert_bn254_fp_to_halo2_fq(x.c0.clone()),
-        c1: convert_bn254_fp_to_halo2_fq(x.c1.clone()),
-    }
-}
-
-fn convert_bn254_fp12_to_halo2_fq12(x: Fp12) -> Fq12 {
-    let c = x.to_coeffs();
-    Fq12::from_coeffs(c.map(convert_bn254_fp2_to_halo2_fq2))
-}
-
-fn convert_g2_affine_halo2_to_openvm(p: G2Affine) -> OpenVmG2Affine {
-    OpenVmG2Affine::from_xy_unchecked(
-        convert_bn254_halo2_fq2_to_fp2(p.x),
-        convert_bn254_halo2_fq2_to_fp2(p.y),
-    )
-}
 
 #[test]
 fn test_bn254_frobenius_coeffs() {
