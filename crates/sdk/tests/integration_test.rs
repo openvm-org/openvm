@@ -120,9 +120,8 @@ fn minimal_config_for_test(app_log_blowup: usize) -> MinimalConfig<NativeConfig>
             app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
             app_vm_config: NativeConfig::new(
                 SystemConfig::default()
-                    .with_max_segment_len(200)
                     .with_continuations()
-                    .with_public_values(16),
+                    .with_public_values(NUM_PUB_VALUES),
                 Native,
             ),
             root_fri_params: standard_fri_params_with_100_bits_conjectured_security(
@@ -150,7 +149,7 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
             SystemConfig::default()
                 .with_max_segment_len(200)
                 .with_continuations()
-                .with_public_values(16),
+                .with_public_values(NUM_PUB_VALUES),
             Native,
         ),
         leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP)
@@ -341,11 +340,10 @@ fn test_e2e_proof_generation_and_verification() {
 #[test]
 fn test_e2e_minimal_proof_generation_and_verification() {
     let app_log_blowup = 1;
-    let app_config = small_test_app_config(app_log_blowup);
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
     println!("minimal_keygen");
     let minimal_pk = Sdk
-        .minimal_keygen(app_config, minimal_config_for_test(3), &params_reader)
+        .minimal_keygen(minimal_config_for_test(app_log_blowup), &params_reader)
         .unwrap();
     println!("generate_minimal_snark_verifier_contract");
     let evm_verifier = Sdk

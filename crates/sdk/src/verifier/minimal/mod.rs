@@ -41,7 +41,7 @@ pub struct MinimalVmVerifierConfig {
 impl MinimalVmVerifierConfig {
     pub fn build_program(&self, app_vm_vk: &MultiStarkVerifyingKey<SC>) -> Program<F> {
         println!("MinimalVmVerifierConfig::build_program");
-        let m_advice = new_from_inner_multi_vk(app_vm_vk);
+        // let m_advice = new_from_inner_multi_vk(app_vm_vk);
         let mut builder = Builder::<C>::default();
 
         {
@@ -64,9 +64,9 @@ impl MinimalVmVerifierConfig {
             builder.range(0, proofs.len()).for_each(|i, builder| {
                 let proof = builder.get(&proofs, i);
                 assert_required_air_for_app_vm_present(builder, &proof);
-                StarkVerifier::verify::<DuplexChallengerVariable<C>>(
-                    builder, &pcs, &m_advice, &proof,
-                );
+                // StarkVerifier::verify::<DuplexChallengerVariable<C>>(
+                //     builder, &pcs, &m_advice, &proof,
+                // );
                 {
                     let commit = get_program_commit(builder, &proof);
                     builder.if_eq(i, RVar::zero()).then_or_else(

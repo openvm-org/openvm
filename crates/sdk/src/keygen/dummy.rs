@@ -77,10 +77,16 @@ where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    // let leaf_fri_params = standard_fri_params_with_100_bits_conjectured_security(1);
+    // let app_fri_params = standard_fri_params_with_100_bits_conjectured_security(1);
     let app_vm_pk = Arc::new(dummy_riscv_app_vm_pk(num_public_values, app_fri_params));
+    // assert_eq!(dummy_app_vm_pk.fri_params, app_vm_pk.fri_params);
+    // assert_eq!(
+    //     dummy_app_vm_pk.vm_pk.per_air.len(),
+    //     app_vm_pk.vm_pk.per_air.len()
+    // );
     let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), None);
-    app_proof.per_segment[0].clone()
+    assert_eq!(app_proof.per_segment.len(), 1);
+    app_proof.per_segment.into_iter().next().unwrap()
     // let app_exe = dummy_app_committed_exe(app_vm_pk.fri_params);
     // let mut leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, 1);
     // let leaf_input = leaf_inputs.pop().unwrap();
@@ -119,29 +125,6 @@ pub(super) fn dummy_internal_proof_riscv_app_vm(
     let leaf_proof = dummy_leaf_proof_riscv_app_vm(leaf_vm_pk, num_public_values, fri_params);
     dummy_internal_proof(internal_vm_pk, internal_exe, leaf_proof)
 }
-
-// pub(super) fn dummy_minimal_proof(
-//     leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-//     leaf_exe: Arc<NonRootCommittedExe>,
-//     leaf_proof: Proof<SC>,
-// ) -> Proof<SC> {
-//     let mut leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(leaf_proof, 1); //InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
-//     let leaf_input = leaf_inputs.pop().unwrap();
-//     let leaf_prover =
-//         VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(leaf_vm_pk, leaf_exe);
-//     SingleSegmentVmProver::prove(&leaf_prover, leaf_input.write_to_stream())
-// }
-
-// pub(super) fn dummy_minimal_proof_riscv_app_vm(
-//     leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-//     leaf_exe: Arc<NonRootCommittedExe>,
-//     num_public_values: usize,
-// ) -> Proof<SC> {
-//     let fri_params = standard_fri_params_with_100_bits_conjectured_security(1);
-//     let leaf_proof =
-//         dummy_leaf_proof_riscv_app_vm(leaf_vm_pk.clone(), num_public_values, fri_params);
-//     dummy_minimal_proof(leaf_vm_pk, leaf_exe, leaf_proof)
-// }
 
 #[allow(dead_code)]
 pub fn dummy_leaf_proof<VC: VmConfig<F>>(

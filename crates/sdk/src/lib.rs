@@ -212,7 +212,6 @@ impl Sdk {
 
     pub fn minimal_keygen<VC: VmConfig<F>>(
         &self,
-        app_config: AppConfig<VC>,
         minimal_config: MinimalConfig<VC>,
         reader: &impl Halo2ParamsReader,
     ) -> Result<MinimalProvingKey<VC>>
@@ -220,7 +219,7 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let minimal_pk = MinimalProvingKey::keygen(app_config, minimal_config, reader);
+        let minimal_pk = MinimalProvingKey::keygen(minimal_config, reader);
         Ok(minimal_pk)
     }
 

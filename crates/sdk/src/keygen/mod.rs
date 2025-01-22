@@ -351,7 +351,6 @@ where
     }
 
     pub fn dummy_proof_and_keygen(config: MinimalStarkConfig<VC>) -> (Self, Proof<SC>) {
-        // let leaf_vm_config = config.leaf_vm_config();
         let root_vm_config = config.root_verifier_vm_config();
 
         // println!("MinimalStarkConfig: {:?}", config);
@@ -367,14 +366,7 @@ where
                 vm_pk,
             }
         });
-        // // let leaf_vm_vk = leaf_vm_pk.vm_pk.get_vk();
 
-        // // Generate dummy app proof for root verifier setup
-        // let leaf_proof = dummy_leaf_proof_riscv_app_vm(
-        //     leaf_vm_pk.clone(),
-        //     config.max_num_user_public_values,
-        //     config.app_fri_params,
-        // );
         let dummy_proof = dummy_minimal_proof(
             app_vm_pk.clone(),
             config.app_fri_params,
@@ -385,7 +377,7 @@ where
             let root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
             let minimal_root_program = MinimalVmVerifierConfig {
                 num_public_values: config.max_num_user_public_values,
-                app_fri_params: config.root_fri_params,
+                app_fri_params: config.app_fri_params,
                 app_system_config: config.app_vm_config.system().clone(),
                 compiler_options: config.compiler_options,
             }
@@ -442,49 +434,12 @@ impl<VC> MinimalProvingKey<VC> {
     /// - This function is very expensive.
     /// - Please make sure SRS(KZG parameters) is already downloaded.
     #[tracing::instrument(level = "info", fields(group = "minimal_keygen"), skip_all)]
-    pub fn keygen(
-        app_config: AppConfig<VC>,
-        minimal_config: MinimalConfig<VC>,
-        reader: &impl Halo2ParamsReader,
-    ) -> Self
+    pub fn keygen(minimal_config: MinimalConfig<VC>, reader: &impl Halo2ParamsReader) -> Self
     where
         VC: VmConfig<F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        // let app_engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params.fri_params);
-        // let app_vm_pk = {
-        //     let vm = VirtualMachine::new(app_engine, app_config.app_vm_config.clone());
-        //     let vm_pk = vm.keygen();
-        //     assert!(
-        //         vm_pk.max_constraint_degree
-        //             <= app_config.app_fri_params.fri_params.max_constraint_degree()
-        //     );
-        //     VmProvingKey {
-        //         fri_params: app_config.app_fri_params.fri_params,
-        //         vm_config: app_config.app_vm_config.clone(),
-        //         vm_pk,
-        //     }
-        // };
-        // let root_committed_exe = {
-        //     let root_engine = BabyBearPoseidon2RootEngine::new(
-        //         minimal_config.minimal_stark_config.root_fri_params,
-        //     );
-        //     let root_program = MinimalVmVerifierConfig {
-        //         num_public_values: minimal_config
-        //             .minimal_stark_config
-        //             .max_num_user_public_values,
-        //         app_fri_params: minimal_config.minimal_stark_config.root_fri_params,
-        //         app_system_config: app_config.app_vm_config.system().clone(),
-        //         compiler_options: minimal_config.minimal_stark_config.compiler_options,
-        //     }
-        //     .build_program(&app_vm_pk.vm_pk.get_vk());
-        //     Arc::new(VmCommittedExe::<RootSC>::commit(
-        //         root_program.into(),
-        //         root_engine.config.pcs(),
-        //     ))
-        // };
-
         let MinimalConfig {
             minimal_stark_config,
             halo2_config,
