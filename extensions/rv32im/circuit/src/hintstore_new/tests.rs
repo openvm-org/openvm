@@ -4,6 +4,22 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use openvm_circuit::{
+    arch::{
+        testing::{memory::gen_pointer, VmChipTestBuilder},
+        Streams, BITWISE_OP_LOOKUP_BUS,
+    },
+    utils::{u32_into_limbs, u32_sign_extend},
+};
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
+};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
+use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_field::FieldAlgebra,
     p3_matrix::{
@@ -14,25 +30,10 @@ use openvm_stark_backend::{
     verifier::VerificationError,
 };
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::{Rng, rngs::StdRng};
-
-use openvm_circuit::{
-    arch::{
-        BITWISE_OP_LOOKUP_BUS,
-        Streams, testing::{memory::gen_pointer, VmChipTestBuilder},
-    },
-    utils::{u32_into_limbs, u32_sign_extend},
-};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
-};
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
-
-use crate::adapters::compose;
+use rand::{rngs::StdRng, Rng};
 
 use super::{HintStoreNewCols, NewHintStoreChip};
+use crate::adapters::compose;
 
 const IMM_BITS: usize = 16;
 
@@ -105,9 +106,17 @@ fn rand_hintstore_test() {
 
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 
-    let mut chip = NewHintStoreChip::<F>::new(tester.execution_bus(), tester.program_bus(), tester.address_bits(), range_checker_chip.clone(), bitwise_chip.clone(), tester.memory_bridge(), tester.offline_memory_mutex_arc());
+    let mut chip = NewHintStoreChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.address_bits(),
+        range_checker_chip.clone(),
+        bitwise_chip.clone(),
+        tester.memory_bridge(),
+        tester.offline_memory_mutex_arc(),
+    );
     chip.set_streams(Arc::new(Mutex::new(Streams::default())));
-    
+
     let num_tests: usize = 100;
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW, None, None);
@@ -139,18 +148,25 @@ fn run_negative_hintstore_test(
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    
-    let mut chip = NewHintStoreChip::<F>::new(tester.execution_bus(), tester.program_bus(), tester.address_bits(), range_checker_chip.clone(), bitwise_chip.clone(), tester.memory_bridge(), tester.offline_memory_mutex_arc());
-    chip.set_streams(Arc::new(Mutex::new(Streams::default())));
 
+    let mut chip = NewHintStoreChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.address_bits(),
+        range_checker_chip.clone(),
+        bitwise_chip.clone(),
+        tester.memory_bridge(),
+        tester.offline_memory_mutex_arc(),
+    );
+    chip.set_streams(Arc::new(Mutex::new(Streams::default())));
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
-        let core_cols: &mut HintStoreNewCols<F> = trace_row.borrow_mut();
+        let cols: &mut HintStoreNewCols<F> = trace_row.as_mut_slice().borrow_mut();
         if let Some(data) = data {
-            core_cols.data = data.map(F::from_canonical_u32);
+            cols.data = data.map(F::from_canonical_u32);
         }
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -187,9 +203,17 @@ fn execute_roundtrip_sanity_test() {
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let mut chip = NewHintStoreChip::<F>::new(tester.execution_bus(), tester.program_bus(), tester.address_bits(), range_checker_chip.clone(), bitwise_chip.clone(), tester.memory_bridge(), tester.offline_memory_mutex_arc());
+    let mut chip = NewHintStoreChip::<F>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.address_bits(),
+        range_checker_chip.clone(),
+        bitwise_chip.clone(),
+        tester.memory_bridge(),
+        tester.offline_memory_mutex_arc(),
+    );
     chip.set_streams(Arc::new(Mutex::new(Streams::default())));
-    
+
     let num_tests: usize = 100;
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW, None, None);

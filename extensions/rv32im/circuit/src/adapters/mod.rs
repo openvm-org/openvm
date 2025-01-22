@@ -42,8 +42,10 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; RV32_REGISTER_NUM_LIMBS]) -> u32 {
 }
 
 /// inverse of `compose`
-pub fn decompose<F: PrimeField32>(mut value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
-    std::array::from_fn(|i| F::from_canonical_u32((value >> (RV32_CELL_BITS * i)) & ((1 << RV32_CELL_BITS) - 1)))
+pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
+    std::array::from_fn(|i| {
+        F::from_canonical_u32((value >> (RV32_CELL_BITS * i)) & ((1 << RV32_CELL_BITS) - 1))
+    })
 }
 
 /// Read register value as [RV32_REGISTER_NUM_LIMBS] limbs from memory.

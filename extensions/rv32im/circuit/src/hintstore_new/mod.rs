@@ -1,46 +1,44 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
-use std::sync::OnceLock;
 
+use openvm_circuit::{
+    arch::{
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor, Streams,
+    },
+    system::{
+        memory::{
+            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
+        },
+        program::ProgramBus,
+    },
+};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    utils::next_power_of_two_or_zero,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
+use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW};
 use openvm_stark_backend::{
-    Chip,
-    ChipUsageGetter,
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput, rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir}, Stateful,
+    prover::types::AirProofInput,
+    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip, ChipUsageGetter, Stateful,
 };
 use serde::{Deserialize, Serialize};
-
-use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
-    system::{
-        memory::{
-            MemoryAddress,
-            MemoryAuxColsFactory, MemoryController, offline_checker::{
-                MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
-            }, OfflineMemory, RecordId,
-        },
-        program::ProgramBus,
-    },
-};
-use openvm_circuit::arch::{AdapterRuntimeContext, Streams};
-use openvm_circuit_primitives::{
-    is_zero::{IsZeroIo, IsZeroSubAir},
-    SubAir,
-    TraceSubRowGenerator, utils::{assert_array_eq, next_power_of_two_or_zero, not},
-};
-use openvm_circuit_primitives::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip};
-use openvm_circuit_primitives::var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus};
-use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode, program::DEFAULT_PC_STEP};
-use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
-use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW};
 
 use crate::adapters::{compose, decompose};
 
@@ -51,12 +49,11 @@ mod tests;
 #[derive(AlignedBorrow)]
 pub struct HintStoreNewCols<T> {
     // common
-    
     pub is_single: T,
     pub is_buffer: T,
     // should be 1 for single
     pub rem_words_limbs: [T; RV32_REGISTER_NUM_LIMBS],
-    
+
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
@@ -68,12 +65,11 @@ pub struct HintStoreNewCols<T> {
     pub mem_ptr_limbs: [T; 2],
     pub write_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
     pub data: [T; RV32_REGISTER_NUM_LIMBS],
-    
+
     // only buffer
-    
     pub is_buffer_start: T,
     pub num_words_ptr: T,
-    pub num_words_aux_cols: T,
+    pub num_words_aux_cols: MemoryReadAuxCols<T>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -101,33 +97,39 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
         let local_cols: &HintStoreNewCols<AB::Var> = (*local).borrow();
         let next = main.row_slice(1);
         let next_cols: &HintStoreNewCols<AB::Var> = (*next).borrow();
-        
+
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
             timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
         };
-        
+
         builder.assert_bool(local_cols.is_single);
         builder.assert_bool(local_cols.is_buffer);
         builder.assert_bool(local_cols.is_buffer_start);
-        builder.when(local_cols.is_buffer_start).assert_one(local_cols.is_buffer);
+        builder
+            .when(local_cols.is_buffer_start)
+            .assert_one(local_cols.is_buffer);
         builder.assert_bool(local_cols.is_single + local_cols.is_buffer);
 
         let is_valid = local_cols.is_single + local_cols.is_buffer;
         let is_start = AB::Expr::ONE - local_cols.is_buffer + local_cols.is_buffer_start;
         let is_end = AB::Expr::ONE - next_cols.is_buffer + next_cols.is_buffer_start;
-        
+
         let mut rem_words = AB::Expr::ZERO;
         let mut next_rem_words = AB::Expr::ZERO;
         let mut mem_ptr = AB::Expr::ZERO;
         let mut next_mem_ptr = AB::Expr::ZERO;
-        for i in RV32_REGISTER_NUM_LIMBS-1..0 {
-            rem_words = rem_words * AB::F::from_canonical_u32(1 << RV32_CELL_BITS) + local_cols.rem_words_limbs[i];
-            next_rem_words = next_rem_words * AB::F::from_canonical_u32(1 << RV32_CELL_BITS) + next_cols.rem_words_limbs[i];
-            mem_ptr = mem_ptr * AB::F::from_canonical_u32(1 << RV32_CELL_BITS) + local_cols.mem_ptr_limbs[i];
-            next_mem_ptr = next_mem_ptr * AB::F::from_canonical_u32(1 << RV32_CELL_BITS) + next_cols.mem_ptr_limbs[i];
+        for i in RV32_REGISTER_NUM_LIMBS - 1..0 {
+            rem_words = rem_words * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
+                + local_cols.rem_words_limbs[i];
+            next_rem_words = next_rem_words * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
+                + next_cols.rem_words_limbs[i];
+            mem_ptr = mem_ptr * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
+                + local_cols.mem_ptr_limbs[i];
+            next_mem_ptr = next_mem_ptr * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
+                + next_cols.mem_ptr_limbs[i];
         }
 
         // read rs1
@@ -142,7 +144,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                 &local_cols.rs1_aux_cols,
             )
             .eval(builder, is_start.clone());
-        
+
         // read rem_words
         self.memory_bridge
             .read(
@@ -155,8 +157,10 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                 &local_cols.rs1_aux_cols,
             )
             .eval(builder, local_cols.is_buffer_start.clone());
-        
-        builder.when(local_cols.is_single).assert_one(rem_words.clone());
+
+        builder
+            .when(local_cols.is_single)
+            .assert_one(rem_words.clone());
 
         // constrain mem_ptr = rs1 + imm as a u32 addition with 2 limbs
         let limbs_01 = local_cols.rs1_data[0]
@@ -185,7 +189,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                 self.pointer_max_bits - RV32_CELL_BITS * 2,
             )
             .eval(builder, is_valid.clone());
-        
+
         for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
             self.bitwise_operation_lookup_bus
                 .send_range(local_cols.data[i * 2], local_cols.data[i * 2 + 1])
@@ -197,7 +201,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::from_canonical_u32(RV32_MEMORY_AS), mem_ptr),
+                MemoryAddress::new(AB::F::from_canonical_u32(RV32_MEMORY_AS), mem_ptr.clone()),
                 local_cols.data,
                 timestamp_pp(),
                 &local_cols.write_aux,
@@ -207,7 +211,10 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
         let to_pc = local_cols.from_state.pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP);
         self.execution_bridge
             .execute(
-                (local_cols.is_single * AB::F::from_canonical_usize(HINT_STOREW.global_opcode().as_usize())) + (local_cols.is_buffer * AB::F::from_canonical_usize(HINT_BUFFER.global_opcode().as_usize())),
+                (local_cols.is_single
+                    * AB::F::from_canonical_usize(HINT_STOREW.global_opcode().as_usize()))
+                    + (local_cols.is_buffer
+                        * AB::F::from_canonical_usize(HINT_BUFFER.global_opcode().as_usize())),
                 [
                     local_cols.is_buffer * (local_cols.num_words_ptr + AB::F::ONE),
                     local_cols.rs1_ptr.into(),
@@ -218,24 +225,43 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                 local_cols.from_state,
                 ExecutionState {
                     pc: to_pc,
-                    timestamp: timestamp + (rem_words.clone() * AB::F::from_canonical_usize(timestamp_delta)),
+                    timestamp: timestamp
+                        + (rem_words.clone() * AB::F::from_canonical_usize(timestamp_delta)),
                 },
             )
             .eval(builder, is_valid.clone());
-        
+
         // buffer transition
-        
-        builder.when(local_cols.is_buffer).when(is_end.clone()).assert_one(rem_words.clone());
-        builder.when(local_cols.is_buffer).when(AB::Expr::ONE - is_end.clone()).assert_one(rem_words.clone() - next_rem_words.clone());
-        builder.when(local_cols.is_buffer).when(AB::Expr::ONE - is_end.clone()).assert_eq(next_mem_ptr.clone() - mem_ptr.clone(), AB::F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS));
-        builder.when(local_cols.is_buffer).when(AB::Expr::ONE - is_end.clone()).assert_eq(timestamp + AB::F::from_canonical_usize(timestamp_delta), next_cols.from_state.timestamp);
+
+        builder
+            .when(local_cols.is_buffer)
+            .when(is_end.clone())
+            .assert_one(rem_words.clone());
+        builder
+            .when(local_cols.is_buffer)
+            .when(AB::Expr::ONE - is_end.clone())
+            .assert_one(rem_words.clone() - next_rem_words.clone());
+        builder
+            .when(local_cols.is_buffer)
+            .when(AB::Expr::ONE - is_end.clone())
+            .assert_eq(
+                next_mem_ptr.clone() - mem_ptr.clone(),
+                AB::F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS),
+            );
+        builder
+            .when(local_cols.is_buffer)
+            .when(AB::Expr::ONE - is_end.clone())
+            .assert_eq(
+                timestamp + AB::F::from_canonical_usize(timestamp_delta),
+                next_cols.from_state.timestamp,
+            );
     }
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct HintStoreRecord<F: Field> {
-    pub from_state: ExecutionState<F>,
+    pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<F>,
     pub rs1: [F; RV32_REGISTER_NUM_LIMBS],
     pub rs1_read: RecordId,
@@ -243,7 +269,7 @@ pub struct HintStoreRecord<F: Field> {
     pub offset_sign: bool,
     pub mem_ptr: u32,
     pub num_words: u32,
-    
+
     pub num_words_read: Option<RecordId>,
     pub hints: Vec<([F; RV32_REGISTER_NUM_LIMBS], RecordId)>,
 }
@@ -312,7 +338,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for NewHintStoreChip<F> {
             memory.increment_timestamp();
             (1, None)
         } else {
-            let (num_words_limbs, num_words_read) = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, num_words_ptr);
+            let (num_words_read, num_words_limbs) =
+                memory.read::<RV32_REGISTER_NUM_LIMBS>(d, num_words_ptr);
             (compose(num_words_limbs), Some(num_words_read))
         };
         let rs1_val = compose(rs1);
@@ -322,16 +349,16 @@ impl<F: PrimeField32> InstructionExecutor<F> for NewHintStoreChip<F> {
 
         let ptr_val = rs1_val.wrapping_add(offset_extended);
         assert!(ptr_val < (1 << self.air.pointer_max_bits));
-        let mem_ptr_limbs = std::array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
-        
+        let mem_ptr_limbs: [u32; 2] =
+            std::array::from_fn(|i| (ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff);
+
         let mut streams = self.streams.get().unwrap().lock().unwrap();
         if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS {
             return Err(ExecutionError::HintOutOfBounds { pc: from_state.pc });
         }
-        
-        let ptr = mem_ptr_limbs[0]
-            + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-        
+
+        let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
+
         let mut record = HintStoreRecord {
             from_state,
             instruction: instruction.clone(),
@@ -344,7 +371,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for NewHintStoreChip<F> {
             num_words_read,
             hints: vec![],
         };
-        
+
         for word_index in 0..num_words {
             if word_index != 0 {
                 memory.increment_timestamp();
@@ -353,8 +380,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for NewHintStoreChip<F> {
 
             let data: [F; RV32_REGISTER_NUM_LIMBS] =
                 std::array::from_fn(|_| streams.hint_stream.pop_front().unwrap());
-            let (write, _) =
-                memory.write(e, F::from_canonical_u32(ptr + (RV32_REGISTER_NUM_LIMBS * word_index)), data);
+            let (write, _) = memory.write(
+                e,
+                F::from_canonical_u32(ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index)),
+                data,
+            );
             record.hints.push((data, write));
 
             for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
@@ -364,10 +394,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for NewHintStoreChip<F> {
                 );
             }
         }
-        
+
         self.height += record.hints.len();
         self.records.push(record);
-
 
         Ok(ExecutionState {
             pc: from_state.pc + DEFAULT_PC_STEP,
@@ -409,25 +438,26 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
         memory: &OfflineMemory<F>,
     ) -> usize {
         let width = HintStoreNewCols::<F>::width();
-        let cols: &mut HintStoreNewCols<F> =
-            slice[..width].borrow_mut();
-        
-        cols.is_single = F::from_bool(record.num_words.is_none());
-        cols.is_buffer = F::from_bool(record.num_words.is_some());
-        
-        cols.from_state = record.from_state;
+        let cols: &mut HintStoreNewCols<F> = slice[..width].borrow_mut();
+
+        cols.is_single = F::from_bool(record.num_words_read.is_none());
+        cols.is_buffer = F::from_bool(record.num_words_read.is_some());
+
+        cols.from_state = record.from_state.map(F::from_canonical_u32);
         cols.rs1_ptr = record.instruction.b;
         cols.rs1_data = record.rs1;
-        cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(memory.record_by_id(record.rs1_read));
-        
+        cols.rs1_aux_cols =
+            aux_cols_factory.make_read_aux_cols(memory.record_by_id(record.rs1_read));
+
         cols.imm = record.instruction.c;
         cols.imm_sign = F::from_bool(record.offset_sign);
-        
+
         cols.num_words_ptr = record.instruction.a;
         if let Some(num_words_read) = record.num_words_read {
-            cols.num_words_aux_cols = aux_cols_factory.make_read_aux_cols(memory.record_by_id(num_words_read));
+            cols.num_words_aux_cols =
+                aux_cols_factory.make_read_aux_cols(memory.record_by_id(num_words_read));
         }
-        
+
         let mut mem_ptr = record.mem_ptr;
         let mut rem_words = record.num_words;
         let mut used_u32s = 0;
@@ -436,16 +466,17 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
             cols.data = data;
             cols.write_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(write));
             cols.rem_words_limbs = decompose(rem_words);
-            cols.mem_ptr_limbs = std::array::from_fn(|i| F::from_canonical_u32((mem_ptr >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
+            cols.mem_ptr_limbs = std::array::from_fn(|i| {
+                F::from_canonical_u32((mem_ptr >> (i * (RV32_CELL_BITS * 2))) & 0xffff)
+            });
             if i != 0 {
                 cols.is_buffer = F::ONE;
-                
             }
             used_u32s += width;
-            mem_ptr += RV32_REGISTER_NUM_LIMBS;
+            mem_ptr += RV32_REGISTER_NUM_LIMBS as u32;
             rem_words -= 1;
         }
-        
+
         used_u32s
     }
 

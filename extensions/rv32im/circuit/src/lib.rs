@@ -33,6 +33,6 @@ pub use shift::*;
 mod extension;
 pub use extension::*;
 
+mod hintstore_new;
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;
-mod hintstore_new;
