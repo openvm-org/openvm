@@ -66,7 +66,7 @@ pub struct EcDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: 
     VmChipWrapper<
         F,
         Rv32VecHeapAdapterChip<F, 1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        EcDoubleCoreChip,
+        FieldExpressionCoreChip,
     >,
 );
 
@@ -81,7 +81,19 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         a: BigUint,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let core = EcDoubleCoreChip::new(config, range_checker.clone(), a, offset);
+        let expr = ec_double_ne_expr(config, range_checker.bus(), a);
+        let core = FieldExpressionCoreChip::new(
+            expr,
+            offset,
+            vec![
+                Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+                Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+            ],
+            vec![],
+            range_checker,
+            "EcDouble",
+            true,
+        );
         Self(VmChipWrapper::new(adapter, core, offline_memory))
     }
 }
