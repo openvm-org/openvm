@@ -17,8 +17,7 @@ use openvm_circuit::{
     derive::{AnyEnum, InstructionExecutor, VmConfig},
 };
 use openvm_ecc_circuit::{
-    CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
-    SECP256K1_CONFIG,
+    CurveConfig, EccExtension, EccExtensionExecutor, EccExtensionPeriphery, SECP256K1_CONFIG,
 };
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
@@ -68,7 +67,7 @@ pub struct Rv32ImEcRecoverConfig {
     #[extension]
     pub keccak: Keccak256,
     #[extension]
-    pub weierstrass: WeierstrassExtension,
+    pub weierstrass: EccExtension,
 }
 
 impl Rv32ImEcRecoverConfig {
@@ -84,7 +83,7 @@ impl Rv32ImEcRecoverConfig {
             io: Default::default(),
             modular: ModularExtension::new(primes),
             keccak: Default::default(),
-            weierstrass: WeierstrassExtension::new(curves),
+            weierstrass: EccExtension::new(curves),
         }
     }
 }
