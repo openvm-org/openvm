@@ -102,11 +102,11 @@ fn set_and_execute_buffer(
     let ptr_val = rng.gen_range(
         0..(1
             << (tester
-            .memory_controller()
-            .borrow()
-            .mem_config()
-            .pointer_max_bits
-            - 2)),
+                .memory_controller()
+                .borrow()
+                .mem_config()
+                .pointer_max_bits
+                - 2)),
     ) << 2;
     let rs1 = rs1
         .unwrap_or(u32_into_limbs::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
@@ -119,12 +119,12 @@ fn set_and_execute_buffer(
     tester.write(1, b, rs1);
 
     let num_words = rng.gen_range(0..20);
-    println!("num_words: {}", num_words);
     let a = gen_pointer(rng, 4);
     tester.write(1, a, decompose(num_words));
 
-    let data: Vec<[F; RV32_REGISTER_NUM_LIMBS]> =
-        (0..num_words).map(|_| array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))))).collect();
+    let data: Vec<[F; RV32_REGISTER_NUM_LIMBS]> = (0..num_words)
+        .map(|_| array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS)))))
+        .collect();
     for i in 0..num_words {
         for datum in data[i as usize] {
             chip.streams
@@ -143,7 +143,10 @@ fn set_and_execute_buffer(
     );
 
     for i in 0..num_words {
-        assert_eq!(data[i as usize], tester.read::<4>(2, ptr_val as usize + (i as usize * RV32_REGISTER_NUM_LIMBS)));
+        assert_eq!(
+            data[i as usize],
+            tester.read::<4>(2, ptr_val as usize + (i as usize * RV32_REGISTER_NUM_LIMBS))
+        );
     }
 }
 
@@ -175,41 +178,13 @@ fn rand_hintstore_test() {
     );
     chip.set_streams(Arc::new(Mutex::new(Streams::default())));
 
-    let num_tests: usize = 5;
+    let num_tests: usize = 8;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW, None, None);
-    }
-
-    drop(range_checker_chip);
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
-    tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn rand_hintstore_buffer_test() {
-    setup_tracing();
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-
-    let mut chip = NewHintStoreChip::<F>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.address_bits(),
-        range_checker_chip.clone(),
-        bitwise_chip.clone(),
-        tester.memory_bridge(),
-        tester.offline_memory_mutex_arc(),
-    );
-    chip.set_streams(Arc::new(Mutex::new(Streams::default())));
-
-    let num_tests: usize = 3;
-    for _ in 0..num_tests {
-        set_and_execute_buffer(&mut tester, &mut chip, &mut rng, HINT_BUFFER, None, None);
+        if rng.gen_bool(0.5) {
+            set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW, None, None);
+        } else {
+            set_and_execute_buffer(&mut tester, &mut chip, &mut rng, HINT_BUFFER, None, None);
+        }
     }
 
     drop(range_checker_chip);

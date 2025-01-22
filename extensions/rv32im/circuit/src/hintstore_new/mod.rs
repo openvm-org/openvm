@@ -113,7 +113,6 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
             .assert_one(local_cols.is_buffer);
         builder.assert_bool(local_cols.is_single + local_cols.is_buffer);
 
-
         let is_valid = local_cols.is_single + local_cols.is_buffer;
         let is_start = local_cols.is_single + local_cols.is_buffer_start;
         // should only be used when is_buffer is truer
@@ -177,7 +176,9 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
 
         builder.when(is_start.clone()).assert_bool(carry.clone());
 
-        builder.when(is_start.clone()).assert_bool(local_cols.imm_sign);
+        builder
+            .when(is_start.clone())
+            .assert_bool(local_cols.imm_sign);
         let imm_extend_limb =
             local_cols.imm_sign * AB::F::from_canonical_u32((1 << (RV32_CELL_BITS * 2)) - 1);
         let carry = (limbs_23 + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
@@ -473,20 +474,16 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
         let mut used_u32s = 0;
         for (i, &(data, write)) in record.hints.iter().enumerate() {
             let cols: &mut HintStoreNewCols<F> = slice[used_u32s..used_u32s + width].borrow_mut();
-            cols.from_state.timestamp = F::from_canonical_u32(record.from_state.timestamp + (3 * i as u32));
+            cols.from_state.timestamp =
+                F::from_canonical_u32(record.from_state.timestamp + (3 * i as u32));
             cols.data = data;
             cols.write_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(write));
             cols.rem_words_limbs = decompose(rem_words);
-            let mem_ptr_limbs = std::array::from_fn(|i| {
-                (mem_ptr >> (i * (RV32_CELL_BITS * 2))) & 0xffff
-            });
+            let mem_ptr_limbs =
+                std::array::from_fn(|i| (mem_ptr >> (i * (RV32_CELL_BITS * 2))) & 0xffff);
             cols.mem_ptr_limbs = mem_ptr_limbs.map(F::from_canonical_u32);
-            range_checker_chip
-                .add_count(mem_ptr_limbs[0], RV32_CELL_BITS * 2);
-            range_checker_chip.add_count(
-                mem_ptr_limbs[1],
-                pointer_max_bits - RV32_CELL_BITS * 2,
-            );
+            range_checker_chip.add_count(mem_ptr_limbs[0], RV32_CELL_BITS * 2);
+            range_checker_chip.add_count(mem_ptr_limbs[1], pointer_max_bits - RV32_CELL_BITS * 2);
             if i != 0 {
                 cols.is_buffer = F::ONE;
             }
