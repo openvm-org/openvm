@@ -4,10 +4,10 @@ use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        ChipId, ExecutionSegment, ExitCode, MemoryConfig, SingleSegmentVmExecutor, Streams,
-        SystemConfig, SystemExecutor, SystemPeriphery, SystemTraceHeights, VirtualMachine,
-        VmChipComplex, VmComplexTraceHeights, VmConfig, VmExecutorResult, VmInventoryError,
-        VmInventoryTraceHeights,
+        ChipId, DefaultSegmentationStrategy, ExecutionSegment, ExitCode, MemoryConfig,
+        SingleSegmentVmExecutor, Streams, SystemConfig, SystemExecutor, SystemPeriphery,
+        SystemTraceHeights, VirtualMachine, VmChipComplex, VmComplexTraceHeights, VmConfig,
+        VmExecutorResult, VmInventoryError, VmInventoryTraceHeights,
     },
     derive::{AnyEnum, InstructionExecutor, VmConfig},
     system::{
@@ -17,7 +17,7 @@ use openvm_circuit::{
         },
         program::trace::VmCommittedExe,
     },
-    utils::{air_test, air_test_with_min_segments},
+    utils::{air_test, air_test_with_custom_segmentation, air_test_with_min_segments},
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
@@ -459,7 +459,8 @@ fn test_vm_continuations() {
     };
 
     let memory_dimensions = config.system.memory_config.memory_dimensions();
-    let final_state = air_test_with_min_segments(config, program, vec![], 3).unwrap();
+    let final_state =
+        air_test_with_custom_segmentation(config, program, vec![], 3, 200000).unwrap();
     let hasher = vm_poseidon2_hasher();
     let num_public_values = 8;
     let pv_proof =
@@ -478,7 +479,10 @@ fn test_vm_continuations_recover_state() {
     }
     .with_continuations();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let vm = VirtualMachine::new(engine, config.clone());
+    let mut vm = VirtualMachine::new(engine, config.clone());
+    vm.executor.set_custom_segmentation_strategy(Arc::new(
+        DefaultSegmentationStrategy::new_with_max_segment_len(500),
+    ));
     let pk = vm.keygen();
     let segments = vm
         .executor
