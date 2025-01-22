@@ -8,7 +8,7 @@ mod bn254 {
     use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::{arch::SystemConfig, utils::air_test_with_min_segments};
-    use openvm_ecc_circuit::WeierstrassExtension;
+    use openvm_ecc_circuit::EccExtension;
     use openvm_ecc_guest::{
         algebra::field::FieldExtension,
         halo2curves::{
@@ -44,7 +44,7 @@ mod bn254 {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes.to_vec()),
-            weierstrass: WeierstrassExtension::new(vec![]),
+            weierstrass: EccExtension::new(vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bn254]),
         }
     }
@@ -304,7 +304,7 @@ mod bls12_381 {
         arch::{instructions::exe::VmExe, SystemConfig},
         utils::{air_test, air_test_with_min_segments},
     };
-    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
+    use openvm_ecc_circuit::EccExtension;
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         halo2curves::{
@@ -340,7 +340,7 @@ mod bls12_381 {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes.to_vec()),
-            weierstrass: WeierstrassExtension::new(vec![]),
+            weierstrass: EccExtension::new(vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bls12_381]),
         }
     }

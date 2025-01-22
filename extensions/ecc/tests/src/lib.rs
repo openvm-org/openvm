@@ -11,8 +11,8 @@ mod tests {
         utils::{air_test, air_test_with_min_segments},
     };
     use openvm_ecc_circuit::{
-        CurveCoeffs, CurveConfig, Rv32WeierstrassConfig, TeCurveConfig, WeierstrassExtension,
-        P256_CONFIG, SECP256K1_CONFIG,
+        CurveCoeffs, CurveConfig, EccExtension, Rv32EccConfig, TeCurveConfig, P256_CONFIG,
+        SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -38,7 +38,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        let config = Rv32EccConfig::new(vec![SECP256K1_CONFIG.clone()]);
         air_test(config, openvm_exe);
         Ok(())
     }
@@ -59,7 +59,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
+        let config = Rv32EccConfig::new(vec![P256_CONFIG.clone()]);
         air_test(config, openvm_exe);
         Ok(())
     }
@@ -80,8 +80,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config =
-            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+        let config = Rv32EccConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
         air_test(config, openvm_exe);
         Ok(())
     }
@@ -104,7 +103,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        let config = Rv32EccConfig::new(vec![SECP256K1_CONFIG.clone()]);
 
         let p = Secp256k1Affine::generator();
         let p = (p + p + p).to_affine();
@@ -132,7 +131,7 @@ mod tests {
                 SECP256K1_CONFIG.scalar.clone(),
             ]))
             .keccak(Default::default())
-            .ecc(WeierstrassExtension::new(vec![SECP256K1_CONFIG.clone()]))
+            .ecc(EccExtension::new(vec![SECP256K1_CONFIG.clone()]))
             .build();
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -165,7 +164,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
         let config =
-            Rv32WeierstrassConfig::new(vec![CurveConfig {
+            Rv32EccConfig::new(vec![CurveConfig {
             modulus: BigUint::from_str(
                 "57896044618658097711785492504343953926634992332820282019728792003956564819949",
             ).unwrap(),
