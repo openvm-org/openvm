@@ -18,7 +18,7 @@ use crate::pairing::PairingIntrinsics;
 mod fp12;
 mod fp2;
 pub mod pairing;
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
 pub(crate) mod utils;
 
 pub use fp12::*;
