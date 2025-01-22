@@ -3,43 +3,46 @@ use std::{
     sync::{Arc, Mutex},
 };
 use std::sync::OnceLock;
-use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
-    system::{
-        memory::{
-            offline_checker::{
-                MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
-            },
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
-        },
-        program::ProgramBus,
-    },
-};
-use openvm_circuit_primitives::{
-    is_zero::{IsZeroIo, IsZeroSubAir},
-    utils::{assert_array_eq, next_power_of_two_or_zero, not},
-    SubAir, TraceSubRowGenerator,
-};
-use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+
 use openvm_stark_backend::{
+    Chip,
+    ChipUsageGetter,
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
-    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter, Stateful,
+    prover::types::AirProofInput, rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir}, Stateful,
 };
 use serde::{Deserialize, Serialize};
+
+use openvm_circuit::{
+    arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
+    system::{
+        memory::{
+            MemoryAddress,
+            MemoryAuxColsFactory, MemoryController, offline_checker::{
+                MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
+            }, OfflineMemory, RecordId,
+        },
+        program::ProgramBus,
+    },
+};
 use openvm_circuit::arch::{AdapterRuntimeContext, Streams};
+use openvm_circuit_primitives::{
+    is_zero::{IsZeroIo, IsZeroSubAir},
+    SubAir,
+    TraceSubRowGenerator, utils::{assert_array_eq, next_power_of_two_or_zero, not},
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip};
 use openvm_circuit_primitives::var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, LocalOpcode, program::DEFAULT_PC_STEP};
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW};
-use crate::adapters::compose;
+
+use crate::adapters::{compose, decompose};
 
 #[cfg(test)]
 mod tests;
@@ -69,7 +72,7 @@ pub struct HintStoreNewCols<T> {
     // only buffer
     
     pub is_buffer_start: T,
-    pub rem_words_ptr: T,
+    pub num_words_ptr: T,
     pub num_words_aux_cols: T,
 }
 
@@ -139,14 +142,13 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                 &local_cols.rs1_aux_cols,
             )
             .eval(builder, is_start.clone());
-
-
+        
         // read rem_words
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_canonical_u32(RV32_REGISTER_AS),
-                    local_cols.rem_words_ptr,
+                    local_cols.num_words_ptr,
                 ),
                 local_cols.rem_words_limbs,
                 timestamp_pp(),
@@ -207,7 +209,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
             .execute(
                 (local_cols.is_single * AB::F::from_canonical_usize(HINT_STOREW.global_opcode().as_usize())) + (local_cols.is_buffer * AB::F::from_canonical_usize(HINT_BUFFER.global_opcode().as_usize())),
                 [
-                    local_cols.is_buffer * (local_cols.rem_words_ptr + AB::F::ONE),
+                    local_cols.is_buffer * (local_cols.num_words_ptr + AB::F::ONE),
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
                     AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
@@ -238,8 +240,11 @@ pub struct HintStoreRecord<F: Field> {
     pub rs1: [F; RV32_REGISTER_NUM_LIMBS],
     pub rs1_read: RecordId,
     pub offset: u32,
+    pub offset_sign: bool,
+    pub mem_ptr: u32,
+    pub num_words: u32,
     
-    pub num_words: Option<([F; RV32_REGISTER_NUM_LIMBS], RecordId)>,
+    pub num_words_read: Option<RecordId>,
     pub hints: Vec<([F; RV32_REGISTER_NUM_LIMBS], RecordId)>,
 }
 
@@ -303,11 +308,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for NewHintStoreChip<F> {
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         let (rs1_read, rs1) = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, rs1_ptr);
-        let num_words_option = if opcode == HINT_STOREW.global_opcode() {
+        let (num_words, num_words_read) = if opcode == HINT_STOREW.global_opcode() {
             memory.increment_timestamp();
-            None
+            (1, None)
         } else {
-            Some(memory.read_cell(d, num_words_ptr))
+            let (num_words_limbs, num_words_read) = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, num_words_ptr);
+            (compose(num_words_limbs), Some(num_words_read))
         };
         let rs1_val = compose(rs1);
         let offset = offset.as_canonical_u32();
@@ -332,11 +338,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for NewHintStoreChip<F> {
             rs1,
             rs1_read,
             offset,
-            num_words: num_words_option,
+            offset_sign: offset_sign == 1,
+            mem_ptr: ptr_val,
+            num_words,
+            num_words_read,
             hints: vec![],
         };
         
-        let num_words = num_words_option.map(|(_, num_words)| num_words.as_canonical_u32()).unwrap_or(1);
         for word_index in 0..num_words {
             if word_index != 0 {
                 memory.increment_timestamp();
@@ -393,104 +401,52 @@ impl<F: Field> ChipUsageGetter for NewHintStoreChip<F> {
 }
 
 impl<F: PrimeField32> NewHintStoreChip<F> {
+    // returns number of used u32s
     fn record_to_rows(
-        record: FriReducedOpeningRecord<F>,
+        record: HintStoreRecord<F>,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
         slice: &mut [F],
         memory: &OfflineMemory<F>,
-    ) {
+    ) -> usize {
         let width = HintStoreNewCols::<F>::width();
-
-        let Instruction {
-            a: a_ptr_ptr,
-            b: b_ptr_ptr,
-            c: result_ptr,
-            d: addr_space,
-            e: length_ptr,
-            f: alpha_ptr,
-            g: alpha_pow_ptr,
-            ..
-        } = record.instruction;
-
-        let length_read = memory.record_by_id(record.length_read);
-        let alpha_read = memory.record_by_id(record.alpha_read);
-        let a_ptr_read = memory.record_by_id(record.a_ptr_read);
-        let b_ptr_read = memory.record_by_id(record.b_ptr_read);
-
-        let length = length_read.data[0].as_canonical_u32() as usize;
-        let alpha: [F; EXT_DEG] = array::from_fn(|i| alpha_read.data[i]);
-        let a_ptr = a_ptr_read.data[0];
-        let b_ptr = b_ptr_read.data[0];
-
-        let mut alpha_pow_current = record.alpha_pow_original;
-        let mut current = [F::ZERO; EXT_DEG];
-
-        let alpha_aux = aux_cols_factory.make_read_aux_cols(alpha_read);
-        let length_aux = aux_cols_factory.make_read_aux_cols(length_read);
-        let a_ptr_aux = aux_cols_factory.make_read_aux_cols(a_ptr_read);
-        let b_ptr_aux = aux_cols_factory.make_read_aux_cols(b_ptr_read);
-
-        let alpha_pow_aux = aux_cols_factory
-            .make_write_aux_cols::<EXT_DEG>(memory.record_by_id(record.alpha_pow_write))
-            .get_base();
-        let result_aux =
-            aux_cols_factory.make_write_aux_cols(memory.record_by_id(record.result_write));
-
-        for i in 0..length {
-            let a_read = memory.record_by_id(record.a_reads[i]);
-            let b_read = memory.record_by_id(record.b_reads[i]);
-            let a = a_read.data[0];
-            let b: [F; EXT_DEG] = array::from_fn(|i| b_read.data[i]);
-            current = FieldExtension::add(
-                current,
-                FieldExtension::multiply(
-                    FieldExtension::subtract(b, elem_to_ext(a)),
-                    alpha_pow_current,
-                ),
-            );
-
-            let mut idx_is_zero = F::ZERO;
-            let mut is_zero_aux = F::ZERO;
-
-            let idx = F::from_canonical_usize(i);
-            IsZeroSubAir.generate_subrow(idx, (&mut is_zero_aux, &mut idx_is_zero));
-
-            let cols: &mut HintStoreNewCols<F> =
-                slice[i * width..(i + 1) * width].borrow_mut();
-            *cols = HintStoreNewCols {
-                enabled: F::ONE,
-                pc: record.pc,
-                a_ptr_ptr,
-                b_ptr_ptr,
-                result_ptr,
-                addr_space,
-                length_ptr,
-                alpha_ptr,
-                alpha_pow_ptr,
-                start_timestamp: record.start_timestamp,
-                a_ptr_aux,
-                b_ptr_aux,
-                a_aux: aux_cols_factory.make_read_aux_cols(a_read),
-                b_aux: aux_cols_factory.make_read_aux_cols(b_read),
-                alpha_aux,
-                length_aux,
-                alpha_pow_aux,
-                result_aux,
-                a_ptr,
-                b_ptr,
-                a,
-                b,
-                alpha,
-                alpha_pow_original: record.alpha_pow_original,
-                alpha_pow_current,
-                idx,
-                idx_is_zero,
-                is_zero_aux,
-                current,
-            };
-
-            alpha_pow_current = FieldExtension::multiply(alpha, alpha_pow_current);
+        let cols: &mut HintStoreNewCols<F> =
+            slice[..width].borrow_mut();
+        
+        cols.is_single = F::from_bool(record.num_words.is_none());
+        cols.is_buffer = F::from_bool(record.num_words.is_some());
+        
+        cols.from_state = record.from_state;
+        cols.rs1_ptr = record.instruction.b;
+        cols.rs1_data = record.rs1;
+        cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(memory.record_by_id(record.rs1_read));
+        
+        cols.imm = record.instruction.c;
+        cols.imm_sign = F::from_bool(record.offset_sign);
+        
+        cols.num_words_ptr = record.instruction.a;
+        if let Some(num_words_read) = record.num_words_read {
+            cols.num_words_aux_cols = aux_cols_factory.make_read_aux_cols(memory.record_by_id(num_words_read));
         }
+        
+        let mut mem_ptr = record.mem_ptr;
+        let mut rem_words = record.num_words;
+        let mut used_u32s = 0;
+        for (i, &(data, write)) in record.hints.iter().enumerate() {
+            let cols: &mut HintStoreNewCols<F> = slice[used_u32s..used_u32s + width].borrow_mut();
+            cols.data = data;
+            cols.write_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(write));
+            cols.rem_words_limbs = decompose(rem_words);
+            cols.mem_ptr_limbs = std::array::from_fn(|i| F::from_canonical_u32((mem_ptr >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
+            if i != 0 {
+                cols.is_buffer = F::ONE;
+                
+            }
+            used_u32s += width;
+            mem_ptr += RV32_REGISTER_NUM_LIMBS;
+            rem_words -= 1;
+        }
+        
+        used_u32s
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
@@ -502,26 +458,16 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
 
         let aux_cols_factory = memory.aux_cols_factory();
 
-        let mut idx = 0;
+        let mut used_u32s = 0;
         for record in self.records {
-            let length = record.a_reads.len();
-            Self::record_to_rows(
+            used_u32s += Self::record_to_rows(
                 record,
                 &aux_cols_factory,
-                &mut flat_trace[idx..idx + (length * width)],
+                &mut flat_trace[used_u32s..],
                 &memory,
             );
-            idx += length * width;
         }
-        // In padding rows, need idx_is_zero = 1 so IsZero constraints pass, and also because next.idx_is_zero is used
-        // to determine the last row per instruction, so the last non-padding row needs next.idx_is_zero = 1
-        flat_trace[self.height * width..]
-            .par_chunks_mut(width)
-            .for_each(|row| {
-                let row: &mut HintStoreNewCols<F> = row.borrow_mut();
-                row.idx_is_zero = F::ONE;
-            });
-
+        // padding rows can just be all zeros
         RowMajorMatrix::new(flat_trace, width)
     }
 }
@@ -541,7 +487,7 @@ where
 impl<F: PrimeField32> Stateful<Vec<u8>> for NewHintStoreChip<F> {
     fn load_state(&mut self, state: Vec<u8>) {
         self.records = bitcode::deserialize(&state).unwrap();
-        self.height = self.records.iter().map(|record| record.a_reads.len()).sum();
+        self.height = self.records.iter().map(|record| record.hints.len()).sum();
     }
 
     fn store_state(&self) -> Vec<u8> {
