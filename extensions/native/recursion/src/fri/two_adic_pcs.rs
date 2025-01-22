@@ -48,6 +48,9 @@ pub fn verify_two_adic_pcs<C: Config>(
     let log_blowup = config.log_blowup;
     let blowup = config.blowup;
     let alpha = challenger.sample_ext(builder);
+    if builder.flags.static_only {
+        builder.ext_reduce_circuit(alpha);
+    }
 
     builder.cycle_tracker_start("stage-d-verifier-verify");
     let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
@@ -232,7 +235,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                                     let p_at_z = builder.get(&ps_at_z, t);
                                     builder.assign(&n, n * alpha + (p_at_z - p_at_x));
                                 }
-                                builder.assign(&cur_ro, cur_ro + cur_alpha_pow * n / (z - x));
+                                builder.assign(&cur_ro, cur_ro + n / (z - x) * cur_alpha_pow);
                                 builder.assign(&cur_alpha_pow, cur_alpha_pow * mat_alpha_pow);
                             } else {
                                 // TODO: this is just for testing the correctness. Will remove later.
@@ -396,13 +399,16 @@ fn compute_round_alpha_pows<C: Config>(
             let mat_alpha_pow: Ext<_, _> = if builder.flags.static_only {
                 let width = width.value();
                 assert!(width < 1 << MAX_LOG_WIDTH);
-                let mut ret = C::EF::ONE.cons();
+                let mut expr = C::EF::ONE.cons();
                 for i in 0..MAX_LOG_WIDTH {
                     if width & (1 << i) != 0 {
-                        ret *= builder.get(&pow_of_alpha, i);
+                        expr *= builder.get(&pow_of_alpha, i);
                     }
                 }
-                builder.eval(ret)
+                let ret: Ext<_, _> = builder.eval(expr);
+                // Minimize max_bits so following computation becomes cheaper.
+                builder.ext_reduce_circuit(ret);
+                ret
             } else {
                 let width = width.get_var();
                 // This is dynamic only so safe to cast.

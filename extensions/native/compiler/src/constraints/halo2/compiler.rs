@@ -408,6 +408,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         );
                         exts.insert(b.0, x);
                     }
+                    DslIr::CircuitFeltReduce(a) => {
+                        let x = f_chip.reduce_max_bits(ctx, felts[&a.0]);
+                        felts.insert(a.0, x);
+                    }
+                    DslIr::CircuitExtReduce(a) => {
+                        let x = ext_chip.reduce_max_bits(ctx, exts[&a.0]);
+                        exts.insert(a.0, x);
+                    }
                     DslIr::CycleTrackerStart(_name) => {
                         #[cfg(feature = "bench-metrics")]
                         cell_tracker.start(_name);
@@ -482,6 +490,8 @@ fn is_babybear_ir<C: Config>(ir: &DslIr<C>) -> bool {
             | DslIr::AssertEqFI(_, _)
             | DslIr::WitnessFelt(_, _)
             | DslIr::CircuitFelts2Ext(_, _)
+            | DslIr::CircuitFeltReduce(_)
+            | DslIr::CircuitExtReduce(_)
             | DslIr::ImmE(_, _)
             | DslIr::AddE(_, _, _)
             | DslIr::AddEF(_, _, _)

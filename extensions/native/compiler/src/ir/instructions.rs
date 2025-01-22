@@ -248,6 +248,10 @@ pub enum DslIr<C: Config> {
     CircuitExt2Felt([Felt<C::F>; 4], Ext<C::F, C::EF>),
     /// Converts a slice of felts to an ext. Should only be used when target is a circuit.
     CircuitFelts2Ext([Felt<C::F>; 4], Ext<C::F, C::EF>),
+    /// Halo2 only. Reduce a Felt so later computation becomes cheaper.
+    CircuitFeltReduce(Felt<C::F>),
+    /// Halo2 only. Reduce an Ext so later computation becomes cheaper.
+    CircuitExtReduce(Ext<C::F, C::EF>),
     /// FriReducedOpening(alpha, curr_alpha_pow, at_x_array, at_z_array, result)
     FriReducedOpening(
         Ext<C::F, C::EF>,
