@@ -116,8 +116,8 @@ pub enum AsmInstruction<F, EF> {
     /// (a, b, c) are memory pointers to (dst, lhs, rhs)
     Poseidon2Compress(i32, i32, i32),
 
-    /// (a, b, res, len, alpha, alpha_pow)
-    FriReducedOpening(i32, i32, i32, i32, i32, i32),
+    /// (a, b, res, len, alpha)
+    FriReducedOpening(i32, i32, i32, i32, i32),
 
     /// (dim, opened, opened_length, sibling, index, commit)
     /// opened values are field elements
@@ -358,11 +358,11 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::CycleTrackerEnd() => {
                 write!(f, "cycle_tracker_end")
             }
-            AsmInstruction::FriReducedOpening(a, b, res, len, alpha, alpha_pow) => {
+            AsmInstruction::FriReducedOpening(a, b, res, len, alpha) => {
                 write!(
                     f,
-                    "fri_mat_opening ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
-                    a, b, res, len, alpha, alpha_pow
+                    "fri_mat_opening ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
+                    a, b, res, len, alpha
                 )
             }
             AsmInstruction::VerifyBatchFelt(dim, opened, opened_length, sibling, index, commit) => {

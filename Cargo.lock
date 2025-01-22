@@ -3952,6 +3952,7 @@ dependencies = [
  "rand",
  "serde",
  "serde-big-array",
+ "static_assertions",
  "strum",
  "test-case",
  "test-log",

@@ -124,7 +124,7 @@ fn test_vm_override_executor_height() {
     ));
 
     // Test getting heights.
-    let vm_config = NativeConfig::aggregation(8, 3);
+    let vm_config = NativeConfig::aggregation(8, 5);
 
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
     let res = executor
@@ -211,7 +211,7 @@ fn test_vm_override_executor_height() {
 fn test_vm_1_optional_air() {
     // Aggregation VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program only
     // uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
-    let config = NativeConfig::aggregation(4, 3);
+    let config = NativeConfig::aggregation(4, 5);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let vm = VirtualMachine::new(engine, config);
@@ -319,7 +319,7 @@ fn test_vm_initial_memory() {
         .into_iter()
         .collect();
 
-    let config = NativeConfig::aggregation(0, 3).with_continuations();
+    let config = NativeConfig::aggregation(0, 5).with_continuations();
     let exe = VmExe {
         program,
         pc_start: 0,
@@ -331,9 +331,11 @@ fn test_vm_initial_memory() {
 
 #[test]
 fn test_vm_1_persistent() {
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let engine = BabyBearPoseidon2Engine::new(
+        FriParameters::standard_with_100_bits_conjectured_security(2),
+    );
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(1, 1, 16, 10, 6, 64, 1024), 0),
+        system: SystemConfig::new(5, MemoryConfig::new(1, 1, 16, 10, 6, 64, 1024), 0),
         native: Default::default(),
     }
     .with_continuations();
@@ -443,7 +445,7 @@ fn test_vm_continuations() {
     let n = 200000;
     let program = gen_continuation_test_program(n);
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::default(), 0).with_max_segment_len(200000),
+        system: SystemConfig::new(5, MemoryConfig::default(), 0).with_max_segment_len(200000),
         native: Default::default(),
     }
     .with_continuations();
@@ -473,11 +475,13 @@ fn test_vm_continuations_recover_state() {
     let n = 2000;
     let program = gen_continuation_test_program(n);
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::default(), 0).with_max_segment_len(500),
+        system: SystemConfig::new(5, MemoryConfig::default(), 0).with_max_segment_len(500),
         native: Default::default(),
     }
     .with_continuations();
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let engine = BabyBearPoseidon2Engine::new(
+        FriParameters::standard_with_100_bits_conjectured_security(2),
+    );
     let vm = VirtualMachine::new(engine, config.clone());
     let pk = vm.keygen();
     let segments = vm
@@ -729,7 +733,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
 
     let program = Program::from_instructions(&instructions);
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(1, 1, 16, 10, 6, 64, 1024), 0)
+        system: SystemConfig::new(5, MemoryConfig::new(1, 1, 16, 10, 6, 64, 1024), 0)
             .with_continuations(),
         native: Default::default(),
     };

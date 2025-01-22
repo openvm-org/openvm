@@ -53,7 +53,6 @@ fn test_single_reduced_opening_eval() {
         builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
     });
     let expected_result = cur_ro;
-    let expected_final_alpha_pow = cur_alpha_pow;
 
     // prints don't work?
     /*builder.print_e(expected_result);
@@ -64,19 +63,15 @@ fn test_single_reduced_opening_eval() {
     let ext_1210 = builder.constant(EF::from_base_slice(&[F::ONE, F::TWO, F::ONE, F::ZERO]));
     builder.print_e(ext_1210);*/
 
-    let cur_alpha_pow: Ext<_, _> = builder.uninit();
     builder.assign(&cur_alpha_pow, initial_alpha_pow);
-    let single_ro_eval_res =
-        builder.fri_single_reduced_opening_eval(alpha, cur_alpha_pow, &mat_opening, &ps_at_z);
-    let actual_final_alpha_pow = cur_alpha_pow;
+    let single_ro_eval_res = builder.fri_single_reduced_opening_eval(alpha, &mat_opening, &ps_at_z);
     let actual_result: Ext<_, _> = builder.uninit();
-    builder.assign(&actual_result, single_ro_eval_res / (z - x));
+    builder.assign(&actual_result, single_ro_eval_res * cur_alpha_pow / (z - x));
 
     //builder.print_e(actual_result);
     //builder.print_e(actual_final_alpha_pow);
 
     builder.assert_ext_eq(expected_result, actual_result);
-    builder.assert_ext_eq(expected_final_alpha_pow, actual_final_alpha_pow);
 
     builder.halt();
 

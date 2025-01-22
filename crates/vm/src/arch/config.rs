@@ -19,9 +19,8 @@ use super::{
 use crate::system::memory::BOUNDARY_AIR_OFFSET;
 
 const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
-// sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
-// allows log_blowup = 1
-const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
+// FRI Reduced Opening Chip has degree = 4.
+const DEFAULT_MAX_CONSTRAINT_DEGREE: usize = 4;
 /// Width of Poseidon2 VM uses.
 pub const POSEIDON2_WIDTH: usize = 16;
 /// Returns a Poseidon2 config for the VM.
@@ -168,7 +167,7 @@ impl SystemConfig {
 impl Default for SystemConfig {
     fn default() -> Self {
         Self::new(
-            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
+            DEFAULT_MAX_CONSTRAINT_DEGREE,
             Default::default(),
             DEFAULT_MAX_NUM_PUBLIC_VALUES,
         )

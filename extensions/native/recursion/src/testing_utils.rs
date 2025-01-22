@@ -65,13 +65,10 @@ pub mod inner {
         test_proof_input: ProofInputForTest<BabyBearPoseidon2Config>,
         fri_params: FriParameters,
     ) {
-        let ProofInputForTest {
-            per_air: air_proof_inputs,
-        } = test_proof_input;
-        let vparams =
-            <BabyBearPoseidon2Engine as StarkFriEngine<BabyBearPoseidon2Config>>::run_test_fast(
-                air_proof_inputs,
-            )
+        let vparams = test_proof_input
+            .run_test(&BabyBearPoseidon2Engine::new(
+                FriParameters::standard_with_100_bits_conjectured_security(2),
+            ))
             .unwrap();
 
         recursive_stark_test(

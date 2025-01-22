@@ -7,20 +7,23 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
+    utils::create_seeded_rng,
+};
 use rand::Rng;
 
-use super::{
-    super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningChip,
-    FriReducedOpeningCols, EXT_DEG,
-};
+use super::{super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningChip, EXT_DEG};
+use crate::OVERALL_WIDTH;
 
 fn compute_fri_mat_opening<F: Field>(
     alpha: [F; EXT_DEG],
-    mut alpha_pow: [F; EXT_DEG],
     a: &[F],
     b: &[[F; EXT_DEG]],
-) -> ([F; EXT_DEG], [F; EXT_DEG]) {
+) -> [F; EXT_DEG] {
+    let mut alpha_pow: [F; EXT_DEG] = elem_to_ext(F::ONE);
     let mut result = [F::ZERO; EXT_DEG];
     for (&a, &b) in a.iter().zip_eq(b) {
         result = FieldExtension::add(
@@ -29,7 +32,7 @@ fn compute_fri_mat_opening<F: Field>(
         );
         alpha_pow = FieldExtension::multiply(alpha, alpha_pow);
     }
-    (alpha_pow, result)
+    result
 }
 
 #[test]
@@ -60,19 +63,17 @@ fn fri_mat_opening_air_test() {
     for _ in 0..num_ops {
         let alpha = gen_ext!();
         let length = rng.gen_range(length_range());
-        let alpha_pow_initial = gen_ext!();
         let a = (0..length)
             .map(|_| BabyBear::from_canonical_u32(rng.gen_range(elem_range())))
             .collect_vec();
         let b = (0..length).map(|_| gen_ext!()).collect_vec();
 
-        let (alpha_pow_final, result) = compute_fri_mat_opening(alpha, alpha_pow_initial, &a, &b);
+        let result = compute_fri_mat_opening(alpha, &a, &b);
 
         let alpha_pointer = gen_pointer(&mut rng, 4);
         let length_pointer = gen_pointer(&mut rng, 1);
         let a_pointer_pointer = gen_pointer(&mut rng, 1);
         let b_pointer_pointer = gen_pointer(&mut rng, 1);
-        let alpha_pow_pointer = gen_pointer(&mut rng, 4);
         let result_pointer = gen_pointer(&mut rng, 4);
         let a_pointer = gen_pointer(&mut rng, 1);
         let b_pointer = gen_pointer(&mut rng, 4);
@@ -100,7 +101,6 @@ fn fri_mat_opening_air_test() {
             b_pointer_pointer,
             BabyBear::from_canonical_usize(b_pointer),
         );
-        tester.write(address_space, alpha_pow_pointer, alpha_pow_initial);
         for i in 0..length {
             tester.write_cell(address_space, a_pointer + i, a[i]);
             tester.write(address_space, b_pointer + (4 * i), b[i]);
@@ -117,19 +117,21 @@ fn fri_mat_opening_air_test() {
                     address_space,
                     length_pointer,
                     alpha_pointer,
-                    alpha_pow_pointer,
                 ],
             ),
-        );
-        assert_eq!(
-            alpha_pow_final,
-            tester.read(address_space, alpha_pow_pointer)
         );
         assert_eq!(result, tester.read(address_space, result_pointer));
     }
 
-    let mut tester = tester.build().load(chip).finalize();
-    tester.simple_test().expect("Verification failed");
+    let mut tester = tester.build_babybear_poseidon2().load(chip).finalize();
+    // Degree needs >= 4
+    tester
+        .test::<BabyBearPoseidon2Engine, _>(|| {
+            BabyBearPoseidon2Engine::new(
+                FriParameters::standard_with_100_bits_conjectured_security(2),
+            )
+        })
+        .expect("Verification failed");
 
     disable_debug_builder();
     // negative test pranking each value
@@ -137,7 +139,7 @@ fn fri_mat_opening_air_test() {
         // TODO: better way to modify existing traces in tester
         let trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
         let old_trace = trace.clone();
-        for width in 0..FriReducedOpeningCols::<BabyBear>::width()
+        for width in 0..OVERALL_WIDTH
         /* num operands */
         {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
@@ -146,7 +148,13 @@ fn fri_mat_opening_air_test() {
 
         // Run a test after pranking each row
         assert_eq!(
-            tester.simple_test().err(),
+            tester
+                .test::<BabyBearPoseidon2Engine, _>(|| {
+                    BabyBearPoseidon2Engine::new(
+                        FriParameters::standard_with_100_bits_conjectured_security(2),
+                    )
+                })
+                .err(),
             Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );

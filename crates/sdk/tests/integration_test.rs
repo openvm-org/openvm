@@ -307,7 +307,7 @@ fn test_static_verifier_custom_pv_handler() {
 
     // Test setup
     println!("test setup");
-    let app_log_blowup = 1;
+    let app_log_blowup = 2;
     let app_config = small_test_app_config(app_log_blowup);
     let app_pk = Sdk.app_keygen(app_config.clone()).unwrap();
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
@@ -358,7 +358,7 @@ fn test_static_verifier_custom_pv_handler() {
 
 #[test]
 fn test_e2e_proof_generation_and_verification() {
-    let app_log_blowup = 1;
+    let app_log_blowup = 2;
     let app_config = small_test_app_config(app_log_blowup);
     let app_pk = Sdk.app_keygen(app_config).unwrap();
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
