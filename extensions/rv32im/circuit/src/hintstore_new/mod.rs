@@ -113,6 +113,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
             .assert_one(local_cols.is_buffer);
         builder.assert_bool(local_cols.is_single + local_cols.is_buffer);
 
+
         let is_valid = local_cols.is_single + local_cols.is_buffer;
         let is_start = local_cols.is_single + local_cols.is_buffer_start;
         // should only be used when is_buffer is truer
@@ -148,7 +149,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
             )
             .eval(builder, is_start.clone());
 
-        // read rem_words
+        // read num_words
         self.memory_bridge
             .read(
                 MemoryAddress::new(
@@ -157,10 +158,9 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                 ),
                 local_cols.rem_words_limbs,
                 timestamp_pp(),
-                &local_cols.rs1_aux_cols,
+                &local_cols.num_words_aux_cols,
             )
             .eval(builder, local_cols.is_buffer_start.clone());
-
 
         builder
             .when(local_cols.is_single)
@@ -175,13 +175,13 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
         let inv = AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2)).inverse();
         let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
 
-        builder.assert_bool(carry.clone());
+        builder.when(is_start.clone()).assert_bool(carry.clone());
 
-        builder.assert_bool(local_cols.imm_sign);
+        builder.when(is_start.clone()).assert_bool(local_cols.imm_sign);
         let imm_extend_limb =
             local_cols.imm_sign * AB::F::from_canonical_u32((1 << (RV32_CELL_BITS * 2)) - 1);
         let carry = (limbs_23 + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
-        builder.assert_bool(carry.clone());
+        builder.when(is_start.clone()).assert_bool(carry.clone());
 
         // preventing mem_ptr overflow
         self.range_bus
@@ -203,6 +203,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
         let mem_ptr = local_cols.mem_ptr_limbs[0]
             + local_cols.mem_ptr_limbs[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
 
+        // write hint
         self.memory_bridge
             .write(
                 MemoryAddress::new(AB::F::from_canonical_u32(RV32_MEMORY_AS), mem_ptr.clone()),
@@ -220,7 +221,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                     + (local_cols.is_buffer
                         * AB::F::from_canonical_usize(HINT_BUFFER.global_opcode().as_usize())),
                 [
-                    local_cols.is_buffer * (local_cols.num_words_ptr + AB::F::ONE),
+                    local_cols.is_buffer * (local_cols.num_words_ptr),
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
                     AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
@@ -233,8 +234,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                         + (rem_words.clone() * AB::F::from_canonical_usize(timestamp_delta)),
                 },
             )
-            .eval(builder, is_valid.clone());
-        // above is fine
+            .eval(builder, is_start.clone());
 
         // buffer transition
 
@@ -451,6 +451,7 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
 
         cols.is_single = F::from_bool(record.num_words_read.is_none());
         cols.is_buffer = F::from_bool(record.num_words_read.is_some());
+        cols.is_buffer_start = cols.is_buffer;
 
         cols.from_state = record.from_state.map(F::from_canonical_u32);
         cols.rs1_ptr = record.instruction.b;
@@ -472,6 +473,7 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
         let mut used_u32s = 0;
         for (i, &(data, write)) in record.hints.iter().enumerate() {
             let cols: &mut HintStoreNewCols<F> = slice[used_u32s..used_u32s + width].borrow_mut();
+            cols.from_state.timestamp = F::from_canonical_u32(record.from_state.timestamp + (3 * i as u32));
             cols.data = data;
             cols.write_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(write));
             cols.rem_words_limbs = decompose(rem_words);
