@@ -1,9 +1,8 @@
 use std::{
-    array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
     sync::{Arc, Mutex},
 };
-
+use std::sync::OnceLock;
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{
@@ -35,10 +34,12 @@ use openvm_stark_backend::{
     Chip, ChipUsageGetter, Stateful,
 };
 use serde::{Deserialize, Serialize};
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit::arch::{AdapterRuntimeContext, Streams};
+use openvm_circuit_primitives::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip};
+use openvm_circuit_primitives::var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus};
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW};
+use crate::adapters::compose;
 
 #[cfg(test)]
 mod tests;
@@ -231,55 +232,58 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
-pub struct FriReducedOpeningRecord<F: Field> {
-    pub pc: F,
-    pub start_timestamp: F,
+pub struct HintStoreRecord<F: Field> {
+    pub from_state: ExecutionState<F>,
     pub instruction: Instruction<F>,
-    pub alpha_read: RecordId,
-    pub length_read: RecordId,
-    pub a_ptr_read: RecordId,
-    pub b_ptr_read: RecordId,
-    pub a_reads: Vec<RecordId>,
-    pub b_reads: Vec<RecordId>,
-    pub alpha_pow_original: [F; EXT_DEG],
-    pub alpha_pow_write: RecordId,
-    pub result_write: RecordId,
+    pub rs1: [F; RV32_REGISTER_NUM_LIMBS],
+    pub rs1_read: RecordId,
+    pub offset: u32,
+    
+    pub num_words: Option<([F; RV32_REGISTER_NUM_LIMBS], RecordId)>,
+    pub hints: Vec<([F; RV32_REGISTER_NUM_LIMBS], RecordId)>,
 }
 
-pub struct FriReducedOpeningChip<F: Field> {
+pub struct NewHintStoreChip<F: Field> {
     air: HintStoreNewAir,
-    records: Vec<FriReducedOpeningRecord<F>>,
+    records: Vec<HintStoreRecord<F>>,
     height: usize,
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+    pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F: PrimeField32> FriReducedOpeningChip<F> {
+impl<F: PrimeField32> NewHintStoreChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
+        pointer_max_bits: usize,
+        range_checker_chip: SharedVariableRangeCheckerChip,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         memory_bridge: MemoryBridge,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let air = HintStoreNewAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
+            range_bus: range_checker_chip.bus(),
+            bitwise_operation_lookup_bus: bitwise_lookup_chip.bus(),
+            pointer_max_bits,
         };
         Self {
             records: vec![],
             air,
             height: 0,
             offline_memory,
+            streams: OnceLock::new(),
+            bitwise_lookup_chip,
         }
+    }
+    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
+        self.streams.set(streams).unwrap();
     }
 }
 
-fn elem_to_ext<F: Field>(elem: F) -> [F; EXT_DEG] {
-    let mut ret = [F::ZERO; EXT_DEG];
-    ret[0] = elem;
-    ret
-}
-
-impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
+impl<F: PrimeField32> InstructionExecutor<F> for NewHintStoreChip<F> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
@@ -287,68 +291,75 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let &Instruction {
-            a: a_ptr_ptr,
-            b: b_ptr_ptr,
-            c: result_ptr,
-            d: addr_space,
-            e: length_ptr,
-            f: alpha_ptr,
-            g: alpha_pow_ptr,
+            opcode,
+            a: num_words_ptr,
+            b: rs1_ptr,
+            c: offset,
+            d,
+            e,
             ..
         } = instruction;
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
-        let alpha_read = memory.read(addr_space, alpha_ptr);
-        let length_read = memory.read_cell(addr_space, length_ptr);
-        let a_ptr_read = memory.read_cell(addr_space, a_ptr_ptr);
-        let b_ptr_read = memory.read_cell(addr_space, b_ptr_ptr);
+        let (rs1_read, rs1) = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, rs1_ptr);
+        let num_words_option = if opcode == HINT_STOREW.global_opcode() {
+            memory.increment_timestamp();
+            None
+        } else {
+            Some(memory.read_cell(d, num_words_ptr))
+        };
+        let rs1_val = compose(rs1);
+        let offset = offset.as_canonical_u32();
+        let offset_sign = (offset & 0x8000) >> 15;
+        let offset_extended = offset + offset_sign * 0xffff0000;
 
-        let alpha = alpha_read.1;
-        let alpha_pow_original = from_fn(|i| {
-            memory.unsafe_read_cell(addr_space, alpha_pow_ptr + F::from_canonical_usize(i))
-        });
-        let mut alpha_pow = alpha_pow_original;
-        let length = length_read.1.as_canonical_u32() as usize;
-        let a_ptr = a_ptr_read.1;
-        let b_ptr = b_ptr_read.1;
-
-        let mut a_reads = Vec::with_capacity(length);
-        let mut b_reads = Vec::with_capacity(length);
-        let mut result = [F::ZERO; EXT_DEG];
-
-        for i in 0..length {
-            let a_read = memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i));
-            let b_read = memory.read(addr_space, b_ptr + F::from_canonical_usize(4 * i));
-            a_reads.push(a_read);
-            b_reads.push(b_read);
-            let a = a_read.1;
-            let b = b_read.1;
-            result = FieldExtension::add(
-                result,
-                FieldExtension::multiply(FieldExtension::subtract(b, elem_to_ext(a)), alpha_pow),
-            );
-            alpha_pow = FieldExtension::multiply(alpha, alpha_pow);
+        let ptr_val = rs1_val.wrapping_add(offset_extended);
+        assert!(ptr_val < (1 << self.air.pointer_max_bits));
+        let mem_ptr_limbs = std::array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
+        
+        let mut streams = self.streams.get().unwrap().lock().unwrap();
+        if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS {
+            return Err(ExecutionError::HintOutOfBounds { pc: from_state.pc });
         }
-
-        let (alpha_pow_write, prev_data) = memory.write(addr_space, alpha_pow_ptr, alpha_pow);
-        debug_assert_eq!(prev_data, alpha_pow_original);
-        let (result_write, _) = memory.write(addr_space, result_ptr, result);
-
-        self.records.push(FriReducedOpeningRecord {
-            pc: F::from_canonical_u32(from_state.pc),
-            start_timestamp: F::from_canonical_u32(from_state.timestamp),
+        
+        let ptr = mem_ptr_limbs[0]
+            + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
+        
+        let mut record = HintStoreRecord {
+            from_state,
             instruction: instruction.clone(),
-            alpha_read: alpha_read.0,
-            length_read: length_read.0,
-            a_ptr_read: a_ptr_read.0,
-            b_ptr_read: b_ptr_read.0,
-            a_reads: a_reads.into_iter().map(|r| r.0).collect(),
-            b_reads: b_reads.into_iter().map(|r| r.0).collect(),
-            alpha_pow_original,
-            alpha_pow_write,
-            result_write,
-        });
+            rs1,
+            rs1_read,
+            offset,
+            num_words: num_words_option,
+            hints: vec![],
+        };
+        
+        let num_words = num_words_option.map(|(_, num_words)| num_words.as_canonical_u32()).unwrap_or(1);
+        for word_index in 0..num_words {
+            if word_index != 0 {
+                memory.increment_timestamp();
+                memory.increment_timestamp();
+            }
 
-        self.height += length;
+            let data: [F; RV32_REGISTER_NUM_LIMBS] =
+                std::array::from_fn(|_| streams.hint_stream.pop_front().unwrap());
+            let (write, _) =
+                memory.write(e, F::from_canonical_u32(ptr + (RV32_REGISTER_NUM_LIMBS * word_index)), data);
+            record.hints.push((data, write));
+
+            for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
+                self.bitwise_lookup_chip.request_range(
+                    data[2 * i].as_canonical_u32(),
+                    data[2 * i + 1].as_canonical_u32(),
+                );
+            }
+        }
+        
+        self.height += record.hints.len();
+        self.records.push(record);
+
 
         Ok(ExecutionState {
             pc: from_state.pc + DEFAULT_PC_STEP,
@@ -357,12 +368,17 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        assert_eq!(opcode, FRI_REDUCED_OPENING.global_opcode().as_usize());
-        String::from("FRI_REDUCED_OPENING")
+        if opcode == HINT_STOREW.global_opcode().as_usize() {
+            String::from("HINT_STOREW")
+        } else if opcode == HINT_BUFFER.global_opcode().as_usize() {
+            String::from("HINT_BUFFER")
+        } else {
+            unreachable!("unsupported opcode: {}", opcode)
+        }
     }
 }
 
-impl<F: Field> ChipUsageGetter for FriReducedOpeningChip<F> {
+impl<F: Field> ChipUsageGetter for NewHintStoreChip<F> {
     fn air_name(&self) -> String {
         "FriReducedOpeningAir".to_string()
     }
@@ -376,7 +392,7 @@ impl<F: Field> ChipUsageGetter for FriReducedOpeningChip<F> {
     }
 }
 
-impl<F: PrimeField32> FriReducedOpeningChip<F> {
+impl<F: PrimeField32> NewHintStoreChip<F> {
     fn record_to_rows(
         record: FriReducedOpeningRecord<F>,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
@@ -510,7 +526,7 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for FriReducedOpeningChip<Val<SC>>
+impl<SC: StarkGenericConfig> Chip<SC> for NewHintStoreChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
@@ -522,7 +538,7 @@ where
     }
 }
 
-impl<F: PrimeField32> Stateful<Vec<u8>> for FriReducedOpeningChip<F> {
+impl<F: PrimeField32> Stateful<Vec<u8>> for NewHintStoreChip<F> {
     fn load_state(&mut self, state: Vec<u8>) {
         self.records = bitcode::deserialize(&state).unwrap();
         self.height = self.records.iter().map(|record| record.a_reads.len()).sum();
