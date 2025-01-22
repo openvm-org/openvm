@@ -63,11 +63,13 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let modulus = modulus.expect("modulus parameter is required");
         let modulus_bytes = string_to_bytes(&modulus);
         let mut limbs = modulus_bytes.len();
+        let mut block_size = 32;
 
         if limbs <= 32 {
             limbs = 32;
         } else if limbs <= 48 {
             limbs = 48;
+            block_size = 16;
         } else {
             panic!("limbs must be at most 48");
         }
