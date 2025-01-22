@@ -72,11 +72,6 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
             panic!("limbs must be at most 48");
         }
 
-        // The largest power of two so that at most 10% of all space is wasted
-        let block_size = 1usize << ((limbs - 1) ^ (limbs + limbs / 9)).ilog2();
-        let limbs = limbs.next_multiple_of(block_size);
-        println!("block_size: {}", block_size);
-        println!("final limbs: {}", limbs);
         let modulus_bytes = modulus_bytes
             .into_iter()
             .chain(vec![0u8; limbs])
@@ -730,9 +725,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             panic!("limbs must be at most 48");
         }
 
-        // The largest power of two so that at most 10% of all space is wasted
-        let block_size = 1usize << ((limbs - 1) ^ (limbs + limbs / 9)).ilog2();
-        let limbs = limbs.next_multiple_of(block_size);
         let modulus_bytes = modulus_bytes
             .into_iter()
             .chain(vec![0u8; limbs])
