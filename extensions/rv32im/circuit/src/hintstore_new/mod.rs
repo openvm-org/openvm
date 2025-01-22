@@ -47,7 +47,7 @@ mod tests;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
-pub struct HintStoreNewCols<T> {
+pub struct Rv32HintStoreCols<T> {
     // common
     pub is_single: T,
     pub is_buffer: T,
@@ -73,7 +73,7 @@ pub struct HintStoreNewCols<T> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct HintStoreNewAir {
+pub struct Rv32HintStoreAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub range_bus: VariableRangeCheckerBus,
@@ -81,22 +81,22 @@ pub struct HintStoreNewAir {
     pointer_max_bits: usize,
 }
 
-impl<F: Field> BaseAir<F> for HintStoreNewAir {
+impl<F: Field> BaseAir<F> for Rv32HintStoreAir {
     fn width(&self) -> usize {
-        HintStoreNewCols::<F>::width()
+        Rv32HintStoreCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for HintStoreNewAir {}
-impl<F: Field> PartitionedBaseAir<F> for HintStoreNewAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32HintStoreAir {}
+impl<F: Field> PartitionedBaseAir<F> for Rv32HintStoreAir {}
 
-impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
+impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local_cols: &HintStoreNewCols<AB::Var> = (*local).borrow();
+        let local_cols: &Rv32HintStoreCols<AB::Var> = (*local).borrow();
         let next = main.row_slice(1);
-        let next_cols: &HintStoreNewCols<AB::Var> = (*next).borrow();
+        let next_cols: &Rv32HintStoreCols<AB::Var> = (*next).borrow();
 
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -266,7 +266,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
-pub struct HintStoreRecord<F: Field> {
+pub struct Rv32HintStoreRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<F>,
     pub rs1: [F; RV32_REGISTER_NUM_LIMBS],
@@ -280,9 +280,9 @@ pub struct HintStoreRecord<F: Field> {
     pub hints: Vec<([F; RV32_REGISTER_NUM_LIMBS], RecordId)>,
 }
 
-pub struct NewHintStoreChip<F: Field> {
-    air: HintStoreNewAir,
-    records: Vec<HintStoreRecord<F>>,
+pub struct Rv32HintStoreChip<F: Field> {
+    air: Rv32HintStoreAir,
+    records: Vec<Rv32HintStoreRecord<F>>,
     height: usize,
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
@@ -290,7 +290,7 @@ pub struct NewHintStoreChip<F: Field> {
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F: PrimeField32> NewHintStoreChip<F> {
+impl<F: PrimeField32> Rv32HintStoreChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
@@ -300,7 +300,7 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
         memory_bridge: MemoryBridge,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let air = HintStoreNewAir {
+        let air = Rv32HintStoreAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
             range_bus: range_checker_chip.bus(),
@@ -322,7 +322,7 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
     }
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for NewHintStoreChip<F> {
+impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
@@ -367,7 +367,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for NewHintStoreChip<F> {
 
         let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
 
-        let mut record = HintStoreRecord {
+        let mut record = Rv32HintStoreRecord {
             from_state,
             instruction: instruction.clone(),
             rs1,
@@ -423,7 +423,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for NewHintStoreChip<F> {
     }
 }
 
-impl<F: Field> ChipUsageGetter for NewHintStoreChip<F> {
+impl<F: Field> ChipUsageGetter for Rv32HintStoreChip<F> {
     fn air_name(&self) -> String {
         "FriReducedOpeningAir".to_string()
     }
@@ -433,22 +433,22 @@ impl<F: Field> ChipUsageGetter for NewHintStoreChip<F> {
     }
 
     fn trace_width(&self) -> usize {
-        HintStoreNewCols::<F>::width()
+        Rv32HintStoreCols::<F>::width()
     }
 }
 
-impl<F: PrimeField32> NewHintStoreChip<F> {
+impl<F: PrimeField32> Rv32HintStoreChip<F> {
     // returns number of used u32s
     fn record_to_rows(
-        record: HintStoreRecord<F>,
+        record: Rv32HintStoreRecord<F>,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
         slice: &mut [F],
         memory: &OfflineMemory<F>,
         range_checker_chip: SharedVariableRangeCheckerChip,
         pointer_max_bits: usize,
     ) -> usize {
-        let width = HintStoreNewCols::<F>::width();
-        let cols: &mut HintStoreNewCols<F> = slice[..width].borrow_mut();
+        let width = Rv32HintStoreCols::<F>::width();
+        let cols: &mut Rv32HintStoreCols<F> = slice[..width].borrow_mut();
 
         cols.is_single = F::from_bool(record.num_words_read.is_none());
         cols.is_buffer = F::from_bool(record.num_words_read.is_some());
@@ -473,7 +473,7 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
         let mut rem_words = record.num_words;
         let mut used_u32s = 0;
         for (i, &(data, write)) in record.hints.iter().enumerate() {
-            let cols: &mut HintStoreNewCols<F> = slice[used_u32s..used_u32s + width].borrow_mut();
+            let cols: &mut Rv32HintStoreCols<F> = slice[used_u32s..used_u32s + width].borrow_mut();
             cols.from_state.timestamp =
                 F::from_canonical_u32(record.from_state.timestamp + (3 * i as u32));
             cols.data = data;
@@ -520,7 +520,7 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for NewHintStoreChip<Val<SC>>
+impl<SC: StarkGenericConfig> Chip<SC> for Rv32HintStoreChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
@@ -532,7 +532,7 @@ where
     }
 }
 
-impl<F: PrimeField32> Stateful<Vec<u8>> for NewHintStoreChip<F> {
+impl<F: PrimeField32> Stateful<Vec<u8>> for Rv32HintStoreChip<F> {
     fn load_state(&mut self, state: Vec<u8>) {
         self.records = bitcode::deserialize(&state).unwrap();
         self.height = self.records.iter().map(|record| record.hints.len()).sum();

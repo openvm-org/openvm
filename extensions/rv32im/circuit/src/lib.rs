@@ -5,7 +5,7 @@ mod base_alu;
 mod branch_eq;
 mod branch_lt;
 mod divrem;
-mod hintstore;
+mod hintstore_new;
 mod jal_lui;
 mod jalr;
 mod less_than;
@@ -20,7 +20,7 @@ pub use base_alu::*;
 pub use branch_eq::*;
 pub use branch_lt::*;
 pub use divrem::*;
-pub use hintstore::*;
+pub use hintstore_new::*;
 pub use jal_lui::*;
 pub use jalr::*;
 pub use less_than::*;
@@ -33,6 +33,5 @@ pub use shift::*;
 mod extension;
 pub use extension::*;
 
-mod hintstore_new;
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;

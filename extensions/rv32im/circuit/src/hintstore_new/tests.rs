@@ -32,7 +32,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{HintStoreNewCols, NewHintStoreChip};
+use super::{Rv32HintStoreCols, Rv32HintStoreChip};
 use crate::adapters::{compose, decompose};
 
 const IMM_BITS: usize = 16;
@@ -41,7 +41,7 @@ type F = BabyBear;
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut NewHintStoreChip<F>,
+    chip: &mut Rv32HintStoreChip<F>,
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
@@ -91,7 +91,7 @@ fn set_and_execute(
 
 fn set_and_execute_buffer(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut NewHintStoreChip<F>,
+    chip: &mut Rv32HintStoreChip<F>,
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
@@ -167,7 +167,7 @@ fn rand_hintstore_test() {
 
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 
-    let mut chip = NewHintStoreChip::<F>::new(
+    let mut chip = Rv32HintStoreChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.address_bits(),
@@ -214,7 +214,7 @@ fn run_negative_hintstore_test(
 
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
 
-    let mut chip = NewHintStoreChip::<F>::new(
+    let mut chip = Rv32HintStoreChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.address_bits(),
@@ -229,7 +229,7 @@ fn run_negative_hintstore_test(
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
-        let cols: &mut HintStoreNewCols<F> = trace_row.as_mut_slice().borrow_mut();
+        let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         if let Some(data) = data {
             cols.data = data.map(F::from_canonical_u32);
         }
@@ -268,7 +268,7 @@ fn execute_roundtrip_sanity_test() {
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let mut chip = NewHintStoreChip::<F>::new(
+    let mut chip = Rv32HintStoreChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.address_bits(),
