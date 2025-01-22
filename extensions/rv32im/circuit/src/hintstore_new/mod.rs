@@ -260,7 +260,6 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreNewAir {
                 timestamp + AB::F::from_canonical_usize(timestamp_delta),
                 next_cols.from_state.timestamp,
             );
-        // above is fine
     }
 }
 
@@ -287,6 +286,7 @@ pub struct NewHintStoreChip<F: Field> {
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<F: PrimeField32> NewHintStoreChip<F> {
@@ -313,6 +313,7 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
             offline_memory,
             streams: OnceLock::new(),
             bitwise_lookup_chip,
+            range_checker_chip,
         }
     }
     pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
@@ -442,6 +443,8 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
         aux_cols_factory: &MemoryAuxColsFactory<F>,
         slice: &mut [F],
         memory: &OfflineMemory<F>,
+        range_checker_chip: SharedVariableRangeCheckerChip,
+        pointer_max_bits: usize,
     ) -> usize {
         let width = HintStoreNewCols::<F>::width();
         let cols: &mut HintStoreNewCols<F> = slice[..width].borrow_mut();
@@ -472,16 +475,22 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
             cols.data = data;
             cols.write_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(write));
             cols.rem_words_limbs = decompose(rem_words);
-            cols.mem_ptr_limbs = std::array::from_fn(|i| {
-                F::from_canonical_u32((mem_ptr >> (i * (RV32_CELL_BITS * 2))) & 0xffff)
+            let mem_ptr_limbs = std::array::from_fn(|i| {
+                (mem_ptr >> (i * (RV32_CELL_BITS * 2))) & 0xffff
             });
+            cols.mem_ptr_limbs = mem_ptr_limbs.map(F::from_canonical_u32);
+            range_checker_chip
+                .add_count(mem_ptr_limbs[0], RV32_CELL_BITS * 2);
+            range_checker_chip.add_count(
+                mem_ptr_limbs[1],
+                pointer_max_bits - RV32_CELL_BITS * 2,
+            );
             if i != 0 {
                 cols.is_buffer = F::ONE;
             }
             used_u32s += width;
             mem_ptr += RV32_REGISTER_NUM_LIMBS as u32;
             rem_words -= 1;
-            println!("cols = {:?}", cols);
         }
 
         used_u32s
@@ -503,6 +512,8 @@ impl<F: PrimeField32> NewHintStoreChip<F> {
                 &aux_cols_factory,
                 &mut flat_trace[used_u32s..],
                 &memory,
+                self.range_checker_chip.clone(),
+                self.air.pointer_max_bits,
             );
         }
         // padding rows can just be all zeros
