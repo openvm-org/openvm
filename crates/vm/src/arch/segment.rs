@@ -38,7 +38,7 @@ const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 //    its trace width is 36 and its after challenge trace width is 80.
 const DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT: usize = DEFAULT_MAX_SEGMENT_LEN * 120;
 
-pub trait SegmentationStrategy {
+pub trait SegmentationStrategy: std::fmt::Debug {
     fn should_segment(
         &self,
         air_names: &[String],
@@ -48,6 +48,7 @@ pub trait SegmentationStrategy {
 }
 
 /// Default segmentation strategy: segment if any chip's height or cells exceed the limits.
+#[derive(Debug)]
 pub struct DefaultSegmentationStrategy {
     max_segment_len: usize,
     max_cells_per_chip_in_segment: usize,
