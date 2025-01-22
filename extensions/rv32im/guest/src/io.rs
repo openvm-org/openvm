@@ -15,6 +15,20 @@ macro_rules! hint_store_u32 {
     };
 }
 
+/// Store the next 4*len bytes from the hint stream to [[rd] + imm]_2.
+#[macro_export]
+macro_rules! hint_buffer_u32 {
+    ($x:expr, $imm:expr, $len:expr) => {
+        openvm_platform::custom_insn_i!(
+            opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
+            funct3 = openvm_rv32im_guest::HINT_BUFFER_FUNCT3,
+            rd = In $x,
+            rs1 = In $len,
+            imm = Const $imm
+        )
+    };
+}
+
 /// Reset the hint stream with the next hint.
 #[inline(always)]
 pub fn hint_input() {
