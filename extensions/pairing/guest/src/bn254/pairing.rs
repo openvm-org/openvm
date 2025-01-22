@@ -16,6 +16,15 @@ use crate::pairing::{
     Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep, MultiMillerLoop,
     PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
 };
+#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+use crate::{
+    bn254::{
+        convert_bn254_fp2_to_halo2_fq2, convert_bn254_fp_to_halo2_fq,
+        convert_bn254_halo2_fq12_to_fp12,
+    },
+    halo2curves_shims::bn254::Bn254 as Halo2CurvesBn254,
+    pairing::FinalExp,
+};
 
 // TODO[jpw]: make macro
 impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
@@ -32,12 +41,12 @@ impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
         {
             let mut uninit: MaybeUninit<EvaluatedLine<Fp2>> = MaybeUninit::uninit();
             custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<Bn254>(PairingBaseFunct7::EvaluateLine),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In self as *const UnevaluatedLine<Fp2>,
-                rs2 = In xy_frac as *const (Fp, Fp)
+                OPCODE,
+                PAIRING_FUNCT3,
+                shifted_funct7::<Bn254>(PairingBaseFunct7::EvaluateLine),
+                uninit.as_mut_ptr(),
+                self as *const UnevaluatedLine<Fp2>,
+                xy_frac as *const (Fp, Fp)
             );
             unsafe { uninit.assume_init() }
         }
@@ -83,12 +92,12 @@ impl LineMulDType<Fp2, Fp12> for Bn254 {
         {
             let mut uninit: MaybeUninit<[Fp2; 5]> = MaybeUninit::uninit();
             custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<Bn254>(PairingBaseFunct7::Mul013By013),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In l0 as *const EvaluatedLine<Fp2>,
-                rs2 = In l1 as *const EvaluatedLine<Fp2>
+                OPCODE,
+                PAIRING_FUNCT3,
+                shifted_funct7::<Bn254>(PairingBaseFunct7::Mul013By013),
+                uninit.as_mut_ptr(),
+                l0 as *const EvaluatedLine<Fp2>,
+                l1 as *const EvaluatedLine<Fp2>
             );
             unsafe { uninit.assume_init() }
         }
@@ -152,12 +161,12 @@ impl LineMulDType<Fp2, Fp12> for Bn254 {
         {
             let mut uninit: MaybeUninit<Fp12> = MaybeUninit::uninit();
             custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<Bn254>(PairingBaseFunct7::MulBy01234),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In f as *const Fp12,
-                rs2 = In x as *const [Fp2; 5]
+                OPCODE,
+                PAIRING_FUNCT3,
+                shifted_funct7::<Bn254>(PairingBaseFunct7::MulBy01234),
+                uninit.as_mut_ptr(),
+                f as *const Fp12,
+                x as *const [Fp2; 5]
             );
             unsafe { uninit.assume_init() }
         }
@@ -307,7 +316,35 @@ impl PairingCheck for Bn254 {
     ) -> (Self::Fp12, Self::Fp12) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            todo!()
+            #[cfg(not(feature = "halo2curves"))]
+            panic!("`halo2curves` feature must be enabled to use pairing check hint");
+
+            #[cfg(feature = "halo2curves")]
+            {
+                let p_halo2 = P
+                    .iter()
+                    .map(|p| {
+                        AffinePoint::new(
+                            convert_bn254_fp_to_halo2_fq(p.x.clone()),
+                            convert_bn254_fp_to_halo2_fq(p.y.clone()),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let q_halo2 = Q
+                    .iter()
+                    .map(|q| {
+                        AffinePoint::new(
+                            convert_bn254_fp2_to_halo2_fq2(q.x.clone()),
+                            convert_bn254_fp2_to_halo2_fq2(q.y.clone()),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let fq12 = Halo2CurvesBn254::multi_miller_loop(&p_halo2, &q_halo2);
+                let (c_fq12, s_fq12) = Halo2CurvesBn254::final_exp_hint(&fq12);
+                let c = convert_bn254_halo2_fq12_to_fp12(c_fq12);
+                let s = convert_bn254_halo2_fq12_to_fp12(s_fq12);
+                (c, s)
+            }
         }
         #[cfg(target_os = "zkvm")]
         {
@@ -316,13 +353,13 @@ impl PairingCheck for Bn254 {
             let p_fat_ptr = (P.as_ptr() as u32, P.len() as u32);
             let q_fat_ptr = (Q.as_ptr() as u32, Q.len() as u32);
             unsafe {
-                custom_insn_r!(
-                    opcode = OPCODE,
-                    funct3 = PAIRING_FUNCT3,
-                    funct7 = ((Bn254::PAIRING_IDX as u8) * PairingBaseFunct7::PAIRING_MAX_KINDS + PairingBaseFunct7::HintFinalExp as u8),
-                    rd = Const "x0",
-                    rs1 = In &p_fat_ptr,
-                    rs2 = In &q_fat_ptr
+                core::arch::asm!(
+                    ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
+                    opcode = const OPCODE,
+                    funct3 = const PAIRING_FUNCT3,
+                    funct7 = const ((Bn254::PAIRING_IDX as u8) * PairingBaseFunct7::PAIRING_MAX_KINDS + PairingBaseFunct7::HintFinalExp as u8),
+                    rs1 = in(reg) &p_fat_ptr,
+                    rs2 = in(reg) &q_fat_ptr
                 );
                 let mut ptr = hint.as_ptr() as *const u8;
                 // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
