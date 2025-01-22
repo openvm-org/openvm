@@ -6,12 +6,15 @@ use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
 use rand::{rngs::StdRng, SeedableRng};
 
-use super::{convert_bls12381_fp12_to_halo2_fq12, Fp, Fp12, Fp2};
+use super::{Fp, Fp12, Fp2};
 use crate::{
     bls12_381::{
-        convert_bls12381_halo2_fq12_to_fp12, convert_bls12381_halo2_fq2_to_fp2,
-        convert_bls12381_halo2_fq_to_fp, convert_g2_affine_halo2_to_openvm, Bls12_381,
-        G2Affine as OpenVmG2Affine,
+        utils::{
+            convert_bls12381_fp12_to_halo2_fq12, convert_bls12381_halo2_fq12_to_fp12,
+            convert_bls12381_halo2_fq2_to_fp2, convert_bls12381_halo2_fq_to_fp,
+            convert_g2_affine_halo2_to_openvm,
+        },
+        Bls12_381, G2Affine as OpenVmG2Affine,
     },
     pairing::{
         fp2_invert_assign, fp6_invert_assign, fp6_square_assign, FinalExp, MultiMillerLoop,

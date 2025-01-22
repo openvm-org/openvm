@@ -22,7 +22,7 @@ use crate::pairing::{
 };
 #[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
 use crate::{
-    bls12_381::{
+    bls12_381::utils::{
         convert_bls12381_fp2_to_halo2_fq2, convert_bls12381_fp_to_halo2_fq,
         convert_bls12381_halo2_fq12_to_fp12,
     },

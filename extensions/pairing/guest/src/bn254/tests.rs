@@ -9,9 +9,12 @@ use rand::{rngs::StdRng, SeedableRng};
 use super::{Fp, Fp12, Fp2};
 use crate::{
     bn254::{
-        convert_bn254_fp12_to_halo2_fq12, convert_bn254_halo2_fq12_to_fp12,
-        convert_bn254_halo2_fq2_to_fp2, convert_bn254_halo2_fq_to_fp,
-        convert_g2_affine_halo2_to_openvm, Bn254, G2Affine as OpenVmG2Affine,
+        utils::{
+            convert_bn254_fp12_to_halo2_fq12, convert_bn254_halo2_fq12_to_fp12,
+            convert_bn254_halo2_fq2_to_fp2, convert_bn254_halo2_fq_to_fp,
+            convert_g2_affine_halo2_to_openvm,
+        },
+        Bn254, G2Affine as OpenVmG2Affine,
     },
     pairing::{
         fp2_invert_assign, fp6_invert_assign, fp6_square_assign, FinalExp, MultiMillerLoop,
