@@ -87,12 +87,12 @@ pub static P256_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
 });
 
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
-pub struct WeierstrassExtension {
+pub struct EccExtension {
     pub supported_curves: Vec<CurveConfig>,
 }
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, BytesStateful)]
-pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
+pub enum EccExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     SwEcAddNeRv32_32(EcAddNeChip<F, 2, 32>),
     SwEcDoubleRv32_32(EcDoubleChip<F, 2, 32>),
@@ -106,14 +106,14 @@ pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
-pub enum WeierstrassExtensionPeriphery<F: PrimeField32> {
+pub enum EccExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),
 }
 
-impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
-    type Executor = WeierstrassExtensionExecutor<F>;
-    type Periphery = WeierstrassExtensionPeriphery<F>;
+impl<F: PrimeField32> VmExtension<F> for EccExtension {
+    type Executor = EccExtensionExecutor<F>;
+    type Periphery = EccExtensionPeriphery<F>;
 
     fn build(
         &self,
@@ -183,7 +183,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::SwEcAddNeRv32_32(sw_add_ne_chip),
+                            EccExtensionExecutor::SwEcAddNeRv32_32(sw_add_ne_chip),
                             sw_add_ne_opcodes
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
@@ -203,7 +203,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::SwEcDoubleRv32_32(sw_double_chip),
+                            EccExtensionExecutor::SwEcDoubleRv32_32(sw_double_chip),
                             sw_double_opcodes
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
@@ -227,7 +227,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::TeEcAddRv32_32(te_add_chip),
+                            EccExtensionExecutor::TeEcAddRv32_32(te_add_chip),
                             sw_add_ne_opcodes
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + te_start_offset)),
@@ -251,7 +251,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::SwEcAddNeRv32_48(sw_add_ne_chip),
+                            EccExtensionExecutor::SwEcAddNeRv32_48(sw_add_ne_chip),
                             sw_add_ne_opcodes
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
@@ -271,7 +271,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::SwEcDoubleRv32_48(sw_double_chip),
+                            EccExtensionExecutor::SwEcDoubleRv32_48(sw_double_chip),
                             sw_double_opcodes
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
@@ -295,7 +295,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::TeEcAddRv32_48(te_add_chip),
+                            EccExtensionExecutor::TeEcAddRv32_48(te_add_chip),
                             te_add_opcodes
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + te_start_offset)),
