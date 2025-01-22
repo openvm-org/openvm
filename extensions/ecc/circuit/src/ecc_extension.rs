@@ -11,7 +11,7 @@ use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_ecc_guest::{
     k256::{SECP256K1_MODULUS, SECP256K1_ORDER},
     p256::{CURVE_A as P256_A, CURVE_B as P256_B, P256_MODULUS, P256_ORDER},
@@ -87,12 +87,12 @@ pub static P256_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
 });
 
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
-pub struct WeierstrassExtension {
+pub struct EccExtension {
     pub supported_curves: Vec<CurveConfig>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]
-pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, BytesStateful)]
+pub enum EccExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     SwEcAddNeRv32_32(EcAddNeChip<F, 2, 32>),
     SwEcDoubleRv32_32(EcDoubleChip<F, 2, 32>),
@@ -105,15 +105,15 @@ pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
     TeEcAddRv32_48(TeEcAddChip<F, 6, 16>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
-pub enum WeierstrassExtensionPeriphery<F: PrimeField32> {
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
+pub enum EccExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),
 }
 
-impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
-    type Executor = WeierstrassExtensionExecutor<F>;
-    type Periphery = WeierstrassExtensionPeriphery<F>;
+impl<F: PrimeField32> VmExtension<F> for EccExtension {
+    type Executor = EccExtensionExecutor<F>;
+    type Periphery = EccExtensionPeriphery<F>;
 
     fn build(
         &self,
@@ -151,7 +151,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let sw_start_offset =
                 Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
-            // right now this is the same as sw_start_offset
+            // right now this is the same as sw_class_offset
             let te_start_offset = Rv32EdwardsOpcode::CLASS_OFFSET + i * Rv32EdwardsOpcode::COUNT;
 
             let bytes = curve.modulus.bits().div_ceil(8);
@@ -182,7 +182,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::SwEcAddNeRv32_32(sw_add_ne_chip),
+                            EccExtensionExecutor::SwEcAddNeRv32_32(sw_add_ne_chip),
                             sw_add_ne_opcodes
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
@@ -202,10 +202,10 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::SwEcDoubleRv32_32(sw_double_chip),
+                            EccExtensionExecutor::SwEcDoubleRv32_32(sw_double_chip),
                             sw_double_opcodes
                                 .clone()
-                                .map(|x| VmOpcode::from_usize(x + sw_class_offset)),
+                                .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
                         )?;
                     }
 
@@ -226,8 +226,8 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::TeEcAddRv32_32(te_add_chip),
-                            te_add_opcodes
+                            EccExtensionExecutor::TeEcAddRv32_32(te_add_chip),
+                            sw_add_ne_opcodes
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + te_start_offset)),
                         )?;
@@ -250,7 +250,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::SwEcAddNeRv32_48(sw_add_ne_chip),
+                            EccExtensionExecutor::SwEcAddNeRv32_48(sw_add_ne_chip),
                             sw_add_ne_opcodes
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
@@ -270,10 +270,10 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::SwEcDoubleRv32_48(sw_double_chip),
+                            EccExtensionExecutor::SwEcDoubleRv32_48(sw_double_chip),
                             sw_double_opcodes
                                 .clone()
-                                .map(|x| VmOpcode::from_usize(x + sw_class_offset)),
+                                .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
                         )?;
                     }
 
@@ -294,7 +294,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                             offline_memory.clone(),
                         );
                         inventory.add_executor(
-                            WeierstrassExtensionExecutor::TeEcAddRv32_48(te_add_chip),
+                            EccExtensionExecutor::TeEcAddRv32_48(te_add_chip),
                             te_add_opcodes
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + te_start_offset)),
@@ -305,13 +305,8 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                 panic!("Modulus too large");
             }
         }
-        let non_qr_hint_sub_ex = phantom::NonQrHintSubEx::new(self.supported_curves.clone());
         builder.add_phantom_sub_executor(
-            non_qr_hint_sub_ex.clone(),
-            PhantomDiscriminant(EccPhantom::HintNonQr as u16),
-        )?;
-        builder.add_phantom_sub_executor(
-            phantom::DecompressHintSubEx::new(non_qr_hint_sub_ex),
+            phantom::DecompressHintSubEx::new(self.supported_curves.clone()),
             PhantomDiscriminant(EccPhantom::HintDecompress as u16),
         )?;
 
@@ -320,36 +315,25 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
 }
 
 pub(crate) mod phantom {
-    use std::{
-        iter::{once, repeat},
-        ops::Deref,
-    };
+    use std::iter::repeat;
 
     use eyre::bail;
-    use num_bigint::{BigUint, RandBigInt};
+    use num_bigint::BigUint;
     use num_integer::Integer;
-    use num_traits::{FromPrimitive, One};
+    use num_traits::One;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
-    use openvm_ecc_guest::weierstrass::DecompressionHint;
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
     use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
-    use rand::{rngs::StdRng, SeedableRng};
 
     use super::{CurveCoeffs, CurveConfig, SwCurveConfig, TeCurveConfig};
 
     #[derive(derive_new::new)]
-    pub struct DecompressHintSubEx(NonQrHintSubEx);
-
-    impl Deref for DecompressHintSubEx {
-        type Target = NonQrHintSubEx;
-
-        fn deref(&self) -> &NonQrHintSubEx {
-            &self.0
-        }
+    pub struct DecompressHintSubEx {
+        pub supported_curves: Vec<CurveConfig>,
     }
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for DecompressHintSubEx {
@@ -370,6 +354,11 @@ pub(crate) mod phantom {
                 );
             }
             let curve = &self.supported_curves[c_idx];
+            let modulus_mod_4 = BigUint::from(3u8) & curve.modulus.clone();
+            if modulus_mod_4 != BigUint::from(3u8) {
+                bail!("Currently only supporting curves with modulus congruent to 3 mod 4.");
+                // TODO: Tonelli-Shanks algorithm
+            }
             let rs1 = unsafe_read_rv32_register(memory, a);
             let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
                 32
@@ -392,226 +381,38 @@ pub(crate) mod phantom {
                 F::from_canonical_u32(RV32_MEMORY_AS),
                 F::from_canonical_u32(rs2),
             );
-            let hint = self.decompress_point(x, rec_id.as_canonical_u32() & 1 == 1, c_idx);
-            let hint_bytes = once(F::from_bool(hint.possible))
-                .chain(repeat(F::ZERO))
-                .take(4)
-                .chain(
-                    hint.sqrt
-                        .to_bytes_le()
-                        .into_iter()
-                        .map(F::from_canonical_u8)
-                        .chain(repeat(F::ZERO))
-                        .take(num_limbs),
-                )
-                .collect();
-            streams.hint_stream = hint_bytes;
-            Ok(())
-        }
-    }
-
-    impl DecompressHintSubEx {
-        fn decompress_point(&self, x: BigUint, is_y_odd: bool, curve_idx: usize) -> BigUint {
-            match self.supported_curves[curve_idx].coeffs.clone() {
-                CurveCoeffs::SwCurve(SwCurveConfig { a, b }) => {
-                    self.decompress_sw_point(x, is_y_odd, curve_idx)
-            }
-            CurveCoeffs::TeCurve(TeCurveConfig { a: _, d: _ }) => {
-                    unimplemented!("should not call decompress_point for Twisted Edwards curves");
-                }
-            }
-        }
-
-        /// Given `x` in the coordinate field of a Weierstrass curve, and the recovery id,
-        /// return the unique `y` such that `(x, y)` is a point on the curve and
-        /// `y` has the same parity as the recovery id.
-        ///
-        /// If no such `y` exists, return the square root of `(x^3 + ax + b) * non_qr`
-        /// where `non_qr` is a quadratic nonresidue of the field.
-        fn decompress_sw_point(
-            &self,
-            x: BigUint,
-            is_y_odd: bool,
-            curve_idx: usize,
-        ) -> DecompressionHint<BigUint> {
-            let curve = &self.supported_curves[curve_idx];
-            let alpha = ((&x * &x * &x) + (&x * &curve.a) + &curve.b) % &curve.modulus;
-            match mod_sqrt(&alpha, &curve.modulus, &self.non_qrs[curve_idx]) {
-                Some(beta) => {
-                    if is_y_odd == beta.is_odd() {
-                        DecompressionHint {
-                            possible: true,
-                            sqrt: beta,
-                        }
-                    } else {
-                        DecompressionHint {
-                            possible: true,
-                            sqrt: &curve.modulus - &beta,
-                        }
-                    }
-                }
-                None => {
-                    debug_assert_eq!(
-                        self.non_qrs[curve_idx]
-                            .modpow(&((&curve.modulus - BigUint::one()) >> 1), &curve.modulus),
-                        &curve.modulus - BigUint::one()
-                    );
-                    let sqrt = mod_sqrt(
-                        &(&alpha * &self.non_qrs[curve_idx]),
-                        &curve.modulus,
-                        &self.non_qrs[curve_idx],
-                    )
-                    .unwrap();
-                    DecompressionHint {
-                        possible: false,
-                        sqrt,
-                    }
-                }
-            }
-        }
-    }
-
-    /// Find the square root of `x` modulo `modulus` with `non_qr` a
-    /// quadratic nonresidue of the field.
-    pub fn mod_sqrt(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigUint> {
-        if modulus % 4u32 == BigUint::from_u8(3).unwrap() {
-            // x^(1/2) = x^((p+1)/4) when p = 3 mod 4
-            let exponent = (modulus + BigUint::one()) >> 2;
-            let ret = x.modpow(&exponent, modulus);
-            if &ret * &ret % modulus == x % modulus {
-                Some(ret)
-            } else {
-                None
-            }
-        } else {
-            // Tonelli-Shanks algorithm
-            // https://en.wikipedia.org/wiki/Tonelli%E2%80%93Shanks_algorithm#The_algorithm
-            let mut q = modulus - BigUint::one();
-            let mut s = 0;
-            while &q % 2u32 == BigUint::ZERO {
-                s += 1;
-                q /= 2u32;
-            }
-            let z = non_qr;
-            let mut m = s;
-            let mut c = z.modpow(&q, modulus);
-            let mut t = x.modpow(&q, modulus);
-            let mut r = x.modpow(&((q + BigUint::one()) >> 1), modulus);
-            loop {
-                if t == BigUint::ZERO {
-                    return Some(BigUint::ZERO);
-                }
-                if t == BigUint::one() {
-                    return Some(r);
-                }
-                let mut i = 0;
-                let mut tmp = t.clone();
-                while tmp != BigUint::one() && i < m {
-                    tmp = &tmp * &tmp % modulus;
-                    i += 1;
-                }
-                if i == m {
-                    // self is not a quadratic residue
-                    return None;
-                }
-                for _ in 0..m - i - 1 {
-                    c = &c * &c % modulus;
-                }
-                let b = c;
-                m = i;
-                c = &b * &b % modulus;
-                t = ((t * &b % modulus) * &b) % modulus;
-                r = (r * b) % modulus;
-            }
-        }
-    }
-
-    #[derive(Clone)]
-    pub struct NonQrHintSubEx {
-        pub supported_curves: Vec<CurveConfig>,
-        pub non_qrs: Vec<BigUint>,
-    }
-
-    impl NonQrHintSubEx {
-        pub fn new(supported_curves: Vec<CurveConfig>) -> Self {
-            let non_qrs = supported_curves
-                .iter()
-                .map(|curve| find_non_qr(&curve.modulus))
-                .collect();
-            Self {
-                supported_curves,
-                non_qrs,
-            }
-        }
-    }
-
-    impl<F: PrimeField32> PhantomSubExecutor<F> for NonQrHintSubEx {
-        fn phantom_execute(
-            &mut self,
-            _: &MemoryController<F>,
-            streams: &mut Streams<F>,
-            _: PhantomDiscriminant,
-            _: F,
-            _: F,
-            c_upper: u16,
-        ) -> eyre::Result<()> {
-            let c_idx = c_upper as usize;
-            if c_idx >= self.supported_curves.len() {
-                bail!(
-                    "Curve index {c_idx} out of range: {} supported curves",
-                    self.supported_curves.len()
-                );
-            }
-            let curve = &self.supported_curves[c_idx];
-
-            let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
-                32
-            } else if curve.modulus.bits().div_ceil(8) <= 48 {
-                48
-            } else {
-                bail!("Modulus too large")
-            };
-
-            let hint_bytes = self.non_qrs[c_idx]
+            let y = decompress_point(x, rec_id.as_canonical_u32() & 1 == 1, curve);
+            let y_bytes = y
                 .to_bytes_le()
                 .into_iter()
                 .map(F::from_canonical_u8)
                 .chain(repeat(F::ZERO))
                 .take(num_limbs)
                 .collect();
-            streams.hint_stream = hint_bytes;
+            streams.hint_stream = y_bytes;
             Ok(())
         }
     }
 
-    // Returns a non-quadratic residue in the field
-    fn find_non_qr(modulus: &BigUint) -> BigUint {
-        if modulus % 4u32 == BigUint::from(3u8) {
-            // p = 3 mod 4 then -1 is a quadratic residue
-            modulus - BigUint::one()
-        } else if modulus % 8u32 == BigUint::from(5u8) {
-            // p = 5 mod 8 then 2 is a non-quadratic residue
-            // since 2^((p-1)/2) = (-1)^((p^2-1)/8)
-            BigUint::from_u8(2u8).unwrap()
-        } else {
-            let mut rng = StdRng::from_entropy();
-            let mut non_qr = rng.gen_biguint_range(
-                &BigUint::from_u8(2).unwrap(),
-                &(modulus - BigUint::from_u8(1).unwrap()),
-            );
-            // To check if non_qr is a quadratic nonresidue, we compute non_qr^((p-1)/2)
-            // If the result is p-1, then non_qr is a quadratic nonresidue
-            // Otherwise, non_qr is a quadratic residue
-            let exponent = (modulus - BigUint::one()) >> 1;
-            while non_qr.modpow(&exponent, modulus) != modulus - BigUint::one() {
-                non_qr = rng.gen_biguint_range(
-                    &BigUint::from_u8(2).unwrap(),
-                    &(modulus - BigUint::from_u8(1).unwrap()),
-                );
+    fn decompress_point(x: BigUint, is_y_odd: bool, curve: &CurveConfig) -> BigUint {
+        match curve.coeffs.clone() {
+            CurveCoeffs::SwCurve(SwCurveConfig { a, b }) => {
+                let alpha = ((&x * &x * &x) + (&x * &a) + &b) % &curve.modulus;
+                let beta = mod_sqrt(alpha, &curve.modulus);
+                if is_y_odd == beta.is_odd() {
+                    beta
+                } else {
+                    &curve.modulus - &beta
+                }
             }
-            non_qr
+            CurveCoeffs::TeCurve(TeCurveConfig { a: _, d: _ }) => {
+                unimplemented!("should not call decompress_point for Twisted Edwards curves");
+            }
         }
     }
 
-
+    fn mod_sqrt(x: BigUint, modulus: &BigUint) -> BigUint {
+        let exponent = (modulus + BigUint::one()) >> 2;
+        x.modpow(&exponent, modulus)
+    }
 }
