@@ -4,8 +4,10 @@ use std::{
 };
 
 use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+    new_integration_api::{
+        AirTx, AirTxMaybeRead, AirTxRead, AirTxWrite, VmAdapterChip, VmCoreAir, VmCoreChip,
+    },
+    Result,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -56,21 +58,16 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublic
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
+impl<AB, TX, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, TX>
     for BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
-    I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
-    I::Writes: From<[[AB::Expr; NUM_LIMBS]; 1]>,
-    I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
+    TX: AirTx<AB>
+        + AirTxRead<AB, Data = [AB::Expr; NUM_LIMBS]>
+        + AirTxMaybeRead<AB, Data = [AB::Expr; NUM_LIMBS]>
+        + AirTxWrite<AB, Data = [AB::Expr; NUM_LIMBS]>,
 {
-    fn eval(
-        &self,
-        builder: &mut AB,
-        local_core: &[AB::Var],
-        _from_pc: AB::Var,
-    ) -> AdapterAirContext<AB::Expr, I> {
+    fn eval(&self, builder: &mut AB, local_core: &[AB::Var], tx: &mut TX) {
         let cols: &BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         let flags = [
             cols.opcode_add_flag,
@@ -86,9 +83,13 @@ where
         });
         builder.assert_bool(is_valid.clone());
 
+        tx.start(builder, is_valid.clone());
         let a = &cols.a;
         let b = &cols.b;
         let c = &cols.c;
+        let rs1_addr = tx.read(builder, b.map(Into::into), is_valid.clone());
+        let rs2_addr = tx.maybe_read(builder, c.map(Into::into), is_valid.clone());
+        let rd_addr = tx.write(builder, a.map(Into::into), is_valid.clone());
 
         // For ADD, define carry[i] = (b[i] + c[i] + carry[i - 1] - a[i]) / 2^LIMB_BITS. If
         // each carry[i] is boolean and 0 <= a[i] < 2^LIMB_BITS, it can be proven that
@@ -138,7 +139,7 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
+        let expected_opcode = VmCoreAir::<AB, TX>::expr_to_global_expr(
             self,
             flags.iter().zip(BaseAluOpcode::iter()).fold(
                 AB::Expr::ZERO,
@@ -148,16 +149,17 @@ where
             ),
         );
 
-        AdapterAirContext {
-            to_pc: None,
-            reads: [cols.b.map(Into::into), cols.c.map(Into::into)].into(),
-            writes: [cols.a.map(Into::into)].into(),
-            instruction: MinimalInstruction {
-                is_valid,
-                opcode: expected_opcode,
-            }
-            .into(),
-        }
+        tx.end(
+            builder,
+            expected_opcode,
+            [
+                rd_addr.pointer,
+                rs1_addr.pointer,
+                rs2_addr.pointer,
+                rs1_addr.address_space,
+                rs2_addr.address_space,
+            ],
+        );
     }
 
     fn start_offset(&self) -> usize {
@@ -197,11 +199,11 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, 
     }
 }
 
-impl<F, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, I>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, A>
     for BaseAluCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    I: VmAdapterInterface<F>,
+    A: VmAdapterChip<F>,
     I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
     I::Writes: From<[[F; NUM_LIMBS]; 1]>,
 {

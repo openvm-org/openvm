@@ -113,6 +113,8 @@ pub struct ExecutionState<T> {
     pub timestamp: T,
 }
 
+pub const EXECUTION_STATE_WIDTH: usize = 2;
+
 #[derive(Clone, Copy, Debug)]
 pub struct ExecutionBus(pub usize);
 
