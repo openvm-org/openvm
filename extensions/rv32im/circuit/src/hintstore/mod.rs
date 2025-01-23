@@ -209,24 +209,18 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             .when(local_cols.is_buffer)
             .when(is_end.clone())
             .assert_one(rem_words.clone());
-        builder
-            .when(local_cols.is_buffer)
-            .when(AB::Expr::ONE - is_end.clone())
-            .assert_one(rem_words.clone() - next_rem_words.clone());
-        builder
-            .when(local_cols.is_buffer)
-            .when(AB::Expr::ONE - is_end.clone())
-            .assert_eq(
-                next_mem_ptr.clone() - mem_ptr.clone(),
-                AB::F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS),
-            );
-        builder
-            .when(local_cols.is_buffer)
-            .when(AB::Expr::ONE - is_end.clone())
-            .assert_eq(
-                timestamp + AB::F::from_canonical_usize(timestamp_delta),
-                next_cols.from_state.timestamp,
-            );
+
+        let mut when_buffer_transition =
+            builder.when(local_cols.is_buffer * (AB::Expr::ONE - is_end.clone()));
+        when_buffer_transition.assert_one(rem_words.clone() - next_rem_words.clone());
+        when_buffer_transition.assert_eq(
+            next_mem_ptr.clone() - mem_ptr.clone(),
+            AB::F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS),
+        );
+        when_buffer_transition.assert_eq(
+            timestamp + AB::F::from_canonical_usize(timestamp_delta),
+            next_cols.from_state.timestamp,
+        );
     }
 }
 
