@@ -8,7 +8,7 @@ use hex_literal::hex;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::AffinePoint;
 use openvm_pairing_guest::{
-    bls12_381::{Bls12_381, Fp, Fp2},
+    bls12_381::{Bls12_381, Bls12_381G1Affine, Fp, Fp2},
     pairing::PairingCheck,
 };
 // ANCHOR_END: imports
@@ -16,11 +16,15 @@ use openvm_pairing_guest::{
 // ANCHOR: init
 openvm_algebra_moduli_macros::moduli_init! {
     "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
-    "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+    // "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
 }
 
 openvm_algebra_complex_macros::complex_init! {
     Bls12_381Fp2 { mod_idx = 0 },
+}
+
+openvm_ecc_guest::sw_setup::sw_init! {
+    Bls12_381G1Affine,
 }
 // ANCHOR_END: init
 
@@ -31,6 +35,7 @@ pub fn main() {
     // ANCHOR: setup
     setup_0();
     setup_all_complex_extensions();
+    setup_all_curves();
     // ANCHOR_END: setup
 
     let p0 = AffinePoint::new(
