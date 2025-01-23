@@ -714,6 +714,65 @@ pub struct MemoryAuxColsFactory<T> {
 
 // NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in parallelized trace generation.
 impl<F: PrimeField32> MemoryAuxColsFactory<F> {
+    pub fn generate_read_aux(&self, read: &MemoryRecord<F>, buffer: &mut MemoryReadAuxCols<F>) {
+        assert!(
+            !read.address_space.is_zero(),
+            "cannot make `MemoryReadAuxCols` for address space 0"
+        );
+        buffer.base.prev_timestamp = F::from_canonical_u32(read.prev_timestamp);
+        self.generate_timestamp_lt(
+            read.prev_timestamp,
+            read.timestamp,
+            &mut buffer.base.clk_lt_aux,
+        );
+    }
+
+    pub fn generate_read_or_immediate_aux(
+        &self,
+        read: &MemoryRecord<F>,
+        buffer: &mut MemoryReadOrImmediateAuxCols<F>,
+    ) {
+        IsZeroSubAir.generate_subrow(
+            read.address_space,
+            (&mut buffer.is_zero_aux, &mut buffer.is_immediate),
+        );
+        buffer.base.prev_timestamp = F::from_canonical_u32(read.prev_timestamp);
+        self.generate_timestamp_lt(
+            read.prev_timestamp,
+            read.timestamp,
+            &mut buffer.base.clk_lt_aux,
+        );
+    }
+
+    pub fn generate_write_aux<const N: usize>(
+        &self,
+        write: &MemoryRecord<F>,
+        buffer: &mut MemoryWriteAuxCols<F, N>,
+    ) {
+        let prev_data = write.prev_data.clone().unwrap();
+        buffer.prev_data = prev_data.try_into().unwrap();
+        buffer.base.prev_timestamp = F::from_canonical_u32(write.prev_timestamp);
+        self.generate_timestamp_lt(
+            write.prev_timestamp,
+            write.timestamp,
+            &mut buffer.base.clk_lt_aux,
+        );
+    }
+
+    fn generate_timestamp_lt(
+        &self,
+        prev_timestamp: u32,
+        timestamp: u32,
+        buffer: &mut LessThanAuxCols<F, AUX_LEN>,
+    ) {
+        debug_assert!(prev_timestamp < timestamp);
+        self.timestamp_lt_air.generate_subrow(
+            (self.range_checker.as_ref(), prev_timestamp, timestamp),
+            &mut buffer.lower_decomp,
+        );
+    }
+
+    // TODO[jpw]: delete these functions and use the ones that fill buffers above.
     pub fn make_read_aux_cols(&self, read: &MemoryRecord<F>) -> MemoryReadAuxCols<F> {
         assert!(
             !read.address_space.is_zero(),

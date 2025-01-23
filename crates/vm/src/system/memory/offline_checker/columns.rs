@@ -14,9 +14,9 @@ use crate::system::memory::offline_checker::bridge::AUX_LEN;
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryBaseAuxCols<T> {
     /// The previous timestamps in which the cells were accessed.
-    pub(super) prev_timestamp: T,
+    pub(crate) prev_timestamp: T,
     /// The auxiliary columns to perform the less than check.
-    pub(super) clk_lt_aux: LessThanAuxCols<T, AUX_LEN>,
+    pub(crate) clk_lt_aux: LessThanAuxCols<T, AUX_LEN>,
 }
 
 #[repr(C)]
@@ -69,7 +69,7 @@ impl<const N: usize, F: FieldAlgebra> MemoryWriteAuxCols<F, N> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryReadAuxCols<T> {
-    pub(super) base: MemoryBaseAuxCols<T>,
+    pub(crate) base: MemoryBaseAuxCols<T>,
 }
 
 impl<F: PrimeField32> MemoryReadAuxCols<F> {
@@ -99,9 +99,9 @@ impl<F: FieldAlgebra + Copy> MemoryReadAuxCols<F> {
 #[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow)]
 pub struct MemoryReadOrImmediateAuxCols<T> {
-    pub(super) base: MemoryBaseAuxCols<T>,
-    pub(super) is_immediate: T,
-    pub(super) is_zero_aux: T,
+    pub(crate) base: MemoryBaseAuxCols<T>,
+    pub(crate) is_immediate: T,
+    pub(crate) is_zero_aux: T,
 }
 
 impl<T> MemoryReadOrImmediateAuxCols<T> {

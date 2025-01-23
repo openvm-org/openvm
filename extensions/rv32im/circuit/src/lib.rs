@@ -1,4 +1,6 @@
 pub mod adapters;
+pub mod new_adapter;
+pub mod new_base_alu;
 
 mod auipc;
 mod base_alu;
