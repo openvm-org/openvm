@@ -219,15 +219,17 @@ where
                         );
                     }
                     for (i, id) in register_reads.into_iter().enumerate() {
-                        // TODO[jpw] make_read_aux_cols should directly write into slice
-                        first_row.mem_oc.register_aux[i] =
-                            aux_cols_factory.make_read_aux_cols(memory.record_by_id(id));
+                        aux_cols_factory.generate_read_aux(
+                            memory.record_by_id(id),
+                            &mut first_row.mem_oc.register_aux[i],
+                        );
                     }
                 }
                 for (i, id) in block.reads.into_iter().enumerate() {
-                    // TODO[jpw] make_read_aux_cols should directly write into slice
-                    first_row.mem_oc.absorb_reads[i] =
-                        aux_cols_factory.make_read_aux_cols(memory.record_by_id(id));
+                    aux_cols_factory.generate_read_aux(
+                        memory.record_by_id(id),
+                        &mut first_row.mem_oc.absorb_reads[i],
+                    );
                 }
 
                 let last_row: &mut KeccakVmCols<Val<SC>> =
@@ -239,8 +241,8 @@ where
                     for (i, record_id) in digest_writes.into_iter().enumerate() {
                         // TODO: these aux columns are only used for the last row - can we share them with aux reads in first row?
                         let record = memory.record_by_id(record_id);
-                        last_row.mem_oc.digest_writes[i] =
-                            aux_cols_factory.make_write_aux_cols(record);
+                        aux_cols_factory
+                            .generate_write_aux(record, &mut last_row.mem_oc.digest_writes[i]);
                     }
                 }
             });

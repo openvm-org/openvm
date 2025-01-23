@@ -93,8 +93,9 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
 
         specific.end_timestamp =
             F::from_canonical_usize(read_root_is_on_right.timestamp as usize + (2 + CHUNK));
-        specific.reads =
-            reads.map(|read| aux_cols_factory.make_read_aux_cols(memory.record_by_id(read)));
+        for (i, read) in reads.iter().enumerate() {
+            aux_cols_factory.generate_read_aux(memory.record_by_id(*read), &mut specific.reads[i]);
+        }
         cols.initial_opened_index = F::from_canonical_usize(opened_index);
         specific.final_opened_index = F::from_canonical_usize(opened_index - 1);
         specific.height = F::from_canonical_usize(height);
@@ -105,10 +106,14 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         specific.index_base_pointer = parent.index_base_pointer;
 
         specific.proof_index = F::from_canonical_usize(proof_index);
-        specific.read_initial_height_or_root_is_on_right =
-            aux_cols_factory.make_read_aux_cols(read_root_is_on_right);
-        specific.read_final_height_or_sibling_array_start =
-            aux_cols_factory.make_read_aux_cols(read_sibling_array_start);
+        aux_cols_factory.generate_read_aux(
+            read_root_is_on_right,
+            &mut specific.read_initial_height_or_root_is_on_right,
+        );
+        aux_cols_factory.generate_read_aux(
+            read_sibling_array_start,
+            &mut specific.read_final_height_or_sibling_array_start,
+        );
         specific.root_is_on_right = F::from_bool(root_is_on_right);
         specific.sibling_array_start = read_sibling_array_start.data[0];
     }
@@ -146,20 +151,32 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         specific.index_register = instruction.e;
         specific.commit_register = instruction.f;
         specific.commit_pointer = commit_pointer;
-        specific.dim_base_pointer_read =
-            aux_cols_factory.make_read_aux_cols(memory.record_by_id(dim_base_pointer_read));
-        specific.opened_base_pointer_read =
-            aux_cols_factory.make_read_aux_cols(memory.record_by_id(opened_base_pointer_read));
-        specific.opened_length_read =
-            aux_cols_factory.make_read_aux_cols(memory.record_by_id(opened_length_read));
-        specific.sibling_base_pointer_read =
-            aux_cols_factory.make_read_aux_cols(memory.record_by_id(sibling_base_pointer_read));
-        specific.index_base_pointer_read =
-            aux_cols_factory.make_read_aux_cols(memory.record_by_id(index_base_pointer_read));
-        specific.commit_pointer_read =
-            aux_cols_factory.make_read_aux_cols(memory.record_by_id(commit_pointer_read));
-        specific.commit_read =
-            aux_cols_factory.make_read_aux_cols(memory.record_by_id(commit_read));
+        aux_cols_factory.generate_read_aux(
+            memory.record_by_id(dim_base_pointer_read),
+            &mut specific.dim_base_pointer_read,
+        );
+        aux_cols_factory.generate_read_aux(
+            memory.record_by_id(opened_base_pointer_read),
+            &mut specific.opened_base_pointer_read,
+        );
+        aux_cols_factory.generate_read_aux(
+            memory.record_by_id(opened_length_read),
+            &mut specific.opened_length_read,
+        );
+        aux_cols_factory.generate_read_aux(
+            memory.record_by_id(sibling_base_pointer_read),
+            &mut specific.sibling_base_pointer_read,
+        );
+        aux_cols_factory.generate_read_aux(
+            memory.record_by_id(index_base_pointer_read),
+            &mut specific.index_base_pointer_read,
+        );
+        aux_cols_factory.generate_read_aux(
+            memory.record_by_id(commit_pointer_read),
+            &mut specific.commit_pointer_read,
+        );
+        aux_cols_factory
+            .generate_read_aux(memory.record_by_id(commit_read), &mut specific.commit_read);
     }
     #[allow(clippy::too_many_arguments)]
     fn incorporate_row_record_to_row(
@@ -220,10 +237,14 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         specific.index_base_pointer = parent.index_base_pointer;
 
         specific.proof_index = F::from_canonical_usize(proof_index);
-        specific.read_initial_height_or_root_is_on_right =
-            aux_cols_factory.make_read_aux_cols(initial_height_read);
-        specific.read_final_height_or_sibling_array_start =
-            aux_cols_factory.make_read_aux_cols(final_height_read);
+        aux_cols_factory.generate_read_aux(
+            initial_height_read,
+            &mut specific.read_initial_height_or_root_is_on_right,
+        );
+        aux_cols_factory.generate_read_aux(
+            final_height_read,
+            &mut specific.read_final_height_or_sibling_array_start,
+        );
     }
     #[allow(clippy::too_many_arguments)]
     fn inside_row_record_to_row(
@@ -269,11 +290,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
                 row_pointer,
                 row_end,
             } = record;
-            cell.read = aux_cols_factory.make_read_aux_cols(memory.record_by_id(read));
+            aux_cols_factory.generate_read_aux(memory.record_by_id(read), &mut cell.read);
             cell.opened_index = F::from_canonical_usize(opened_index);
             if let Some(read_row_pointer_and_length) = read_row_pointer_and_length {
-                cell.read_row_pointer_and_length = aux_cols_factory
-                    .make_read_aux_cols(memory.record_by_id(read_row_pointer_and_length));
+                aux_cols_factory.generate_read_aux(
+                    memory.record_by_id(read_row_pointer_and_length),
+                    &mut cell.read_row_pointer_and_length,
+                );
             }
             cell.row_pointer = F::from_canonical_usize(row_pointer);
             cell.row_end = F::from_canonical_usize(row_end);
@@ -419,19 +442,20 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         specific.output_pointer = output_pointer;
         specific.input_pointer_1 = input_pointer_1;
         specific.input_pointer_2 = input_pointer_2;
-        specific.read_output_pointer = aux_cols_factory.make_read_aux_cols(read_output_pointer);
-        specific.read_input_pointer_1 = aux_cols_factory.make_read_aux_cols(read_input_pointer_1);
-        specific.read_data_1 = aux_cols_factory.make_read_aux_cols(read_data_1);
-        specific.read_data_2 = aux_cols_factory.make_read_aux_cols(read_data_2);
-        specific.write_data_1 = aux_cols_factory.make_write_aux_cols(write_data_1);
+        aux_cols_factory.generate_read_aux(read_output_pointer, &mut specific.read_output_pointer);
+        aux_cols_factory
+            .generate_read_aux(read_input_pointer_1, &mut specific.read_input_pointer_1);
+        aux_cols_factory.generate_read_aux(read_data_1, &mut specific.read_data_1);
+        aux_cols_factory.generate_read_aux(read_data_2, &mut specific.read_data_2);
+        aux_cols_factory.generate_write_aux(write_data_1, &mut specific.write_data_1);
 
         if opcode == COMP_POS2.global_opcode() {
             let read_input_pointer_2 = memory.record_by_id(read_input_pointer_2.unwrap());
-            specific.read_input_pointer_2 =
-                aux_cols_factory.make_read_aux_cols(read_input_pointer_2);
+            aux_cols_factory
+                .generate_read_aux(read_input_pointer_2, &mut specific.read_input_pointer_2);
         } else {
             let write_data_2 = memory.record_by_id(write_data_2.unwrap());
-            specific.write_data_2 = aux_cols_factory.make_write_aux_cols(write_data_2);
+            aux_cols_factory.generate_write_aux(write_data_2, &mut specific.write_data_2);
         }
     }
 

@@ -171,7 +171,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for JalNativeAdapterChip<F> {
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.a_pointer = write.pointer;
         row_slice.a_as = write.address_space;
-        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write);
+        aux_cols_factory.generate_write_aux(write, &mut row_slice.writes_aux);
     }
 
     fn air(&self) -> &Self::Air {

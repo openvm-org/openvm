@@ -279,22 +279,22 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
-        row_slice.reads_aux = read_record.reads.map(|(id, _)| {
-            let record = memory.record_by_id(id);
-            let address = MemoryAddress::new(record.address_space, record.pointer);
-            NativeAdapterReadCols {
-                address,
-                read_aux: aux_cols_factory.make_read_or_immediate_aux_cols(record),
-            }
-        });
-        row_slice.writes_aux = write_record.writes.map(|(id, _)| {
-            let record = memory.record_by_id(id);
-            let address = MemoryAddress::new(record.address_space, record.pointer);
-            NativeAdapterWriteCols {
-                address,
-                write_aux: aux_cols_factory.make_write_aux_cols(record),
-            }
-        });
+        for (i, read) in read_record.reads.iter().enumerate() {
+            let (id, _) = read;
+            let record = memory.record_by_id(*id);
+            aux_cols_factory
+                .generate_read_or_immediate_aux(record, &mut row_slice.reads_aux[i].read_aux);
+            row_slice.reads_aux[i].address =
+                MemoryAddress::new(record.address_space, record.pointer);
+        }
+
+        for (i, write) in write_record.writes.iter().enumerate() {
+            let (id, _) = write;
+            let record = memory.record_by_id(*id);
+            aux_cols_factory.generate_write_aux(record, &mut row_slice.writes_aux[i].write_aux);
+            row_slice.writes_aux[i].address =
+                MemoryAddress::new(record.address_space, record.pointer);
+        }
     }
 
     fn air(&self) -> &Self::Air {

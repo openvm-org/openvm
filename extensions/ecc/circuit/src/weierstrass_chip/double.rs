@@ -231,7 +231,6 @@ where
             vec![x_biguint.clone(), y_biguint.clone()],
             vec![is_double_flag],
         );
-        assert_eq!(vars.len(), 3); // x1^2, x3, y3
 
         let writes = self
             .air

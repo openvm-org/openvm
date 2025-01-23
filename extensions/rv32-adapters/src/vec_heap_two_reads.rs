@@ -1,5 +1,5 @@
 use std::{
-    array::{self, from_fn},
+    array::from_fn,
     borrow::{Borrow, BorrowMut},
     iter::zip,
     marker::PhantomData,
@@ -531,23 +531,28 @@ pub(super) fn vec_heap_two_reads_generate_trace_row_impl<
     row_slice.rs1_ptr = rs1.pointer;
     row_slice.rs2_ptr = rs2.pointer;
 
-    row_slice.rd_val = array::from_fn(|i| rd.data[i]);
-    row_slice.rs1_val = array::from_fn(|i| rs1.data[i]);
-    row_slice.rs2_val = array::from_fn(|i| rs2.data[i]);
+    row_slice.rd_val.copy_from_slice(&rd.data);
+    row_slice.rs1_val.copy_from_slice(&rs1.data);
+    row_slice.rs2_val.copy_from_slice(&rs2.data);
 
-    row_slice.rs1_read_aux = aux_cols_factory.make_read_aux_cols(rs1);
-    row_slice.rs2_read_aux = aux_cols_factory.make_read_aux_cols(rs2);
-    row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(rd);
-    row_slice.reads1_aux = read_record
-        .reads1
-        .map(|r| aux_cols_factory.make_read_aux_cols(memory.record_by_id(r)));
-    row_slice.reads2_aux = read_record
-        .reads2
-        .map(|r| aux_cols_factory.make_read_aux_cols(memory.record_by_id(r)));
-    row_slice.writes_aux = write_record
-        .writes
-        .map(|w| aux_cols_factory.make_write_aux_cols(memory.record_by_id(w)));
+    aux_cols_factory.generate_read_aux(rs1, &mut row_slice.rs1_read_aux);
+    aux_cols_factory.generate_read_aux(rs2, &mut row_slice.rs2_read_aux);
+    aux_cols_factory.generate_read_aux(rd, &mut row_slice.rd_read_aux);
 
+    for (i, r) in read_record.reads1.iter().enumerate() {
+        let record = memory.record_by_id(*r);
+        aux_cols_factory.generate_read_aux(record, &mut row_slice.reads1_aux[i]);
+    }
+
+    for (i, r) in read_record.reads2.iter().enumerate() {
+        let record = memory.record_by_id(*r);
+        aux_cols_factory.generate_read_aux(record, &mut row_slice.reads2_aux[i]);
+    }
+
+    for (i, w) in write_record.writes.iter().enumerate() {
+        let record = memory.record_by_id(*w);
+        aux_cols_factory.generate_write_aux(record, &mut row_slice.writes_aux[i]);
+    }
     // Range checks:
     let need_range_check = [
         &read_record.rs1,

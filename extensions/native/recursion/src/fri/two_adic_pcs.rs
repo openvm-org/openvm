@@ -238,17 +238,14 @@ pub fn verify_two_adic_pcs<C: Config>(
                                 builder.assign(&cur_ro, cur_ro + n / (z - x) * cur_alpha_pow);
                                 builder.assign(&cur_alpha_pow, cur_alpha_pow * mat_alpha_pow);
                             } else {
-                                // TODO: this is just for testing the correctness. Will remove later.
-                                let expected_alpha_pow: Ext<_, _> =
-                                    builder.eval(cur_alpha_pow * mat_alpha_pow);
                                 let mat_ro = builder.fri_single_reduced_opening_eval(
                                     alpha,
-                                    cur_alpha_pow,
                                     &mat_opening,
                                     &ps_at_z,
                                 );
-                                builder.assert_ext_eq(expected_alpha_pow, cur_alpha_pow);
-                                builder.assign(&cur_ro, cur_ro + (mat_ro / (z - x)));
+                                builder
+                                    .assign(&cur_ro, cur_ro + (mat_ro * cur_alpha_pow / (z - x)));
+                                builder.assign(&cur_alpha_pow, cur_alpha_pow * mat_alpha_pow);
                             }
 
                             builder.cycle_tracker_end("single-reduced-opening-eval");

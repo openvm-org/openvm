@@ -311,18 +311,18 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         let data_read = read_record.data_read.map(|read| memory.record_by_id(read));
         if let Some(data_read) = data_read {
-            cols.data_read_aux_cols = aux_cols_factory.make_read_aux_cols(data_read);
-        } else {
-            cols.data_read_aux_cols = MemoryReadAuxCols::disabled();
+            aux_cols_factory.generate_read_aux(data_read, &mut cols.data_read_aux_cols);
         }
 
         let write = memory.record_by_id(write_record.write_id);
         cols.data_write_as = write.address_space;
         cols.data_write_pointer = write.pointer;
 
-        cols.pointer_read_aux_cols =
-            aux_cols_factory.make_read_aux_cols(memory.record_by_id(read_record.pointer_read));
-        cols.data_write_aux_cols = aux_cols_factory.make_write_aux_cols(write);
+        aux_cols_factory.generate_read_aux(
+            memory.record_by_id(read_record.pointer_read),
+            &mut cols.pointer_read_aux_cols,
+        );
+        aux_cols_factory.generate_write_aux(write, &mut cols.data_write_aux_cols);
     }
 
     fn air(&self) -> &Self::Air {
