@@ -387,13 +387,13 @@ impl FriReducedOpeningAir {
             let mut enabled =
                 last_row.when(local.general.is_ins_row + local.general.is_workload_row);
             // If the last row is enabled, it must be the second row of an instruction row. This
-            // is a safeguard for edge cases.
+            // is not a must because other constraints have already guaranteed it. But we keep this
+            // as an explicit boundary condition.
             enabled.assert_one(local.general.is_ins_row);
             enabled.assert_zero(local.is_first);
         }
         {
-            let mut when_transition = builder.when_transition();
-            let mut is_ins_row = when_transition.when(local.general.is_ins_row);
+            let mut is_ins_row = builder.when(local.general.is_ins_row);
             let mut not_first_ins_row = is_ins_row.when_ne(local.is_first, AB::Expr::ONE);
             // ATTENTION: degree of not_first_ins_row is 2
             // Because all the followings assert 0, we don't need to check next.enabled.
