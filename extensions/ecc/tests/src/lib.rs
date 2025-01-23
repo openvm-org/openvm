@@ -12,7 +12,8 @@ mod tests {
         utils::{air_test, air_test_with_min_segments},
     };
     use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG,
+        CurveConfig, CurveCoeffs, CurveConfig, Rv32WeierstrassConfig, TeCurveConfig, WeierstrassExtension,
+        P256_CONFIG, SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -192,6 +193,43 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
+        air_test(config, openvm_exe);
+        Ok(())
+    }
+
+    #[test]
+    fn test_edwards_ec() -> Result<()> {
+        let elf = build_example_program_at_path_with_features::<&str>(
+            get_programs_dir!(),
+            "edwards_ec",
+            [],
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        let config =
+            Rv32WeierstrassConfig::new(vec![CurveConfig {
+            modulus: BigUint::from_str(
+                "57896044618658097711785492504343953926634992332820282019728792003956564819949",
+            ).unwrap(),
+            scalar: BigUint::from_str(
+                "7237005577332262213973186563042994240857116359379907606001950938285454250989",
+            ).unwrap(),
+            coeffs: CurveCoeffs::TeCurve(TeCurveConfig {
+                a: BigUint::from_str(
+                    "57896044618658097711785492504343953926634992332820282019728792003956564819948",
+                ).unwrap(),
+                d: BigUint::from_str(
+                    "37095705934669439343138083508754565189542113879843219016388785533085940283555",
+                ).unwrap(),
+            }),
+        }]);
         air_test(config, openvm_exe);
         Ok(())
     }

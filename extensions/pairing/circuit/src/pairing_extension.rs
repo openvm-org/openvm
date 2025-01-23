@@ -8,7 +8,7 @@ use openvm_circuit::{
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
-use openvm_ecc_circuit::CurveConfig;
+use openvm_ecc_circuit::{CurveCoeffs, CurveConfig, SwCurveConfig};
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
     bls12_381::{
@@ -38,15 +38,19 @@ impl PairingCurve {
                 BN254_ECC_STRUCT_NAME.to_string(),
                 BN254_MODULUS.clone(),
                 BN254_ORDER.clone(),
-                BigUint::zero(),
-                BigUint::from_u8(3).unwrap(),
+                CurveCoeffs::SwCurve(SwCurveConfig {
+                    a: BigUint::zero(),
+                    b: BigUint::from_u8(3).unwrap(),
+                }),
             ),
             PairingCurve::Bls12_381 => CurveConfig::new(
                 BLS12_381_ECC_STRUCT_NAME.to_string(),
                 BLS12_381_MODULUS.clone(),
                 BLS12_381_ORDER.clone(),
-                BigUint::zero(),
-                BigUint::from_u8(4).unwrap(),
+                CurveCoeffs::SwCurve(SwCurveConfig {
+                    a: BigUint::zero(),
+                    b: BigUint::from_u8(4).unwrap(),
+                }),
             ),
         }
     }

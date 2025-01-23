@@ -6,6 +6,7 @@ extern crate alloc;
 pub use once_cell;
 pub use openvm_algebra_guest as algebra;
 pub use openvm_ecc_sw_macros as sw_macros;
+pub use openvm_ecc_te_macros as te_macros;
 use strum_macros::FromRepr;
 
 mod affine_point;
@@ -17,11 +18,13 @@ pub use msm::*;
 
 /// Optimized ECDSA implementation with the same functional interface as the `ecdsa` crate
 pub mod ecdsa;
+/// Edwards curve traits
+pub mod edwards;
 /// Weierstrass curve traits
 pub mod weierstrass;
 
 /// This is custom-1 defined in RISC-V spec document
-pub const OPCODE: u8 = 0x2b;
+pub const SW_OPCODE: u8 = 0x2b;
 pub const SW_FUNCT3: u8 = 0b001;
 
 /// Short Weierstrass curves are configurable.
@@ -38,4 +41,19 @@ pub enum SwBaseFunct7 {
 
 impl SwBaseFunct7 {
     pub const SHORT_WEIERSTRASS_MAX_KINDS: u8 = 8;
+}
+
+/// This is custom-1 defined in RISC-V spec document
+pub const TE_OPCODE: u8 = 0x2b;
+pub const TE_FUNCT3: u8 = 0b100;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
+#[repr(u8)]
+pub enum TeBaseFunct7 {
+    TeAdd = 0,
+    TeSetup,
+}
+
+impl TeBaseFunct7 {
+    pub const TWISTED_EDWARDS_MAX_KINDS: u8 = 8;
 }

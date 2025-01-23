@@ -20,6 +20,7 @@ openvm-keccak256-transpiler.workspace = true
 openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
 openvm-sdk.workspace = true
 eyre.workspace = true
+num-bigint.workspace = true
 hex-literal.workspace = true
 num-bigint.workspace = true
 halo2curves-axiom = { workspace = true }

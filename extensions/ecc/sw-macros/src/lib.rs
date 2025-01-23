@@ -435,7 +435,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
                 openvm::platform::custom_insn_r!(
-                    opcode = OPCODE,
+                    opcode = SW_OPCODE,
                     funct3 = SW_FUNCT3 as usize,
                     funct7 = SwBaseFunct7::SwAddNe as usize + #ec_idx
                         * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
@@ -448,7 +448,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #double_extern_func(rd: usize, rs1: usize) {
                 openvm::platform::custom_insn_r!(
-                    opcode = OPCODE,
+                    opcode = SW_OPCODE,
                     funct3 = SW_FUNCT3 as usize,
                     funct7 = SwBaseFunct7::SwDouble as usize + #ec_idx
                         * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
@@ -475,7 +475,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                     let p2 = [one.as_ref(), one.as_ref()].concat();
                     let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(
-                        opcode = ::openvm_ecc_guest::OPCODE,
+                        opcode = ::openvm_ecc_guest::SW_OPCODE,
                         funct3 = ::openvm_ecc_guest::SW_FUNCT3 as usize,
                         funct7 = ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
@@ -485,7 +485,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                         rs2 = In p2.as_ptr()
                     );
                     openvm::platform::custom_insn_r!(
-                        opcode = ::openvm_ecc_guest::OPCODE,
+                        opcode = ::openvm_ecc_guest::SW_OPCODE,
                         funct3 = ::openvm_ecc_guest::SW_FUNCT3 as usize,
                         funct7 = ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
@@ -503,7 +503,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
         #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_2 {
-            use ::openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
+            use ::openvm_ecc_guest::{SW_OPCODE, SW_FUNCT3, SwBaseFunct7};
 
             #(#externs)*
         }
