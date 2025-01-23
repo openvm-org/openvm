@@ -331,19 +331,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
                 data,
             );
             record.hints.push((data, write));
-
-            for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
-                let mem_ptr_limbs =
-                    decompose::<F>(mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index));
-                self.bitwise_lookup_chip.request_range(
-                    mem_ptr_limbs[2 * i].as_canonical_u32(),
-                    mem_ptr_limbs[(2 * i) + 1].as_canonical_u32(),
-                );
-                self.bitwise_lookup_chip.request_range(
-                    data[2 * i].as_canonical_u32(),
-                    data[2 * i + 1].as_canonical_u32(),
-                );
-            }
         }
 
         self.height += record.hints.len();
@@ -387,6 +374,7 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         aux_cols_factory: &MemoryAuxColsFactory<F>,
         slice: &mut [F],
         memory: &OfflineMemory<F>,
+        bitwise_lookup_chip: &SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     ) -> usize {
         let width = Rv32HintStoreCols::<F>::width();
         let cols: &mut Rv32HintStoreCols<F> = slice[..width].borrow_mut();
@@ -414,6 +402,18 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         let mut rem_words = record.num_words;
         let mut used_u32s = 0;
         for (i, &(data, write)) in record.hints.iter().enumerate() {
+            for half in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
+                let mem_ptr_limbs = decompose::<F>(mem_ptr);
+                bitwise_lookup_chip.request_range(
+                    mem_ptr_limbs[2 * half].as_canonical_u32(),
+                    mem_ptr_limbs[(2 * half) + 1].as_canonical_u32(),
+                );
+                bitwise_lookup_chip.request_range(
+                    data[2 * half].as_canonical_u32(),
+                    data[2 * half + 1].as_canonical_u32(),
+                );
+            }
+
             let cols: &mut Rv32HintStoreCols<F> = slice[used_u32s..used_u32s + width].borrow_mut();
             cols.from_state.timestamp =
                 F::from_canonical_u32(record.from_state.timestamp + (3 * i as u32));
@@ -448,6 +448,7 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
                 &aux_cols_factory,
                 &mut flat_trace[used_u32s..],
                 &memory,
+                &self.bitwise_lookup_chip,
             );
         }
         // padding rows can just be all zeros
