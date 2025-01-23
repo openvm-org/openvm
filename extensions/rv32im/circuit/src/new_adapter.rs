@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        new_integration_api::{AirTx, AirTxMaybeRead, AirTxRead, AirTxWrite, VmAdapterChip},
-        ExecutionState, SystemPort,
+        new_integration_api::VmAdapter, AirTx, AirTxMaybeRead, AirTxRead, AirTxWrite,
+        ExecuteTxMaybeRead, ExecuteTxRead, ExecuteTxWrite, ExecutionState, SystemPort,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -30,7 +30,7 @@ pub struct Rv32RegisterAdapter {
     port: SystemPort,
 }
 
-impl<F> VmAdapterChip<F> for Rv32RegisterAdapter
+impl<F> VmAdapter<F> for Rv32RegisterAdapter
 where
     F: 'static,
 {
@@ -86,23 +86,32 @@ pub struct Rv32RegisterExecuteTx<F> {
     // because it will prevent shared borrowing of `MemoryController`
 }
 
-impl<F: PrimeField32> Rv32RegisterExecuteTx<F> {
+impl<F: PrimeField32> ExecuteTxRead<F> for Rv32RegisterExecuteTx<F> {
+    type Data = [F; RV32_REGISTER_NUM_LIMBS];
     // Note[jpw]: we don't fix `address_space` because `F::from_canonical_u32` is not const. The instruction will already have `address_space` defined, so we pass it directly.
-    pub fn read_register(
+    fn read(
+        &mut self,
         memory: &mut MemoryController<F>,
-        address_space: F,
-        ptr: F,
+        address: MemoryAddress<F, F>,
     ) -> (RecordId, [F; RV32_REGISTER_NUM_LIMBS]) {
-        debug_assert_eq!(address_space.as_canonical_u32(), RV32_REGISTER_AS);
-        memory.read(address_space, ptr)
+        debug_assert_eq!(address.address_space.as_canonical_u32(), RV32_REGISTER_AS);
+        memory.read(address.address_space, address.pointer)
     }
+}
+
+impl<F: PrimeField32> ExecuteTxMaybeRead<F> for Rv32RegisterExecuteTx<F> {
+    type Data = [F; RV32_REGISTER_NUM_LIMBS];
 
     /// Returns `Some(record_id)` if register or `None` if immediate.
-    pub fn read_register_or_imm(
+    /// The `address.address_space` must be either 0 or 1.
+    /// If 0, then `address.pointer` is interpretted as the immediate value.
+    fn maybe_read(
+        &mut self,
         memory: &mut MemoryController<F>,
-        address_space: F,
-        ptr_or_imm: F,
+        address: MemoryAddress<F, F>,
     ) -> (Option<RecordId>, [F; RV32_REGISTER_NUM_LIMBS]) {
+        let address_space = address.address_space;
+        let ptr_or_imm = address.pointer;
         debug_assert!(
             address_space.as_canonical_u32() == RV32_IMM_AS
                 || address_space.as_canonical_u32() == RV32_REGISTER_AS
@@ -126,16 +135,20 @@ impl<F: PrimeField32> Rv32RegisterExecuteTx<F> {
             (Some(id), data)
         }
     }
+}
+
+impl<F: PrimeField32> ExecuteTxWrite<F> for Rv32RegisterExecuteTx<F> {
+    type Data = [F; RV32_REGISTER_NUM_LIMBS];
 
     /// Returns `(id, prev_data)`
-    pub fn write_register(
+    fn write(
+        &mut self,
         memory: &mut MemoryController<F>,
-        address_space: F,
-        ptr: F,
+        address: MemoryAddress<F, F>,
         data: [F; RV32_REGISTER_NUM_LIMBS],
     ) -> (RecordId, [F; RV32_REGISTER_NUM_LIMBS]) {
-        debug_assert_eq!(address_space.as_canonical_u32(), RV32_REGISTER_AS);
-        memory.write(address_space, ptr, data)
+        debug_assert_eq!(address.address_space.as_canonical_u32(), RV32_REGISTER_AS);
+        memory.write(address.address_space, address.pointer, data)
     }
 }
 
@@ -186,7 +199,7 @@ const READ_IMM_WIDTH: usize = size_of::<Rv32RegOrImmReadCols<u8>>();
 const WRITE_WIDTH: usize = size_of::<Rv32RegisterWriteCols<u8>>();
 
 impl<AB: InteractionBuilder> AirTx<AB> for Rv32RegisterAirTx<'_, AB> {
-    fn start(&mut self, builder: &mut AB, multiplicity: impl Into<AB::Expr>) {
+    fn start(&mut self, _builder: &mut AB, multiplicity: impl Into<AB::Expr>) {
         self.instr_multiplicity = multiplicity.into();
         let (local, remaining) = self.row_buffer.split_at(STATE_WIDTH);
         self.row_buffer = remaining;
@@ -215,7 +228,7 @@ impl<AB: InteractionBuilder> AirTx<AB> for Rv32RegisterAirTx<'_, AB> {
         };
         self.port.program_bus.send_instruction(
             builder,
-            from_state.pc,
+            from_state.pc.clone(),
             opcode,
             operands,
             self.instr_multiplicity.clone(),

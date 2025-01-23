@@ -3,11 +3,13 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    new_integration_api::{
-        AirTx, AirTxMaybeRead, AirTxRead, AirTxWrite, VmAdapterChip, VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        new_integration_api::{VmAdapter, VmCoreAir, VmCoreChip},
+        AirTx, AirTxMaybeRead, AirTxRead, AirTxWrite, ExecuteTxMaybeRead, ExecuteTxRead,
+        ExecuteTxWrite, Result,
     },
-    Result,
+    system::memory::{MemoryAddress, MemoryController},
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -167,6 +169,7 @@ where
     }
 }
 
+// TODO: store adapter records
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "T: Serialize + DeserializeOwned")]
 pub struct BaseAluCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
@@ -203,35 +206,40 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, A>
     for BaseAluCoreChip<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: VmAdapterChip<F>,
-    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-    I::Writes: From<[[F; NUM_LIMBS]; 1]>,
+    A: VmAdapter<F>,
+    for<'tx> A::ExecuteTx<'tx>: ExecuteTxRead<F, Data = [F; NUM_LIMBS]>
+        + ExecuteTxMaybeRead<F, Data = [F; NUM_LIMBS]>
+        + ExecuteTxWrite<F, Data = [F; NUM_LIMBS]>,
 {
     type Record = BaseAluCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
     type Air = BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>;
 
-    #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction { opcode, .. } = instruction;
+        from_pc: u32,
+        tx: &mut A::ExecuteTx<'_>,
+    ) -> Result<Self::Record> {
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = *instruction;
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        let data: [[F; NUM_LIMBS]; 2] = reads.into();
-        let b = data[0].map(|x| x.as_canonical_u32());
-        let c = data[1].map(|y| y.as_canonical_u32());
-        let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &b, &c);
-
-        let output = AdapterRuntimeContext {
-            to_pc: None,
-            writes: [a.map(F::from_canonical_u32)].into(),
-        };
+        let (rs1_id, rs1_data) = tx.read(memory, MemoryAddress::new(d, b));
+        let (rs2_id, rs2_data) = tx.maybe_read(memory, MemoryAddress::new(e, c));
+        let b = rs1_data.map(|x| x.as_canonical_u32());
+        let c = rs2_data.map(|y| y.as_canonical_u32());
+        let rd_data = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &b, &c);
 
         if local_opcode == BaseAluOpcode::ADD || local_opcode == BaseAluOpcode::SUB {
-            for a_val in a {
+            for a_val in rd_data {
                 self.bitwise_lookup_chip.request_xor(a_val, a_val);
             }
         } else {
@@ -240,14 +248,16 @@ where
             }
         }
 
+        let rd_data = rd_data.map(F::from_canonical_u32);
+        let (rd_id, _) = tx.write(memory, MemoryAddress::new(d, a), rd_data.clone());
         let record = Self::Record {
             opcode: local_opcode,
-            a: a.map(F::from_canonical_u32),
-            b: data[0],
-            c: data[1],
+            a: rd_data,
+            b: rs1_data,
+            c: rs2_data,
         };
 
-        Ok((output, record))
+        Ok(record)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

@@ -6,9 +6,9 @@ use openvm_stark_backend::{
 use serde::{de::DeserializeOwned, Serialize};
 
 use super::Result;
-use crate::system::memory::{MemoryAddress, MemoryController};
+use crate::system::memory::MemoryController;
 
-pub trait VmAdapterChip<F> {
+pub trait VmAdapter<F> {
     type ExecuteTx<'tx>
     where
         Self: 'tx;
@@ -18,90 +18,8 @@ pub trait VmAdapterChip<F> {
         Self: 'tx;
 }
 
-pub trait AirTx<AB: AirBuilder> {
-    /// Start the constraints for a single instruction.
-    /// The `end` or `end_jump` function should be called after all constraints
-    /// for the instruction have been added.
-    /// In conjunction with `end`, these function handles interactions
-    /// on program and execution buses.
-    fn start(&mut self, builder: &mut AB, multiplicity: impl Into<AB::Expr>);
-
-    /// Ends transaction, incrementing the program counter by the default amount.
-    /// The transaction **may** choose to modify `operands` before
-    /// sending to the program bus.
-    fn end(
-        &mut self,
-        builder: &mut AB,
-        opcode: impl Into<AB::Expr>,
-        operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
-    ) {
-        self.end_impl(builder, opcode, operands, None);
-    }
-
-    /// Ends transaction, jumping to the specified program counter.
-    fn end_jump(
-        &mut self,
-        builder: &mut AB,
-        opcode: impl Into<AB::Expr>,
-        operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
-        to_pc: impl Into<AB::Expr>,
-    ) {
-        self.end_impl(builder, opcode, operands, Some(to_pc.into()));
-    }
-
-    /// Ends transaction, adding necessary interactions to program
-    /// and execution bus. Timestamp is managed internally.
-    ///
-    /// In conjunction with `start`, these functions handle interactions
-    /// on program and execution buses.
-    fn end_impl(
-        &mut self,
-        builder: &mut AB,
-        opcode: impl Into<AB::Expr>,
-        operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
-        to_pc: Option<AB::Expr>,
-    );
-}
-
-pub trait AirTxRead<AB: AirBuilder> {
-    type Data;
-
-    /// Return the memory address that was read from.
-    /// The return type is needed to get the instruction.
-    fn read(
-        &mut self,
-        builder: &mut AB,
-        data: Self::Data,
-        multiplicity: impl Into<AB::Expr>,
-    ) -> MemoryAddress<AB::Expr, AB::Expr>;
-}
-
-pub trait AirTxMaybeRead<AB: AirBuilder> {
-    type Data;
-
-    /// Apply constraints that may conditionally do a read.
-    /// For example, either read from memory or handle immediates.
-    fn maybe_read(
-        &mut self,
-        builder: &mut AB,
-        data: Self::Data,
-        multiplicity: impl Into<AB::Expr>,
-    ) -> MemoryAddress<AB::Expr, AB::Expr>;
-}
-
-pub trait AirTxWrite<AB: AirBuilder> {
-    type Data;
-
-    fn write(
-        &mut self,
-        builder: &mut AB,
-        data: Self::Data,
-        multiplicity: impl Into<AB::Expr>,
-    ) -> MemoryAddress<AB::Expr, AB::Expr>;
-}
-
 /// Trait to be implemented on primitive chip to integrate with the machine.
-pub trait VmCoreChip<F, A: VmAdapterChip<F>> {
+pub trait VmCoreChip<F, A: VmAdapter<F>> {
     /// Minimum data that must be recorded to be able to generate trace for one row.
     type Record: Send + Serialize + DeserializeOwned;
     type Air;

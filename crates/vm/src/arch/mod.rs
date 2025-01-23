@@ -9,6 +9,7 @@ mod integration_api;
 pub mod new_integration_api;
 /// Runtime execution and segmentation
 pub mod segment;
+mod tx;
 /// Top level [VirtualMachine] constructor and API.
 pub mod vm;
 
@@ -24,4 +25,5 @@ pub use execution::*;
 pub use extensions::*;
 pub use integration_api::*;
 pub use segment::*;
+pub use tx::*;
 pub use vm::*;

@@ -51,10 +51,3 @@ impl<S, T> MemoryAddress<S, T> {
         }
     }
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AlignedBorrow)]
-#[repr(C)]
-pub struct HeapAddress<S, T> {
-    pub address: MemoryAddress<S, T>,
-    pub data: MemoryAddress<S, T>,
-}
