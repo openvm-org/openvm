@@ -258,7 +258,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                             if builder.flags.static_only {
                                 let n: Ext<C::F, C::EF> = builder.constant(C::EF::ZERO);
                                 let width = ps_at_z.len().value();
-                                for (t, alpha_pow) in alpha_pows.iter().enumerate() {
+                                for (t, alpha_pow) in alpha_pows.iter().take(width).enumerate() {
                                     let p_at_x = builder.get(&mat_opening, t);
                                     let p_at_z = builder.get(&ps_at_z, t);
                                     builder.assign(&n, n + (p_at_z - p_at_x) * alpha_pow.clone());
