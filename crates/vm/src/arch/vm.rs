@@ -136,9 +136,8 @@ where
         let mut segment_idx = 0;
 
         loop {
-            let mut one_segment_result =
+            let one_segment_result =
                 self.execute_until_segment(exe.clone(), memory, streams, segment_idx, pc)?;
-            streams = one_segment_result.segment.chip_complex.take_streams();
             segments.push(one_segment_result.segment);
             if one_segment_result.next_state.is_none() {
                 break;
@@ -147,6 +146,7 @@ where
             memory = next_state.memory;
             pc = next_state.pc;
             segment_idx = next_state.segment_idx;
+            streams = next_state.input;
         }
         tracing::debug!("Number of continuation segments: {}", segments.len());
 
