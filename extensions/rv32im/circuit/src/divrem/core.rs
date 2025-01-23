@@ -639,7 +639,7 @@ fn limbs_to_u32<const NUM_LIMBS: usize>(x: &[u32; NUM_LIMBS]) -> u32 {
 
 fn u32_to_limbs<const NUM_LIMBS: usize>(x: &u32) -> [u32; NUM_LIMBS] {
     let mut res = [0; NUM_LIMBS];
-    let mut x = x.clone();
+    let mut x = *x;
     let base = 1u32 << RV32_CELL_BITS;
     for limb in res.iter_mut() {
         let (quot, rem) = (x / base, x % base);
