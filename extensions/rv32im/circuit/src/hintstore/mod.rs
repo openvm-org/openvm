@@ -14,11 +14,11 @@ use openvm_circuit::{
         },
         program::ProgramBus,
     },
+    utils::u32_into_limbs,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::next_power_of_two_or_zero,
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -55,14 +55,10 @@ pub struct Rv32HintStoreCols<T> {
     pub rem_words_limbs: [T; RV32_REGISTER_NUM_LIMBS],
 
     pub from_state: ExecutionState<T>,
-    pub rs1_ptr: T,
-    pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rs1_aux_cols: MemoryReadAuxCols<T>,
+    pub mem_ptr_ptr: T,
+    pub mem_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
+    pub mem_ptr_aux_cols: MemoryReadAuxCols<T>,
 
-    pub imm: T,
-    pub imm_sign: T,
-    /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
-    pub mem_ptr_limbs: [T; 2],
     pub write_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
     pub data: [T; RV32_REGISTER_NUM_LIMBS],
 
@@ -76,9 +72,7 @@ pub struct Rv32HintStoreCols<T> {
 pub struct Rv32HintStoreAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    pub range_bus: VariableRangeCheckerBus,
     pub bitwise_operation_lookup_bus: BitwiseOperationLookupBus,
-    pointer_max_bits: usize,
 }
 
 impl<F: Field> BaseAir<F> for Rv32HintStoreAir {
@@ -127,24 +121,22 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
                 + local_cols.rem_words_limbs[i];
             next_rem_words = next_rem_words * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
                 + next_cols.rem_words_limbs[i];
-        }
-        for i in (0..RV32_REGISTER_NUM_LIMBS / 2).rev() {
-            mem_ptr = mem_ptr * AB::F::from_canonical_u32(1 << (2 * RV32_CELL_BITS))
+            mem_ptr = mem_ptr * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
                 + local_cols.mem_ptr_limbs[i];
-            next_mem_ptr = next_mem_ptr * AB::F::from_canonical_u32(1 << (2 * RV32_CELL_BITS))
+            next_mem_ptr = next_mem_ptr * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
                 + next_cols.mem_ptr_limbs[i];
         }
 
-        // read rs1
+        // read mem_ptr
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_canonical_u32(RV32_REGISTER_AS),
-                    local_cols.rs1_ptr,
+                    local_cols.mem_ptr_ptr,
                 ),
-                local_cols.rs1_data,
+                local_cols.mem_ptr_limbs,
                 timestamp_pp(),
-                &local_cols.rs1_aux_cols,
+                &local_cols.mem_ptr_aux_cols,
             )
             .eval(builder, is_start.clone());
 
@@ -165,44 +157,19 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             .when(local_cols.is_single)
             .assert_one(rem_words.clone());
 
-        // constrain mem_ptr = rs1 + imm as a u32 addition with 2 limbs
-        let limbs_01 = local_cols.rs1_data[0]
-            + local_cols.rs1_data[1] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
-        let limbs_23 = local_cols.rs1_data[2]
-            + local_cols.rs1_data[3] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
-
-        let inv = AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2)).inverse();
-        let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
-
-        builder.when(is_start.clone()).assert_bool(carry.clone());
-
-        builder
-            .when(is_start.clone())
-            .assert_bool(local_cols.imm_sign);
-        let imm_extend_limb =
-            local_cols.imm_sign * AB::F::from_canonical_u32((1 << (RV32_CELL_BITS * 2)) - 1);
-        let carry = (limbs_23 + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
-        builder.when(is_start.clone()).assert_bool(carry.clone());
-
-        // preventing mem_ptr overflow
-        self.range_bus
-            .range_check(local_cols.mem_ptr_limbs[0], RV32_CELL_BITS * 2)
-            .eval(builder, is_valid.clone());
-        self.range_bus
-            .range_check(
-                local_cols.mem_ptr_limbs[1],
-                self.pointer_max_bits - RV32_CELL_BITS * 2,
-            )
-            .eval(builder, is_valid.clone());
-
         for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
+            // preventing mem_ptr overflow
             self.bitwise_operation_lookup_bus
-                .send_range(local_cols.data[i * 2], local_cols.data[i * 2 + 1])
+                .send_range(
+                    local_cols.mem_ptr_limbs[2 * i],
+                    local_cols.mem_ptr_limbs[(2 * i) + 1],
+                )
+                .eval(builder, is_valid.clone());
+            // checking that hint is bytes
+            self.bitwise_operation_lookup_bus
+                .send_range(local_cols.data[2 * i], local_cols.data[(2 * i) + 1])
                 .eval(builder, is_valid.clone());
         }
-
-        let mem_ptr = local_cols.mem_ptr_limbs[0]
-            + local_cols.mem_ptr_limbs[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
 
         // write hint
         self.memory_bridge
@@ -223,8 +190,8 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
                         * AB::F::from_canonical_usize(HINT_BUFFER.global_opcode().as_usize())),
                 [
                     local_cols.is_buffer * (local_cols.num_words_ptr),
-                    local_cols.rs1_ptr.into(),
-                    local_cols.imm.into(),
+                    local_cols.mem_ptr_ptr.into(),
+                    AB::Expr::ZERO,
                     AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
                 ],
@@ -269,10 +236,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
 pub struct Rv32HintStoreRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     pub instruction: Instruction<F>,
-    pub rs1: [F; RV32_REGISTER_NUM_LIMBS],
-    pub rs1_read: RecordId,
-    pub offset: u32,
-    pub offset_sign: bool,
+    pub mem_ptr_read: RecordId,
     pub mem_ptr: u32,
     pub num_words: u32,
 
@@ -287,15 +251,12 @@ pub struct Rv32HintStoreChip<F: Field> {
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<F: PrimeField32> Rv32HintStoreChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        pointer_max_bits: usize,
-        range_checker_chip: SharedVariableRangeCheckerChip,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         memory_bridge: MemoryBridge,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
@@ -303,9 +264,7 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         let air = Rv32HintStoreAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
-            range_bus: range_checker_chip.bus(),
             bitwise_operation_lookup_bus: bitwise_lookup_chip.bus(),
-            pointer_max_bits,
         };
         Self {
             records: vec![],
@@ -314,7 +273,6 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
             offline_memory,
             streams: OnceLock::new(),
             bitwise_lookup_chip,
-            range_checker_chip,
         }
     }
     pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
@@ -332,8 +290,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
         let &Instruction {
             opcode,
             a: num_words_ptr,
-            b: rs1_ptr,
-            c: offset,
+            b: mem_ptr_ptr,
             d,
             e,
             ..
@@ -341,7 +298,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
-        let (rs1_read, rs1) = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, rs1_ptr);
+        let (mem_ptr_read, mem_ptr_limbs) = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, mem_ptr_ptr);
         let (num_words, num_words_read) = if opcode == HINT_STOREW.global_opcode() {
             memory.increment_timestamp();
             (1, None)
@@ -350,31 +307,18 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
                 memory.read::<RV32_REGISTER_NUM_LIMBS>(d, num_words_ptr);
             (compose(num_words_limbs), Some(num_words_read))
         };
-        let rs1_val = compose(rs1);
-        let offset = offset.as_canonical_u32();
-        let offset_sign = (offset & 0x8000) >> 15;
-        let offset_extended = offset + offset_sign * 0xffff0000;
-
-        let ptr_val = rs1_val.wrapping_add(offset_extended);
-        assert!(ptr_val < (1 << self.air.pointer_max_bits));
-        let mem_ptr_limbs: [u32; 2] =
-            std::array::from_fn(|i| (ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff);
+        let mem_ptr = compose(mem_ptr_limbs);
 
         let mut streams = self.streams.get().unwrap().lock().unwrap();
         if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS {
             return Err(ExecutionError::HintOutOfBounds { pc: from_state.pc });
         }
 
-        let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-
         let mut record = Rv32HintStoreRecord {
             from_state,
             instruction: instruction.clone(),
-            rs1,
-            rs1_read,
-            offset,
-            offset_sign: offset_sign == 1,
-            mem_ptr: ptr_val,
+            mem_ptr_read,
+            mem_ptr,
             num_words,
             num_words_read,
             hints: vec![],
@@ -390,12 +334,17 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
                 std::array::from_fn(|_| streams.hint_stream.pop_front().unwrap());
             let (write, _) = memory.write(
                 e,
-                F::from_canonical_u32(ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index)),
+                F::from_canonical_u32(mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index)),
                 data,
             );
             record.hints.push((data, write));
 
             for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
+                let mem_ptr_limbs = u32_into_limbs::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+                    mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
+                );
+                self.bitwise_lookup_chip
+                    .request_range(mem_ptr_limbs[2 * i], mem_ptr_limbs[(2 * i) + 1]);
                 self.bitwise_lookup_chip.request_range(
                     data[2 * i].as_canonical_u32(),
                     data[2 * i + 1].as_canonical_u32(),
@@ -444,8 +393,6 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         aux_cols_factory: &MemoryAuxColsFactory<F>,
         slice: &mut [F],
         memory: &OfflineMemory<F>,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-        pointer_max_bits: usize,
     ) -> usize {
         let width = Rv32HintStoreCols::<F>::width();
         let cols: &mut Rv32HintStoreCols<F> = slice[..width].borrow_mut();
@@ -455,13 +402,9 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         cols.is_buffer_start = cols.is_buffer;
 
         cols.from_state = record.from_state.map(F::from_canonical_u32);
-        cols.rs1_ptr = record.instruction.b;
-        cols.rs1_data = record.rs1;
-        cols.rs1_aux_cols =
-            aux_cols_factory.make_read_aux_cols(memory.record_by_id(record.rs1_read));
-
-        cols.imm = record.instruction.c;
-        cols.imm_sign = F::from_bool(record.offset_sign);
+        cols.mem_ptr_ptr = record.instruction.b;
+        cols.mem_ptr_aux_cols =
+            aux_cols_factory.make_read_aux_cols(memory.record_by_id(record.mem_ptr_read));
 
         cols.num_words_ptr = record.instruction.a;
         if let Some(num_words_read) = record.num_words_read {
@@ -479,11 +422,7 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
             cols.data = data;
             cols.write_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(write));
             cols.rem_words_limbs = decompose(rem_words);
-            let mem_ptr_limbs =
-                std::array::from_fn(|i| (mem_ptr >> (i * (RV32_CELL_BITS * 2))) & 0xffff);
-            cols.mem_ptr_limbs = mem_ptr_limbs.map(F::from_canonical_u32);
-            range_checker_chip.add_count(mem_ptr_limbs[0], RV32_CELL_BITS * 2);
-            range_checker_chip.add_count(mem_ptr_limbs[1], pointer_max_bits - RV32_CELL_BITS * 2);
+            cols.mem_ptr_limbs = decompose(mem_ptr);
             if i != 0 {
                 cols.is_buffer = F::ONE;
             }
@@ -511,8 +450,6 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
                 &aux_cols_factory,
                 &mut flat_trace[used_u32s..],
                 &memory,
-                self.range_checker_chip.clone(),
-                self.air.pointer_max_bits,
             );
         }
         // padding rows can just be all zeros

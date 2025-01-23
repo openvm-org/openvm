@@ -452,9 +452,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             memory_bridge,
         } = builder.system_port();
         let offline_memory = builder.system_base().offline_memory();
-        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
 
-        let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(&chip) = builder
             .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()
@@ -470,8 +468,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
         let mut hintstore_chip = Rv32HintStoreChip::new(
             execution_bus,
             program_bus,
-            pointer_max_bits,
-            range_checker.clone(),
             bitwise_lu_chip.clone(),
             memory_bridge,
             offline_memory.clone(),
