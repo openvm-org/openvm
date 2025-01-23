@@ -294,7 +294,7 @@ impl PairingCheck for Bls12_381 {
                     rs2 = In &q_fat_ptr
                 );
                 let ptr = hint.as_ptr() as *const u8;
-                hint_buffer_u32!(ptr, 0, (48 * 12 * 2) / 4);
+                hint_buffer_u32!(ptr, (48 * 12 * 2) / 4);
                 hint.assume_init()
             }
         }

@@ -37,7 +37,7 @@ pub fn read<T: DeserializeOwned>() -> T {
 pub fn read_u32() -> u32 {
     let ptr = unsafe { alloc::alloc::alloc(Layout::from_size_align(4, 4).unwrap()) };
     let addr = ptr as u32;
-    hint_store_u32!(addr, 0);
+    hint_store_u32!(addr);
     let result: u32;
     unsafe {
         core::arch::asm!("lw {rd}, ({rs1})", rd = out(reg) result, rs1 = in(reg) addr);
@@ -47,7 +47,7 @@ pub fn read_u32() -> u32 {
 
 fn hint_store_word(ptr: *mut u32) {
     #[cfg(target_os = "zkvm")]
-    hint_store_u32!(ptr, 0);
+    hint_store_u32!(ptr);
     #[cfg(not(target_os = "zkvm"))]
     unsafe {
         *ptr = crate::host::read_u32();
@@ -68,7 +68,7 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
         let ptr_start = unsafe { alloc::alloc::alloc(layout) };
         let mut ptr = ptr_start;
 
-        hint_buffer_u32!(ptr, 0, num_words);
+        hint_buffer_u32!(ptr, num_words);
         unsafe { Vec::from_raw_parts(ptr_start, len, capacity) }
     }
     #[cfg(not(target_os = "zkvm"))]
