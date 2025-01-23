@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use eyre::Result;
+    use num_bigint::BigUint;
     use openvm_algebra_circuit::ModularExtension;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{
@@ -8,7 +11,8 @@ mod tests {
         utils::{air_test, air_test_with_min_segments},
     };
     use openvm_ecc_circuit::{
-        Rv32WeierstrassConfig, WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG,
+        CurveCoeffs, CurveConfig, EccExtension, Rv32EccConfig, TeCurveConfig, P256_CONFIG,
+        SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -34,7 +38,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        let config = Rv32EccConfig::new(vec![SECP256K1_CONFIG.clone()]);
         air_test(config, openvm_exe);
         Ok(())
     }
@@ -55,7 +59,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
+        let config = Rv32EccConfig::new(vec![P256_CONFIG.clone()]);
         air_test(config, openvm_exe);
         Ok(())
     }
@@ -76,8 +80,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config =
-            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+        let config = Rv32EccConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
         air_test(config, openvm_exe);
         Ok(())
     }
@@ -100,7 +103,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        let config = Rv32EccConfig::new(vec![SECP256K1_CONFIG.clone()]);
 
         let p = Secp256k1Affine::generator();
         let p = (p + p + p).to_affine();
@@ -128,7 +131,7 @@ mod tests {
                 SECP256K1_CONFIG.scalar.clone(),
             ]))
             .keccak(Default::default())
-            .ecc(WeierstrassExtension::new(vec![SECP256K1_CONFIG.clone()]))
+            .ecc(EccExtension::new(vec![SECP256K1_CONFIG.clone()]))
             .build();
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -140,6 +143,43 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
+        air_test(config, openvm_exe);
+        Ok(())
+    }
+
+    #[test]
+    fn test_edwards_ec() -> Result<()> {
+        let elf = build_example_program_at_path_with_features::<&str>(
+            get_programs_dir!(),
+            "edwards_ec",
+            [],
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        let config =
+            Rv32EccConfig::new(vec![CurveConfig {
+            modulus: BigUint::from_str(
+                "57896044618658097711785492504343953926634992332820282019728792003956564819949",
+            ).unwrap(),
+            scalar: BigUint::from_str(
+                "7237005577332262213973186563042994240857116359379907606001950938285454250989",
+            ).unwrap(),
+            coeffs: CurveCoeffs::TeCurve(TeCurveConfig {
+                a: BigUint::from_str(
+                    "57896044618658097711785492504343953926634992332820282019728792003956564819948",
+                ).unwrap(),
+                d: BigUint::from_str(
+                    "37095705934669439343138083508754565189542113879843219016388785533085940283555",
+                ).unwrap(),
+            }),
+        }]);
         air_test(config, openvm_exe);
         Ok(())
     }

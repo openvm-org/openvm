@@ -7,6 +7,7 @@ extern crate alloc;
 pub use halo2curves_axiom as halo2curves;
 pub use openvm_algebra_guest as algebra;
 pub use openvm_ecc_sw_setup as sw_setup;
+pub use openvm_ecc_te_setup as te_setup;
 use strum_macros::FromRepr;
 
 mod affine_point;
@@ -18,6 +19,8 @@ pub use msm::*;
 
 /// ECDSA
 pub mod ecdsa;
+/// Edwards curve traits
+pub mod edwards;
 /// Weierstrass curve traits
 pub mod weierstrass;
 
@@ -30,7 +33,7 @@ pub mod k256;
 pub mod p256;
 
 /// This is custom-1 defined in RISC-V spec document
-pub const OPCODE: u8 = 0x2b;
+pub const SW_OPCODE: u8 = 0x2b;
 pub const SW_FUNCT3: u8 = 0b001;
 
 /// Short Weierstrass curves are configurable.
@@ -46,4 +49,19 @@ pub enum SwBaseFunct7 {
 
 impl SwBaseFunct7 {
     pub const SHORT_WEIERSTRASS_MAX_KINDS: u8 = 8;
+}
+
+/// This is custom-1 defined in RISC-V spec document
+pub const TE_OPCODE: u8 = 0x2b;
+pub const TE_FUNCT3: u8 = 0b100;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
+#[repr(u8)]
+pub enum TeBaseFunct7 {
+    TeAdd = 0,
+    TeSetup,
+}
+
+impl TeBaseFunct7 {
+    pub const TWISTED_EDWARDS_MAX_KINDS: u8 = 8;
 }

@@ -21,7 +21,7 @@ use itertools::Itertools;
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use openvm_build::{GuestOptions, TargetFilter};
 use openvm_circuit::utils::air_test_with_min_segments;
-use openvm_ecc_circuit::WeierstrassExtension;
+use openvm_ecc_circuit::EccExtension;
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
 use openvm_pairing_guest::bn254::{Bn254Scalar, BN254_MODULUS, BN254_ORDER};
 use openvm_sdk::{config::SdkVmConfig, Sdk, StdIn};
@@ -268,9 +268,7 @@ fn test_plonk_zkvm() -> eyre::Result<()> {
             BN254_MODULUS.clone(),
             BN254_ORDER.clone(),
         ]))
-        .ecc(WeierstrassExtension::new(vec![
-            PairingCurve::Bn254.curve_config()
-        ]))
+        .ecc(EccExtension::new(vec![PairingCurve::Bn254.curve_config()]))
         .fp2(Fp2Extension::new(vec![BN254_MODULUS.clone()]))
         .pairing(PairingExtension::new(vec![PairingCurve::Bn254]))
         .build();
