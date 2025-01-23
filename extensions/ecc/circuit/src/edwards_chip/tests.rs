@@ -14,7 +14,7 @@ use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::TeEcAddChip;
+use super::TeAddChip;
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
@@ -118,7 +118,7 @@ fn test_add() {
         tester.address_bits(),
         bitwise_chip.clone(),
     );
-    let mut chip = TeEcAddChip::new(
+    let mut chip = TeAddChip::new(
         adapter,
         config,
         Rv32EdwardsOpcode::CLASS_OFFSET,

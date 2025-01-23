@@ -4129,21 +4129,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num-bigint-dig"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc84195820f291c7697304f3cbdadd1cb7199c0efc917ff5eafd71225c136151"
-dependencies = [
- "byteorder",
- "lazy_static",
- "libm",
- "num-integer",
- "num-iter",
- "num-traits",
- "smallvec",
-]
-
-[[package]]
 name = "num-complex"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4688,7 +4673,6 @@ dependencies = [
  "hex-literal 0.4.1",
  "lazy_static",
  "num-bigint 0.4.6",
- "num-bigint-dig",
  "num-integer",
  "num-traits",
  "once_cell",

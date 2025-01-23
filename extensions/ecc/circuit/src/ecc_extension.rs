@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
-use super::{EcAddNeChip, EcDoubleChip, TeEcAddChip};
+use super::{SwAddNeChip, SwDoubleChip, TeAddChip};
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -39,6 +39,7 @@ pub struct CurveConfig {
     #[serde_as(as = "DisplayFromStr")]
     pub scalar: BigUint,
     // curve-specific coefficients
+    #[serde_as(as = "_")]
     pub coeffs: CurveCoeffs,
 }
 
@@ -96,15 +97,15 @@ pub struct EccExtension {
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, BytesStateful)]
 pub enum EccExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
-    SwEcAddNeRv32_32(EcAddNeChip<F, 2, 32>),
-    SwEcDoubleRv32_32(EcDoubleChip<F, 2, 32>),
+    SwEcAddNeRv32_32(SwAddNeChip<F, 2, 32>),
+    SwEcDoubleRv32_32(SwDoubleChip<F, 2, 32>),
     // 48 limbs prime
-    SwEcAddNeRv32_48(EcAddNeChip<F, 6, 16>),
-    SwEcDoubleRv32_48(EcDoubleChip<F, 6, 16>),
+    SwEcAddNeRv32_48(SwAddNeChip<F, 6, 16>),
+    SwEcDoubleRv32_48(SwDoubleChip<F, 6, 16>),
     // 32 limbs prime
-    TeEcAddRv32_32(TeEcAddChip<F, 2, 32>),
+    TeEcAddRv32_32(TeAddChip<F, 2, 32>),
     // 48 limbs prime
-    TeEcAddRv32_48(TeEcAddChip<F, 6, 16>),
+    TeEcAddRv32_48(TeAddChip<F, 6, 16>),
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
@@ -170,7 +171,7 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
             if bytes <= 32 {
                 match curve.coeffs.clone() {
                     CurveCoeffs::SwCurve(SwCurveConfig { a, b: _ }) => {
-                        let sw_add_ne_chip = EcAddNeChip::new(
+                        let sw_add_ne_chip = SwAddNeChip::new(
                             Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
                                 execution_bus,
                                 program_bus,
@@ -189,7 +190,7 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
                         )?;
-                        let sw_double_chip = EcDoubleChip::new(
+                        let sw_double_chip = SwDoubleChip::new(
                             Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
                                 execution_bus,
                                 program_bus,
@@ -212,7 +213,7 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                     }
 
                     CurveCoeffs::TeCurve(TeCurveConfig { a, d }) => {
-                        let te_add_chip = TeEcAddChip::new(
+                        let te_add_chip = TeAddChip::new(
                             Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
                                 execution_bus,
                                 program_bus,
@@ -238,7 +239,7 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
             } else if bytes <= 48 {
                 match curve.coeffs.clone() {
                     CurveCoeffs::SwCurve(SwCurveConfig { a, b: _ }) => {
-                        let sw_add_ne_chip = EcAddNeChip::new(
+                        let sw_add_ne_chip = SwAddNeChip::new(
                             Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
                                 execution_bus,
                                 program_bus,
@@ -257,7 +258,7 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
                         )?;
-                        let sw_double_chip = EcDoubleChip::new(
+                        let sw_double_chip = SwDoubleChip::new(
                             Rv32VecHeapAdapterChip::<F, 1, 6, 6, 16, 16>::new(
                                 execution_bus,
                                 program_bus,
@@ -280,7 +281,7 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                     }
 
                     CurveCoeffs::TeCurve(TeCurveConfig { a, d }) => {
-                        let te_add_chip = TeEcAddChip::new(
+                        let te_add_chip = TeAddChip::new(
                             Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
                                 execution_bus,
                                 program_bus,

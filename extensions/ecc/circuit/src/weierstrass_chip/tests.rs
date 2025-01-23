@@ -14,7 +14,7 @@ use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::{EcAddNeChip, EcDoubleChip};
+use super::{SwAddNeChip, SwDoubleChip};
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
@@ -94,7 +94,7 @@ fn test_add_ne() {
         tester.address_bits(),
         bitwise_chip.clone(),
     );
-    let mut chip = EcAddNeChip::new(
+    let mut chip = SwAddNeChip::new(
         adapter,
         config,
         Rv32WeierstrassOpcode::CLASS_OFFSET,
@@ -173,7 +173,7 @@ fn test_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    let mut chip = EcDoubleChip::new(
+    let mut chip = SwDoubleChip::new(
         adapter,
         tester.memory_controller().borrow().range_checker.clone(),
         config,
@@ -251,7 +251,7 @@ fn test_p256_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    let mut chip = EcDoubleChip::new(
+    let mut chip = SwDoubleChip::new(
         adapter,
         tester.memory_controller().borrow().range_checker.clone(),
         config,

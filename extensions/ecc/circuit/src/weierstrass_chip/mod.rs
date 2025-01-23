@@ -26,8 +26,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
-pub struct EcAddNeChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub  VmChipWrapper<
+pub struct SwAddNeChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    pub VmChipWrapper<
         F,
         Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreChip,
@@ -35,7 +35,7 @@ pub struct EcAddNeChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: u
 );
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    EcAddNeChip<F, BLOCKS, BLOCK_SIZE>
+    SwAddNeChip<F, BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
@@ -44,7 +44,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         range_checker: SharedVariableRangeCheckerChip,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let expr = ec_add_ne_expr(config, range_checker.bus());
+        let expr = sw_add_ne_expr(config, range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
@@ -62,8 +62,8 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
 }
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
-pub struct EcDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub  VmChipWrapper<
+pub struct SwDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    pub VmChipWrapper<
         F,
         Rv32VecHeapAdapterChip<F, 1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreChip,
@@ -71,7 +71,7 @@ pub struct EcDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: 
 );
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    EcDoubleChip<F, BLOCKS, BLOCK_SIZE>
+    SwDoubleChip<F, BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
@@ -81,7 +81,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         a: BigUint,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let expr = ec_double_ne_expr(config, range_checker.bus(), a);
+        let expr = sw_double_ne_expr(config, range_checker.bus(), a);
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,

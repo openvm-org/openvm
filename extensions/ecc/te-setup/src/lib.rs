@@ -107,14 +107,16 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                 fn add_chip(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
                     #[cfg(not(target_os = "zkvm"))]
                     {
+                        use openvm_algebra_guest::DivUnsafe;
+
                         let x1y2 = p1.x() * p2.y();
                         let y1x2 = p1.y() * p2.x();
                         let x1x2 = p1.x() * p2.x();
                         let y1y2 = p1.y() * p2.y();
-                        let dx1x2y1y2 = Self::CURVE_D * x1x2 * y1y2;
+                        let dx1x2y1y2 = Self::CURVE_D * &x1x2 * &y1y2;
 
-                        let x3 = (x1y2 + y1x2).div_unsafe(&(Self::Coordinate::ONE + dx1x2y1y2));
-                        let y3 = (y1y2 - Self::CURVE_A * x1x2).div_unsafe(&(Self::Coordinate::ONE - dx1x2y1y2));
+                        let x3 = (x1y2 + y1x2).div_unsafe(&<#intmod_type as openvm_algebra_guest::IntMod>::ONE + &dx1x2y1y2);
+                        let y3 = (y1y2 - Self::CURVE_A * x1x2).div_unsafe(&<#intmod_type as openvm_algebra_guest::IntMod>::ONE - &dx1x2y1y2);
 
                         #struct_name { x: x3, y: y3 }
                     }
