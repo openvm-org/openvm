@@ -34,16 +34,26 @@ impl Rv32RegisterAdapter {
 
     pub fn air_tx<'a, AB: InteractionBuilder>(
         &self,
-        builder: &'a mut AB,
         row_buffer: &'a [AB::Var],
     ) -> Rv32RegisterAirTx<'a, AB> {
         Rv32RegisterAirTx {
             port: self.port,
-            builder,
             row_buffer,
             cur_timestamp: None,
             instr_multiplicity: AB::Expr::ZERO,
             from_state: None,
+        }
+    }
+
+    pub fn trace_tx<'a, F>(
+        &self,
+        memory: &'a OfflineMemory<F>,
+        row_buffer: &'a mut [F],
+    ) -> Rv32RegisterTraceTx<'a, F> {
+        Rv32RegisterTraceTx {
+            memory,
+            row_buffer,
+            pos: 0,
         }
     }
 }
@@ -109,12 +119,13 @@ impl<F: PrimeField32> Rv32RegisterExecuteTx<'_, F> {
 
 pub struct Rv32RegisterAirTx<'a, AB: AirBuilder> {
     port: SystemPort,
-    builder: &'a mut AB,
     row_buffer: &'a [AB::Var],
     pub cur_timestamp: Option<AB::Expr>,
     /// Multiplicity to use for program and execution bus
     instr_multiplicity: AB::Expr,
     from_state: Option<ExecutionState<AB::Expr>>,
+    // Reminder: don't try to include `builder: &'a mut AB` because there
+    // will be mutable borrow issues (you can't share a mutable reference)
 }
 
 impl<AB: AirBuilder> Drop for Rv32RegisterAirTx<'_, AB> {
@@ -154,6 +165,7 @@ const WRITE_WIDTH: usize = size_of::<Rv32RegisterWriteCols<u8>>();
 impl<AB: InteractionBuilder> Rv32RegisterAirTx<'_, AB> {
     pub fn start(
         &mut self,
+        builder: &mut AB,
         opcode: impl Into<AB::Expr>,
         operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
         from_state: ExecutionState<impl Into<AB::Expr>>,
@@ -163,7 +175,7 @@ impl<AB: InteractionBuilder> Rv32RegisterAirTx<'_, AB> {
         let from_state: ExecutionState<AB::Expr> =
             ExecutionState::new(from_state.pc, from_state.timestamp);
         self.port.program_bus.send_instruction(
-            self.builder,
+            builder,
             from_state.pc.clone(),
             opcode,
             operands,
@@ -173,15 +185,15 @@ impl<AB: InteractionBuilder> Rv32RegisterAirTx<'_, AB> {
         self.from_state = Some(from_state);
     }
 
-    pub fn end(&mut self) {
-        self.end_impl(None);
+    pub fn end(&mut self, builder: &mut AB) {
+        self.end_impl(builder, None);
     }
 
-    pub fn end_jump(&mut self, to_pc: impl Into<AB::Expr>) {
-        self.end_impl(Some(to_pc.into()));
+    pub fn end_jump(&mut self, builder: &mut AB, to_pc: impl Into<AB::Expr>) {
+        self.end_impl(builder, Some(to_pc.into()));
     }
 
-    pub fn end_impl(&mut self, to_pc: Option<AB::Expr>) {
+    pub fn end_impl(&mut self, builder: &mut AB, to_pc: Option<AB::Expr>) {
         let cur_timestamp = self
             .cur_timestamp
             .take()
@@ -194,7 +206,7 @@ impl<AB: InteractionBuilder> Rv32RegisterAirTx<'_, AB> {
             timestamp: cur_timestamp,
         };
         self.port.execution_bus.execute(
-            self.builder,
+            builder,
             self.instr_multiplicity.clone(),
             from_state,
             to_state,
@@ -214,6 +226,7 @@ impl<AB: InteractionBuilder> Rv32RegisterAirTx<'_, AB> {
 
     pub fn read_register(
         &mut self,
+        builder: &mut AB,
         data: [AB::Expr; RV32_REGISTER_NUM_LIMBS],
         multiplicity: impl Into<AB::Expr>,
     ) {
@@ -229,13 +242,17 @@ impl<AB: InteractionBuilder> Rv32RegisterAirTx<'_, AB> {
                 timestamp,
                 &local.aux,
             )
-            .eval(self.builder, multiplicity);
+            .eval(builder, multiplicity);
     }
 
     /// Memory bridge multiplicity is equal to `address_space`, which is 0 or 1.
     /// In particular, dummy rows should set `address_space` to 0
     /// (a row of all zeros will satisfy constraints).
-    pub fn read_register_or_imm(&mut self, data: [AB::Expr; RV32_REGISTER_NUM_LIMBS]) {
+    pub fn read_register_or_imm(
+        &mut self,
+        builder: &mut AB,
+        data: [AB::Expr; RV32_REGISTER_NUM_LIMBS],
+    ) {
         let (local, remaining) = self.row_buffer.split_at(READ_IMM_WIDTH);
         self.row_buffer = remaining;
         let local: &Rv32RegOrImmReadCols<AB::Var> = local.borrow();
@@ -245,8 +262,8 @@ impl<AB: InteractionBuilder> Rv32RegisterAirTx<'_, AB> {
         let imm = data[0].clone()
             + data[1].clone() * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS)
             + rs_sign.clone() * AB::Expr::from_canonical_usize(1 << (2 * RV32_CELL_BITS));
-        self.builder.assert_bool(local.address_space);
-        let mut imm_when = self.builder.when(not(local.address_space));
+        builder.assert_bool(local.address_space);
+        let mut imm_when = builder.when(not(local.address_space));
         imm_when.assert_eq(local.ptr_or_imm, imm);
         imm_when.assert_eq(rs_sign.clone(), data[3].clone());
         imm_when.assert_zero(
@@ -262,11 +279,12 @@ impl<AB: InteractionBuilder> Rv32RegisterAirTx<'_, AB> {
                 timestamp,
                 &local.aux,
             )
-            .eval(self.builder, local.address_space);
+            .eval(builder, local.address_space);
     }
 
     pub fn write_register(
         &mut self,
+        builder: &mut AB,
         data: [AB::Expr; RV32_REGISTER_NUM_LIMBS],
         multiplicity: impl Into<AB::Expr>,
     ) {
@@ -282,7 +300,7 @@ impl<AB: InteractionBuilder> Rv32RegisterAirTx<'_, AB> {
                 timestamp,
                 &local.aux,
             )
-            .eval(self.builder, multiplicity);
+            .eval(builder, multiplicity);
     }
 }
 

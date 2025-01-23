@@ -6,6 +6,7 @@ mod execution;
 mod extensions;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
+pub mod new_integration_api;
 /// Runtime execution and segmentation
 pub mod segment;
 /// Top level [VirtualMachine] constructor and API.
