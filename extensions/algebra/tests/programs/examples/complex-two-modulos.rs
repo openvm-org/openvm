@@ -5,11 +5,11 @@ use openvm_algebra_guest::IntMod;
 
 openvm::entry!(main);
 
-openvm_algebra_moduli_setup::moduli_declare! {
+openvm_algebra_moduli_macros::moduli_declare! {
     Mod1 { modulus = "998244353" },
     Mod2 { modulus = "1000000007" }
 }
-openvm_algebra_moduli_setup::moduli_init! {
+openvm_algebra_moduli_macros::moduli_init! {
     "998244353", "1000000007"
 }
 

@@ -1,5 +1,5 @@
 [package]
-name = "openvm-ecc-sw-setup"
+name = "openvm-ecc-sw-macros"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
