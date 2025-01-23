@@ -1,6 +1,8 @@
 This document explains the specification of the `VERIFY_BATCH` opcode and its implementation by `NativePoseidon2Chip`. `CHUNK` is 8.
 
-### Specification
+# Specification
+
+## Context
 
 We use a `VERIFY_BATCH` instruction in the following context:
 
@@ -16,6 +18,8 @@ This is done as follows:
 
 During verification, we would like to verify the hashing done one paths from the root of the Merkle tree to a particular leaf. We are given a specific `index` less than `h_max`, and are given access to the relevant rows of the original matrices -- these are "opened values".
 We are also given the siblings encountered in the path to the root with whom we apply Poseidon2 compression. Our goal is to verify that the root computed in this way is equal to `commit`.
+
+## Precise Specification
 
 More precisely, we are given the following inputs. Assumem that the original matrices `M_1, ..., M_n` are specified in decreasing order of height.
 
@@ -36,7 +40,9 @@ A `VERIFY_BATCH` instruction does the following:
   - Then, if `h` is not 1, we incorporate the sibling by doing `node <- p2_compress(node, siblings[proof_index])` if `index_bits[proof_index] = 0`, and `node <- p2_compress(siblings[proof_index], node)` if `index_bits[proof_index] = 1`.
 - At the end, it checks that `node = commit`.
 
-The instruction uses the following format:
+## Instruction Format
+
+The instruction uses the following seven operands. As seven is the current maximum number of operands, the address space for all reads is fixed to be `AS::Native = 5`.
 
 | Operand | Name | Meaning                                                                                                                                                                                                                          |
 |---------|------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -48,6 +54,41 @@ The instruction uses the following format:
 | `f` | `commit` | Pointer to the start pointer of the `commit` array                                                                                                                                                                               |
 | `g` | `opened_value_size_inv` | The inverse of the size of an opened value. If the elements of the original matrices, and therefore the opened values, are field elements, then this should be 1. If they are extension field elements, then this should be 1/4. |
 
-### Opened Values
-
 It is assumed that the `opened_values` array consists of elements of size 2 field elements, with the first field element being the pointer to the start of the row, and the second field element being the length of the row.
+
+# Implementation
+
+## Structure of Rows
+
+The above verification process consists of two essential types of operations; as a result we handle these using two different types of rows:
+- `InsideRow`: These rows are responsible for concatenating the opened values and computing the rolling hash.
+- `TopLevel`: These rows are responsible for computing Poisedon2 compression. There are two subtypes:
+  - `IncorporateSibling`: These rows are responsible for compressing a sibling with the current node. As part of this, they read both `sibling` and `index_bits` in order to determine whether to compute `p2_compress(sibling, node)` or `p2_compress(node, sibling)`.
+  - `IncorporateRow`: These rows are responsible for compressing the rolling hash of a (concatenated) row of opened values with the current node.
+
+As the `NativePoseidon2Chip` is also responsible for handling basic `PERM_POS2` and `COMP_POS2` instructions, these incur a third type of row:
+- `SimplePoseidon`
+
+As the three different types of rows require cells representing different things, in order to avoid having many unused cells in each row, we use the following strategy for columns.
+The `NatiivePoseidon2Cols` struct contains cells that are used by both `InsideRow` and `TopLevel` rows (in addition to a couple cells that cannot safely be used in different ways by both), some of which are also used by `SimplePoseidon` rows.
+This naturally includes the auxiliary columns used by the actual Poseidon2 hash Subair.
+In addition, `NativePoseidon2Cols` contains a `specific` field whose type is simply an array of `F`.
+`specific` is used in different ways by different tyeps of rows; we accomplish this by having a different struct for each type of row:
+- `TopLevelSpecificCols`
+- `InsideRowSpecificCols`
+- `SimplePoseidonSpecificCols`
+
+`specific` then has length equal to the maximum width of the above three, so that it can be cast to each one.
+
+
+## Layout of Rows in the Matrix
+
+The execution of a single `VERIFY_BATCH` instruction consists of a contiguous subsegment of `TopLevel` rows in the trace matrix, with each row corresponding to a single Poseidon2 compression, except for the first one, which is necessarily an `IncorporateRow` row and simply sets the initial value of `node`.
+The last of these `TopLevel` rows performs the execution interaction as well as the memory accesses to dereference operands `a` through `g`.
+
+Each `IncorporateRow` row, in order to compute the rolling hash of a concatenation of opened values, itself incurs a contiguous subsegment of `InsideRow` rows in the trace matrix.
+The last of these `InsideRow` rows interacts with the `IncorporateRow` to receive the necessary inputs and return the resulting hash; this interaction currently takes place on bus 7.
+
+As the communication between `TopLevel` and `InsideRow` rows is done via interaction, there is no relationship between their actual positions in the trace matrix.
+
+Each `PERM_POS2` and `COMP_POS2` instruction corresponds to a single `SimplePoseidon` row in the trace matrix.
