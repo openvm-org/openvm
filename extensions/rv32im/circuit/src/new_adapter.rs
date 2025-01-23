@@ -5,8 +5,10 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        new_integration_api::VmAdapter, AirTx, AirTxMaybeRead, AirTxRead, AirTxWrite,
-        ExecuteTxMaybeRead, ExecuteTxRead, ExecuteTxWrite, ExecutionState, SystemPort,
+        new_integration_api::{VmAdapter, VmAdapterAir},
+        AirTx, AirTxMaybeRead, AirTxRead, AirTxWrite, ExecuteTx, ExecuteTxMaybeRead, ExecuteTxRead,
+        ExecuteTxWrite, ExecutionState, SystemPort, TraceTx, TraceTxMaybeRead, TraceTxRead,
+        TraceTxWrite, EXECUTION_STATE_WIDTH,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -21,134 +23,76 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::AirBuilder,
+    p3_air::{AirBuilder, BaseAir},
     p3_field::{FieldAlgebra, PrimeField32},
 };
 
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32RegisterAdapter {
     port: SystemPort,
+
+    // These are only needed to determine the adapter trace row width.
+    // Keeping here to not have to make another struct.
+    num_read: usize,
+    num_read_or_imm: usize,
+    num_write: usize,
 }
 
-impl<F> VmAdapter<F> for Rv32RegisterAdapter
-where
-    F: 'static,
-{
-    type ExecuteTx<'tx>
-        = Rv32RegisterExecuteTx<F>
-    where
-        Self: 'tx;
+impl<F> VmAdapter<F> for Rv32RegisterAdapter {
+    type ExecuteTx = Rv32RegisterExecuteTx<F>;
 
     type TraceTx<'tx>
         = Rv32RegisterTraceTx<'tx, F>
     where
-        Self: 'tx;
-}
+        Self: 'tx,
+        F: 'tx;
 
-impl Rv32RegisterAdapter {
-    pub fn width(num_read: usize, num_read_or_imm: usize, num_write: usize) -> usize {
-        STATE_WIDTH
-            + num_read * READ_WIDTH
-            + num_read_or_imm * READ_IMM_WIDTH
-            + num_write * WRITE_WIDTH
+    fn execute_tx(&self) -> Rv32RegisterExecuteTx<F> {
+        Rv32RegisterExecuteTx {
+            from_pc: None,
+            phantom: PhantomData,
+        }
     }
 
-    pub fn air_tx<'a, AB: InteractionBuilder>(
+    fn trace_tx<'a>(
         &self,
-        row_buffer: &'a [AB::Var],
-    ) -> Rv32RegisterAirTx<'a, AB> {
+        memory: &'a OfflineMemory<F>,
+        row_adapter: &'a mut [F],
+        from_state: ExecutionState<u32>,
+    ) -> Rv32RegisterTraceTx<'a, F> {
+        Rv32RegisterTraceTx {
+            memory,
+            row_buffer: row_adapter,
+            pos: 0,
+            from_state,
+        }
+    }
+}
+
+impl<F> BaseAir<F> for Rv32RegisterAdapter {
+    fn width(&self) -> usize {
+        STATE_WIDTH
+            + self.num_read * READ_WIDTH
+            + self.num_read_or_imm * READ_IMM_WIDTH
+            + self.num_write * WRITE_WIDTH
+    }
+}
+
+impl<AB: AirBuilder> VmAdapterAir<AB> for Rv32RegisterAdapter {
+    type AirTx<'tx>
+        = Rv32RegisterAirTx<'tx, AB>
+    where
+        Self: 'tx,
+        AB: 'tx;
+
+    fn air_tx<'a>(&self, local_adapter: &'a [AB::Var]) -> Rv32RegisterAirTx<'a, AB> {
         Rv32RegisterAirTx {
             port: self.port,
-            row_buffer,
+            row_buffer: local_adapter,
             cur_timestamp: None,
             instr_multiplicity: AB::Expr::ZERO,
             from_state: None,
         }
-    }
-
-    pub fn trace_tx<'a, F>(
-        &self,
-        memory: &'a OfflineMemory<F>,
-        row_buffer: &'a mut [F],
-    ) -> Rv32RegisterTraceTx<'a, F> {
-        Rv32RegisterTraceTx {
-            memory,
-            row_buffer,
-            pos: 0,
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct Rv32RegisterExecuteTx<F> {
-    phantom: PhantomData<F>,
-    // Reminder: don't try to include `memory: &'a mut MemoryController<F>`
-    // because it will prevent shared borrowing of `MemoryController`
-}
-
-impl<F: PrimeField32> ExecuteTxRead<F> for Rv32RegisterExecuteTx<F> {
-    type Data = [F; RV32_REGISTER_NUM_LIMBS];
-    // Note[jpw]: we don't fix `address_space` because `F::from_canonical_u32` is not const. The instruction will already have `address_space` defined, so we pass it directly.
-    fn read(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        address: MemoryAddress<F, F>,
-    ) -> (RecordId, [F; RV32_REGISTER_NUM_LIMBS]) {
-        debug_assert_eq!(address.address_space.as_canonical_u32(), RV32_REGISTER_AS);
-        memory.read(address.address_space, address.pointer)
-    }
-}
-
-impl<F: PrimeField32> ExecuteTxMaybeRead<F> for Rv32RegisterExecuteTx<F> {
-    type Data = [F; RV32_REGISTER_NUM_LIMBS];
-
-    /// Returns `Some(record_id)` if register or `None` if immediate.
-    /// The `address.address_space` must be either 0 or 1.
-    /// If 0, then `address.pointer` is interpretted as the immediate value.
-    fn maybe_read(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        address: MemoryAddress<F, F>,
-    ) -> (Option<RecordId>, [F; RV32_REGISTER_NUM_LIMBS]) {
-        let address_space = address.address_space;
-        let ptr_or_imm = address.pointer;
-        debug_assert!(
-            address_space.as_canonical_u32() == RV32_IMM_AS
-                || address_space.as_canonical_u32() == RV32_REGISTER_AS
-        );
-        if address_space.is_zero() {
-            let imm_u32 = ptr_or_imm.as_canonical_u32();
-            debug_assert_eq!(imm_u32 >> 24, 0);
-            memory.increment_timestamp();
-            (
-                None,
-                [
-                    imm_u32 as u8,
-                    (imm_u32 >> 8) as u8,
-                    (imm_u32 >> 16) as u8,
-                    (imm_u32 >> 16) as u8,
-                ]
-                .map(F::from_canonical_u8),
-            )
-        } else {
-            let (id, data) = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, ptr_or_imm);
-            (Some(id), data)
-        }
-    }
-}
-
-impl<F: PrimeField32> ExecuteTxWrite<F> for Rv32RegisterExecuteTx<F> {
-    type Data = [F; RV32_REGISTER_NUM_LIMBS];
-
-    /// Returns `(id, prev_data)`
-    fn write(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        address: MemoryAddress<F, F>,
-        data: [F; RV32_REGISTER_NUM_LIMBS],
-    ) -> (RecordId, [F; RV32_REGISTER_NUM_LIMBS]) {
-        debug_assert_eq!(address.address_space.as_canonical_u32(), RV32_REGISTER_AS);
-        memory.write(address.address_space, address.pointer, data)
     }
 }
 
@@ -193,7 +137,7 @@ pub struct Rv32RegisterWriteCols<T> {
     pub aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 }
 
-const STATE_WIDTH: usize = size_of::<ExecutionState<u8>>();
+const STATE_WIDTH: usize = EXECUTION_STATE_WIDTH;
 const READ_WIDTH: usize = size_of::<Rv32RegisterReadCols<u8>>();
 const READ_IMM_WIDTH: usize = size_of::<Rv32RegOrImmReadCols<u8>>();
 const WRITE_WIDTH: usize = size_of::<Rv32RegisterWriteCols<u8>>();
@@ -255,9 +199,9 @@ impl<AB: AirBuilder> Rv32RegisterAirTx<'_, AB> {
     }
 }
 
-impl<AB: InteractionBuilder> AirTxRead<AB> for Rv32RegisterAirTx<'_, AB> {
-    type Data = [AB::Expr; RV32_REGISTER_NUM_LIMBS];
-
+impl<AB: InteractionBuilder> AirTxRead<AB, [AB::Expr; RV32_REGISTER_NUM_LIMBS]>
+    for Rv32RegisterAirTx<'_, AB>
+{
     fn read(
         &mut self,
         builder: &mut AB,
@@ -280,9 +224,9 @@ impl<AB: InteractionBuilder> AirTxRead<AB> for Rv32RegisterAirTx<'_, AB> {
     }
 }
 
-impl<AB: InteractionBuilder> AirTxMaybeRead<AB> for Rv32RegisterAirTx<'_, AB> {
-    type Data = [AB::Expr; RV32_REGISTER_NUM_LIMBS];
-
+impl<AB: InteractionBuilder> AirTxMaybeRead<AB, [AB::Expr; RV32_REGISTER_NUM_LIMBS]>
+    for Rv32RegisterAirTx<'_, AB>
+{
     /// Memory bridge multiplicity is equal to `address_space`, which is 0 or 1.
     /// In particular, dummy rows should set `address_space` to 0
     /// (a row of all zeros will satisfy constraints).
@@ -319,8 +263,9 @@ impl<AB: InteractionBuilder> AirTxMaybeRead<AB> for Rv32RegisterAirTx<'_, AB> {
     }
 }
 
-impl<AB: InteractionBuilder> AirTxWrite<AB> for Rv32RegisterAirTx<'_, AB> {
-    type Data = [AB::Expr; RV32_REGISTER_NUM_LIMBS];
+impl<AB: InteractionBuilder> AirTxWrite<AB, [AB::Expr; RV32_REGISTER_NUM_LIMBS]>
+    for Rv32RegisterAirTx<'_, AB>
+{
     fn write(
         &mut self,
         builder: &mut AB,
@@ -332,7 +277,7 @@ impl<AB: InteractionBuilder> AirTxWrite<AB> for Rv32RegisterAirTx<'_, AB> {
         let local: &Rv32RegisterWriteCols<AB::Var> = local.borrow();
         let timestamp = self.timestamp_pp();
         let addr = MemoryAddress::new(
-            AB::F::from_canonical_u32(RV32_REGISTER_AS),
+            AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
             local.ptr.into(),
         );
         self.port
@@ -348,26 +293,124 @@ impl<AB: InteractionBuilder> AirTxWrite<AB> for Rv32RegisterAirTx<'_, AB> {
     }
 }
 
+pub struct Rv32RegisterExecuteTx<F> {
+    from_pc: Option<u32>,
+    phantom: PhantomData<F>,
+    // Reminder: don't try to include `memory: &'a mut MemoryController<F>`
+    // because it will prevent shared borrowing of `MemoryController`
+}
+
+impl<F> Drop for Rv32RegisterExecuteTx<F> {
+    fn drop(&mut self) {
+        assert!(self.from_pc.is_none(), "Transaction was never ended");
+    }
+}
+
+impl<F> ExecuteTx for Rv32RegisterExecuteTx<F> {
+    fn start(&mut self, from_pc: u32) {
+        self.from_pc = Some(from_pc);
+    }
+
+    fn end(&mut self) -> u32 {
+        self.from_pc.unwrap() + DEFAULT_PC_STEP
+    }
+}
+
+impl<F: PrimeField32> ExecuteTxRead<F, [F; RV32_REGISTER_NUM_LIMBS]> for Rv32RegisterExecuteTx<F> {
+    type Record = RecordId;
+    // Note[jpw]: we don't fix `address_space` because `F::from_canonical_u32` is not const. The instruction will already have `address_space` defined, so we pass it directly.
+    fn read(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        address: MemoryAddress<F, F>,
+    ) -> (RecordId, [F; RV32_REGISTER_NUM_LIMBS]) {
+        debug_assert_eq!(address.address_space.as_canonical_u32(), RV32_REGISTER_AS);
+        memory.read(address.address_space, address.pointer)
+    }
+}
+
+impl<F: PrimeField32> ExecuteTxMaybeRead<F, [F; RV32_REGISTER_NUM_LIMBS]>
+    for Rv32RegisterExecuteTx<F>
+{
+    /// The record has the form `(record_id, imm)` where
+    /// - `record_id` is `None` if immediate.
+    /// - `imm` is immediate field element if immediate, otherwise 0.
+    type Record = (Option<RecordId>, F);
+    /// Returns `Some(record_id)` if register or `None` if immediate.
+    /// The `address.address_space` must be either 0 or 1.
+    /// If 0, then `address.pointer` is interpretted as the immediate value.
+    fn maybe_read(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        address: MemoryAddress<F, F>,
+    ) -> ((Option<RecordId>, F), [F; RV32_REGISTER_NUM_LIMBS]) {
+        let address_space = address.address_space;
+        let ptr_or_imm = address.pointer;
+        debug_assert!(
+            address_space.as_canonical_u32() == RV32_IMM_AS
+                || address_space.as_canonical_u32() == RV32_REGISTER_AS
+        );
+        if address_space.is_zero() {
+            let imm_u32 = ptr_or_imm.as_canonical_u32();
+            debug_assert_eq!(imm_u32 >> 24, 0);
+            memory.increment_timestamp();
+            (
+                (None, ptr_or_imm),
+                [
+                    imm_u32 as u8,
+                    (imm_u32 >> 8) as u8,
+                    (imm_u32 >> 16) as u8,
+                    (imm_u32 >> 16) as u8,
+                ]
+                .map(F::from_canonical_u8),
+            )
+        } else {
+            let (id, data) = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, ptr_or_imm);
+            ((Some(id), F::ZERO), data)
+        }
+    }
+}
+
+impl<F: PrimeField32> ExecuteTxWrite<F, [F; RV32_REGISTER_NUM_LIMBS]> for Rv32RegisterExecuteTx<F> {
+    type Record = RecordId;
+
+    /// Returns `(id, prev_data)`
+    fn write(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        address: MemoryAddress<F, F>,
+        data: [F; RV32_REGISTER_NUM_LIMBS],
+    ) -> (RecordId, [F; RV32_REGISTER_NUM_LIMBS]) {
+        debug_assert_eq!(address.address_space.as_canonical_u32(), RV32_REGISTER_AS);
+        memory.write(address.address_space, address.pointer, data)
+    }
+}
+
 pub struct Rv32RegisterTraceTx<'a, F> {
     memory: &'a OfflineMemory<F>,
+    from_state: ExecutionState<u32>,
     row_buffer: &'a mut [F],
     pos: usize,
 }
 
-impl<F: PrimeField32> Rv32RegisterTraceTx<'_, F> {
-    pub fn start(&mut self, state: ExecutionState<u32>) {
+impl<F: PrimeField32> TraceTx<F> for Rv32RegisterTraceTx<'_, F> {
+    fn start(&mut self) {
         let pos = self.pos;
         let buffer: &mut ExecutionState<F> = self.row_buffer[pos..pos + STATE_WIDTH].borrow_mut();
         self.pos += STATE_WIDTH;
-        buffer.pc = F::from_canonical_u32(state.pc);
-        buffer.timestamp = F::from_canonical_u32(state.timestamp);
+        buffer.pc = F::from_canonical_u32(self.from_state.pc);
+        buffer.timestamp = F::from_canonical_u32(self.from_state.timestamp);
     }
 
-    pub fn end(&mut self) {
+    fn end(&mut self) {
         // do nothing
     }
+}
 
-    pub fn read_register(&mut self, id: RecordId) {
+impl<F: PrimeField32> TraceTxRead<F> for Rv32RegisterTraceTx<'_, F> {
+    type Record = RecordId;
+
+    fn read(&mut self, id: RecordId) {
         let pos = self.pos;
         let buffer: &mut Rv32RegisterReadCols<_> =
             self.row_buffer[pos..pos + READ_WIDTH].borrow_mut();
@@ -379,9 +422,13 @@ impl<F: PrimeField32> Rv32RegisterTraceTx<'_, F> {
         buffer.ptr = record.pointer;
         aux_factory.generate_read_aux(record, &mut buffer.aux);
     }
+}
+
+impl<F: PrimeField32> TraceTxMaybeRead<F> for Rv32RegisterTraceTx<'_, F> {
+    type Record = (Option<RecordId>, F);
 
     /// `id` is `None` if immediate.
-    pub fn read_register_or_imm(&mut self, id: Option<RecordId>, imm: F) {
+    fn maybe_read(&mut self, (id, imm): (Option<RecordId>, F)) {
         let pos = self.pos;
         let buffer: &mut Rv32RegOrImmReadCols<_> =
             self.row_buffer[pos..pos + READ_IMM_WIDTH].borrow_mut();
@@ -398,8 +445,12 @@ impl<F: PrimeField32> Rv32RegisterTraceTx<'_, F> {
             buffer.address_space = F::ZERO;
         }
     }
+}
 
-    pub fn write_register(&mut self, id: RecordId) {
+impl<F: PrimeField32> TraceTxWrite<F> for Rv32RegisterTraceTx<'_, F> {
+    type Record = RecordId;
+
+    fn write(&mut self, id: RecordId) {
         let pos = self.pos;
         let buffer: &mut Rv32RegisterWriteCols<_> =
             self.row_buffer[pos..pos + WRITE_WIDTH].borrow_mut();

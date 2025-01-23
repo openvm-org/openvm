@@ -1,6 +1,11 @@
-use openvm_stark_backend::p3_air::AirBuilder;
+//! Traits for AIR, execute, and trace transactions.
+//! These are used with the integration API when a core implementation wishes
+//! to be generic over the adapter. However, it is not _required_ to use these traits.
 
-use crate::system::memory::{MemoryAddress, MemoryController, RecordId};
+use openvm_stark_backend::p3_air::AirBuilder;
+use serde::{de::DeserializeOwned, Serialize};
+
+use crate::system::memory::{MemoryAddress, MemoryController};
 
 pub trait AirTx<AB: AirBuilder> {
     /// Start the constraints for a single instruction.
@@ -47,71 +52,96 @@ pub trait AirTx<AB: AirBuilder> {
     );
 }
 
-pub trait AirTxRead<AB: AirBuilder> {
-    type Data;
-
+pub trait AirTxRead<AB: AirBuilder, Data> {
     /// Return the memory address that was read from.
     /// The return type is needed to get the instruction.
     fn read(
         &mut self,
         builder: &mut AB,
-        data: Self::Data,
+        data: Data,
         multiplicity: impl Into<AB::Expr>,
     ) -> MemoryAddress<AB::Expr, AB::Expr>;
 }
 
-pub trait AirTxMaybeRead<AB: AirBuilder> {
-    type Data;
-
+pub trait AirTxMaybeRead<AB: AirBuilder, Data> {
     /// Apply constraints that may conditionally do a read.
     /// For example, either read from memory or handle immediates.
     fn maybe_read(
         &mut self,
         builder: &mut AB,
-        data: Self::Data,
+        data: Data,
         multiplicity: impl Into<AB::Expr>,
     ) -> MemoryAddress<AB::Expr, AB::Expr>;
 }
 
-pub trait AirTxWrite<AB: AirBuilder> {
-    type Data;
-
+pub trait AirTxWrite<AB: AirBuilder, Data> {
     fn write(
         &mut self,
         builder: &mut AB,
-        data: Self::Data,
+        data: Data,
         multiplicity: impl Into<AB::Expr>,
     ) -> MemoryAddress<AB::Expr, AB::Expr>;
 }
 
-pub trait ExecuteTxRead<F> {
-    type Data;
+pub trait ExecuteTx {
+    fn start(&mut self, from_pc: u32);
+
+    /// Returns `to_pc`.
+    fn end(&mut self) -> u32;
+}
+
+pub trait ExecuteTxRead<F, Data> {
+    type Record: Clone + Send + Serialize + DeserializeOwned;
 
     fn read(
         &mut self,
         memory: &mut MemoryController<F>,
         address: MemoryAddress<F, F>,
-    ) -> (RecordId, Self::Data);
+    ) -> (Self::Record, Data);
 }
 
-pub trait ExecuteTxWrite<F> {
-    type Data;
+pub trait ExecuteTxWrite<F, Data> {
+    type Record: Clone + Send + Serialize + DeserializeOwned;
 
     /// Returns the previous data at the address.
     fn write(
         &mut self,
         memory: &mut MemoryController<F>,
         address: MemoryAddress<F, F>,
-        data: Self::Data,
-    ) -> (RecordId, Self::Data);
+        data: Data,
+    ) -> (Self::Record, Data);
 }
 
-pub trait ExecuteTxMaybeRead<F> {
-    type Data;
+pub trait ExecuteTxMaybeRead<F, Data> {
+    type Record: Clone + Send + Serialize + DeserializeOwned;
 
     fn maybe_read(
         &mut self,
         memory: &mut MemoryController<F>,
         address: MemoryAddress<F, F>,
-    ) -> (Option<RecordId>, Self::Data);
+    ) -> (Self::Record, Data);
+}
+
+pub trait TraceTx<F> {
+    fn start(&mut self);
+
+    fn end(&mut self);
+}
+
+pub trait TraceTxRead<F> {
+    type Record: Send + Serialize + DeserializeOwned;
+
+    fn read(&mut self, record: Self::Record);
+}
+
+pub trait TraceTxMaybeRead<F> {
+    type Record: Clone + Send + Serialize + DeserializeOwned;
+
+    fn maybe_read(&mut self, record: Self::Record);
+}
+
+pub trait TraceTxWrite<F> {
+    type Record: Clone + Send + Serialize + DeserializeOwned;
+
+    fn write(&mut self, record: Self::Record);
 }

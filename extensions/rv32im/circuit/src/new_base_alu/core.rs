@@ -6,8 +6,8 @@ use std::{
 use openvm_circuit::{
     arch::{
         new_integration_api::{VmAdapter, VmCoreAir, VmCoreChip},
-        AirTx, AirTxMaybeRead, AirTxRead, AirTxWrite, ExecuteTxMaybeRead, ExecuteTxRead,
-        ExecuteTxWrite, Result,
+        AirTx, AirTxMaybeRead, AirTxRead, AirTxWrite, ExecuteTx, ExecuteTxMaybeRead, ExecuteTxRead,
+        ExecuteTxWrite, Result, TraceTx, TraceTxMaybeRead, TraceTxRead, TraceTxWrite,
     },
     system::memory::{MemoryAddress, MemoryController},
 };
@@ -65,9 +65,9 @@ impl<AB, TX, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, TX>
 where
     AB: InteractionBuilder,
     TX: AirTx<AB>
-        + AirTxRead<AB, Data = [AB::Expr; NUM_LIMBS]>
-        + AirTxMaybeRead<AB, Data = [AB::Expr; NUM_LIMBS]>
-        + AirTxWrite<AB, Data = [AB::Expr; NUM_LIMBS]>,
+        + AirTxRead<AB, [AB::Expr; NUM_LIMBS]>
+        + AirTxMaybeRead<AB, [AB::Expr; NUM_LIMBS]>
+        + AirTxWrite<AB, [AB::Expr; NUM_LIMBS]>,
 {
     fn eval(&self, builder: &mut AB, local_core: &[AB::Var], tx: &mut TX) {
         let cols: &BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
@@ -169,17 +169,25 @@ where
     }
 }
 
-// TODO: store adapter records
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound = "T: Serialize + DeserializeOwned")]
-pub struct BaseAluCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(bound = "F: Serialize + DeserializeOwned")]
+pub struct BaseAluCoreRecord<F, TX, const NUM_LIMBS: usize>
+where
+    TX: ExecuteTxRead<F, [F; NUM_LIMBS]>
+        + ExecuteTxMaybeRead<F, [F; NUM_LIMBS]>
+        + ExecuteTxWrite<F, [F; NUM_LIMBS]>,
+{
     pub opcode: BaseAluOpcode,
     #[serde(with = "BigArray")]
-    pub a: [T; NUM_LIMBS],
+    pub a: [F; NUM_LIMBS],
     #[serde(with = "BigArray")]
-    pub b: [T; NUM_LIMBS],
+    pub b: [F; NUM_LIMBS],
     #[serde(with = "BigArray")]
-    pub c: [T; NUM_LIMBS],
+    pub c: [F; NUM_LIMBS],
+
+    pub a_record: <TX as ExecuteTxWrite<F, [F; NUM_LIMBS]>>::Record,
+    pub b_record: <TX as ExecuteTxRead<F, [F; NUM_LIMBS]>>::Record,
+    pub c_record: <TX as ExecuteTxMaybeRead<F, [F; NUM_LIMBS]>>::Record,
 }
 
 pub struct BaseAluCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
@@ -207,11 +215,18 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, A>
 where
     F: PrimeField32,
     A: VmAdapter<F>,
-    for<'tx> A::ExecuteTx<'tx>: ExecuteTxRead<F, Data = [F; NUM_LIMBS]>
-        + ExecuteTxMaybeRead<F, Data = [F; NUM_LIMBS]>
-        + ExecuteTxWrite<F, Data = [F; NUM_LIMBS]>,
+    A::ExecuteTx: ExecuteTx
+        + ExecuteTxRead<F, [F; NUM_LIMBS]>
+        + ExecuteTxMaybeRead<F, [F; NUM_LIMBS]>
+        + ExecuteTxWrite<F, [F; NUM_LIMBS]>,
+    for<'tx> A::TraceTx<'tx>: TraceTx<F>
+        + TraceTxRead<F, Record = <A::ExecuteTx as ExecuteTxRead<F, [F; NUM_LIMBS]>>::Record>
+        + TraceTxMaybeRead<
+            F,
+            Record = <A::ExecuteTx as ExecuteTxMaybeRead<F, [F; NUM_LIMBS]>>::Record,
+        > + TraceTxWrite<F, Record = <A::ExecuteTx as ExecuteTxWrite<F, [F; NUM_LIMBS]>>::Record>,
 {
-    type Record = BaseAluCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
+    type Record = BaseAluCoreRecord<F, A::ExecuteTx, NUM_LIMBS>;
     type Air = BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>;
 
     fn execute_instruction(
@@ -219,8 +234,8 @@ where
         memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
         from_pc: u32,
-        tx: &mut A::ExecuteTx<'_>,
-    ) -> Result<Self::Record> {
+        tx: &mut A::ExecuteTx,
+    ) -> Result<(u32, BaseAluCoreRecord<F, A::ExecuteTx, NUM_LIMBS>)> {
         let Instruction {
             opcode,
             a,
@@ -232,8 +247,9 @@ where
         } = *instruction;
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        let (rs1_id, rs1_data) = tx.read(memory, MemoryAddress::new(d, b));
-        let (rs2_id, rs2_data) = tx.maybe_read(memory, MemoryAddress::new(e, c));
+        tx.start(from_pc);
+        let (rs1_record, rs1_data) = tx.read(memory, MemoryAddress::new(d, b));
+        let (rs2_record, rs2_data) = tx.maybe_read(memory, MemoryAddress::new(e, c));
         let b = rs1_data.map(|x| x.as_canonical_u32());
         let c = rs2_data.map(|y| y.as_canonical_u32());
         let rd_data = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &b, &c);
@@ -249,31 +265,45 @@ where
         }
 
         let rd_data = rd_data.map(F::from_canonical_u32);
-        let (rd_id, _) = tx.write(memory, MemoryAddress::new(d, a), rd_data.clone());
-        let record = Self::Record {
+        let (rd_record, _) = tx.write(memory, MemoryAddress::new(d, a), rd_data);
+        let record = BaseAluCoreRecord {
             opcode: local_opcode,
             a: rd_data,
             b: rs1_data,
             c: rs2_data,
+            a_record: rd_record,
+            b_record: rs1_record,
+            c_record: rs2_record,
         };
+        let to_pc = tx.end();
 
-        Ok(record)
+        Ok((to_pc, record))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", BaseAluOpcode::from_usize(opcode - self.air.offset))
     }
 
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
-        row_slice.a = record.a;
-        row_slice.b = record.b;
-        row_slice.c = record.c;
-        row_slice.opcode_add_flag = F::from_bool(record.opcode == BaseAluOpcode::ADD);
-        row_slice.opcode_sub_flag = F::from_bool(record.opcode == BaseAluOpcode::SUB);
-        row_slice.opcode_xor_flag = F::from_bool(record.opcode == BaseAluOpcode::XOR);
-        row_slice.opcode_or_flag = F::from_bool(record.opcode == BaseAluOpcode::OR);
-        row_slice.opcode_and_flag = F::from_bool(record.opcode == BaseAluOpcode::AND);
+    fn generate_trace_row(
+        &self,
+        row_core: &mut [F],
+        record: BaseAluCoreRecord<F, A::ExecuteTx, NUM_LIMBS>,
+        tx: &mut A::TraceTx<'_>,
+    ) {
+        let buffer: &mut BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_core.borrow_mut();
+        tx.start();
+        tx.read(record.b_record);
+        tx.maybe_read(record.c_record);
+        tx.write(record.a_record);
+        buffer.a = record.a;
+        buffer.b = record.b;
+        buffer.c = record.c;
+        buffer.opcode_add_flag = F::from_bool(record.opcode == BaseAluOpcode::ADD);
+        buffer.opcode_sub_flag = F::from_bool(record.opcode == BaseAluOpcode::SUB);
+        buffer.opcode_xor_flag = F::from_bool(record.opcode == BaseAluOpcode::XOR);
+        buffer.opcode_or_flag = F::from_bool(record.opcode == BaseAluOpcode::OR);
+        buffer.opcode_and_flag = F::from_bool(record.opcode == BaseAluOpcode::AND);
+        tx.end();
     }
 
     fn air(&self) -> &Self::Air {
