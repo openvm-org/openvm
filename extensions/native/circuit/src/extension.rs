@@ -58,10 +58,10 @@ impl NativeConfig {
         self
     }
 
-    pub fn aggregation(num_public_values: usize, max_constraint_degree: usize) -> Self {
+    pub fn aggregation(num_public_values: usize, poseidon2_max_constraint_degree: usize) -> Self {
         Self {
             system: SystemConfig::new(
-                max_constraint_degree,
+                poseidon2_max_constraint_degree,
                 MemoryConfig {
                     max_access_adapter_n: 8,
                     ..Default::default()

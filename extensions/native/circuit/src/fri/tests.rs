@@ -7,12 +7,7 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
-    utils::create_seeded_rng,
-};
+use openvm_stark_sdk::{engine::StarkFriEngine, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
 use super::{super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningChip, EXT_DEG};
@@ -123,15 +118,8 @@ fn fri_mat_opening_air_test() {
         assert_eq!(result, tester.read(address_space, result_pointer));
     }
 
-    let mut tester = tester.build_babybear_poseidon2().load(chip).finalize();
-    // Degree needs >= 4
-    tester
-        .test::<BabyBearPoseidon2Engine, _>(|| {
-            BabyBearPoseidon2Engine::new(
-                FriParameters::standard_with_100_bits_conjectured_security(2),
-            )
-        })
-        .expect("Verification failed");
+    let mut tester = tester.build().load(chip).finalize();
+    tester.simple_test().expect("Verification failed");
 
     disable_debug_builder();
     // negative test pranking each value
@@ -148,13 +136,7 @@ fn fri_mat_opening_air_test() {
 
         // Run a test after pranking each row
         assert_eq!(
-            tester
-                .test::<BabyBearPoseidon2Engine, _>(|| {
-                    BabyBearPoseidon2Engine::new(
-                        FriParameters::standard_with_100_bits_conjectured_security(2),
-                    )
-                })
-                .err(),
+            tester.simple_test().err(),
             Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
