@@ -3,26 +3,14 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
-use openvm_stark_backend::{
-    Chip,
-    ChipUsageGetter,
-    config::{StarkGenericConfig, Val},
-    interaction::InteractionBuilder,
-    p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput, rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir}, Stateful,
-};
-use serde::{Deserialize, Serialize};
-
 use openvm_circuit::{
     arch::{
         ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor, Streams,
     },
     system::{
         memory::{
-            MemoryAddress,
-            MemoryAuxColsFactory, MemoryController, offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols}, OfflineMemory, RecordId,
+            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -34,11 +22,22 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
-    LocalOpcode,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    prover::types::AirProofInput,
+    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip, ChipUsageGetter, Stateful,
+};
+use serde::{Deserialize, Serialize};
 
 use crate::adapters::{compose, decompose};
 
@@ -340,11 +339,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
             record.hints.push((data, write));
 
             for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
-                let mem_ptr_limbs = decompose::<F>(
-                    mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
+                let mem_ptr_limbs =
+                    decompose::<F>(mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index));
+                self.bitwise_lookup_chip.request_range(
+                    mem_ptr_limbs[2 * i].as_canonical_u32(),
+                    mem_ptr_limbs[(2 * i) + 1].as_canonical_u32(),
                 );
-                self.bitwise_lookup_chip
-                    .request_range(mem_ptr_limbs[2 * i].as_canonical_u32(), mem_ptr_limbs[(2 * i) + 1].as_canonical_u32());
                 self.bitwise_lookup_chip.request_range(
                     data[2 * i].as_canonical_u32(),
                     data[2 * i + 1].as_canonical_u32(),
