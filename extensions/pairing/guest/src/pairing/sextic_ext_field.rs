@@ -78,12 +78,12 @@ pub(crate) fn sextic_tower_mul_intrinsic<P: super::PairingIntrinsics>(
     rhs: *const u8,
 ) {
     custom_insn_r!(
-        OPCODE,
-        PAIRING_FUNCT3,
-        shifted_funct7::<P>(PairingBaseFunct7::Fp12Mul),
-        dst,
-        lhs,
-        rhs
+        opcode = OPCODE,
+        funct3 = PAIRING_FUNCT3,
+        funct7 = shifted_funct7::<P>(PairingBaseFunct7::Fp12Mul),
+        rd = In dst,
+        rs1 = In lhs,
+        rs2 = In rhs
     );
 }
 

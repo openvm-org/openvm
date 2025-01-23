@@ -7,11 +7,13 @@ on:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
     paths:
-      - "crates/circuits/**"
-      - "crates/vm/**"
-      - "crates/toolchain/**"
-      - "extensions/**"
       - "benchmarks/**"
+      - "crates/circuits/**"
+      - "crates/toolchain/**"
+      - "crates/prof/**"
+      - "crates/sdk/**"
+      - "crates/vm/**"
+      - "extensions/**"
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
   workflow_dispatch:

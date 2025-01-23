@@ -4,7 +4,7 @@ use halo2curves_axiom::{
     bn256::{Fq12, Gt},
     pairing::MillerLoopResult,
 };
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::Pow;
 use openvm_algebra_guest::ExpBytes;
 

@@ -42,13 +42,13 @@ use prover::{vm::ContinuationVmProof, SingleSegmentContinuationProver};
 
 pub mod commit;
 pub mod config;
+pub mod keygen;
 pub mod prover;
 pub mod static_verifier;
-
-pub mod keygen;
 pub mod verifier;
 
 mod stdin;
+use static_verifier::StaticVerifierPvHandler;
 pub use stdin::*;
 pub mod fs;
 
@@ -58,10 +58,10 @@ use crate::{
     prover::{AppProver, ContinuationProver},
 };
 
-pub(crate) type SC = BabyBearPoseidon2Config;
-pub(crate) type C = InnerConfig;
-pub(crate) type F = BabyBear;
-pub(crate) type RootSC = BabyBearPoseidon2RootConfig;
+pub type SC = BabyBearPoseidon2Config;
+pub type C = InnerConfig;
+pub type F = BabyBear;
+pub type RootSC = BabyBearPoseidon2RootConfig;
 pub type NonRootCommittedExe = VmCommittedExe<SC>;
 
 pub struct Sdk;
@@ -178,8 +178,9 @@ impl Sdk {
         &self,
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
+        pv_handler: Option<&impl StaticVerifierPvHandler>,
     ) -> Result<AggProvingKey> {
-        let agg_pk = AggProvingKey::keygen(config, reader);
+        let agg_pk = AggProvingKey::keygen(config, reader, pv_handler);
         Ok(agg_pk)
     }
 

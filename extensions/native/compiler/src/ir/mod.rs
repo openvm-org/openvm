@@ -4,7 +4,6 @@ pub use instructions::*;
 use openvm_stark_backend::p3_field::{ExtensionField, PrimeField, TwoAdicField};
 pub use poseidon::{DIGEST_SIZE, PERMUTATION_WIDTH};
 pub use ptr::*;
-pub use ref_ptr::*;
 pub use select::*;
 pub use symbolic::*;
 pub use types::*;
@@ -18,12 +17,12 @@ mod fri;
 mod instructions;
 mod poseidon;
 mod ptr;
-mod ref_ptr;
 mod select;
 mod symbolic;
 mod types;
 mod utils;
 mod var;
+mod verify_batch;
 
 pub trait Config: Clone + Default {
     type N: PrimeField;

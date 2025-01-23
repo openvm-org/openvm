@@ -63,15 +63,17 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let modulus = modulus.expect("modulus parameter is required");
         let modulus_bytes = string_to_bytes(&modulus);
         let mut limbs = modulus_bytes.len();
+        let mut block_size = 32;
 
-        if limbs < 32 {
+        if limbs <= 32 {
             limbs = 32;
-            proc_macro::Diagnostic::new(proc_macro::Level::Warning, "`limbs` has been set to 32 because it was too small; this is going to be changed once we support more flexible reads").emit();
+        } else if limbs <= 48 {
+            limbs = 48;
+            block_size = 16;
+        } else {
+            panic!("limbs must be at most 48");
         }
 
-        // The largest power of two so that at most 10% of all space is wasted
-        let block_size = 1usize << ((limbs - 1) ^ (limbs + limbs / 9)).ilog2();
-        let limbs = limbs.next_multiple_of(block_size);
         let modulus_bytes = modulus_bytes
             .into_iter()
             .chain(vec![0u8; limbs])
@@ -195,7 +197,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         let modulus = Self::modulus_biguint();
-                        let inv = openvm::utils::uint_mod_inverse(&other.as_biguint(), &modulus);
+                        let inv = other.as_biguint().modinv(&modulus).unwrap();
                         *self = Self::from_biguint((self.as_biguint() * inv) % modulus);
                     }
                     #[cfg(target_os = "zkvm")]
@@ -287,7 +289,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         let modulus = Self::modulus_biguint();
-                        let inv = openvm::utils::uint_mod_inverse(&other.as_biguint(), &modulus);
+                        let inv = other.as_biguint().modinv(&modulus).unwrap();
                         Self::from_biguint((self.as_biguint() * inv) % modulus)
                     }
                     #[cfg(target_os = "zkvm")]
@@ -380,18 +382,18 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
 
                     #[cfg(not(target_os = "zkvm"))]
-                    fn modulus_biguint() -> num_bigint_dig::BigUint {
-                        num_bigint_dig::BigUint::from_bytes_le(&Self::MODULUS)
+                    fn modulus_biguint() -> num_bigint::BigUint {
+                        num_bigint::BigUint::from_bytes_le(&Self::MODULUS)
                     }
 
                     #[cfg(not(target_os = "zkvm"))]
-                    fn from_biguint(biguint: num_bigint_dig::BigUint) -> Self {
+                    fn from_biguint(biguint: num_bigint::BigUint) -> Self {
                         Self(openvm::utils::biguint_to_limbs(&biguint))
                     }
 
                     #[cfg(not(target_os = "zkvm"))]
-                    fn as_biguint(&self) -> num_bigint_dig::BigUint {
-                        num_bigint_dig::BigUint::from_bytes_le(self.as_le_bytes())
+                    fn as_biguint(&self) -> num_bigint::BigUint {
+                        num_bigint::BigUint::from_bytes_le(self.as_le_bytes())
                     }
 
                     fn neg_assign(&mut self) {
@@ -717,14 +719,14 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         let modulus_bytes = string_to_bytes(&modulus);
         let mut limbs = modulus_bytes.len();
 
-        if limbs < 32 {
+        if limbs <= 32 {
             limbs = 32;
-            proc_macro::Diagnostic::new(proc_macro::Level::Warning, "`limbs` has been set to 32 because it was too small; this is going to be changed once we support more flexible reads").emit();
+        } else if limbs <= 48 {
+            limbs = 48;
+        } else {
+            panic!("limbs must be at most 48");
         }
 
-        // The largest power of two so that at most 10% of all space is wasted
-        let block_size = 1usize << ((limbs - 1) ^ (limbs + limbs / 9)).ilog2();
-        let limbs = limbs.next_multiple_of(block_size);
         let modulus_bytes = modulus_bytes
             .into_iter()
             .chain(vec![0u8; limbs])
@@ -779,12 +781,12 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                 #[no_mangle]
                 extern "C" fn #func_name(rd: usize, rs1: usize, rs2: usize) {
                     openvm::platform::custom_insn_r!(
-                        ::openvm_algebra_guest::OPCODE,
-                        ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
-                        ::openvm_algebra_guest::ModArithBaseFunct7::#local_opcode as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                        rd,
-                        rs1,
-                        rs2
+                        opcode = ::openvm_algebra_guest::OPCODE,
+                        funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                        funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::#local_opcode as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                        rd = In rd,
+                        rs1 = In rs1,
+                        rs2 = In rs2
                     )
                 }
             });
@@ -796,17 +798,14 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #is_eq_extern_func(rs1: usize, rs2: usize) -> bool {
                 let mut x: u32;
-                unsafe {
-                    core::arch::asm!(
-                        ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
-                        opcode = const ::openvm_algebra_guest::OPCODE,
-                        funct3 = const ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
-                        funct7 = const ::openvm_algebra_guest::ModArithBaseFunct7::IsEqMod as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                        rd = out(reg) x,
-                        rs1 = in(reg) rs1,
-                        rs2 = in(reg) rs2
-                    );
-                }
+                openvm::platform::custom_insn_r!(
+                    opcode = ::openvm_algebra_guest::OPCODE,
+                    funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                    funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::IsEqMod as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    rd = Out x,
+                    rs1 = In rs1,
+                    rs2 = In rs2
+                );
                 x != 0
             }
         });
@@ -833,36 +832,37 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0`, `x1` or `x2`, into a `SETUP_ADDSUB`, `SETUP_MULDIV` or `SETUP_ISEQ` instruction.
                     let mut uninit: core::mem::MaybeUninit<[u8; #limbs]> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(
-                        ::openvm_algebra_guest::OPCODE,
-                        ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                        ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
+                        opcode = ::openvm_algebra_guest::OPCODE,
+                        funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                        funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
                             + #mod_idx
                                 * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        remaining.as_ptr(),
-                        "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
+                        rd = In uninit.as_mut_ptr(),
+                        rs1 = In remaining.as_ptr(),
+                        rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
                     );
                     openvm::platform::custom_insn_r!(
-                        ::openvm_algebra_guest::OPCODE,
-                        ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                        ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
+                        opcode = ::openvm_algebra_guest::OPCODE,
+                        funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                        funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
                             + #mod_idx
                                 * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        remaining.as_ptr(),
-                        "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
+                        rd = In uninit.as_mut_ptr(),
+                        rs1 = In remaining.as_ptr(),
+                        rs2 = Const "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
                     );
                     unsafe {
                         // This should not be x0:
                         let mut tmp = uninit.as_mut_ptr() as usize;
-                        // rs2="x2" will be parsed as 2 and therefore transpiled to SETUP_ISEQ
-                        core::arch::asm!(
-                            ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, x2",
-                            opcode = const ::openvm_algebra_guest::OPCODE,
-                            funct3 = const ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
-                            funct7 = const ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                            rd = inout(reg) tmp,
-                            rs1 = in(reg) remaining.as_ptr(),
+                        openvm::platform::custom_insn_r!(
+                            opcode = ::openvm_algebra_guest::OPCODE,
+                            funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                            funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
+                                + #mod_idx
+                                    * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                            rd = InOut tmp,
+                            rs1 = In remaining.as_ptr(),
+                            rs2 = Const "x2" // will be parsed as 2 and therefore transpiled to SETUP_ISEQ
                         );
                         // rd = inout(reg) is necessary because this instruction will write to `rd` register
                     }
@@ -879,7 +879,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         mod openvm_intrinsics_ffi {
             #(#externs)*
         }
-        #[allow(non_snake_case)]
+        #[allow(non_snake_case, non_upper_case_globals)]
         pub mod openvm_intrinsics_meta_do_not_type_this_by_yourself {
             pub const two_modular_limbs_list: [u8; #total_limbs_cnt] = [#(#two_modular_limbs_flattened_list),*];
             pub const limb_list_borders: [usize; #cnt_limbs_list_len] = [#(#limb_list_borders),*];

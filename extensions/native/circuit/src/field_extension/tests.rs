@@ -7,7 +7,7 @@ use openvm_circuit::arch::testing::{
     memory::{gen_address_space, gen_pointer},
     VmChipTestBuilder,
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldExtensionOpcode;
 use openvm_stark_backend::{
     p3_field::{extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra},
@@ -35,7 +35,7 @@ fn new_field_extension_air_test() {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        FieldExtensionCoreChip::new(0),
+        FieldExtensionCoreChip::new(),
         tester.offline_memory_mutex_arc(),
     );
     let trace_width = chip.trace_width();
@@ -66,7 +66,7 @@ fn new_field_extension_air_test() {
         tester.execute(
             &mut chip,
             &Instruction::from_usize(
-                VmOpcode::from_usize(opcode as usize),
+                opcode.global_opcode(),
                 [result_address, address1, address2, as_d, as_e],
             ),
         );

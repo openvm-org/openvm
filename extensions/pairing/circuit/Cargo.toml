@@ -27,7 +27,7 @@ openvm-rv32-adapters = { workspace = true }
 openvm-ecc-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
 
-num-bigint-dig = { workspace = true }
+num-bigint = { workspace = true }
 num-traits = { workspace = true }
 strum = { workspace = true }
 derive_more = { workspace = true }

@@ -16,7 +16,7 @@ pub mod internal;
 pub mod leaf;
 pub mod minimal;
 pub mod root;
-pub(crate) mod utils;
+pub mod utils;
 
 const SBOX_SIZE: usize = 7;
 

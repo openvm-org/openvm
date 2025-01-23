@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
 use hex::FromHex;
 use openvm_circuit::arch::{
@@ -6,9 +6,9 @@ use openvm_circuit::arch::{
     BITWISE_OP_LOOKUP_BUS,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError,
@@ -31,7 +31,7 @@ fn build_keccak256_test(
     io: Vec<(Vec<u8>, Option<[u8; 32]>, Option<[u8; 32]>)>,
 ) -> VmChipTester<BabyBearBlake3Config> {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<8>::new(bitwise_bus));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<8>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = KeccakVmChip::new(
@@ -40,7 +40,7 @@ fn build_keccak256_test(
         tester.memory_bridge(),
         tester.address_bits(),
         bitwise_chip.clone(),
-        0,
+        Rv32KeccakOpcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
@@ -65,7 +65,7 @@ fn build_keccak256_test(
         tester.execute(
             &mut chip,
             &Instruction::from_isize(
-                VmOpcode::from_usize(Rv32KeccakOpcode::KECCAK256 as usize),
+                Rv32KeccakOpcode::KECCAK256.global_opcode(),
                 a as isize,
                 b as isize,
                 c as isize,

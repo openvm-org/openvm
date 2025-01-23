@@ -7,7 +7,7 @@ use openvm_circuit::{
     },
     utils::{u32_into_limbs, u32_sign_extend},
 };
-use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -89,10 +89,7 @@ fn set_and_execute(
 
     tester.execute(
         chip,
-        &Instruction::from_usize(
-            VmOpcode::with_default_offset(opcode),
-            [a, b, imm as usize, 1, mem_as],
-        ),
+        &Instruction::from_usize(opcode.global_opcode(), [a, b, imm as usize, 1, mem_as]),
     );
 
     let write_data = run_write_data(opcode, read_data, some_prev_data, shift_amount);
@@ -124,10 +121,9 @@ fn rand_loadstore_test() {
         tester.memory_bridge(),
         tester.address_bits(),
         range_checker_chip.clone(),
-        Rv32LoadStoreOpcode::default_offset(),
     );
 
-    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
+    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
@@ -174,10 +170,9 @@ fn run_negative_loadstore_test(
         tester.memory_bridge(),
         tester.address_bits(),
         range_checker_chip.clone(),
-        Rv32LoadStoreOpcode::default_offset(),
     );
 
-    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
+    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
     let adapter_width = BaseAir::<F>::width(adapter.air());
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
@@ -296,9 +291,8 @@ fn execute_roundtrip_sanity_test() {
         tester.memory_bridge(),
         tester.address_bits(),
         range_checker_chip.clone(),
-        Rv32LoadStoreOpcode::default_offset(),
     );
-    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
+    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;

@@ -56,6 +56,7 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 - [`openvm-instructions-derive`](../../crates/toolchain/instructions/derive): Procedural macros to derive traits for OpenVM instructions.
 - [`openvm-macros-common`](../../crates/toolchain/macros): Common library for parsing utilities shared across procedural macros used for custom instruction setup in guest programs.
 - [`openvm-toolchain-tests`](../../crates/toolchain/tests): Includes all official RISC-V 32-bit IM test vectors and transpiler tests. Also, provides utilities for writing integration tests for custom extensions.
+- [`openvm-custom-insn`](../../crates/toolchain/custom_insn): Custom instruction macros for use in guest programs.
 
 ### Circuit Framework
 

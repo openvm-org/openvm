@@ -75,7 +75,7 @@ pub struct Rv32MultAdapterCols<T> {
     pub rd_ptr: T,
     pub rs1_ptr: T,
     pub rs2_ptr: T,
-    pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; 2],
+    pub reads_aux: [MemoryReadAuxCols<T>; 2],
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 }
 
@@ -245,11 +245,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
         let rs2 = memory.record_by_id(read_record.rs2);
         row_slice.rs1_ptr = rs1.pointer;
         row_slice.rs2_ptr = rs2.pointer;
-        row_slice.reads_aux = [
-            aux_cols_factory.make_read_aux_cols(rs1),
-            aux_cols_factory.make_read_aux_cols(rs2),
-        ];
-        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(rd);
+        aux_cols_factory.generate_read_aux(rs1, &mut row_slice.reads_aux[0]);
+        aux_cols_factory.generate_read_aux(rs2, &mut row_slice.reads_aux[1]);
+        aux_cols_factory.generate_write_aux(rd, &mut row_slice.writes_aux);
     }
 
     fn air(&self) -> &Self::Air {

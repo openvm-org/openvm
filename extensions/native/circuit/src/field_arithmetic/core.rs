@@ -6,7 +6,7 @@ use openvm_circuit::arch::{
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldArithmeticOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -32,9 +32,7 @@ pub struct FieldArithmeticCoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct FieldArithmeticCoreAir {
-    offset: usize,
-}
+pub struct FieldArithmeticCoreAir {}
 
 impl<F: Field> BaseAir<F> for FieldArithmeticCoreAir {
     fn width(&self) -> usize {
@@ -95,10 +93,14 @@ where
             writes: [[cols.a.into()]].into(),
             instruction: MinimalInstruction {
                 is_valid,
-                opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
+                opcode: VmCoreAir::<AB, I>::expr_to_global_expr(self, expected_opcode),
             }
             .into(),
         }
+    }
+
+    fn start_offset(&self) -> usize {
+        FieldArithmeticOpcode::CLASS_OFFSET
     }
 }
 
@@ -115,10 +117,16 @@ pub struct FieldArithmeticCoreChip {
 }
 
 impl FieldArithmeticCoreChip {
-    pub fn new(offset: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            air: FieldArithmeticCoreAir { offset },
+            air: FieldArithmeticCoreAir {},
         }
+    }
+}
+
+impl Default for FieldArithmeticCoreChip {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -138,8 +146,9 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode =
-            FieldArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let local_opcode = FieldArithmeticOpcode::from_usize(
+            opcode.local_opcode_idx(FieldArithmeticOpcode::CLASS_OFFSET),
+        );
 
         let data: [[F; 1]; 2] = reads.into();
         let b = data[0][0];
@@ -164,7 +173,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            FieldArithmeticOpcode::from_usize(opcode - self.air.offset)
+            FieldArithmeticOpcode::from_usize(opcode - FieldArithmeticOpcode::CLASS_OFFSET)
         )
     }
 

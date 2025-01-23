@@ -10,7 +10,7 @@ use openvm_circuit::arch::{
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldExtensionOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -39,9 +39,7 @@ pub struct FieldExtensionCoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct FieldExtensionCoreAir {
-    offset: usize,
-}
+pub struct FieldExtensionCoreAir {}
 
 impl<F: Field> BaseAir<F> for FieldExtensionCoreAir {
     fn width(&self) -> usize {
@@ -95,7 +93,7 @@ where
             builder.assert_bool(flag);
 
             is_valid += flag.into();
-            expected_opcode += flag * AB::F::from_canonical_usize(opcode as usize);
+            expected_opcode += flag * AB::F::from_canonical_usize(opcode.local_usize());
 
             for (j, result_part) in result.into_iter().enumerate() {
                 expected_result[j] += flag * result_part;
@@ -123,10 +121,14 @@ where
             writes: [cols.x.map(Into::into)].into(),
             instruction: MinimalInstruction {
                 is_valid,
-                opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
+                opcode: VmCoreAir::<AB, I>::expr_to_global_expr(self, expected_opcode),
             }
             .into(),
         }
+    }
+
+    fn start_offset(&self) -> usize {
+        FieldExtensionOpcode::CLASS_OFFSET
     }
 }
 
@@ -143,10 +145,16 @@ pub struct FieldExtensionCoreChip {
 }
 
 impl FieldExtensionCoreChip {
-    pub fn new(offset: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            air: FieldExtensionCoreAir { offset },
+            air: FieldExtensionCoreAir {},
         }
+    }
+}
+
+impl Default for FieldExtensionCoreChip {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -166,7 +174,7 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
+        let local_opcode_idx = opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET);
 
         let data: [[F; EXT_DEG]; 2] = reads.into();
         let y: [F; EXT_DEG] = data[0];
@@ -193,7 +201,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            FieldExtensionOpcode::from_usize(opcode - self.air.offset)
+            FieldExtensionOpcode::from_usize(opcode - FieldExtensionOpcode::CLASS_OFFSET)
         )
     }
 

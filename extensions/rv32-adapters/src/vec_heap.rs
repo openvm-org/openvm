@@ -1,9 +1,8 @@
 use std::{
-    array::{self, from_fn},
+    array::from_fn,
     borrow::{Borrow, BorrowMut},
     iter::{once, zip},
     marker::PhantomData,
-    sync::Arc,
 };
 
 use itertools::izip;
@@ -21,7 +20,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -59,7 +58,7 @@ pub struct Rv32VecHeapAdapterChip<
 > {
     pub air:
         Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     _marker: PhantomData<F>,
 }
 
@@ -78,7 +77,7 @@ impl<
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         address_bits: usize,
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     ) -> Self {
         assert!(NUM_READS <= 2);
         assert!(
@@ -145,10 +144,10 @@ pub struct Rv32VecHeapAdapterCols<
     pub rs_val: [[T; RV32_REGISTER_NUM_LIMBS]; NUM_READS],
     pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
 
-    pub rs_read_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; NUM_READS],
-    pub rd_read_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
+    pub rd_read_aux: MemoryReadAuxCols<T>,
 
-    pub reads_aux: [[MemoryReadAuxCols<T, READ_SIZE>; BLOCKS_PER_READ]; NUM_READS],
+    pub reads_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; BLOCKS_PER_WRITE],
 }
 
@@ -458,7 +457,7 @@ impl<
             row_slice,
             &read_record,
             &write_record,
-            &self.bitwise_lookup_chip,
+            self.bitwise_lookup_chip.clone(),
             self.air.address_bits,
             memory,
         )
@@ -480,7 +479,7 @@ pub(super) fn vec_heap_generate_trace_row_impl<
     row_slice: &mut [F],
     read_record: &Rv32VecHeapReadRecord<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
     write_record: &Rv32VecHeapWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>,
-    bitwise_lookup_chip: &BitwiseOperationLookupChip<RV32_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     address_bits: usize,
     memory: &OfflineMemory<F>,
 ) {
@@ -503,19 +502,27 @@ pub(super) fn vec_heap_generate_trace_row_impl<
         .collect::<Vec<_>>();
 
     row_slice.rd_ptr = rd.pointer;
-    row_slice.rs_ptr = array::from_fn(|i| rs[i].pointer);
+    row_slice.rd_val.copy_from_slice(&rd.data);
 
-    row_slice.rd_val = array::from_fn(|i| rd.data[i]);
-    row_slice.rs_val = array::from_fn(|j| array::from_fn(|i| rs[j].data[i]));
+    for (i, r) in rs.iter().enumerate() {
+        row_slice.rs_ptr[i] = r.pointer;
+        row_slice.rs_val[i].copy_from_slice(&r.data);
+        aux_cols_factory.generate_read_aux(r, &mut row_slice.rs_read_aux[i]);
+    }
 
-    row_slice.rs_read_aux = array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs[i]));
-    row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(rd);
-    row_slice.reads_aux = read_record
-        .reads
-        .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(memory.record_by_id(x))));
-    row_slice.writes_aux = write_record
-        .writes
-        .map(|w| aux_cols_factory.make_write_aux_cols(memory.record_by_id(w)));
+    aux_cols_factory.generate_read_aux(rd, &mut row_slice.rd_read_aux);
+
+    for (i, reads) in read_record.reads.iter().enumerate() {
+        for (j, &x) in reads.iter().enumerate() {
+            let record = memory.record_by_id(x);
+            aux_cols_factory.generate_read_aux(record, &mut row_slice.reads_aux[i][j]);
+        }
+    }
+
+    for (i, &w) in write_record.writes.iter().enumerate() {
+        let record = memory.record_by_id(w);
+        aux_cols_factory.generate_write_aux(record, &mut row_slice.writes_aux[i]);
+    }
 
     // Range checks:
     let need_range_check: Vec<u32> = rs

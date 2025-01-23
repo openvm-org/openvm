@@ -16,7 +16,9 @@ use openvm_sdk::{
         DEFAULT_INTERNAL_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP, DEFAULT_ROOT_LOG_BLOWUP,
     },
     keygen::{leaf_keygen, AppProvingKey},
-    prover::{AppProver, LeafProver},
+    prover::{
+        vm::local::VmLocalProver, AppProver, LeafProvingController, DEFAULT_NUM_CHILDREN_LEAF,
+    },
     StdIn,
 };
 use openvm_stark_backend::utils::metrics_span;
@@ -122,6 +124,7 @@ impl BenchmarkCli {
             halo2_config: Halo2Config {
                 verifier_k: self.halo2_outer_k.unwrap_or(24),
                 wrapper_k: self.halo2_wrapper_k,
+                profiling: self.profiling,
             },
         }
     }
@@ -233,8 +236,14 @@ where
         .expect("Verification failed");
     if let Some(leaf_vm_config) = leaf_vm_config {
         let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);
-        let leaf_prover = LeafProver::new(leaf_vm_pk, app_pk.leaf_committed_exe);
-        leaf_prover.generate_proof(&app_proof);
+        let leaf_prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(
+            leaf_vm_pk,
+            app_pk.leaf_committed_exe,
+        );
+        let leaf_controller = LeafProvingController {
+            num_children: DEFAULT_NUM_CHILDREN_LEAF,
+        };
+        leaf_controller.generate_proof(&leaf_prover, &app_proof);
     }
     Ok(())
 }

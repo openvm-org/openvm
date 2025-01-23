@@ -45,6 +45,10 @@ name = "ec_nonzero_a"
 required-features = ["p256"]
 
 [[example]]
+name = "ec_two_curves"
+required-features = ["k256", "p256"]
+
+[[example]]
 name = "decompress"
 required-features = ["k256"]
 

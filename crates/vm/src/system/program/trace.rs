@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use derivative::Derivative;
 use itertools::Itertools;
-use openvm_instructions::{exe::VmExe, program::Program, SystemOpcode, VmOpcode};
+use openvm_instructions::{exe::VmExe, program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::{
     config::{Com, Domain, StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,
@@ -127,7 +127,7 @@ pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> Ro
 
 pub(super) fn padding_instruction<F: Field>() -> Instruction<F> {
     Instruction::from_usize(
-        VmOpcode::with_default_offset(SystemOpcode::TERMINATE),
+        SystemOpcode::TERMINATE.global_opcode(),
         [0, 0, EXIT_CODE_FAIL],
     )
 }

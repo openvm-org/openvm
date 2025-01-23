@@ -58,12 +58,13 @@ impl LeafVmVerifierConfig {
                 <Vec<Proof<BabyBearPoseidon2Config>> as Hintable<C>>::read(&mut builder);
             println!("proofs: {:?}", proofs.len());
             // At least 1 proof should be provided.
-            builder.assert_ne::<Usize<_>>(proofs.len(), RVar::zero());
+            builder.assert_nonzero(&proofs.len());
             builder.cycle_tracker_end("ReadProofsFromInput");
 
             builder.cycle_tracker_start("VerifyProofs");
             let pvs = VmVerifierPvs::<Felt<F>>::uninit(&mut builder);
-            builder.range(0, proofs.len()).for_each(|i, builder| {
+            builder.range(0, proofs.len()).for_each(|i_vec, builder| {
+                let i = i_vec[0];
                 let proof = builder.get(&proofs, i);
                 assert_required_air_for_app_vm_present(builder, &proof);
                 StarkVerifier::verify::<DuplexChallengerVariable<C>>(

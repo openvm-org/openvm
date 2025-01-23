@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{
@@ -9,10 +9,10 @@ use openvm_circuit::{
     utils::generate_long_number,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -62,7 +62,7 @@ fn run_rv32_mulh_rand_write_execute<E: InstructionExecutor<F>>(
     let (a, _, _, _, _) = run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
     tester.execute(
         chip,
-        &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [rd, rs1, rs2, 1, 0]),
+        &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
     );
 
     assert_eq!(
@@ -82,10 +82,8 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
 
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-    let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32MulHChip::<F>::new(
@@ -94,7 +92,7 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_checker.clone(), 0),
+        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_checker.clone()),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -157,10 +155,8 @@ fn run_rv32_mulh_negative_test(
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
 
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-    let range_tuple_chip = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let range_tuple_chip = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32MulHTestChip::<F>::new(
@@ -169,13 +165,13 @@ fn run_rv32_mulh_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_chip.clone(), 0),
+        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_chip.clone()),
         tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(
         &mut chip,
-        &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 0]),
+        &Instruction::from_usize(opcode.global_opcode(), [0, 0, 0, 1, 0]),
     );
 
     let trace_width = chip.trace_width();

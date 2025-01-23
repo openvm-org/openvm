@@ -2,15 +2,14 @@
 extern crate alloc;
 extern crate proc_macro;
 
-use hints::create_new_struct_and_impl_hintable;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, Data, DeriveInput, Fields, GenericParam, Generics, ItemStruct,
-    TypeParamBound,
+    parse::{Parse, ParseStream},
+    parse_macro_input,
+    punctuated::Punctuated,
+    Data, DeriveInput, Expr, Fields, GenericParam, Generics, Token, TypeParamBound,
 };
-
-mod hints;
 
 /// Returns true if the generic parameter C: Config exists.
 pub(crate) fn has_config_generic(generics: &Generics) -> bool {
@@ -69,14 +68,6 @@ pub fn derive_variable(input: TokenStream) -> TokenStream {
                     }
                 });
 
-                let fields_assert_ne = fields.named.iter().map(|f| {
-                    let fname = &f.ident;
-                    let ftype = &f.ty;
-                    quote! {
-                        <#ftype as Variable<C>>::assert_ne(lhs.#fname, rhs.#fname, builder);
-                    }
-                });
-
                 let field_sizes = fields.named.iter().map(|f| {
                     let ftype = &f.ty;
                     quote! {
@@ -131,16 +122,6 @@ pub fn derive_variable(input: TokenStream) -> TokenStream {
                             let rhs = rhs.into();
                             #(#fields_assert_eq)*
                         }
-
-                        fn assert_ne(
-                            lhs: impl Into<Self::Expression>,
-                            rhs: impl Into<Self::Expression>,
-                            builder: &mut Builder<C>,
-                        ) {
-                            let lhs = lhs.into();
-                            let rhs = rhs.into();
-                            #(#fields_assert_ne)*
-                        }
                     }
 
                     impl #impl_generics MemVariable<C> for #name #ty_generics #where_clause {
@@ -174,13 +155,35 @@ pub fn derive_variable(input: TokenStream) -> TokenStream {
     gen.into()
 }
 
-#[proc_macro_derive(Hintable)]
-pub fn hintable_derive(input: TokenStream) -> TokenStream {
-    let ast = parse_macro_input!(input as ItemStruct);
+struct IterZipArgs {
+    builder: Expr,
+    args: Punctuated<Expr, Token![,]>,
+}
 
-    let new_struct = create_new_struct_and_impl_hintable(&ast);
-    match new_struct {
-        Ok(new_struct) => new_struct.into(),
-        Err(err) => err.into(),
+impl Parse for IterZipArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let builder = input.parse()?;
+        let _: Token![,] = input.parse()?;
+        let args = Punctuated::parse_terminated(input)?;
+
+        Ok(IterZipArgs { builder, args })
     }
+}
+
+#[proc_macro]
+pub fn iter_zip(input: TokenStream) -> TokenStream {
+    let IterZipArgs { builder, args } = parse_macro_input!(input as IterZipArgs);
+    let array_elements = args.iter().map(|arg| {
+        quote! {
+            Box::new(#arg.clone()) as Box<dyn ArrayLike<_>>
+        }
+    });
+
+    let expanded = quote! {
+        #builder.zip(&[
+            #(#array_elements),*
+        ])
+    };
+
+    expanded.into()
 }

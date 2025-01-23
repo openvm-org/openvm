@@ -2,12 +2,10 @@ use alloc::rc::Rc;
 use std::cell::RefCell;
 
 use itertools::Itertools;
-use openvm_stark_backend::p3_field::FieldAlgebra;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RVar, Ref, SymbolicVar, Usize, Var,
-    Variable,
+    Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RVar, Usize, Var, Variable,
 };
 
 /// A logical array.
@@ -45,23 +43,6 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
         }
     }
 
-    /// Asserts that an array has a certain length. Change its length to constant if it is a variable.
-    pub fn assert_len(&self, builder: &mut Builder<C>, len: usize) {
-        match self {
-            Self::Fixed(vec) => {
-                assert_eq!(vec.borrow().len(), len);
-            }
-            Self::Dyn(_, c_len) => match c_len {
-                Usize::Const(_) => {
-                    assert_eq!(c_len.value(), len);
-                }
-                Usize::Var(c_len) => {
-                    builder.assert_eq::<Var<_>>(*c_len, C::N::from_canonical_usize(len));
-                }
-            },
-        }
-    }
-
     /// Shifts the array by `shift` elements.
     /// !Attention!: the behavior of `Fixed` and `Dyn` is different. For Dyn, the shift is a view
     /// and shares memory with the original. For `Fixed`, `set`/`set_value` on slices won't impact
@@ -78,10 +59,9 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                 }
             }
             Self::Dyn(ptr, len) => {
-                assert_eq!(V::size_of(), 1, "only support variables of size 1");
                 let len = RVar::from(len.clone());
                 let shift = shift.into();
-                let new_ptr = builder.eval(*ptr + shift);
+                let new_ptr = builder.eval(*ptr + shift * RVar::from(V::size_of()));
                 let new_length = builder.eval(len - shift);
                 Array::Dyn(new_ptr, Usize::Var(new_length))
             }
@@ -123,18 +103,9 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                     panic!("Cannot slice a fixed array with a variable start or end");
                 }
             }
-            Self::Dyn(ptr, len) => {
-                if builder.flags.debug {
-                    let valid = builder.lt(start, end);
-                    builder.assert_var_eq(valid, C::N::ONE);
-
-                    let len_plus_1_v = SymbolicVar::from(len.clone()) + C::N::ONE;
-                    let valid = builder.lt(end, len_plus_1_v);
-                    builder.assert_var_eq(valid, C::N::ONE);
-                }
-
+            Self::Dyn(ptr, _) => {
                 let slice_len = builder.eval(end - start);
-                let address = builder.eval(ptr.address + start);
+                let address = builder.eval(ptr.address + start * RVar::from(V::size_of()));
                 let ptr = Ptr { address };
                 Array::Dyn(ptr, Usize::Var(slice_len))
             }
@@ -192,11 +163,7 @@ impl<C: Config> Builder<C> {
                     panic!("Cannot index into a fixed slice with a variable size")
                 }
             }
-            Array::Dyn(ptr, len) => {
-                if self.flags.debug {
-                    let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::ONE);
-                }
+            Array::Dyn(ptr, _) => {
                 let index = MemIndex {
                     index,
                     offset: 0,
@@ -209,69 +176,86 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    /// Returns a pointer to the array at the specified `index` within the given `slice`.
-    pub fn get_ptr<V: MemVariable<C>, I: Into<RVar<C::N>>>(
-        &mut self,
-        slice: &Array<C, Array<C, V>>,
-        index: I,
-    ) -> Ptr<C::N> {
-        let index = index.into();
-
+    /// Intended to be used with `ptr` from `zip`. Assumes that:
+    /// - if `slice` is `Array::Fixed`, then `ptr` is a constant index in [0, slice.len()).
+    /// - if `slice` is `Array::Dyn`, then `ptr` is a variable iterator over the entries of `slice`.
+    ///
+    /// In both cases, loads and returns the corresponding element of `slice`.
+    pub fn iter_ptr_get<V: MemVariable<C>>(&mut self, slice: &Array<C, V>, ptr: RVar<C::N>) -> V {
         match slice {
-            Array::Fixed(_) => {
-                todo!()
-            }
-            Array::Dyn(ptr, len) => {
-                if self.flags.debug {
-                    let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::ONE);
+            Array::Fixed(v) => {
+                if let RVar::Const(_) = ptr {
+                    let idx = ptr.value();
+                    v.borrow()[idx].clone().unwrap()
+                } else {
+                    panic!("Cannot index into a fixed slice with a variable index")
                 }
+            }
+            Array::Dyn(_, _) => {
                 let index = MemIndex {
-                    index,
+                    index: 0.into(),
                     offset: 0,
-                    size: <Array<C, V> as MemVariable<C>>::size_of(),
+                    size: V::size_of(),
                 };
-                let var: Ptr<C::N> = self.uninit();
-                self.load(var, *ptr, index);
+                let var: V = self.uninit();
+                self.load(
+                    var.clone(),
+                    Ptr {
+                        address: match ptr {
+                            RVar::Const(_) => panic!(
+                                "iter_ptr_get on dynamic array not supported for constant ptr"
+                            ),
+                            RVar::Val(v) => v,
+                        },
+                    },
+                    index,
+                );
                 var
             }
         }
     }
 
-    fn ptr_at<V: MemVariable<C>, I: Into<RVar<C::N>>>(
+    /// Intended to be used with `ptr` from `zip`. Assumes that:
+    /// - if `slice` is `Array::Fixed`, then `ptr` is a constant index in [0, slice.len()).
+    /// - if `slice` is `Array::Dyn`, then `ptr` is a variable iterator over the entries of `slice`.
+    ///
+    /// In both cases, stores the given `value` at the corresponding element of `slice`.
+    pub fn iter_ptr_set<V: MemVariable<C>, Expr: Into<V::Expression>>(
         &mut self,
         slice: &Array<C, V>,
-        index: I,
-    ) -> Ptr<C::N> {
-        let index = index.into();
-
+        ptr: RVar<C::N>,
+        value: Expr,
+    ) {
         match slice {
-            Array::Fixed(_) => {
-                panic!();
+            Array::Fixed(v) => {
+                if let RVar::Const(_) = ptr {
+                    let idx = ptr.value();
+                    let value = self.eval(value);
+                    v.borrow_mut()[idx] = Some(value);
+                } else {
+                    panic!("Cannot index into a fixed slice with a variable index")
+                }
             }
-            Array::Dyn(ptr, len) => {
-                if self.flags.debug {
-                    let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::ONE);
-                }
-                Ptr {
-                    address: self.eval(
-                        ptr.address
-                            + index * RVar::from_field(C::N::from_canonical_usize(V::size_of())),
-                    ),
-                }
+            Array::Dyn(_, _) => {
+                let value: V = self.eval(value);
+                self.store(
+                    Ptr {
+                        address: match ptr {
+                            RVar::Const(_) => panic!(
+                                "iter_ptr_set on dynamic array not supported for constant ptr"
+                            ),
+                            RVar::Val(v) => v,
+                        },
+                    },
+                    MemIndex {
+                        index: 0.into(),
+                        offset: 0,
+                        size: V::size_of(),
+                    },
+                    value,
+                );
             }
         }
-    }
-
-    pub fn get_ref<V: MemVariable<C>, I: Into<RVar<C::N>>>(
-        &mut self,
-        slice: &Array<C, V>,
-        index: I,
-    ) -> Ref<C, V> {
-        let index = index.into();
-        let ptr = self.ptr_at(slice, index);
-        Ref::from_ptr(ptr)
     }
 
     pub fn set<V: MemVariable<C>, I: Into<RVar<C::N>>, Expr: Into<V::Expression>>(
@@ -292,11 +276,7 @@ impl<C: Config> Builder<C> {
                     panic!("Cannot index into a fixed slice with a variable index")
                 }
             }
-            Array::Dyn(ptr, len) => {
-                if self.flags.debug {
-                    let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::ONE);
-                }
+            Array::Dyn(ptr, _) => {
                 let index = MemIndex {
                     index,
                     offset: 0,
@@ -382,48 +362,10 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
             (Array::Dyn(_, lhs_len), Array::Dyn(_, rhs_len)) => {
                 builder.assert_eq::<Usize<_>>(lhs_len.clone(), rhs_len);
 
-                builder.range(0, lhs_len).for_each(|i, builder| {
-                    let a = builder.get(&lhs, i);
-                    let b = builder.get(&rhs, i);
+                builder.range(0, lhs_len).for_each(|idx_vec, builder| {
+                    let a = builder.get(&lhs, idx_vec[0]);
+                    let b = builder.get(&rhs, idx_vec[0]);
                     builder.assert_eq::<T>(a, b);
-                });
-            }
-            _ => panic!("cannot compare arrays of different types"),
-        }
-    }
-
-    fn assert_ne(
-        lhs: impl Into<Self::Expression>,
-        rhs: impl Into<Self::Expression>,
-        builder: &mut Builder<C>,
-    ) {
-        let lhs = lhs.into();
-        let rhs = rhs.into();
-
-        match (lhs.clone(), rhs.clone()) {
-            (Array::Fixed(lhs), Array::Fixed(rhs)) => {
-                // No need to compare if they are the same reference. The same reference will
-                // also cause borrow errors.
-                if Rc::ptr_eq(&lhs, &rhs) {
-                    panic!("assert not equal on the same array");
-                }
-                for (l, r) in lhs.borrow().iter().zip_eq(rhs.borrow().iter()) {
-                    assert!(l.is_some(), "lhs array is not fully initialized");
-                    assert!(r.is_some(), "rhs array is not fully initialized");
-                    T::assert_ne(
-                        T::Expression::from(l.as_ref().unwrap().clone()),
-                        T::Expression::from(r.as_ref().unwrap().clone()),
-                        builder,
-                    );
-                }
-            }
-            (Array::Dyn(_, lhs_len), Array::Dyn(_, rhs_len)) => {
-                builder.assert_eq::<Usize<_>>(lhs_len.clone(), rhs_len);
-
-                builder.range(0, lhs_len).for_each(|i, builder| {
-                    let a = builder.get(&lhs, i);
-                    let b = builder.get(&rhs, i);
-                    builder.assert_ne::<T>(a, b);
                 });
             }
             _ => panic!("cannot compare arrays of different types"),
@@ -488,5 +430,37 @@ pub fn unsafe_array_transmute<C: Config, S, T>(arr: Array<C, S>) -> Array<C, T> 
         Array::Dyn(ptr, len)
     } else {
         unreachable!()
+    }
+}
+
+#[allow(clippy::len_without_is_empty)]
+pub trait ArrayLike<C: Config> {
+    fn len(&self) -> Usize<C::N>;
+
+    fn ptr(&self) -> Ptr<C::N>;
+
+    fn is_fixed(&self) -> bool;
+
+    fn element_size_of(&self) -> usize;
+}
+
+impl<C: Config, T: MemVariable<C>> ArrayLike<C> for Array<C, T> {
+    fn len(&self) -> Usize<C::N> {
+        self.len()
+    }
+
+    fn ptr(&self) -> Ptr<C::N> {
+        self.ptr()
+    }
+
+    fn is_fixed(&self) -> bool {
+        match self {
+            Array::Fixed(_) => true,
+            Array::Dyn(_, _) => false,
+        }
+    }
+
+    fn element_size_of(&self) -> usize {
+        T::size_of()
     }
 }

@@ -4,7 +4,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -28,7 +30,7 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
-use super::{ExecutionBus, InstructionExecutor};
+use super::{ExecutionBus, InstructionExecutor, SystemPort};
 use crate::{
     arch::{ExecutionState, MemoryConfig},
     system::{
@@ -142,6 +144,16 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.write(address_space, pointer, value);
     }
 
+    pub fn write_usize<const N: usize>(
+        &mut self,
+        address_space: usize,
+        pointer: usize,
+        value: [usize; N],
+    ) {
+        self.memory
+            .write(address_space, pointer, value.map(F::from_canonical_usize));
+    }
+
     pub fn write_heap<const NUM_LIMBS: usize>(
         &mut self,
         register: usize,
@@ -151,6 +163,14 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.write(1usize, register, [F::from_canonical_usize(pointer)]);
         for (i, &write) in writes.iter().enumerate() {
             self.write(2usize, pointer + i * NUM_LIMBS, write);
+        }
+    }
+
+    pub fn system_port(&self) -> SystemPort {
+        SystemPort {
+            execution_bus: self.execution.bus,
+            program_bus: self.program.bus,
+            memory_bridge: self.memory_bridge(),
         }
     }
 
@@ -170,7 +190,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.controller.clone()
     }
 
-    pub fn range_checker(&self) -> Arc<VariableRangeCheckerChip> {
+    pub fn range_checker(&self) -> SharedVariableRangeCheckerChip {
         self.memory.controller.borrow().range_checker.clone()
     }
 
@@ -236,15 +256,27 @@ impl VmChipTestBuilder<BabyBear> {
         let tester = tester.load(self.execution);
         tester.load(self.program)
     }
+    pub fn build_babybear_poseidon2(self) -> VmChipTester<BabyBearPoseidon2Config> {
+        self.memory
+            .controller
+            .borrow_mut()
+            .finalize(None::<&mut Poseidon2PeripheryChip<BabyBear>>);
+        let tester = VmChipTester {
+            memory: Some(self.memory),
+            ..Default::default()
+        };
+        let tester = tester.load(self.execution);
+        tester.load(self.program)
+    }
 }
 
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
-        let mem_config = MemoryConfig::new(2, 1, 29, 29, 17, 64, 1 << 22);
-        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+        let mem_config = MemoryConfig::default();
+        let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
-        )));
+        ));
         let memory_controller = MemoryController::with_volatile_memory(
             MemoryBus(MEMORY_BUS),
             mem_config,

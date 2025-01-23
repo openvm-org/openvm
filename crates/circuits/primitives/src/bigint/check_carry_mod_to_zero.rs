@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::FieldAlgebra};
 
 use super::{

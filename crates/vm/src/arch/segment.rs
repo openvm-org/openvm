@@ -10,12 +10,12 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
-    Chip,
+    Chip, Stateful,
 };
 
 use super::{
-    ExecutionError, Streams, SystemBase, SystemConfig, VmChipComplex, VmComplexTraceHeights,
-    VmConfig,
+    ExecutionError, Streams, SystemBase, SystemConfig, VmChipComplex, VmChipComplexState,
+    VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -26,6 +26,84 @@ use crate::{
 
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;
+
+const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
+// a heuristic number for the maximum number of cells per chip in a segment
+// a few reasons for this number:
+//  1. `VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>` is
+//    the chip with the most cells in a segment from the reth-benchmark.
+//  2. `VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>`:
+//    its trace width is 36 and its after challenge trace width is 80.
+const DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT: usize = DEFAULT_MAX_SEGMENT_LEN * 120;
+
+pub trait SegmentationStrategy:
+    std::fmt::Debug + Send + Sync + std::panic::UnwindSafe + std::panic::RefUnwindSafe
+{
+    fn should_segment(
+        &self,
+        air_names: &[String],
+        trace_heights: &[usize],
+        trace_cells: &[usize],
+    ) -> bool;
+}
+
+/// Default segmentation strategy: segment if any chip's height or cells exceed the limits.
+#[derive(Debug)]
+pub struct DefaultSegmentationStrategy {
+    max_segment_len: usize,
+    max_cells_per_chip_in_segment: usize,
+}
+
+impl Default for DefaultSegmentationStrategy {
+    fn default() -> Self {
+        Self {
+            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+            max_cells_per_chip_in_segment: DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT,
+        }
+    }
+}
+
+impl DefaultSegmentationStrategy {
+    pub fn new_with_max_segment_len(max_segment_len: usize) -> Self {
+        Self {
+            max_segment_len,
+            max_cells_per_chip_in_segment: max_segment_len * 120,
+        }
+    }
+}
+
+impl SegmentationStrategy for DefaultSegmentationStrategy {
+    fn should_segment(
+        &self,
+        air_names: &[String],
+        trace_heights: &[usize],
+        trace_cells: &[usize],
+    ) -> bool {
+        for (i, &height) in trace_heights.iter().enumerate() {
+            if height > self.max_segment_len {
+                tracing::info!(
+                    "Should segment because chip {} (name: {}) has height {}",
+                    i,
+                    air_names[i],
+                    height
+                );
+                return true;
+            }
+        }
+        for (i, &num_cells) in trace_cells.iter().enumerate() {
+            if num_cells > self.max_cells_per_chip_in_segment {
+                tracing::info!(
+                    "Should segment because chip {} (name: {}) has {} cells",
+                    i,
+                    air_names[i],
+                    num_cells
+                );
+                return true;
+            }
+        }
+        false
+    }
+}
 
 pub struct ExecutionSegment<F, VC>
 where
@@ -85,6 +163,31 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         }
     }
 
+    /// Creates a new execution segment just for proving.
+    pub fn new_for_proving(
+        config: &VC,
+        program: Program<F>,
+        vm_chip_complex_state: VmChipComplexState<F>,
+    ) -> Self {
+        let mut chip_complex = config.create_chip_complex().unwrap();
+        let program = if !config.system().profiling {
+            program.strip_debug_infos()
+        } else {
+            program
+        };
+        chip_complex.set_program(program);
+        chip_complex.load_state(vm_chip_complex_state);
+        let air_names = chip_complex.air_names();
+        Self {
+            chip_complex,
+            final_memory: None,
+            air_names,
+            #[cfg(feature = "bench-metrics")]
+            metrics: Default::default(),
+            since_last_segment_check: 0,
+        }
+    }
+
     pub fn system_config(&self) -> &SystemConfig {
         self.chip_complex.config()
     }
@@ -138,7 +241,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 );
 
                 let &Instruction { opcode, c, .. } = instruction;
-                if opcode == VmOpcode::with_default_offset(SystemOpcode::TERMINATE) {
+                if opcode == SystemOpcode::TERMINATE.global_opcode() {
                     did_terminate = true;
                     self.chip_complex.connector_chip_mut().end(
                         ExecutionState::new(pc, timestamp),
@@ -148,7 +251,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 }
 
                 // Some phantom instruction handling is more convenient to do here than in PhantomChip.
-                if opcode == VmOpcode::with_default_offset(SystemOpcode::PHANTOM) {
+                if opcode == SystemOpcode::PHANTOM.global_opcode() {
                     // Note: the discriminant is the lower 16 bits of the c operand.
                     let discriminant = c.as_canonical_u32() as u16;
                     let phantom = SysPhantom::from_repr(discriminant);
@@ -251,19 +354,15 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             return false;
         }
         self.since_last_segment_check = 0;
-        let heights = self.chip_complex.dynamic_trace_heights();
-        for (i, height) in heights.enumerate() {
-            if height > self.system_config().max_segment_len {
-                tracing::info!(
-                    "Should segment because chip {} has height {}",
-                    self.air_names[i],
-                    height
-                );
-                return true;
-            }
-        }
-
-        false
+        let segmentation_strategy = self.system_config().segmentation_strategy.clone();
+        segmentation_strategy.should_segment(
+            &self.air_names,
+            &self
+                .chip_complex
+                .dynamic_trace_heights()
+                .collect::<Vec<_>>(),
+            &self.chip_complex.current_trace_cells(),
+        )
     }
 
     pub fn current_trace_cells(&self) -> Vec<usize> {
@@ -273,5 +372,8 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     /// Includes constant trace heights.
     pub fn current_trace_heights(&self) -> Vec<usize> {
         self.chip_complex.current_trace_heights()
+    }
+    pub fn store_chip_complex_state(&self) -> VmChipComplexState<F> {
+        self.chip_complex.store_state()
     }
 }

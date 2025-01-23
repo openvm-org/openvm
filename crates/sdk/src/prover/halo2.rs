@@ -30,8 +30,11 @@ impl Halo2Prover {
     pub fn prove_for_evm(&self, root_proof: &Proof<RootSC>) -> EvmProof {
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
-        let snark = info_span!("prove", group = "halo2_outer")
-            .in_scope(|| self.halo2_pk.verifier.prove(&self.verifier_srs, witness));
+        let snark = info_span!("prove", group = "halo2_outer").in_scope(|| {
+            self.halo2_pk
+                .verifier
+                .prove(&self.verifier_srs, witness, self.halo2_pk.profiling)
+        });
         info_span!("prove_for_evm", group = "halo2_wrapper").in_scope(|| {
             self.halo2_pk
                 .wrapper

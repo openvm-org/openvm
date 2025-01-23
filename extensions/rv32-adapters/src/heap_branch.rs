@@ -1,9 +1,8 @@
 use std::{
-    array::{self, from_fn},
+    array::from_fn,
     borrow::{Borrow, BorrowMut},
     iter::once,
     marker::PhantomData,
-    sync::Arc,
 };
 
 use itertools::izip;
@@ -22,7 +21,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -52,9 +51,9 @@ pub struct Rv32HeapBranchAdapterCols<T, const NUM_READS: usize, const READ_SIZE:
 
     pub rs_ptr: [T; NUM_READS],
     pub rs_val: [[T; RV32_REGISTER_NUM_LIMBS]; NUM_READS],
-    pub rs_read_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; NUM_READS],
+    pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
 
-    pub heap_read_aux: [MemoryReadAuxCols<T, READ_SIZE>; NUM_READS],
+    pub heap_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -170,7 +169,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
 
 pub struct Rv32HeapBranchAdapterChip<F: Field, const NUM_READS: usize, const READ_SIZE: usize> {
     pub air: Rv32HeapBranchAdapterAir<NUM_READS, READ_SIZE>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     _marker: PhantomData<F>,
 }
 
@@ -182,7 +181,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         address_bits: usize,
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     ) -> Self {
         assert!(NUM_READS <= 2);
         assert!(
@@ -286,14 +285,19 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
         let row_slice: &mut Rv32HeapBranchAdapterCols<_, NUM_READS, READ_SIZE> =
             row_slice.borrow_mut();
         row_slice.from_state = write_record.map(F::from_canonical_u32);
+
         let rs_reads = read_record.rs_reads.map(|r| memory.record_by_id(r));
-        row_slice.rs_ptr = array::from_fn(|i| rs_reads[i].pointer);
-        row_slice.rs_val = array::from_fn(|i| rs_reads[i].data.clone().try_into().unwrap());
-        row_slice.rs_read_aux =
-            array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs_reads[i]));
-        row_slice.heap_read_aux = read_record
-            .heap_reads
-            .map(|r| aux_cols_factory.make_read_aux_cols(memory.record_by_id(r)));
+
+        for (i, rs_read) in rs_reads.iter().enumerate() {
+            row_slice.rs_ptr[i] = rs_read.pointer;
+            row_slice.rs_val[i].copy_from_slice(&rs_read.data);
+            aux_cols_factory.generate_read_aux(rs_read, &mut row_slice.rs_read_aux[i]);
+        }
+
+        for (i, heap_read) in read_record.heap_reads.iter().enumerate() {
+            let record = memory.record_by_id(*heap_read);
+            aux_cols_factory.generate_read_aux(record, &mut row_slice.heap_read_aux[i]);
+        }
 
         // Range checks:
         let need_range_check: Vec<u32> = rs_reads

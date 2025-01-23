@@ -1,15 +1,13 @@
-use std::sync::Arc;
-
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
 };
 use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_ecc_guest::AffinePoint;
-use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_mod_circuit_builder::{
     test_utils::{
         biguint_to_limbs, bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint,
@@ -41,9 +39,7 @@ const BLOCK_SIZE: usize = 32;
 fn test_mul_013_by_013() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 10, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -60,7 +56,7 @@ fn test_mul_013_by_013() {
             limb_bits: LIMB_BITS,
         },
         BN254_XI_ISIZE,
-        PairingOpcode::default_offset(),
+        PairingOpcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
@@ -139,9 +135,7 @@ fn test_mul_013_by_013() {
 fn test_mul_by_01234() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 12, 10, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -157,7 +151,7 @@ fn test_mul_by_01234() {
             limb_bits: LIMB_BITS,
         },
         BN254_XI_ISIZE,
-        PairingOpcode::default_offset(),
+        PairingOpcode::CLASS_OFFSET,
         tester.range_checker(),
         tester.offline_memory_mutex_arc(),
     );
@@ -234,9 +228,7 @@ fn test_evaluate_line() {
         num_limbs: BN254_NUM_LIMBS,
     };
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 4, 2, 4, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -247,7 +239,7 @@ fn test_evaluate_line() {
     let mut chip = EvaluateLineChip::new(
         adapter,
         config,
-        PairingOpcode::default_offset(),
+        PairingOpcode::CLASS_OFFSET,
         tester.range_checker(),
         tester.offline_memory_mutex_arc(),
     );

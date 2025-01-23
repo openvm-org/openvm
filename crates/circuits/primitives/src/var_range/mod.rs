@@ -6,7 +6,10 @@
 use core::mem::size_of;
 use std::{
     borrow::{Borrow, BorrowMut},
-    sync::{atomic::AtomicU32, Arc},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -18,7 +21,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter, Stateful,
 };
 use tracing::instrument;
 
@@ -98,6 +101,9 @@ pub struct VariableRangeCheckerChip {
     pub air: VariableRangeCheckerAir,
     count: Vec<AtomicU32>,
 }
+
+#[derive(Clone)]
+pub struct SharedVariableRangeCheckerChip(Arc<VariableRangeCheckerChip>);
 
 impl VariableRangeCheckerChip {
     pub fn new(bus: VariableRangeCheckerBus) -> Self {
@@ -179,6 +185,36 @@ impl VariableRangeCheckerChip {
     }
 }
 
+impl SharedVariableRangeCheckerChip {
+    pub fn new(bus: VariableRangeCheckerBus) -> Self {
+        Self(Arc::new(VariableRangeCheckerChip::new(bus)))
+    }
+
+    pub fn bus(&self) -> VariableRangeCheckerBus {
+        self.0.bus()
+    }
+
+    pub fn range_max_bits(&self) -> usize {
+        self.0.range_max_bits()
+    }
+
+    pub fn air_width(&self) -> usize {
+        self.0.air_width()
+    }
+
+    pub fn add_count(&self, value: u32, max_bits: usize) {
+        self.0.add_count(value, max_bits)
+    }
+
+    pub fn clear(&self) {
+        self.0.clear()
+    }
+
+    pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
+        self.0.generate_trace()
+    }
+}
+
 impl<SC: StarkGenericConfig> Chip<SC> for VariableRangeCheckerChip
 where
     Val<SC>: PrimeField32,
@@ -190,6 +226,19 @@ where
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let trace = self.generate_trace::<Val<SC>>();
         AirProofInput::simple_no_pis(Arc::new(self.air), trace)
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for SharedVariableRangeCheckerChip
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        self.0.air()
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        self.0.generate_air_proof_input()
     }
 }
 
@@ -205,5 +254,38 @@ impl ChipUsageGetter for VariableRangeCheckerChip {
     }
     fn trace_width(&self) -> usize {
         NUM_VARIABLE_RANGE_COLS
+    }
+}
+
+impl ChipUsageGetter for SharedVariableRangeCheckerChip {
+    fn air_name(&self) -> String {
+        self.0.air_name()
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.0.current_trace_height()
+    }
+
+    fn trace_width(&self) -> usize {
+        self.0.trace_width()
+    }
+}
+
+impl Stateful<Vec<u8>> for SharedVariableRangeCheckerChip {
+    fn load_state(&mut self, state: Vec<u8>) {
+        let count_vals: Vec<u32> = bitcode::deserialize(&state).unwrap();
+        for (x, val) in self.0.count.iter().zip(count_vals) {
+            x.store(val, Ordering::Relaxed);
+        }
+    }
+
+    fn store_state(&self) -> Vec<u8> {
+        bitcode::serialize(&self.0.count).unwrap()
+    }
+}
+
+impl AsRef<VariableRangeCheckerChip> for SharedVariableRangeCheckerChip {
+    fn as_ref(&self) -> &VariableRangeCheckerChip {
+        &self.0
     }
 }

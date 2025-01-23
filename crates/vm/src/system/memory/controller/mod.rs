@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_zero::IsZeroSubAir,
     utils::next_power_of_two_or_zero,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     TraceSubRowGenerator,
 };
 use openvm_stark_backend::{
@@ -25,11 +25,14 @@ use openvm_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
-use super::{merkle::DirectCompressionBus, volatile::VolatileBoundaryChip};
+use super::{
+    merkle::DirectCompressionBus,
+    paged_vec::{AddressMap, PAGE_SIZE},
+    volatile::VolatileBoundaryChip,
+};
 use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
     system::memory::{
@@ -38,17 +41,17 @@ use crate::{
         merkle::{MemoryMerkleBus, MemoryMerkleChip},
         offline::{MemoryRecord, OfflineMemory, INITIAL_TIMESTAMP},
         offline_checker::{
-            MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
-            MemoryWriteAuxCols, AUX_LEN,
+            MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
+            MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols, AUX_LEN,
         },
-        online::{Address, Memory, MemoryLogEntry},
+        online::{Memory, MemoryLogEntry},
         persistent::PersistentBoundaryChip,
         tree::MemoryNode,
     },
 };
 
 pub mod dimensions;
-mod interface;
+pub mod interface;
 
 pub const CHUNK: usize = 8;
 /// The offset of the Merkle AIR in AIRs of MemoryController.
@@ -59,7 +62,7 @@ pub const BOUNDARY_AIR_OFFSET: usize = 0;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct RecordId(pub usize);
 
-pub type MemoryImage<F> = FxHashMap<Address, F>;
+pub type MemoryImage<F> = AddressMap<F, PAGE_SIZE>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimestampedValues<T, const N: usize> {
@@ -91,7 +94,7 @@ pub struct MemoryController<F> {
 
     #[getset(get = "pub")]
     pub(crate) mem_config: MemoryConfig,
-    pub range_checker: Arc<VariableRangeCheckerChip>,
+    pub range_checker: SharedVariableRangeCheckerChip,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
 
@@ -226,10 +229,10 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn with_volatile_memory(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
     ) -> Self {
         let range_checker_bus = range_checker.bus();
-        let initial_memory = MemoryImage::default();
+        let initial_memory = AddressMap::from_mem_config(&mem_config);
         Self {
             memory_bus,
             mem_config,
@@ -241,13 +244,13 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: Memory::new(mem_config.access_capacity),
+            memory: Memory::new(&mem_config),
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
                 initial_memory,
                 1,
                 memory_bus,
                 range_checker.clone(),
-                mem_config.clk_max_bits,
+                mem_config,
             ))),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
@@ -267,7 +270,7 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn with_persistent_memory(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         merkle_bus: MemoryMerkleBus,
         compression_bus: DirectCompressionBus,
     ) -> Self {
@@ -285,19 +288,19 @@ impl<F: PrimeField32> MemoryController<F> {
                 compression_bus,
             ),
             merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus, compression_bus),
-            initial_memory: MemoryImage::default(),
+            initial_memory: AddressMap::from_mem_config(&mem_config),
         };
         Self {
             memory_bus,
             mem_config,
             interface_chip,
-            memory: Memory::new(0), // it is expected that the memory will be set later
+            memory: Memory::new(&mem_config), // it is expected that the memory will be set later
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
-                MemoryImage::default(),
+                AddressMap::from_mem_config(&mem_config),
                 CHUNK,
                 memory_bus,
                 range_checker.clone(),
-                mem_config.clk_max_bits,
+                mem_config,
             ))),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
@@ -346,7 +349,7 @@ impl<F: PrimeField32> MemoryController<F> {
             panic!("Cannot set initial memory after first timestamp");
         }
         let mut offline_memory = self.offline_memory.lock().unwrap();
-        offline_memory.set_initial_memory(memory.clone());
+        offline_memory.set_initial_memory(memory.clone(), self.mem_config);
 
         self.memory = Memory::from_image(memory.clone(), self.mem_config.access_capacity);
 
@@ -694,20 +697,78 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
         self.offline_memory.clone()
     }
+    pub fn get_memory_logs(&self) -> Vec<MemoryLogEntry<F>> {
+        // TODO: can we avoid clone?
+        self.memory.log.clone()
+    }
+    pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {
+        self.memory.log = logs;
+    }
 }
 
 pub struct MemoryAuxColsFactory<T> {
-    pub(crate) range_checker: Arc<VariableRangeCheckerChip>,
+    pub(crate) range_checker: SharedVariableRangeCheckerChip,
     pub(crate) timestamp_lt_air: AssertLtSubAir,
     pub(crate) _marker: PhantomData<T>,
 }
 
 // NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in parallelized trace generation.
 impl<F: PrimeField32> MemoryAuxColsFactory<F> {
-    pub fn make_read_aux_cols<const N: usize>(
+    pub fn generate_read_aux(&self, read: &MemoryRecord<F>, buffer: &mut MemoryReadAuxCols<F>) {
+        assert!(
+            !read.address_space.is_zero(),
+            "cannot make `MemoryReadAuxCols` for address space 0"
+        );
+        self.generate_base_aux(read, &mut buffer.base);
+    }
+
+    pub fn generate_read_or_immediate_aux(
         &self,
         read: &MemoryRecord<F>,
-    ) -> MemoryReadAuxCols<F, N> {
+        buffer: &mut MemoryReadOrImmediateAuxCols<F>,
+    ) {
+        IsZeroSubAir.generate_subrow(
+            read.address_space,
+            (&mut buffer.is_zero_aux, &mut buffer.is_immediate),
+        );
+        self.generate_base_aux(read, &mut buffer.base);
+    }
+
+    pub fn generate_write_aux<const N: usize>(
+        &self,
+        write: &MemoryRecord<F>,
+        buffer: &mut MemoryWriteAuxCols<F, N>,
+    ) {
+        buffer
+            .prev_data
+            .copy_from_slice(write.prev_data.as_ref().unwrap());
+        self.generate_base_aux(write, &mut buffer.base);
+    }
+
+    pub fn generate_base_aux(&self, record: &MemoryRecord<F>, buffer: &mut MemoryBaseAuxCols<F>) {
+        buffer.prev_timestamp = F::from_canonical_u32(record.prev_timestamp);
+        self.generate_timestamp_lt(
+            record.prev_timestamp,
+            record.timestamp,
+            &mut buffer.timestamp_lt_aux,
+        );
+    }
+
+    fn generate_timestamp_lt(
+        &self,
+        prev_timestamp: u32,
+        timestamp: u32,
+        buffer: &mut LessThanAuxCols<F, AUX_LEN>,
+    ) {
+        debug_assert!(prev_timestamp < timestamp);
+        self.timestamp_lt_air.generate_subrow(
+            (self.range_checker.as_ref(), prev_timestamp, timestamp),
+            &mut buffer.lower_decomp,
+        );
+    }
+
+    /// In general, prefer `generate_read_aux` which writes in-place rather than this function.
+    pub fn make_read_aux_cols(&self, read: &MemoryRecord<F>) -> MemoryReadAuxCols<F> {
         assert!(
             !read.address_space.is_zero(),
             "cannot make `MemoryReadAuxCols` for address space 0"
@@ -718,24 +779,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         )
     }
 
-    pub fn make_read_or_immediate_aux_cols(
-        &self,
-        read: &MemoryRecord<F>,
-    ) -> MemoryReadOrImmediateAuxCols<F> {
-        let mut inv = F::ZERO;
-        let mut is_zero = F::ZERO;
-        IsZeroSubAir.generate_subrow(read.address_space, (&mut inv, &mut is_zero));
-        let timestamp_lt_cols =
-            self.generate_timestamp_lt_cols(read.prev_timestamp, read.timestamp);
-
-        MemoryReadOrImmediateAuxCols::new(
-            F::from_canonical_u32(read.prev_timestamp),
-            is_zero,
-            inv,
-            timestamp_lt_cols,
-        )
-    }
-
+    /// In general, prefer `generate_write_aux` which writes in-place rather than this function.
     pub fn make_write_aux_cols<const N: usize>(
         &self,
         write: &MemoryRecord<F>,
@@ -756,7 +800,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         debug_assert!(prev_timestamp < timestamp);
         let mut decomp = [F::ZERO; AUX_LEN];
         self.timestamp_lt_air.generate_subrow(
-            (&self.range_checker, prev_timestamp, timestamp),
+            (self.range_checker.as_ref(), prev_timestamp, timestamp),
             &mut decomp,
         );
         LessThanAuxCols::new(decomp)
@@ -765,9 +809,10 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
 
-    use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+    use openvm_circuit_primitives::var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+    };
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
@@ -787,7 +832,7 @@ mod tests {
         let memory_bus = MemoryBus(MEMORY_BUS);
         let memory_config = MemoryConfig::default();
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
-        let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
 
         let mut memory_controller = MemoryController::with_volatile_memory(
             memory_bus,

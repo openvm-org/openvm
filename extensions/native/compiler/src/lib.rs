@@ -1,8 +1,8 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::needless_range_loop)]
 
-use openvm_instructions::UsizeOpcode;
-use openvm_instructions_derive::UsizeOpcode;
+use openvm_instructions::LocalOpcode;
+use openvm_instructions_derive::LocalOpcode;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
@@ -16,7 +16,7 @@ pub mod conversion;
 pub mod ir;
 
 pub mod prelude {
-    pub use openvm_native_compiler_derive::{DslVariable, Hintable};
+    pub use openvm_native_compiler_derive::DslVariable;
 
     pub use crate::{asm::AsmCompiler, ir::*};
 }
@@ -36,22 +36,33 @@ pub mod prelude {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
 #[opcode_offset = 0x100]
 #[repr(usize)]
+#[allow(non_camel_case_types)]
 pub enum NativeLoadStoreOpcode {
     LOADW,
     STOREW,
-    LOADW2,
-    STOREW2,
     /// Instruction to write the next hint word into memory.
-    SHINTW,
+    HINT_STOREW,
 }
 
-#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[derive(Copy, Clone, Debug, LocalOpcode)]
+#[opcode_offset = 0x108]
+pub struct NativeLoadStore4Opcode(pub NativeLoadStoreOpcode);
+
+impl NativeLoadStore4Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        NativeLoadStoreOpcode::iter().map(Self)
+    }
+}
+
+pub const BLOCK_LOAD_STORE_SIZE: usize = 4;
+
+#[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x110]
 pub struct NativeBranchEqualOpcode(pub BranchEqualOpcode);
 
@@ -62,7 +73,7 @@ impl NativeBranchEqualOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x115]
 #[repr(usize)]
@@ -71,7 +82,7 @@ pub enum NativeJalOpcode {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x125]
 #[repr(usize)]
@@ -90,7 +101,7 @@ pub enum CastfOpcode {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -114,7 +125,7 @@ pub enum FieldArithmeticOpcode {
     EnumCount,
     EnumIter,
     FromRepr,
-    UsizeOpcode,
+    LocalOpcode,
     Serialize,
     Deserialize,
 )]
@@ -138,9 +149,32 @@ pub enum NativePhantom {
     HintBits,
 }
 
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x150]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Poseidon2Opcode {
+    PERM_POS2,
+    COMP_POS2,
+}
+
 /// Opcodes for FRI opening proofs.
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
 #[opcode_offset = 0x160]
 #[repr(usize)]
@@ -149,4 +183,17 @@ pub enum FriOpcode {
     /// In FRI pcs opening verification, the reduced opening polynomial is computed one evaluation
     /// per column polynomial, per opening point
     FRI_REDUCED_OPENING,
+}
+
+/// Opcodes for verify batch.
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
+)]
+#[opcode_offset = 0x170]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum VerifyBatchOpcode {
+    /// In FRI pcs opening verification, the reduced opening polynomial is computed one evaluation
+    /// per column polynomial, per opening point
+    VERIFY_BATCH,
 }

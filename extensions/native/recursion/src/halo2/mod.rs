@@ -199,6 +199,7 @@ impl Halo2Prover {
         pk: &ProvingKey<G1Affine>,
         dsl_operations: DslOperations<C>,
         witness: Witness<C>,
+        profiling: bool,
     ) -> Snark {
         let k = config_params.k;
         #[cfg(feature = "bench-metrics")]
@@ -206,7 +207,7 @@ impl Halo2Prover {
         let builder = Self::builder(CircuitBuilderStage::Prover, k)
             .use_params(config_params)
             .use_break_points(break_points);
-        let builder = Self::populate(builder, dsl_operations, witness, false);
+        let builder = Self::populate(builder, dsl_operations, witness, profiling);
         #[cfg(feature = "bench-metrics")]
         {
             let stats = builder.statistics();

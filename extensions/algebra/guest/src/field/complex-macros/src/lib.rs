@@ -576,13 +576,13 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                 #[no_mangle]
                 extern "C" fn #func_name(rd: usize, rs1: usize, rs2: usize) {
                     openvm::platform::custom_insn_r!(
-                        openvm_algebra_guest::OPCODE,
-                        openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
-                        openvm_algebra_guest::ComplexExtFieldBaseFunct7::#local_opcode as usize
+                        opcode = openvm_algebra_guest::OPCODE,
+                        funct3 = openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
+                        funct7 = openvm_algebra_guest::ComplexExtFieldBaseFunct7::#local_opcode as usize
                             + #mod_idx * (openvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
-                        rd,
-                        rs1,
-                        rs2
+                        rd = In rd,
+                        rs1 = In rs1,
+                        rs2 = In rs2
                     )
                 }
             });
@@ -605,24 +605,24 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
                     let mut uninit: core::mem::MaybeUninit<[u8; openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1] - openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]]> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(
-                        ::openvm_algebra_guest::OPCODE,
-                        ::openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
-                        ::openvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
+                        opcode = ::openvm_algebra_guest::OPCODE,
+                        funct3 = ::openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
+                        funct7 = ::openvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
                             + #mod_idx
                                 * (::openvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        two_modulus_bytes.as_ptr(),
-                        "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
+                        rd = In uninit.as_mut_ptr(),
+                        rs1 = In two_modulus_bytes.as_ptr(),
+                        rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
                     );
                     openvm::platform::custom_insn_r!(
-                        ::openvm_algebra_guest::OPCODE,
-                        ::openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
-                        ::openvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
+                        opcode = ::openvm_algebra_guest::OPCODE,
+                        funct3 = ::openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
+                        funct7 = ::openvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
                             + #mod_idx
                                 * (::openvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        two_modulus_bytes.as_ptr(),
-                        "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
+                        rd = In uninit.as_mut_ptr(),
+                        rs1 = In two_modulus_bytes.as_ptr(),
+                        rs2 = Const "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
                     );
                 }
             }

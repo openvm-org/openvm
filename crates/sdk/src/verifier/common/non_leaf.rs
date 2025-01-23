@@ -1,7 +1,7 @@
 use std::{array, borrow::Borrow};
 
 use openvm_circuit::arch::PUBLIC_VALUES_AIR_ID;
-use openvm_native_compiler::ir::{Array, Builder, Config, Felt, RVar, Usize, DIGEST_SIZE};
+use openvm_native_compiler::ir::{Array, Builder, Config, Felt, RVar, DIGEST_SIZE};
 use openvm_native_recursion::{
     challenger::duplex::DuplexChallengerVariable, fri::TwoAdicFriPcsVariable, stark::StarkVerifier,
     types::MultiStarkVerificationAdvice, vars::StarkProofVariable,
@@ -39,11 +39,12 @@ impl<C: Config> NonLeafVerifierVariables<C> {
         C::F: PrimeField32,
     {
         // At least 1 proof should be provided.
-        builder.assert_ne::<Usize<_>>(proofs.len(), RVar::zero());
+        builder.assert_nonzero(&proofs.len());
         let pvs = VmVerifierPvs::<Felt<C::F>>::uninit(builder);
         let leaf_verifier_commit = array::from_fn(|_| builder.uninit());
 
-        builder.range(0, proofs.len()).for_each(|i, builder| {
+        builder.range(0, proofs.len()).for_each(|i_vec, builder| {
+            let i = i_vec[0];
             let proof = builder.get(proofs, i);
             assert_required_air_for_agg_vm_present(builder, &proof);
             let proof_vm_pvs = self.verify_internal_or_leaf_verifier_proof(builder, &proof);

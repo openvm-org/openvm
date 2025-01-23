@@ -1,10 +1,10 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -50,7 +50,7 @@ fn set_and_execute(
     tester.execute_with_pc(
         chip,
         &Instruction::large_from_isize(
-            VmOpcode::with_default_offset(opcode),
+            opcode.global_opcode(),
             a as isize,
             0,
             imm as isize,
@@ -82,9 +82,7 @@ fn set_and_execute(
 fn rand_jal_lui_test() {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let adapter = Rv32CondRdWriteAdapterChip::<F>::new(
@@ -92,7 +90,7 @@ fn rand_jal_lui_test() {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone(), Rv32JalLuiOpcode::default_offset());
+    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone());
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
@@ -126,9 +124,7 @@ fn run_negative_jal_lui_test(
 ) {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let adapter = Rv32CondRdWriteAdapterChip::<F>::new(
@@ -137,7 +133,7 @@ fn run_negative_jal_lui_test(
         tester.memory_bridge(),
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone(), Rv32JalLuiOpcode::default_offset());
+    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone());
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     set_and_execute(
@@ -311,9 +307,7 @@ fn overflow_negative_tests() {
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let adapter = Rv32CondRdWriteAdapterChip::<F>::new(
@@ -321,7 +315,7 @@ fn execute_roundtrip_sanity_test() {
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let core = Rv32JalLuiCoreChip::new(bitwise_chip, Rv32JalLuiOpcode::default_offset());
+    let core = Rv32JalLuiCoreChip::new(bitwise_chip);
     let mut chip = Rv32JalLuiChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
     let num_tests: usize = 10;
     for _ in 0..num_tests {

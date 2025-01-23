@@ -7,7 +7,7 @@ use std::{
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::instruction::Instruction;
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
     air_builders::{debug::DebugConstraintBuilder, symbolic::SymbolicRapBuilder},
     config::{StarkGenericConfig, Val},
@@ -17,7 +17,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter, Stateful,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -158,6 +158,23 @@ where
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I>;
+
+    /// The offset the opcodes by this chip start from.
+    /// This is usually just `CorrespondingOpcode::CLASS_OFFSET`,
+    /// but sometimes (for modular chips, for example) it also depends on something else.
+    fn start_offset(&self) -> usize;
+
+    fn start_offset_expr(&self) -> AB::Expr {
+        AB::Expr::from_canonical_usize(self.start_offset())
+    }
+
+    fn expr_to_global_expr(&self, local_expr: impl Into<AB::Expr>) -> AB::Expr {
+        self.start_offset_expr() + local_expr.into()
+    }
+
+    fn opcode_to_global_expr(&self, local_opcode: impl LocalOpcode) -> AB::Expr {
+        self.expr_to_global_expr(AB::Expr::from_canonical_usize(local_opcode.local_usize()))
+    }
 }
 
 pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
@@ -206,6 +223,18 @@ where
             records: Vec::with_capacity(DEFAULT_RECORDS_CAPACITY),
             offline_memory,
         }
+    }
+}
+
+impl<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> Stateful<Vec<u8>>
+    for VmChipWrapper<F, A, C>
+{
+    fn load_state(&mut self, state: Vec<u8>) {
+        self.records = bitcode::deserialize(&state).unwrap();
+    }
+
+    fn store_state(&self) -> Vec<u8> {
+        bitcode::serialize(&self.records).unwrap()
     }
 }
 

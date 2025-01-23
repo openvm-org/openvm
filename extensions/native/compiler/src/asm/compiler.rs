@@ -1,5 +1,4 @@
 use alloc::{collections::BTreeMap, vec};
-use std::collections::BTreeSet;
 
 use openvm_circuit::arch::instructions::instruction::DebugInfo;
 use openvm_stark_backend::p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
@@ -8,7 +7,7 @@ use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrCon
 use crate::{
     asm::AsmInstruction,
     ir::{Array, DslIr, Ext, Felt, Ptr, RVar, Usize, Var},
-    prelude::{MemIndex, TracedVec},
+    prelude::TracedVec,
 };
 
 /// The memory location for the top of memory
@@ -20,7 +19,7 @@ pub(crate) const HEAP_START_ADDRESS: i32 = 1 << 24;
 /// The heap pointer address.
 pub(crate) const HEAP_PTR: i32 = HEAP_START_ADDRESS - 4;
 /// Utility register.
-pub(crate) const A0: i32 = HEAP_START_ADDRESS - 8;
+pub const A0: i32 = HEAP_START_ADDRESS - 8;
 
 /// The memory location for the top of the stack.
 pub(crate) const STACK_TOP: i32 = HEAP_START_ADDRESS - 64;
@@ -29,10 +28,6 @@ pub(crate) const STACK_TOP: i32 = HEAP_START_ADDRESS - 64;
 // #[derive(Debug, Clone, Default)]
 pub struct AsmCompiler<F, EF> {
     basic_blocks: Vec<BasicBlock<F, EF>>,
-    break_label: Option<F>,
-    break_label_map: BTreeMap<F, F>,
-    break_counter: usize,
-    contains_break: BTreeSet<F>,
     function_labels: BTreeMap<String, F>,
     trap_label: F,
     word_size: usize,
@@ -74,23 +69,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     pub fn new(word_size: usize) -> Self {
         Self {
             basic_blocks: vec![BasicBlock::new()],
-            break_label: None,
-            break_label_map: BTreeMap::new(),
-            contains_break: BTreeSet::new(),
             function_labels: BTreeMap::new(),
-            break_counter: 0,
             trap_label: F::ONE,
             word_size,
         }
-    }
-
-    /// Creates a new break label.
-    pub fn new_break_label(&mut self) -> F {
-        let label = self.break_counter;
-        self.break_counter += 1;
-        let label = F::from_canonical_usize(label);
-        self.break_label = Some(label);
-        label
     }
 
     /// Builds the operations into assembly instructions.
@@ -365,25 +347,15 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         );
                     }
                 }
-                DslIr::Break => {
-                    let label = self.break_label.expect("No break label set");
-                    let current_block = self.block_label();
-                    self.contains_break.insert(current_block);
-                    self.push(AsmInstruction::Break(label), debug_info);
-                }
-                DslIr::For(start, end, step_size, loop_var, block) => {
-                    let for_compiler = ForCompiler {
+                DslIr::ZipFor(starts, end0, step_sizes, loop_vars, block) => {
+                    let zip_for_compiler = ZipForCompiler {
                         compiler: self,
-                        start,
-                        end,
-                        step_size,
-                        loop_var,
+                        starts,
+                        end0,
+                        step_sizes,
+                        loop_vars,
                     };
-                    for_compiler.for_each(move |_, builder| builder.build(block), debug_info);
-                }
-                DslIr::Loop(block) => {
-                    let loop_compiler = LoopCompiler { compiler: self };
-                    loop_compiler.compile(move |builder| builder.build(block), debug_info);
+                    zip_for_compiler.for_each(move |_, builder| builder.build(block), debug_info);
                 }
                 DslIr::AssertEqV(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
@@ -393,14 +365,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::Const(rhs), false, debug_info)
                 }
-                DslIr::AssertNeV(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Val(rhs.fp()), true, debug_info)
-                }
-                DslIr::AssertNeVI(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Const(rhs), true, debug_info)
-                }
                 DslIr::AssertEqF(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::Val(rhs.fp()), false, debug_info)
@@ -408,14 +372,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::AssertEqFI(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::Const(rhs), false, debug_info)
-                }
-                DslIr::AssertNeF(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Val(rhs.fp()), true, debug_info)
-                }
-                DslIr::AssertNeFI(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::Const(rhs), true, debug_info)
                 }
                 DslIr::AssertEqE(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
@@ -425,13 +381,19 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::ExtConst(rhs), false, debug_info)
                 }
-                DslIr::AssertNeE(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::ExtVal(rhs.fp()), true, debug_info)
-                }
-                DslIr::AssertNeEI(lhs, rhs) => {
-                    // If lhs == rhs, execute TRAP
-                    self.assert(lhs.fp(), ValueOrConst::ExtConst(rhs), true, debug_info)
+                DslIr::AssertNonZero(u) => {
+                    // If u == 0, execute TRAP
+                    match u {
+                        Usize::Const(_) => self.assert(
+                            u.value() as i32,
+                            ValueOrConst::Const(F::ZERO),
+                            true,
+                            debug_info,
+                        ),
+                        Usize::Var(v) => {
+                            self.assert(v.fp(), ValueOrConst::Const(F::ZERO), true, debug_info)
+                        }
+                    }
                 }
                 DslIr::Alloc(ptr, len, size) => {
                     self.alloc(ptr, len, size, debug_info);
@@ -441,22 +403,36 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         AsmInstruction::LoadFI(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
-                    IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::LoadF(var.fp(), ptr.fp(), index, size, offset),
-                        debug_info.clone(),
-                    ),
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
+                        self.push(
+                            AsmInstruction::LoadFI(var.fp(), A0, F::ZERO, F::ZERO, offset),
+                            debug_info.clone(),
+                        )
+                    }
                 },
                 DslIr::LoadF(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
                         AsmInstruction::LoadFI(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
-                    IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::LoadF(var.fp(), ptr.fp(), index, size, offset),
-                        debug_info.clone(),
-                    ),
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
+                        self.push(
+                            AsmInstruction::LoadFI(var.fp(), A0, F::ZERO, F::ZERO, offset),
+                            debug_info.clone(),
+                        )
+                    }
                 },
-                DslIr::LoadE(var, ptr, index) => self.load_ext(var, ptr.fp(), index, debug_info),
+                DslIr::LoadE(var, ptr, index) => match index.fp() {
+                    IndexTriple::Const(index, offset, size) => {
+                        self.load_ext(var, ptr.fp(), index * size + offset, debug_info)
+                    }
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
+                        self.load_ext(var, A0, offset, debug_info)
+                    }
+                },
                 DslIr::LoadHeapPtr(ptr) => self.push(
                     AsmInstruction::AddFI(ptr.fp(), HEAP_PTR, F::ZERO),
                     debug_info,
@@ -466,34 +442,42 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         AsmInstruction::StoreFI(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
-                    IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::StoreF(var.fp(), ptr.fp(), index, size, offset),
-                        debug_info.clone(),
-                    ),
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
+                        self.push(
+                            AsmInstruction::StoreFI(var.fp(), A0, F::ZERO, F::ZERO, offset),
+                            debug_info.clone(),
+                        )
+                    }
                 },
                 DslIr::StoreF(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
                         AsmInstruction::StoreFI(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
-                    IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::StoreF(var.fp(), ptr.fp(), index, size, offset),
-                        debug_info.clone(),
-                    ),
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
+                        self.push(
+                            AsmInstruction::StoreFI(var.fp(), A0, F::ZERO, F::ZERO, offset),
+                            debug_info.clone(),
+                        )
+                    }
                 },
-                DslIr::StoreE(var, ptr, index) => self.store_ext(var, ptr.fp(), index, debug_info),
+                DslIr::StoreE(var, ptr, index) => match index.fp() {
+                    IndexTriple::Const(index, offset, size) => {
+                        self.store_ext(var, ptr.fp(), index * size + offset, debug_info)
+                    }
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
+                        self.store_ext(var, A0, offset, debug_info)
+                    }
+                },
                 DslIr::StoreHeapPtr(ptr) => self.push(
                     AsmInstruction::AddFI(HEAP_PTR, ptr.fp(), F::ZERO),
                     debug_info,
                 ),
                 DslIr::HintBitsF(var, len) => {
                     self.push(AsmInstruction::HintBits(var.fp(), len), debug_info);
-                }
-                DslIr::HintBitsV(var, len) => {
-                    self.push(AsmInstruction::HintBits(var.fp(), len), debug_info);
-                }
-                DslIr::HintBitsU(_) => {
-                    todo!()
                 }
                 DslIr::Poseidon2PermuteBabyBear(dst, src) => match (dst, src) {
                     (Array::Dyn(dst, _), Array::Dyn(src, _)) => self.push(
@@ -563,7 +547,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::Halt => {
                     self.push(AsmInstruction::Halt, debug_info);
                 }
-                DslIr::FriReducedOpening(alpha, curr_alpha_pow, at_x_array, at_z_array, result) => {
+                DslIr::FriReducedOpening(alpha, at_x_array, at_z_array, result) => {
                     self.push(
                         AsmInstruction::FriReducedOpening(
                             at_x_array.ptr().fp(),
@@ -576,7 +560,32 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                                 Usize::Var(len) => len.fp(),
                             },
                             alpha.fp(),
-                            curr_alpha_pow.fp(),
+                        ),
+                        debug_info,
+                    );
+                }
+                DslIr::VerifyBatchFelt(dim, opened, sibling, index, commit) => {
+                    self.push(
+                        AsmInstruction::VerifyBatchFelt(
+                            dim.ptr().fp(),
+                            opened.ptr().fp(),
+                            opened.len().get_var().fp(),
+                            sibling.ptr().fp(),
+                            index.ptr().fp(),
+                            commit.ptr().fp(),
+                        ),
+                        debug_info,
+                    );
+                }
+                DslIr::VerifyBatchExt(dim, opened, sibling, index, commit) => {
+                    self.push(
+                        AsmInstruction::VerifyBatchExt(
+                            dim.ptr().fp(),
+                            opened.ptr().fp(),
+                            opened.len().get_var().fp(),
+                            sibling.ptr().fp(),
+                            index.ptr().fp(),
+                            commit.ptr().fp(),
                         ),
                         debug_info,
                     );
@@ -797,162 +806,88 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> IfCom
     }
 }
 
-/// A builder for a for loop.
-///
-/// SAFETY: Starting with end < start will lead to undefined behavior.
-pub struct ForCompiler<'a, F: Field, EF> {
+// Zipped for loop -- loop extends over the first entry in starts and end0
+// ATTENTION: starting with starts[0] > end0 will lead to undefined behavior.
+pub struct ZipForCompiler<'a, F: Field, EF> {
     compiler: &'a mut AsmCompiler<F, EF>,
-    start: RVar<F>,
-    end: RVar<F>,
-    step_size: F,
-    loop_var: Var<F>,
+    starts: Vec<RVar<F>>,
+    end0: RVar<F>,
+    step_sizes: Vec<F>,
+    loop_vars: Vec<Var<F>>,
 }
 
-impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> ForCompiler<'_, F, EF> {
+impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
+    ZipForCompiler<'_, F, EF>
+{
+    /// This assumes that the number of steps in `range(starts[0], ends[0], step_sizes[0])` is
+    /// minimal among all ranges.
+    ///
+    /// It is the responsibility of the caller to ensure that this precondition holds.
     pub(super) fn for_each(
-        mut self,
-        f: impl FnOnce(Var<F>, &mut AsmCompiler<F, EF>),
+        self,
+        f: impl FnOnce(Vec<Var<F>>, &mut AsmCompiler<F, EF>),
         debug_info: Option<DebugInfo>,
     ) {
-        // The function block structure:
-        // - Setting the loop range
-        // - Executing the loop body and incrementing the loop variable
-        // - the loop condition
+        // initialize the loop variables
+        self.starts
+            .iter()
+            .zip(self.loop_vars.iter())
+            .for_each(|(start, loop_var)| match start {
+                RVar::Const(start) => {
+                    self.compiler.push(
+                        AsmInstruction::ImmF(loop_var.fp(), *start),
+                        debug_info.clone(),
+                    );
+                }
+                RVar::Val(start) => {
+                    self.compiler.push(
+                        AsmInstruction::CopyF(loop_var.fp(), start.fp()),
+                        debug_info.clone(),
+                    );
+                }
+            });
 
-        // Set the loop variable to the start of the range.
-        self.set_loop_var(debug_info.clone());
-
-        // Save the label of the for loop call.
         let loop_call_label = self.compiler.block_label();
 
-        // Initialize a break label for this loop.
-        let break_label = self.compiler.new_break_label();
-        self.compiler.break_label = Some(break_label);
-
-        // A basic block for the loop body
         self.compiler.basic_block();
-
-        // Save the loop body label for the loop condition.
         let loop_label = self.compiler.block_label();
 
-        // The loop body.
-        f(self.loop_var, self.compiler);
+        f(self.loop_vars.clone(), self.compiler);
 
-        // Increment the loop variable.
-        self.compiler.push(
-            AsmInstruction::AddFI(self.loop_var.fp(), self.loop_var.fp(), self.step_size),
-            debug_info.clone(),
-        );
+        self.loop_vars
+            .iter()
+            .zip(self.step_sizes.iter())
+            .for_each(|(loop_var, step_size)| {
+                self.compiler.push(
+                    AsmInstruction::AddFI(loop_var.fp(), loop_var.fp(), *step_size),
+                    debug_info.clone(),
+                );
+            });
 
-        // Add a basic block for the loop condition.
         self.compiler.basic_block();
+        let end = self.end0;
+        let loop_var = self.loop_vars[0];
+        match end {
+            RVar::Const(end) => {
+                self.compiler.push(
+                    AsmInstruction::BneI(loop_label, loop_var.fp(), end),
+                    debug_info.clone(),
+                );
+            }
+            RVar::Val(end) => {
+                self.compiler.push(
+                    AsmInstruction::Bne(loop_label, loop_var.fp(), end.fp()),
+                    debug_info.clone(),
+                );
+            }
+        };
 
-        // Jump to loop body if the loop condition still holds.
-        self.jump_to_loop_body(loop_label, debug_info.clone());
-
-        // Add a jump instruction to the loop condition in the loop call block.
         let label = self.compiler.block_label();
         let instr = AsmInstruction::j(label);
         self.compiler
             .push_to_block(loop_call_label, instr, debug_info.clone());
 
-        // Initialize the after loop block.
         self.compiler.basic_block();
-
-        // Resolve the break label.
-        let label = self.compiler.block_label();
-        self.compiler.break_label_map.insert(break_label, label);
-
-        // Replace the break instruction with a jump to the after loop block.
-        for block in self.compiler.contains_break.iter() {
-            for instruction in self.compiler.basic_blocks[block.as_canonical_u32() as usize]
-                .0
-                .iter_mut()
-            {
-                if let AsmInstruction::Break(l) = instruction {
-                    if *l == break_label {
-                        *instruction = AsmInstruction::j(label);
-                    }
-                }
-            }
-        }
-
-        // self.compiler.contains_break.clear();
-    }
-
-    fn set_loop_var(&mut self, debug_info: Option<DebugInfo>) {
-        match self.start {
-            RVar::Const(start) => {
-                self.compiler.push(
-                    AsmInstruction::ImmF(self.loop_var.fp(), start),
-                    debug_info.clone(),
-                );
-            }
-            RVar::Val(var) => {
-                self.compiler.push(
-                    AsmInstruction::CopyF(self.loop_var.fp(), var.fp()),
-                    debug_info.clone(),
-                );
-            }
-        }
-    }
-
-    fn jump_to_loop_body(&mut self, loop_label: F, debug_info: Option<DebugInfo>) {
-        match self.end {
-            RVar::Const(end) => {
-                let instr = AsmInstruction::BneI(loop_label, self.loop_var.fp(), end);
-                self.compiler.push(instr, debug_info.clone());
-            }
-            RVar::Val(end) => {
-                let instr = AsmInstruction::Bne(loop_label, self.loop_var.fp(), end.fp());
-                self.compiler.push(instr, debug_info.clone());
-            }
-        }
-    }
-}
-
-struct LoopCompiler<'a, F: Field, EF> {
-    compiler: &'a mut AsmCompiler<F, EF>,
-}
-
-impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> LoopCompiler<'_, F, EF> {
-    fn compile(
-        self,
-        compile_body: impl FnOnce(&mut AsmCompiler<F, EF>),
-        debug_info: Option<DebugInfo>,
-    ) {
-        // Initialize a break label for this loop.
-        let break_label = self.compiler.new_break_label();
-        self.compiler.break_label = Some(break_label);
-
-        // Loop block.
-        self.compiler.basic_block();
-        let loop_label = self.compiler.block_label();
-
-        compile_body(self.compiler);
-        self.compiler
-            .push(AsmInstruction::j(loop_label), debug_info.clone());
-
-        // After loop block.
-        self.compiler.basic_block();
-        let after_loop_label = self.compiler.block_label();
-        self.compiler
-            .break_label_map
-            .insert(break_label, after_loop_label);
-
-        // Replace break instructions with a jump to the after loop block.
-        for block in self.compiler.contains_break.iter() {
-            for instruction in self.compiler.basic_blocks[block.as_canonical_u32() as usize]
-                .0
-                .iter_mut()
-            {
-                if let AsmInstruction::Break(l) = instruction {
-                    if *l == break_label {
-                        *instruction = AsmInstruction::j(after_loop_label);
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -968,82 +903,18 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         }
     }
 
-    fn load_ext(
-        &mut self,
-        val: Ext<F, EF>,
-        addr: i32,
-        index: MemIndex<F>,
-        debug_info: Option<DebugInfo>,
-    ) {
-        match index.fp() {
-            IndexTriple::Const(index, offset, size) => {
-                for i in 0..EF::D {
-                    self.push(
-                        AsmInstruction::LoadFI(
-                            val.fp() + i as i32,
-                            addr,
-                            index,
-                            size,
-                            offset + F::from_canonical_usize(i),
-                        ),
-                        debug_info.clone(),
-                    )
-                }
-            }
-            IndexTriple::Var(index, offset, size) => {
-                for i in 0..EF::D {
-                    self.push(
-                        AsmInstruction::LoadF(
-                            val.fp() + i as i32,
-                            addr,
-                            index,
-                            size,
-                            offset + F::from_canonical_usize(i),
-                        ),
-                        debug_info.clone(),
-                    )
-                }
-            }
-        }
+    fn load_ext(&mut self, val: Ext<F, EF>, addr: i32, offset: F, debug_info: Option<DebugInfo>) {
+        self.push(
+            AsmInstruction::LoadEI(val.fp(), addr, F::ZERO, F::ONE, offset),
+            debug_info.clone(),
+        );
     }
 
-    fn store_ext(
-        &mut self,
-        val: Ext<F, EF>,
-        addr: i32,
-        index: MemIndex<F>,
-        debug_info: Option<DebugInfo>,
-    ) {
-        match index.fp() {
-            IndexTriple::Const(index, offset, size) => {
-                for i in 0..EF::D {
-                    self.push(
-                        AsmInstruction::StoreFI(
-                            val.fp() + i as i32,
-                            addr,
-                            index,
-                            size,
-                            offset + F::from_canonical_usize(i),
-                        ),
-                        debug_info.clone(),
-                    )
-                }
-            }
-            IndexTriple::Var(index, offset, size) => {
-                for i in 0..EF::D {
-                    self.push(
-                        AsmInstruction::StoreF(
-                            val.fp() + i as i32,
-                            addr,
-                            index,
-                            size,
-                            offset + F::from_canonical_usize(i),
-                        ),
-                        debug_info.clone(),
-                    )
-                }
-            }
-        }
+    fn store_ext(&mut self, val: Ext<F, EF>, addr: i32, offset: F, debug_info: Option<DebugInfo>) {
+        self.push(
+            AsmInstruction::StoreEI(val.fp(), addr, F::ZERO, F::ONE, offset),
+            debug_info.clone(),
+        );
     }
 
     fn add_ext_exti(

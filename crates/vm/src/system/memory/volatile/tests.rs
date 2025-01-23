@@ -1,6 +1,8 @@
 use std::{collections::HashSet, iter, sync::Arc};
 
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, prover::types::AirProofInput, Chip,
 };
@@ -42,7 +44,7 @@ fn boundary_air_test() {
     }
 
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, DECOMP);
-    let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+    let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
     let mut boundary_chip =
         VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
 
@@ -110,7 +112,7 @@ fn boundary_air_test() {
     // test trace height override
     {
         let overridden_height = boundary_api.main_trace_height() * 2;
-        let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
         let mut boundary_chip =
             VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
         boundary_chip.set_overridden_height(overridden_height);

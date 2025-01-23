@@ -9,7 +9,9 @@ use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sdk::{commit::commit_app_exe, prover::ContinuationProver, Sdk, StdIn};
+use openvm_sdk::{
+    commit::commit_app_exe, keygen::RootVerifierProvingKey, prover::ContinuationProver, Sdk, StdIn,
+};
 use openvm_stark_sdk::bench::run_with_metric_collection;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
@@ -35,7 +37,11 @@ async fn main() -> Result<()> {
             .unwrap_or(PathBuf::from(DEFAULT_PARAMS_DIR)),
     );
     let app_pk = Arc::new(sdk.app_keygen(app_config)?);
-    let full_agg_pk = sdk.agg_keygen(agg_config, &halo2_params_reader)?;
+    let full_agg_pk = sdk.agg_keygen(
+        agg_config,
+        &halo2_params_reader,
+        None::<&RootVerifierProvingKey>,
+    )?;
     let elf = args.build_bench_program("fibonacci")?;
     let exe = VmExe::from_elf(
         elf,

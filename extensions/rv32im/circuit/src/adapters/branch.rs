@@ -73,7 +73,7 @@ pub struct Rv32BranchAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs2_ptr: T,
-    pub reads_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; 2],
+    pub reads_aux: [MemoryReadAuxCols<T>; 2],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -216,10 +216,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
         let rs2 = memory.record_by_id(read_record.rs2);
         row_slice.rs1_ptr = rs1.pointer;
         row_slice.rs2_ptr = rs2.pointer;
-        row_slice.reads_aux = [
-            aux_cols_factory.make_read_aux_cols(rs1),
-            aux_cols_factory.make_read_aux_cols(rs2),
-        ]
+        aux_cols_factory.generate_read_aux(rs1, &mut row_slice.reads_aux[0]);
+        aux_cols_factory.generate_read_aux(rs2, &mut row_slice.reads_aux[1]);
     }
 
     fn air(&self) -> &Self::Air {

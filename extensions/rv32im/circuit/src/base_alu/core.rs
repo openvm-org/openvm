@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
 use openvm_circuit::arch::{
@@ -9,11 +8,11 @@ use openvm_circuit::arch::{
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -139,12 +138,15 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        let expected_opcode = flags.iter().zip(BaseAluOpcode::iter()).fold(
-            AB::Expr::ZERO,
-            |acc, (flag, local_opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
-            },
-        ) + AB::Expr::from_canonical_usize(self.offset);
+        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
+            self,
+            flags.iter().zip(BaseAluOpcode::iter()).fold(
+                AB::Expr::ZERO,
+                |acc, (flag, local_opcode)| {
+                    acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
+                },
+            ),
+        );
 
         AdapterAirContext {
             to_pc: None,
@@ -156,6 +158,10 @@ where
             }
             .into(),
         }
+    }
+
+    fn start_offset(&self) -> usize {
+        self.offset
     }
 }
 
@@ -173,12 +179,12 @@ pub struct BaseAluCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> 
 
 pub struct BaseAluCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
     ) -> Self {
         Self {

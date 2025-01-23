@@ -1,7 +1,7 @@
 use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{
     asm::AsmBuilder,
-    ir::{Array, Config, Ext, ExtConst, Felt, RVar, Ref, Var},
+    ir::{Array, Config, Ext, ExtConst, Felt, RVar, Var},
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
 };
 use openvm_native_compiler_derive::DslVariable;
@@ -11,9 +11,9 @@ use rand::{thread_rng, Rng};
 
 #[derive(DslVariable, Clone, Debug)]
 pub struct Point<C: Config> {
-    x: Ref<C, Var<C::N>>,
-    y: Ref<C, Felt<C::F>>,
-    z: Ref<C, Ext<C::F, C::EF>>,
+    x: Ptr<C::N>,
+    y: Ptr<C::N>,
+    z: Ptr<C::N>,
 }
 
 #[test]
@@ -64,7 +64,8 @@ fn test_compiler_array() {
     }
 
     // Put values dynamically
-    builder.range(0, dyn_len).for_each(|i, builder| {
+    builder.range(0, dyn_len).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         builder.set(
             &var_array,
             i,
@@ -75,7 +76,8 @@ fn test_compiler_array() {
     });
 
     // Assert values set.
-    builder.range(0, dyn_len).for_each(|i, builder| {
+    builder.range(0, dyn_len).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         let var_value = builder.get(&var_array, i);
         builder.assert_var_eq(var_value, i * RVar::from_field(F::from_canonical_u32(2)));
         let felt_value = builder.get(&felt_array, i);
@@ -87,16 +89,41 @@ fn test_compiler_array() {
     // Test the derived macro and mixed size allocations.
     let point_array = builder.dyn_array::<Point<_>>(len);
 
-    builder.range(0, dyn_len).for_each(|i, builder| {
+    builder.range(0, dyn_len).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         let x: Var<_> = builder.eval(F::TWO);
-        let mut x_ptr: Ref<_, Var<_>> = builder.uninit();
-        builder.set_to_value(&mut x_ptr, x);
+        let x_ptr: Ptr<F> = builder.uninit();
+        builder.store(
+            x_ptr,
+            MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: 1,
+            },
+            x,
+        );
         let y: Felt<_> = builder.eval(F::ONE);
-        let mut y_ptr: Ref<_, Felt<_>> = builder.uninit();
-        builder.set_to_value(&mut y_ptr, y);
+        let y_ptr: Ptr<F> = builder.uninit();
+        builder.store(
+            y_ptr,
+            MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: 1,
+            },
+            y,
+        );
         let z: Ext<_, _> = builder.eval(EF::ONE.cons());
-        let mut z_ptr: Ref<_, Ext<_, _>> = builder.uninit();
-        builder.set_to_value(&mut z_ptr, z);
+        let z_ptr: Ptr<F> = builder.uninit();
+        builder.store(
+            z_ptr,
+            MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: 4,
+            },
+            z,
+        );
         let point = Point {
             x: x_ptr,
             y: y_ptr,
@@ -105,11 +132,39 @@ fn test_compiler_array() {
         builder.set(&point_array, i, point);
     });
 
-    builder.range(0, dyn_len).for_each(|i, builder| {
+    builder.range(0, dyn_len).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         let point = builder.get(&point_array, i);
-        let x = builder.deref(&point.x);
-        let y = builder.deref(&point.y);
-        let z = builder.deref(&point.z);
+        let x: Var<_> = builder.uninit();
+        builder.load(
+            x,
+            point.x,
+            MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: 1,
+            },
+        );
+        let y: Felt<_> = builder.uninit();
+        builder.load(
+            y,
+            point.y,
+            MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: 1,
+            },
+        );
+        let z: Ext<_, _> = builder.uninit();
+        builder.load(
+            z,
+            point.z,
+            MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: 4,
+            },
+        );
         builder.assert_var_eq(x, F::TWO);
         builder.assert_felt_eq(y, F::ONE);
         builder.assert_ext_eq(z, EF::ONE.cons());
@@ -117,12 +172,14 @@ fn test_compiler_array() {
 
     let array = builder.dyn_array::<Array<_, Var<_>>>(len);
 
-    builder.range(0, array.len()).for_each(|i, builder| {
+    builder.range(0, array.len()).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         builder.set(&array, i, var_array.clone());
     });
 
     // TODO: this part of the test is extremely slow.
-    builder.range(0, array.len()).for_each(|i, builder| {
+    builder.range(0, array.len()).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         let point_array_back = builder.get(&array, i);
         builder.assert_eq::<Array<_, _>>(point_array_back, var_array.clone());
     });

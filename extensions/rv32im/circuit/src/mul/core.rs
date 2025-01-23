@@ -1,16 +1,15 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
+use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -33,7 +32,7 @@ pub struct MultiplicationCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
 #[derive(Copy, Clone, Debug)]
 pub struct MultiplicationCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: RangeTupleCheckerBus<2>,
-    offset: usize,
+    pub offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -89,7 +88,7 @@ where
         }
 
         // TODO: revisit after opcode change, this core chip currently supports a single opcode
-        let expected_opcode = AB::Expr::from_canonical_usize(MulOpcode::MUL as usize + self.offset);
+        let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, MulOpcode::MUL);
 
         AdapterAirContext {
             to_pc: None,
@@ -102,16 +101,20 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        self.offset
+    }
 }
 
 #[derive(Debug)]
 pub struct MultiplicationCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: MultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
+    pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationCoreChip<NUM_LIMBS, LIMB_BITS> {
-    pub fn new(range_tuple_chip: Arc<RangeTupleCheckerChip<2>>, offset: usize) -> Self {
+    pub fn new(range_tuple_chip: SharedRangeTupleCheckerChip<2>, offset: usize) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
         // < NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1 bytes
         // (with LIMB_BITS bits).

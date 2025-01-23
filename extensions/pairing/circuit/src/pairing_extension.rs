@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use derive_more::derive::From;
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
@@ -9,11 +7,11 @@ use openvm_circuit::{
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_ecc_circuit::CurveConfig;
-use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
+use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_pairing_guest::{
     bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER, BLS12_381_XI_ISIZE},
@@ -66,7 +64,7 @@ pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, BytesStateful)]
 pub enum PairingExtensionExecutor<F: PrimeField32> {
     // bn254 (32 limbs)
     MillerDoubleStepRv32_32(MillerDoubleStepChip<F, 4, 8, 32>),
@@ -84,9 +82,9 @@ pub enum PairingExtensionExecutor<F: PrimeField32> {
     EcLineMulBy02345(EcLineMulBy02345Chip<F, 36, 30, 36, 16>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
 pub enum PairingExtensionPeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
+    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),
 }
 
@@ -104,14 +102,14 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
             program_bus,
             memory_bridge,
         } = builder.system_port();
-        let bitwise_lu_chip = if let Some(chip) = builder
-            .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
+        let bitwise_lu_chip = if let Some(&chip) = builder
+            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()
         {
-            Arc::clone(chip)
+            chip.clone()
         } else {
             let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = Arc::new(BitwiseOperationLookupChip::new(bitwise_lu_bus));
+            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
             inventory.add_periphery_chip(chip.clone());
             chip
         };
@@ -121,8 +119,8 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
         for curve in self.supported_curves.iter() {
             let pairing_idx = *curve as usize;
             let pairing_class_offset =
-                PairingOpcode::default_offset() + pairing_idx * PairingOpcode::COUNT;
-            let fp12_class_offset = Fp12Opcode::default_offset() + pairing_idx * Fp12Opcode::COUNT;
+                PairingOpcode::CLASS_OFFSET + pairing_idx * PairingOpcode::COUNT;
+            let fp12_class_offset = Fp12Opcode::CLASS_OFFSET + pairing_idx * Fp12Opcode::COUNT;
             match curve {
                 PairingCurve::Bn254 => {
                     let bn_config = ExprBuilderConfig {

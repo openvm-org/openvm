@@ -1,10 +1,9 @@
 use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
-use num_bigint_dig::BigUint;
+use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
@@ -12,12 +11,12 @@ use openvm_circuit::arch::{
 };
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     is_equal_array::{IsEqArrayIo, IsEqArraySubAir},
     SubAir, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -233,6 +232,10 @@ where
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        self.offset
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -255,7 +258,7 @@ pub struct ModularIsEqualCoreChip<
     const LIMB_BITS: usize,
 > {
     pub air: ModularIsEqualCoreAir<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
 impl<const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
@@ -263,7 +266,7 @@ impl<const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
 {
     pub fn new(
         modulus: BigUint,
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
     ) -> Self {
         Self {

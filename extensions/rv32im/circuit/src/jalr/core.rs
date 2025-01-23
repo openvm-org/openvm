@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
 use openvm_circuit::arch::{
@@ -9,14 +8,14 @@ use openvm_circuit::arch::{
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    UsizeOpcode,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
 use openvm_stark_backend::{
@@ -61,7 +60,6 @@ pub struct Rv32JalrCoreRecord<F> {
 pub struct Rv32JalrCoreAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
-    pub offset: usize,
 }
 
 impl<F: Field> BaseAir<F> for Rv32JalrCoreAir {
@@ -156,7 +154,7 @@ where
         let to_pc =
             to_pc_limbs[0] * AB::F::TWO + to_pc_limbs[1] * AB::F::from_canonical_u32(1 << 16);
 
-        let expected_opcode = AB::F::from_canonical_usize(JALR as usize + self.offset);
+        let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, JALR);
 
         AdapterAirContext {
             to_pc: Some(to_pc),
@@ -164,32 +162,34 @@ where
             writes: [rd_data].into(),
             instruction: ImmInstruction {
                 is_valid: is_valid.into(),
-                opcode: expected_opcode.into(),
+                opcode: expected_opcode,
                 immediate: imm.into(),
             }
             .into(),
         }
     }
+
+    fn start_offset(&self) -> usize {
+        Rv32JalrOpcode::CLASS_OFFSET
+    }
 }
 
 pub struct Rv32JalrCoreChip {
     pub air: Rv32JalrCoreAir,
-    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl Rv32JalrCoreChip {
     pub fn new(
-        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
-        range_checker_chip: Arc<VariableRangeCheckerChip>,
-        offset: usize,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 16);
         Self {
             air: Rv32JalrCoreAir {
                 bitwise_lookup_bus: bitwise_lookup_chip.bus(),
                 range_bus: range_checker_chip.bus(),
-                offset,
             },
             bitwise_lookup_chip,
             range_checker_chip,
@@ -213,7 +213,8 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, c, .. } = *instruction;
-        let local_opcode = Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let local_opcode =
+            Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(Rv32JalrOpcode::CLASS_OFFSET));
 
         let imm = c.as_canonical_u32();
         let imm_sign = (imm & 0x8000) >> 15;
@@ -257,7 +258,10 @@ where
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", Rv32JalrOpcode::from_usize(opcode - self.air.offset))
+        format!(
+            "{:?}",
+            Rv32JalrOpcode::from_usize(opcode - Rv32JalrOpcode::CLASS_OFFSET)
+        )
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {

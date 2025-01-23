@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{
@@ -8,9 +8,9 @@ use openvm_circuit::{
     utils::{generate_long_number, i32_to_f},
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -45,9 +45,7 @@ type F = BabyBear;
 fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32LessThanChip::<F>::new(
@@ -56,7 +54,7 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        LessThanCoreChip::new(bitwise_chip.clone(), 0),
+        LessThanCoreChip::new(bitwise_chip.clone(), LessThanOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -72,8 +70,14 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             (Some(imm), c)
         };
 
-        let (instruction, rd) =
-            rv32_rand_write_register_or_imm(&mut tester, b, c, c_imm, opcode as usize, &mut rng);
+        let (instruction, rd) = rv32_rand_write_register_or_imm(
+            &mut tester,
+            b,
+            c,
+            c_imm,
+            opcode.global_opcode().as_usize(),
+            &mut rng,
+        );
         tester.execute(&mut chip, &instruction);
 
         let (cmp, _, _, _) =
@@ -85,13 +89,25 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
 
     // Test special case where b = c
     let b = [101, 128, 202, 255];
-    let (instruction, _) =
-        rv32_rand_write_register_or_imm(&mut tester, b, b, None, opcode as usize, &mut rng);
+    let (instruction, _) = rv32_rand_write_register_or_imm(
+        &mut tester,
+        b,
+        b,
+        None,
+        opcode.global_opcode().as_usize(),
+        &mut rng,
+    );
     tester.execute(&mut chip, &instruction);
 
     let b = [36, 0, 0, 0];
-    let (instruction, _) =
-        rv32_rand_write_register_or_imm(&mut tester, b, b, Some(36), opcode as usize, &mut rng);
+    let (instruction, _) = rv32_rand_write_register_or_imm(
+        &mut tester,
+        b,
+        b,
+        Some(36),
+        opcode.global_opcode().as_usize(),
+        &mut rng,
+    );
     tester.execute(&mut chip, &instruction);
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
@@ -137,9 +153,7 @@ fn run_rv32_lt_negative_test(
     interaction_error: bool,
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = Rv32LessThanTestChip::<F>::new(
@@ -148,13 +162,13 @@ fn run_rv32_lt_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        LessThanCoreChip::new(bitwise_chip.clone(), 0),
+        LessThanCoreChip::new(bitwise_chip.clone(), LessThanOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(
         &mut chip,
-        &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 1]),
+        &Instruction::from_usize(opcode.global_opcode(), [0, 0, 0, 1, 1]),
     );
 
     let trace_width = chip.trace_width();

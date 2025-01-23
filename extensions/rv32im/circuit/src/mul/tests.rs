@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{
@@ -7,8 +7,8 @@ use openvm_circuit::{
     },
     utils::generate_long_number,
 };
-use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -48,7 +48,7 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
         RANGE_TUPLE_CHECKER_BUS,
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
-    let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+    let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32MultiplicationChip::<F>::new(
@@ -57,7 +57,7 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        MultiplicationCoreChip::new(range_tuple_checker.clone(), 0),
+        MultiplicationCoreChip::new(range_tuple_checker.clone(), MulOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -70,7 +70,7 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
             b,
             c,
             None,
-            MulOpcode::MUL as usize,
+            MulOpcode::MUL.global_opcode().as_usize(),
             &mut rng,
         );
         instruction.e = F::ZERO;
@@ -123,7 +123,7 @@ fn run_rv32_mul_negative_test(
         RANGE_TUPLE_CHECKER_BUS,
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
-    let range_tuple_chip = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+    let range_tuple_chip = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32MultiplicationTestChip::<F>::new(
@@ -132,16 +132,13 @@ fn run_rv32_mul_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        MultiplicationCoreChip::new(range_tuple_chip.clone(), 0),
+        MultiplicationCoreChip::new(range_tuple_chip.clone(), MulOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(
         &mut chip,
-        &Instruction::from_usize(
-            VmOpcode::from_usize(MulOpcode::MUL as usize),
-            [0, 0, 0, 1, 0],
-        ),
+        &Instruction::from_usize(MulOpcode::MUL.global_opcode(), [0, 0, 0, 1, 0]),
     );
 
     let trace_width = chip.trace_width();

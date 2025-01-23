@@ -381,42 +381,40 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
                 openvm::platform::custom_insn_r!(
-                    OPCODE,
-                    SW_FUNCT3 as usize,
-                    SwBaseFunct7::SwAddNe as usize + #ec_idx
+                    opcode = OPCODE,
+                    funct3 = SW_FUNCT3 as usize,
+                    funct7 = SwBaseFunct7::SwAddNe as usize + #ec_idx
                         * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                    rd,
-                    rs1,
-                    rs2
+                    rd = In rd,
+                    rs1 = In rs1,
+                    rs2 = In rs2
                 );
             }
 
             #[no_mangle]
             extern "C" fn #double_extern_func(rd: usize, rs1: usize) {
                 openvm::platform::custom_insn_r!(
-                    OPCODE,
-                    SW_FUNCT3 as usize,
-                    SwBaseFunct7::SwDouble as usize + #ec_idx
+                    opcode = OPCODE,
+                    funct3 = SW_FUNCT3 as usize,
+                    funct7 = SwBaseFunct7::SwDouble as usize + #ec_idx
                         * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                    rd,
-                    rs1,
-                    "x0"
+                    rd = In rd,
+                    rs1 = In rs1,
+                    rs2 = Const "x0"
                 );
             }
 
             #[no_mangle]
             extern "C" fn #hint_decompress_extern_func(rs1: usize, rs2: usize) {
-                unsafe {
-                    core::arch::asm!(
-                        ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
-                        opcode = const OPCODE,
-                        funct3 = const SW_FUNCT3 as usize,
-                        funct7 = const SwBaseFunct7::HintDecompress as usize + #ec_idx
-                            * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                        rs1 = in(reg) rs1,
-                        rs2 = in(reg) rs2
-                    );
-                }
+                openvm::platform::custom_insn_r!(
+                    opcode = OPCODE,
+                    funct3 = SW_FUNCT3 as usize,
+                    funct7 = SwBaseFunct7::HintDecompress as usize + #ec_idx
+                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    rd = Const "x0",
+                    rs1 = In rs1,
+                    rs2 = In rs2
+                );
             }
         });
 
@@ -431,31 +429,31 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                     let modulus_bytes = <<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
                     let mut one = [0u8; <<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
                     one[0] = 1;
-                    let curve_a_bytes = <#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A.as_le_bytes();
+                    let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A);
                     // p1 should be (p, a)
                     let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
                     let p2 = [one.as_ref(), one.as_ref()].concat();
                     let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(
-                        ::openvm_ecc_guest::OPCODE,
-                        ::openvm_ecc_guest::SW_FUNCT3 as usize,
-                        ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
+                        opcode = ::openvm_ecc_guest::OPCODE,
+                        funct3 = ::openvm_ecc_guest::SW_FUNCT3 as usize,
+                        funct7 = ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
                                 * (::openvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        p1.as_ptr(),
-                        p2.as_ptr()
+                        rd = In uninit.as_mut_ptr(),
+                        rs1 = In p1.as_ptr(),
+                        rs2 = In p2.as_ptr()
                     );
                     openvm::platform::custom_insn_r!(
-                        ::openvm_ecc_guest::OPCODE,
-                        ::openvm_ecc_guest::SW_FUNCT3 as usize,
-                        ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
+                        opcode = ::openvm_ecc_guest::OPCODE,
+                        funct3 = ::openvm_ecc_guest::SW_FUNCT3 as usize,
+                        funct7 = ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
                                 * (::openvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        p1.as_ptr(),
-                        "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE
+                        rd = In uninit.as_mut_ptr(),
+                        rs1 = In p1.as_ptr(),
+                        rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE
                     );
                 }
             }

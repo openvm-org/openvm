@@ -61,6 +61,28 @@ mod tests {
     }
 
     #[test]
+    fn test_ec_two_curves() -> Result<()> {
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "ec_two_curves",
+            ["k256", "p256"],
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        let config =
+            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+        air_test(config, openvm_exe);
+        Ok(())
+    }
+
+    #[test]
     fn test_decompress() -> Result<()> {
         use openvm_ecc_guest::halo2curves::{group::Curve, secp256k1::Secp256k1Affine};
 

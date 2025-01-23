@@ -7,8 +7,10 @@ use std::{
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
+use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip, SymbolicExpr,
 };
@@ -19,7 +21,7 @@ use crate::Fp2;
 
 // Input: Fp2 * 2
 // Output: Fp2
-#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, BytesStateful)]
 pub struct Fp2MulDivChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub  VmChipWrapper<
         F,
@@ -35,7 +37,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         config: ExprBuilderConfig,
         offset: usize,
-        range_checker: Arc<VariableRangeCheckerChip>,
+        range_checker: SharedVariableRangeCheckerChip,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let (expr, is_mul_flag, is_div_flag) = fp2_muldiv_expr(config, range_checker.bus());
@@ -124,16 +126,15 @@ pub fn fp2_muldiv_expr(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
 
     use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use itertools::Itertools;
     use openvm_algebra_transpiler::Fp2Opcode;
     use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use openvm_circuit_primitives::bitwise_op_lookup::{
-        BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
-    use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
     use openvm_mod_circuit_builder::{
         test_utils::{biguint_to_limbs, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
         ExprBuilderConfig,
@@ -153,15 +154,14 @@ mod tests {
     #[test]
     fn test_fp2_muldiv() {
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let modulus = BN254_MODULUS.clone();
         let config = ExprBuilderConfig {
-            modulus: BN254_MODULUS.clone(),
+            modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-            bitwise_bus,
-        ));
+        let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
         let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, NUM_LIMBS, NUM_LIMBS>::new(
             tester.execution_bus(),
             tester.program_bus(),
@@ -172,7 +172,7 @@ mod tests {
         let mut chip = Fp2MulDivChip::new(
             adapter,
             config,
-            Fp2Opcode::default_offset(),
+            Fp2Opcode::CLASS_OFFSET,
             tester.range_checker(),
             tester.offline_memory_mutex_arc(),
         );
@@ -221,6 +221,15 @@ mod tests {
                     .map(BabyBear::from_canonical_u32)
             })
             .collect_vec();
+        let modulus =
+            biguint_to_limbs::<NUM_LIMBS>(modulus, LIMB_BITS).map(BabyBear::from_canonical_u32);
+        let zero = [BabyBear::ZERO; NUM_LIMBS];
+        let setup_instruction = rv32_write_heap_default(
+            &mut tester,
+            vec![modulus, zero],
+            vec![zero; 2],
+            chip.0.core.air.offset + Fp2Opcode::SETUP_MULDIV as usize,
+        );
         let instruction1 = rv32_write_heap_default(
             &mut tester,
             x_limbs.clone(),
@@ -233,6 +242,7 @@ mod tests {
             y_limbs,
             chip.0.core.air.offset + Fp2Opcode::DIV as usize,
         );
+        tester.execute(&mut chip, &setup_instruction);
         tester.execute(&mut chip, &instruction1);
         tester.execute(&mut chip, &instruction2);
         let tester = tester.build().load(chip).load(bitwise_chip).finalize();

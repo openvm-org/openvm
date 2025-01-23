@@ -10,14 +10,22 @@ pub enum AsmInstruction<F, EF> {
     /// Load word (dst, src, var_index, size, offset).
     ///
     /// Load a value from the address stored at src(fp) into dst(fp) with given index and offset.
-    LoadF(i32, i32, i32, F, F),
     LoadFI(i32, i32, F, F, F),
+
+    /// Load extension word (dst, src, var_index, size, offset).
+    ///
+    /// Load an extension from the address stored at src(fp) into dst(fp) with given index and offset.
+    LoadEI(i32, i32, F, F, F),
 
     /// Store word (val, addr, var_index, size, offset)
     ///
     /// Store a value from val(fp) into the address stored at addr(fp) with given index and offset.
-    StoreF(i32, i32, i32, F, F),
     StoreFI(i32, i32, F, F, F),
+
+    /// Store extension word (val, addr, var_index, size, offset)
+    ///
+    /// Store an extension from val(fp) into the address stored at addr(fp) with given index and offset.
+    StoreEI(i32, i32, F, F, F),
 
     /// Set dst = imm.
     ImmF(i32, F),
@@ -100,9 +108,6 @@ pub enum AsmInstruction<F, EF> {
     /// Halt.
     Halt,
 
-    /// Break(label)
-    Break(F),
-
     /// Perform a Poseidon2 permutation on state starting at address `lhs`
     /// and store new state at `rhs`.
     /// (a, b) are pointers to (lhs, rhs).
@@ -111,8 +116,16 @@ pub enum AsmInstruction<F, EF> {
     /// (a, b, c) are memory pointers to (dst, lhs, rhs)
     Poseidon2Compress(i32, i32, i32),
 
-    /// (a, b, res, len, alpha, alpha_pow)
-    FriReducedOpening(i32, i32, i32, i32, i32, i32),
+    /// (a, b, res, len, alpha)
+    FriReducedOpening(i32, i32, i32, i32, i32),
+
+    /// (dim, opened, opened_length, sibling, index, commit)
+    /// opened values are field elements
+    VerifyBatchFelt(i32, i32, i32, i32, i32, i32),
+
+    /// (dim, opened, opened_length, sibling, index, commit)
+    /// opened values are extension field elements
+    VerifyBatchExt(i32, i32, i32, i32, i32, i32),
 
     /// Print a variable.
     PrintV(i32),
@@ -134,6 +147,9 @@ pub enum AsmInstruction<F, EF> {
     /// Stores the next hint stream word into value stored at addr + value.
     StoreHintWordI(i32, F),
 
+    /// Stores the next hint stream ext into value stored at addr + value.
+    StoreHintExtI(i32, F),
+
     /// Publish(val, index).
     Publish(i32, i32),
 
@@ -148,14 +164,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
 
     pub fn fmt(&self, labels: &BTreeMap<F, String>, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
-            AsmInstruction::LoadF(dst, src, var_index, size, offset) => {
-                write!(
-                    f,
-                    "lw    ({})fp, ({})fp, ({})fp, {}, {}",
-                    dst, src, var_index, size, offset
-                )
-            }
             AsmInstruction::LoadFI(dst, src, var_index, size, offset) => {
                 write!(
                     f,
@@ -163,10 +171,10 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                     dst, src, var_index, size, offset
                 )
             }
-            AsmInstruction::StoreF(dst, src, var_index, size, offset) => {
+            AsmInstruction::LoadEI(dst, src, var_index, size, offset) => {
                 write!(
                     f,
-                    "sw    ({})fp, ({})fp, ({})fp, {}, {}",
+                    "lei   ({})fp, ({})fp, {}, {}, {}",
                     dst, src, var_index, size, offset
                 )
             }
@@ -174,6 +182,13 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(
                     f,
                     "swi   ({})fp, ({})fp, {}, {}, {}",
+                    dst, src, var_index, size, offset
+                )
+            }
+            AsmInstruction::StoreEI(dst, src, var_index, size, offset) => {
+                write!(
+                    f,
+                    "sei   ({})fp, ({})fp, {}, {}, {}",
                     dst, src, var_index, size, offset
                 )
             }
@@ -331,6 +346,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::StoreHintWordI(dst, offset) => {
                 write!(f, "shintw ({})fp {}", dst, offset)
             }
+            AsmInstruction::StoreHintExtI(dst, offset) => {
+                write!(f, "shinte ({})fp {}", dst, offset)
+            }
             AsmInstruction::Publish(val, index) => {
                 write!(f, "commit ({})fp ({})fp", val, index)
             }
@@ -340,11 +358,25 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::CycleTrackerEnd() => {
                 write!(f, "cycle_tracker_end")
             }
-            AsmInstruction::FriReducedOpening(a, b, res, len, alpha, alpha_pow) => {
+            AsmInstruction::FriReducedOpening(a, b, res, len, alpha) => {
                 write!(
                     f,
-                    "fri_mat_opening ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
-                    a, b, res, len, alpha, alpha_pow
+                    "fri_mat_opening ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
+                    a, b, res, len, alpha
+                )
+            }
+            AsmInstruction::VerifyBatchFelt(dim, opened, opened_length, sibling, index, commit) => {
+                write!(
+                    f,
+                    "verify_batch_felt ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
+                    dim, opened, opened_length, sibling, index, commit
+                )
+            }
+            AsmInstruction::VerifyBatchExt(dim, opened, opened_length, sibling, index, commit) => {
+                write!(
+                    f,
+                    "verify_batch_ext ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
+                    dim, opened, opened_length, sibling, index, commit
                 )
             }
         }

@@ -1,15 +1,14 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    sync::Arc,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::instruction::Instruction;
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::CastfOpcode;
 use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::{
@@ -36,7 +35,6 @@ pub struct CastFCoreCols<T> {
 #[derive(Copy, Clone, Debug)]
 pub struct CastFCoreAir {
     pub bus: VariableRangeCheckerBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_BITS
-    offset: usize,
 }
 
 impl<F: Field> BaseAir<F> for CastFCoreAir {
@@ -81,7 +79,7 @@ where
                         _ => unreachable!(),
                     },
                 )
-                .eval(builder, AB::Expr::ONE);
+                .eval(builder, cols.is_valid);
         }
 
         AdapterAirContext {
@@ -90,10 +88,16 @@ where
             writes: [cols.out_val.map(Into::into)].into(),
             instruction: MinimalInstruction {
                 is_valid: cols.is_valid.into(),
-                opcode: AB::Expr::from_canonical_usize(CastfOpcode::CASTF as usize + self.offset),
+                opcode: AB::Expr::from_canonical_usize(
+                    CastfOpcode::CASTF.global_opcode().as_usize(),
+                ),
             }
             .into(),
         }
+    }
+
+    fn start_offset(&self) -> usize {
+        CastfOpcode::CLASS_OFFSET
     }
 }
 
@@ -105,15 +109,14 @@ pub struct CastFRecord<F> {
 
 pub struct CastFCoreChip {
     pub air: CastFCoreAir,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl CastFCoreChip {
-    pub fn new(range_checker_chip: Arc<VariableRangeCheckerChip>, offset: usize) -> Self {
+    pub fn new(range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
         Self {
             air: CastFCoreAir {
                 bus: range_checker_chip.bus(),
-                offset,
             },
             range_checker_chip,
         }
@@ -138,7 +141,7 @@ where
         let Instruction { opcode, .. } = instruction;
 
         assert_eq!(
-            opcode.local_opcode_idx(self.air.offset),
+            opcode.local_opcode_idx(CastfOpcode::CLASS_OFFSET),
             CastfOpcode::CASTF as usize
         );
 

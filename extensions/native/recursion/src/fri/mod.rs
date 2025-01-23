@@ -1,11 +1,12 @@
 pub use domain::*;
 use openvm_native_compiler::{
     ir::{
-        Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
-        DIGEST_SIZE,
+        Array, ArrayLike, Builder, Config, Ext, ExtensionOperand, Felt, RVar, SymbolicVar, Usize,
+        Var,
     },
     prelude::MemVariable,
 };
+use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::{Field, FieldAlgebra, TwoAdicField};
 pub use two_adic_pcs::*;
 
@@ -51,11 +52,13 @@ where
     let two_adic_gen_ext = two_adic_generator_f.to_operand().symbolic();
     let two_adic_generator_ef: Ext<_, _> = builder.eval(two_adic_gen_ext);
 
-    let x = builder.exp_reverse_bits_len(two_adic_generator_ef, index_bits, log_max_height);
+    let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
+    let x = builder.exp_bits_big_endian(two_adic_generator_ef, &index_bits_truncated);
 
     builder
         .range(0, commit_phase_commits.len())
-        .for_each(|i, builder| {
+        .for_each(|i_vec, builder| {
+            let i = i_vec[0];
             let log_folded_height = builder.eval_expr(log_max_height - i - C::N::ONE);
             let log_folded_height_plus_one = builder.eval_expr(log_folded_height + C::N::ONE);
             let commit = builder.get(commit_phase_commits, i);
@@ -149,6 +152,8 @@ pub fn verify_batch<C: Config>(
     opened_values: &NestedOpenedValues<C>,
     proof: &Array<C, DigestVariable<C>>,
 ) {
+    //println!("poseidon2");
+    //panic!();
     if builder.flags.static_only {
         verify_batch_static(
             builder,
@@ -160,95 +165,27 @@ pub fn verify_batch<C: Config>(
         );
         return;
     }
-    let reducer = opened_values.create_reducer(builder);
 
-    let commit = if let DigestVariable::Felt(commit) = commit {
-        commit
-    } else {
-        panic!("Expected a Felt commitment");
+    let dimensions = match dimensions {
+        Array::Dyn(ptr, len) => Array::Dyn(ptr, len.clone()),
+        _ => panic!("Expected a dynamic array of felts"),
     };
-    // Cast DigestVariable into the concrete type.
-    let proof: Array<C, Array<C, Felt<C::F>>> = if let Array::Dyn(ptr, len) = proof {
-        Array::Dyn(*ptr, len.clone())
-    } else {
-        panic!("Expected a dynamic array of Felt commitments");
+    let proof = match proof {
+        Array::Dyn(ptr, len) => Array::Dyn(*ptr, len.clone()),
+        _ => panic!("Expected a dynamic array of felts"),
     };
-
-    // The index of which table to process next.
-    let index: Usize<C::N> = builder.eval(C::N::ZERO);
-    // The height of the current layer (padded).
-    let current_height = builder.get(&dimensions, index.clone()).height;
-    // Reduce all the tables that have the same height to a single root.
-    let root = reducer
-        .reduce_fast(
-            builder,
-            index.clone(),
-            &dimensions,
-            current_height.clone(),
-            opened_values,
-        )
-        .into_inner_digest();
-    let root_ptr = root.ptr();
-
-    // For each sibling in the proof, reconstruct the root.
-    let left: Ptr<C::N> = builder.uninit();
-    let right: Ptr<C::N> = builder.uninit();
-    builder.range(0, proof.len()).for_each(|i, builder| {
-        let sibling = builder.get_ptr(&proof, i);
-        let bit = builder.get(&index_bits, i);
-
-        builder.if_eq(bit, C::N::ONE).then_or_else(
-            |builder| {
-                builder.assign(&left, sibling);
-                builder.assign(&right, root_ptr);
-            },
-            |builder| {
-                builder.assign(&left, root_ptr);
-                builder.assign(&right, sibling);
-            },
-        );
-
-        builder.poseidon2_compress_x(
-            &Array::Dyn(root_ptr, Usize::from(0)),
-            &Array::Dyn(left, Usize::from(0)),
-            &Array::Dyn(right, Usize::from(0)),
-        );
-        builder.assign(
-            &current_height,
-            current_height.clone() * (C::N::TWO.inverse()),
-        );
-
-        builder
-            .if_ne(index.clone(), dimensions.len())
-            .then(|builder| {
-                let next_height = builder.get(&dimensions, index.clone()).height;
-                builder
-                    .if_eq(next_height, current_height.clone())
-                    .then(|builder| {
-                        let next_height_openings_digest = reducer
-                            .reduce_fast(
-                                builder,
-                                index.clone(),
-                                &dimensions,
-                                current_height.clone(),
-                                opened_values,
-                            )
-                            .into_inner_digest();
-                        builder.poseidon2_compress_x(
-                            &root.clone(),
-                            &root.clone(),
-                            &next_height_openings_digest,
-                        );
-                    });
-            })
-    });
-
-    // Assert that the commitments match.
-    for i in 0..DIGEST_SIZE {
-        let e1 = builder.get(commit, i);
-        let e2 = builder.get(&root, i);
-        builder.assert_felt_eq(e1, e2);
-    }
+    let commit = match commit {
+        DigestVariable::Felt(arr) => arr,
+        _ => panic!("Expected a dynamic array of felts"),
+    };
+    match opened_values {
+        NestedOpenedValues::Felt(opened_values) => {
+            builder.verify_batch_felt(&dimensions, opened_values, &proof, &index_bits, commit)
+        }
+        NestedOpenedValues::Ext(opened_values) => {
+            builder.verify_batch_ext(&dimensions, opened_values, &proof, &index_bits, commit)
+        }
+    };
 }
 
 /// [static version] Verifies a batch opening.
@@ -288,7 +225,8 @@ pub fn verify_batch_static<C: Config>(
         .into_outer_digest();
 
     // For each sibling in the proof, reconstruct the root.
-    builder.range(0, proof.len()).for_each(|i, builder| {
+    builder.range(0, proof.len()).for_each(|i_vec, builder| {
+        let i = i_vec[0];
         let sibling: OuterDigestVariable<C> = if let DigestVariable::Var(d) = builder.get(proof, i)
         {
             d.vec().try_into().unwrap()
@@ -356,23 +294,23 @@ where
     let nb_opened_values: Usize<_> = builder.eval(C::N::ZERO);
     let start_dim_idx: Usize<_> = builder.eval(dim_idx.clone());
     builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
-    builder
-        .range(start_dim_idx, dims.len())
-        .for_each(|i, builder| {
-            let height = builder.get(dims, i).height;
-            builder
-                .if_eq(height, curr_height_padded.clone())
-                .then(|builder| {
-                    let opened_values = builder.get(opened_values, i);
-                    builder.set_value(
-                        &nested_opened_values_buffer,
-                        nb_opened_values.clone(),
-                        opened_values.clone(),
-                    );
-                    builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::ONE);
-                    builder.assign(&dim_idx, dim_idx.clone() + C::N::ONE);
-                });
-        });
+    let dims_shifted = dims.shift(builder, start_dim_idx.clone());
+    let opened_values_shifted = opened_values.shift(builder, start_dim_idx);
+    iter_zip!(builder, dims_shifted, opened_values_shifted).for_each(|ptr_vec, builder| {
+        let height = builder.iter_ptr_get(&dims_shifted, ptr_vec[0]).height;
+        builder
+            .if_eq(height, curr_height_padded.clone())
+            .then(|builder| {
+                let opened_values = builder.iter_ptr_get(&opened_values_shifted, ptr_vec[1]);
+                builder.set_value(
+                    &nested_opened_values_buffer,
+                    nb_opened_values.clone(),
+                    opened_values.clone(),
+                );
+                builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::ONE);
+            });
+    });
+    builder.assign(&dim_idx, dim_idx.clone() + nb_opened_values.clone());
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup");
 
     nested_opened_values_buffer.truncate(builder, nb_opened_values);

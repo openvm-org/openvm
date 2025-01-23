@@ -1,4 +1,4 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
@@ -8,9 +8,9 @@ use openvm_circuit::{
     utils::generate_long_number,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -45,9 +45,7 @@ type F = BabyBear;
 fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32ShiftChip::<F>::new(
@@ -59,7 +57,7 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         ShiftCoreChip::new(
             bitwise_chip.clone(),
             tester.memory_controller().borrow().range_checker.clone(),
-            0,
+            ShiftOpcode::CLASS_OFFSET,
         ),
         tester.offline_memory_mutex_arc(),
     );
@@ -76,8 +74,14 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             (Some(imm), c)
         };
 
-        let (instruction, rd) =
-            rv32_rand_write_register_or_imm(&mut tester, b, c, c_imm, opcode as usize, &mut rng);
+        let (instruction, rd) = rv32_rand_write_register_or_imm(
+            &mut tester,
+            b,
+            c,
+            c_imm,
+            opcode.global_opcode().as_usize(),
+            &mut rng,
+        );
         tester.execute(&mut chip, &instruction);
 
         let (a, _, _) = run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
@@ -138,9 +142,7 @@ fn run_rv32_shift_negative_test(
     interaction_error: bool,
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
     let mut chip = Rv32ShiftTestChip::<F>::new(
@@ -149,13 +151,17 @@ fn run_rv32_shift_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        ShiftCoreChip::new(bitwise_chip.clone(), range_checker_chip.clone(), 0),
+        ShiftCoreChip::new(
+            bitwise_chip.clone(),
+            range_checker_chip.clone(),
+            ShiftOpcode::CLASS_OFFSET,
+        ),
         tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(
         &mut chip,
-        &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 1]),
+        &Instruction::from_usize(opcode.global_opcode(), [0, 0, 0, 1, 1]),
     );
 
     let bit_shift = prank_vals

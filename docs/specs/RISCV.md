@@ -199,7 +199,7 @@ The transpilation will only be valid for programs where:
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
 | terminate      | TERMINATE `_, _, utof(imm)`                                      |
-| hintstorew     | HINTSTOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2`    |
+| hintstorew     | HINT_STOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2`    |
 | reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`        |
 | hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                             |
 | printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`                 |
