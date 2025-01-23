@@ -54,22 +54,10 @@ fn test_single_reduced_opening_eval() {
     });
     let expected_result = cur_ro;
 
-    // prints don't work?
-    /*builder.print_e(expected_result);
-    builder.print_e(expected_final_alpha_pow);
-
-    let two = builder.constant(F::TWO);
-    builder.print_f(two);
-    let ext_1210 = builder.constant(EF::from_base_slice(&[F::ONE, F::TWO, F::ONE, F::ZERO]));
-    builder.print_e(ext_1210);*/
-
     builder.assign(&cur_alpha_pow, initial_alpha_pow);
     let single_ro_eval_res = builder.fri_single_reduced_opening_eval(alpha, &mat_opening, &ps_at_z);
     let actual_result: Ext<_, _> = builder.uninit();
     builder.assign(&actual_result, single_ro_eval_res * cur_alpha_pow / (z - x));
-
-    //builder.print_e(actual_result);
-    //builder.print_e(actual_final_alpha_pow);
 
     builder.assert_ext_eq(expected_result, actual_result);
 
@@ -78,7 +66,6 @@ fn test_single_reduced_opening_eval() {
     let mut compiler = AsmCompiler::new(1);
     compiler.build(builder.operations);
     let asm_code = compiler.code();
-    // println!("{}", asm_code);
 
     let program = convert_program::<F, EF>(asm_code, CompilerOptions::default());
     execute_program(program, vec![]);
