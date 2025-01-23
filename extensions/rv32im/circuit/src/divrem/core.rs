@@ -552,8 +552,8 @@ pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 
     let x_big = limbs_to_u32(&x_abs);
     let y_big = limbs_to_u32(&y_abs);
-    let q_big = x_big.clone() / y_big.clone();
-    let r_big = x_big.clone() % y_big.clone();
+    let q_big = x_big / y_big;
+    let r_big = x_big % y_big;
 
     let q = if x_sign ^ y_sign {
         negate(&u32_to_limbs(&q_big))
