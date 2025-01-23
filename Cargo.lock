@@ -4347,6 +4347,8 @@ dependencies = [
  "openvm-transpiler",
  "serde",
  "static_assertions",
+ "tempfile",
+ "toml",
  "tracing",
 ]
 

@@ -45,6 +45,7 @@ pub mod config;
 pub mod keygen;
 pub mod prover;
 pub mod static_verifier;
+pub mod utils;
 pub mod verifier;
 
 mod stdin;

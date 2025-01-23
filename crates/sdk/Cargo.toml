@@ -45,6 +45,8 @@ tracing.workspace = true
 itertools.workspace = true
 getset.workspace = true
 clap = { workspace = true, features = ["derive"] }
+tempfile.workspace = true
+toml.workspace = true
 
 [features]
 default = ["parallel"]
