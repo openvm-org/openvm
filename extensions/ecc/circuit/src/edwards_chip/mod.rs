@@ -8,7 +8,7 @@ mod tests;
 
 use std::sync::{Arc, Mutex};
 
-use num_bigint::{BigInt, BigUint};
+use num_bigint::BigUint;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
@@ -39,8 +39,8 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         config: ExprBuilderConfig,
         offset: usize,
-        a: num_bigint::BigUint,
-        d: num_bigint::BigUint,
+        a: BigUint,
+        d: BigUint,
         range_checker: SharedVariableRangeCheckerChip,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
