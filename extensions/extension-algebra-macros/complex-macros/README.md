@@ -80,7 +80,7 @@ pub fn setup_all_complex_extensions() {
 }
 ```
 
-3. Obviously, `mod_idx` in the `complex_init!` must match the position of the corresponding modulus in the `moduli_init!` macro. The order of the items in `complex_init!` only affects what `setup_complex_*` function will correspond to what complex class. However, it again imposes the restriction that we only can invoke `complex_init!` once. Again analogous to the moduli setups, we must call `setup_complex_*` for each used complex extension before doing anything with entities of that class (or one can call `setup_all_complex_extensions` to setup all of them, if all are used).
+3. Obviously, `mod_idx` in the `complex_init!` must match the position of the corresponding modulus in the `moduli_init!` macro. The order of the items in `complex_init!` affects what `setup_complex_*` function will correspond to what complex class. Also, it **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of numbers in `Fp2Extension::supported_modulus`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file). However, it again imposes the restriction that we only can invoke `complex_init!` once. Again analogous to the moduli setups, we must call `setup_complex_*` for each used complex extension before doing anything with entities of that class (or one can call `setup_all_complex_extensions` to setup all of them, if all are used).
 
 4. Note that, due to the nature of function names, the name of the struct used in `complex_init!` must be the same as in `complex_declare!`. To illustrate, the following code will **fail** to compile:
 

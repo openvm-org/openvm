@@ -95,7 +95,9 @@ pub fn setup_all_curves() {
 
 3. Again, the `setup` function for every used curve must be called before any other instructions for that curve. If all curves are used, one can call `setup_all_curves()` to setup all of them.
 
-4. Note that, due to the nature of function names, the name of the struct used in `sw_init!` must be the same as in `sw_declare!`. To illustrate, the following code will **fail** to compile:
+4. The order of the items in `sw_init!` **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of `CurveConfig`s in `WeierstrassExtension::supported_curves`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file).
+
+5. Note that, due to the nature of function names, the name of the struct used in `sw_init!` must be the same as in `sw_declare!`. To illustrate, the following code will **fail** to compile:
 
 ```rust
 // ...
