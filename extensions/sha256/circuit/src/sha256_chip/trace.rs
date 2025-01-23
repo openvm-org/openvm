@@ -218,9 +218,9 @@ where
                                 cols.rd_ptr = dst_read.pointer;
                                 cols.rs1_ptr = src_read.pointer;
                                 cols.rs2_ptr = len_read.pointer;
-                                cols.dst_ptr = dst_read.data.clone().try_into().unwrap();
-                                cols.src_ptr = src_read.data.clone().try_into().unwrap();
-                                cols.len_data = len_read.data.clone().try_into().unwrap();
+                                cols.dst_ptr.copy_from_slice(&dst_read.data);
+                                cols.src_ptr.copy_from_slice(&src_read.data);
+                                cols.len_data.copy_from_slice(&len_read.data);
                                 memory_aux_cols_factory
                                     .generate_read_aux(dst_read, &mut cols.register_reads_aux[0]);
                                 memory_aux_cols_factory
