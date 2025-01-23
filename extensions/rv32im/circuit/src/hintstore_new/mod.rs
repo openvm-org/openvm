@@ -159,7 +159,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
                 timestamp_pp(),
                 &local_cols.num_words_aux_cols,
             )
-            .eval(builder, local_cols.is_buffer_start.clone());
+            .eval(builder, local_cols.is_buffer_start);
 
         builder
             .when(local_cols.is_single)

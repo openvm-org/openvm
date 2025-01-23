@@ -468,12 +468,12 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
         };
 
         let mut hintstore_chip = Rv32HintStoreChip::new(
-                execution_bus,
-                program_bus,
-                pointer_max_bits,
-                range_checker.clone(),
-                bitwise_lu_chip.clone(),
-                memory_bridge,
+            execution_bus,
+            program_bus,
+            pointer_max_bits,
+            range_checker.clone(),
+            bitwise_lu_chip.clone(),
+            memory_bridge,
             offline_memory.clone(),
         );
         hintstore_chip.set_streams(builder.streams().clone());

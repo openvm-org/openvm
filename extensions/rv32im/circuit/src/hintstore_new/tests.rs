@@ -32,7 +32,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{Rv32HintStoreCols, Rv32HintStoreChip};
+use super::{Rv32HintStoreChip, Rv32HintStoreCols};
 use crate::adapters::{compose, decompose};
 
 const IMM_BITS: usize = 16;

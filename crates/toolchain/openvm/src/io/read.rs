@@ -1,11 +1,11 @@
 use core::mem::MaybeUninit;
 
 use openvm_platform::WORD_SIZE;
+#[cfg(target_os = "zkvm")]
+use openvm_rv32im_guest::hint_buffer_u32;
 
 use super::hint_store_word;
 use crate::serde::WordRead;
-#[cfg(target_os = "zkvm")]
-use openvm_rv32im_guest::hint_buffer_u32;
 
 /// Provides a Reader for reading serialized data from the hint stream.
 #[derive(Copy, Clone)]
@@ -32,7 +32,8 @@ impl WordRead for Reader {
         if let Some(new_remaining) = self.bytes_remaining.checked_sub(num_words * WORD_SIZE) {
             #[cfg(target_os = "zkvm")]
             hint_buffer_u32!(words.as_mut_ptr(), 0, words.len());
-            #[cfg(not(target_os = "zkvm"))] {
+            #[cfg(not(target_os = "zkvm"))]
+            {
                 for w in words.iter_mut() {
                     hint_store_word(w as *mut u32);
                 }
@@ -50,14 +51,19 @@ impl WordRead for Reader {
         }
         let mut num_padded_bytes = bytes.len();
         #[cfg(target_os = "zkvm")]
-        hint_buffer_u32!(bytes as *mut [u8] as *mut u32, 0, num_padded_bytes / WORD_SIZE);
-        #[cfg(not(target_os = "zkvm"))] {
+        hint_buffer_u32!(
+            bytes as *mut [u8] as *mut u32,
+            0,
+            num_padded_bytes / WORD_SIZE
+        );
+        #[cfg(not(target_os = "zkvm"))]
+        {
             let mut words = bytes.chunks_exact_mut(WORD_SIZE);
             for word in &mut words {
                 hint_store_word(word as *mut [u8] as *mut u32);
             }
         }
-        
+
         let remainder = bytes.chunks_exact_mut(WORD_SIZE).into_remainder();
         if !remainder.is_empty() {
             num_padded_bytes += WORD_SIZE - remainder.len();

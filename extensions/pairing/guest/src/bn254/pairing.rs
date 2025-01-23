@@ -11,6 +11,7 @@ use {
     openvm_platform::custom_insn_r,
     openvm_rv32im_guest::hint_buffer_u32,
 };
+
 use super::{Bn254, Fp, Fp12, Fp2};
 use crate::pairing::{
     Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep, MultiMillerLoop,

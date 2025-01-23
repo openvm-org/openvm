@@ -6,8 +6,9 @@ use core::alloc::Layout;
 use core::fmt::Write;
 
 #[cfg(target_os = "zkvm")]
-use openvm_rv32im_guest::{hint_input, hint_store_u32, hint_buffer_u32};
+use openvm_rv32im_guest::{hint_buffer_u32, hint_input, hint_store_u32};
 use serde::de::DeserializeOwned;
+
 #[cfg(not(target_os = "zkvm"))]
 use crate::host::{hint_input, read_n_bytes, read_u32};
 use crate::serde::Deserializer;
@@ -66,7 +67,7 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
         // SAFETY: We populate a `Vec<u8>` by hintstore-ing `num_words` 4 byte words. We set the length to `len` and don't care about the extra `capacity - len` bytes stored.
         let ptr_start = unsafe { alloc::alloc::alloc(layout) };
         let mut ptr = ptr_start;
-        
+
         hint_buffer_u32!(ptr, 0, num_words);
         unsafe { Vec::from_raw_parts(ptr_start, len, capacity) }
     }
