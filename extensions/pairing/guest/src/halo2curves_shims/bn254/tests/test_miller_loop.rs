@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use halo2curves_axiom::bn256::{Fq, Fq2, G1Affine, G2Affine, G2Prepared};
+use halo2curves_axiom::bn256::G2Prepared;
 
 use super::{assert_miller_results_eq, generate_test_points_bn254};
 use crate::{halo2curves_shims::bn254::Bn254, pairing::MultiMillerLoop};

@@ -9,9 +9,8 @@ pub use line::*;
 #[cfg(test)]
 pub mod tests;
 
-use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, G1Affine, G2Affine};
-use openvm_algebra_guest::field::{Field, FieldExtension};
-use rand::Rng;
+use halo2curves_axiom::bn256::{Fq, Fq12, Fq2};
+use openvm_algebra_guest::field::FieldExtension;
 
 use crate::pairing::{Evaluatable, EvaluatedLine, FromLineDType, UnevaluatedLine};
 

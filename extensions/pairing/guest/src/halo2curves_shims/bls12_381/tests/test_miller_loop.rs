@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared};
+use halo2curves_axiom::bls12_381::{Fq12, G1Affine, G2Affine, G2Prepared};
 use openvm_ecc_guest::{algebra::Field, AffinePoint};
 use rand::{rngs::StdRng, SeedableRng};
 use subtle::ConditionallySelectable;

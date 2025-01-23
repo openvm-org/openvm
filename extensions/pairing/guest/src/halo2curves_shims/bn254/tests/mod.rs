@@ -8,8 +8,8 @@ use halo2curves_axiom::{
 use itertools::izip;
 use num_bigint::BigUint;
 use num_traits::Pow;
-use openvm_algebra_guest::{ExpBytes, Field};
-use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
+use openvm_algebra_guest::ExpBytes;
+use openvm_ecc_guest::AffinePoint;
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::bn254::{BN254_MODULUS, BN254_ORDER};
