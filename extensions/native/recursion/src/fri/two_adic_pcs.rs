@@ -77,6 +77,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     let log_max_height =
         builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(log_blowup));
 
+    builder.cycle_tracker_start("pre-compute-alpha-pows");
     // Only used in dynamic mode.
     let round_alpha_pows = compute_round_alpha_pows(builder, rounds.clone(), alpha);
     // Only used in static mode.
@@ -94,6 +95,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     } else {
         vec![]
     };
+    builder.cycle_tracker_end("pre-compute-alpha-pows");
 
     iter_zip!(builder, proof.query_proofs).for_each(|ptr_vec, builder| {
         let query_proof = builder.iter_ptr_get(&proof.query_proofs, ptr_vec[0]);
