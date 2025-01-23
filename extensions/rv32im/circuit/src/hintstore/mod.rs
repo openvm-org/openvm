@@ -108,7 +108,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
 
         let is_valid = local_cols.is_single + local_cols.is_buffer;
         let is_start = local_cols.is_single + local_cols.is_buffer_start;
-        // should only be used when is_buffer is truer
+        // should only be used when is_buffer is true
         let is_end = AB::Expr::ONE - next_cols.is_buffer + next_cols.is_buffer_start;
 
         let mut rem_words = AB::Expr::ZERO;
