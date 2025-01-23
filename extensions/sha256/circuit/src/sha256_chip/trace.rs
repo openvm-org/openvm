@@ -152,8 +152,8 @@ where
                             if row < 4 {
                                 read_ptr += read_size;
                                 cur_timestamp += Val::<SC>::ONE;
-                                cols.read_aux =
-                                    memory_aux_cols_factory.make_read_aux_cols(block_reads[row]);
+                                memory_aux_cols_factory
+                                    .generate_read_aux(block_reads[row], &mut cols.read_aux);
 
                                 if (row + 1) * SHA256_READ_SIZE <= message_left {
                                     cols.control.pad_flags = get_flag_pt_array(
@@ -218,16 +218,17 @@ where
                                 cols.rd_ptr = dst_read.pointer;
                                 cols.rs1_ptr = src_read.pointer;
                                 cols.rs2_ptr = len_read.pointer;
-                                cols.dst_ptr = dst_read.data.clone().try_into().unwrap();
-                                cols.src_ptr = src_read.data.clone().try_into().unwrap();
-                                cols.len_data = len_read.data.clone().try_into().unwrap();
-                                cols.register_reads_aux = [
-                                    memory_aux_cols_factory.make_read_aux_cols(dst_read),
-                                    memory_aux_cols_factory.make_read_aux_cols(src_read),
-                                    memory_aux_cols_factory.make_read_aux_cols(len_read),
-                                ];
-                                cols.writes_aux =
-                                    memory_aux_cols_factory.make_write_aux_cols(digest_write);
+                                cols.dst_ptr.copy_from_slice(&dst_read.data);
+                                cols.src_ptr.copy_from_slice(&src_read.data);
+                                cols.len_data.copy_from_slice(&len_read.data);
+                                memory_aux_cols_factory
+                                    .generate_read_aux(dst_read, &mut cols.register_reads_aux[0]);
+                                memory_aux_cols_factory
+                                    .generate_read_aux(src_read, &mut cols.register_reads_aux[1]);
+                                memory_aux_cols_factory
+                                    .generate_read_aux(len_read, &mut cols.register_reads_aux[2]);
+                                memory_aux_cols_factory
+                                    .generate_write_aux(digest_write, &mut cols.writes_aux);
                             }
                             cols.control.padding_occurred =
                                 Val::<SC>::from_bool(has_padding_occurred);

@@ -223,12 +223,9 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         row_slice.b_pointer = b_record.pointer;
         row_slice.c_pointer = c_record.pointer;
         row_slice.c_as = c_record.address_space;
-
-        row_slice.reads_aux = [
-            aux_cols_factory.make_read_aux_cols(b_record),
-            aux_cols_factory.make_read_aux_cols(c_record),
-        ];
-        row_slice.writes_aux = [aux_cols_factory.make_write_aux_cols(a_record)];
+        aux_cols_factory.generate_read_aux(b_record, &mut row_slice.reads_aux[0]);
+        aux_cols_factory.generate_read_aux(c_record, &mut row_slice.reads_aux[1]);
+        aux_cols_factory.generate_write_aux(a_record, &mut row_slice.writes_aux[0]);
     }
 
     fn air(&self) -> &Self::Air {

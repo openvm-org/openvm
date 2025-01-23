@@ -1,5 +1,5 @@
 use std::{
-    array::{self, from_fn},
+    array::from_fn,
     borrow::{Borrow, BorrowMut},
     iter::{once, zip},
     marker::PhantomData,
@@ -502,19 +502,27 @@ pub(super) fn vec_heap_generate_trace_row_impl<
         .collect::<Vec<_>>();
 
     row_slice.rd_ptr = rd.pointer;
-    row_slice.rs_ptr = array::from_fn(|i| rs[i].pointer);
+    row_slice.rd_val.copy_from_slice(&rd.data);
 
-    row_slice.rd_val = array::from_fn(|i| rd.data[i]);
-    row_slice.rs_val = array::from_fn(|j| array::from_fn(|i| rs[j].data[i]));
+    for (i, r) in rs.iter().enumerate() {
+        row_slice.rs_ptr[i] = r.pointer;
+        row_slice.rs_val[i].copy_from_slice(&r.data);
+        aux_cols_factory.generate_read_aux(r, &mut row_slice.rs_read_aux[i]);
+    }
 
-    row_slice.rs_read_aux = array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs[i]));
-    row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(rd);
-    row_slice.reads_aux = read_record
-        .reads
-        .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(memory.record_by_id(x))));
-    row_slice.writes_aux = write_record
-        .writes
-        .map(|w| aux_cols_factory.make_write_aux_cols(memory.record_by_id(w)));
+    aux_cols_factory.generate_read_aux(rd, &mut row_slice.rd_read_aux);
+
+    for (i, reads) in read_record.reads.iter().enumerate() {
+        for (j, &x) in reads.iter().enumerate() {
+            let record = memory.record_by_id(x);
+            aux_cols_factory.generate_read_aux(record, &mut row_slice.reads_aux[i][j]);
+        }
+    }
+
+    for (i, &w) in write_record.writes.iter().enumerate() {
+        let record = memory.record_by_id(w);
+        aux_cols_factory.generate_write_aux(record, &mut row_slice.writes_aux[i]);
+    }
 
     // Range checks:
     let need_range_check: Vec<u32> = rs

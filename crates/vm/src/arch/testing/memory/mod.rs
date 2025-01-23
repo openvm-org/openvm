@@ -99,10 +99,8 @@ where
                 address_space: record.address_space,
                 pointer: record.pointer,
             };
-            row.data = match &record.prev_data {
-                Some(prev_data) => prev_data.clone().try_into().unwrap(),
-                None => record.data.clone().try_into().unwrap(),
-            };
+            row.data
+                .copy_from_slice(record.prev_data.as_ref().unwrap_or(&record.data));
             row.timestamp = Val::<SC>::from_canonical_u32(record.prev_timestamp);
             row.count = -Val::<SC>::ONE;
 
@@ -111,7 +109,7 @@ where
                 address_space: record.address_space,
                 pointer: record.pointer,
             };
-            row.data = record.data.clone().try_into().unwrap();
+            row.data.copy_from_slice(&record.data);
             row.timestamp = Val::<SC>::from_canonical_u32(record.timestamp);
             row.count = Val::<SC>::ONE;
         }
