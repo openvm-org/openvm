@@ -41,7 +41,13 @@ where
     VC::Periphery: Chip<BabyBearPoseidon2Config>,
 {
     setup_tracing();
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let mut log_blowup = 1;
+    while config.system().max_constraint_degree > (1 << log_blowup) + 1 {
+        log_blowup += 1;
+    }
+    let engine = BabyBearPoseidon2Engine::new(
+        FriParameters::standard_with_100_bits_conjectured_security(log_blowup),
+    );
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let mut result = vm.execute_and_generate(exe, input).unwrap();

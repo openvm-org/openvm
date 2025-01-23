@@ -7,6 +7,8 @@ use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
 mod fp12;
 mod fp2;
 mod pairing;
+#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+pub(crate) mod utils;
 
 pub use fp12::*;
 pub use fp2::*;

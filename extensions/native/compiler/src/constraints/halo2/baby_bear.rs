@@ -80,6 +80,15 @@ impl BabyBearChip {
         r
     }
 
+    /// Reduce max_bits if possible. This function doesn't guarantee that the actual value is within BabyBear.
+    pub fn reduce_max_bits(&self, ctx: &mut Context<Fr>, a: AssignedBabyBear) -> AssignedBabyBear {
+        if a.max_bits > BABYBEAR_MAX_BITS {
+            self.reduce(ctx, a)
+        } else {
+            a
+        }
+    }
+
     pub fn add(
         &self,
         ctx: &mut Context<Fr>,
@@ -526,5 +535,19 @@ impl BabyBearExt4Chip {
             a.to_extension_field() / b.to_extension_field()
         );
         c
+    }
+
+    pub fn reduce_max_bits(
+        &self,
+        ctx: &mut Context<Fr>,
+        a: AssignedBabyBearExt4,
+    ) -> AssignedBabyBearExt4 {
+        AssignedBabyBearExt4(
+            a.0.into_iter()
+                .map(|x| self.base.reduce_max_bits(ctx, x))
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap(),
+        )
     }
 }

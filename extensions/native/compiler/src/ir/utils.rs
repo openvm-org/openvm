@@ -175,4 +175,10 @@ impl<C: Config> Builder<C> {
             .push(DslIr::CircuitExt2Felt([a, b, c, d], value));
         [a, b, c, d]
     }
+    pub fn felt_reduce_circuit(&mut self, value: Felt<C::F>) {
+        self.operations.push(DslIr::CircuitFeltReduce(value));
+    }
+    pub fn ext_reduce_circuit(&mut self, value: Ext<C::F, C::EF>) {
+        self.operations.push(DslIr::CircuitExtReduce(value));
+    }
 }

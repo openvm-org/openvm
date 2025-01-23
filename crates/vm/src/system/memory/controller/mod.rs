@@ -41,8 +41,8 @@ use crate::{
         merkle::{MemoryMerkleBus, MemoryMerkleChip},
         offline::{MemoryRecord, OfflineMemory, INITIAL_TIMESTAMP},
         offline_checker::{
-            MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
-            MemoryWriteAuxCols, AUX_LEN,
+            MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
+            MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols, AUX_LEN,
         },
         online::{Memory, MemoryLogEntry},
         persistent::PersistentBoundaryChip,
@@ -714,6 +714,60 @@ pub struct MemoryAuxColsFactory<T> {
 
 // NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in parallelized trace generation.
 impl<F: PrimeField32> MemoryAuxColsFactory<F> {
+    pub fn generate_read_aux(&self, read: &MemoryRecord<F>, buffer: &mut MemoryReadAuxCols<F>) {
+        assert!(
+            !read.address_space.is_zero(),
+            "cannot make `MemoryReadAuxCols` for address space 0"
+        );
+        self.generate_base_aux(read, &mut buffer.base);
+    }
+
+    pub fn generate_read_or_immediate_aux(
+        &self,
+        read: &MemoryRecord<F>,
+        buffer: &mut MemoryReadOrImmediateAuxCols<F>,
+    ) {
+        IsZeroSubAir.generate_subrow(
+            read.address_space,
+            (&mut buffer.is_zero_aux, &mut buffer.is_immediate),
+        );
+        self.generate_base_aux(read, &mut buffer.base);
+    }
+
+    pub fn generate_write_aux<const N: usize>(
+        &self,
+        write: &MemoryRecord<F>,
+        buffer: &mut MemoryWriteAuxCols<F, N>,
+    ) {
+        buffer
+            .prev_data
+            .copy_from_slice(write.prev_data.as_ref().unwrap());
+        self.generate_base_aux(write, &mut buffer.base);
+    }
+
+    pub fn generate_base_aux(&self, record: &MemoryRecord<F>, buffer: &mut MemoryBaseAuxCols<F>) {
+        buffer.prev_timestamp = F::from_canonical_u32(record.prev_timestamp);
+        self.generate_timestamp_lt(
+            record.prev_timestamp,
+            record.timestamp,
+            &mut buffer.timestamp_lt_aux,
+        );
+    }
+
+    fn generate_timestamp_lt(
+        &self,
+        prev_timestamp: u32,
+        timestamp: u32,
+        buffer: &mut LessThanAuxCols<F, AUX_LEN>,
+    ) {
+        debug_assert!(prev_timestamp < timestamp);
+        self.timestamp_lt_air.generate_subrow(
+            (self.range_checker.as_ref(), prev_timestamp, timestamp),
+            &mut buffer.lower_decomp,
+        );
+    }
+
+    /// In general, prefer `generate_read_aux` which writes in-place rather than this function.
     pub fn make_read_aux_cols(&self, read: &MemoryRecord<F>) -> MemoryReadAuxCols<F> {
         assert!(
             !read.address_space.is_zero(),
@@ -725,24 +779,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         )
     }
 
-    pub fn make_read_or_immediate_aux_cols(
-        &self,
-        read: &MemoryRecord<F>,
-    ) -> MemoryReadOrImmediateAuxCols<F> {
-        let mut inv = F::ZERO;
-        let mut is_zero = F::ZERO;
-        IsZeroSubAir.generate_subrow(read.address_space, (&mut inv, &mut is_zero));
-        let timestamp_lt_cols =
-            self.generate_timestamp_lt_cols(read.prev_timestamp, read.timestamp);
-
-        MemoryReadOrImmediateAuxCols::new(
-            F::from_canonical_u32(read.prev_timestamp),
-            is_zero,
-            inv,
-            timestamp_lt_cols,
-        )
-    }
-
+    /// In general, prefer `generate_write_aux` which writes in-place rather than this function.
     pub fn make_write_aux_cols<const N: usize>(
         &self,
         write: &MemoryRecord<F>,

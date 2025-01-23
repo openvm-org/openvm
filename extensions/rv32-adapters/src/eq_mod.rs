@@ -1,5 +1,5 @@
 use std::{
-    array::{self, from_fn},
+    array::from_fn,
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
 };
@@ -397,16 +397,19 @@ impl<
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
         let rs = read_record.rs.map(|r| memory.record_by_id(r));
-        row_slice.rs_ptr = array::from_fn(|i| rs[i].pointer);
-        row_slice.rs_val = array::from_fn(|i| rs[i].data.clone().try_into().unwrap());
-        row_slice.rs_read_aux = array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs[i]));
-        row_slice.heap_read_aux = read_record
-            .reads
-            .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(memory.record_by_id(x))));
+        for (i, r) in rs.iter().enumerate() {
+            row_slice.rs_ptr[i] = r.pointer;
+            row_slice.rs_val[i] = r.data.clone().try_into().unwrap();
+            aux_cols_factory.generate_read_aux(r, &mut row_slice.rs_read_aux[i]);
+            for (j, x) in read_record.reads[i].iter().enumerate() {
+                let read = memory.record_by_id(*x);
+                aux_cols_factory.generate_read_aux(read, &mut row_slice.heap_read_aux[i][j]);
+            }
+        }
 
         let rd = memory.record_by_id(write_record.rd_id);
         row_slice.rd_ptr = rd.pointer;
-        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(rd);
+        aux_cols_factory.generate_write_aux(rd, &mut row_slice.writes_aux);
 
         // Range checks
         let need_range_check: [u32; 2] = from_fn(|i| {

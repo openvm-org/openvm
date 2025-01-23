@@ -168,27 +168,27 @@ fn generate_trace<F: PrimeField32>(
 
         match (record.data.len(), &record.prev_data) {
             (1, &None) => {
-                row.read_1_aux = aux_factory.make_read_aux_cols(&record);
+                aux_factory.generate_read_aux(&record, &mut row.read_1_aux);
                 row.data_1 = record.data.try_into().unwrap();
                 row.is_read_1 = F::ONE;
             }
             (1, &Some(_)) => {
-                row.write_1_aux = aux_factory.make_write_aux_cols(&record);
+                aux_factory.generate_write_aux(&record, &mut row.write_1_aux);
                 row.data_1 = record.data.try_into().unwrap();
                 row.is_write_1 = F::ONE;
             }
             (4, &None) => {
-                row.read_4_aux = aux_factory.make_read_aux_cols(&record);
+                aux_factory.generate_read_aux(&record, &mut row.read_4_aux);
                 row.data_4 = record.data.try_into().unwrap();
                 row.is_read_4 = F::ONE;
             }
             (4, &Some(_)) => {
-                row.write_4_aux = aux_factory.make_write_aux_cols(&record);
+                aux_factory.generate_write_aux(&record, &mut row.write_4_aux);
                 row.data_4 = record.data.try_into().unwrap();
                 row.is_write_4 = F::ONE;
             }
             (MAX, &None) => {
-                row.read_max_aux = aux_factory.make_read_aux_cols(&record);
+                aux_factory.generate_read_aux(&record, &mut row.read_max_aux);
                 row.data_max = record.data.try_into().unwrap();
                 row.is_read_max = F::ONE;
             }

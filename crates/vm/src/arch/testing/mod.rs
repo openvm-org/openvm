@@ -256,6 +256,18 @@ impl VmChipTestBuilder<BabyBear> {
         let tester = tester.load(self.execution);
         tester.load(self.program)
     }
+    pub fn build_babybear_poseidon2(self) -> VmChipTester<BabyBearPoseidon2Config> {
+        self.memory
+            .controller
+            .borrow_mut()
+            .finalize(None::<&mut Poseidon2PeripheryChip<BabyBear>>);
+        let tester = VmChipTester {
+            memory: Some(self.memory),
+            ..Default::default()
+        };
+        let tester = tester.load(self.execution);
+        tester.load(self.program)
+    }
 }
 
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {

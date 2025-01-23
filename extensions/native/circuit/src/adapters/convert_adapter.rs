@@ -216,8 +216,8 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
         row_slice.b_pointer = read.pointer;
         row_slice.b_as = read.address_space;
 
-        row_slice.reads_aux = [aux_cols_factory.make_read_aux_cols(read)];
-        row_slice.writes_aux = [aux_cols_factory.make_write_aux_cols(write)];
+        aux_cols_factory.generate_read_aux(read, &mut row_slice.reads_aux[0]);
+        aux_cols_factory.generate_write_aux(write, &mut row_slice.writes_aux[0]);
     }
 
     fn air(&self) -> &Self::Air {

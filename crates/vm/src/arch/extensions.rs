@@ -94,7 +94,7 @@ pub trait VmExtension<F: PrimeField32> {
 }
 
 /// SystemPort combines system resources needed by most extensions
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct SystemPort {
     pub execution_bus: ExecutionBus,
     pub program_bus: ProgramBus,

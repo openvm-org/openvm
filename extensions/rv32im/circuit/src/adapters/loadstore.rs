@@ -467,18 +467,16 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         let rs1 = memory.record_by_id(read_record.rs1_record);
         adapter_cols.rs1_data = rs1.data.clone().try_into().unwrap();
-        adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(rs1);
+        aux_cols_factory.generate_read_aux(rs1, &mut adapter_cols.rs1_aux_cols);
         adapter_cols.rs1_ptr = read_record.rs1_ptr;
         adapter_cols.rd_rs2_ptr = write_record.rd_rs2_ptr;
-        adapter_cols.read_data_aux =
-            aux_cols_factory.make_read_aux_cols(memory.record_by_id(read_record.read));
+        let read = memory.record_by_id(read_record.read);
+        aux_cols_factory.generate_read_aux(read, &mut adapter_cols.read_data_aux);
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
         adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
         let write = memory.record_by_id(write_record.write_id);
-        adapter_cols.write_base_aux = aux_cols_factory
-            .make_write_aux_cols::<RV32_REGISTER_NUM_LIMBS>(write)
-            .get_base();
+        aux_cols_factory.generate_base_aux(write, &mut adapter_cols.write_base_aux);
         adapter_cols.mem_as = read_record.mem_as;
     }
 
