@@ -66,15 +66,6 @@ impl Default for MemoryConfig {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct SegmentationStrategyArc(pub Arc<dyn SegmentationStrategy>);
-
-impl Default for SegmentationStrategyArc {
-    fn default() -> Self {
-        Self(Arc::new(DefaultSegmentationStrategy::default()))
-    }
-}
-
 /// System-level configuration for the virtual machine. Contains all configuration parameters that
 /// are managed by the architecture, including configuration for continuations support.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,8 +94,12 @@ pub struct SystemConfig {
     /// Segmentation strategy
     /// This field is skipped in serde as it's only used in execution and
     /// not needed after any serialize/deserialize.
-    #[serde(skip)]
-    pub segmentation_strategy: SegmentationStrategyArc,
+    #[serde(skip, default = "get_default_segmentation_strategy")]
+    pub segmentation_strategy: Arc<dyn SegmentationStrategy>,
+}
+
+pub fn get_default_segmentation_strategy() -> Arc<dyn SegmentationStrategy> {
+    Arc::new(DefaultSegmentationStrategy::default())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -119,7 +114,7 @@ impl SystemConfig {
         memory_config: MemoryConfig,
         num_public_values: usize,
     ) -> Self {
-        let segmentation_strategy = SegmentationStrategyArc::default();
+        let segmentation_strategy = get_default_segmentation_strategy();
         Self {
             max_constraint_degree,
             continuation_enabled: false,
@@ -151,10 +146,14 @@ impl SystemConfig {
     }
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        self.segmentation_strategy = SegmentationStrategyArc(Arc::new(
+        self.segmentation_strategy = Arc::new(
             DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_len),
-        ));
+        );
         self
+    }
+
+    pub fn set_segmentation_strategy<S: SegmentationStrategy + 'static>(&mut self, strategy: S) {
+        self.segmentation_strategy = Arc::new(strategy);
     }
 
     pub fn with_profiling(mut self) -> Self {

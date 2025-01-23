@@ -354,7 +354,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             return false;
         }
         self.since_last_segment_check = 0;
-        let segmentation_strategy = self.system_config().segmentation_strategy.0.clone();
+        let segmentation_strategy = self.system_config().segmentation_strategy.clone();
         segmentation_strategy.should_segment(
             &self.air_names,
             &self
