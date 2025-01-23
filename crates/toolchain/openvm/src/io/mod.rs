@@ -68,12 +68,6 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
         let mut ptr = ptr_start;
         
         hint_buffer_u32!(ptr, 0, num_words);
-
-        /*// Note: if len % 4 != 0, this will discard some last bytes
-        for _ in 0..num_words {
-            hint_store_u32!(ptr, 0);
-            ptr = unsafe { ptr.add(4) };
-        }*/
         unsafe { Vec::from_raw_parts(ptr_start, len, capacity) }
     }
     #[cfg(not(target_os = "zkvm"))]
