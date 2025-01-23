@@ -108,7 +108,9 @@ const_assert_eq!(OVERALL_WIDTH, 26);
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
 struct GeneralCols<T> {
-    enabled: T,
+    /// Whether the row is a workload row.
+    is_workload_row: T,
+    /// Whether the row is an instruction row.
     is_ins_row: T,
     timestamp: T,
 }
@@ -179,13 +181,16 @@ impl FriReducedOpeningAir {
     ) {
         let local: &GeneralCols<AB::Var> = local_slice[..GENERAL_WIDTH].borrow();
         let next: &GeneralCols<AB::Var> = next_slice[..GENERAL_WIDTH].borrow();
-        builder.assert_bool(local.enabled);
         builder.assert_bool(local.is_ins_row);
+        builder.assert_bool(local.is_workload_row);
+        // A row can either be an instruction row or a workload row.
+        builder.assert_bool(local.is_ins_row + local.is_workload_row);
         {
             // All enabled rows must be before disabled rows.
             let mut when_transition = builder.when_transition();
-            let mut when_disabled = when_transition.when_ne(local.enabled, AB::Expr::ONE);
-            when_disabled.assert_zero(next.enabled);
+            let mut when_disabled =
+                when_transition.when_ne(local.is_ins_row + local.is_workload_row, AB::Expr::ONE);
+            when_disabled.assert_zero(next.is_ins_row + next.is_workload_row);
         }
     }
 
@@ -199,8 +204,7 @@ impl FriReducedOpeningAir {
         let next: &PrefixCols<AB::Var> = next_slice[..PREFIX_WIDTH].borrow();
         let local_data = &local.prefix.data;
         let start_timestamp = next.general.timestamp;
-        let multiplicity =
-            local.prefix.general.enabled * (AB::Expr::ONE - local.prefix.general.is_ins_row);
+        let multiplicity = local.prefix.general.is_workload_row;
         // a_ptr/b_ptr/length/result
         let ptr_reads = AB::F::from_canonical_usize(4);
         // read a
@@ -211,7 +215,7 @@ impl FriReducedOpeningAir {
                 start_timestamp + ptr_reads,
                 &local.a_aux,
             )
-            .eval(builder, multiplicity.clone());
+            .eval(builder, multiplicity);
         // read b
         self.memory_bridge
             .read(
@@ -223,9 +227,7 @@ impl FriReducedOpeningAir {
             .eval(builder, multiplicity);
         {
             let mut when_transition = builder.when_transition();
-            let mut not_ins_row =
-                when_transition.when_ne(local.prefix.general.is_ins_row, AB::F::ONE);
-            let mut builder = not_ins_row.when(next.general.enabled);
+            let mut builder = when_transition.when(local.prefix.general.is_workload_row);
             // ATTENTION: degree of builder is 2
             // local.timestamp = next.timestamp + 2
             builder.assert_eq(
@@ -270,9 +272,10 @@ impl FriReducedOpeningAir {
         }
         {
             let mut when_first_row = builder.when_first_row();
-            let mut when_enabled = when_first_row.when(local.prefix.general.enabled);
+            let mut when_enabled = when_first_row
+                .when(local.prefix.general.is_ins_row + local.prefix.general.is_workload_row);
             // First row must be a workload row.
-            when_enabled.assert_zero(local.prefix.general.is_ins_row);
+            when_enabled.assert_one(local.prefix.general.is_workload_row);
             // Workload rows must start with the first element.
             when_enabled.assert_zero(local.prefix.data.idx);
             // local.result is all 0s.
@@ -292,18 +295,16 @@ impl FriReducedOpeningAir {
     ) {
         let local: &Instruction1Cols<AB::Var> = local_slice[..INS_1_WIDTH].borrow();
         let next: &Instruction2Cols<AB::Var> = next_slice[..INS_2_WIDTH].borrow();
+        // `is_ins_row` already indicates enabled.
         let mut is_ins_row = builder.when(local.prefix.general.is_ins_row);
         let mut is_first_ins = is_ins_row.when(local.prefix.a_or_is_first);
-        let mut next_enabled = is_first_ins.when(next.general.enabled);
-        // ATTENTION: degree of next_enabled is 3
-        next_enabled.assert_zero(next.is_first);
-        next_enabled.assert_one(next.general.is_ins_row);
+        // ATTENTION: degree of is_first_ins is 2
+        is_first_ins.assert_one(next.general.is_ins_row);
+        is_first_ins.assert_zero(next.is_first);
 
         let local_data = &local.prefix.data;
         let length = local.prefix.data.idx;
-        let multiplicity = local.prefix.general.enabled
-            * local.prefix.general.is_ins_row
-            * local.prefix.a_or_is_first;
+        let multiplicity = local.prefix.general.is_ins_row * local.prefix.a_or_is_first;
         let start_timestamp = local.prefix.general.timestamp;
         // 4 reads
         let write_timestamp =
@@ -381,28 +382,28 @@ impl FriReducedOpeningAir {
     ) {
         let local: &Instruction2Cols<AB::Var> = local_slice[..INS_2_WIDTH].borrow();
         let next: &WorkloadCols<AB::Var> = next_slice[..WL_WIDTH].borrow();
-
         {
             let mut last_row = builder.when_last_row();
-            let mut enabled = last_row.when(local.general.enabled);
+            let mut enabled =
+                last_row.when(local.general.is_ins_row + local.general.is_workload_row);
             // If the last row is enabled, it must be the second row of an instruction row. This
             // is a safeguard for edge cases.
             enabled.assert_one(local.general.is_ins_row);
-            enabled.assert_one(local.is_first);
+            enabled.assert_zero(local.is_first);
         }
         {
             let mut when_transition = builder.when_transition();
             let mut is_ins_row = when_transition.when(local.general.is_ins_row);
-            let mut not_first_row = is_ins_row.when_ne(local.is_first, AB::Expr::ONE);
-            // when_transition is necessary to check the next row is enabled.
-            let mut enabled = not_first_row.when(next.prefix.general.enabled);
+            let mut not_first_ins_row = is_ins_row.when_ne(local.is_first, AB::Expr::ONE);
+            // ATTENTION: degree of not_first_ins_row is 2
+            // Because all the followings assert 0, we don't need to check next.enabled.
             // The next row must be a workload row.
-            enabled.assert_zero(next.prefix.general.is_ins_row);
+            not_first_ins_row.assert_zero(next.prefix.general.is_ins_row);
             // The next row must have idx = 0.
-            enabled.assert_zero(next.prefix.data.idx);
+            not_first_ins_row.assert_zero(next.prefix.data.idx);
             // next.result is all 0s
             assert_array_eq(
-                &mut enabled,
+                &mut not_first_ins_row,
                 next.prefix.data.result,
                 [AB::Expr::ZERO; EXT_DEG],
             );
@@ -604,7 +605,7 @@ fn record_to_rows<F: PrimeField32>(
         *cols = WorkloadCols {
             prefix: PrefixCols {
                 general: GeneralCols {
-                    enabled: F::ONE,
+                    is_workload_row: F::ONE,
                     is_ins_row: F::ZERO,
                     timestamp: record.start_timestamp + F::from_canonical_usize((length - i) * 2),
                 },
@@ -635,7 +636,7 @@ fn record_to_rows<F: PrimeField32>(
         *cols = Instruction1Cols {
             prefix: PrefixCols {
                 general: GeneralCols {
-                    enabled: F::ONE,
+                    is_workload_row: F::ZERO,
                     is_ins_row: F::ONE,
                     timestamp: record.start_timestamp,
                 },
@@ -662,7 +663,7 @@ fn record_to_rows<F: PrimeField32>(
         let cols: &mut Instruction2Cols<F> = slice[start..start + INS_2_WIDTH].borrow_mut();
         *cols = Instruction2Cols {
             general: GeneralCols {
-                enabled: F::ONE,
+                is_workload_row: F::ZERO,
                 is_ins_row: F::ONE,
                 timestamp: record.start_timestamp,
             },
