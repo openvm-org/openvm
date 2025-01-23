@@ -1,0 +1,12 @@
+| group | app.proof_time_ms | app.cycles | app.cells_used | leaf.proof_time_ms | leaf.cycles | leaf.cells_used |
+| -- | -- | -- | -- | -- | -- | -- |
+| [verify_fibair](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/perf/opt-static-alpha-pow/verify_fibair-7a71ef7ec7f642ba71e1be44bef5022fe4809940.md) |<span style='color: red'>(+1618 [+72.0%])</span> 3,866 |  513,396 | <span style='color: green'>(-27201 [-0.1%])</span> 19,358,552 |- | - | - |
+| [fibonacci_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/perf/opt-static-alpha-pow/fibonacci-7a71ef7ec7f642ba71e1be44bef5022fe4809940.md) |<span style='color: red'>(+4614 [+76.0%])</span> 10,685 |  1,500,137 |  51,486,676 |<span style='color: red'>(+5682 [+70.5%])</span> 13,742 | <span style='color: red'>(+4874 [+0.3%])</span> 1,838,573 | <span style='color: green'>(-5102009 [-6.8%])</span> 70,385,208 |
+| [regex_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/perf/opt-static-alpha-pow/regex-7a71ef7ec7f642ba71e1be44bef5022fe4809940.md) |<span style='color: red'>(+57742 [+311.7%])</span> 76,266 | <span style='color: red'>(+9385 [+0.2%])</span> 4,200,289 | <span style='color: red'>(+169837 [+0.1%])</span> 165,180,746 |<span style='color: red'>(+7689 [+40.1%])</span> 26,845 | <span style='color: red'>(+6600 [+0.2%])</span> 3,035,433 | <span style='color: green'>(-21498853 [-13.2%])</span> 141,787,888 |
+| [fib_e2e](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/perf/opt-static-alpha-pow/fib_e2e-7a71ef7ec7f642ba71e1be44bef5022fe4809940.md) | 78,433 |  12,000,137 |  410,698,060 | 91,077 |  11,494,727 |  435,873,576 |
+| [ecrecover_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/perf/opt-static-alpha-pow/ecrecover-7a71ef7ec7f642ba71e1be44bef5022fe4809940.md) |<span style='color: red'>(+1886 [+72.2%])</span> 4,497 | <span style='color: red'>(+4847 [+1.7%])</span> 290,248 | <span style='color: red'>(+155632 [+1.0%])</span> 15,230,665 |<span style='color: red'>(+13541 [+60.4%])</span> 35,946 | <span style='color: red'>(+60433 [+1.5%])</span> 4,227,106 | <span style='color: green'>(-35964351 [-14.9%])</span> 205,445,478 |
+
+
+Commit: https://github.com/openvm-org/openvm/commit/7a71ef7ec7f642ba71e1be44bef5022fe4809940
+
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/12925414977)
