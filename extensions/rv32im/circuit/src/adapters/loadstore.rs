@@ -466,7 +466,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let adapter_cols: &mut Rv32LoadStoreAdapterCols<_> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
         let rs1 = memory.record_by_id(read_record.rs1_record);
-        adapter_cols.rs1_data = rs1.data.clone().try_into().unwrap();
+        adapter_cols.rs1_data.copy_from_slice(&rs1.data);
         aux_cols_factory.generate_read_aux(rs1, &mut adapter_cols.rs1_aux_cols);
         adapter_cols.rs1_ptr = read_record.rs1_ptr;
         adapter_cols.rd_rs2_ptr = write_record.rd_rs2_ptr;
