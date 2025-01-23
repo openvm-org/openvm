@@ -1,0 +1,4064 @@
+| Summary | Proof Time (s) | Parallel Proof Time (s) |
+|:---|---:|---:|
+| Total |  603.13 |  360.06 |
+| fib_e2e |  78.13 |  11.60 |
+| leaf |  91.25 |  13.81 |
+| internal.0 |  98.98 |  28.27 |
+| internal.1 |  57.07 |  28.68 |
+| internal.2 |  28.89 |  28.89 |
+| root |  45.78 |  45.78 |
+| halo2_outer |  161.51 |  161.51 |
+| halo2_wrapper |  41.52 |  41.52 |
+
+
+| fib_e2e |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  11,161.57 |  78,131 |  11,598 |  10,045 |
+| `main_cells_used     ` |  58,671,151.43 |  410,698,060 |  59,808,409 |  51,983,912 |
+| `total_cycles        ` |  1,714,305.29 |  12,000,137 |  1,747,603 |  1,515,024 |
+| `execute_time_ms     ` |  5,627.71 |  39,394 |  5,844 |  4,963 |
+| `trace_gen_time_ms   ` |  868.14 |  6,077 |  953 |  744 |
+| `stark_prove_excluding_trace_time_ms` |  4,665.71 |  32,660 |  4,831 |  4,338 |
+| `main_trace_commit_time_ms` |  613.71 |  4,296 |  765 |  538 |
+| `generate_perm_trace_time_ms` |  152.71 |  1,069 |  189 |  119 |
+| `perm_trace_commit_time_ms` |  1,718.57 |  12,030 |  1,832 |  1,456 |
+| `quotient_poly_compute_time_ms` |  774.57 |  5,422 |  805 |  725 |
+| `quotient_poly_commit_time_ms` |  410.86 |  2,876 |  456 |  372 |
+| `pcs_opening_time_ms ` |  991.86 |  6,943 |  1,076 |  944 |
+
+| leaf |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  13,036 |  91,252 |  13,810 |  12,760 |
+| `main_cells_used     ` |  62,268,373.43 |  435,878,614 |  70,223,280 |  60,339,248 |
+| `total_cycles        ` |  1,642,176.43 |  11,495,235 |  1,833,904 |  1,595,402 |
+| `execute_time_ms     ` |  5,549 |  38,843 |  6,041 |  5,359 |
+| `trace_gen_time_ms   ` |  1,297.29 |  9,081 |  1,416 |  1,261 |
+| `stark_prove_excluding_trace_time_ms` |  6,189.71 |  43,328 |  6,353 |  6,118 |
+| `main_trace_commit_time_ms` |  1,057.43 |  7,402 |  1,091 |  1,041 |
+| `generate_perm_trace_time_ms` |  131 |  917 |  135 |  127 |
+| `perm_trace_commit_time_ms` |  1,173.86 |  8,217 |  1,219 |  1,143 |
+| `quotient_poly_compute_time_ms` |  1,497 |  10,479 |  1,535 |  1,415 |
+| `quotient_poly_commit_time_ms` |  1,049.14 |  7,344 |  1,134 |  1,003 |
+| `pcs_opening_time_ms ` |  1,278.71 |  8,951 |  1,316 |  1,243 |
+
+| internal.0 |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  24,744.50 |  98,978 |  28,272 |  14,927 |
+| `main_cells_used     ` |  123,193,426.25 |  492,773,705 |  140,451,472 |  71,431,113 |
+| `total_cycles        ` |  3,223,346.50 |  12,893,386 |  3,683,948 |  1,842,507 |
+| `execute_time_ms     ` |  11,098 |  44,392 |  12,786 |  6,417 |
+| `trace_gen_time_ms   ` |  2,565.25 |  10,261 |  2,964 |  1,775 |
+| `stark_prove_excluding_trace_time_ms` |  11,081.25 |  44,325 |  12,556 |  6,735 |
+| `main_trace_commit_time_ms` |  2,024.50 |  8,098 |  2,294 |  1,229 |
+| `generate_perm_trace_time_ms` |  250.25 |  1,001 |  290 |  148 |
+| `perm_trace_commit_time_ms` |  2,163.50 |  8,654 |  2,478 |  1,270 |
+| `quotient_poly_compute_time_ms` |  2,577.50 |  10,310 |  2,908 |  1,637 |
+| `quotient_poly_commit_time_ms` |  1,844.75 |  7,379 |  2,094 |  1,107 |
+| `pcs_opening_time_ms ` |  2,217.75 |  8,871 |  2,517 |  1,341 |
+
+| internal.1 |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  28,536.50 |  57,073 |  28,683 |  28,390 |
+| `main_cells_used     ` |  144,196,216.50 |  288,392,433 |  145,061,086 |  143,331,347 |
+| `total_cycles        ` |  3,780,731 |  7,561,462 |  3,811,011 |  3,750,451 |
+| `execute_time_ms     ` |  13,109 |  26,218 |  13,176 |  13,042 |
+| `trace_gen_time_ms   ` |  2,825.50 |  5,651 |  3,021 |  2,630 |
+| `stark_prove_excluding_trace_time_ms` |  12,602 |  25,204 |  12,620 |  12,584 |
+| `main_trace_commit_time_ms` |  2,307.50 |  4,615 |  2,309 |  2,306 |
+| `generate_perm_trace_time_ms` |  282.50 |  565 |  283 |  282 |
+| `perm_trace_commit_time_ms` |  2,464 |  4,928 |  2,472 |  2,456 |
+| `quotient_poly_compute_time_ms` |  2,891 |  5,782 |  2,905 |  2,877 |
+| `quotient_poly_commit_time_ms` |  2,092 |  4,184 |  2,093 |  2,091 |
+| `pcs_opening_time_ms ` |  2,562 |  5,124 |  2,573 |  2,551 |
+
+| internal.2 |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  28,889 |  28,889 |  28,889 |  28,889 |
+| `main_cells_used     ` |  145,068,566 |  145,068,566 |  145,068,566 |  145,068,566 |
+| `total_cycles        ` |  3,811,759 |  3,811,759 |  3,811,759 |  3,811,759 |
+| `execute_time_ms     ` |  13,301 |  13,301 |  13,301 |  13,301 |
+| `trace_gen_time_ms   ` |  3,040 |  3,040 |  3,040 |  3,040 |
+| `stark_prove_excluding_trace_time_ms` |  12,548 |  12,548 |  12,548 |  12,548 |
+| `main_trace_commit_time_ms` |  2,303 |  2,303 |  2,303 |  2,303 |
+| `generate_perm_trace_time_ms` |  274 |  274 |  274 |  274 |
+| `perm_trace_commit_time_ms` |  2,463 |  2,463 |  2,463 |  2,463 |
+| `quotient_poly_compute_time_ms` |  2,907 |  2,907 |  2,907 |  2,907 |
+| `quotient_poly_commit_time_ms` |  2,075 |  2,075 |  2,075 |  2,075 |
+| `pcs_opening_time_ms ` |  2,524 |  2,524 |  2,524 |  2,524 |
+
+| root |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  45,776 |  45,776 |  45,776 |  45,776 |
+| `main_cells_used     ` |  73,784,029 |  73,784,029 |  73,784,029 |  73,784,029 |
+| `total_cycles        ` |  1,906,364 |  1,906,364 |  1,906,364 |  1,906,364 |
+| `execute_time_ms     ` |  6,796 |  6,796 |  6,796 |  6,796 |
+| `trace_gen_time_ms   ` |  1,481 |  1,481 |  1,481 |  1,481 |
+| `stark_prove_excluding_trace_time_ms` |  37,499 |  37,499 |  37,499 |  37,499 |
+| `main_trace_commit_time_ms` |  11,321 |  11,321 |  11,321 |  11,321 |
+| `generate_perm_trace_time_ms` |  150 |  150 |  150 |  150 |
+| `perm_trace_commit_time_ms` |  12,473 |  12,473 |  12,473 |  12,473 |
+| `quotient_poly_compute_time_ms` |  1,517 |  1,517 |  1,517 |  1,517 |
+| `quotient_poly_commit_time_ms` |  8,205 |  8,205 |  8,205 |  8,205 |
+| `pcs_opening_time_ms ` |  3,828 |  3,828 |  3,828 |  3,828 |
+
+| halo2_outer |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  161,507 |  161,507 |  161,507 |  161,507 |
+| `main_cells_used     ` |  88,261,065 |  88,261,065 |  88,261,065 |  88,261,065 |
+
+| halo2_wrapper |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  41,523 |  41,523 |  41,523 |  41,523 |
+
+
+
+<details>
+<summary>Detailed Metrics</summary>
+
+|  | execute_time_ms |
+| --- |
+|  | 3,455 | 
+
+| group | total_proof_time_ms | num_segments | main_cells_used |
+| --- | --- | --- | --- |
+| fib_e2e |  | 7 |  | 
+| halo2_outer | 161,507 |  | 88,261,065 | 
+| halo2_wrapper | 41,523 |  |  | 
+
+| group | air_name | dsl_ir | idx | opcode | cells_used |
+| --- | --- | --- | --- | --- | --- |
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 0 | BNE | 10,856 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 1 | BNE | 10,856 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 2 | BNE | 10,856 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 3 | BNE | 5,428 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 0 | BNE | 184 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 1 | BNE | 184 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 2 | BNE | 184 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 3 | BNE | 92 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 0 | BNE | 135,263 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 1 | BNE | 135,263 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 2 | BNE | 135,263 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 3 | BNE | 67,344 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqFI | 0 | BNE | 161 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqFI | 1 | BNE | 161 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqFI | 2 | BNE | 161 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqFI | 3 | BNE | 69 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 0 | BNE | 62,514 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 1 | BNE | 62,514 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 2 | BNE | 62,514 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 3 | BNE | 31,257 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 0 | BNE | 10,902 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 1 | BNE | 10,902 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 2 | BNE | 10,902 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 3 | BNE | 5,451 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 0 | BEQ | 23 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 1 | BEQ | 23 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 2 | BEQ | 23 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 3 | BEQ | 23 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 0 | BNE | 6,440 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 1 | BNE | 6,440 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 2 | BNE | 6,440 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 3 | BNE | 3,220 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 0 | BNE | 883,982 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 1 | BNE | 883,982 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 2 | BNE | 883,982 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 3 | BNE | 441,991 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 0 | BEQ | 6,578 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 1 | BEQ | 6,578 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 2 | BEQ | 6,578 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 3 | BEQ | 3,289 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 0 | BEQ | 4,278 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 1 | BEQ | 4,278 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 2 | BEQ | 4,278 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 3 | BEQ | 2,139 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 0 | BNE | 13,357,204 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 1 | BNE | 13,354,720 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 2 | BNE | 13,354,720 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 3 | BNE | 6,680,074 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> |  | 0 | JAL | 10 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> |  | 1 | JAL | 10 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> |  | 2 | JAL | 10 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> |  | 3 | JAL | 10 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 0 | JAL | 135,270 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 1 | JAL | 131,480 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 2 | JAL | 135,890 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 3 | JAL | 67,070 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | IfNe | 0 | JAL | 60 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | IfNe | 1 | JAL | 60 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | IfNe | 2 | JAL | 60 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | IfNe | 3 | JAL | 30 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 0 | JAL | 598,670 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 1 | JAL | 598,670 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 2 | JAL | 598,670 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 3 | JAL | 299,390 | 
+| internal.0 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 0 | PUBLISH | 1,196 | 
+| internal.0 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 1 | PUBLISH | 1,196 | 
+| internal.0 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 2 | PUBLISH | 1,196 | 
+| internal.0 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 3 | PUBLISH | 1,196 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 0 | ADD | 30 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 1 | ADD | 30 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 2 | ADD | 30 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 3 | ADD | 30 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 0 | ADD | 83,520 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 1 | ADD | 83,520 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 2 | ADD | 83,520 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 3 | ADD | 41,760 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 0 | ADD | 66,000 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 1 | ADD | 66,000 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 2 | ADD | 66,000 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 3 | ADD | 33,000 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 0 | ADD | 2,232,000 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 1 | ADD | 2,232,000 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 2 | ADD | 2,232,000 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 3 | ADD | 1,116,000 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 0 | ADD | 177,600 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 1 | ADD | 177,600 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 2 | ADD | 177,600 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 3 | ADD | 88,800 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 0 | ADD | 711,570 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 1 | ADD | 711,570 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 2 | ADD | 711,570 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 3 | ADD | 356,160 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 0 | ADD | 2,382,480 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 1 | ADD | 2,382,240 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 2 | ADD | 2,382,240 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 3 | ADD | 1,191,510 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 0 | ADD | 5,198,460 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 1 | ADD | 5,198,460 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 2 | ADD | 5,198,460 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 3 | ADD | 2,600,160 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 0 | ADD | 5,865,780 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 0 | MUL | 1,624,320 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 1 | ADD | 5,865,780 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 1 | MUL | 1,624,320 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 2 | ADD | 5,865,780 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 2 | MUL | 1,624,320 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 3 | ADD | 2,933,580 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 3 | MUL | 812,370 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 0 | ADD | 8,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 1 | ADD | 8,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 2 | ADD | 8,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 3 | ADD | 4,440 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 0 | ADD | 44,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 1 | ADD | 44,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 2 | ADD | 44,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 3 | ADD | 22,440 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 0 | DIV | 332,640 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 1 | DIV | 332,640 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 2 | DIV | 332,640 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 3 | DIV | 166,320 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 0 | DIV | 23,460 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 1 | DIV | 23,460 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 2 | DIV | 23,460 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 3 | DIV | 11,730 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 0 | ADD | 290,400 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 1 | ADD | 290,400 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 2 | ADD | 290,400 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 3 | ADD | 145,200 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 0 | ADD | 246,900 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 1 | ADD | 246,900 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 2 | ADD | 246,900 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 3 | ADD | 125,970 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 0 | ADD | 313,470 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 1 | ADD | 313,470 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 2 | ADD | 313,470 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 3 | ADD | 158,490 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 0 | ADD | 640,080 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 0 | MUL | 640,080 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 1 | ADD | 640,080 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 1 | MUL | 640,080 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 2 | ADD | 640,080 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 2 | MUL | 640,080 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 3 | ADD | 320,040 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 3 | MUL | 320,040 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 0 | ADD | 809,520 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 0 | MUL | 538,860 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 1 | ADD | 809,520 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 1 | MUL | 538,860 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 2 | ADD | 809,520 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 2 | MUL | 538,860 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 3 | ADD | 404,760 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 3 | MUL | 269,430 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 0 | ADD | 60 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 1 | ADD | 60 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 2 | ADD | 60 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 3 | ADD | 30 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 0 | ADD | 2,728,980 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 0 | MUL | 2,437,560 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 1 | ADD | 2,728,980 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 1 | MUL | 2,437,560 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 2 | ADD | 2,728,980 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 2 | MUL | 2,437,560 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 3 | ADD | 1,364,490 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 3 | MUL | 1,218,780 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 0 | MUL | 291,360 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 1 | MUL | 291,360 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 2 | MUL | 291,360 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 3 | MUL | 145,680 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 0 | MUL | 49,200 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 1 | MUL | 49,200 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 2 | MUL | 49,200 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 3 | MUL | 24,600 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 0 | ADD | 410,640 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 1 | ADD | 410,640 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 2 | ADD | 410,640 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 3 | ADD | 205,320 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 0 | MUL | 1,515,720 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 1 | MUL | 1,515,720 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 2 | MUL | 1,515,720 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 3 | MUL | 757,860 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 0 | MUL | 168,300 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 1 | MUL | 168,300 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 2 | MUL | 168,300 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 3 | MUL | 84,150 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 0 | MUL | 656,310 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 1 | MUL | 656,310 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 2 | MUL | 656,310 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 3 | MUL | 328,170 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 0 | MUL | 20,400 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 1 | MUL | 20,400 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 2 | MUL | 20,400 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 3 | MUL | 10,200 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 0 | ADD | 539,280 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 0 | MUL | 539,280 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 1 | ADD | 539,280 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 1 | MUL | 539,280 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 2 | ADD | 539,280 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 2 | MUL | 539,280 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 3 | ADD | 269,640 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 3 | MUL | 269,640 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 0 | ADD | 44,520 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 0 | MUL | 22,560 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 1 | ADD | 44,520 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 1 | MUL | 22,560 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 2 | ADD | 44,520 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 2 | MUL | 22,560 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 3 | ADD | 22,260 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 3 | MUL | 11,280 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 0 | ADD | 60 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 1 | ADD | 60 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 2 | ADD | 60 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 3 | ADD | 30 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 0 | ADD | 829,320 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 0 | MUL | 555,660 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 1 | ADD | 829,320 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 1 | MUL | 555,660 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 2 | ADD | 829,320 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 2 | MUL | 555,660 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 3 | ADD | 414,660 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 3 | MUL | 277,830 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 0 | ADD | 1,019,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 0 | SUB | 339,960 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 1 | ADD | 1,019,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 1 | SUB | 339,960 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 2 | ADD | 1,019,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 2 | SUB | 339,960 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 3 | ADD | 509,940 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 3 | SUB | 169,980 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 0 | ADD | 23,040 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 1 | ADD | 23,040 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 2 | ADD | 23,040 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 3 | ADD | 11,520 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 0 | ADD | 89,760 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 1 | ADD | 89,760 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 2 | ADD | 89,760 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 3 | ADD | 44,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubF | 0 | SUB | 480 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubF | 1 | SUB | 480 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubF | 2 | SUB | 480 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubF | 3 | SUB | 240 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 0 | SUB | 167,280 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 1 | SUB | 167,280 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 2 | SUB | 167,280 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 3 | SUB | 83,640 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 0 | SUB | 376,500 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 1 | SUB | 376,500 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 2 | SUB | 376,500 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 3 | SUB | 188,250 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 0 | SUB | 59,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 1 | SUB | 59,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 2 | SUB | 59,880 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 3 | SUB | 29,940 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 0 | SUB | 50,400 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 1 | SUB | 50,400 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 2 | SUB | 50,400 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 3 | SUB | 25,200 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 0 | ADD | 6,840 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 1 | ADD | 6,840 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 2 | ADD | 6,840 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 3 | ADD | 3,420 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 0 | ADD | 18,914,580 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 1 | ADD | 18,911,340 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 2 | ADD | 18,911,340 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 3 | ADD | 9,459,210 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 0 | LOADW | 1,306,950 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 1 | LOADW | 1,306,950 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 2 | LOADW | 1,306,950 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 3 | LOADW | 653,575 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 0 | LOADW | 6,597,350 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 1 | LOADW | 6,597,350 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 2 | LOADW | 6,597,350 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 3 | LOADW | 3,298,800 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 0 | STOREW | 319,650 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 1 | STOREW | 319,650 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 2 | STOREW | 319,650 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 3 | STOREW | 161,925 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 0 | HINT_STOREW | 11,105,200 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 1 | HINT_STOREW | 11,105,200 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 2 | HINT_STOREW | 11,105,200 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 3 | HINT_STOREW | 5,552,825 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 0 | STOREW | 2,833,250 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 1 | STOREW | 2,833,250 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 2 | STOREW | 2,833,250 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 3 | STOREW | 1,418,025 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 0 | LOADW | 1,770,380 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 1 | LOADW | 1,770,380 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 2 | LOADW | 1,770,380 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 3 | LOADW | 885,190 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 0 | STOREW | 978,248 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 1 | STOREW | 978,248 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 2 | STOREW | 978,248 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 3 | STOREW | 489,124 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 0 | FE4ADD | 1,169,200 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 1 | FE4ADD | 1,169,200 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 2 | FE4ADD | 1,169,200 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 3 | FE4ADD | 584,600 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 0 | BBE4DIV | 520,160 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 1 | BBE4DIV | 520,160 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 2 | BBE4DIV | 520,160 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 3 | BBE4DIV | 260,080 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 0 | BBE4DIV | 14,960 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 1 | BBE4DIV | 14,960 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 2 | BBE4DIV | 14,960 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 3 | BBE4DIV | 7,480 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 0 | BBE4MUL | 2,190,640 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 1 | BBE4MUL | 2,186,640 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 2 | BBE4MUL | 2,186,640 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 3 | BBE4MUL | 1,097,320 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 0 | BBE4MUL | 136,880 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 1 | BBE4MUL | 136,880 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 2 | BBE4MUL | 136,880 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 3 | BBE4MUL | 68,440 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 0 | FE4SUB | 283,200 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 1 | FE4SUB | 283,200 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 2 | FE4SUB | 283,200 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 3 | FE4SUB | 141,600 | 
+| internal.0 | FriReducedOpeningAir | FriReducedOpening | 0 | FRI_REDUCED_OPENING | 6,936,384 | 
+| internal.0 | FriReducedOpeningAir | FriReducedOpening | 1 | FRI_REDUCED_OPENING | 6,936,384 | 
+| internal.0 | FriReducedOpeningAir | FriReducedOpening | 2 | FRI_REDUCED_OPENING | 6,936,384 | 
+| internal.0 | FriReducedOpeningAir | FriReducedOpening | 3 | FRI_REDUCED_OPENING | 3,468,192 | 
+| internal.0 | PhantomAir | CT-InitializePcsConst | 0 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-InitializePcsConst | 1 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-InitializePcsConst | 2 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-InitializePcsConst | 3 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-ReadProofsFromInput | 0 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-ReadProofsFromInput | 1 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-ReadProofsFromInput | 2 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-ReadProofsFromInput | 3 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-VerifyProofs | 0 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-VerifyProofs | 1 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-VerifyProofs | 2 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-VerifyProofs | 3 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-cache-generator-powers | 0 | PHANTOM | 6,048 | 
+| internal.0 | PhantomAir | CT-cache-generator-powers | 1 | PHANTOM | 6,048 | 
+| internal.0 | PhantomAir | CT-cache-generator-powers | 2 | PHANTOM | 6,048 | 
+| internal.0 | PhantomAir | CT-cache-generator-powers | 3 | PHANTOM | 3,024 | 
+| internal.0 | PhantomAir | CT-compute-reduced-opening | 0 | PHANTOM | 6,048 | 
+| internal.0 | PhantomAir | CT-compute-reduced-opening | 1 | PHANTOM | 6,048 | 
+| internal.0 | PhantomAir | CT-compute-reduced-opening | 2 | PHANTOM | 6,048 | 
+| internal.0 | PhantomAir | CT-compute-reduced-opening | 3 | PHANTOM | 3,024 | 
+| internal.0 | PhantomAir | CT-exp-reverse-bits-len | 0 | PHANTOM | 97,776 | 
+| internal.0 | PhantomAir | CT-exp-reverse-bits-len | 1 | PHANTOM | 97,776 | 
+| internal.0 | PhantomAir | CT-exp-reverse-bits-len | 2 | PHANTOM | 97,776 | 
+| internal.0 | PhantomAir | CT-exp-reverse-bits-len | 3 | PHANTOM | 48,888 | 
+| internal.0 | PhantomAir | CT-pre-compute-alpha-pows | 0 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-pre-compute-alpha-pows | 1 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-pre-compute-alpha-pows | 2 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-pre-compute-alpha-pows | 3 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-single-reduced-opening-eval | 0 | PHANTOM | 135,072 | 
+| internal.0 | PhantomAir | CT-single-reduced-opening-eval | 1 | PHANTOM | 135,072 | 
+| internal.0 | PhantomAir | CT-single-reduced-opening-eval | 2 | PHANTOM | 135,072 | 
+| internal.0 | PhantomAir | CT-single-reduced-opening-eval | 3 | PHANTOM | 67,536 | 
+| internal.0 | PhantomAir | CT-stage-c-build-rounds | 0 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-c-build-rounds | 1 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-c-build-rounds | 2 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-c-build-rounds | 3 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-stage-d-verifier-verify | 0 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-d-verifier-verify | 1 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-d-verifier-verify | 2 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-d-verifier-verify | 3 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-stage-d-verify-pcs | 0 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-d-verify-pcs | 1 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-d-verify-pcs | 2 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-d-verify-pcs | 3 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-stage-e-verify-constraints | 0 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-e-verify-constraints | 1 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-e-verify-constraints | 2 | PHANTOM | 24 | 
+| internal.0 | PhantomAir | CT-stage-e-verify-constraints | 3 | PHANTOM | 12 | 
+| internal.0 | PhantomAir | CT-verify-batch | 0 | PHANTOM | 6,048 | 
+| internal.0 | PhantomAir | CT-verify-batch | 1 | PHANTOM | 6,048 | 
+| internal.0 | PhantomAir | CT-verify-batch | 2 | PHANTOM | 6,048 | 
+| internal.0 | PhantomAir | CT-verify-batch | 3 | PHANTOM | 3,024 | 
+| internal.0 | PhantomAir | CT-verify-batch-ext | 0 | PHANTOM | 20,160 | 
+| internal.0 | PhantomAir | CT-verify-batch-ext | 1 | PHANTOM | 20,160 | 
+| internal.0 | PhantomAir | CT-verify-batch-ext | 2 | PHANTOM | 20,160 | 
+| internal.0 | PhantomAir | CT-verify-batch-ext | 3 | PHANTOM | 10,080 | 
+| internal.0 | PhantomAir | CT-verify-query | 0 | PHANTOM | 1,008 | 
+| internal.0 | PhantomAir | CT-verify-query | 1 | PHANTOM | 1,008 | 
+| internal.0 | PhantomAir | CT-verify-query | 2 | PHANTOM | 1,008 | 
+| internal.0 | PhantomAir | CT-verify-query | 3 | PHANTOM | 504 | 
+| internal.0 | PhantomAir | HintBitsF | 0 | PHANTOM | 1,680 | 
+| internal.0 | PhantomAir | HintBitsF | 1 | PHANTOM | 1,680 | 
+| internal.0 | PhantomAir | HintBitsF | 2 | PHANTOM | 1,680 | 
+| internal.0 | PhantomAir | HintBitsF | 3 | PHANTOM | 840 | 
+| internal.0 | PhantomAir | HintInputVec | 0 | PHANTOM | 261,714 | 
+| internal.0 | PhantomAir | HintInputVec | 1 | PHANTOM | 261,714 | 
+| internal.0 | PhantomAir | HintInputVec | 2 | PHANTOM | 261,714 | 
+| internal.0 | PhantomAir | HintInputVec | 3 | PHANTOM | 130,884 | 
+| internal.0 | VerifyBatchAir | Poseidon2PermuteBabyBear | 0 | PERM_POS2 | 40,698 | 
+| internal.0 | VerifyBatchAir | Poseidon2PermuteBabyBear | 1 | PERM_POS2 | 40,698 | 
+| internal.0 | VerifyBatchAir | Poseidon2PermuteBabyBear | 2 | PERM_POS2 | 40,698 | 
+| internal.0 | VerifyBatchAir | Poseidon2PermuteBabyBear | 3 | PERM_POS2 | 20,349 | 
+| internal.0 | VerifyBatchAir | VerifyBatchExt | 0 | VERIFY_BATCH | 9,049,320 | 
+| internal.0 | VerifyBatchAir | VerifyBatchExt | 1 | VERIFY_BATCH | 9,049,320 | 
+| internal.0 | VerifyBatchAir | VerifyBatchExt | 2 | VERIFY_BATCH | 9,049,320 | 
+| internal.0 | VerifyBatchAir | VerifyBatchExt | 3 | VERIFY_BATCH | 4,524,660 | 
+| internal.0 | VerifyBatchAir | VerifyBatchFelt | 0 | VERIFY_BATCH | 11,546,262 | 
+| internal.0 | VerifyBatchAir | VerifyBatchFelt | 1 | VERIFY_BATCH | 11,563,020 | 
+| internal.0 | VerifyBatchAir | VerifyBatchFelt | 2 | VERIFY_BATCH | 11,563,020 | 
+| internal.0 | VerifyBatchAir | VerifyBatchFelt | 3 | VERIFY_BATCH | 5,747,994 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 4 | BNE | 10,856 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 5 | BNE | 10,856 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 4 | BNE | 184 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 5 | BNE | 184 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 4 | BNE | 135,631 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 5 | BNE | 135,631 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqFI | 4 | BNE | 161 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqFI | 5 | BNE | 161 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 4 | BNE | 64,446 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 5 | BNE | 63,480 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 4 | BNE | 10,902 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 5 | BNE | 10,902 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 4 | BEQ | 23 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 5 | BEQ | 23 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 4 | BNE | 6,624 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 5 | BNE | 6,532 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 4 | BNE | 912,134 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 5 | BNE | 898,426 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 4 | BEQ | 6,762 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 5 | BEQ | 6,670 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 4 | BEQ | 4,278 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 5 | BEQ | 4,278 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 4 | BNE | 13,971,396 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 5 | BNE | 13,676,628 | 
+| internal.1 | <JalNativeAdapterAir,JalCoreAir> |  | 4 | JAL | 10 | 
+| internal.1 | <JalNativeAdapterAir,JalCoreAir> |  | 5 | JAL | 10 | 
+| internal.1 | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 4 | JAL | 135,860 | 
+| internal.1 | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 5 | JAL | 139,760 | 
+| internal.1 | <JalNativeAdapterAir,JalCoreAir> | IfNe | 4 | JAL | 60 | 
+| internal.1 | <JalNativeAdapterAir,JalCoreAir> | IfNe | 5 | JAL | 60 | 
+| internal.1 | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 4 | JAL | 624,730 | 
+| internal.1 | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 5 | JAL | 612,120 | 
+| internal.1 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 4 | PUBLISH | 1,196 | 
+| internal.1 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 5 | PUBLISH | 1,196 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 4 | ADD | 30 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 5 | ADD | 30 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 4 | ADD | 88,320 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 5 | ADD | 87,840 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 4 | ADD | 66,000 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 5 | ADD | 66,000 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 4 | ADD | 2,266,560 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 5 | ADD | 2,251,200 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 4 | ADD | 177,600 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 5 | ADD | 177,600 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 4 | ADD | 743,730 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 5 | ADD | 728,370 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 4 | ADD | 2,518,140 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 5 | ADD | 2,451,810 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 4 | ADD | 5,453,760 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 5 | ADD | 5,330,850 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 4 | ADD | 6,178,500 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 4 | MUL | 1,707,540 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 5 | ADD | 6,027,180 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 5 | MUL | 1,667,190 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 4 | ADD | 8,880 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 5 | ADD | 8,880 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 4 | ADD | 44,880 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 5 | ADD | 44,880 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 4 | DIV | 347,760 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 5 | DIV | 340,200 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 4 | DIV | 23,460 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 5 | DIV | 23,460 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 4 | ADD | 294,240 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 5 | ADD | 294,240 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 4 | ADD | 246,900 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 5 | ADD | 246,900 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 4 | ADD | 322,590 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 5 | ADD | 318,390 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 4 | ADD | 647,640 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 4 | MUL | 647,640 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 5 | ADD | 643,860 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 5 | MUL | 643,860 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 4 | ADD | 809,760 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 4 | MUL | 538,860 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 5 | ADD | 809,640 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 5 | MUL | 538,860 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 4 | ADD | 60 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 5 | ADD | 60 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 4 | ADD | 2,741,580 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 4 | MUL | 2,447,640 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 5 | ADD | 2,735,280 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 5 | MUL | 2,442,600 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 4 | MUL | 301,440 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 5 | MUL | 296,400 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 4 | MUL | 49,200 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 5 | MUL | 49,200 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 4 | ADD | 411,600 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 5 | ADD | 411,120 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 4 | MUL | 1,576,200 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 5 | MUL | 1,545,960 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 4 | MUL | 168,300 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 5 | MUL | 168,300 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 4 | MUL | 661,350 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 5 | MUL | 658,830 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 4 | MUL | 20,400 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 5 | MUL | 20,400 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 4 | ADD | 541,800 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 4 | MUL | 541,800 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 5 | ADD | 540,540 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 5 | MUL | 540,540 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 4 | ADD | 45,960 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 4 | MUL | 22,560 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 5 | ADD | 45,720 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 5 | MUL | 22,560 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 4 | ADD | 60 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 5 | ADD | 60 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 4 | ADD | 826,800 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 4 | MUL | 555,660 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 5 | ADD | 828,060 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 5 | MUL | 555,660 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 4 | ADD | 1,019,880 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 4 | SUB | 339,960 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 5 | ADD | 1,019,880 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 5 | SUB | 339,960 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 4 | ADD | 23,040 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 5 | ADD | 23,040 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 4 | ADD | 89,760 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 5 | ADD | 89,760 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubF | 4 | SUB | 480 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubF | 5 | SUB | 480 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 4 | SUB | 167,280 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 5 | SUB | 167,280 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 4 | SUB | 381,540 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 5 | SUB | 379,020 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 4 | SUB | 62,640 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 5 | SUB | 61,260 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 4 | SUB | 52,920 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 5 | SUB | 51,660 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 4 | ADD | 6,840 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 5 | ADD | 6,840 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 4 | ADD | 19,730,880 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 5 | ADD | 19,338,810 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 4 | LOADW | 1,312,050 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 5 | LOADW | 1,310,700 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 4 | LOADW | 6,700,400 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 5 | LOADW | 6,649,925 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 4 | STOREW | 333,450 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 5 | STOREW | 326,950 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 4 | HINT_STOREW | 11,616,750 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 5 | HINT_STOREW | 11,370,825 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 4 | STOREW | 2,950,950 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 5 | STOREW | 2,894,200 | 
+| internal.1 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 4 | LOADW | 1,787,516 | 
+| internal.1 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 5 | LOADW | 1,778,948 | 
+| internal.1 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 4 | STOREW | 989,740 | 
+| internal.1 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 5 | STOREW | 983,994 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 4 | FE4ADD | 1,177,440 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 5 | FE4ADD | 1,173,960 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 4 | BBE4DIV | 523,520 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 5 | BBE4DIV | 521,840 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 4 | BBE4DIV | 14,960 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 5 | BBE4DIV | 14,960 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 4 | BBE4MUL | 2,237,120 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 5 | BBE4MUL | 2,218,200 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 4 | BBE4MUL | 137,200 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 5 | BBE4MUL | 137,040 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 4 | FE4SUB | 293,280 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 5 | FE4SUB | 288,240 | 
+| internal.1 | FriReducedOpeningAir | FriReducedOpening | 4 | FRI_REDUCED_OPENING | 6,936,384 | 
+| internal.1 | FriReducedOpeningAir | FriReducedOpening | 5 | FRI_REDUCED_OPENING | 6,936,384 | 
+| internal.1 | PhantomAir | CT-InitializePcsConst | 4 | PHANTOM | 12 | 
+| internal.1 | PhantomAir | CT-InitializePcsConst | 5 | PHANTOM | 12 | 
+| internal.1 | PhantomAir | CT-ReadProofsFromInput | 4 | PHANTOM | 12 | 
+| internal.1 | PhantomAir | CT-ReadProofsFromInput | 5 | PHANTOM | 12 | 
+| internal.1 | PhantomAir | CT-VerifyProofs | 4 | PHANTOM | 12 | 
+| internal.1 | PhantomAir | CT-VerifyProofs | 5 | PHANTOM | 12 | 
+| internal.1 | PhantomAir | CT-cache-generator-powers | 4 | PHANTOM | 6,048 | 
+| internal.1 | PhantomAir | CT-cache-generator-powers | 5 | PHANTOM | 6,048 | 
+| internal.1 | PhantomAir | CT-compute-reduced-opening | 4 | PHANTOM | 6,048 | 
+| internal.1 | PhantomAir | CT-compute-reduced-opening | 5 | PHANTOM | 6,048 | 
+| internal.1 | PhantomAir | CT-exp-reverse-bits-len | 4 | PHANTOM | 97,776 | 
+| internal.1 | PhantomAir | CT-exp-reverse-bits-len | 5 | PHANTOM | 97,776 | 
+| internal.1 | PhantomAir | CT-pre-compute-alpha-pows | 4 | PHANTOM | 24 | 
+| internal.1 | PhantomAir | CT-pre-compute-alpha-pows | 5 | PHANTOM | 24 | 
+| internal.1 | PhantomAir | CT-single-reduced-opening-eval | 4 | PHANTOM | 135,072 | 
+| internal.1 | PhantomAir | CT-single-reduced-opening-eval | 5 | PHANTOM | 135,072 | 
+| internal.1 | PhantomAir | CT-stage-c-build-rounds | 4 | PHANTOM | 24 | 
+| internal.1 | PhantomAir | CT-stage-c-build-rounds | 5 | PHANTOM | 24 | 
+| internal.1 | PhantomAir | CT-stage-d-verifier-verify | 4 | PHANTOM | 24 | 
+| internal.1 | PhantomAir | CT-stage-d-verifier-verify | 5 | PHANTOM | 24 | 
+| internal.1 | PhantomAir | CT-stage-d-verify-pcs | 4 | PHANTOM | 24 | 
+| internal.1 | PhantomAir | CT-stage-d-verify-pcs | 5 | PHANTOM | 24 | 
+| internal.1 | PhantomAir | CT-stage-e-verify-constraints | 4 | PHANTOM | 24 | 
+| internal.1 | PhantomAir | CT-stage-e-verify-constraints | 5 | PHANTOM | 24 | 
+| internal.1 | PhantomAir | CT-verify-batch | 4 | PHANTOM | 6,048 | 
+| internal.1 | PhantomAir | CT-verify-batch | 5 | PHANTOM | 6,048 | 
+| internal.1 | PhantomAir | CT-verify-batch-ext | 4 | PHANTOM | 21,168 | 
+| internal.1 | PhantomAir | CT-verify-batch-ext | 5 | PHANTOM | 20,664 | 
+| internal.1 | PhantomAir | CT-verify-query | 4 | PHANTOM | 1,008 | 
+| internal.1 | PhantomAir | CT-verify-query | 5 | PHANTOM | 1,008 | 
+| internal.1 | PhantomAir | HintBitsF | 4 | PHANTOM | 1,680 | 
+| internal.1 | PhantomAir | HintBitsF | 5 | PHANTOM | 1,680 | 
+| internal.1 | PhantomAir | HintInputVec | 4 | PHANTOM | 276,342 | 
+| internal.1 | PhantomAir | HintInputVec | 5 | PHANTOM | 269,280 | 
+| internal.1 | VerifyBatchAir | Poseidon2PermuteBabyBear | 4 | PERM_POS2 | 43,092 | 
+| internal.1 | VerifyBatchAir | Poseidon2PermuteBabyBear | 5 | PERM_POS2 | 42,693 | 
+| internal.1 | VerifyBatchAir | VerifyBatchExt | 4 | VERIFY_BATCH | 9,853,704 | 
+| internal.1 | VerifyBatchAir | VerifyBatchExt | 5 | VERIFY_BATCH | 9,451,512 | 
+| internal.1 | VerifyBatchAir | VerifyBatchFelt | 4 | VERIFY_BATCH | 11,630,052 | 
+| internal.1 | VerifyBatchAir | VerifyBatchFelt | 5 | VERIFY_BATCH | 11,579,778 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 6 | BNE | 10,856 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 6 | BNE | 184 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 6 | BNE | 135,631 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqFI | 6 | BNE | 161 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 6 | BNE | 64,446 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 6 | BNE | 10,902 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 6 | BEQ | 23 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 6 | BNE | 6,624 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 6 | BNE | 912,134 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 6 | BEQ | 6,762 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 6 | BEQ | 4,278 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 6 | BNE | 13,971,396 | 
+| internal.2 | <JalNativeAdapterAir,JalCoreAir> |  | 6 | JAL | 10 | 
+| internal.2 | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 6 | JAL | 143,340 | 
+| internal.2 | <JalNativeAdapterAir,JalCoreAir> | IfNe | 6 | JAL | 60 | 
+| internal.2 | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 6 | JAL | 624,730 | 
+| internal.2 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 6 | PUBLISH | 1,196 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 6 | ADD | 30 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 6 | ADD | 88,320 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 6 | ADD | 66,000 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 6 | ADD | 2,266,560 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 6 | ADD | 177,600 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 6 | ADD | 743,730 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 6 | ADD | 2,518,140 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 6 | ADD | 5,453,760 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 6 | ADD | 6,178,500 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 6 | MUL | 1,707,540 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 6 | ADD | 8,880 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 6 | ADD | 44,880 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 6 | DIV | 347,760 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 6 | DIV | 23,460 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 6 | ADD | 294,240 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 6 | ADD | 246,900 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 6 | ADD | 322,590 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 6 | ADD | 647,640 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 6 | MUL | 647,640 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 6 | ADD | 809,760 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 6 | MUL | 538,860 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 6 | ADD | 60 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 6 | ADD | 2,741,580 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 6 | MUL | 2,447,640 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 6 | MUL | 301,440 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 6 | MUL | 49,200 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 6 | ADD | 411,600 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 6 | MUL | 1,576,200 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 6 | MUL | 168,300 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 6 | MUL | 661,350 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 6 | MUL | 20,400 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 6 | ADD | 541,800 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 6 | MUL | 541,800 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 6 | ADD | 45,960 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 6 | MUL | 22,560 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 6 | ADD | 60 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 6 | ADD | 826,800 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 6 | MUL | 555,660 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 6 | ADD | 1,019,880 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 6 | SUB | 339,960 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 6 | ADD | 23,040 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 6 | ADD | 89,760 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubF | 6 | SUB | 480 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 6 | SUB | 167,280 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 6 | SUB | 381,540 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 6 | SUB | 62,640 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 6 | SUB | 52,920 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 6 | ADD | 6,840 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 6 | ADD | 19,730,880 | 
+| internal.2 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 6 | LOADW | 1,312,050 | 
+| internal.2 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 6 | LOADW | 6,700,400 | 
+| internal.2 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 6 | STOREW | 333,450 | 
+| internal.2 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 6 | HINT_STOREW | 11,616,750 | 
+| internal.2 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 6 | STOREW | 2,950,950 | 
+| internal.2 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 6 | LOADW | 1,787,516 | 
+| internal.2 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 6 | STOREW | 989,740 | 
+| internal.2 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 6 | FE4ADD | 1,177,440 | 
+| internal.2 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 6 | BBE4DIV | 523,520 | 
+| internal.2 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 6 | BBE4DIV | 14,960 | 
+| internal.2 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 6 | BBE4MUL | 2,237,120 | 
+| internal.2 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 6 | BBE4MUL | 137,200 | 
+| internal.2 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 6 | FE4SUB | 293,280 | 
+| internal.2 | FriReducedOpeningAir | FriReducedOpening | 6 | FRI_REDUCED_OPENING | 6,936,384 | 
+| internal.2 | PhantomAir | CT-InitializePcsConst | 6 | PHANTOM | 12 | 
+| internal.2 | PhantomAir | CT-ReadProofsFromInput | 6 | PHANTOM | 12 | 
+| internal.2 | PhantomAir | CT-VerifyProofs | 6 | PHANTOM | 12 | 
+| internal.2 | PhantomAir | CT-cache-generator-powers | 6 | PHANTOM | 6,048 | 
+| internal.2 | PhantomAir | CT-compute-reduced-opening | 6 | PHANTOM | 6,048 | 
+| internal.2 | PhantomAir | CT-exp-reverse-bits-len | 6 | PHANTOM | 97,776 | 
+| internal.2 | PhantomAir | CT-pre-compute-alpha-pows | 6 | PHANTOM | 24 | 
+| internal.2 | PhantomAir | CT-single-reduced-opening-eval | 6 | PHANTOM | 135,072 | 
+| internal.2 | PhantomAir | CT-stage-c-build-rounds | 6 | PHANTOM | 24 | 
+| internal.2 | PhantomAir | CT-stage-d-verifier-verify | 6 | PHANTOM | 24 | 
+| internal.2 | PhantomAir | CT-stage-d-verify-pcs | 6 | PHANTOM | 24 | 
+| internal.2 | PhantomAir | CT-stage-e-verify-constraints | 6 | PHANTOM | 24 | 
+| internal.2 | PhantomAir | CT-verify-batch | 6 | PHANTOM | 6,048 | 
+| internal.2 | PhantomAir | CT-verify-batch-ext | 6 | PHANTOM | 21,168 | 
+| internal.2 | PhantomAir | CT-verify-query | 6 | PHANTOM | 1,008 | 
+| internal.2 | PhantomAir | HintBitsF | 6 | PHANTOM | 1,680 | 
+| internal.2 | PhantomAir | HintInputVec | 6 | PHANTOM | 276,342 | 
+| internal.2 | VerifyBatchAir | Poseidon2PermuteBabyBear | 6 | PERM_POS2 | 43,092 | 
+| internal.2 | VerifyBatchAir | VerifyBatchExt | 6 | VERIFY_BATCH | 9,853,704 | 
+| internal.2 | VerifyBatchAir | VerifyBatchFelt | 6 | VERIFY_BATCH | 11,630,052 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 0 | BNE | 5,704 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 1 | BNE | 5,152 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 2 | BNE | 5,152 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 3 | BNE | 5,152 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 4 | BNE | 5,152 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 5 | BNE | 5,152 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 6 | BNE | 5,336 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 0 | BNE | 92 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 1 | BNE | 92 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 2 | BNE | 92 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 3 | BNE | 92 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 4 | BNE | 92 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 5 | BNE | 92 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 6 | BNE | 92 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 0 | BNE | 61,824 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 1 | BNE | 52,992 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 2 | BNE | 52,992 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 3 | BNE | 52,992 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 4 | BNE | 52,992 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 5 | BNE | 52,992 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 6 | BNE | 56,120 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 0 | BNE | 33,373 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 1 | BNE | 31,855 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 2 | BNE | 31,855 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 3 | BNE | 31,855 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 4 | BNE | 31,855 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 5 | BNE | 31,855 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 6 | BNE | 32,361 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 0 | BNE | 5,543 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 1 | BNE | 4,025 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 2 | BNE | 4,025 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 3 | BNE | 4,025 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 4 | BNE | 4,025 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 5 | BNE | 4,025 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 6 | BNE | 4,554 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 0 | BEQ | 23 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 1 | BEQ | 23 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 2 | BEQ | 23 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 3 | BEQ | 23 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 4 | BEQ | 23 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 5 | BEQ | 23 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 6 | BEQ | 23 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 0 | BNE | 3,266 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 1 | BNE | 3,243 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 2 | BNE | 3,243 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 3 | BNE | 3,243 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 4 | BNE | 3,243 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 5 | BNE | 3,243 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 6 | BNE | 3,243 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 0 | BNE | 509,933 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 1 | BNE | 476,813 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 2 | BNE | 476,813 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 3 | BNE | 476,813 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 4 | BNE | 476,813 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 5 | BNE | 476,813 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 6 | BNE | 487,853 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 0 | BEQ | 3,289 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 1 | BEQ | 3,289 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 2 | BEQ | 3,289 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 3 | BEQ | 3,289 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 4 | BEQ | 3,289 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 5 | BEQ | 3,289 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 6 | BEQ | 3,289 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 0 | BEQ | 2,300 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 1 | BEQ | 1,610 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 2 | BEQ | 1,610 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 3 | BEQ | 1,610 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 4 | BEQ | 1,610 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 5 | BEQ | 1,610 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 6 | BEQ | 1,840 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 0 | BNE | 6,822,375 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 1 | BNE | 6,052,841 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 2 | BNE | 6,052,841 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 3 | BNE | 6,052,841 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 4 | BNE | 6,052,841 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 5 | BNE | 6,052,841 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 6 | BNE | 6,338,478 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> |  | 0 | JAL | 10 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> |  | 1 | JAL | 10 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> |  | 2 | JAL | 10 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> |  | 3 | JAL | 10 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> |  | 4 | JAL | 10 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> |  | 5 | JAL | 10 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> |  | 6 | JAL | 10 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 0 | JAL | 90,990 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 1 | JAL | 88,830 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 2 | JAL | 86,950 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 3 | JAL | 91,150 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 4 | JAL | 89,490 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 5 | JAL | 84,820 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 6 | JAL | 84,320 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfNe | 0 | JAL | 10 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfNe | 1 | JAL | 20 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfNe | 2 | JAL | 20 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfNe | 3 | JAL | 20 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfNe | 4 | JAL | 20 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfNe | 5 | JAL | 20 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | IfNe | 6 | JAL | 20 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 0 | JAL | 305,470 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 1 | JAL | 283,150 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 2 | JAL | 283,150 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 3 | JAL | 283,150 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 4 | JAL | 283,150 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 5 | JAL | 283,150 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 6 | JAL | 292,850 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 0 | PUBLISH | 828 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 1 | PUBLISH | 828 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 2 | PUBLISH | 828 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 3 | PUBLISH | 828 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 4 | PUBLISH | 828 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 5 | PUBLISH | 828 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 6 | PUBLISH | 828 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 0 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 1 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 2 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 3 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 4 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 5 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 6 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 0 | ADD | 21,120 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 1 | ADD | 19,680 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 2 | ADD | 19,680 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 3 | ADD | 19,680 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 4 | ADD | 19,680 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 5 | ADD | 19,680 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 6 | ADD | 20,160 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 0 | ADD | 18,480 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 1 | ADD | 14,280 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 2 | ADD | 14,280 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 3 | ADD | 14,280 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 4 | ADD | 14,280 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 5 | ADD | 14,280 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 6 | ADD | 15,960 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 0 | ADD | 841,800 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 1 | ADD | 670,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 2 | ADD | 670,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 3 | ADD | 670,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 4 | ADD | 670,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 5 | ADD | 670,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 6 | ADD | 728,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 0 | ADD | 82,050 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 1 | ADD | 71,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 2 | ADD | 71,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 3 | ADD | 71,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 4 | ADD | 71,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 5 | ADD | 71,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 6 | ADD | 74,850 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 0 | ADD | 468,750 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 1 | ADD | 467,490 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 2 | ADD | 467,490 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 3 | ADD | 467,490 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 4 | ADD | 467,490 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 5 | ADD | 467,490 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 6 | ADD | 468,150 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 0 | ADD | 1,212,390 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 1 | ADD | 1,144,590 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 2 | ADD | 1,144,590 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 3 | ADD | 1,144,590 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 4 | ADD | 1,144,590 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 5 | ADD | 1,144,590 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 6 | ADD | 1,173,840 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 0 | ADD | 2,796,510 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 1 | ADD | 2,651,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 2 | ADD | 2,651,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 3 | ADD | 2,651,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 4 | ADD | 2,651,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 5 | ADD | 2,651,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 6 | ADD | 2,706,450 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 0 | ADD | 3,075,000 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 0 | MUL | 854,130 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 1 | ADD | 2,933,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 1 | MUL | 817,050 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 2 | ADD | 2,933,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 2 | MUL | 817,050 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 3 | ADD | 2,933,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 3 | MUL | 817,050 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 4 | ADD | 2,933,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 4 | MUL | 817,050 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 5 | ADD | 2,933,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 5 | MUL | 817,050 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 6 | ADD | 3,007,920 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 6 | MUL | 836,280 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 0 | ADD | 3,780 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 1 | ADD | 3,060 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 2 | ADD | 3,060 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 3 | ADD | 3,060 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 4 | ADD | 3,060 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 5 | ADD | 3,060 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 6 | ADD | 3,300 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 0 | ADD | 6,480 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 1 | ADD | 4,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 2 | ADD | 4,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 3 | ADD | 4,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 4 | ADD | 4,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 5 | ADD | 4,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 6 | ADD | 5,040 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 0 | DIV | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 1 | DIV | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 2 | DIV | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 3 | DIV | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 4 | DIV | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 5 | DIV | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 6 | DIV | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 0 | DIV | 3,840 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 1 | DIV | 2,580 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 2 | DIV | 2,580 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 3 | DIV | 2,580 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 4 | DIV | 2,580 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 5 | DIV | 2,580 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 6 | DIV | 3,000 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 0 | ADD | 106,080 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 1 | ADD | 65,280 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 2 | ADD | 65,280 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 3 | ADD | 65,280 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 4 | ADD | 65,280 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 5 | ADD | 65,280 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 6 | ADD | 78,120 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 0 | ADD | 123,570 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 1 | ADD | 110,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 2 | ADD | 110,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 3 | ADD | 110,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 4 | ADD | 110,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 5 | ADD | 110,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 6 | ADD | 114,690 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 0 | ADD | 160,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 1 | ADD | 154,380 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 2 | ADD | 154,380 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 3 | ADD | 154,380 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 4 | ADD | 154,380 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 5 | ADD | 154,380 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 6 | ADD | 156,450 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 0 | ADD | 282,240 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 0 | MUL | 282,240 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 1 | ADD | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 1 | MUL | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 2 | ADD | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 2 | MUL | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 3 | ADD | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 3 | MUL | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 4 | ADD | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 4 | MUL | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 5 | ADD | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 5 | MUL | 221,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 6 | ADD | 241,920 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 6 | MUL | 241,920 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 0 | ADD | 355,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 0 | MUL | 236,490 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 1 | ADD | 261,840 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 1 | MUL | 173,130 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 2 | ADD | 261,840 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 2 | MUL | 173,130 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 3 | ADD | 261,840 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 3 | MUL | 173,130 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 4 | ADD | 261,840 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 4 | MUL | 173,130 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 5 | ADD | 261,840 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 5 | MUL | 173,130 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 6 | ADD | 293,040 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 6 | MUL | 194,250 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 0 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 1 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 2 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 3 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 4 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 5 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 6 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 0 | ADD | 1,220,970 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 0 | MUL | 1,095,780 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 1 | ADD | 916,770 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 1 | MUL | 822,180 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 2 | ADD | 916,770 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 2 | MUL | 822,180 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 3 | ADD | 916,770 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 3 | MUL | 822,180 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 4 | ADD | 916,770 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 4 | MUL | 822,180 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 5 | ADD | 916,770 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 5 | MUL | 822,180 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 6 | ADD | 1,018,170 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 6 | MUL | 913,380 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 0 | MUL | 113,760 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 1 | MUL | 109,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 2 | MUL | 109,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 3 | MUL | 109,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 4 | MUL | 109,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 5 | MUL | 109,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 6 | MUL | 110,880 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 0 | MUL | 15,000 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 1 | MUL | 5,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 2 | MUL | 5,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 3 | MUL | 5,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 4 | MUL | 5,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 5 | MUL | 5,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 6 | MUL | 9,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 0 | ADD | 183,120 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 1 | ADD | 108,000 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 2 | ADD | 108,000 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 3 | ADD | 108,000 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 4 | ADD | 108,000 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 5 | ADD | 108,000 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 6 | ADD | 136,560 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 0 | MUL | 969,390 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 1 | MUL | 956,790 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 2 | MUL | 956,790 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 3 | MUL | 956,790 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 4 | MUL | 956,790 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 5 | MUL | 956,790 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 6 | MUL | 960,990 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 0 | MUL | 77,490 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 1 | MUL | 66,510 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 2 | MUL | 66,510 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 3 | MUL | 66,510 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 4 | MUL | 66,510 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 5 | MUL | 66,510 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 6 | MUL | 70,170 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 0 | MUL | 298,140 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 1 | MUL | 235,860 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 2 | MUL | 235,860 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 3 | MUL | 235,860 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 4 | MUL | 235,860 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 5 | MUL | 235,860 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 6 | MUL | 256,620 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 0 | MUL | 5,160 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 1 | MUL | 2,880 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 2 | MUL | 2,880 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 3 | MUL | 2,880 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 4 | MUL | 2,880 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 5 | MUL | 2,880 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 6 | MUL | 3,720 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 0 | ADD | 231,840 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 0 | MUL | 231,840 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 1 | ADD | 171,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 1 | MUL | 171,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 2 | ADD | 171,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 2 | MUL | 171,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 3 | ADD | 171,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 3 | MUL | 171,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 4 | ADD | 171,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 4 | MUL | 171,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 5 | ADD | 171,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 5 | MUL | 171,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 6 | ADD | 191,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 6 | MUL | 191,520 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 0 | ADD | 20,550 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 0 | MUL | 9,240 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 1 | ADD | 16,770 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 1 | MUL | 6,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 2 | ADD | 16,770 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 2 | MUL | 6,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 3 | ADD | 16,770 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 3 | MUL | 6,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 4 | ADD | 16,770 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 4 | MUL | 6,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 5 | ADD | 16,770 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 5 | MUL | 6,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 6 | ADD | 24,510 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 6 | MUL | 13,800 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 0 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 1 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 2 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 3 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 4 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 5 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 6 | ADD | 30 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 0 | ADD | 355,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 0 | MUL | 238,020 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 1 | ADD | 254,820 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 1 | MUL | 168,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 2 | ADD | 254,820 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 2 | MUL | 168,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 3 | ADD | 254,820 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 3 | MUL | 168,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 4 | ADD | 254,820 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 4 | MUL | 168,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 5 | ADD | 254,820 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 5 | MUL | 168,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 6 | ADD | 288,360 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 6 | MUL | 191,580 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 0 | ADD | 485,460 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 0 | SUB | 161,820 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 1 | ADD | 348,300 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 1 | SUB | 116,100 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 2 | ADD | 348,300 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 2 | SUB | 116,100 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 3 | ADD | 348,300 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 3 | SUB | 116,100 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 4 | ADD | 348,300 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 4 | SUB | 116,100 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 5 | ADD | 348,300 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 5 | SUB | 116,100 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 6 | ADD | 394,020 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 6 | SUB | 131,340 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 0 | ADD | 10,320 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 1 | ADD | 4,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 2 | ADD | 4,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 3 | ADD | 4,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 4 | ADD | 4,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 5 | ADD | 4,440 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 6 | ADD | 6,240 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 0 | ADD | 12,960 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 1 | ADD | 8,640 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 2 | ADD | 8,640 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 3 | ADD | 8,640 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 4 | ADD | 8,640 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 5 | ADD | 8,640 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 6 | ADD | 10,080 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 0 | SUB | 76,890 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 1 | SUB | 66,090 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 2 | SUB | 66,090 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 3 | SUB | 66,090 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 4 | SUB | 66,090 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 5 | SUB | 66,090 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 6 | SUB | 69,690 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 0 | SUB | 174,480 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 1 | SUB | 144,060 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 2 | SUB | 144,060 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 3 | SUB | 144,060 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 4 | SUB | 144,060 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 5 | SUB | 144,060 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 6 | SUB | 154,200 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 0 | SUB | 30,000 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 1 | SUB | 29,820 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 2 | SUB | 29,820 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 3 | SUB | 29,820 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 4 | SUB | 29,820 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 5 | SUB | 29,820 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 6 | SUB | 29,880 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 0 | SUB | 25,200 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 1 | SUB | 25,200 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 2 | SUB | 25,200 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 3 | SUB | 25,200 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 4 | SUB | 25,200 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 5 | SUB | 25,200 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 6 | SUB | 25,200 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 0 | ADD | 3,060 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 1 | ADD | 2,160 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 2 | ADD | 2,160 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 3 | ADD | 2,160 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 4 | ADD | 2,160 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 5 | ADD | 2,160 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 6 | ADD | 2,460 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 0 | ADD | 9,647,010 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 1 | ADD | 8,506,470 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 2 | ADD | 8,506,470 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 3 | ADD | 8,506,470 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 4 | ADD | 8,506,470 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 5 | ADD | 8,506,470 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 6 | ADD | 8,924,640 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 0 | LOADW | 575,700 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 1 | LOADW | 436,500 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 2 | LOADW | 436,500 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 3 | LOADW | 436,500 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 4 | LOADW | 436,500 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 5 | LOADW | 436,500 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 6 | LOADW | 499,300 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 0 | LOADW | 3,177,450 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 1 | LOADW | 2,598,450 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 2 | LOADW | 2,598,450 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 3 | LOADW | 2,598,450 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 4 | LOADW | 2,598,450 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 5 | LOADW | 2,598,450 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 6 | LOADW | 2,797,100 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 0 | STOREW | 205,100 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 1 | STOREW | 201,950 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 2 | STOREW | 201,950 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 3 | STOREW | 201,950 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 4 | STOREW | 201,950 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 5 | STOREW | 201,950 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 6 | STOREW | 219,200 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 0 | HINT_STOREW | 5,750,200 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 1 | HINT_STOREW | 5,055,550 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 2 | HINT_STOREW | 5,055,550 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 3 | HINT_STOREW | 5,055,550 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 4 | HINT_STOREW | 5,055,550 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 5 | HINT_STOREW | 5,055,550 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 6 | HINT_STOREW | 5,318,350 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 0 | STOREW | 1,416,400 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 1 | STOREW | 1,276,600 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 2 | STOREW | 1,276,600 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 3 | STOREW | 1,276,600 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 4 | STOREW | 1,276,600 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 5 | STOREW | 1,276,600 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 6 | STOREW | 1,323,200 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 0 | LOADW | 807,398 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 1 | LOADW | 616,828 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 2 | LOADW | 616,828 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 3 | LOADW | 616,828 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 4 | LOADW | 616,828 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 5 | LOADW | 616,828 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 6 | LOADW | 681,394 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 0 | STOREW | 446,080 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 1 | STOREW | 376,108 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 2 | STOREW | 376,108 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 3 | STOREW | 376,108 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 4 | STOREW | 376,108 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 5 | STOREW | 376,108 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 6 | STOREW | 399,432 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 0 | FE4ADD | 497,480 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 1 | FE4ADD | 355,400 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 2 | FE4ADD | 355,400 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 3 | FE4ADD | 355,400 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 4 | FE4ADD | 355,400 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 5 | FE4ADD | 355,400 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 6 | FE4ADD | 402,600 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 0 | BBE4DIV | 248,560 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 1 | BBE4DIV | 187,600 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 2 | BBE4DIV | 187,600 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 3 | BBE4DIV | 187,600 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 4 | BBE4DIV | 187,600 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 5 | BBE4DIV | 187,600 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 6 | BBE4DIV | 207,920 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 0 | BBE4DIV | 2,160 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 1 | BBE4DIV | 1,440 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 2 | BBE4DIV | 1,440 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 3 | BBE4DIV | 1,440 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 4 | BBE4DIV | 1,440 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 5 | BBE4DIV | 1,440 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 6 | BBE4DIV | 1,680 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 0 | BBE4MUL | 773,520 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 1 | BBE4MUL | 577,960 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 2 | BBE4MUL | 577,960 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 3 | BBE4MUL | 577,960 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 4 | BBE4MUL | 577,960 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 5 | BBE4MUL | 577,960 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 6 | BBE4MUL | 640,520 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 0 | BBE4MUL | 61,040 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 1 | BBE4MUL | 36,000 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 2 | BBE4MUL | 36,000 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 3 | BBE4MUL | 36,000 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 4 | BBE4MUL | 36,000 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 5 | BBE4MUL | 36,000 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 6 | BBE4MUL | 45,520 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 0 | FE4SUB | 132,240 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 1 | FE4SUB | 121,840 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 2 | FE4SUB | 121,840 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 3 | FE4SUB | 121,840 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 4 | FE4SUB | 121,840 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 5 | FE4SUB | 121,840 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 6 | FE4SUB | 124,760 | 
+| leaf | FriReducedOpeningAir | FriReducedOpening | 0 | FRI_REDUCED_OPENING | 3,343,704 | 
+| leaf | FriReducedOpeningAir | FriReducedOpening | 1 | FRI_REDUCED_OPENING | 2,164,344 | 
+| leaf | FriReducedOpeningAir | FriReducedOpening | 2 | FRI_REDUCED_OPENING | 2,164,344 | 
+| leaf | FriReducedOpeningAir | FriReducedOpening | 3 | FRI_REDUCED_OPENING | 2,164,344 | 
+| leaf | FriReducedOpeningAir | FriReducedOpening | 4 | FRI_REDUCED_OPENING | 2,164,344 | 
+| leaf | FriReducedOpeningAir | FriReducedOpening | 5 | FRI_REDUCED_OPENING | 2,164,344 | 
+| leaf | FriReducedOpeningAir | FriReducedOpening | 6 | FRI_REDUCED_OPENING | 2,592,408 | 
+| leaf | PhantomAir | CT-ExtractPublicValuesCommit | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ExtractPublicValuesCommit | 1 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ExtractPublicValuesCommit | 2 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ExtractPublicValuesCommit | 3 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ExtractPublicValuesCommit | 4 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ExtractPublicValuesCommit | 5 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ExtractPublicValuesCommit | 6 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-InitializePcsConst | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-InitializePcsConst | 1 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-InitializePcsConst | 2 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-InitializePcsConst | 3 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-InitializePcsConst | 4 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-InitializePcsConst | 5 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-InitializePcsConst | 6 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ReadProofsFromInput | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ReadProofsFromInput | 1 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ReadProofsFromInput | 2 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ReadProofsFromInput | 3 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ReadProofsFromInput | 4 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ReadProofsFromInput | 5 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ReadProofsFromInput | 6 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-VerifyProofs | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-VerifyProofs | 1 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-VerifyProofs | 2 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-VerifyProofs | 3 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-VerifyProofs | 4 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-VerifyProofs | 5 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-VerifyProofs | 6 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-cache-generator-powers | 0 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-cache-generator-powers | 1 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-cache-generator-powers | 2 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-cache-generator-powers | 3 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-cache-generator-powers | 4 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-cache-generator-powers | 5 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-cache-generator-powers | 6 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-compute-reduced-opening | 0 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-compute-reduced-opening | 1 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-compute-reduced-opening | 2 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-compute-reduced-opening | 3 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-compute-reduced-opening | 4 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-compute-reduced-opening | 5 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-compute-reduced-opening | 6 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-exp-reverse-bits-len | 0 | PHANTOM | 41,328 | 
+| leaf | PhantomAir | CT-exp-reverse-bits-len | 1 | PHANTOM | 29,232 | 
+| leaf | PhantomAir | CT-exp-reverse-bits-len | 2 | PHANTOM | 29,232 | 
+| leaf | PhantomAir | CT-exp-reverse-bits-len | 3 | PHANTOM | 29,232 | 
+| leaf | PhantomAir | CT-exp-reverse-bits-len | 4 | PHANTOM | 29,232 | 
+| leaf | PhantomAir | CT-exp-reverse-bits-len | 5 | PHANTOM | 29,232 | 
+| leaf | PhantomAir | CT-exp-reverse-bits-len | 6 | PHANTOM | 33,264 | 
+| leaf | PhantomAir | CT-pre-compute-alpha-pows | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-pre-compute-alpha-pows | 1 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-pre-compute-alpha-pows | 2 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-pre-compute-alpha-pows | 3 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-pre-compute-alpha-pows | 4 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-pre-compute-alpha-pows | 5 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-pre-compute-alpha-pows | 6 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-single-reduced-opening-eval | 0 | PHANTOM | 64,008 | 
+| leaf | PhantomAir | CT-single-reduced-opening-eval | 1 | PHANTOM | 45,864 | 
+| leaf | PhantomAir | CT-single-reduced-opening-eval | 2 | PHANTOM | 45,864 | 
+| leaf | PhantomAir | CT-single-reduced-opening-eval | 3 | PHANTOM | 45,864 | 
+| leaf | PhantomAir | CT-single-reduced-opening-eval | 4 | PHANTOM | 45,864 | 
+| leaf | PhantomAir | CT-single-reduced-opening-eval | 5 | PHANTOM | 45,864 | 
+| leaf | PhantomAir | CT-single-reduced-opening-eval | 6 | PHANTOM | 51,912 | 
+| leaf | PhantomAir | CT-stage-c-build-rounds | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-c-build-rounds | 1 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-c-build-rounds | 2 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-c-build-rounds | 3 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-c-build-rounds | 4 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-c-build-rounds | 5 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-c-build-rounds | 6 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verifier-verify | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verifier-verify | 1 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verifier-verify | 2 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verifier-verify | 3 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verifier-verify | 4 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verifier-verify | 5 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verifier-verify | 6 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verify-pcs | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verify-pcs | 1 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verify-pcs | 2 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verify-pcs | 3 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verify-pcs | 4 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verify-pcs | 5 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verify-pcs | 6 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-e-verify-constraints | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-e-verify-constraints | 1 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-e-verify-constraints | 2 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-e-verify-constraints | 3 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-e-verify-constraints | 4 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-e-verify-constraints | 5 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-e-verify-constraints | 6 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-verify-batch | 0 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-verify-batch | 1 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-verify-batch | 2 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-verify-batch | 3 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-verify-batch | 4 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-verify-batch | 5 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-verify-batch | 6 | PHANTOM | 4,032 | 
+| leaf | PhantomAir | CT-verify-batch-ext | 0 | PHANTOM | 10,080 | 
+| leaf | PhantomAir | CT-verify-batch-ext | 1 | PHANTOM | 10,080 | 
+| leaf | PhantomAir | CT-verify-batch-ext | 2 | PHANTOM | 10,080 | 
+| leaf | PhantomAir | CT-verify-batch-ext | 3 | PHANTOM | 10,080 | 
+| leaf | PhantomAir | CT-verify-batch-ext | 4 | PHANTOM | 10,080 | 
+| leaf | PhantomAir | CT-verify-batch-ext | 5 | PHANTOM | 10,080 | 
+| leaf | PhantomAir | CT-verify-batch-ext | 6 | PHANTOM | 10,080 | 
+| leaf | PhantomAir | CT-verify-query | 0 | PHANTOM | 504 | 
+| leaf | PhantomAir | CT-verify-query | 1 | PHANTOM | 504 | 
+| leaf | PhantomAir | CT-verify-query | 2 | PHANTOM | 504 | 
+| leaf | PhantomAir | CT-verify-query | 3 | PHANTOM | 504 | 
+| leaf | PhantomAir | CT-verify-query | 4 | PHANTOM | 504 | 
+| leaf | PhantomAir | CT-verify-query | 5 | PHANTOM | 504 | 
+| leaf | PhantomAir | CT-verify-query | 6 | PHANTOM | 504 | 
+| leaf | PhantomAir | HintBitsF | 0 | PHANTOM | 750 | 
+| leaf | PhantomAir | HintBitsF | 1 | PHANTOM | 606 | 
+| leaf | PhantomAir | HintBitsF | 2 | PHANTOM | 606 | 
+| leaf | PhantomAir | HintBitsF | 3 | PHANTOM | 606 | 
+| leaf | PhantomAir | HintBitsF | 4 | PHANTOM | 606 | 
+| leaf | PhantomAir | HintBitsF | 5 | PHANTOM | 606 | 
+| leaf | PhantomAir | HintBitsF | 6 | PHANTOM | 654 | 
+| leaf | PhantomAir | HintInputVec | 0 | PHANTOM | 136,674 | 
+| leaf | PhantomAir | HintInputVec | 1 | PHANTOM | 129,942 | 
+| leaf | PhantomAir | HintInputVec | 2 | PHANTOM | 129,942 | 
+| leaf | PhantomAir | HintInputVec | 3 | PHANTOM | 129,942 | 
+| leaf | PhantomAir | HintInputVec | 4 | PHANTOM | 129,942 | 
+| leaf | PhantomAir | HintInputVec | 5 | PHANTOM | 129,942 | 
+| leaf | PhantomAir | HintInputVec | 6 | PHANTOM | 133,536 | 
+| leaf | VerifyBatchAir | Poseidon2CompressBabyBear | 6 | COMP_POS2 | 10,773 | 
+| leaf | VerifyBatchAir | Poseidon2PermuteBabyBear | 0 | PERM_POS2 | 20,349 | 
+| leaf | VerifyBatchAir | Poseidon2PermuteBabyBear | 1 | PERM_POS2 | 19,152 | 
+| leaf | VerifyBatchAir | Poseidon2PermuteBabyBear | 2 | PERM_POS2 | 19,152 | 
+| leaf | VerifyBatchAir | Poseidon2PermuteBabyBear | 3 | PERM_POS2 | 19,152 | 
+| leaf | VerifyBatchAir | Poseidon2PermuteBabyBear | 4 | PERM_POS2 | 19,152 | 
+| leaf | VerifyBatchAir | Poseidon2PermuteBabyBear | 5 | PERM_POS2 | 19,152 | 
+| leaf | VerifyBatchAir | Poseidon2PermuteBabyBear | 6 | PERM_POS2 | 19,551 | 
+| leaf | VerifyBatchAir | VerifyBatchExt | 0 | VERIFY_BATCH | 4,524,660 | 
+| leaf | VerifyBatchAir | VerifyBatchExt | 1 | VERIFY_BATCH | 4,524,660 | 
+| leaf | VerifyBatchAir | VerifyBatchExt | 2 | VERIFY_BATCH | 4,524,660 | 
+| leaf | VerifyBatchAir | VerifyBatchExt | 3 | VERIFY_BATCH | 4,524,660 | 
+| leaf | VerifyBatchAir | VerifyBatchExt | 4 | VERIFY_BATCH | 4,524,660 | 
+| leaf | VerifyBatchAir | VerifyBatchExt | 5 | VERIFY_BATCH | 4,524,660 | 
+| leaf | VerifyBatchAir | VerifyBatchExt | 6 | VERIFY_BATCH | 4,524,660 | 
+| leaf | VerifyBatchAir | VerifyBatchFelt | 0 | VERIFY_BATCH | 6,451,830 | 
+| leaf | VerifyBatchAir | VerifyBatchFelt | 1 | VERIFY_BATCH | 5,178,222 | 
+| leaf | VerifyBatchAir | VerifyBatchFelt | 2 | VERIFY_BATCH | 5,178,222 | 
+| leaf | VerifyBatchAir | VerifyBatchFelt | 3 | VERIFY_BATCH | 5,178,222 | 
+| leaf | VerifyBatchAir | VerifyBatchFelt | 4 | VERIFY_BATCH | 5,178,222 | 
+| leaf | VerifyBatchAir | VerifyBatchFelt | 5 | VERIFY_BATCH | 5,178,222 | 
+| leaf | VerifyBatchAir | VerifyBatchFelt | 6 | VERIFY_BATCH | 5,630,688 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 0 | BNE | 5,428 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 0 | BNE | 92 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 0 | BNE | 67,712 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqFI | 0 | BNE | 115 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 0 | BNE | 32,223 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 0 | BNE | 5,474 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 0 | BEQ | 23 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 0 | BNE | 3,312 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 0 | BNE | 456,067 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 0 | BEQ | 3,381 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 0 | BEQ | 2,139 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 0 | BNE | 6,986,319 | 
+| root | <JalNativeAdapterAir,JalCoreAir> |  | 0 | JAL | 10 | 
+| root | <JalNativeAdapterAir,JalCoreAir> | IfEqI | 0 | JAL | 68,650 | 
+| root | <JalNativeAdapterAir,JalCoreAir> | IfNe | 0 | JAL | 30 | 
+| root | <JalNativeAdapterAir,JalCoreAir> | ZipFor | 0 | JAL | 312,350 | 
+| root | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 0 | PUBLISH | 1,104 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> |  | 0 | ADD | 30 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFFI | 0 | ADD | 44,160 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEFI | 0 | ADD | 33,000 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddEI | 0 | ADD | 1,133,280 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddF | 0 | ADD | 88,800 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddFI | 0 | ADD | 372,240 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddV | 0 | ADD | 1,259,010 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | AddVI | 0 | ADD | 2,727,480 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 0 | ADD | 3,089,820 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | Alloc | 0 | MUL | 854,130 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | CastFV | 0 | ADD | 4,440 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivEIN | 0 | ADD | 22,440 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivF | 0 | DIV | 173,880 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | DivFIN | 0 | DIV | 11,730 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmE | 0 | ADD | 147,120 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmF | 0 | ADD | 126,240 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ImmV | 0 | ADD | 163,410 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 0 | ADD | 323,820 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadE | 0 | MUL | 323,820 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 0 | ADD | 404,880 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadF | 0 | MUL | 269,430 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadHeapPtr | 0 | ADD | 30 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 0 | ADD | 1,370,790 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | LoadV | 0 | MUL | 1,223,820 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEF | 0 | MUL | 150,720 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEFI | 0 | MUL | 24,600 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulEI | 0 | ADD | 205,800 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulF | 0 | MUL | 788,100 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulFI | 0 | MUL | 84,150 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | MulVI | 0 | MUL | 330,690 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | NegE | 0 | MUL | 10,200 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 0 | ADD | 270,900 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreE | 0 | MUL | 270,900 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 0 | ADD | 22,980 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreF | 0 | MUL | 11,280 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreHeapPtr | 0 | ADD | 30 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 0 | ADD | 413,400 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | StoreV | 0 | MUL | 277,830 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 0 | ADD | 509,940 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEF | 0 | SUB | 169,980 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEFI | 0 | ADD | 11,520 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubEI | 0 | ADD | 44,880 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubF | 0 | SUB | 240 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubFI | 0 | SUB | 83,640 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubV | 0 | SUB | 190,770 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVI | 0 | SUB | 31,320 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | SubVIN | 0 | SUB | 26,460 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | UnsafeCastVF | 0 | ADD | 3,420 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | ZipFor | 0 | ADD | 9,866,250 | 
+| root | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 0 | LOADW | 659,325 | 
+| root | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 0 | LOADW | 3,350,150 | 
+| root | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 0 | STOREW | 173,225 | 
+| root | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 0 | HINT_STOREW | 5,809,025 | 
+| root | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 0 | STOREW | 1,476,875 | 
+| root | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 0 | LOADW | 893,758 | 
+| root | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 0 | STOREW | 494,870 | 
+| root | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 0 | FE4ADD | 588,720 | 
+| root | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 0 | BBE4DIV | 261,760 | 
+| root | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 0 | BBE4DIV | 7,480 | 
+| root | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 0 | BBE4MUL | 1,118,560 | 
+| root | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 0 | BBE4MUL | 68,600 | 
+| root | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 0 | FE4SUB | 146,640 | 
+| root | FriReducedOpeningAir | FriReducedOpening | 0 | FRI_REDUCED_OPENING | 3,468,192 | 
+| root | PhantomAir | CT-ExtractPublicValues | 0 | PHANTOM | 12 | 
+| root | PhantomAir | CT-InitializePcsConst | 0 | PHANTOM | 12 | 
+| root | PhantomAir | CT-ReadProofsFromInput | 0 | PHANTOM | 12 | 
+| root | PhantomAir | CT-VerifyProofs | 0 | PHANTOM | 12 | 
+| root | PhantomAir | CT-cache-generator-powers | 0 | PHANTOM | 3,024 | 
+| root | PhantomAir | CT-compute-reduced-opening | 0 | PHANTOM | 3,024 | 
+| root | PhantomAir | CT-exp-reverse-bits-len | 0 | PHANTOM | 48,888 | 
+| root | PhantomAir | CT-pre-compute-alpha-pows | 0 | PHANTOM | 12 | 
+| root | PhantomAir | CT-single-reduced-opening-eval | 0 | PHANTOM | 67,536 | 
+| root | PhantomAir | CT-stage-c-build-rounds | 0 | PHANTOM | 12 | 
+| root | PhantomAir | CT-stage-d-verifier-verify | 0 | PHANTOM | 12 | 
+| root | PhantomAir | CT-stage-d-verify-pcs | 0 | PHANTOM | 12 | 
+| root | PhantomAir | CT-stage-e-verify-constraints | 0 | PHANTOM | 12 | 
+| root | PhantomAir | CT-verify-batch | 0 | PHANTOM | 3,024 | 
+| root | PhantomAir | CT-verify-batch-ext | 0 | PHANTOM | 10,584 | 
+| root | PhantomAir | CT-verify-query | 0 | PHANTOM | 504 | 
+| root | PhantomAir | HintBitsF | 0 | PHANTOM | 840 | 
+| root | PhantomAir | HintInputVec | 0 | PHANTOM | 138,156 | 
+| root | VerifyBatchAir | Poseidon2CompressBabyBear | 0 | COMP_POS2 | 4,788 | 
+| root | VerifyBatchAir | Poseidon2PermuteBabyBear | 0 | PERM_POS2 | 21,546 | 
+| root | VerifyBatchAir | VerifyBatchExt | 0 | VERIFY_BATCH | 4,926,852 | 
+| root | VerifyBatchAir | VerifyBatchFelt | 0 | VERIFY_BATCH | 5,815,026 | 
+
+| group | air_name | dsl_ir | opcode | segment | cells_used |
+| --- | --- | --- | --- | --- | --- |
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | ADD | 0 | 37,747,008 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | ADD | 1 | 37,746,000 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | ADD | 2 | 37,746,036 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | ADD | 3 | 37,746,036 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | ADD | 4 | 37,746,036 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | ADD | 5 | 37,746,000 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | ADD | 6 | 32,724,396 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | AND | 0 | 72 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | OR | 0 | 36 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | SUB | 0 | 144 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | XOR | 0 | 72 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> |  | SLTU | 0 | 12,931,389 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> |  | SLTU | 1 | 12,931,537 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> |  | SLTU | 2 | 12,931,500 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> |  | SLTU | 3 | 12,931,500 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> |  | SLTU | 4 | 12,931,500 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> |  | SLTU | 5 | 12,931,500 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> |  | SLTU | 6 | 11,211,111 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,ShiftCoreAir<4, 8>> |  | SLL | 0 | 106 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BEQ | 0 | 3,029,052 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BEQ | 1 | 3,029,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BEQ | 2 | 3,029,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BEQ | 3 | 3,029,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BEQ | 4 | 3,029,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BEQ | 5 | 3,029,026 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BEQ | 6 | 2,626,026 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BNE | 0 | 3,029,078 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BNE | 1 | 3,029,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BNE | 2 | 3,029,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BNE | 3 | 3,029,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BNE | 4 | 3,029,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BNE | 5 | 3,029,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BNE | 6 | 2,626,026 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchLessThanCoreAir<4, 8>> |  | BGEU | 0 | 96 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchLessThanCoreAir<4, 8>> |  | BLTU | 0 | 64 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | JAL | 0 | 2,096,982 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | JAL | 1 | 2,097,000 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | JAL | 2 | 2,097,000 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | JAL | 3 | 2,097,000 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | JAL | 4 | 2,097,000 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | JAL | 5 | 2,097,000 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | JAL | 6 | 1,818,018 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | LUI | 0 | 162 | 
+| fib_e2e | <Rv32HintStoreAdapterAir,Rv32HintStoreCoreAir> |  | HINT_STOREW | 0 | 78 | 
+| fib_e2e | <Rv32JalrAdapterAir,Rv32JalrCoreAir> |  | JALR | 0 | 336 | 
+| fib_e2e | <Rv32JalrAdapterAir,Rv32JalrCoreAir> |  | JALR | 6 | 28 | 
+| fib_e2e | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | LOADW | 0 | 400 | 
+| fib_e2e | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | LOADW | 6 | 120 | 
+| fib_e2e | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | STOREW | 0 | 520 | 
+| fib_e2e | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | STOREW | 6 | 80 | 
+| fib_e2e | <Rv32RdWriteAdapterAir,Rv32AuipcCoreAir> |  | AUIPC | 0 | 168 | 
+| fib_e2e | PhantomAir |  | PHANTOM | 0 | 12 | 
+
+| group | air_name | idx | rows | prep_cols | perm_cols | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| internal.0 | AccessAdapterAir<2> | 0 | 524,288 |  | 16 | 11 | 14,155,776 | 
+| internal.0 | AccessAdapterAir<2> | 1 | 524,288 |  | 16 | 11 | 14,155,776 | 
+| internal.0 | AccessAdapterAir<2> | 2 | 524,288 |  | 16 | 11 | 14,155,776 | 
+| internal.0 | AccessAdapterAir<2> | 3 | 262,144 |  | 16 | 11 | 7,077,888 | 
+| internal.0 | AccessAdapterAir<4> | 0 | 262,144 |  | 16 | 13 | 7,602,176 | 
+| internal.0 | AccessAdapterAir<4> | 1 | 262,144 |  | 16 | 13 | 7,602,176 | 
+| internal.0 | AccessAdapterAir<4> | 2 | 262,144 |  | 16 | 13 | 7,602,176 | 
+| internal.0 | AccessAdapterAir<4> | 3 | 131,072 |  | 16 | 13 | 3,801,088 | 
+| internal.0 | AccessAdapterAir<8> | 0 | 512 |  | 16 | 17 | 16,896 | 
+| internal.0 | AccessAdapterAir<8> | 1 | 512 |  | 16 | 17 | 16,896 | 
+| internal.0 | AccessAdapterAir<8> | 2 | 512 |  | 16 | 17 | 16,896 | 
+| internal.0 | AccessAdapterAir<8> | 3 | 256 |  | 16 | 17 | 8,448 | 
+| internal.0 | FriReducedOpeningAir | 0 | 524,288 |  | 36 | 26 | 32,505,856 | 
+| internal.0 | FriReducedOpeningAir | 1 | 524,288 |  | 36 | 26 | 32,505,856 | 
+| internal.0 | FriReducedOpeningAir | 2 | 524,288 |  | 36 | 26 | 32,505,856 | 
+| internal.0 | FriReducedOpeningAir | 3 | 262,144 |  | 36 | 26 | 16,252,928 | 
+| internal.0 | NativePoseidon2Air<BabyBearParameters>, 1> | 0 | 65,536 |  | 356 | 399 | 49,479,680 | 
+| internal.0 | NativePoseidon2Air<BabyBearParameters>, 1> | 1 | 65,536 |  | 356 | 399 | 49,479,680 | 
+| internal.0 | NativePoseidon2Air<BabyBearParameters>, 1> | 2 | 65,536 |  | 356 | 399 | 49,479,680 | 
+| internal.0 | NativePoseidon2Air<BabyBearParameters>, 1> | 3 | 32,768 |  | 356 | 399 | 24,739,840 | 
+| internal.0 | PhantomAir | 0 | 131,072 |  | 8 | 6 | 1,835,008 | 
+| internal.0 | PhantomAir | 1 | 131,072 |  | 8 | 6 | 1,835,008 | 
+| internal.0 | PhantomAir | 2 | 131,072 |  | 8 | 6 | 1,835,008 | 
+| internal.0 | PhantomAir | 3 | 65,536 |  | 8 | 6 | 917,504 | 
+| internal.0 | ProgramAir | 0 | 262,144 |  | 8 | 10 | 4,718,592 | 
+| internal.0 | ProgramAir | 1 | 262,144 |  | 8 | 10 | 4,718,592 | 
+| internal.0 | ProgramAir | 2 | 262,144 |  | 8 | 10 | 4,718,592 | 
+| internal.0 | ProgramAir | 3 | 262,144 |  | 8 | 10 | 4,718,592 | 
+| internal.0 | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| internal.0 | VariableRangeCheckerAir | 1 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| internal.0 | VariableRangeCheckerAir | 2 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| internal.0 | VariableRangeCheckerAir | 3 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| internal.0 | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 0 | 1,048,576 |  | 28 | 23 | 53,477,376 | 
+| internal.0 | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 1 | 1,048,576 |  | 28 | 23 | 53,477,376 | 
+| internal.0 | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 2 | 1,048,576 |  | 28 | 23 | 53,477,376 | 
+| internal.0 | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 3 | 524,288 |  | 28 | 23 | 26,738,688 | 
+| internal.0 | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 0 | 131,072 |  | 12 | 10 | 2,883,584 | 
+| internal.0 | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 1 | 131,072 |  | 12 | 10 | 2,883,584 | 
+| internal.0 | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 2 | 131,072 |  | 12 | 10 | 2,883,584 | 
+| internal.0 | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 3 | 65,536 |  | 12 | 10 | 1,441,792 | 
+| internal.0 | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 0 | 64 |  | 16 | 23 | 2,496 | 
+| internal.0 | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 1 | 64 |  | 16 | 23 | 2,496 | 
+| internal.0 | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 2 | 64 |  | 16 | 23 | 2,496 | 
+| internal.0 | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 3 | 64 |  | 16 | 23 | 2,496 | 
+| internal.0 | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 0 | 2,097,152 |  | 20 | 30 | 104,857,600 | 
+| internal.0 | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 1 | 2,097,152 |  | 20 | 30 | 104,857,600 | 
+| internal.0 | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 2 | 2,097,152 |  | 20 | 30 | 104,857,600 | 
+| internal.0 | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 3 | 1,048,576 |  | 20 | 30 | 52,428,800 | 
+| internal.0 | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 0 | 1,048,576 |  | 36 | 25 | 63,963,136 | 
+| internal.0 | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 1 | 1,048,576 |  | 36 | 25 | 63,963,136 | 
+| internal.0 | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 2 | 1,048,576 |  | 36 | 25 | 63,963,136 | 
+| internal.0 | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 3 | 524,288 |  | 36 | 25 | 31,981,568 | 
+| internal.0 | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 0 | 131,072 |  | 36 | 34 | 9,175,040 | 
+| internal.0 | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 1 | 131,072 |  | 36 | 34 | 9,175,040 | 
+| internal.0 | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 2 | 131,072 |  | 36 | 34 | 9,175,040 | 
+| internal.0 | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 3 | 65,536 |  | 36 | 34 | 4,587,520 | 
+| internal.0 | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 0 | 131,072 |  | 20 | 40 | 7,864,320 | 
+| internal.0 | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 1 | 131,072 |  | 20 | 40 | 7,864,320 | 
+| internal.0 | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 2 | 131,072 |  | 20 | 40 | 7,864,320 | 
+| internal.0 | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 3 | 65,536 |  | 20 | 40 | 3,932,160 | 
+| internal.0 | VmConnectorAir | 0 | 2 | 1 | 8 | 4 | 24 | 
+| internal.0 | VmConnectorAir | 1 | 2 | 1 | 8 | 4 | 24 | 
+| internal.0 | VmConnectorAir | 2 | 2 | 1 | 8 | 4 | 24 | 
+| internal.0 | VmConnectorAir | 3 | 2 | 1 | 8 | 4 | 24 | 
+| internal.0 | VolatileBoundaryAir | 0 | 1,048,576 |  | 8 | 11 | 19,922,944 | 
+| internal.0 | VolatileBoundaryAir | 1 | 1,048,576 |  | 8 | 11 | 19,922,944 | 
+| internal.0 | VolatileBoundaryAir | 2 | 1,048,576 |  | 8 | 11 | 19,922,944 | 
+| internal.0 | VolatileBoundaryAir | 3 | 524,288 |  | 8 | 11 | 9,961,472 | 
+| internal.1 | AccessAdapterAir<2> | 4 | 524,288 |  | 16 | 11 | 14,155,776 | 
+| internal.1 | AccessAdapterAir<2> | 5 | 524,288 |  | 16 | 11 | 14,155,776 | 
+| internal.1 | AccessAdapterAir<4> | 4 | 262,144 |  | 16 | 13 | 7,602,176 | 
+| internal.1 | AccessAdapterAir<4> | 5 | 262,144 |  | 16 | 13 | 7,602,176 | 
+| internal.1 | AccessAdapterAir<8> | 4 | 512 |  | 16 | 17 | 16,896 | 
+| internal.1 | AccessAdapterAir<8> | 5 | 512 |  | 16 | 17 | 16,896 | 
+| internal.1 | FriReducedOpeningAir | 4 | 524,288 |  | 36 | 26 | 32,505,856 | 
+| internal.1 | FriReducedOpeningAir | 5 | 524,288 |  | 36 | 26 | 32,505,856 | 
+| internal.1 | NativePoseidon2Air<BabyBearParameters>, 1> | 4 | 65,536 |  | 356 | 399 | 49,479,680 | 
+| internal.1 | NativePoseidon2Air<BabyBearParameters>, 1> | 5 | 65,536 |  | 356 | 399 | 49,479,680 | 
+| internal.1 | PhantomAir | 4 | 131,072 |  | 8 | 6 | 1,835,008 | 
+| internal.1 | PhantomAir | 5 | 131,072 |  | 8 | 6 | 1,835,008 | 
+| internal.1 | ProgramAir | 4 | 262,144 |  | 8 | 10 | 4,718,592 | 
+| internal.1 | ProgramAir | 5 | 262,144 |  | 8 | 10 | 4,718,592 | 
+| internal.1 | VariableRangeCheckerAir | 4 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| internal.1 | VariableRangeCheckerAir | 5 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| internal.1 | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 4 | 1,048,576 |  | 28 | 23 | 53,477,376 | 
+| internal.1 | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 5 | 1,048,576 |  | 28 | 23 | 53,477,376 | 
+| internal.1 | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 4 | 131,072 |  | 12 | 10 | 2,883,584 | 
+| internal.1 | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 5 | 131,072 |  | 12 | 10 | 2,883,584 | 
+| internal.1 | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 4 | 64 |  | 16 | 23 | 2,496 | 
+| internal.1 | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 5 | 64 |  | 16 | 23 | 2,496 | 
+| internal.1 | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 4 | 2,097,152 |  | 20 | 30 | 104,857,600 | 
+| internal.1 | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 5 | 2,097,152 |  | 20 | 30 | 104,857,600 | 
+| internal.1 | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 4 | 1,048,576 |  | 36 | 25 | 63,963,136 | 
+| internal.1 | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 5 | 1,048,576 |  | 36 | 25 | 63,963,136 | 
+| internal.1 | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 4 | 131,072 |  | 36 | 34 | 9,175,040 | 
+| internal.1 | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 5 | 131,072 |  | 36 | 34 | 9,175,040 | 
+| internal.1 | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 4 | 131,072 |  | 20 | 40 | 7,864,320 | 
+| internal.1 | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 5 | 131,072 |  | 20 | 40 | 7,864,320 | 
+| internal.1 | VmConnectorAir | 4 | 2 | 1 | 8 | 4 | 24 | 
+| internal.1 | VmConnectorAir | 5 | 2 | 1 | 8 | 4 | 24 | 
+| internal.1 | VolatileBoundaryAir | 4 | 1,048,576 |  | 8 | 11 | 19,922,944 | 
+| internal.1 | VolatileBoundaryAir | 5 | 1,048,576 |  | 8 | 11 | 19,922,944 | 
+| internal.2 | AccessAdapterAir<2> | 6 | 524,288 |  | 16 | 11 | 14,155,776 | 
+| internal.2 | AccessAdapterAir<4> | 6 | 262,144 |  | 16 | 13 | 7,602,176 | 
+| internal.2 | AccessAdapterAir<8> | 6 | 512 |  | 16 | 17 | 16,896 | 
+| internal.2 | FriReducedOpeningAir | 6 | 524,288 |  | 36 | 26 | 32,505,856 | 
+| internal.2 | NativePoseidon2Air<BabyBearParameters>, 1> | 6 | 65,536 |  | 356 | 399 | 49,479,680 | 
+| internal.2 | PhantomAir | 6 | 131,072 |  | 8 | 6 | 1,835,008 | 
+| internal.2 | ProgramAir | 6 | 262,144 |  | 8 | 10 | 4,718,592 | 
+| internal.2 | VariableRangeCheckerAir | 6 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| internal.2 | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 6 | 1,048,576 |  | 28 | 23 | 53,477,376 | 
+| internal.2 | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 6 | 131,072 |  | 12 | 10 | 2,883,584 | 
+| internal.2 | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 6 | 64 |  | 16 | 23 | 2,496 | 
+| internal.2 | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 6 | 2,097,152 |  | 20 | 30 | 104,857,600 | 
+| internal.2 | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 6 | 1,048,576 |  | 36 | 25 | 63,963,136 | 
+| internal.2 | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 6 | 131,072 |  | 36 | 34 | 9,175,040 | 
+| internal.2 | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 6 | 131,072 |  | 20 | 40 | 7,864,320 | 
+| internal.2 | VmConnectorAir | 6 | 2 | 1 | 8 | 4 | 24 | 
+| internal.2 | VolatileBoundaryAir | 6 | 1,048,576 |  | 8 | 11 | 19,922,944 | 
+| leaf | AccessAdapterAir<2> | 0 | 262,144 |  | 16 | 11 | 7,077,888 | 
+| leaf | AccessAdapterAir<2> | 1 | 131,072 |  | 16 | 11 | 3,538,944 | 
+| leaf | AccessAdapterAir<2> | 2 | 131,072 |  | 16 | 11 | 3,538,944 | 
+| leaf | AccessAdapterAir<2> | 3 | 131,072 |  | 16 | 11 | 3,538,944 | 
+| leaf | AccessAdapterAir<2> | 4 | 131,072 |  | 16 | 11 | 3,538,944 | 
+| leaf | AccessAdapterAir<2> | 5 | 131,072 |  | 16 | 11 | 3,538,944 | 
+| leaf | AccessAdapterAir<2> | 6 | 262,144 |  | 16 | 11 | 7,077,888 | 
+| leaf | AccessAdapterAir<4> | 0 | 131,072 |  | 16 | 13 | 3,801,088 | 
+| leaf | AccessAdapterAir<4> | 1 | 65,536 |  | 16 | 13 | 1,900,544 | 
+| leaf | AccessAdapterAir<4> | 2 | 65,536 |  | 16 | 13 | 1,900,544 | 
+| leaf | AccessAdapterAir<4> | 3 | 65,536 |  | 16 | 13 | 1,900,544 | 
+| leaf | AccessAdapterAir<4> | 4 | 65,536 |  | 16 | 13 | 1,900,544 | 
+| leaf | AccessAdapterAir<4> | 5 | 65,536 |  | 16 | 13 | 1,900,544 | 
+| leaf | AccessAdapterAir<4> | 6 | 131,072 |  | 16 | 13 | 3,801,088 | 
+| leaf | AccessAdapterAir<8> | 0 | 256 |  | 16 | 17 | 8,448 | 
+| leaf | AccessAdapterAir<8> | 1 | 256 |  | 16 | 17 | 8,448 | 
+| leaf | AccessAdapterAir<8> | 2 | 256 |  | 16 | 17 | 8,448 | 
+| leaf | AccessAdapterAir<8> | 3 | 256 |  | 16 | 17 | 8,448 | 
+| leaf | AccessAdapterAir<8> | 4 | 256 |  | 16 | 17 | 8,448 | 
+| leaf | AccessAdapterAir<8> | 5 | 256 |  | 16 | 17 | 8,448 | 
+| leaf | AccessAdapterAir<8> | 6 | 512 |  | 16 | 17 | 16,896 | 
+| leaf | FriReducedOpeningAir | 0 | 131,072 |  | 36 | 26 | 8,126,464 | 
+| leaf | FriReducedOpeningAir | 1 | 131,072 |  | 36 | 26 | 8,126,464 | 
+| leaf | FriReducedOpeningAir | 2 | 131,072 |  | 36 | 26 | 8,126,464 | 
+| leaf | FriReducedOpeningAir | 3 | 131,072 |  | 36 | 26 | 8,126,464 | 
+| leaf | FriReducedOpeningAir | 4 | 131,072 |  | 36 | 26 | 8,126,464 | 
+| leaf | FriReducedOpeningAir | 5 | 131,072 |  | 36 | 26 | 8,126,464 | 
+| leaf | FriReducedOpeningAir | 6 | 131,072 |  | 36 | 26 | 8,126,464 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 1> | 0 | 32,768 |  | 356 | 399 | 24,739,840 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 1> | 1 | 32,768 |  | 356 | 399 | 24,739,840 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 1> | 2 | 32,768 |  | 356 | 399 | 24,739,840 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 1> | 3 | 32,768 |  | 356 | 399 | 24,739,840 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 1> | 4 | 32,768 |  | 356 | 399 | 24,739,840 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 1> | 5 | 32,768 |  | 356 | 399 | 24,739,840 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 1> | 6 | 32,768 |  | 356 | 399 | 24,739,840 | 
+| leaf | PhantomAir | 0 | 65,536 |  | 8 | 6 | 917,504 | 
+| leaf | PhantomAir | 1 | 65,536 |  | 8 | 6 | 917,504 | 
+| leaf | PhantomAir | 2 | 65,536 |  | 8 | 6 | 917,504 | 
+| leaf | PhantomAir | 3 | 65,536 |  | 8 | 6 | 917,504 | 
+| leaf | PhantomAir | 4 | 65,536 |  | 8 | 6 | 917,504 | 
+| leaf | PhantomAir | 5 | 65,536 |  | 8 | 6 | 917,504 | 
+| leaf | PhantomAir | 6 | 65,536 |  | 8 | 6 | 917,504 | 
+| leaf | ProgramAir | 0 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| leaf | ProgramAir | 1 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| leaf | ProgramAir | 2 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| leaf | ProgramAir | 3 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| leaf | ProgramAir | 4 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| leaf | ProgramAir | 5 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| leaf | ProgramAir | 6 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| leaf | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| leaf | VariableRangeCheckerAir | 1 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| leaf | VariableRangeCheckerAir | 2 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| leaf | VariableRangeCheckerAir | 3 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| leaf | VariableRangeCheckerAir | 4 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| leaf | VariableRangeCheckerAir | 5 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| leaf | VariableRangeCheckerAir | 6 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 0 | 524,288 |  | 28 | 23 | 26,738,688 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 1 | 524,288 |  | 28 | 23 | 26,738,688 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 2 | 524,288 |  | 28 | 23 | 26,738,688 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 3 | 524,288 |  | 28 | 23 | 26,738,688 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 4 | 524,288 |  | 28 | 23 | 26,738,688 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 5 | 524,288 |  | 28 | 23 | 26,738,688 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 6 | 524,288 |  | 28 | 23 | 26,738,688 | 
+| leaf | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 0 | 65,536 |  | 12 | 10 | 1,441,792 | 
+| leaf | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 1 | 65,536 |  | 12 | 10 | 1,441,792 | 
+| leaf | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 2 | 65,536 |  | 12 | 10 | 1,441,792 | 
+| leaf | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 3 | 65,536 |  | 12 | 10 | 1,441,792 | 
+| leaf | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 4 | 65,536 |  | 12 | 10 | 1,441,792 | 
+| leaf | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 5 | 65,536 |  | 12 | 10 | 1,441,792 | 
+| leaf | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 6 | 65,536 |  | 12 | 10 | 1,441,792 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 0 | 64 |  | 16 | 23 | 2,496 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 1 | 64 |  | 16 | 23 | 2,496 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 2 | 64 |  | 16 | 23 | 2,496 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 3 | 64 |  | 16 | 23 | 2,496 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 4 | 64 |  | 16 | 23 | 2,496 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 5 | 64 |  | 16 | 23 | 2,496 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 6 | 64 |  | 16 | 23 | 2,496 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 0 | 1,048,576 |  | 20 | 30 | 52,428,800 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 1 | 1,048,576 |  | 20 | 30 | 52,428,800 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 2 | 1,048,576 |  | 20 | 30 | 52,428,800 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 3 | 1,048,576 |  | 20 | 30 | 52,428,800 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 4 | 1,048,576 |  | 20 | 30 | 52,428,800 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 5 | 1,048,576 |  | 20 | 30 | 52,428,800 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 6 | 1,048,576 |  | 20 | 30 | 52,428,800 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 0 | 524,288 |  | 36 | 25 | 31,981,568 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 1 | 524,288 |  | 36 | 25 | 31,981,568 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 2 | 524,288 |  | 36 | 25 | 31,981,568 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 3 | 524,288 |  | 36 | 25 | 31,981,568 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 4 | 524,288 |  | 36 | 25 | 31,981,568 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 5 | 524,288 |  | 36 | 25 | 31,981,568 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 6 | 524,288 |  | 36 | 25 | 31,981,568 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 0 | 65,536 |  | 36 | 34 | 4,587,520 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 1 | 32,768 |  | 36 | 34 | 2,293,760 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 2 | 32,768 |  | 36 | 34 | 2,293,760 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 3 | 32,768 |  | 36 | 34 | 2,293,760 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 4 | 32,768 |  | 36 | 34 | 2,293,760 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 5 | 32,768 |  | 36 | 34 | 2,293,760 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 6 | 32,768 |  | 36 | 34 | 2,293,760 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 0 | 65,536 |  | 20 | 40 | 3,932,160 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 1 | 32,768 |  | 20 | 40 | 1,966,080 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 2 | 32,768 |  | 20 | 40 | 1,966,080 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 3 | 32,768 |  | 20 | 40 | 1,966,080 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 4 | 32,768 |  | 20 | 40 | 1,966,080 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 5 | 32,768 |  | 20 | 40 | 1,966,080 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 6 | 65,536 |  | 20 | 40 | 3,932,160 | 
+| leaf | VmConnectorAir | 0 | 2 | 1 | 8 | 4 | 24 | 
+| leaf | VmConnectorAir | 1 | 2 | 1 | 8 | 4 | 24 | 
+| leaf | VmConnectorAir | 2 | 2 | 1 | 8 | 4 | 24 | 
+| leaf | VmConnectorAir | 3 | 2 | 1 | 8 | 4 | 24 | 
+| leaf | VmConnectorAir | 4 | 2 | 1 | 8 | 4 | 24 | 
+| leaf | VmConnectorAir | 5 | 2 | 1 | 8 | 4 | 24 | 
+| leaf | VmConnectorAir | 6 | 2 | 1 | 8 | 4 | 24 | 
+| leaf | VolatileBoundaryAir | 0 | 524,288 |  | 8 | 11 | 9,961,472 | 
+| leaf | VolatileBoundaryAir | 1 | 524,288 |  | 8 | 11 | 9,961,472 | 
+| leaf | VolatileBoundaryAir | 2 | 524,288 |  | 8 | 11 | 9,961,472 | 
+| leaf | VolatileBoundaryAir | 3 | 524,288 |  | 8 | 11 | 9,961,472 | 
+| leaf | VolatileBoundaryAir | 4 | 524,288 |  | 8 | 11 | 9,961,472 | 
+| leaf | VolatileBoundaryAir | 5 | 524,288 |  | 8 | 11 | 9,961,472 | 
+| leaf | VolatileBoundaryAir | 6 | 524,288 |  | 8 | 11 | 9,961,472 | 
+| root | AccessAdapterAir<2> | 0 | 262,144 |  | 16 | 11 | 7,077,888 | 
+| root | AccessAdapterAir<4> | 0 | 131,072 |  | 16 | 13 | 3,801,088 | 
+| root | AccessAdapterAir<8> | 0 | 256 |  | 16 | 17 | 8,448 | 
+| root | FriReducedOpeningAir | 0 | 262,144 |  | 36 | 26 | 16,252,928 | 
+| root | NativePoseidon2Air<BabyBearParameters>, 1> | 0 | 32,768 |  | 356 | 399 | 24,739,840 | 
+| root | PhantomAir | 0 | 65,536 |  | 8 | 6 | 917,504 | 
+| root | ProgramAir | 0 | 262,144 |  | 8 | 10 | 4,718,592 | 
+| root | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| root | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 0 | 524,288 |  | 28 | 23 | 26,738,688 | 
+| root | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 0 | 65,536 |  | 12 | 10 | 1,441,792 | 
+| root | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 0 | 64 |  | 16 | 23 | 2,496 | 
+| root | VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir> | 0 | 1,048,576 |  | 20 | 30 | 52,428,800 | 
+| root | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 0 | 524,288 |  | 36 | 25 | 31,981,568 | 
+| root | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 0 | 65,536 |  | 36 | 34 | 4,587,520 | 
+| root | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 0 | 65,536 |  | 20 | 40 | 3,932,160 | 
+| root | VmConnectorAir | 0 | 2 | 1 | 8 | 4 | 24 | 
+| root | VolatileBoundaryAir | 0 | 524,288 |  | 8 | 11 | 9,961,472 | 
+
+| group | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| fib_e2e | AccessAdapterAir<8> | 0 | 64 |  | 24 | 17 | 2,624 | 
+| fib_e2e | AccessAdapterAir<8> | 1 | 16 |  | 24 | 17 | 656 | 
+| fib_e2e | AccessAdapterAir<8> | 2 | 16 |  | 24 | 17 | 656 | 
+| fib_e2e | AccessAdapterAir<8> | 3 | 16 |  | 24 | 17 | 656 | 
+| fib_e2e | AccessAdapterAir<8> | 4 | 16 |  | 24 | 17 | 656 | 
+| fib_e2e | AccessAdapterAir<8> | 5 | 16 |  | 24 | 17 | 656 | 
+| fib_e2e | AccessAdapterAir<8> | 6 | 32 |  | 24 | 17 | 1,312 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 0 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 1 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 2 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 3 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 4 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 5 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 6 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| fib_e2e | MemoryMerkleAir<8> | 0 | 256 |  | 20 | 32 | 13,312 | 
+| fib_e2e | MemoryMerkleAir<8> | 1 | 128 |  | 20 | 32 | 6,656 | 
+| fib_e2e | MemoryMerkleAir<8> | 2 | 128 |  | 20 | 32 | 6,656 | 
+| fib_e2e | MemoryMerkleAir<8> | 3 | 128 |  | 20 | 32 | 6,656 | 
+| fib_e2e | MemoryMerkleAir<8> | 4 | 128 |  | 20 | 32 | 6,656 | 
+| fib_e2e | MemoryMerkleAir<8> | 5 | 128 |  | 20 | 32 | 6,656 | 
+| fib_e2e | MemoryMerkleAir<8> | 6 | 256 |  | 20 | 32 | 13,312 | 
+| fib_e2e | PersistentBoundaryAir<8> | 0 | 64 |  | 12 | 20 | 2,048 | 
+| fib_e2e | PersistentBoundaryAir<8> | 1 | 16 |  | 12 | 20 | 512 | 
+| fib_e2e | PersistentBoundaryAir<8> | 2 | 16 |  | 12 | 20 | 512 | 
+| fib_e2e | PersistentBoundaryAir<8> | 3 | 16 |  | 12 | 20 | 512 | 
+| fib_e2e | PersistentBoundaryAir<8> | 4 | 16 |  | 12 | 20 | 512 | 
+| fib_e2e | PersistentBoundaryAir<8> | 5 | 16 |  | 12 | 20 | 512 | 
+| fib_e2e | PersistentBoundaryAir<8> | 6 | 32 |  | 12 | 20 | 1,024 | 
+| fib_e2e | PhantomAir | 0 | 2 |  | 12 | 6 | 36 | 
+| fib_e2e | PhantomAir | 1 | 1 |  | 12 | 6 | 18 | 
+| fib_e2e | PhantomAir | 2 | 1 |  | 12 | 6 | 18 | 
+| fib_e2e | PhantomAir | 3 | 1 |  | 12 | 6 | 18 | 
+| fib_e2e | PhantomAir | 4 | 1 |  | 12 | 6 | 18 | 
+| fib_e2e | PhantomAir | 5 | 1 |  | 12 | 6 | 18 | 
+| fib_e2e | PhantomAir | 6 | 1 |  | 12 | 6 | 18 | 
+| fib_e2e | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 0 | 256 |  | 8 | 300 | 78,848 | 
+| fib_e2e | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 1 | 128 |  | 8 | 300 | 39,424 | 
+| fib_e2e | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 2 | 128 |  | 8 | 300 | 39,424 | 
+| fib_e2e | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 3 | 128 |  | 8 | 300 | 39,424 | 
+| fib_e2e | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 4 | 128 |  | 8 | 300 | 39,424 | 
+| fib_e2e | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 5 | 128 |  | 8 | 300 | 39,424 | 
+| fib_e2e | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 6 | 256 |  | 8 | 300 | 78,848 | 
+| fib_e2e | ProgramAir | 0 | 4,096 |  | 8 | 10 | 73,728 | 
+| fib_e2e | ProgramAir | 1 | 4,096 |  | 8 | 10 | 73,728 | 
+| fib_e2e | ProgramAir | 2 | 4,096 |  | 8 | 10 | 73,728 | 
+| fib_e2e | ProgramAir | 3 | 4,096 |  | 8 | 10 | 73,728 | 
+| fib_e2e | ProgramAir | 4 | 4,096 |  | 8 | 10 | 73,728 | 
+| fib_e2e | ProgramAir | 5 | 4,096 |  | 8 | 10 | 73,728 | 
+| fib_e2e | ProgramAir | 6 | 4,096 |  | 8 | 10 | 73,728 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 0 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 1 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 2 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 3 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 4 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 5 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 6 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| fib_e2e | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| fib_e2e | VariableRangeCheckerAir | 1 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| fib_e2e | VariableRangeCheckerAir | 2 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| fib_e2e | VariableRangeCheckerAir | 3 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| fib_e2e | VariableRangeCheckerAir | 4 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| fib_e2e | VariableRangeCheckerAir | 5 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| fib_e2e | VariableRangeCheckerAir | 6 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 0 | 1,048,576 |  | 80 | 36 | 121,634,816 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 1 | 1,048,576 |  | 80 | 36 | 121,634,816 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 2 | 1,048,576 |  | 80 | 36 | 121,634,816 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 3 | 1,048,576 |  | 80 | 36 | 121,634,816 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 4 | 1,048,576 |  | 80 | 36 | 121,634,816 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 5 | 1,048,576 |  | 80 | 36 | 121,634,816 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 6 | 1,048,576 |  | 80 | 36 | 121,634,816 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 0 | 524,288 |  | 40 | 37 | 40,370,176 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 1 | 524,288 |  | 40 | 37 | 40,370,176 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 2 | 524,288 |  | 40 | 37 | 40,370,176 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 3 | 524,288 |  | 40 | 37 | 40,370,176 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 4 | 524,288 |  | 40 | 37 | 40,370,176 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 5 | 524,288 |  | 40 | 37 | 40,370,176 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 6 | 524,288 |  | 40 | 37 | 40,370,176 | 
+| fib_e2e | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 0 | 2 |  | 52 | 53 | 210 | 
+| fib_e2e | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 0 | 262,144 |  | 48 | 26 | 19,398,656 | 
+| fib_e2e | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 1 | 262,144 |  | 48 | 26 | 19,398,656 | 
+| fib_e2e | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 2 | 262,144 |  | 48 | 26 | 19,398,656 | 
+| fib_e2e | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 3 | 262,144 |  | 48 | 26 | 19,398,656 | 
+| fib_e2e | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 4 | 262,144 |  | 48 | 26 | 19,398,656 | 
+| fib_e2e | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 5 | 262,144 |  | 48 | 26 | 19,398,656 | 
+| fib_e2e | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 6 | 262,144 |  | 48 | 26 | 19,398,656 | 
+| fib_e2e | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 0 | 8 |  | 56 | 32 | 704 | 
+| fib_e2e | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 0 | 131,072 |  | 44 | 18 | 8,126,464 | 
+| fib_e2e | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 1 | 131,072 |  | 44 | 18 | 8,126,464 | 
+| fib_e2e | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 2 | 131,072 |  | 44 | 18 | 8,126,464 | 
+| fib_e2e | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 3 | 131,072 |  | 44 | 18 | 8,126,464 | 
+| fib_e2e | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 4 | 131,072 |  | 44 | 18 | 8,126,464 | 
+| fib_e2e | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 5 | 131,072 |  | 44 | 18 | 8,126,464 | 
+| fib_e2e | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 6 | 131,072 |  | 44 | 18 | 8,126,464 | 
+| fib_e2e | VmAirWrapper<Rv32HintStoreAdapterAir, Rv32HintStoreCoreAir> | 0 | 4 |  | 36 | 26 | 248 | 
+| fib_e2e | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 0 | 16 |  | 36 | 28 | 1,024 | 
+| fib_e2e | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 6 | 1 |  | 36 | 28 | 64 | 
+| fib_e2e | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 0 | 32 |  | 72 | 40 | 3,584 | 
+| fib_e2e | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 6 | 8 |  | 72 | 40 | 896 | 
+| fib_e2e | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 0 | 16 |  | 28 | 21 | 784 | 
+| fib_e2e | VmConnectorAir | 0 | 2 | 1 | 12 | 4 | 32 | 
+| fib_e2e | VmConnectorAir | 1 | 2 | 1 | 12 | 4 | 32 | 
+| fib_e2e | VmConnectorAir | 2 | 2 | 1 | 12 | 4 | 32 | 
+| fib_e2e | VmConnectorAir | 3 | 2 | 1 | 12 | 4 | 32 | 
+| fib_e2e | VmConnectorAir | 4 | 2 | 1 | 12 | 4 | 32 | 
+| fib_e2e | VmConnectorAir | 5 | 2 | 1 | 12 | 4 | 32 | 
+| fib_e2e | VmConnectorAir | 6 | 2 | 1 | 12 | 4 | 32 | 
+
+| group | cell_tracker_span | simple_advice_cells | lookup_advice_cells |
+| --- | --- | --- | --- |
+| halo2_outer | VerifierProgram | 874,615 | 244,301 | 
+| halo2_outer | VerifierProgram;PoseidonCell | 20,120 |  | 
+| halo2_outer | VerifierProgram;stage-c-build-rounds | 334,819 | 697 | 
+| halo2_outer | VerifierProgram;stage-c-build-rounds;PoseidonCell | 47,785 |  | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs | 161 | 40 | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify | 561,377 | 2,728 | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify;PoseidonCell | 67,905 |  | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify;cache-generator-powers | 585,396 | 99,036 | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify;compute-reduced-opening;single-reduced-opening-eval | 15,833,328 | 662,340 | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify;pre-compute-alpha-pows | 80,187 | 11,168 | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify;verify-batch | 119,028 |  | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify;verify-batch;PoseidonCell | 14,110,236 |  | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify;verify-batch;verify-batch-reduce-fast;PoseidonCell | 13,862,898 | 396,648 | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify;verify-query | 3,327,156 | 730,674 | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify;verify-query;verify-batch-ext | 251,160 |  | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify;verify-query;verify-batch-ext;PoseidonCell | 24,401,160 |  | 
+| halo2_outer | VerifierProgram;stage-d-verify-pcs;stage-d-verifier-verify;verify-query;verify-batch-ext;verify-batch-reduce-fast;PoseidonCell | 2,493,372 | 84,840 | 
+| halo2_outer | VerifierProgram;stage-e-verify-constraints | 7,464,423 | 1,593,466 | 
+
+| group | chip_name | idx | rows_used |
+| --- | --- | --- | --- |
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 0 | 629,495 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 1 | 629,387 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 2 | 629,387 | 
+| internal.0 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 3 | 314,799 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | 0 | 73,401 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | 1 | 73,022 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | 2 | 73,463 | 
+| internal.0 | <JalNativeAdapterAir,JalCoreAir> | 3 | 36,650 | 
+| internal.0 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 0 | 52 | 
+| internal.0 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 1 | 52 | 
+| internal.0 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 2 | 52 | 
+| internal.0 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 3 | 52 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 0 | 1,802,959 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 1 | 1,802,843 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 2 | 1,802,843 | 
+| internal.0 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 3 | 901,770 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 0 | 886,496 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 1 | 886,496 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 2 | 886,496 | 
+| internal.0 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 3 | 443,406 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 0 | 80,842 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 1 | 80,842 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 2 | 80,842 | 
+| internal.0 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 3 | 40,421 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 0 | 107,876 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 1 | 107,776 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 2 | 107,776 | 
+| internal.0 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 3 | 53,988 | 
+| internal.0 | AccessAdapter<2> | 0 | 373,564 | 
+| internal.0 | AccessAdapter<2> | 1 | 373,564 | 
+| internal.0 | AccessAdapter<2> | 2 | 373,564 | 
+| internal.0 | AccessAdapter<2> | 3 | 210,236 | 
+| internal.0 | AccessAdapter<4> | 0 | 176,958 | 
+| internal.0 | AccessAdapter<4> | 1 | 176,958 | 
+| internal.0 | AccessAdapter<4> | 2 | 176,958 | 
+| internal.0 | AccessAdapter<4> | 3 | 100,206 | 
+| internal.0 | AccessAdapter<8> | 0 | 312 | 
+| internal.0 | AccessAdapter<8> | 1 | 312 | 
+| internal.0 | AccessAdapter<8> | 2 | 312 | 
+| internal.0 | AccessAdapter<8> | 3 | 156 | 
+| internal.0 | Boundary | 0 | 634,645 | 
+| internal.0 | Boundary | 1 | 634,645 | 
+| internal.0 | Boundary | 2 | 634,645 | 
+| internal.0 | Boundary | 3 | 372,067 | 
+| internal.0 | FriReducedOpeningAir | 0 | 266,784 | 
+| internal.0 | FriReducedOpeningAir | 1 | 266,784 | 
+| internal.0 | FriReducedOpeningAir | 2 | 266,784 | 
+| internal.0 | FriReducedOpeningAir | 3 | 133,392 | 
+| internal.0 | PhantomAir | 0 | 89,285 | 
+| internal.0 | PhantomAir | 1 | 89,285 | 
+| internal.0 | PhantomAir | 2 | 89,285 | 
+| internal.0 | PhantomAir | 3 | 44,650 | 
+| internal.0 | ProgramChip | 0 | 149,046 | 
+| internal.0 | ProgramChip | 1 | 149,046 | 
+| internal.0 | ProgramChip | 2 | 149,046 | 
+| internal.0 | ProgramChip | 3 | 149,046 | 
+| internal.0 | VariableRangeCheckerAir | 0 | 262,144 | 
+| internal.0 | VariableRangeCheckerAir | 1 | 262,144 | 
+| internal.0 | VariableRangeCheckerAir | 2 | 262,144 | 
+| internal.0 | VariableRangeCheckerAir | 3 | 262,144 | 
+| internal.0 | VerifyBatchAir | 0 | 51,720 | 
+| internal.0 | VerifyBatchAir | 1 | 51,762 | 
+| internal.0 | VerifyBatchAir | 2 | 51,762 | 
+| internal.0 | VerifyBatchAir | 3 | 25,797 | 
+| internal.0 | VmConnectorAir | 0 | 2 | 
+| internal.0 | VmConnectorAir | 1 | 2 | 
+| internal.0 | VmConnectorAir | 2 | 2 | 
+| internal.0 | VmConnectorAir | 3 | 2 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 4 | 657,539 | 
+| internal.1 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 5 | 644,077 | 
+| internal.1 | <JalNativeAdapterAir,JalCoreAir> | 4 | 76,066 | 
+| internal.1 | <JalNativeAdapterAir,JalCoreAir> | 5 | 75,195 | 
+| internal.1 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 4 | 52 | 
+| internal.1 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 5 | 52 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 4 | 1,864,015 | 
+| internal.1 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 5 | 1,834,685 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 4 | 916,544 | 
+| internal.1 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 5 | 902,104 | 
+| internal.1 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 4 | 81,684 | 
+| internal.1 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 5 | 81,263 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 4 | 109,588 | 
+| internal.1 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 5 | 108,856 | 
+| internal.1 | AccessAdapter<2> | 4 | 377,752 | 
+| internal.1 | AccessAdapter<2> | 5 | 384,640 | 
+| internal.1 | AccessAdapter<4> | 4 | 178,968 | 
+| internal.1 | AccessAdapter<4> | 5 | 183,062 | 
+| internal.1 | AccessAdapter<8> | 4 | 328 | 
+| internal.1 | AccessAdapter<8> | 5 | 324 | 
+| internal.1 | Boundary | 4 | 660,709 | 
+| internal.1 | Boundary | 5 | 679,309 | 
+| internal.1 | FriReducedOpeningAir | 4 | 266,784 | 
+| internal.1 | FriReducedOpeningAir | 5 | 266,784 | 
+| internal.1 | PhantomAir | 4 | 91,891 | 
+| internal.1 | PhantomAir | 5 | 90,630 | 
+| internal.1 | ProgramChip | 4 | 149,046 | 
+| internal.1 | ProgramChip | 5 | 149,046 | 
+| internal.1 | VariableRangeCheckerAir | 4 | 262,144 | 
+| internal.1 | VariableRangeCheckerAir | 5 | 262,144 | 
+| internal.1 | VerifyBatchAir | 4 | 53,952 | 
+| internal.1 | VerifyBatchAir | 5 | 52,817 | 
+| internal.1 | VmConnectorAir | 4 | 2 | 
+| internal.1 | VmConnectorAir | 5 | 2 | 
+| internal.2 | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 6 | 657,539 | 
+| internal.2 | <JalNativeAdapterAir,JalCoreAir> | 6 | 76,814 | 
+| internal.2 | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 6 | 52 | 
+| internal.2 | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 6 | 1,864,015 | 
+| internal.2 | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 6 | 916,544 | 
+| internal.2 | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 6 | 81,684 | 
+| internal.2 | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 6 | 109,588 | 
+| internal.2 | AccessAdapter<2> | 6 | 377,752 | 
+| internal.2 | AccessAdapter<4> | 6 | 178,968 | 
+| internal.2 | AccessAdapter<8> | 6 | 328 | 
+| internal.2 | Boundary | 6 | 660,709 | 
+| internal.2 | FriReducedOpeningAir | 6 | 266,784 | 
+| internal.2 | PhantomAir | 6 | 91,891 | 
+| internal.2 | ProgramChip | 6 | 149,046 | 
+| internal.2 | VariableRangeCheckerAir | 6 | 262,144 | 
+| internal.2 | VerifyBatchAir | 6 | 53,952 | 
+| internal.2 | VmConnectorAir | 6 | 2 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 0 | 323,814 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 1 | 288,345 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 2 | 288,345 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 3 | 288,345 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 4 | 288,345 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 5 | 288,345 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 6 | 301,443 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | 0 | 39,648 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | 1 | 37,201 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | 2 | 37,013 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | 3 | 37,433 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | 4 | 37,267 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | 5 | 36,800 | 
+| leaf | <JalNativeAdapterAir,JalCoreAir> | 6 | 37,720 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 0 | 36 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 1 | 36 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 2 | 36 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 3 | 36 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 4 | 36 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 5 | 36 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 6 | 36 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 0 | 894,851 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 1 | 783,131 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 2 | 783,131 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 3 | 783,131 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 4 | 783,131 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 5 | 783,131 | 
+| leaf | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 6 | 823,821 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 0 | 444,994 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 1 | 382,762 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 2 | 382,762 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 3 | 382,762 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 4 | 382,762 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 5 | 382,762 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 6 | 406,286 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 0 | 36,867 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 1 | 29,204 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 2 | 29,204 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 3 | 29,204 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 4 | 29,204 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 5 | 29,204 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 6 | 31,789 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 0 | 42,875 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 1 | 32,006 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 2 | 32,006 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 3 | 32,006 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 4 | 32,006 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 5 | 32,006 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 6 | 35,575 | 
+| leaf | AccessAdapter<2> | 0 | 161,726 | 
+| leaf | AccessAdapter<2> | 1 | 128,084 | 
+| leaf | AccessAdapter<2> | 2 | 128,084 | 
+| leaf | AccessAdapter<2> | 3 | 128,084 | 
+| leaf | AccessAdapter<2> | 4 | 128,084 | 
+| leaf | AccessAdapter<2> | 5 | 128,084 | 
+| leaf | AccessAdapter<2> | 6 | 140,158 | 
+| leaf | AccessAdapter<4> | 0 | 76,580 | 
+| leaf | AccessAdapter<4> | 1 | 60,768 | 
+| leaf | AccessAdapter<4> | 2 | 60,768 | 
+| leaf | AccessAdapter<4> | 3 | 60,768 | 
+| leaf | AccessAdapter<4> | 4 | 60,768 | 
+| leaf | AccessAdapter<4> | 5 | 60,768 | 
+| leaf | AccessAdapter<4> | 6 | 66,468 | 
+| leaf | AccessAdapter<8> | 0 | 160 | 
+| leaf | AccessAdapter<8> | 1 | 154 | 
+| leaf | AccessAdapter<8> | 2 | 154 | 
+| leaf | AccessAdapter<8> | 3 | 154 | 
+| leaf | AccessAdapter<8> | 4 | 154 | 
+| leaf | AccessAdapter<8> | 5 | 154 | 
+| leaf | AccessAdapter<8> | 6 | 318 | 
+| leaf | Boundary | 0 | 338,059 | 
+| leaf | Boundary | 1 | 304,417 | 
+| leaf | Boundary | 2 | 304,417 | 
+| leaf | Boundary | 3 | 304,417 | 
+| leaf | Boundary | 4 | 304,417 | 
+| leaf | Boundary | 5 | 304,417 | 
+| leaf | Boundary | 6 | 316,933 | 
+| leaf | FriReducedOpeningAir | 0 | 128,604 | 
+| leaf | FriReducedOpeningAir | 1 | 83,244 | 
+| leaf | FriReducedOpeningAir | 2 | 83,244 | 
+| leaf | FriReducedOpeningAir | 3 | 83,244 | 
+| leaf | FriReducedOpeningAir | 4 | 83,244 | 
+| leaf | FriReducedOpeningAir | 5 | 83,244 | 
+| leaf | FriReducedOpeningAir | 6 | 99,708 | 
+| leaf | PhantomAir | 0 | 44,258 | 
+| leaf | PhantomAir | 1 | 38,072 | 
+| leaf | PhantomAir | 2 | 38,072 | 
+| leaf | PhantomAir | 3 | 38,072 | 
+| leaf | PhantomAir | 4 | 38,072 | 
+| leaf | PhantomAir | 5 | 38,072 | 
+| leaf | PhantomAir | 6 | 40,359 | 
+| leaf | ProgramChip | 0 | 75,254 | 
+| leaf | ProgramChip | 1 | 75,254 | 
+| leaf | ProgramChip | 2 | 75,254 | 
+| leaf | ProgramChip | 3 | 75,254 | 
+| leaf | ProgramChip | 4 | 75,254 | 
+| leaf | ProgramChip | 5 | 75,254 | 
+| leaf | ProgramChip | 6 | 75,254 | 
+| leaf | VariableRangeCheckerAir | 0 | 262,144 | 
+| leaf | VariableRangeCheckerAir | 1 | 262,144 | 
+| leaf | VariableRangeCheckerAir | 2 | 262,144 | 
+| leaf | VariableRangeCheckerAir | 3 | 262,144 | 
+| leaf | VariableRangeCheckerAir | 4 | 262,144 | 
+| leaf | VariableRangeCheckerAir | 5 | 262,144 | 
+| leaf | VariableRangeCheckerAir | 6 | 262,144 | 
+| leaf | VerifyBatchAir | 0 | 27,561 | 
+| leaf | VerifyBatchAir | 1 | 24,366 | 
+| leaf | VerifyBatchAir | 2 | 24,366 | 
+| leaf | VerifyBatchAir | 3 | 24,366 | 
+| leaf | VerifyBatchAir | 4 | 24,366 | 
+| leaf | VerifyBatchAir | 5 | 24,366 | 
+| leaf | VerifyBatchAir | 6 | 25,528 | 
+| leaf | VmConnectorAir | 0 | 2 | 
+| leaf | VmConnectorAir | 1 | 2 | 
+| leaf | VmConnectorAir | 2 | 2 | 
+| leaf | VmConnectorAir | 3 | 2 | 
+| leaf | VmConnectorAir | 4 | 2 | 
+| leaf | VmConnectorAir | 5 | 2 | 
+| leaf | VmConnectorAir | 6 | 2 | 
+| root | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 0 | 328,795 | 
+| root | <JalNativeAdapterAir,JalCoreAir> | 0 | 38,104 | 
+| root | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 0 | 48 | 
+| root | <NativeAdapterAir<2, 1>,FieldArithmeticCoreAir> | 0 | 932,261 | 
+| root | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 0 | 458,744 | 
+| root | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 0 | 40,842 | 
+| root | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 0 | 54,794 | 
+| root | AccessAdapter<2> | 0 | 212,532 | 
+| root | AccessAdapter<4> | 0 | 101,312 | 
+| root | AccessAdapter<8> | 0 | 230 | 
+| root | Boundary | 0 | 385,491 | 
+| root | FriReducedOpeningAir | 0 | 133,392 | 
+| root | PhantomAir | 0 | 45,948 | 
+| root | ProgramChip | 0 | 149,319 | 
+| root | VariableRangeCheckerAir | 0 | 262,144 | 
+| root | VerifyBatchAir | 0 | 26,988 | 
+| root | VmConnectorAir | 0 | 2 | 
+
+| group | chip_name | segment | rows_used |
+| --- | --- | --- | --- |
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> | 0 | 1,048,537 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> | 1 | 1,048,500 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> | 2 | 1,048,501 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> | 3 | 1,048,501 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> | 4 | 1,048,502 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> | 5 | 1,048,501 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> | 6 | 909,012 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> | 0 | 349,497 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> | 1 | 349,501 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> | 2 | 349,500 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> | 3 | 349,501 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> | 4 | 349,500 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> | 5 | 349,500 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> | 6 | 303,003 | 
+| fib_e2e | <Rv32BaseAluAdapterAir,ShiftCoreAir<4, 8>> | 0 | 2 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> | 0 | 233,005 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> | 1 | 233,001 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> | 2 | 233,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> | 3 | 233,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> | 4 | 233,000 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> | 5 | 233,001 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> | 6 | 202,002 | 
+| fib_e2e | <Rv32BranchAdapterAir,BranchLessThanCoreAir<4, 8>> | 0 | 5 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> | 0 | 116,508 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> | 1 | 116,500 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> | 2 | 116,501 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> | 3 | 116,500 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> | 4 | 116,500 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> | 5 | 116,500 | 
+| fib_e2e | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> | 6 | 101,001 | 
+| fib_e2e | <Rv32HintStoreAdapterAir,Rv32HintStoreCoreAir> | 0 | 3 | 
+| fib_e2e | <Rv32JalrAdapterAir,Rv32JalrCoreAir> | 0 | 12 | 
+| fib_e2e | <Rv32JalrAdapterAir,Rv32JalrCoreAir> | 6 | 1 | 
+| fib_e2e | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> | 0 | 23 | 
+| fib_e2e | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> | 6 | 5 | 
+| fib_e2e | <Rv32RdWriteAdapterAir,Rv32AuipcCoreAir> | 0 | 9 | 
+| fib_e2e | AccessAdapter<8> | 0 | 34 | 
+| fib_e2e | AccessAdapter<8> | 1 | 16 | 
+| fib_e2e | AccessAdapter<8> | 2 | 16 | 
+| fib_e2e | AccessAdapter<8> | 3 | 16 | 
+| fib_e2e | AccessAdapter<8> | 4 | 16 | 
+| fib_e2e | AccessAdapter<8> | 5 | 16 | 
+| fib_e2e | AccessAdapter<8> | 6 | 24 | 
+| fib_e2e | Arc<BabyBearParameters>, 1> | 0 | 150 | 
+| fib_e2e | Arc<BabyBearParameters>, 1> | 1 | 82 | 
+| fib_e2e | Arc<BabyBearParameters>, 1> | 2 | 82 | 
+| fib_e2e | Arc<BabyBearParameters>, 1> | 3 | 83 | 
+| fib_e2e | Arc<BabyBearParameters>, 1> | 4 | 84 | 
+| fib_e2e | Arc<BabyBearParameters>, 1> | 5 | 84 | 
+| fib_e2e | Arc<BabyBearParameters>, 1> | 6 | 169 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 0 | 65,536 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 1 | 65,536 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 2 | 65,536 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 3 | 65,536 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 4 | 65,536 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 5 | 65,536 | 
+| fib_e2e | BitwiseOperationLookupAir<8> | 6 | 65,536 | 
+| fib_e2e | Boundary | 0 | 34 | 
+| fib_e2e | Boundary | 1 | 16 | 
+| fib_e2e | Boundary | 2 | 16 | 
+| fib_e2e | Boundary | 3 | 16 | 
+| fib_e2e | Boundary | 4 | 16 | 
+| fib_e2e | Boundary | 5 | 16 | 
+| fib_e2e | Boundary | 6 | 24 | 
+| fib_e2e | Merkle | 0 | 174 | 
+| fib_e2e | Merkle | 1 | 72 | 
+| fib_e2e | Merkle | 2 | 72 | 
+| fib_e2e | Merkle | 3 | 72 | 
+| fib_e2e | Merkle | 4 | 72 | 
+| fib_e2e | Merkle | 5 | 72 | 
+| fib_e2e | Merkle | 6 | 178 | 
+| fib_e2e | PhantomAir | 0 | 2 | 
+| fib_e2e | ProgramChip | 0 | 3,275 | 
+| fib_e2e | ProgramChip | 1 | 3,275 | 
+| fib_e2e | ProgramChip | 2 | 3,275 | 
+| fib_e2e | ProgramChip | 3 | 3,275 | 
+| fib_e2e | ProgramChip | 4 | 3,275 | 
+| fib_e2e | ProgramChip | 5 | 3,275 | 
+| fib_e2e | ProgramChip | 6 | 3,275 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 0 | 524,288 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 1 | 524,288 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 2 | 524,288 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 3 | 524,288 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 4 | 524,288 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 5 | 524,288 | 
+| fib_e2e | RangeTupleCheckerAir<2> | 6 | 524,288 | 
+| fib_e2e | VariableRangeCheckerAir | 0 | 262,144 | 
+| fib_e2e | VariableRangeCheckerAir | 1 | 262,144 | 
+| fib_e2e | VariableRangeCheckerAir | 2 | 262,144 | 
+| fib_e2e | VariableRangeCheckerAir | 3 | 262,144 | 
+| fib_e2e | VariableRangeCheckerAir | 4 | 262,144 | 
+| fib_e2e | VariableRangeCheckerAir | 5 | 262,144 | 
+| fib_e2e | VariableRangeCheckerAir | 6 | 262,144 | 
+| fib_e2e | VmConnectorAir | 0 | 2 | 
+| fib_e2e | VmConnectorAir | 1 | 2 | 
+| fib_e2e | VmConnectorAir | 2 | 2 | 
+| fib_e2e | VmConnectorAir | 3 | 2 | 
+| fib_e2e | VmConnectorAir | 4 | 2 | 
+| fib_e2e | VmConnectorAir | 5 | 2 | 
+| fib_e2e | VmConnectorAir | 6 | 2 | 
+
+| group | dsl_ir | idx | opcode | frequency |
+| --- | --- | --- | --- | --- |
+| internal.0 |  | 0 | ADD | 2 | 
+| internal.0 |  | 0 | JAL | 1 | 
+| internal.0 |  | 1 | ADD | 2 | 
+| internal.0 |  | 1 | JAL | 1 | 
+| internal.0 |  | 2 | ADD | 2 | 
+| internal.0 |  | 2 | JAL | 1 | 
+| internal.0 |  | 3 | ADD | 2 | 
+| internal.0 |  | 3 | JAL | 1 | 
+| internal.0 | AddE | 0 | FE4ADD | 29,230 | 
+| internal.0 | AddE | 1 | FE4ADD | 29,230 | 
+| internal.0 | AddE | 2 | FE4ADD | 29,230 | 
+| internal.0 | AddE | 3 | FE4ADD | 14,615 | 
+| internal.0 | AddEFFI | 0 | ADD | 2,784 | 
+| internal.0 | AddEFFI | 1 | ADD | 2,784 | 
+| internal.0 | AddEFFI | 2 | ADD | 2,784 | 
+| internal.0 | AddEFFI | 3 | ADD | 1,392 | 
+| internal.0 | AddEFI | 0 | ADD | 2,200 | 
+| internal.0 | AddEFI | 1 | ADD | 2,200 | 
+| internal.0 | AddEFI | 2 | ADD | 2,200 | 
+| internal.0 | AddEFI | 3 | ADD | 1,100 | 
+| internal.0 | AddEI | 0 | ADD | 74,400 | 
+| internal.0 | AddEI | 1 | ADD | 74,400 | 
+| internal.0 | AddEI | 2 | ADD | 74,400 | 
+| internal.0 | AddEI | 3 | ADD | 37,200 | 
+| internal.0 | AddF | 0 | ADD | 5,920 | 
+| internal.0 | AddF | 1 | ADD | 5,920 | 
+| internal.0 | AddF | 2 | ADD | 5,920 | 
+| internal.0 | AddF | 3 | ADD | 2,960 | 
+| internal.0 | AddFI | 0 | ADD | 23,719 | 
+| internal.0 | AddFI | 1 | ADD | 23,719 | 
+| internal.0 | AddFI | 2 | ADD | 23,719 | 
+| internal.0 | AddFI | 3 | ADD | 11,872 | 
+| internal.0 | AddV | 0 | ADD | 79,416 | 
+| internal.0 | AddV | 1 | ADD | 79,408 | 
+| internal.0 | AddV | 2 | ADD | 79,408 | 
+| internal.0 | AddV | 3 | ADD | 39,717 | 
+| internal.0 | AddVI | 0 | ADD | 173,282 | 
+| internal.0 | AddVI | 1 | ADD | 173,282 | 
+| internal.0 | AddVI | 2 | ADD | 173,282 | 
+| internal.0 | AddVI | 3 | ADD | 86,672 | 
+| internal.0 | Alloc | 0 | ADD | 195,526 | 
+| internal.0 | Alloc | 0 | MUL | 54,144 | 
+| internal.0 | Alloc | 1 | ADD | 195,526 | 
+| internal.0 | Alloc | 1 | MUL | 54,144 | 
+| internal.0 | Alloc | 2 | ADD | 195,526 | 
+| internal.0 | Alloc | 2 | MUL | 54,144 | 
+| internal.0 | Alloc | 3 | ADD | 97,786 | 
+| internal.0 | Alloc | 3 | MUL | 27,079 | 
+| internal.0 | AssertEqE | 0 | BNE | 472 | 
+| internal.0 | AssertEqE | 1 | BNE | 472 | 
+| internal.0 | AssertEqE | 2 | BNE | 472 | 
+| internal.0 | AssertEqE | 3 | BNE | 236 | 
+| internal.0 | AssertEqEI | 0 | BNE | 8 | 
+| internal.0 | AssertEqEI | 1 | BNE | 8 | 
+| internal.0 | AssertEqEI | 2 | BNE | 8 | 
+| internal.0 | AssertEqEI | 3 | BNE | 4 | 
+| internal.0 | AssertEqF | 0 | BNE | 5,881 | 
+| internal.0 | AssertEqF | 1 | BNE | 5,881 | 
+| internal.0 | AssertEqF | 2 | BNE | 5,881 | 
+| internal.0 | AssertEqF | 3 | BNE | 2,928 | 
+| internal.0 | AssertEqFI | 0 | BNE | 7 | 
+| internal.0 | AssertEqFI | 1 | BNE | 7 | 
+| internal.0 | AssertEqFI | 2 | BNE | 7 | 
+| internal.0 | AssertEqFI | 3 | BNE | 3 | 
+| internal.0 | AssertEqV | 0 | BNE | 2,718 | 
+| internal.0 | AssertEqV | 1 | BNE | 2,718 | 
+| internal.0 | AssertEqV | 2 | BNE | 2,718 | 
+| internal.0 | AssertEqV | 3 | BNE | 1,359 | 
+| internal.0 | AssertEqVI | 0 | BNE | 474 | 
+| internal.0 | AssertEqVI | 1 | BNE | 474 | 
+| internal.0 | AssertEqVI | 2 | BNE | 474 | 
+| internal.0 | AssertEqVI | 3 | BNE | 237 | 
+| internal.0 | AssertNonZero | 0 | BEQ | 1 | 
+| internal.0 | AssertNonZero | 1 | BEQ | 1 | 
+| internal.0 | AssertNonZero | 2 | BEQ | 1 | 
+| internal.0 | AssertNonZero | 3 | BEQ | 1 | 
+| internal.0 | CT-InitializePcsConst | 0 | PHANTOM | 2 | 
+| internal.0 | CT-InitializePcsConst | 1 | PHANTOM | 2 | 
+| internal.0 | CT-InitializePcsConst | 2 | PHANTOM | 2 | 
+| internal.0 | CT-InitializePcsConst | 3 | PHANTOM | 2 | 
+| internal.0 | CT-ReadProofsFromInput | 0 | PHANTOM | 2 | 
+| internal.0 | CT-ReadProofsFromInput | 1 | PHANTOM | 2 | 
+| internal.0 | CT-ReadProofsFromInput | 2 | PHANTOM | 2 | 
+| internal.0 | CT-ReadProofsFromInput | 3 | PHANTOM | 2 | 
+| internal.0 | CT-VerifyProofs | 0 | PHANTOM | 2 | 
+| internal.0 | CT-VerifyProofs | 1 | PHANTOM | 2 | 
+| internal.0 | CT-VerifyProofs | 2 | PHANTOM | 2 | 
+| internal.0 | CT-VerifyProofs | 3 | PHANTOM | 2 | 
+| internal.0 | CT-cache-generator-powers | 0 | PHANTOM | 1,008 | 
+| internal.0 | CT-cache-generator-powers | 1 | PHANTOM | 1,008 | 
+| internal.0 | CT-cache-generator-powers | 2 | PHANTOM | 1,008 | 
+| internal.0 | CT-cache-generator-powers | 3 | PHANTOM | 504 | 
+| internal.0 | CT-compute-reduced-opening | 0 | PHANTOM | 1,008 | 
+| internal.0 | CT-compute-reduced-opening | 1 | PHANTOM | 1,008 | 
+| internal.0 | CT-compute-reduced-opening | 2 | PHANTOM | 1,008 | 
+| internal.0 | CT-compute-reduced-opening | 3 | PHANTOM | 504 | 
+| internal.0 | CT-exp-reverse-bits-len | 0 | PHANTOM | 16,296 | 
+| internal.0 | CT-exp-reverse-bits-len | 1 | PHANTOM | 16,296 | 
+| internal.0 | CT-exp-reverse-bits-len | 2 | PHANTOM | 16,296 | 
+| internal.0 | CT-exp-reverse-bits-len | 3 | PHANTOM | 8,148 | 
+| internal.0 | CT-pre-compute-alpha-pows | 0 | PHANTOM | 4 | 
+| internal.0 | CT-pre-compute-alpha-pows | 1 | PHANTOM | 4 | 
+| internal.0 | CT-pre-compute-alpha-pows | 2 | PHANTOM | 4 | 
+| internal.0 | CT-pre-compute-alpha-pows | 3 | PHANTOM | 2 | 
+| internal.0 | CT-single-reduced-opening-eval | 0 | PHANTOM | 22,512 | 
+| internal.0 | CT-single-reduced-opening-eval | 1 | PHANTOM | 22,512 | 
+| internal.0 | CT-single-reduced-opening-eval | 2 | PHANTOM | 22,512 | 
+| internal.0 | CT-single-reduced-opening-eval | 3 | PHANTOM | 11,256 | 
+| internal.0 | CT-stage-c-build-rounds | 0 | PHANTOM | 4 | 
+| internal.0 | CT-stage-c-build-rounds | 1 | PHANTOM | 4 | 
+| internal.0 | CT-stage-c-build-rounds | 2 | PHANTOM | 4 | 
+| internal.0 | CT-stage-c-build-rounds | 3 | PHANTOM | 2 | 
+| internal.0 | CT-stage-d-verifier-verify | 0 | PHANTOM | 4 | 
+| internal.0 | CT-stage-d-verifier-verify | 1 | PHANTOM | 4 | 
+| internal.0 | CT-stage-d-verifier-verify | 2 | PHANTOM | 4 | 
+| internal.0 | CT-stage-d-verifier-verify | 3 | PHANTOM | 2 | 
+| internal.0 | CT-stage-d-verify-pcs | 0 | PHANTOM | 4 | 
+| internal.0 | CT-stage-d-verify-pcs | 1 | PHANTOM | 4 | 
+| internal.0 | CT-stage-d-verify-pcs | 2 | PHANTOM | 4 | 
+| internal.0 | CT-stage-d-verify-pcs | 3 | PHANTOM | 2 | 
+| internal.0 | CT-stage-e-verify-constraints | 0 | PHANTOM | 4 | 
+| internal.0 | CT-stage-e-verify-constraints | 1 | PHANTOM | 4 | 
+| internal.0 | CT-stage-e-verify-constraints | 2 | PHANTOM | 4 | 
+| internal.0 | CT-stage-e-verify-constraints | 3 | PHANTOM | 2 | 
+| internal.0 | CT-verify-batch | 0 | PHANTOM | 1,008 | 
+| internal.0 | CT-verify-batch | 1 | PHANTOM | 1,008 | 
+| internal.0 | CT-verify-batch | 2 | PHANTOM | 1,008 | 
+| internal.0 | CT-verify-batch | 3 | PHANTOM | 504 | 
+| internal.0 | CT-verify-batch-ext | 0 | PHANTOM | 3,360 | 
+| internal.0 | CT-verify-batch-ext | 1 | PHANTOM | 3,360 | 
+| internal.0 | CT-verify-batch-ext | 2 | PHANTOM | 3,360 | 
+| internal.0 | CT-verify-batch-ext | 3 | PHANTOM | 1,680 | 
+| internal.0 | CT-verify-query | 0 | PHANTOM | 168 | 
+| internal.0 | CT-verify-query | 1 | PHANTOM | 168 | 
+| internal.0 | CT-verify-query | 2 | PHANTOM | 168 | 
+| internal.0 | CT-verify-query | 3 | PHANTOM | 84 | 
+| internal.0 | CastFV | 0 | ADD | 296 | 
+| internal.0 | CastFV | 1 | ADD | 296 | 
+| internal.0 | CastFV | 2 | ADD | 296 | 
+| internal.0 | CastFV | 3 | ADD | 148 | 
+| internal.0 | DivE | 0 | BBE4DIV | 13,004 | 
+| internal.0 | DivE | 1 | BBE4DIV | 13,004 | 
+| internal.0 | DivE | 2 | BBE4DIV | 13,004 | 
+| internal.0 | DivE | 3 | BBE4DIV | 6,502 | 
+| internal.0 | DivEIN | 0 | ADD | 1,496 | 
+| internal.0 | DivEIN | 0 | BBE4DIV | 374 | 
+| internal.0 | DivEIN | 1 | ADD | 1,496 | 
+| internal.0 | DivEIN | 1 | BBE4DIV | 374 | 
+| internal.0 | DivEIN | 2 | ADD | 1,496 | 
+| internal.0 | DivEIN | 2 | BBE4DIV | 374 | 
+| internal.0 | DivEIN | 3 | ADD | 748 | 
+| internal.0 | DivEIN | 3 | BBE4DIV | 187 | 
+| internal.0 | DivF | 0 | DIV | 11,088 | 
+| internal.0 | DivF | 1 | DIV | 11,088 | 
+| internal.0 | DivF | 2 | DIV | 11,088 | 
+| internal.0 | DivF | 3 | DIV | 5,544 | 
+| internal.0 | DivFIN | 0 | DIV | 782 | 
+| internal.0 | DivFIN | 1 | DIV | 782 | 
+| internal.0 | DivFIN | 2 | DIV | 782 | 
+| internal.0 | DivFIN | 3 | DIV | 391 | 
+| internal.0 | FriReducedOpening | 0 | FRI_REDUCED_OPENING | 11,256 | 
+| internal.0 | FriReducedOpening | 1 | FRI_REDUCED_OPENING | 11,256 | 
+| internal.0 | FriReducedOpening | 2 | FRI_REDUCED_OPENING | 11,256 | 
+| internal.0 | FriReducedOpening | 3 | FRI_REDUCED_OPENING | 5,628 | 
+| internal.0 | HintBitsF | 0 | PHANTOM | 280 | 
+| internal.0 | HintBitsF | 1 | PHANTOM | 280 | 
+| internal.0 | HintBitsF | 2 | PHANTOM | 280 | 
+| internal.0 | HintBitsF | 3 | PHANTOM | 140 | 
+| internal.0 | HintInputVec | 0 | PHANTOM | 43,619 | 
+| internal.0 | HintInputVec | 1 | PHANTOM | 43,619 | 
+| internal.0 | HintInputVec | 2 | PHANTOM | 43,619 | 
+| internal.0 | HintInputVec | 3 | PHANTOM | 21,814 | 
+| internal.0 | IfEq | 0 | BNE | 280 | 
+| internal.0 | IfEq | 1 | BNE | 280 | 
+| internal.0 | IfEq | 2 | BNE | 280 | 
+| internal.0 | IfEq | 3 | BNE | 140 | 
+| internal.0 | IfEqI | 0 | BNE | 38,434 | 
+| internal.0 | IfEqI | 0 | JAL | 13,527 | 
+| internal.0 | IfEqI | 1 | BNE | 38,434 | 
+| internal.0 | IfEqI | 1 | JAL | 13,148 | 
+| internal.0 | IfEqI | 2 | BNE | 38,434 | 
+| internal.0 | IfEqI | 2 | JAL | 13,589 | 
+| internal.0 | IfEqI | 3 | BNE | 19,217 | 
+| internal.0 | IfEqI | 3 | JAL | 6,707 | 
+| internal.0 | IfNe | 0 | BEQ | 286 | 
+| internal.0 | IfNe | 0 | JAL | 6 | 
+| internal.0 | IfNe | 1 | BEQ | 286 | 
+| internal.0 | IfNe | 1 | JAL | 6 | 
+| internal.0 | IfNe | 2 | BEQ | 286 | 
+| internal.0 | IfNe | 2 | JAL | 6 | 
+| internal.0 | IfNe | 3 | BEQ | 143 | 
+| internal.0 | IfNe | 3 | JAL | 3 | 
+| internal.0 | IfNeI | 0 | BEQ | 186 | 
+| internal.0 | IfNeI | 1 | BEQ | 186 | 
+| internal.0 | IfNeI | 2 | BEQ | 186 | 
+| internal.0 | IfNeI | 3 | BEQ | 93 | 
+| internal.0 | ImmE | 0 | ADD | 9,680 | 
+| internal.0 | ImmE | 1 | ADD | 9,680 | 
+| internal.0 | ImmE | 2 | ADD | 9,680 | 
+| internal.0 | ImmE | 3 | ADD | 4,840 | 
+| internal.0 | ImmF | 0 | ADD | 8,230 | 
+| internal.0 | ImmF | 1 | ADD | 8,230 | 
+| internal.0 | ImmF | 2 | ADD | 8,230 | 
+| internal.0 | ImmF | 3 | ADD | 4,199 | 
+| internal.0 | ImmV | 0 | ADD | 10,449 | 
+| internal.0 | ImmV | 1 | ADD | 10,449 | 
+| internal.0 | ImmV | 2 | ADD | 10,449 | 
+| internal.0 | ImmV | 3 | ADD | 5,283 | 
+| internal.0 | LoadE | 0 | ADD | 21,336 | 
+| internal.0 | LoadE | 0 | LOADW | 52,070 | 
+| internal.0 | LoadE | 0 | MUL | 21,336 | 
+| internal.0 | LoadE | 1 | ADD | 21,336 | 
+| internal.0 | LoadE | 1 | LOADW | 52,070 | 
+| internal.0 | LoadE | 1 | MUL | 21,336 | 
+| internal.0 | LoadE | 2 | ADD | 21,336 | 
+| internal.0 | LoadE | 2 | LOADW | 52,070 | 
+| internal.0 | LoadE | 2 | MUL | 21,336 | 
+| internal.0 | LoadE | 3 | ADD | 10,668 | 
+| internal.0 | LoadE | 3 | LOADW | 26,035 | 
+| internal.0 | LoadE | 3 | MUL | 10,668 | 
+| internal.0 | LoadF | 0 | ADD | 26,984 | 
+| internal.0 | LoadF | 0 | LOADW | 52,278 | 
+| internal.0 | LoadF | 0 | MUL | 17,962 | 
+| internal.0 | LoadF | 1 | ADD | 26,984 | 
+| internal.0 | LoadF | 1 | LOADW | 52,278 | 
+| internal.0 | LoadF | 1 | MUL | 17,962 | 
+| internal.0 | LoadF | 2 | ADD | 26,984 | 
+| internal.0 | LoadF | 2 | LOADW | 52,278 | 
+| internal.0 | LoadF | 2 | MUL | 17,962 | 
+| internal.0 | LoadF | 3 | ADD | 13,492 | 
+| internal.0 | LoadF | 3 | LOADW | 26,143 | 
+| internal.0 | LoadF | 3 | MUL | 8,981 | 
+| internal.0 | LoadHeapPtr | 0 | ADD | 2 | 
+| internal.0 | LoadHeapPtr | 1 | ADD | 2 | 
+| internal.0 | LoadHeapPtr | 2 | ADD | 2 | 
+| internal.0 | LoadHeapPtr | 3 | ADD | 1 | 
+| internal.0 | LoadV | 0 | ADD | 90,966 | 
+| internal.0 | LoadV | 0 | LOADW | 263,894 | 
+| internal.0 | LoadV | 0 | MUL | 81,252 | 
+| internal.0 | LoadV | 1 | ADD | 90,966 | 
+| internal.0 | LoadV | 1 | LOADW | 263,894 | 
+| internal.0 | LoadV | 1 | MUL | 81,252 | 
+| internal.0 | LoadV | 2 | ADD | 90,966 | 
+| internal.0 | LoadV | 2 | LOADW | 263,894 | 
+| internal.0 | LoadV | 2 | MUL | 81,252 | 
+| internal.0 | LoadV | 3 | ADD | 45,483 | 
+| internal.0 | LoadV | 3 | LOADW | 131,952 | 
+| internal.0 | LoadV | 3 | MUL | 40,626 | 
+| internal.0 | MulE | 0 | BBE4MUL | 54,766 | 
+| internal.0 | MulE | 1 | BBE4MUL | 54,666 | 
+| internal.0 | MulE | 2 | BBE4MUL | 54,666 | 
+| internal.0 | MulE | 3 | BBE4MUL | 27,433 | 
+| internal.0 | MulEF | 0 | MUL | 9,712 | 
+| internal.0 | MulEF | 1 | MUL | 9,712 | 
+| internal.0 | MulEF | 2 | MUL | 9,712 | 
+| internal.0 | MulEF | 3 | MUL | 4,856 | 
+| internal.0 | MulEFI | 0 | MUL | 1,640 | 
+| internal.0 | MulEFI | 1 | MUL | 1,640 | 
+| internal.0 | MulEFI | 2 | MUL | 1,640 | 
+| internal.0 | MulEFI | 3 | MUL | 820 | 
+| internal.0 | MulEI | 0 | ADD | 13,688 | 
+| internal.0 | MulEI | 0 | BBE4MUL | 3,422 | 
+| internal.0 | MulEI | 1 | ADD | 13,688 | 
+| internal.0 | MulEI | 1 | BBE4MUL | 3,422 | 
+| internal.0 | MulEI | 2 | ADD | 13,688 | 
+| internal.0 | MulEI | 2 | BBE4MUL | 3,422 | 
+| internal.0 | MulEI | 3 | ADD | 6,844 | 
+| internal.0 | MulEI | 3 | BBE4MUL | 1,711 | 
+| internal.0 | MulF | 0 | MUL | 50,524 | 
+| internal.0 | MulF | 1 | MUL | 50,524 | 
+| internal.0 | MulF | 2 | MUL | 50,524 | 
+| internal.0 | MulF | 3 | MUL | 25,262 | 
+| internal.0 | MulFI | 0 | MUL | 5,610 | 
+| internal.0 | MulFI | 1 | MUL | 5,610 | 
+| internal.0 | MulFI | 2 | MUL | 5,610 | 
+| internal.0 | MulFI | 3 | MUL | 2,805 | 
+| internal.0 | MulVI | 0 | MUL | 21,877 | 
+| internal.0 | MulVI | 1 | MUL | 21,877 | 
+| internal.0 | MulVI | 2 | MUL | 21,877 | 
+| internal.0 | MulVI | 3 | MUL | 10,939 | 
+| internal.0 | NegE | 0 | MUL | 680 | 
+| internal.0 | NegE | 1 | MUL | 680 | 
+| internal.0 | NegE | 2 | MUL | 680 | 
+| internal.0 | NegE | 3 | MUL | 340 | 
+| internal.0 | Poseidon2PermuteBabyBear | 0 | PERM_POS2 | 102 | 
+| internal.0 | Poseidon2PermuteBabyBear | 1 | PERM_POS2 | 102 | 
+| internal.0 | Poseidon2PermuteBabyBear | 2 | PERM_POS2 | 102 | 
+| internal.0 | Poseidon2PermuteBabyBear | 3 | PERM_POS2 | 51 | 
+| internal.0 | Publish | 0 | PUBLISH | 52 | 
+| internal.0 | Publish | 1 | PUBLISH | 52 | 
+| internal.0 | Publish | 2 | PUBLISH | 52 | 
+| internal.0 | Publish | 3 | PUBLISH | 52 | 
+| internal.0 | StoreE | 0 | ADD | 17,976 | 
+| internal.0 | StoreE | 0 | MUL | 17,976 | 
+| internal.0 | StoreE | 0 | STOREW | 28,772 | 
+| internal.0 | StoreE | 1 | ADD | 17,976 | 
+| internal.0 | StoreE | 1 | MUL | 17,976 | 
+| internal.0 | StoreE | 1 | STOREW | 28,772 | 
+| internal.0 | StoreE | 2 | ADD | 17,976 | 
+| internal.0 | StoreE | 2 | MUL | 17,976 | 
+| internal.0 | StoreE | 2 | STOREW | 28,772 | 
+| internal.0 | StoreE | 3 | ADD | 8,988 | 
+| internal.0 | StoreE | 3 | MUL | 8,988 | 
+| internal.0 | StoreE | 3 | STOREW | 14,386 | 
+| internal.0 | StoreF | 0 | ADD | 1,484 | 
+| internal.0 | StoreF | 0 | MUL | 752 | 
+| internal.0 | StoreF | 0 | STOREW | 12,786 | 
+| internal.0 | StoreF | 1 | ADD | 1,484 | 
+| internal.0 | StoreF | 1 | MUL | 752 | 
+| internal.0 | StoreF | 1 | STOREW | 12,786 | 
+| internal.0 | StoreF | 2 | ADD | 1,484 | 
+| internal.0 | StoreF | 2 | MUL | 752 | 
+| internal.0 | StoreF | 2 | STOREW | 12,786 | 
+| internal.0 | StoreF | 3 | ADD | 742 | 
+| internal.0 | StoreF | 3 | MUL | 376 | 
+| internal.0 | StoreF | 3 | STOREW | 6,477 | 
+| internal.0 | StoreHeapPtr | 0 | ADD | 2 | 
+| internal.0 | StoreHeapPtr | 1 | ADD | 2 | 
+| internal.0 | StoreHeapPtr | 2 | ADD | 2 | 
+| internal.0 | StoreHeapPtr | 3 | ADD | 1 | 
+| internal.0 | StoreHintWord | 0 | HINT_STOREW | 444,208 | 
+| internal.0 | StoreHintWord | 1 | HINT_STOREW | 444,208 | 
+| internal.0 | StoreHintWord | 2 | HINT_STOREW | 444,208 | 
+| internal.0 | StoreHintWord | 3 | HINT_STOREW | 222,113 | 
+| internal.0 | StoreV | 0 | ADD | 27,644 | 
+| internal.0 | StoreV | 0 | MUL | 18,522 | 
+| internal.0 | StoreV | 0 | STOREW | 113,330 | 
+| internal.0 | StoreV | 1 | ADD | 27,644 | 
+| internal.0 | StoreV | 1 | MUL | 18,522 | 
+| internal.0 | StoreV | 1 | STOREW | 113,330 | 
+| internal.0 | StoreV | 2 | ADD | 27,644 | 
+| internal.0 | StoreV | 2 | MUL | 18,522 | 
+| internal.0 | StoreV | 2 | STOREW | 113,330 | 
+| internal.0 | StoreV | 3 | ADD | 13,822 | 
+| internal.0 | StoreV | 3 | MUL | 9,261 | 
+| internal.0 | StoreV | 3 | STOREW | 56,721 | 
+| internal.0 | SubE | 0 | FE4SUB | 7,080 | 
+| internal.0 | SubE | 1 | FE4SUB | 7,080 | 
+| internal.0 | SubE | 2 | FE4SUB | 7,080 | 
+| internal.0 | SubE | 3 | FE4SUB | 3,540 | 
+| internal.0 | SubEF | 0 | ADD | 33,996 | 
+| internal.0 | SubEF | 0 | SUB | 11,332 | 
+| internal.0 | SubEF | 1 | ADD | 33,996 | 
+| internal.0 | SubEF | 1 | SUB | 11,332 | 
+| internal.0 | SubEF | 2 | ADD | 33,996 | 
+| internal.0 | SubEF | 2 | SUB | 11,332 | 
+| internal.0 | SubEF | 3 | ADD | 16,998 | 
+| internal.0 | SubEF | 3 | SUB | 5,666 | 
+| internal.0 | SubEFI | 0 | ADD | 768 | 
+| internal.0 | SubEFI | 1 | ADD | 768 | 
+| internal.0 | SubEFI | 2 | ADD | 768 | 
+| internal.0 | SubEFI | 3 | ADD | 384 | 
+| internal.0 | SubEI | 0 | ADD | 2,992 | 
+| internal.0 | SubEI | 1 | ADD | 2,992 | 
+| internal.0 | SubEI | 2 | ADD | 2,992 | 
+| internal.0 | SubEI | 3 | ADD | 1,496 | 
+| internal.0 | SubF | 0 | SUB | 16 | 
+| internal.0 | SubF | 1 | SUB | 16 | 
+| internal.0 | SubF | 2 | SUB | 16 | 
+| internal.0 | SubF | 3 | SUB | 8 | 
+| internal.0 | SubFI | 0 | SUB | 5,576 | 
+| internal.0 | SubFI | 1 | SUB | 5,576 | 
+| internal.0 | SubFI | 2 | SUB | 5,576 | 
+| internal.0 | SubFI | 3 | SUB | 2,788 | 
+| internal.0 | SubV | 0 | SUB | 12,550 | 
+| internal.0 | SubV | 1 | SUB | 12,550 | 
+| internal.0 | SubV | 2 | SUB | 12,550 | 
+| internal.0 | SubV | 3 | SUB | 6,275 | 
+| internal.0 | SubVI | 0 | SUB | 1,996 | 
+| internal.0 | SubVI | 1 | SUB | 1,996 | 
+| internal.0 | SubVI | 2 | SUB | 1,996 | 
+| internal.0 | SubVI | 3 | SUB | 998 | 
+| internal.0 | SubVIN | 0 | SUB | 1,680 | 
+| internal.0 | SubVIN | 1 | SUB | 1,680 | 
+| internal.0 | SubVIN | 2 | SUB | 1,680 | 
+| internal.0 | SubVIN | 3 | SUB | 840 | 
+| internal.0 | UnsafeCastVF | 0 | ADD | 228 | 
+| internal.0 | UnsafeCastVF | 1 | ADD | 228 | 
+| internal.0 | UnsafeCastVF | 2 | ADD | 228 | 
+| internal.0 | UnsafeCastVF | 3 | ADD | 114 | 
+| internal.0 | VerifyBatchExt | 0 | VERIFY_BATCH | 1,680 | 
+| internal.0 | VerifyBatchExt | 1 | VERIFY_BATCH | 1,680 | 
+| internal.0 | VerifyBatchExt | 2 | VERIFY_BATCH | 1,680 | 
+| internal.0 | VerifyBatchExt | 3 | VERIFY_BATCH | 840 | 
+| internal.0 | VerifyBatchFelt | 0 | VERIFY_BATCH | 504 | 
+| internal.0 | VerifyBatchFelt | 1 | VERIFY_BATCH | 504 | 
+| internal.0 | VerifyBatchFelt | 2 | VERIFY_BATCH | 504 | 
+| internal.0 | VerifyBatchFelt | 3 | VERIFY_BATCH | 252 | 
+| internal.0 | ZipFor | 0 | ADD | 630,486 | 
+| internal.0 | ZipFor | 0 | BNE | 580,748 | 
+| internal.0 | ZipFor | 0 | JAL | 59,867 | 
+| internal.0 | ZipFor | 1 | ADD | 630,378 | 
+| internal.0 | ZipFor | 1 | BNE | 580,640 | 
+| internal.0 | ZipFor | 1 | JAL | 59,867 | 
+| internal.0 | ZipFor | 2 | ADD | 630,378 | 
+| internal.0 | ZipFor | 2 | BNE | 580,640 | 
+| internal.0 | ZipFor | 2 | JAL | 59,867 | 
+| internal.0 | ZipFor | 3 | ADD | 315,307 | 
+| internal.0 | ZipFor | 3 | BNE | 290,438 | 
+| internal.0 | ZipFor | 3 | JAL | 29,939 | 
+| internal.1 |  | 4 | ADD | 2 | 
+| internal.1 |  | 4 | JAL | 1 | 
+| internal.1 |  | 5 | ADD | 2 | 
+| internal.1 |  | 5 | JAL | 1 | 
+| internal.1 | AddE | 4 | FE4ADD | 29,436 | 
+| internal.1 | AddE | 5 | FE4ADD | 29,349 | 
+| internal.1 | AddEFFI | 4 | ADD | 2,944 | 
+| internal.1 | AddEFFI | 5 | ADD | 2,928 | 
+| internal.1 | AddEFI | 4 | ADD | 2,200 | 
+| internal.1 | AddEFI | 5 | ADD | 2,200 | 
+| internal.1 | AddEI | 4 | ADD | 75,552 | 
+| internal.1 | AddEI | 5 | ADD | 75,040 | 
+| internal.1 | AddF | 4 | ADD | 5,920 | 
+| internal.1 | AddF | 5 | ADD | 5,920 | 
+| internal.1 | AddFI | 4 | ADD | 24,791 | 
+| internal.1 | AddFI | 5 | ADD | 24,279 | 
+| internal.1 | AddV | 4 | ADD | 83,938 | 
+| internal.1 | AddV | 5 | ADD | 81,727 | 
+| internal.1 | AddVI | 4 | ADD | 181,792 | 
+| internal.1 | AddVI | 5 | ADD | 177,695 | 
+| internal.1 | Alloc | 4 | ADD | 205,950 | 
+| internal.1 | Alloc | 4 | MUL | 56,918 | 
+| internal.1 | Alloc | 5 | ADD | 200,906 | 
+| internal.1 | Alloc | 5 | MUL | 55,573 | 
+| internal.1 | AssertEqE | 4 | BNE | 472 | 
+| internal.1 | AssertEqE | 5 | BNE | 472 | 
+| internal.1 | AssertEqEI | 4 | BNE | 8 | 
+| internal.1 | AssertEqEI | 5 | BNE | 8 | 
+| internal.1 | AssertEqF | 4 | BNE | 5,897 | 
+| internal.1 | AssertEqF | 5 | BNE | 5,897 | 
+| internal.1 | AssertEqFI | 4 | BNE | 7 | 
+| internal.1 | AssertEqFI | 5 | BNE | 7 | 
+| internal.1 | AssertEqV | 4 | BNE | 2,802 | 
+| internal.1 | AssertEqV | 5 | BNE | 2,760 | 
+| internal.1 | AssertEqVI | 4 | BNE | 474 | 
+| internal.1 | AssertEqVI | 5 | BNE | 474 | 
+| internal.1 | AssertNonZero | 4 | BEQ | 1 | 
+| internal.1 | AssertNonZero | 5 | BEQ | 1 | 
+| internal.1 | CT-InitializePcsConst | 4 | PHANTOM | 2 | 
+| internal.1 | CT-InitializePcsConst | 5 | PHANTOM | 2 | 
+| internal.1 | CT-ReadProofsFromInput | 4 | PHANTOM | 2 | 
+| internal.1 | CT-ReadProofsFromInput | 5 | PHANTOM | 2 | 
+| internal.1 | CT-VerifyProofs | 4 | PHANTOM | 2 | 
+| internal.1 | CT-VerifyProofs | 5 | PHANTOM | 2 | 
+| internal.1 | CT-cache-generator-powers | 4 | PHANTOM | 1,008 | 
+| internal.1 | CT-cache-generator-powers | 5 | PHANTOM | 1,008 | 
+| internal.1 | CT-compute-reduced-opening | 4 | PHANTOM | 1,008 | 
+| internal.1 | CT-compute-reduced-opening | 5 | PHANTOM | 1,008 | 
+| internal.1 | CT-exp-reverse-bits-len | 4 | PHANTOM | 16,296 | 
+| internal.1 | CT-exp-reverse-bits-len | 5 | PHANTOM | 16,296 | 
+| internal.1 | CT-pre-compute-alpha-pows | 4 | PHANTOM | 4 | 
+| internal.1 | CT-pre-compute-alpha-pows | 5 | PHANTOM | 4 | 
+| internal.1 | CT-single-reduced-opening-eval | 4 | PHANTOM | 22,512 | 
+| internal.1 | CT-single-reduced-opening-eval | 5 | PHANTOM | 22,512 | 
+| internal.1 | CT-stage-c-build-rounds | 4 | PHANTOM | 4 | 
+| internal.1 | CT-stage-c-build-rounds | 5 | PHANTOM | 4 | 
+| internal.1 | CT-stage-d-verifier-verify | 4 | PHANTOM | 4 | 
+| internal.1 | CT-stage-d-verifier-verify | 5 | PHANTOM | 4 | 
+| internal.1 | CT-stage-d-verify-pcs | 4 | PHANTOM | 4 | 
+| internal.1 | CT-stage-d-verify-pcs | 5 | PHANTOM | 4 | 
+| internal.1 | CT-stage-e-verify-constraints | 4 | PHANTOM | 4 | 
+| internal.1 | CT-stage-e-verify-constraints | 5 | PHANTOM | 4 | 
+| internal.1 | CT-verify-batch | 4 | PHANTOM | 1,008 | 
+| internal.1 | CT-verify-batch | 5 | PHANTOM | 1,008 | 
+| internal.1 | CT-verify-batch-ext | 4 | PHANTOM | 3,528 | 
+| internal.1 | CT-verify-batch-ext | 5 | PHANTOM | 3,444 | 
+| internal.1 | CT-verify-query | 4 | PHANTOM | 168 | 
+| internal.1 | CT-verify-query | 5 | PHANTOM | 168 | 
+| internal.1 | CastFV | 4 | ADD | 296 | 
+| internal.1 | CastFV | 5 | ADD | 296 | 
+| internal.1 | DivE | 4 | BBE4DIV | 13,088 | 
+| internal.1 | DivE | 5 | BBE4DIV | 13,046 | 
+| internal.1 | DivEIN | 4 | ADD | 1,496 | 
+| internal.1 | DivEIN | 4 | BBE4DIV | 374 | 
+| internal.1 | DivEIN | 5 | ADD | 1,496 | 
+| internal.1 | DivEIN | 5 | BBE4DIV | 374 | 
+| internal.1 | DivF | 4 | DIV | 11,592 | 
+| internal.1 | DivF | 5 | DIV | 11,340 | 
+| internal.1 | DivFIN | 4 | DIV | 782 | 
+| internal.1 | DivFIN | 5 | DIV | 782 | 
+| internal.1 | FriReducedOpening | 4 | FRI_REDUCED_OPENING | 11,256 | 
+| internal.1 | FriReducedOpening | 5 | FRI_REDUCED_OPENING | 11,256 | 
+| internal.1 | HintBitsF | 4 | PHANTOM | 280 | 
+| internal.1 | HintBitsF | 5 | PHANTOM | 280 | 
+| internal.1 | HintInputVec | 4 | PHANTOM | 46,057 | 
+| internal.1 | HintInputVec | 5 | PHANTOM | 44,880 | 
+| internal.1 | IfEq | 4 | BNE | 288 | 
+| internal.1 | IfEq | 5 | BNE | 284 | 
+| internal.1 | IfEqI | 4 | BNE | 39,658 | 
+| internal.1 | IfEqI | 4 | JAL | 13,586 | 
+| internal.1 | IfEqI | 5 | BNE | 39,062 | 
+| internal.1 | IfEqI | 5 | JAL | 13,976 | 
+| internal.1 | IfNe | 4 | BEQ | 294 | 
+| internal.1 | IfNe | 4 | JAL | 6 | 
+| internal.1 | IfNe | 5 | BEQ | 290 | 
+| internal.1 | IfNe | 5 | JAL | 6 | 
+| internal.1 | IfNeI | 4 | BEQ | 186 | 
+| internal.1 | IfNeI | 5 | BEQ | 186 | 
+| internal.1 | ImmE | 4 | ADD | 9,808 | 
+| internal.1 | ImmE | 5 | ADD | 9,808 | 
+| internal.1 | ImmF | 4 | ADD | 8,230 | 
+| internal.1 | ImmF | 5 | ADD | 8,230 | 
+| internal.1 | ImmV | 4 | ADD | 10,753 | 
+| internal.1 | ImmV | 5 | ADD | 10,613 | 
+| internal.1 | LoadE | 4 | ADD | 21,588 | 
+| internal.1 | LoadE | 4 | LOADW | 52,574 | 
+| internal.1 | LoadE | 4 | MUL | 21,588 | 
+| internal.1 | LoadE | 5 | ADD | 21,462 | 
+| internal.1 | LoadE | 5 | LOADW | 52,322 | 
+| internal.1 | LoadE | 5 | MUL | 21,462 | 
+| internal.1 | LoadF | 4 | ADD | 26,992 | 
+| internal.1 | LoadF | 4 | LOADW | 52,482 | 
+| internal.1 | LoadF | 4 | MUL | 17,962 | 
+| internal.1 | LoadF | 5 | ADD | 26,988 | 
+| internal.1 | LoadF | 5 | LOADW | 52,428 | 
+| internal.1 | LoadF | 5 | MUL | 17,962 | 
+| internal.1 | LoadHeapPtr | 4 | ADD | 2 | 
+| internal.1 | LoadHeapPtr | 5 | ADD | 2 | 
+| internal.1 | LoadV | 4 | ADD | 91,386 | 
+| internal.1 | LoadV | 4 | LOADW | 268,016 | 
+| internal.1 | LoadV | 4 | MUL | 81,588 | 
+| internal.1 | LoadV | 5 | ADD | 91,176 | 
+| internal.1 | LoadV | 5 | LOADW | 265,997 | 
+| internal.1 | LoadV | 5 | MUL | 81,420 | 
+| internal.1 | MulE | 4 | BBE4MUL | 55,928 | 
+| internal.1 | MulE | 5 | BBE4MUL | 55,455 | 
+| internal.1 | MulEF | 4 | MUL | 10,048 | 
+| internal.1 | MulEF | 5 | MUL | 9,880 | 
+| internal.1 | MulEFI | 4 | MUL | 1,640 | 
+| internal.1 | MulEFI | 5 | MUL | 1,640 | 
+| internal.1 | MulEI | 4 | ADD | 13,720 | 
+| internal.1 | MulEI | 4 | BBE4MUL | 3,430 | 
+| internal.1 | MulEI | 5 | ADD | 13,704 | 
+| internal.1 | MulEI | 5 | BBE4MUL | 3,426 | 
+| internal.1 | MulF | 4 | MUL | 52,540 | 
+| internal.1 | MulF | 5 | MUL | 51,532 | 
+| internal.1 | MulFI | 4 | MUL | 5,610 | 
+| internal.1 | MulFI | 5 | MUL | 5,610 | 
+| internal.1 | MulVI | 4 | MUL | 22,045 | 
+| internal.1 | MulVI | 5 | MUL | 21,961 | 
+| internal.1 | NegE | 4 | MUL | 680 | 
+| internal.1 | NegE | 5 | MUL | 680 | 
+| internal.1 | Poseidon2PermuteBabyBear | 4 | PERM_POS2 | 108 | 
+| internal.1 | Poseidon2PermuteBabyBear | 5 | PERM_POS2 | 107 | 
+| internal.1 | Publish | 4 | PUBLISH | 52 | 
+| internal.1 | Publish | 5 | PUBLISH | 52 | 
+| internal.1 | StoreE | 4 | ADD | 18,060 | 
+| internal.1 | StoreE | 4 | MUL | 18,060 | 
+| internal.1 | StoreE | 4 | STOREW | 29,110 | 
+| internal.1 | StoreE | 5 | ADD | 18,018 | 
+| internal.1 | StoreE | 5 | MUL | 18,018 | 
+| internal.1 | StoreE | 5 | STOREW | 28,941 | 
+| internal.1 | StoreF | 4 | ADD | 1,532 | 
+| internal.1 | StoreF | 4 | MUL | 752 | 
+| internal.1 | StoreF | 4 | STOREW | 13,338 | 
+| internal.1 | StoreF | 5 | ADD | 1,524 | 
+| internal.1 | StoreF | 5 | MUL | 752 | 
+| internal.1 | StoreF | 5 | STOREW | 13,078 | 
+| internal.1 | StoreHeapPtr | 4 | ADD | 2 | 
+| internal.1 | StoreHeapPtr | 5 | ADD | 2 | 
+| internal.1 | StoreHintWord | 4 | HINT_STOREW | 464,670 | 
+| internal.1 | StoreHintWord | 5 | HINT_STOREW | 454,833 | 
+| internal.1 | StoreV | 4 | ADD | 27,560 | 
+| internal.1 | StoreV | 4 | MUL | 18,522 | 
+| internal.1 | StoreV | 4 | STOREW | 118,038 | 
+| internal.1 | StoreV | 5 | ADD | 27,602 | 
+| internal.1 | StoreV | 5 | MUL | 18,522 | 
+| internal.1 | StoreV | 5 | STOREW | 115,768 | 
+| internal.1 | SubE | 4 | FE4SUB | 7,332 | 
+| internal.1 | SubE | 5 | FE4SUB | 7,206 | 
+| internal.1 | SubEF | 4 | ADD | 33,996 | 
+| internal.1 | SubEF | 4 | SUB | 11,332 | 
+| internal.1 | SubEF | 5 | ADD | 33,996 | 
+| internal.1 | SubEF | 5 | SUB | 11,332 | 
+| internal.1 | SubEFI | 4 | ADD | 768 | 
+| internal.1 | SubEFI | 5 | ADD | 768 | 
+| internal.1 | SubEI | 4 | ADD | 2,992 | 
+| internal.1 | SubEI | 5 | ADD | 2,992 | 
+| internal.1 | SubF | 4 | SUB | 16 | 
+| internal.1 | SubF | 5 | SUB | 16 | 
+| internal.1 | SubFI | 4 | SUB | 5,576 | 
+| internal.1 | SubFI | 5 | SUB | 5,576 | 
+| internal.1 | SubV | 4 | SUB | 12,718 | 
+| internal.1 | SubV | 5 | SUB | 12,634 | 
+| internal.1 | SubVI | 4 | SUB | 2,088 | 
+| internal.1 | SubVI | 5 | SUB | 2,042 | 
+| internal.1 | SubVIN | 4 | SUB | 1,764 | 
+| internal.1 | SubVIN | 5 | SUB | 1,722 | 
+| internal.1 | UnsafeCastVF | 4 | ADD | 228 | 
+| internal.1 | UnsafeCastVF | 5 | ADD | 228 | 
+| internal.1 | VerifyBatchExt | 4 | VERIFY_BATCH | 1,764 | 
+| internal.1 | VerifyBatchExt | 5 | VERIFY_BATCH | 1,722 | 
+| internal.1 | VerifyBatchFelt | 4 | VERIFY_BATCH | 504 | 
+| internal.1 | VerifyBatchFelt | 5 | VERIFY_BATCH | 504 | 
+| internal.1 | ZipFor | 4 | ADD | 657,696 | 
+| internal.1 | ZipFor | 4 | BNE | 607,452 | 
+| internal.1 | ZipFor | 4 | JAL | 62,473 | 
+| internal.1 | ZipFor | 5 | ADD | 644,627 | 
+| internal.1 | ZipFor | 5 | BNE | 594,636 | 
+| internal.1 | ZipFor | 5 | JAL | 61,212 | 
+| internal.2 |  | 6 | ADD | 2 | 
+| internal.2 |  | 6 | JAL | 1 | 
+| internal.2 | AddE | 6 | FE4ADD | 29,436 | 
+| internal.2 | AddEFFI | 6 | ADD | 2,944 | 
+| internal.2 | AddEFI | 6 | ADD | 2,200 | 
+| internal.2 | AddEI | 6 | ADD | 75,552 | 
+| internal.2 | AddF | 6 | ADD | 5,920 | 
+| internal.2 | AddFI | 6 | ADD | 24,791 | 
+| internal.2 | AddV | 6 | ADD | 83,938 | 
+| internal.2 | AddVI | 6 | ADD | 181,792 | 
+| internal.2 | Alloc | 6 | ADD | 205,950 | 
+| internal.2 | Alloc | 6 | MUL | 56,918 | 
+| internal.2 | AssertEqE | 6 | BNE | 472 | 
+| internal.2 | AssertEqEI | 6 | BNE | 8 | 
+| internal.2 | AssertEqF | 6 | BNE | 5,897 | 
+| internal.2 | AssertEqFI | 6 | BNE | 7 | 
+| internal.2 | AssertEqV | 6 | BNE | 2,802 | 
+| internal.2 | AssertEqVI | 6 | BNE | 474 | 
+| internal.2 | AssertNonZero | 6 | BEQ | 1 | 
+| internal.2 | CT-InitializePcsConst | 6 | PHANTOM | 2 | 
+| internal.2 | CT-ReadProofsFromInput | 6 | PHANTOM | 2 | 
+| internal.2 | CT-VerifyProofs | 6 | PHANTOM | 2 | 
+| internal.2 | CT-cache-generator-powers | 6 | PHANTOM | 1,008 | 
+| internal.2 | CT-compute-reduced-opening | 6 | PHANTOM | 1,008 | 
+| internal.2 | CT-exp-reverse-bits-len | 6 | PHANTOM | 16,296 | 
+| internal.2 | CT-pre-compute-alpha-pows | 6 | PHANTOM | 4 | 
+| internal.2 | CT-single-reduced-opening-eval | 6 | PHANTOM | 22,512 | 
+| internal.2 | CT-stage-c-build-rounds | 6 | PHANTOM | 4 | 
+| internal.2 | CT-stage-d-verifier-verify | 6 | PHANTOM | 4 | 
+| internal.2 | CT-stage-d-verify-pcs | 6 | PHANTOM | 4 | 
+| internal.2 | CT-stage-e-verify-constraints | 6 | PHANTOM | 4 | 
+| internal.2 | CT-verify-batch | 6 | PHANTOM | 1,008 | 
+| internal.2 | CT-verify-batch-ext | 6 | PHANTOM | 3,528 | 
+| internal.2 | CT-verify-query | 6 | PHANTOM | 168 | 
+| internal.2 | CastFV | 6 | ADD | 296 | 
+| internal.2 | DivE | 6 | BBE4DIV | 13,088 | 
+| internal.2 | DivEIN | 6 | ADD | 1,496 | 
+| internal.2 | DivEIN | 6 | BBE4DIV | 374 | 
+| internal.2 | DivF | 6 | DIV | 11,592 | 
+| internal.2 | DivFIN | 6 | DIV | 782 | 
+| internal.2 | FriReducedOpening | 6 | FRI_REDUCED_OPENING | 11,256 | 
+| internal.2 | HintBitsF | 6 | PHANTOM | 280 | 
+| internal.2 | HintInputVec | 6 | PHANTOM | 46,057 | 
+| internal.2 | IfEq | 6 | BNE | 288 | 
+| internal.2 | IfEqI | 6 | BNE | 39,658 | 
+| internal.2 | IfEqI | 6 | JAL | 14,334 | 
+| internal.2 | IfNe | 6 | BEQ | 294 | 
+| internal.2 | IfNe | 6 | JAL | 6 | 
+| internal.2 | IfNeI | 6 | BEQ | 186 | 
+| internal.2 | ImmE | 6 | ADD | 9,808 | 
+| internal.2 | ImmF | 6 | ADD | 8,230 | 
+| internal.2 | ImmV | 6 | ADD | 10,753 | 
+| internal.2 | LoadE | 6 | ADD | 21,588 | 
+| internal.2 | LoadE | 6 | LOADW | 52,574 | 
+| internal.2 | LoadE | 6 | MUL | 21,588 | 
+| internal.2 | LoadF | 6 | ADD | 26,992 | 
+| internal.2 | LoadF | 6 | LOADW | 52,482 | 
+| internal.2 | LoadF | 6 | MUL | 17,962 | 
+| internal.2 | LoadHeapPtr | 6 | ADD | 2 | 
+| internal.2 | LoadV | 6 | ADD | 91,386 | 
+| internal.2 | LoadV | 6 | LOADW | 268,016 | 
+| internal.2 | LoadV | 6 | MUL | 81,588 | 
+| internal.2 | MulE | 6 | BBE4MUL | 55,928 | 
+| internal.2 | MulEF | 6 | MUL | 10,048 | 
+| internal.2 | MulEFI | 6 | MUL | 1,640 | 
+| internal.2 | MulEI | 6 | ADD | 13,720 | 
+| internal.2 | MulEI | 6 | BBE4MUL | 3,430 | 
+| internal.2 | MulF | 6 | MUL | 52,540 | 
+| internal.2 | MulFI | 6 | MUL | 5,610 | 
+| internal.2 | MulVI | 6 | MUL | 22,045 | 
+| internal.2 | NegE | 6 | MUL | 680 | 
+| internal.2 | Poseidon2PermuteBabyBear | 6 | PERM_POS2 | 108 | 
+| internal.2 | Publish | 6 | PUBLISH | 52 | 
+| internal.2 | StoreE | 6 | ADD | 18,060 | 
+| internal.2 | StoreE | 6 | MUL | 18,060 | 
+| internal.2 | StoreE | 6 | STOREW | 29,110 | 
+| internal.2 | StoreF | 6 | ADD | 1,532 | 
+| internal.2 | StoreF | 6 | MUL | 752 | 
+| internal.2 | StoreF | 6 | STOREW | 13,338 | 
+| internal.2 | StoreHeapPtr | 6 | ADD | 2 | 
+| internal.2 | StoreHintWord | 6 | HINT_STOREW | 464,670 | 
+| internal.2 | StoreV | 6 | ADD | 27,560 | 
+| internal.2 | StoreV | 6 | MUL | 18,522 | 
+| internal.2 | StoreV | 6 | STOREW | 118,038 | 
+| internal.2 | SubE | 6 | FE4SUB | 7,332 | 
+| internal.2 | SubEF | 6 | ADD | 33,996 | 
+| internal.2 | SubEF | 6 | SUB | 11,332 | 
+| internal.2 | SubEFI | 6 | ADD | 768 | 
+| internal.2 | SubEI | 6 | ADD | 2,992 | 
+| internal.2 | SubF | 6 | SUB | 16 | 
+| internal.2 | SubFI | 6 | SUB | 5,576 | 
+| internal.2 | SubV | 6 | SUB | 12,718 | 
+| internal.2 | SubVI | 6 | SUB | 2,088 | 
+| internal.2 | SubVIN | 6 | SUB | 1,764 | 
+| internal.2 | UnsafeCastVF | 6 | ADD | 228 | 
+| internal.2 | VerifyBatchExt | 6 | VERIFY_BATCH | 1,764 | 
+| internal.2 | VerifyBatchFelt | 6 | VERIFY_BATCH | 504 | 
+| internal.2 | ZipFor | 6 | ADD | 657,696 | 
+| internal.2 | ZipFor | 6 | BNE | 607,452 | 
+| internal.2 | ZipFor | 6 | JAL | 62,473 | 
+| leaf |  | 0 | ADD | 2 | 
+| leaf |  | 0 | JAL | 1 | 
+| leaf |  | 1 | ADD | 2 | 
+| leaf |  | 1 | JAL | 1 | 
+| leaf |  | 2 | ADD | 2 | 
+| leaf |  | 2 | JAL | 1 | 
+| leaf |  | 3 | ADD | 2 | 
+| leaf |  | 3 | JAL | 1 | 
+| leaf |  | 4 | ADD | 2 | 
+| leaf |  | 4 | JAL | 1 | 
+| leaf |  | 5 | ADD | 2 | 
+| leaf |  | 5 | JAL | 1 | 
+| leaf |  | 6 | ADD | 2 | 
+| leaf |  | 6 | JAL | 1 | 
+| leaf | AddE | 0 | FE4ADD | 12,437 | 
+| leaf | AddE | 1 | FE4ADD | 8,885 | 
+| leaf | AddE | 2 | FE4ADD | 8,885 | 
+| leaf | AddE | 3 | FE4ADD | 8,885 | 
+| leaf | AddE | 4 | FE4ADD | 8,885 | 
+| leaf | AddE | 5 | FE4ADD | 8,885 | 
+| leaf | AddE | 6 | FE4ADD | 10,065 | 
+| leaf | AddEFFI | 0 | ADD | 704 | 
+| leaf | AddEFFI | 1 | ADD | 656 | 
+| leaf | AddEFFI | 2 | ADD | 656 | 
+| leaf | AddEFFI | 3 | ADD | 656 | 
+| leaf | AddEFFI | 4 | ADD | 656 | 
+| leaf | AddEFFI | 5 | ADD | 656 | 
+| leaf | AddEFFI | 6 | ADD | 672 | 
+| leaf | AddEFI | 0 | ADD | 616 | 
+| leaf | AddEFI | 1 | ADD | 476 | 
+| leaf | AddEFI | 2 | ADD | 476 | 
+| leaf | AddEFI | 3 | ADD | 476 | 
+| leaf | AddEFI | 4 | ADD | 476 | 
+| leaf | AddEFI | 5 | ADD | 476 | 
+| leaf | AddEFI | 6 | ADD | 532 | 
+| leaf | AddEI | 0 | ADD | 28,060 | 
+| leaf | AddEI | 1 | ADD | 22,344 | 
+| leaf | AddEI | 2 | ADD | 22,344 | 
+| leaf | AddEI | 3 | ADD | 22,344 | 
+| leaf | AddEI | 4 | ADD | 22,344 | 
+| leaf | AddEI | 5 | ADD | 22,344 | 
+| leaf | AddEI | 6 | ADD | 24,284 | 
+| leaf | AddF | 0 | ADD | 2,735 | 
+| leaf | AddF | 1 | ADD | 2,375 | 
+| leaf | AddF | 2 | ADD | 2,375 | 
+| leaf | AddF | 3 | ADD | 2,375 | 
+| leaf | AddF | 4 | ADD | 2,375 | 
+| leaf | AddF | 5 | ADD | 2,375 | 
+| leaf | AddF | 6 | ADD | 2,495 | 
+| leaf | AddFI | 0 | ADD | 15,625 | 
+| leaf | AddFI | 1 | ADD | 15,583 | 
+| leaf | AddFI | 2 | ADD | 15,583 | 
+| leaf | AddFI | 3 | ADD | 15,583 | 
+| leaf | AddFI | 4 | ADD | 15,583 | 
+| leaf | AddFI | 5 | ADD | 15,583 | 
+| leaf | AddFI | 6 | ADD | 15,605 | 
+| leaf | AddV | 0 | ADD | 40,413 | 
+| leaf | AddV | 1 | ADD | 38,153 | 
+| leaf | AddV | 2 | ADD | 38,153 | 
+| leaf | AddV | 3 | ADD | 38,153 | 
+| leaf | AddV | 4 | ADD | 38,153 | 
+| leaf | AddV | 5 | ADD | 38,153 | 
+| leaf | AddV | 6 | ADD | 39,128 | 
+| leaf | AddVI | 0 | ADD | 93,217 | 
+| leaf | AddVI | 1 | ADD | 88,375 | 
+| leaf | AddVI | 2 | ADD | 88,375 | 
+| leaf | AddVI | 3 | ADD | 88,375 | 
+| leaf | AddVI | 4 | ADD | 88,375 | 
+| leaf | AddVI | 5 | ADD | 88,375 | 
+| leaf | AddVI | 6 | ADD | 90,215 | 
+| leaf | Alloc | 0 | ADD | 102,500 | 
+| leaf | Alloc | 0 | MUL | 28,471 | 
+| leaf | Alloc | 1 | ADD | 97,784 | 
+| leaf | Alloc | 1 | MUL | 27,235 | 
+| leaf | Alloc | 2 | ADD | 97,784 | 
+| leaf | Alloc | 2 | MUL | 27,235 | 
+| leaf | Alloc | 3 | ADD | 97,784 | 
+| leaf | Alloc | 3 | MUL | 27,235 | 
+| leaf | Alloc | 4 | ADD | 97,784 | 
+| leaf | Alloc | 4 | MUL | 27,235 | 
+| leaf | Alloc | 5 | ADD | 97,784 | 
+| leaf | Alloc | 5 | MUL | 27,235 | 
+| leaf | Alloc | 6 | ADD | 100,264 | 
+| leaf | Alloc | 6 | MUL | 27,876 | 
+| leaf | AssertEqE | 0 | BNE | 248 | 
+| leaf | AssertEqE | 1 | BNE | 224 | 
+| leaf | AssertEqE | 2 | BNE | 224 | 
+| leaf | AssertEqE | 3 | BNE | 224 | 
+| leaf | AssertEqE | 4 | BNE | 224 | 
+| leaf | AssertEqE | 5 | BNE | 224 | 
+| leaf | AssertEqE | 6 | BNE | 232 | 
+| leaf | AssertEqEI | 0 | BNE | 4 | 
+| leaf | AssertEqEI | 1 | BNE | 4 | 
+| leaf | AssertEqEI | 2 | BNE | 4 | 
+| leaf | AssertEqEI | 3 | BNE | 4 | 
+| leaf | AssertEqEI | 4 | BNE | 4 | 
+| leaf | AssertEqEI | 5 | BNE | 4 | 
+| leaf | AssertEqEI | 6 | BNE | 4 | 
+| leaf | AssertEqF | 0 | BNE | 2,688 | 
+| leaf | AssertEqF | 1 | BNE | 2,304 | 
+| leaf | AssertEqF | 2 | BNE | 2,304 | 
+| leaf | AssertEqF | 3 | BNE | 2,304 | 
+| leaf | AssertEqF | 4 | BNE | 2,304 | 
+| leaf | AssertEqF | 5 | BNE | 2,304 | 
+| leaf | AssertEqF | 6 | BNE | 2,440 | 
+| leaf | AssertEqV | 0 | BNE | 1,451 | 
+| leaf | AssertEqV | 1 | BNE | 1,385 | 
+| leaf | AssertEqV | 2 | BNE | 1,385 | 
+| leaf | AssertEqV | 3 | BNE | 1,385 | 
+| leaf | AssertEqV | 4 | BNE | 1,385 | 
+| leaf | AssertEqV | 5 | BNE | 1,385 | 
+| leaf | AssertEqV | 6 | BNE | 1,407 | 
+| leaf | AssertEqVI | 0 | BNE | 241 | 
+| leaf | AssertEqVI | 1 | BNE | 175 | 
+| leaf | AssertEqVI | 2 | BNE | 175 | 
+| leaf | AssertEqVI | 3 | BNE | 175 | 
+| leaf | AssertEqVI | 4 | BNE | 175 | 
+| leaf | AssertEqVI | 5 | BNE | 175 | 
+| leaf | AssertEqVI | 6 | BNE | 198 | 
+| leaf | AssertNonZero | 0 | BEQ | 1 | 
+| leaf | AssertNonZero | 1 | BEQ | 1 | 
+| leaf | AssertNonZero | 2 | BEQ | 1 | 
+| leaf | AssertNonZero | 3 | BEQ | 1 | 
+| leaf | AssertNonZero | 4 | BEQ | 1 | 
+| leaf | AssertNonZero | 5 | BEQ | 1 | 
+| leaf | AssertNonZero | 6 | BEQ | 1 | 
+| leaf | CT-ExtractPublicValuesCommit | 0 | PHANTOM | 2 | 
+| leaf | CT-ExtractPublicValuesCommit | 1 | PHANTOM | 2 | 
+| leaf | CT-ExtractPublicValuesCommit | 2 | PHANTOM | 2 | 
+| leaf | CT-ExtractPublicValuesCommit | 3 | PHANTOM | 2 | 
+| leaf | CT-ExtractPublicValuesCommit | 4 | PHANTOM | 2 | 
+| leaf | CT-ExtractPublicValuesCommit | 5 | PHANTOM | 2 | 
+| leaf | CT-ExtractPublicValuesCommit | 6 | PHANTOM | 2 | 
+| leaf | CT-InitializePcsConst | 0 | PHANTOM | 2 | 
+| leaf | CT-InitializePcsConst | 1 | PHANTOM | 2 | 
+| leaf | CT-InitializePcsConst | 2 | PHANTOM | 2 | 
+| leaf | CT-InitializePcsConst | 3 | PHANTOM | 2 | 
+| leaf | CT-InitializePcsConst | 4 | PHANTOM | 2 | 
+| leaf | CT-InitializePcsConst | 5 | PHANTOM | 2 | 
+| leaf | CT-InitializePcsConst | 6 | PHANTOM | 2 | 
+| leaf | CT-ReadProofsFromInput | 0 | PHANTOM | 2 | 
+| leaf | CT-ReadProofsFromInput | 1 | PHANTOM | 2 | 
+| leaf | CT-ReadProofsFromInput | 2 | PHANTOM | 2 | 
+| leaf | CT-ReadProofsFromInput | 3 | PHANTOM | 2 | 
+| leaf | CT-ReadProofsFromInput | 4 | PHANTOM | 2 | 
+| leaf | CT-ReadProofsFromInput | 5 | PHANTOM | 2 | 
+| leaf | CT-ReadProofsFromInput | 6 | PHANTOM | 2 | 
+| leaf | CT-VerifyProofs | 0 | PHANTOM | 2 | 
+| leaf | CT-VerifyProofs | 1 | PHANTOM | 2 | 
+| leaf | CT-VerifyProofs | 2 | PHANTOM | 2 | 
+| leaf | CT-VerifyProofs | 3 | PHANTOM | 2 | 
+| leaf | CT-VerifyProofs | 4 | PHANTOM | 2 | 
+| leaf | CT-VerifyProofs | 5 | PHANTOM | 2 | 
+| leaf | CT-VerifyProofs | 6 | PHANTOM | 2 | 
+| leaf | CT-cache-generator-powers | 0 | PHANTOM | 672 | 
+| leaf | CT-cache-generator-powers | 1 | PHANTOM | 672 | 
+| leaf | CT-cache-generator-powers | 2 | PHANTOM | 672 | 
+| leaf | CT-cache-generator-powers | 3 | PHANTOM | 672 | 
+| leaf | CT-cache-generator-powers | 4 | PHANTOM | 672 | 
+| leaf | CT-cache-generator-powers | 5 | PHANTOM | 672 | 
+| leaf | CT-cache-generator-powers | 6 | PHANTOM | 672 | 
+| leaf | CT-compute-reduced-opening | 0 | PHANTOM | 672 | 
+| leaf | CT-compute-reduced-opening | 1 | PHANTOM | 672 | 
+| leaf | CT-compute-reduced-opening | 2 | PHANTOM | 672 | 
+| leaf | CT-compute-reduced-opening | 3 | PHANTOM | 672 | 
+| leaf | CT-compute-reduced-opening | 4 | PHANTOM | 672 | 
+| leaf | CT-compute-reduced-opening | 5 | PHANTOM | 672 | 
+| leaf | CT-compute-reduced-opening | 6 | PHANTOM | 672 | 
+| leaf | CT-exp-reverse-bits-len | 0 | PHANTOM | 6,888 | 
+| leaf | CT-exp-reverse-bits-len | 1 | PHANTOM | 4,872 | 
+| leaf | CT-exp-reverse-bits-len | 2 | PHANTOM | 4,872 | 
+| leaf | CT-exp-reverse-bits-len | 3 | PHANTOM | 4,872 | 
+| leaf | CT-exp-reverse-bits-len | 4 | PHANTOM | 4,872 | 
+| leaf | CT-exp-reverse-bits-len | 5 | PHANTOM | 4,872 | 
+| leaf | CT-exp-reverse-bits-len | 6 | PHANTOM | 5,544 | 
+| leaf | CT-pre-compute-alpha-pows | 0 | PHANTOM | 2 | 
+| leaf | CT-pre-compute-alpha-pows | 1 | PHANTOM | 2 | 
+| leaf | CT-pre-compute-alpha-pows | 2 | PHANTOM | 2 | 
+| leaf | CT-pre-compute-alpha-pows | 3 | PHANTOM | 2 | 
+| leaf | CT-pre-compute-alpha-pows | 4 | PHANTOM | 2 | 
+| leaf | CT-pre-compute-alpha-pows | 5 | PHANTOM | 2 | 
+| leaf | CT-pre-compute-alpha-pows | 6 | PHANTOM | 2 | 
+| leaf | CT-single-reduced-opening-eval | 0 | PHANTOM | 10,668 | 
+| leaf | CT-single-reduced-opening-eval | 1 | PHANTOM | 7,644 | 
+| leaf | CT-single-reduced-opening-eval | 2 | PHANTOM | 7,644 | 
+| leaf | CT-single-reduced-opening-eval | 3 | PHANTOM | 7,644 | 
+| leaf | CT-single-reduced-opening-eval | 4 | PHANTOM | 7,644 | 
+| leaf | CT-single-reduced-opening-eval | 5 | PHANTOM | 7,644 | 
+| leaf | CT-single-reduced-opening-eval | 6 | PHANTOM | 8,652 | 
+| leaf | CT-stage-c-build-rounds | 0 | PHANTOM | 2 | 
+| leaf | CT-stage-c-build-rounds | 1 | PHANTOM | 2 | 
+| leaf | CT-stage-c-build-rounds | 2 | PHANTOM | 2 | 
+| leaf | CT-stage-c-build-rounds | 3 | PHANTOM | 2 | 
+| leaf | CT-stage-c-build-rounds | 4 | PHANTOM | 2 | 
+| leaf | CT-stage-c-build-rounds | 5 | PHANTOM | 2 | 
+| leaf | CT-stage-c-build-rounds | 6 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verifier-verify | 0 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verifier-verify | 1 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verifier-verify | 2 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verifier-verify | 3 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verifier-verify | 4 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verifier-verify | 5 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verifier-verify | 6 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verify-pcs | 0 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verify-pcs | 1 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verify-pcs | 2 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verify-pcs | 3 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verify-pcs | 4 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verify-pcs | 5 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verify-pcs | 6 | PHANTOM | 2 | 
+| leaf | CT-stage-e-verify-constraints | 0 | PHANTOM | 2 | 
+| leaf | CT-stage-e-verify-constraints | 1 | PHANTOM | 2 | 
+| leaf | CT-stage-e-verify-constraints | 2 | PHANTOM | 2 | 
+| leaf | CT-stage-e-verify-constraints | 3 | PHANTOM | 2 | 
+| leaf | CT-stage-e-verify-constraints | 4 | PHANTOM | 2 | 
+| leaf | CT-stage-e-verify-constraints | 5 | PHANTOM | 2 | 
+| leaf | CT-stage-e-verify-constraints | 6 | PHANTOM | 2 | 
+| leaf | CT-verify-batch | 0 | PHANTOM | 672 | 
+| leaf | CT-verify-batch | 1 | PHANTOM | 672 | 
+| leaf | CT-verify-batch | 2 | PHANTOM | 672 | 
+| leaf | CT-verify-batch | 3 | PHANTOM | 672 | 
+| leaf | CT-verify-batch | 4 | PHANTOM | 672 | 
+| leaf | CT-verify-batch | 5 | PHANTOM | 672 | 
+| leaf | CT-verify-batch | 6 | PHANTOM | 672 | 
+| leaf | CT-verify-batch-ext | 0 | PHANTOM | 1,680 | 
+| leaf | CT-verify-batch-ext | 1 | PHANTOM | 1,680 | 
+| leaf | CT-verify-batch-ext | 2 | PHANTOM | 1,680 | 
+| leaf | CT-verify-batch-ext | 3 | PHANTOM | 1,680 | 
+| leaf | CT-verify-batch-ext | 4 | PHANTOM | 1,680 | 
+| leaf | CT-verify-batch-ext | 5 | PHANTOM | 1,680 | 
+| leaf | CT-verify-batch-ext | 6 | PHANTOM | 1,680 | 
+| leaf | CT-verify-query | 0 | PHANTOM | 84 | 
+| leaf | CT-verify-query | 1 | PHANTOM | 84 | 
+| leaf | CT-verify-query | 2 | PHANTOM | 84 | 
+| leaf | CT-verify-query | 3 | PHANTOM | 84 | 
+| leaf | CT-verify-query | 4 | PHANTOM | 84 | 
+| leaf | CT-verify-query | 5 | PHANTOM | 84 | 
+| leaf | CT-verify-query | 6 | PHANTOM | 84 | 
+| leaf | CastFV | 0 | ADD | 126 | 
+| leaf | CastFV | 1 | ADD | 102 | 
+| leaf | CastFV | 2 | ADD | 102 | 
+| leaf | CastFV | 3 | ADD | 102 | 
+| leaf | CastFV | 4 | ADD | 102 | 
+| leaf | CastFV | 5 | ADD | 102 | 
+| leaf | CastFV | 6 | ADD | 110 | 
+| leaf | DivE | 0 | BBE4DIV | 6,214 | 
+| leaf | DivE | 1 | BBE4DIV | 4,690 | 
+| leaf | DivE | 2 | BBE4DIV | 4,690 | 
+| leaf | DivE | 3 | BBE4DIV | 4,690 | 
+| leaf | DivE | 4 | BBE4DIV | 4,690 | 
+| leaf | DivE | 5 | BBE4DIV | 4,690 | 
+| leaf | DivE | 6 | BBE4DIV | 5,198 | 
+| leaf | DivEIN | 0 | ADD | 216 | 
+| leaf | DivEIN | 0 | BBE4DIV | 54 | 
+| leaf | DivEIN | 1 | ADD | 144 | 
+| leaf | DivEIN | 1 | BBE4DIV | 36 | 
+| leaf | DivEIN | 2 | ADD | 144 | 
+| leaf | DivEIN | 2 | BBE4DIV | 36 | 
+| leaf | DivEIN | 3 | ADD | 144 | 
+| leaf | DivEIN | 3 | BBE4DIV | 36 | 
+| leaf | DivEIN | 4 | ADD | 144 | 
+| leaf | DivEIN | 4 | BBE4DIV | 36 | 
+| leaf | DivEIN | 5 | ADD | 144 | 
+| leaf | DivEIN | 5 | BBE4DIV | 36 | 
+| leaf | DivEIN | 6 | ADD | 168 | 
+| leaf | DivEIN | 6 | BBE4DIV | 42 | 
+| leaf | DivF | 0 | DIV | 7,392 | 
+| leaf | DivF | 1 | DIV | 7,392 | 
+| leaf | DivF | 2 | DIV | 7,392 | 
+| leaf | DivF | 3 | DIV | 7,392 | 
+| leaf | DivF | 4 | DIV | 7,392 | 
+| leaf | DivF | 5 | DIV | 7,392 | 
+| leaf | DivF | 6 | DIV | 7,392 | 
+| leaf | DivFIN | 0 | DIV | 128 | 
+| leaf | DivFIN | 1 | DIV | 86 | 
+| leaf | DivFIN | 2 | DIV | 86 | 
+| leaf | DivFIN | 3 | DIV | 86 | 
+| leaf | DivFIN | 4 | DIV | 86 | 
+| leaf | DivFIN | 5 | DIV | 86 | 
+| leaf | DivFIN | 6 | DIV | 100 | 
+| leaf | FriReducedOpening | 0 | FRI_REDUCED_OPENING | 5,334 | 
+| leaf | FriReducedOpening | 1 | FRI_REDUCED_OPENING | 3,822 | 
+| leaf | FriReducedOpening | 2 | FRI_REDUCED_OPENING | 3,822 | 
+| leaf | FriReducedOpening | 3 | FRI_REDUCED_OPENING | 3,822 | 
+| leaf | FriReducedOpening | 4 | FRI_REDUCED_OPENING | 3,822 | 
+| leaf | FriReducedOpening | 5 | FRI_REDUCED_OPENING | 3,822 | 
+| leaf | FriReducedOpening | 6 | FRI_REDUCED_OPENING | 4,326 | 
+| leaf | HintBitsF | 0 | PHANTOM | 125 | 
+| leaf | HintBitsF | 1 | PHANTOM | 101 | 
+| leaf | HintBitsF | 2 | PHANTOM | 101 | 
+| leaf | HintBitsF | 3 | PHANTOM | 101 | 
+| leaf | HintBitsF | 4 | PHANTOM | 101 | 
+| leaf | HintBitsF | 5 | PHANTOM | 101 | 
+| leaf | HintBitsF | 6 | PHANTOM | 109 | 
+| leaf | HintInputVec | 0 | PHANTOM | 22,779 | 
+| leaf | HintInputVec | 1 | PHANTOM | 21,657 | 
+| leaf | HintInputVec | 2 | PHANTOM | 21,657 | 
+| leaf | HintInputVec | 3 | PHANTOM | 21,657 | 
+| leaf | HintInputVec | 4 | PHANTOM | 21,657 | 
+| leaf | HintInputVec | 5 | PHANTOM | 21,657 | 
+| leaf | HintInputVec | 6 | PHANTOM | 22,256 | 
+| leaf | IfEq | 0 | BNE | 142 | 
+| leaf | IfEq | 1 | BNE | 141 | 
+| leaf | IfEq | 2 | BNE | 141 | 
+| leaf | IfEq | 3 | BNE | 141 | 
+| leaf | IfEq | 4 | BNE | 141 | 
+| leaf | IfEq | 5 | BNE | 141 | 
+| leaf | IfEq | 6 | BNE | 141 | 
+| leaf | IfEqI | 0 | BNE | 22,171 | 
+| leaf | IfEqI | 0 | JAL | 9,099 | 
+| leaf | IfEqI | 1 | BNE | 20,731 | 
+| leaf | IfEqI | 1 | JAL | 8,883 | 
+| leaf | IfEqI | 2 | BNE | 20,731 | 
+| leaf | IfEqI | 2 | JAL | 8,695 | 
+| leaf | IfEqI | 3 | BNE | 20,731 | 
+| leaf | IfEqI | 3 | JAL | 9,115 | 
+| leaf | IfEqI | 4 | BNE | 20,731 | 
+| leaf | IfEqI | 4 | JAL | 8,949 | 
+| leaf | IfEqI | 5 | BNE | 20,731 | 
+| leaf | IfEqI | 5 | JAL | 8,482 | 
+| leaf | IfEqI | 6 | BNE | 21,211 | 
+| leaf | IfEqI | 6 | JAL | 8,432 | 
+| leaf | IfNe | 0 | BEQ | 143 | 
+| leaf | IfNe | 0 | JAL | 1 | 
+| leaf | IfNe | 1 | BEQ | 143 | 
+| leaf | IfNe | 1 | JAL | 2 | 
+| leaf | IfNe | 2 | BEQ | 143 | 
+| leaf | IfNe | 2 | JAL | 2 | 
+| leaf | IfNe | 3 | BEQ | 143 | 
+| leaf | IfNe | 3 | JAL | 2 | 
+| leaf | IfNe | 4 | BEQ | 143 | 
+| leaf | IfNe | 4 | JAL | 2 | 
+| leaf | IfNe | 5 | BEQ | 143 | 
+| leaf | IfNe | 5 | JAL | 2 | 
+| leaf | IfNe | 6 | BEQ | 143 | 
+| leaf | IfNe | 6 | JAL | 2 | 
+| leaf | IfNeI | 0 | BEQ | 100 | 
+| leaf | IfNeI | 1 | BEQ | 70 | 
+| leaf | IfNeI | 2 | BEQ | 70 | 
+| leaf | IfNeI | 3 | BEQ | 70 | 
+| leaf | IfNeI | 4 | BEQ | 70 | 
+| leaf | IfNeI | 5 | BEQ | 70 | 
+| leaf | IfNeI | 6 | BEQ | 80 | 
+| leaf | ImmE | 0 | ADD | 3,536 | 
+| leaf | ImmE | 1 | ADD | 2,176 | 
+| leaf | ImmE | 2 | ADD | 2,176 | 
+| leaf | ImmE | 3 | ADD | 2,176 | 
+| leaf | ImmE | 4 | ADD | 2,176 | 
+| leaf | ImmE | 5 | ADD | 2,176 | 
+| leaf | ImmE | 6 | ADD | 2,604 | 
+| leaf | ImmF | 0 | ADD | 4,119 | 
+| leaf | ImmF | 1 | ADD | 3,675 | 
+| leaf | ImmF | 2 | ADD | 3,675 | 
+| leaf | ImmF | 3 | ADD | 3,675 | 
+| leaf | ImmF | 4 | ADD | 3,675 | 
+| leaf | ImmF | 5 | ADD | 3,675 | 
+| leaf | ImmF | 6 | ADD | 3,823 | 
+| leaf | ImmV | 0 | ADD | 5,344 | 
+| leaf | ImmV | 1 | ADD | 5,146 | 
+| leaf | ImmV | 2 | ADD | 5,146 | 
+| leaf | ImmV | 3 | ADD | 5,146 | 
+| leaf | ImmV | 4 | ADD | 5,146 | 
+| leaf | ImmV | 5 | ADD | 5,146 | 
+| leaf | ImmV | 6 | ADD | 5,215 | 
+| leaf | LoadE | 0 | ADD | 9,408 | 
+| leaf | LoadE | 0 | LOADW | 23,747 | 
+| leaf | LoadE | 0 | MUL | 9,408 | 
+| leaf | LoadE | 1 | ADD | 7,392 | 
+| leaf | LoadE | 1 | LOADW | 18,142 | 
+| leaf | LoadE | 1 | MUL | 7,392 | 
+| leaf | LoadE | 2 | ADD | 7,392 | 
+| leaf | LoadE | 2 | LOADW | 18,142 | 
+| leaf | LoadE | 2 | MUL | 7,392 | 
+| leaf | LoadE | 3 | ADD | 7,392 | 
+| leaf | LoadE | 3 | LOADW | 18,142 | 
+| leaf | LoadE | 3 | MUL | 7,392 | 
+| leaf | LoadE | 4 | ADD | 7,392 | 
+| leaf | LoadE | 4 | LOADW | 18,142 | 
+| leaf | LoadE | 4 | MUL | 7,392 | 
+| leaf | LoadE | 5 | ADD | 7,392 | 
+| leaf | LoadE | 5 | LOADW | 18,142 | 
+| leaf | LoadE | 5 | MUL | 7,392 | 
+| leaf | LoadE | 6 | ADD | 8,064 | 
+| leaf | LoadE | 6 | LOADW | 20,041 | 
+| leaf | LoadE | 6 | MUL | 8,064 | 
+| leaf | LoadF | 0 | ADD | 11,848 | 
+| leaf | LoadF | 0 | LOADW | 23,028 | 
+| leaf | LoadF | 0 | MUL | 7,883 | 
+| leaf | LoadF | 1 | ADD | 8,728 | 
+| leaf | LoadF | 1 | LOADW | 17,460 | 
+| leaf | LoadF | 1 | MUL | 5,771 | 
+| leaf | LoadF | 2 | ADD | 8,728 | 
+| leaf | LoadF | 2 | LOADW | 17,460 | 
+| leaf | LoadF | 2 | MUL | 5,771 | 
+| leaf | LoadF | 3 | ADD | 8,728 | 
+| leaf | LoadF | 3 | LOADW | 17,460 | 
+| leaf | LoadF | 3 | MUL | 5,771 | 
+| leaf | LoadF | 4 | ADD | 8,728 | 
+| leaf | LoadF | 4 | LOADW | 17,460 | 
+| leaf | LoadF | 4 | MUL | 5,771 | 
+| leaf | LoadF | 5 | ADD | 8,728 | 
+| leaf | LoadF | 5 | LOADW | 17,460 | 
+| leaf | LoadF | 5 | MUL | 5,771 | 
+| leaf | LoadF | 6 | ADD | 9,768 | 
+| leaf | LoadF | 6 | LOADW | 19,972 | 
+| leaf | LoadF | 6 | MUL | 6,475 | 
+| leaf | LoadHeapPtr | 0 | ADD | 1 | 
+| leaf | LoadHeapPtr | 1 | ADD | 1 | 
+| leaf | LoadHeapPtr | 2 | ADD | 1 | 
+| leaf | LoadHeapPtr | 3 | ADD | 1 | 
+| leaf | LoadHeapPtr | 4 | ADD | 1 | 
+| leaf | LoadHeapPtr | 5 | ADD | 1 | 
+| leaf | LoadHeapPtr | 6 | ADD | 1 | 
+| leaf | LoadV | 0 | ADD | 40,699 | 
+| leaf | LoadV | 0 | LOADW | 127,098 | 
+| leaf | LoadV | 0 | MUL | 36,526 | 
+| leaf | LoadV | 1 | ADD | 30,559 | 
+| leaf | LoadV | 1 | LOADW | 103,938 | 
+| leaf | LoadV | 1 | MUL | 27,406 | 
+| leaf | LoadV | 2 | ADD | 30,559 | 
+| leaf | LoadV | 2 | LOADW | 103,938 | 
+| leaf | LoadV | 2 | MUL | 27,406 | 
+| leaf | LoadV | 3 | ADD | 30,559 | 
+| leaf | LoadV | 3 | LOADW | 103,938 | 
+| leaf | LoadV | 3 | MUL | 27,406 | 
+| leaf | LoadV | 4 | ADD | 30,559 | 
+| leaf | LoadV | 4 | LOADW | 103,938 | 
+| leaf | LoadV | 4 | MUL | 27,406 | 
+| leaf | LoadV | 5 | ADD | 30,559 | 
+| leaf | LoadV | 5 | LOADW | 103,938 | 
+| leaf | LoadV | 5 | MUL | 27,406 | 
+| leaf | LoadV | 6 | ADD | 33,939 | 
+| leaf | LoadV | 6 | LOADW | 111,884 | 
+| leaf | LoadV | 6 | MUL | 30,446 | 
+| leaf | MulE | 0 | BBE4MUL | 19,338 | 
+| leaf | MulE | 1 | BBE4MUL | 14,449 | 
+| leaf | MulE | 2 | BBE4MUL | 14,449 | 
+| leaf | MulE | 3 | BBE4MUL | 14,449 | 
+| leaf | MulE | 4 | BBE4MUL | 14,449 | 
+| leaf | MulE | 5 | BBE4MUL | 14,449 | 
+| leaf | MulE | 6 | BBE4MUL | 16,013 | 
+| leaf | MulEF | 0 | MUL | 3,792 | 
+| leaf | MulEF | 1 | MUL | 3,648 | 
+| leaf | MulEF | 2 | MUL | 3,648 | 
+| leaf | MulEF | 3 | MUL | 3,648 | 
+| leaf | MulEF | 4 | MUL | 3,648 | 
+| leaf | MulEF | 5 | MUL | 3,648 | 
+| leaf | MulEF | 6 | MUL | 3,696 | 
+| leaf | MulEFI | 0 | MUL | 500 | 
+| leaf | MulEFI | 1 | MUL | 184 | 
+| leaf | MulEFI | 2 | MUL | 184 | 
+| leaf | MulEFI | 3 | MUL | 184 | 
+| leaf | MulEFI | 4 | MUL | 184 | 
+| leaf | MulEFI | 5 | MUL | 184 | 
+| leaf | MulEFI | 6 | MUL | 312 | 
+| leaf | MulEI | 0 | ADD | 6,104 | 
+| leaf | MulEI | 0 | BBE4MUL | 1,526 | 
+| leaf | MulEI | 1 | ADD | 3,600 | 
+| leaf | MulEI | 1 | BBE4MUL | 900 | 
+| leaf | MulEI | 2 | ADD | 3,600 | 
+| leaf | MulEI | 2 | BBE4MUL | 900 | 
+| leaf | MulEI | 3 | ADD | 3,600 | 
+| leaf | MulEI | 3 | BBE4MUL | 900 | 
+| leaf | MulEI | 4 | ADD | 3,600 | 
+| leaf | MulEI | 4 | BBE4MUL | 900 | 
+| leaf | MulEI | 5 | ADD | 3,600 | 
+| leaf | MulEI | 5 | BBE4MUL | 900 | 
+| leaf | MulEI | 6 | ADD | 4,552 | 
+| leaf | MulEI | 6 | BBE4MUL | 1,138 | 
+| leaf | MulF | 0 | MUL | 32,313 | 
+| leaf | MulF | 1 | MUL | 31,893 | 
+| leaf | MulF | 2 | MUL | 31,893 | 
+| leaf | MulF | 3 | MUL | 31,893 | 
+| leaf | MulF | 4 | MUL | 31,893 | 
+| leaf | MulF | 5 | MUL | 31,893 | 
+| leaf | MulF | 6 | MUL | 32,033 | 
+| leaf | MulFI | 0 | MUL | 2,583 | 
+| leaf | MulFI | 1 | MUL | 2,217 | 
+| leaf | MulFI | 2 | MUL | 2,217 | 
+| leaf | MulFI | 3 | MUL | 2,217 | 
+| leaf | MulFI | 4 | MUL | 2,217 | 
+| leaf | MulFI | 5 | MUL | 2,217 | 
+| leaf | MulFI | 6 | MUL | 2,339 | 
+| leaf | MulVI | 0 | MUL | 9,938 | 
+| leaf | MulVI | 1 | MUL | 7,862 | 
+| leaf | MulVI | 2 | MUL | 7,862 | 
+| leaf | MulVI | 3 | MUL | 7,862 | 
+| leaf | MulVI | 4 | MUL | 7,862 | 
+| leaf | MulVI | 5 | MUL | 7,862 | 
+| leaf | MulVI | 6 | MUL | 8,554 | 
+| leaf | NegE | 0 | MUL | 172 | 
+| leaf | NegE | 1 | MUL | 96 | 
+| leaf | NegE | 2 | MUL | 96 | 
+| leaf | NegE | 3 | MUL | 96 | 
+| leaf | NegE | 4 | MUL | 96 | 
+| leaf | NegE | 5 | MUL | 96 | 
+| leaf | NegE | 6 | MUL | 124 | 
+| leaf | Poseidon2CompressBabyBear | 6 | COMP_POS2 | 27 | 
+| leaf | Poseidon2PermuteBabyBear | 0 | PERM_POS2 | 51 | 
+| leaf | Poseidon2PermuteBabyBear | 1 | PERM_POS2 | 48 | 
+| leaf | Poseidon2PermuteBabyBear | 2 | PERM_POS2 | 48 | 
+| leaf | Poseidon2PermuteBabyBear | 3 | PERM_POS2 | 48 | 
+| leaf | Poseidon2PermuteBabyBear | 4 | PERM_POS2 | 48 | 
+| leaf | Poseidon2PermuteBabyBear | 5 | PERM_POS2 | 48 | 
+| leaf | Poseidon2PermuteBabyBear | 6 | PERM_POS2 | 49 | 
+| leaf | Publish | 0 | PUBLISH | 36 | 
+| leaf | Publish | 1 | PUBLISH | 36 | 
+| leaf | Publish | 2 | PUBLISH | 36 | 
+| leaf | Publish | 3 | PUBLISH | 36 | 
+| leaf | Publish | 4 | PUBLISH | 36 | 
+| leaf | Publish | 5 | PUBLISH | 36 | 
+| leaf | Publish | 6 | PUBLISH | 36 | 
+| leaf | StoreE | 0 | ADD | 7,728 | 
+| leaf | StoreE | 0 | MUL | 7,728 | 
+| leaf | StoreE | 0 | STOREW | 13,120 | 
+| leaf | StoreE | 1 | ADD | 5,712 | 
+| leaf | StoreE | 1 | MUL | 5,712 | 
+| leaf | StoreE | 1 | STOREW | 11,062 | 
+| leaf | StoreE | 2 | ADD | 5,712 | 
+| leaf | StoreE | 2 | MUL | 5,712 | 
+| leaf | StoreE | 2 | STOREW | 11,062 | 
+| leaf | StoreE | 3 | ADD | 5,712 | 
+| leaf | StoreE | 3 | MUL | 5,712 | 
+| leaf | StoreE | 3 | STOREW | 11,062 | 
+| leaf | StoreE | 4 | ADD | 5,712 | 
+| leaf | StoreE | 4 | MUL | 5,712 | 
+| leaf | StoreE | 4 | STOREW | 11,062 | 
+| leaf | StoreE | 5 | ADD | 5,712 | 
+| leaf | StoreE | 5 | MUL | 5,712 | 
+| leaf | StoreE | 5 | STOREW | 11,062 | 
+| leaf | StoreE | 6 | ADD | 6,384 | 
+| leaf | StoreE | 6 | MUL | 6,384 | 
+| leaf | StoreE | 6 | STOREW | 11,748 | 
+| leaf | StoreF | 0 | ADD | 685 | 
+| leaf | StoreF | 0 | MUL | 308 | 
+| leaf | StoreF | 0 | STOREW | 8,204 | 
+| leaf | StoreF | 1 | ADD | 559 | 
+| leaf | StoreF | 1 | MUL | 212 | 
+| leaf | StoreF | 1 | STOREW | 8,078 | 
+| leaf | StoreF | 2 | ADD | 559 | 
+| leaf | StoreF | 2 | MUL | 212 | 
+| leaf | StoreF | 2 | STOREW | 8,078 | 
+| leaf | StoreF | 3 | ADD | 559 | 
+| leaf | StoreF | 3 | MUL | 212 | 
+| leaf | StoreF | 3 | STOREW | 8,078 | 
+| leaf | StoreF | 4 | ADD | 559 | 
+| leaf | StoreF | 4 | MUL | 212 | 
+| leaf | StoreF | 4 | STOREW | 8,078 | 
+| leaf | StoreF | 5 | ADD | 559 | 
+| leaf | StoreF | 5 | MUL | 212 | 
+| leaf | StoreF | 5 | STOREW | 8,078 | 
+| leaf | StoreF | 6 | ADD | 817 | 
+| leaf | StoreF | 6 | MUL | 460 | 
+| leaf | StoreF | 6 | STOREW | 8,768 | 
+| leaf | StoreHeapPtr | 0 | ADD | 1 | 
+| leaf | StoreHeapPtr | 1 | ADD | 1 | 
+| leaf | StoreHeapPtr | 2 | ADD | 1 | 
+| leaf | StoreHeapPtr | 3 | ADD | 1 | 
+| leaf | StoreHeapPtr | 4 | ADD | 1 | 
+| leaf | StoreHeapPtr | 5 | ADD | 1 | 
+| leaf | StoreHeapPtr | 6 | ADD | 1 | 
+| leaf | StoreHintWord | 0 | HINT_STOREW | 230,008 | 
+| leaf | StoreHintWord | 1 | HINT_STOREW | 202,222 | 
+| leaf | StoreHintWord | 2 | HINT_STOREW | 202,222 | 
+| leaf | StoreHintWord | 3 | HINT_STOREW | 202,222 | 
+| leaf | StoreHintWord | 4 | HINT_STOREW | 202,222 | 
+| leaf | StoreHintWord | 5 | HINT_STOREW | 202,222 | 
+| leaf | StoreHintWord | 6 | HINT_STOREW | 212,734 | 
+| leaf | StoreV | 0 | ADD | 11,848 | 
+| leaf | StoreV | 0 | MUL | 7,934 | 
+| leaf | StoreV | 0 | STOREW | 56,656 | 
+| leaf | StoreV | 1 | ADD | 8,494 | 
+| leaf | StoreV | 1 | MUL | 5,612 | 
+| leaf | StoreV | 1 | STOREW | 51,064 | 
+| leaf | StoreV | 2 | ADD | 8,494 | 
+| leaf | StoreV | 2 | MUL | 5,612 | 
+| leaf | StoreV | 2 | STOREW | 51,064 | 
+| leaf | StoreV | 3 | ADD | 8,494 | 
+| leaf | StoreV | 3 | MUL | 5,612 | 
+| leaf | StoreV | 3 | STOREW | 51,064 | 
+| leaf | StoreV | 4 | ADD | 8,494 | 
+| leaf | StoreV | 4 | MUL | 5,612 | 
+| leaf | StoreV | 4 | STOREW | 51,064 | 
+| leaf | StoreV | 5 | ADD | 8,494 | 
+| leaf | StoreV | 5 | MUL | 5,612 | 
+| leaf | StoreV | 5 | STOREW | 51,064 | 
+| leaf | StoreV | 6 | ADD | 9,612 | 
+| leaf | StoreV | 6 | MUL | 6,386 | 
+| leaf | StoreV | 6 | STOREW | 52,928 | 
+| leaf | SubE | 0 | FE4SUB | 3,306 | 
+| leaf | SubE | 1 | FE4SUB | 3,046 | 
+| leaf | SubE | 2 | FE4SUB | 3,046 | 
+| leaf | SubE | 3 | FE4SUB | 3,046 | 
+| leaf | SubE | 4 | FE4SUB | 3,046 | 
+| leaf | SubE | 5 | FE4SUB | 3,046 | 
+| leaf | SubE | 6 | FE4SUB | 3,119 | 
+| leaf | SubEF | 0 | ADD | 16,182 | 
+| leaf | SubEF | 0 | SUB | 5,394 | 
+| leaf | SubEF | 1 | ADD | 11,610 | 
+| leaf | SubEF | 1 | SUB | 3,870 | 
+| leaf | SubEF | 2 | ADD | 11,610 | 
+| leaf | SubEF | 2 | SUB | 3,870 | 
+| leaf | SubEF | 3 | ADD | 11,610 | 
+| leaf | SubEF | 3 | SUB | 3,870 | 
+| leaf | SubEF | 4 | ADD | 11,610 | 
+| leaf | SubEF | 4 | SUB | 3,870 | 
+| leaf | SubEF | 5 | ADD | 11,610 | 
+| leaf | SubEF | 5 | SUB | 3,870 | 
+| leaf | SubEF | 6 | ADD | 13,134 | 
+| leaf | SubEF | 6 | SUB | 4,378 | 
+| leaf | SubEFI | 0 | ADD | 344 | 
+| leaf | SubEFI | 1 | ADD | 148 | 
+| leaf | SubEFI | 2 | ADD | 148 | 
+| leaf | SubEFI | 3 | ADD | 148 | 
+| leaf | SubEFI | 4 | ADD | 148 | 
+| leaf | SubEFI | 5 | ADD | 148 | 
+| leaf | SubEFI | 6 | ADD | 208 | 
+| leaf | SubEI | 0 | ADD | 432 | 
+| leaf | SubEI | 1 | ADD | 288 | 
+| leaf | SubEI | 2 | ADD | 288 | 
+| leaf | SubEI | 3 | ADD | 288 | 
+| leaf | SubEI | 4 | ADD | 288 | 
+| leaf | SubEI | 5 | ADD | 288 | 
+| leaf | SubEI | 6 | ADD | 336 | 
+| leaf | SubFI | 0 | SUB | 2,563 | 
+| leaf | SubFI | 1 | SUB | 2,203 | 
+| leaf | SubFI | 2 | SUB | 2,203 | 
+| leaf | SubFI | 3 | SUB | 2,203 | 
+| leaf | SubFI | 4 | SUB | 2,203 | 
+| leaf | SubFI | 5 | SUB | 2,203 | 
+| leaf | SubFI | 6 | SUB | 2,323 | 
+| leaf | SubV | 0 | SUB | 5,816 | 
+| leaf | SubV | 1 | SUB | 4,802 | 
+| leaf | SubV | 2 | SUB | 4,802 | 
+| leaf | SubV | 3 | SUB | 4,802 | 
+| leaf | SubV | 4 | SUB | 4,802 | 
+| leaf | SubV | 5 | SUB | 4,802 | 
+| leaf | SubV | 6 | SUB | 5,140 | 
+| leaf | SubVI | 0 | SUB | 1,000 | 
+| leaf | SubVI | 1 | SUB | 994 | 
+| leaf | SubVI | 2 | SUB | 994 | 
+| leaf | SubVI | 3 | SUB | 994 | 
+| leaf | SubVI | 4 | SUB | 994 | 
+| leaf | SubVI | 5 | SUB | 994 | 
+| leaf | SubVI | 6 | SUB | 996 | 
+| leaf | SubVIN | 0 | SUB | 840 | 
+| leaf | SubVIN | 1 | SUB | 840 | 
+| leaf | SubVIN | 2 | SUB | 840 | 
+| leaf | SubVIN | 3 | SUB | 840 | 
+| leaf | SubVIN | 4 | SUB | 840 | 
+| leaf | SubVIN | 5 | SUB | 840 | 
+| leaf | SubVIN | 6 | SUB | 840 | 
+| leaf | UnsafeCastVF | 0 | ADD | 102 | 
+| leaf | UnsafeCastVF | 1 | ADD | 72 | 
+| leaf | UnsafeCastVF | 2 | ADD | 72 | 
+| leaf | UnsafeCastVF | 3 | ADD | 72 | 
+| leaf | UnsafeCastVF | 4 | ADD | 72 | 
+| leaf | UnsafeCastVF | 5 | ADD | 72 | 
+| leaf | UnsafeCastVF | 6 | ADD | 82 | 
+| leaf | VerifyBatchExt | 0 | VERIFY_BATCH | 840 | 
+| leaf | VerifyBatchExt | 1 | VERIFY_BATCH | 840 | 
+| leaf | VerifyBatchExt | 2 | VERIFY_BATCH | 840 | 
+| leaf | VerifyBatchExt | 3 | VERIFY_BATCH | 840 | 
+| leaf | VerifyBatchExt | 4 | VERIFY_BATCH | 840 | 
+| leaf | VerifyBatchExt | 5 | VERIFY_BATCH | 840 | 
+| leaf | VerifyBatchExt | 6 | VERIFY_BATCH | 840 | 
+| leaf | VerifyBatchFelt | 0 | VERIFY_BATCH | 336 | 
+| leaf | VerifyBatchFelt | 1 | VERIFY_BATCH | 336 | 
+| leaf | VerifyBatchFelt | 2 | VERIFY_BATCH | 336 | 
+| leaf | VerifyBatchFelt | 3 | VERIFY_BATCH | 336 | 
+| leaf | VerifyBatchFelt | 4 | VERIFY_BATCH | 336 | 
+| leaf | VerifyBatchFelt | 5 | VERIFY_BATCH | 336 | 
+| leaf | VerifyBatchFelt | 6 | VERIFY_BATCH | 336 | 
+| leaf | ZipFor | 0 | ADD | 321,567 | 
+| leaf | ZipFor | 0 | BNE | 296,625 | 
+| leaf | ZipFor | 0 | JAL | 30,547 | 
+| leaf | ZipFor | 1 | ADD | 283,549 | 
+| leaf | ZipFor | 1 | BNE | 263,167 | 
+| leaf | ZipFor | 1 | JAL | 28,315 | 
+| leaf | ZipFor | 2 | ADD | 283,549 | 
+| leaf | ZipFor | 2 | BNE | 263,167 | 
+| leaf | ZipFor | 2 | JAL | 28,315 | 
+| leaf | ZipFor | 3 | ADD | 283,549 | 
+| leaf | ZipFor | 3 | BNE | 263,167 | 
+| leaf | ZipFor | 3 | JAL | 28,315 | 
+| leaf | ZipFor | 4 | ADD | 283,549 | 
+| leaf | ZipFor | 4 | BNE | 263,167 | 
+| leaf | ZipFor | 4 | JAL | 28,315 | 
+| leaf | ZipFor | 5 | ADD | 283,549 | 
+| leaf | ZipFor | 5 | BNE | 263,167 | 
+| leaf | ZipFor | 5 | JAL | 28,315 | 
+| leaf | ZipFor | 6 | ADD | 297,488 | 
+| leaf | ZipFor | 6 | BNE | 275,586 | 
+| leaf | ZipFor | 6 | JAL | 29,285 | 
+| root |  | 0 | ADD | 2 | 
+| root |  | 0 | JAL | 1 | 
+| root | AddE | 0 | FE4ADD | 14,718 | 
+| root | AddEFFI | 0 | ADD | 1,472 | 
+| root | AddEFI | 0 | ADD | 1,100 | 
+| root | AddEI | 0 | ADD | 37,776 | 
+| root | AddF | 0 | ADD | 2,960 | 
+| root | AddFI | 0 | ADD | 12,408 | 
+| root | AddV | 0 | ADD | 41,967 | 
+| root | AddVI | 0 | ADD | 90,916 | 
+| root | Alloc | 0 | ADD | 102,994 | 
+| root | Alloc | 0 | MUL | 28,471 | 
+| root | AssertEqE | 0 | BNE | 236 | 
+| root | AssertEqEI | 0 | BNE | 4 | 
+| root | AssertEqF | 0 | BNE | 2,944 | 
+| root | AssertEqFI | 0 | BNE | 5 | 
+| root | AssertEqV | 0 | BNE | 1,401 | 
+| root | AssertEqVI | 0 | BNE | 238 | 
+| root | AssertNonZero | 0 | BEQ | 1 | 
+| root | CT-ExtractPublicValues | 0 | PHANTOM | 2 | 
+| root | CT-InitializePcsConst | 0 | PHANTOM | 2 | 
+| root | CT-ReadProofsFromInput | 0 | PHANTOM | 2 | 
+| root | CT-VerifyProofs | 0 | PHANTOM | 2 | 
+| root | CT-cache-generator-powers | 0 | PHANTOM | 504 | 
+| root | CT-compute-reduced-opening | 0 | PHANTOM | 504 | 
+| root | CT-exp-reverse-bits-len | 0 | PHANTOM | 8,148 | 
+| root | CT-pre-compute-alpha-pows | 0 | PHANTOM | 2 | 
+| root | CT-single-reduced-opening-eval | 0 | PHANTOM | 11,256 | 
+| root | CT-stage-c-build-rounds | 0 | PHANTOM | 2 | 
+| root | CT-stage-d-verifier-verify | 0 | PHANTOM | 2 | 
+| root | CT-stage-d-verify-pcs | 0 | PHANTOM | 2 | 
+| root | CT-stage-e-verify-constraints | 0 | PHANTOM | 2 | 
+| root | CT-verify-batch | 0 | PHANTOM | 504 | 
+| root | CT-verify-batch-ext | 0 | PHANTOM | 1,764 | 
+| root | CT-verify-query | 0 | PHANTOM | 84 | 
+| root | CastFV | 0 | ADD | 148 | 
+| root | DivE | 0 | BBE4DIV | 6,544 | 
+| root | DivEIN | 0 | ADD | 748 | 
+| root | DivEIN | 0 | BBE4DIV | 187 | 
+| root | DivF | 0 | DIV | 5,796 | 
+| root | DivFIN | 0 | DIV | 391 | 
+| root | FriReducedOpening | 0 | FRI_REDUCED_OPENING | 5,628 | 
+| root | HintBitsF | 0 | PHANTOM | 140 | 
+| root | HintInputVec | 0 | PHANTOM | 23,026 | 
+| root | IfEq | 0 | BNE | 144 | 
+| root | IfEqI | 0 | BNE | 19,829 | 
+| root | IfEqI | 0 | JAL | 6,865 | 
+| root | IfNe | 0 | BEQ | 147 | 
+| root | IfNe | 0 | JAL | 3 | 
+| root | IfNeI | 0 | BEQ | 93 | 
+| root | ImmE | 0 | ADD | 4,904 | 
+| root | ImmF | 0 | ADD | 4,208 | 
+| root | ImmV | 0 | ADD | 5,447 | 
+| root | LoadE | 0 | ADD | 10,794 | 
+| root | LoadE | 0 | LOADW | 26,287 | 
+| root | LoadE | 0 | MUL | 10,794 | 
+| root | LoadF | 0 | ADD | 13,496 | 
+| root | LoadF | 0 | LOADW | 26,373 | 
+| root | LoadF | 0 | MUL | 8,981 | 
+| root | LoadHeapPtr | 0 | ADD | 1 | 
+| root | LoadV | 0 | ADD | 45,693 | 
+| root | LoadV | 0 | LOADW | 134,006 | 
+| root | LoadV | 0 | MUL | 40,794 | 
+| root | MulE | 0 | BBE4MUL | 27,964 | 
+| root | MulEF | 0 | MUL | 5,024 | 
+| root | MulEFI | 0 | MUL | 820 | 
+| root | MulEI | 0 | ADD | 6,860 | 
+| root | MulEI | 0 | BBE4MUL | 1,715 | 
+| root | MulF | 0 | MUL | 26,270 | 
+| root | MulFI | 0 | MUL | 2,805 | 
+| root | MulVI | 0 | MUL | 11,023 | 
+| root | NegE | 0 | MUL | 340 | 
+| root | Poseidon2CompressBabyBear | 0 | COMP_POS2 | 12 | 
+| root | Poseidon2PermuteBabyBear | 0 | PERM_POS2 | 54 | 
+| root | Publish | 0 | PUBLISH | 48 | 
+| root | StoreE | 0 | ADD | 9,030 | 
+| root | StoreE | 0 | MUL | 9,030 | 
+| root | StoreE | 0 | STOREW | 14,555 | 
+| root | StoreF | 0 | ADD | 766 | 
+| root | StoreF | 0 | MUL | 376 | 
+| root | StoreF | 0 | STOREW | 6,929 | 
+| root | StoreHeapPtr | 0 | ADD | 1 | 
+| root | StoreHintWord | 0 | HINT_STOREW | 232,361 | 
+| root | StoreV | 0 | ADD | 13,780 | 
+| root | StoreV | 0 | MUL | 9,261 | 
+| root | StoreV | 0 | STOREW | 59,075 | 
+| root | SubE | 0 | FE4SUB | 3,666 | 
+| root | SubEF | 0 | ADD | 16,998 | 
+| root | SubEF | 0 | SUB | 5,666 | 
+| root | SubEFI | 0 | ADD | 384 | 
+| root | SubEI | 0 | ADD | 1,496 | 
+| root | SubF | 0 | SUB | 8 | 
+| root | SubFI | 0 | SUB | 2,788 | 
+| root | SubV | 0 | SUB | 6,359 | 
+| root | SubVI | 0 | SUB | 1,044 | 
+| root | SubVIN | 0 | SUB | 882 | 
+| root | UnsafeCastVF | 0 | ADD | 114 | 
+| root | VerifyBatchExt | 0 | VERIFY_BATCH | 882 | 
+| root | VerifyBatchFelt | 0 | VERIFY_BATCH | 252 | 
+| root | ZipFor | 0 | ADD | 328,875 | 
+| root | ZipFor | 0 | BNE | 303,753 | 
+| root | ZipFor | 0 | JAL | 31,235 | 
+
+| group | dsl_ir | opcode | segment | frequency |
+| --- | --- | --- | --- | --- |
+| fib_e2e |  | ADD | 0 | 1,048,528 | 
+| fib_e2e |  | ADD | 1 | 1,048,500 | 
+| fib_e2e |  | ADD | 2 | 1,048,501 | 
+| fib_e2e |  | ADD | 3 | 1,048,501 | 
+| fib_e2e |  | ADD | 4 | 1,048,502 | 
+| fib_e2e |  | ADD | 5 | 1,048,501 | 
+| fib_e2e |  | ADD | 6 | 909,012 | 
+| fib_e2e |  | AND | 0 | 2 | 
+| fib_e2e |  | AUIPC | 0 | 9 | 
+| fib_e2e |  | BEQ | 0 | 116,502 | 
+| fib_e2e |  | BEQ | 1 | 116,500 | 
+| fib_e2e |  | BEQ | 2 | 116,500 | 
+| fib_e2e |  | BEQ | 3 | 116,500 | 
+| fib_e2e |  | BEQ | 4 | 116,500 | 
+| fib_e2e |  | BEQ | 5 | 116,501 | 
+| fib_e2e |  | BEQ | 6 | 101,001 | 
+| fib_e2e |  | BGEU | 0 | 3 | 
+| fib_e2e |  | BLTU | 0 | 2 | 
+| fib_e2e |  | BNE | 0 | 116,503 | 
+| fib_e2e |  | BNE | 1 | 116,501 | 
+| fib_e2e |  | BNE | 2 | 116,500 | 
+| fib_e2e |  | BNE | 3 | 116,500 | 
+| fib_e2e |  | BNE | 4 | 116,500 | 
+| fib_e2e |  | BNE | 5 | 116,500 | 
+| fib_e2e |  | BNE | 6 | 101,001 | 
+| fib_e2e |  | HINT_STOREW | 0 | 3 | 
+| fib_e2e |  | JAL | 0 | 116,499 | 
+| fib_e2e |  | JAL | 1 | 116,500 | 
+| fib_e2e |  | JAL | 2 | 116,501 | 
+| fib_e2e |  | JAL | 3 | 116,500 | 
+| fib_e2e |  | JAL | 4 | 116,500 | 
+| fib_e2e |  | JAL | 5 | 116,500 | 
+| fib_e2e |  | JAL | 6 | 101,001 | 
+| fib_e2e |  | JALR | 0 | 12 | 
+| fib_e2e |  | JALR | 6 | 1 | 
+| fib_e2e |  | LOADW | 0 | 10 | 
+| fib_e2e |  | LOADW | 6 | 3 | 
+| fib_e2e |  | LUI | 0 | 9 | 
+| fib_e2e |  | OR | 0 | 1 | 
+| fib_e2e |  | PHANTOM | 0 | 2 | 
+| fib_e2e |  | SLL | 0 | 2 | 
+| fib_e2e |  | SLTU | 0 | 349,497 | 
+| fib_e2e |  | SLTU | 1 | 349,501 | 
+| fib_e2e |  | SLTU | 2 | 349,500 | 
+| fib_e2e |  | SLTU | 3 | 349,501 | 
+| fib_e2e |  | SLTU | 4 | 349,500 | 
+| fib_e2e |  | SLTU | 5 | 349,500 | 
+| fib_e2e |  | SLTU | 6 | 303,003 | 
+| fib_e2e |  | STOREW | 0 | 13 | 
+| fib_e2e |  | STOREW | 6 | 2 | 
+| fib_e2e |  | SUB | 0 | 4 | 
+| fib_e2e |  | XOR | 0 | 2 | 
+
+| group | idx | trace_gen_time_ms | total_proof_time_ms | total_cycles | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| internal.0 | 0 | 2,572 | 27,656 | 3,683,948 | 374,819,800 | 12,556 | 2,908 | 2,091 | 2,478 | 2,508 | 2,284 | 140,444,058 | 284 | 12,528 | 
+| internal.0 | 1 | 2,950 | 28,123 | 3,683,245 | 374,819,800 | 12,512 | 2,874 | 2,094 | 2,450 | 2,517 | 2,294 | 140,447,062 | 279 | 12,661 | 
+| internal.0 | 2 | 2,964 | 28,272 | 3,683,686 | 374,819,800 | 12,522 | 2,891 | 2,087 | 2,456 | 2,505 | 2,291 | 140,451,472 | 290 | 12,786 | 
+| internal.0 | 3 | 1,775 | 14,927 | 1,842,507 | 190,950,104 | 6,735 | 1,637 | 1,107 | 1,270 | 1,341 | 1,229 | 71,431,113 | 148 | 6,417 | 
+| internal.1 | 4 | 2,630 | 28,390 | 3,811,011 | 374,819,800 | 12,584 | 2,877 | 2,091 | 2,472 | 2,551 | 2,309 | 145,061,086 | 282 | 13,176 | 
+| internal.1 | 5 | 3,021 | 28,683 | 3,750,451 | 374,819,800 | 12,620 | 2,905 | 2,093 | 2,456 | 2,573 | 2,306 | 143,331,347 | 283 | 13,042 | 
+| internal.2 | 6 | 3,040 | 28,889 | 3,811,759 | 374,819,800 | 12,548 | 2,907 | 2,075 | 2,463 | 2,524 | 2,303 | 145,068,566 | 274 | 13,301 | 
+| leaf | 0 | 1,416 | 13,810 | 1,833,904 | 180,464,344 | 6,353 | 1,494 | 1,096 | 1,219 | 1,316 | 1,091 | 70,223,280 | 135 | 6,041 | 
+| leaf | 1 | 1,272 | 12,760 | 1,595,803 | 170,765,016 | 6,118 | 1,491 | 1,022 | 1,180 | 1,243 | 1,049 | 60,343,258 | 130 | 5,370 | 
+| leaf | 2 | 1,269 | 12,763 | 1,595,615 | 170,765,016 | 6,135 | 1,513 | 1,038 | 1,143 | 1,265 | 1,041 | 60,341,378 | 132 | 5,359 | 
+| leaf | 3 | 1,263 | 12,854 | 1,596,035 | 170,765,016 | 6,143 | 1,519 | 1,027 | 1,157 | 1,262 | 1,046 | 60,345,578 | 130 | 5,448 | 
+| leaf | 4 | 1,261 | 12,824 | 1,595,869 | 170,765,016 | 6,165 | 1,535 | 1,024 | 1,146 | 1,280 | 1,050 | 60,343,918 | 127 | 5,398 | 
+| leaf | 5 | 1,273 | 12,852 | 1,595,402 | 170,765,016 | 6,131 | 1,512 | 1,003 | 1,156 | 1,278 | 1,048 | 60,339,248 | 132 | 5,448 | 
+| leaf | 6 | 1,327 | 13,389 | 1,682,607 | 178,179,032 | 6,283 | 1,415 | 1,134 | 1,216 | 1,307 | 1,077 | 63,941,954 | 131 | 5,779 | 
+| root | 0 | 1,481 | 45,776 | 1,906,364 | 190,950,104 | 37,499 | 1,517 | 8,205 | 12,473 | 3,828 | 11,321 | 73,784,029 | 150 | 6,796 | 
+
+| group | segment | trace_gen_time_ms | total_proof_time_ms | total_cycles | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| fib_e2e | 0 | 923 | 11,598 | 1,747,603 | 197,440,542 | 4,831 | 795 | 456 | 1,647 | 977 | 765 | 59,808,409 | 189 | 5,844 | 
+| fib_e2e | 1 | 953 | 11,222 | 1,747,502 | 197,384,386 | 4,575 | 805 | 420 | 1,721 | 968 | 538 | 59,780,846 | 119 | 5,694 | 
+| fib_e2e | 2 | 953 | 11,366 | 1,747,502 | 197,384,386 | 4,718 | 802 | 394 | 1,781 | 983 | 635 | 59,780,837 | 120 | 5,695 | 
+| fib_e2e | 3 | 843 | 11,215 | 1,747,502 | 197,384,386 | 4,667 | 725 | 372 | 1,802 | 1,076 | 568 | 59,781,156 | 120 | 5,705 | 
+| fib_e2e | 4 | 832 | 11,330 | 1,747,502 | 197,384,386 | 4,784 | 764 | 454 | 1,832 | 959 | 591 | 59,781,455 | 181 | 5,714 | 
+| fib_e2e | 5 | 829 | 11,355 | 1,747,502 | 197,384,386 | 4,747 | 749 | 390 | 1,791 | 1,036 | 609 | 59,781,445 | 168 | 5,779 | 
+| fib_e2e | 6 | 744 | 10,045 | 1,515,024 | 197,432,594 | 4,338 | 782 | 390 | 1,456 | 944 | 590 | 51,983,912 | 172 | 4,963 | 
+
+</details>
+
+
+<details>
+<summary>Flamegraphs</summary>
+
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-fib_e2e.dsl_ir.opcode.air_name.cells_used.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-fib_e2e.dsl_ir.opcode.air_name.cells_used.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-fib_e2e.dsl_ir.opcode.air_name.cells_used.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-fib_e2e.dsl_ir.opcode.air_name.cells_used.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-fib_e2e.dsl_ir.opcode.frequency.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-fib_e2e.dsl_ir.opcode.frequency.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-fib_e2e.dsl_ir.opcode.frequency.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-fib_e2e.dsl_ir.opcode.frequency.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-halo2_outer.cell_tracker_span.cells_used.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-halo2_outer.cell_tracker_span.cells_used.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-halo2_outer.cell_tracker_span.cells_used.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-halo2_outer.cell_tracker_span.cells_used.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.0.dsl_ir.opcode.air_name.cells_used.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.0.dsl_ir.opcode.air_name.cells_used.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.0.dsl_ir.opcode.air_name.cells_used.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.0.dsl_ir.opcode.air_name.cells_used.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.0.dsl_ir.opcode.frequency.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.0.dsl_ir.opcode.frequency.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.0.dsl_ir.opcode.frequency.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.0.dsl_ir.opcode.frequency.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.1.dsl_ir.opcode.air_name.cells_used.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.1.dsl_ir.opcode.air_name.cells_used.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.1.dsl_ir.opcode.air_name.cells_used.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.1.dsl_ir.opcode.air_name.cells_used.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.1.dsl_ir.opcode.frequency.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.1.dsl_ir.opcode.frequency.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.1.dsl_ir.opcode.frequency.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.1.dsl_ir.opcode.frequency.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.2.dsl_ir.opcode.air_name.cells_used.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.2.dsl_ir.opcode.air_name.cells_used.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.2.dsl_ir.opcode.air_name.cells_used.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.2.dsl_ir.opcode.air_name.cells_used.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.2.dsl_ir.opcode.frequency.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.2.dsl_ir.opcode.frequency.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.2.dsl_ir.opcode.frequency.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-internal.2.dsl_ir.opcode.frequency.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-leaf.dsl_ir.opcode.air_name.cells_used.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-leaf.dsl_ir.opcode.air_name.cells_used.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-leaf.dsl_ir.opcode.air_name.cells_used.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-leaf.dsl_ir.opcode.air_name.cells_used.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-leaf.dsl_ir.opcode.frequency.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-leaf.dsl_ir.opcode.frequency.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-leaf.dsl_ir.opcode.frequency.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-leaf.dsl_ir.opcode.frequency.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-root.dsl_ir.opcode.air_name.cells_used.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-root.dsl_ir.opcode.air_name.cells_used.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-root.dsl_ir.opcode.air_name.cells_used.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-root.dsl_ir.opcode.air_name.cells_used.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-root.dsl_ir.opcode.frequency.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-root.dsl_ir.opcode.frequency.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-root.dsl_ir.opcode.frequency.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/abde525bf4e10ed9cf514c242f9d423e9e8eff91/fib_e2e-abde525bf4e10ed9cf514c242f9d423e9e8eff91-root.dsl_ir.opcode.frequency.svg)
+
+</details>
+
+Commit: https://github.com/openvm-org/openvm/commit/abde525bf4e10ed9cf514c242f9d423e9e8eff91
+
+Max Segment Length: 1048476
+
+Instance Type: 64cpu-linux-arm64
+
+Memory Allocator: mimalloc
+
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/12933141073)
