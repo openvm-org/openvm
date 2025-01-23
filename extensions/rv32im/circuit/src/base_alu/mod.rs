@@ -6,9 +6,6 @@ use crate::adapters::Rv32BaseAluAdapterChip;
 mod core;
 pub use core::*;
 
-#[cfg(test)]
-mod tests;
-
 pub type Rv32BaseAluChip<F> = VmChipWrapper<
     F,
     Rv32BaseAluAdapterChip<F>,

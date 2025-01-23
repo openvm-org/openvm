@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        new_integration_api::{VmAdapter, VmCoreAir, VmCoreChip},
+        new_integration_api::{VmAdapter, VmAdapterAir, VmCoreAir, VmCoreChip},
         AirTx, AirTxMaybeRead, AirTxRead, AirTxWrite, ExecuteTx, ExecuteTxMaybeRead, ExecuteTxRead,
         ExecuteTxWrite, Result, TraceTx, TraceTxMaybeRead, TraceTxRead, TraceTxWrite,
     },
@@ -60,16 +60,17 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublic
 {
 }
 
-impl<AB, TX, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, TX>
+impl<AB, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, A>
     for BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
-    TX: AirTx<AB>
+    A: VmAdapterAir<AB>,
+    A::AirTx: AirTx<AB>
         + AirTxRead<AB, [AB::Expr; NUM_LIMBS]>
         + AirTxMaybeRead<AB, [AB::Expr; NUM_LIMBS]>
         + AirTxWrite<AB, [AB::Expr; NUM_LIMBS]>,
 {
-    fn eval(&self, builder: &mut AB, local_core: &[AB::Var], tx: &mut TX) {
+    fn eval(&self, builder: &mut AB, local_core: &[AB::Var], tx: &mut A::AirTx) {
         let cols: &BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         let flags = [
             cols.opcode_add_flag,
@@ -141,7 +142,7 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        let expected_opcode = VmCoreAir::<AB, TX>::expr_to_global_expr(
+        let expected_opcode = VmCoreAir::<AB, A>::expr_to_global_expr(
             self,
             flags.iter().zip(BaseAluOpcode::iter()).fold(
                 AB::Expr::ZERO,

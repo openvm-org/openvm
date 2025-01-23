@@ -79,16 +79,13 @@ impl<F> BaseAir<F> for Rv32RegisterAdapter {
 }
 
 impl<AB: AirBuilder> VmAdapterAir<AB> for Rv32RegisterAdapter {
-    type AirTx<'tx>
-        = Rv32RegisterAirTx<'tx, AB>
-    where
-        Self: 'tx,
-        AB: 'tx;
+    type AirTx = Rv32RegisterAirTx<AB>;
 
-    fn air_tx<'a>(&self, local_adapter: &'a [AB::Var]) -> Rv32RegisterAirTx<'a, AB> {
+    fn air_tx(&self, local_adapter: &[AB::Var]) -> Rv32RegisterAirTx<AB> {
         Rv32RegisterAirTx {
             port: self.port,
-            row_buffer: local_adapter,
+            row_buffer: local_adapter.to_vec(),
+            pos: 0,
             cur_timestamp: None,
             instr_multiplicity: AB::Expr::ZERO,
             from_state: None,
@@ -96,9 +93,12 @@ impl<AB: AirBuilder> VmAdapterAir<AB> for Rv32RegisterAdapter {
     }
 }
 
-pub struct Rv32RegisterAirTx<'a, AB: AirBuilder> {
+pub struct Rv32RegisterAirTx<AB: AirBuilder> {
     port: SystemPort,
-    row_buffer: &'a [AB::Var],
+    // We use Vec instead of slice because there are some lifetime issues around
+    // AB needing to outlive 'tx which Rust GATs can't handle yet.
+    row_buffer: Vec<AB::Var>,
+    pos: usize,
     pub cur_timestamp: Option<AB::Expr>,
     /// Multiplicity to use for program and execution bus
     instr_multiplicity: AB::Expr,
@@ -107,7 +107,7 @@ pub struct Rv32RegisterAirTx<'a, AB: AirBuilder> {
     // will be mutable borrow issues (you can't share a mutable reference)
 }
 
-impl<AB: AirBuilder> Drop for Rv32RegisterAirTx<'_, AB> {
+impl<AB: AirBuilder> Drop for Rv32RegisterAirTx<AB> {
     fn drop(&mut self) {
         assert!(self.cur_timestamp.is_none(), "Transaction was never ended");
     }
@@ -142,12 +142,12 @@ const READ_WIDTH: usize = size_of::<Rv32RegisterReadCols<u8>>();
 const READ_IMM_WIDTH: usize = size_of::<Rv32RegOrImmReadCols<u8>>();
 const WRITE_WIDTH: usize = size_of::<Rv32RegisterWriteCols<u8>>();
 
-impl<AB: InteractionBuilder> AirTx<AB> for Rv32RegisterAirTx<'_, AB> {
+impl<AB: InteractionBuilder> AirTx<AB> for Rv32RegisterAirTx<AB> {
     fn start(&mut self, _builder: &mut AB, multiplicity: impl Into<AB::Expr>) {
         self.instr_multiplicity = multiplicity.into();
-        let (local, remaining) = self.row_buffer.split_at(STATE_WIDTH);
-        self.row_buffer = remaining;
-        let from_state: &ExecutionState<AB::Var> = local.borrow();
+        let pos = self.pos;
+        let from_state: &ExecutionState<AB::Var> = self.row_buffer[pos..pos + STATE_WIDTH].borrow();
+        self.pos += STATE_WIDTH;
         self.cur_timestamp = Some(from_state.timestamp.into());
         self.from_state = Some(ExecutionState::new(from_state.pc, from_state.timestamp));
     }
@@ -186,21 +186,14 @@ impl<AB: InteractionBuilder> AirTx<AB> for Rv32RegisterAirTx<'_, AB> {
     }
 }
 
-impl<AB: AirBuilder> Rv32RegisterAirTx<'_, AB> {
+impl<AB: AirBuilder> Rv32RegisterAirTx<AB> {
     pub fn set_cur_timestamp(&mut self, timestamp: impl Into<AB::Expr>) {
         self.cur_timestamp = Some(timestamp.into());
-    }
-
-    fn timestamp_pp(&mut self) -> AB::Expr {
-        let cur_timestamp = self.cur_timestamp.as_mut().unwrap();
-        let t = cur_timestamp.clone();
-        *cur_timestamp = cur_timestamp.clone() + AB::Expr::ONE;
-        t
     }
 }
 
 impl<AB: InteractionBuilder> AirTxRead<AB, [AB::Expr; RV32_REGISTER_NUM_LIMBS]>
-    for Rv32RegisterAirTx<'_, AB>
+    for Rv32RegisterAirTx<AB>
 {
     fn read(
         &mut self,
@@ -208,10 +201,13 @@ impl<AB: InteractionBuilder> AirTxRead<AB, [AB::Expr; RV32_REGISTER_NUM_LIMBS]>
         data: [AB::Expr; RV32_REGISTER_NUM_LIMBS],
         multiplicity: impl Into<AB::Expr>,
     ) -> MemoryAddress<AB::Expr, AB::Expr> {
-        let (local, remaining) = self.row_buffer.split_at(READ_WIDTH);
-        self.row_buffer = remaining;
-        let local: &Rv32RegisterReadCols<AB::Var> = local.borrow();
-        let timestamp = self.timestamp_pp();
+        let pos = self.pos;
+        let local: &Rv32RegisterReadCols<AB::Var> = self.row_buffer[pos..pos + READ_WIDTH].borrow();
+        self.pos += READ_WIDTH;
+        // Annoyance: we cannot make self.timestamp_pp() a function due to selective mutable borrow. This may be possible in a newer Rust version.
+        let cur_timestamp = self.cur_timestamp.as_mut().unwrap();
+        let timestamp = cur_timestamp.clone();
+        *cur_timestamp = cur_timestamp.clone() + AB::Expr::ONE;
         let addr = MemoryAddress::new(
             AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
             local.ptr.into(),
@@ -225,7 +221,7 @@ impl<AB: InteractionBuilder> AirTxRead<AB, [AB::Expr; RV32_REGISTER_NUM_LIMBS]>
 }
 
 impl<AB: InteractionBuilder> AirTxMaybeRead<AB, [AB::Expr; RV32_REGISTER_NUM_LIMBS]>
-    for Rv32RegisterAirTx<'_, AB>
+    for Rv32RegisterAirTx<AB>
 {
     /// Memory bridge multiplicity is equal to `address_space`, which is 0 or 1.
     /// In particular, dummy rows should set `address_space` to 0
@@ -236,9 +232,10 @@ impl<AB: InteractionBuilder> AirTxMaybeRead<AB, [AB::Expr; RV32_REGISTER_NUM_LIM
         data: [AB::Expr; RV32_REGISTER_NUM_LIMBS],
         _multiplicity: impl Into<AB::Expr>,
     ) -> MemoryAddress<AB::Expr, AB::Expr> {
-        let (local, remaining) = self.row_buffer.split_at(READ_IMM_WIDTH);
-        self.row_buffer = remaining;
-        let local: &Rv32RegOrImmReadCols<AB::Var> = local.borrow();
+        let pos = self.pos;
+        let local: &Rv32RegOrImmReadCols<AB::Var> =
+            self.row_buffer[pos..pos + READ_IMM_WIDTH].borrow();
+        self.pos += READ_IMM_WIDTH;
 
         // if an immediate value, constrain that its 4-byte representation is correct
         let rs_sign = data[2].clone();
@@ -253,7 +250,9 @@ impl<AB: InteractionBuilder> AirTxMaybeRead<AB, [AB::Expr; RV32_REGISTER_NUM_LIM
             rs_sign.clone() * (AB::Expr::from_canonical_usize((1 << RV32_CELL_BITS) - 1) - rs_sign),
         );
 
-        let timestamp = self.timestamp_pp();
+        let cur_timestamp = self.cur_timestamp.as_mut().unwrap();
+        let timestamp = cur_timestamp.clone();
+        *cur_timestamp = cur_timestamp.clone() + AB::Expr::ONE;
         let addr = MemoryAddress::new(local.address_space.into(), local.ptr_or_imm.into());
         self.port
             .memory_bridge
@@ -264,7 +263,7 @@ impl<AB: InteractionBuilder> AirTxMaybeRead<AB, [AB::Expr; RV32_REGISTER_NUM_LIM
 }
 
 impl<AB: InteractionBuilder> AirTxWrite<AB, [AB::Expr; RV32_REGISTER_NUM_LIMBS]>
-    for Rv32RegisterAirTx<'_, AB>
+    for Rv32RegisterAirTx<AB>
 {
     fn write(
         &mut self,
@@ -272,10 +271,13 @@ impl<AB: InteractionBuilder> AirTxWrite<AB, [AB::Expr; RV32_REGISTER_NUM_LIMBS]>
         data: [AB::Expr; RV32_REGISTER_NUM_LIMBS],
         multiplicity: impl Into<AB::Expr>,
     ) -> MemoryAddress<AB::Expr, AB::Expr> {
-        let (local, remaining) = self.row_buffer.split_at(WRITE_WIDTH);
-        self.row_buffer = remaining;
-        let local: &Rv32RegisterWriteCols<AB::Var> = local.borrow();
-        let timestamp = self.timestamp_pp();
+        let pos = self.pos;
+        let local: &Rv32RegisterWriteCols<AB::Var> =
+            self.row_buffer[pos..pos + WRITE_WIDTH].borrow();
+        self.pos += WRITE_WIDTH;
+        let cur_timestamp = self.cur_timestamp.as_mut().unwrap();
+        let timestamp = cur_timestamp.clone();
+        *cur_timestamp = cur_timestamp.clone() + AB::Expr::ONE;
         let addr = MemoryAddress::new(
             AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
             local.ptr.into(),
@@ -312,7 +314,7 @@ impl<F> ExecuteTx for Rv32RegisterExecuteTx<F> {
     }
 
     fn end(&mut self) -> u32 {
-        self.from_pc.unwrap() + DEFAULT_PC_STEP
+        self.from_pc.take().unwrap() + DEFAULT_PC_STEP
     }
 }
 

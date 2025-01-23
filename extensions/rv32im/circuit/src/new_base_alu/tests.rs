@@ -3,7 +3,7 @@ use std::borrow::BorrowMut;
 use openvm_circuit::{
     arch::{
         testing::{TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
+        ExecutionBridge, BITWISE_OP_LOOKUP_BUS,
     },
     utils::generate_long_number,
 };
@@ -28,8 +28,9 @@ use rand::Rng;
 
 use super::{core::run_alu, BaseAluCoreChip, Rv32BaseAluChip};
 use crate::{
-    adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     base_alu::BaseAluCoreCols,
+    new_adapter::Rv32RegisterAdapter,
     test_utils::{generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm},
 };
 
@@ -49,11 +50,7 @@ fn run_rv32_alu_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32BaseAluChip::<F>::new(
-        Rv32BaseAluAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-        ),
+        Rv32RegisterAdapter::new(tester.system_port(), 1, 1, 1),
         BaseAluCoreChip::new(bitwise_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
@@ -122,8 +119,7 @@ fn rv32_alu_and_rand_test() {
 // A dummy adapter is used so memory interactions don't indirectly cause false passes.
 //////////////////////////////////////////////////////////////////////////////////////
 
-type Rv32BaseAluTestChip<F> =
-    VmChipWrapper<F, TestAdapterChip<F>, BaseAluCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+// TODO: make new prank adapter
 
 #[allow(clippy::too_many_arguments)]
 fn run_rv32_alu_negative_test(
@@ -137,12 +133,8 @@ fn run_rv32_alu_negative_test(
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let mut chip = Rv32BaseAluTestChip::<F>::new(
-        TestAdapterChip::new(
-            vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat()],
-            vec![None],
-            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
-        ),
+    let mut chip = Rv32BaseAluChip::<F>::new(
+        Rv32RegisterAdapter::new(tester.system_port(), 1, 1, 1),
         BaseAluCoreChip::new(bitwise_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
@@ -153,7 +145,7 @@ fn run_rv32_alu_negative_test(
     );
 
     let trace_width = chip.trace_width();
-    let adapter_width = BaseAir::<F>::width(chip.adapter.air());
+    let adapter_width = BaseAir::<F>::width(&chip.adapter);
 
     if (opcode == BaseAluOpcode::ADD || opcode == BaseAluOpcode::SUB)
         && a.iter().all(|&a_val| a_val < (1 << RV32_CELL_BITS))

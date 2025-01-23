@@ -45,12 +45,9 @@ pub trait VmAdapter<F>: BaseAir<F> + Clone {
 /// Trait to be implemented on a struct that has enough information to determine
 /// the adapter row width.
 pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
-    type AirTx<'tx>
-    where
-        Self: 'tx,
-        AB: 'tx;
+    type AirTx;
 
-    fn air_tx<'a>(&self, local_adapter: &'a [AB::Var]) -> Self::AirTx<'a>;
+    fn air_tx(&self, local_adapter: &[AB::Var]) -> Self::AirTx;
 }
 
 /// Trait to be implemented on primitive chip to integrate with the machine.
@@ -95,12 +92,12 @@ pub trait VmCoreChip<F, A: VmAdapter<F>> {
     }
 }
 
-/// The generic `TX` should be an `AirTx` type.
-pub trait VmCoreAir<AB, TX>: BaseAirWithPublicValues<AB::F>
+pub trait VmCoreAir<AB, A>: BaseAirWithPublicValues<AB::F>
 where
     AB: AirBuilder,
+    A: VmAdapterAir<AB>,
 {
-    fn eval(&self, builder: &mut AB, local_core: &[AB::Var], tx: &mut TX);
+    fn eval(&self, builder: &mut AB, local_core: &[AB::Var], tx: &mut A::AirTx);
 
     /// The offset the opcodes by this chip start from.
     /// This is usually just `CorrespondingOpcode::CLASS_OFFSET`,
@@ -198,14 +195,8 @@ where
     A: VmAdapterAir<SymbolicRapBuilder<Val<SC>>>
         + for<'a> VmAdapterAir<DebugConstraintBuilder<'a, SC>>, // AirRef bound
     C::Air: Send + Sync + 'static,
-    C::Air: for<'tx> VmCoreAir<
-        SymbolicRapBuilder<Val<SC>>,
-        <A as VmAdapterAir<SymbolicRapBuilder<Val<SC>>>>::AirTx<'tx>,
-    >,
-    C::Air: for<'tx, 'a> VmCoreAir<
-        DebugConstraintBuilder<'a, SC>,
-        <A as VmAdapterAir<DebugConstraintBuilder<'a, SC>>>::AirTx<'tx>,
-    >,
+    C::Air: VmCoreAir<SymbolicRapBuilder<Val<SC>>, A>
+        + for<'a> VmCoreAir<DebugConstraintBuilder<'a, SC>, A>,
 {
     fn air(&self) -> Arc<dyn AnyRap<SC>> {
         let air: VmAirWrapper<A, C::Air> = VmAirWrapper {
@@ -301,7 +292,7 @@ impl<AB, A, C> Air<AB> for VmAirWrapper<A, C>
 where
     AB: AirBuilder,
     A: VmAdapterAir<AB>,
-    C: for<'tx> VmCoreAir<AB, A::AirTx<'tx>>,
+    C: VmCoreAir<AB, A>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
