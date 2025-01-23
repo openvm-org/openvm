@@ -23,7 +23,7 @@ const SBOX_SIZE: usize = 7;
 impl AggStarkConfig {
     pub fn leaf_vm_config(&self) -> NativeConfig {
         let mut config = NativeConfig::aggregation(
-            DIGEST_SIZE * 2 + self.max_num_user_public_values,
+            VmVerifierPvs::<u8>::width(),
             SBOX_SIZE.min(self.leaf_fri_params.max_constraint_degree()),
         );
         config.system.profiling = self.profiling;
@@ -56,6 +56,7 @@ where
     pub fn minimal_root_verifier_vm_config(&self) -> NativeConfig {
         let mut config = NativeConfig::aggregation(
             DIGEST_SIZE * 2 + self.max_num_user_public_values,
+            // VmVerifierPvs::<u8>::width(),
             SBOX_SIZE.min(self.root_fri_params.max_constraint_degree()),
         );
         config.system.profiling = self.profiling;
