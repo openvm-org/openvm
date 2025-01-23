@@ -80,10 +80,9 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 
 #### Procedural macros for algebraic structs
 
-- [`openvm-algebra-moduli-macros`](../../extensions/extension-algebra-macros/moduli-macros): Procedural macros for use in guest program to generate modular arithmetic struct with custom intrinsics for compile-time modulus.
-- [`openvm-algebra-complex-macros`](../../extensions/extension-algebra-macros/complex-macros): Procedural macros for use in guest program to generate complex field struct with custom intrinsics for compile-time modulus.
-- [`openvm-ecc-sw-macros`](../../extensions/extension-algebra-macros/sw-macros): Procedural macros for use in guest program to generate short Weierstrass curve struct with custom intrinsics for compile-time curve.
-
+- [`openvm-algebra-moduli-macros`](../../extensions/algebra/moduli-macros): Procedural macros for use in guest program to generate modular arithmetic struct with custom intrinsics for compile-time modulus.
+- [`openvm-algebra-complex-macros`](../../extensions/algebra/complex-macros): Procedural macros for use in guest program to generate complex field struct with custom intrinsics for compile-time modulus.
+- [`openvm-ecc-sw-macros`](../../extensions/ecc/sw-macros): Procedural macros for use in guest program to generate short Weierstrass curve struct with custom intrinsics for compile-time curve.
 
 #### RV32IM
 
