@@ -26,13 +26,14 @@ k256 = { version = "0.13.3", default-features = false, features = [
     "ecdsa-core",
     "ecdsa",
 ], optional = true }
+num-bigint = "0.4.6"
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = "0.4.6"
 
 [features]
 default = []
-std = ["serde/std", "openvm/std"]
+std = ["serde/std", "openvm/std", "openvm-ecc-guest/std"]
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
 p256 = ["openvm-ecc-guest/p256"]
 

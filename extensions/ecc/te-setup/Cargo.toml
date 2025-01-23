@@ -1,0 +1,17 @@
+[package]
+name = "openvm-ecc-te-setup"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+syn = { version = "2.0", features = ["full"] }
+quote = "1.0"
+openvm-macros-common = { workspace = true, default-features = false }
+num-bigint.workspace = true
+proc-macro2 = "1.0.38"
+
+[lib]
+proc-macro = true
