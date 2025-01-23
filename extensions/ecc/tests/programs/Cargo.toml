@@ -14,6 +14,8 @@ openvm-algebra-guest = { path = "../../../algebra/guest", default-features = fal
 openvm-algebra-moduli-setup = { path = "../../../algebra/moduli-setup", default-features = false }
 openvm-keccak256-guest = { path = "../../../keccak256/guest", default-features = false }
 
+num-bigint = "0.4.6"
+
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
@@ -26,7 +28,7 @@ k256 = { version = "0.13.3", default-features = false, features = [
 ], optional = true }
 
 [features]
-default = []
+default = ["std"]
 std = ["serde/std", "openvm/std", "openvm-ecc-guest/std"]
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
 p256 = ["openvm-ecc-guest/p256"]
