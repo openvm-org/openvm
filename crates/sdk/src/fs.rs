@@ -14,6 +14,7 @@ use crate::{
     F, SC,
 };
 
+// TODO: remove these type specific functions
 pub fn read_exe_from_file<P: AsRef<Path>>(path: P) -> Result<VmExe<F>> {
     read_from_file_bitcode(path)
 }
@@ -78,13 +79,13 @@ pub fn write_evm_verifier_to_file<P: AsRef<Path>>(verifier: EvmVerifier, path: P
     write_to_file_bytes(path, verifier)
 }
 
-pub(crate) fn read_from_file_bitcode<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
+pub fn read_from_file_bitcode<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
     let data = std::fs::read(path)?;
     let ret = bitcode::deserialize(&data)?;
     Ok(ret)
 }
 
-pub(crate) fn write_to_file_bitcode<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
+pub fn write_to_file_bitcode<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
     let bytes = bitcode::serialize(&data)?;
     if let Some(parent) = path.as_ref().parent() {
         create_dir_all(parent)?;
@@ -93,15 +94,12 @@ pub(crate) fn write_to_file_bitcode<T: Serialize, P: AsRef<Path>>(path: P, data:
     Ok(())
 }
 
-pub(crate) fn read_from_file_bytes<T: From<Vec<u8>>, P: AsRef<Path>>(path: P) -> Result<T> {
+pub fn read_from_file_bytes<T: From<Vec<u8>>, P: AsRef<Path>>(path: P) -> Result<T> {
     let bytes = read(path)?;
     Ok(T::from(bytes))
 }
 
-pub(crate) fn write_to_file_bytes<T: Into<Vec<u8>>, P: AsRef<Path>>(
-    path: P,
-    data: T,
-) -> Result<()> {
+pub fn write_to_file_bytes<T: Into<Vec<u8>>, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
     if let Some(parent) = path.as_ref().parent() {
         create_dir_all(parent)?;
     }
