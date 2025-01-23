@@ -1,4 +1,4 @@
-# `openvm-algebra-sw-macros`
+# `openvm-ecc-sw-macros`
 
 Procedural macros for use in guest program to generate short Weierstrass elliptic curve struct with custom intrinsics for compile-time modulus.
 
