@@ -4246,8 +4246,6 @@ dependencies = [
  "eyre",
  "itertools 0.13.0",
  "lazy_static",
- "num-bigint 0.4.6",
- "num-integer",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",

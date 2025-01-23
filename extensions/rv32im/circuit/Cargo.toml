@@ -24,9 +24,6 @@ derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 eyre.workspace = true
-# for div_rem:
-num-bigint.workspace = true
-num-integer.workspace = true
 serde = { workspace = true, features = ["derive", "std"] }
 serde-big-array.workspace = true
 

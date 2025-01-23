@@ -3,8 +3,6 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use num_bigint::BigUint;
-use num_integer::Integer;
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
@@ -15,7 +13,11 @@ use openvm_circuit_primitives::{
     utils::{not, select},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::DivRemOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -96,6 +98,8 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
+        // ATTENTION: Usage outside of the RV32IM context is currently not supported.
+        assert!(NUM_LIMBS == RV32_REGISTER_NUM_LIMBS && LIMB_BITS == RV32_CELL_BITS);
         let cols: &DivRemCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         let flags = [
             cols.opcode_div_flag,
@@ -417,11 +421,7 @@ where
         }
 
         let sign_xor = b_sign ^ c_sign;
-        let r_prime = if sign_xor {
-            negate::<NUM_LIMBS, LIMB_BITS>(&r)
-        } else {
-            r
-        };
+        let r_prime = if sign_xor { negate::<NUM_LIMBS>(&r) } else { r };
         let r_zero = r.iter().all(|&v| v == 0) && case != DivRemCoreSpecialCase::ZeroDivisor;
 
         if is_signed {
@@ -547,34 +547,26 @@ pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         );
     }
 
-    let x_abs = if x_sign {
-        negate::<NUM_LIMBS, LIMB_BITS>(x)
-    } else {
-        *x
-    };
-    let y_abs = if y_sign {
-        negate::<NUM_LIMBS, LIMB_BITS>(y)
-    } else {
-        *y
-    };
+    let x_abs = if x_sign { negate(x) } else { *x };
+    let y_abs = if y_sign { negate(y) } else { *y };
 
-    let x_big = limbs_to_biguint::<NUM_LIMBS, LIMB_BITS>(&x_abs);
-    let y_big = limbs_to_biguint::<NUM_LIMBS, LIMB_BITS>(&y_abs);
+    let x_big = limbs_to_u32(&x_abs);
+    let y_big = limbs_to_u32(&y_abs);
     let q_big = x_big.clone() / y_big.clone();
     let r_big = x_big.clone() % y_big.clone();
 
     let q = if x_sign ^ y_sign {
-        negate::<NUM_LIMBS, LIMB_BITS>(&biguint_to_limbs::<NUM_LIMBS, LIMB_BITS>(&q_big))
+        negate(&u32_to_limbs(&q_big))
     } else {
-        biguint_to_limbs::<NUM_LIMBS, LIMB_BITS>(&q_big)
+        u32_to_limbs(&q_big)
     };
     let q_sign = signed && (q[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1);
 
     // In C |q * y| <= |x|, which means if x is negative then r <= 0 and vice versa.
     let r = if x_sign {
-        negate::<NUM_LIMBS, LIMB_BITS>(&biguint_to_limbs::<NUM_LIMBS, LIMB_BITS>(&r_big))
+        negate(&u32_to_limbs(&r_big))
     } else {
-        biguint_to_limbs::<NUM_LIMBS, LIMB_BITS>(&r_big)
+        u32_to_limbs(&r_big)
     };
 
     (q, r, x_sign, y_sign, q_sign, DivRemCoreSpecialCase::None)
@@ -636,40 +628,33 @@ pub(super) fn run_mul_carries<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     carry
 }
 
-fn limbs_to_biguint<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    x: &[u32; NUM_LIMBS],
-) -> BigUint {
-    let base = BigUint::new(vec![1 << LIMB_BITS]);
-    let mut res = BigUint::new(vec![0]);
+fn limbs_to_u32<const NUM_LIMBS: usize>(x: &[u32; NUM_LIMBS]) -> u32 {
+    let mut res = 0u32;
     for val in x.iter().rev() {
-        res *= base.clone();
-        res += BigUint::new(vec![*val]);
+        res *= 1 << RV32_CELL_BITS;
+        res += *val;
     }
     res
 }
 
-fn biguint_to_limbs<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    x: &BigUint,
-) -> [u32; NUM_LIMBS] {
+fn u32_to_limbs<const NUM_LIMBS: usize>(x: &u32) -> [u32; NUM_LIMBS] {
     let mut res = [0; NUM_LIMBS];
     let mut x = x.clone();
-    let base = BigUint::from(1u32 << LIMB_BITS);
+    let base = 1u32 << RV32_CELL_BITS;
     for limb in res.iter_mut() {
-        let (quot, rem) = x.div_rem(&base);
-        *limb = rem.iter_u32_digits().next().unwrap_or(0);
+        let (quot, rem) = (x / base, x % base);
+        *limb = rem;
         x = quot;
     }
-    debug_assert_eq!(x, BigUint::from(0u32));
+    debug_assert_eq!(x, 0u32);
     res
 }
 
-fn negate<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    x: &[u32; NUM_LIMBS],
-) -> [u32; NUM_LIMBS] {
+fn negate<const NUM_LIMBS: usize>(x: &[u32; NUM_LIMBS]) -> [u32; NUM_LIMBS] {
     let mut carry = 1;
     array::from_fn(|i| {
-        let val = (1 << LIMB_BITS) + carry - 1 - x[i];
-        carry = val >> LIMB_BITS;
-        val % (1 << LIMB_BITS)
+        let val = (1 << RV32_CELL_BITS) + carry - 1 - x[i];
+        carry = val >> RV32_CELL_BITS;
+        val % (1 << RV32_CELL_BITS)
     })
 }
