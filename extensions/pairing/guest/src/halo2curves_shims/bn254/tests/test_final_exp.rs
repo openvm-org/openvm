@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::ops::Neg;
 
 use halo2curves_axiom::bn256::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;
@@ -7,7 +8,6 @@ use num_traits::Num;
 use openvm_ecc_guest::{algebra::ExpBytes, AffinePoint};
 
 use crate::{
-    affine_point::AffineCoords,
     halo2curves_shims::bn254::Bn254,
     pairing::{FinalExp, MultiMillerLoop},
 };
