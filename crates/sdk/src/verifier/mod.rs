@@ -22,7 +22,12 @@ const SBOX_SIZE: usize = 7;
 
 impl AggStarkConfig {
     pub fn leaf_vm_config(&self) -> NativeConfig {
-        leaf_vm_config(&self.leaf_fri_params, self.profiling)
+        let mut config = NativeConfig::aggregation(
+            DIGEST_SIZE * 2 + self.max_num_user_public_values,
+            SBOX_SIZE.min(self.leaf_fri_params.max_constraint_degree()),
+        );
+        config.system.profiling = self.profiling;
+        config
     }
     pub fn internal_vm_config(&self) -> NativeConfig {
         let mut config = NativeConfig::aggregation(
@@ -33,11 +38,12 @@ impl AggStarkConfig {
         config
     }
     pub fn root_verifier_vm_config(&self) -> NativeConfig {
-        root_verifier_vm_config(
-            &self.root_fri_params,
-            self.max_num_user_public_values,
-            self.profiling,
-        )
+        let mut config = NativeConfig::aggregation(
+            DIGEST_SIZE * 2 + self.max_num_user_public_values,
+            SBOX_SIZE.min(self.root_fri_params.max_constraint_degree()),
+        );
+        config.system.profiling = self.profiling;
+        config
     }
 }
 
@@ -47,37 +53,12 @@ where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    // pub fn leaf_vm_config(&self) -> NativeConfig {
-    //     leaf_vm_config(&self.leaf_fri_params, self.profiling)
-    // }
-
-    pub fn root_verifier_vm_config(&self) -> NativeConfig {
-        root_verifier_vm_config(
-            &self.root_fri_params,
-            self.max_num_user_public_values,
-            self.profiling,
-        )
+    pub fn minimal_root_verifier_vm_config(&self) -> NativeConfig {
+        let mut config = NativeConfig::aggregation(
+            DIGEST_SIZE * 2 + self.max_num_user_public_values,
+            SBOX_SIZE.min(self.root_fri_params.max_constraint_degree()),
+        );
+        config.system.profiling = self.profiling;
+        config
     }
-}
-
-fn leaf_vm_config(fri_params: &FriParameters, profiling: bool) -> NativeConfig {
-    let mut config = NativeConfig::aggregation(
-        VmVerifierPvs::<u8>::width(),
-        SBOX_SIZE.min(fri_params.max_constraint_degree()),
-    );
-    config.system.profiling = profiling;
-    config
-}
-
-fn root_verifier_vm_config(
-    fri_params: &FriParameters,
-    max_num_user_public_values: usize,
-    profiling: bool,
-) -> NativeConfig {
-    let mut config = NativeConfig::aggregation(
-        DIGEST_SIZE * 2 + max_num_user_public_values,
-        SBOX_SIZE.min(fri_params.max_constraint_degree()),
-    );
-    config.system.profiling = profiling;
-    config
 }

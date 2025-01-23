@@ -100,6 +100,15 @@ where
     VC::Periphery: Chip<SC>,
 {
     pub fn keygen(config: AppConfig<VC>) -> Self {
+        println!(
+            "AppStarkConfig app_fri_params: {:?}",
+            config.app_fri_params.fri_params
+        );
+        println!(
+            "AppStarkConfig app_vm_config: {:?}",
+            config.app_vm_config.system().clone()
+        );
+
         let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params.fri_params);
         let app_vm_pk = {
             let vm = VirtualMachine::new(app_engine, config.app_vm_config.clone());
@@ -165,6 +174,11 @@ impl AggStarkProvingKey {
     }
 
     pub fn dummy_proof_and_keygen(config: AggStarkConfig) -> (Self, Proof<SC>) {
+        println!(
+            "AggStarkConfig leaf_fri_params: {:?}",
+            config.leaf_fri_params
+        );
+
         let leaf_vm_config = config.leaf_vm_config();
         let internal_vm_config = config.internal_vm_config();
         let root_vm_config = config.root_verifier_vm_config();
@@ -351,9 +365,16 @@ where
     }
 
     pub fn dummy_proof_and_keygen(config: MinimalStarkConfig<VC>) -> (Self, Proof<SC>) {
-        let root_vm_config = config.root_verifier_vm_config();
+        let root_vm_config = config.minimal_root_verifier_vm_config();
 
-        // println!("MinimalStarkConfig: {:?}", config);
+        println!(
+            "MinimalStarkConfig app_fri_params: {:?}",
+            config.app_fri_params
+        );
+        println!(
+            "MinimalStarkConfig app_vm_config: {:?}",
+            config.app_vm_config.system().clone()
+        );
 
         let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params);
         let app_vm_pk = Arc::new({
@@ -367,11 +388,8 @@ where
             }
         });
 
-        let dummy_proof = dummy_minimal_proof(
-            app_vm_pk.clone(),
-            config.app_fri_params,
-            config.max_num_user_public_values,
-        );
+        let dummy_proof =
+            dummy_minimal_proof(config.app_fri_params, config.max_num_user_public_values);
 
         let root_verifier_pk = {
             let root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
@@ -429,6 +447,33 @@ where
     }
 }
 
+/// Proving key for the minimal root verifier.
+/// Properties:
+/// - Traces heights of each AIR is constant. This is required by the static verifier.
+/// - Instead of the AIR order specified by VC. AIRs are ordered by trace heights.
+#[derive(Serialize, Deserialize, Derivative)]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
+pub struct MinimalRootVerifierProvingKey {
+    /// VM Proving key for the root verifier.
+    /// - AIR proving key in `MultiStarkProvingKey` is ordered by trace height.
+    /// - `VmConfig.overridden_executor_heights` is specified and is in the original AIR order.
+    /// - `VmConfig.memory_config.boundary_air_height` is specified.
+    pub vm_pk: Arc<VmProvingKey<RootSC, NativeConfig>>,
+    /// Committed executable for the root VM.
+    pub root_committed_exe: Arc<VmCommittedExe<RootSC>>,
+    /// The constant trace heights, ordered by AIR ID.
+    pub air_heights: Vec<usize>,
+    // The following is currently not used:
+    // The constant trace heights, ordered according to an internal ordering determined by the `NativeConfig`.
+    // pub internal_heights: VmComplexTraceHeights,
+}
+
+impl MinimalRootVerifierProvingKey {
+    pub fn air_id_permutation(&self) -> AirIdPermutation {
+        AirIdPermutation::compute(&self.air_heights)
+    }
+}
+
 impl<VC> MinimalProvingKey<VC> {
     /// Attention:
     /// - This function is very expensive.
@@ -448,7 +493,7 @@ impl<VC> MinimalProvingKey<VC> {
             MinimalStarkProvingKey::dummy_proof_and_keygen(minimal_stark_config);
         let dummy_root_proof = minimal_stark_pk
             .root_verifier_pk
-            .generate_dummy_root_proof(vec![dummy_proof]);
+            .generate_dummy_minimal_root_proof(dummy_proof);
 
         // TODO: Remove; this is only for testing. cache the halo2 proving key to speed up test.
         let halo2_pk_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

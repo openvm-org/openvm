@@ -77,8 +77,7 @@ where
 }
 
 pub struct MinimalStarkProver {
-    // leaf_prover: LeafProver,
-    root_prover: RootVerifierLocalProver,
+    pub root_prover: RootVerifierLocalProver,
 }
 
 impl MinimalStarkProver {

@@ -21,10 +21,11 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    keygen::RootVerifierProvingKey,
-    prover::{vm::SingleSegmentVmProver, RootVerifierLocalProver},
+    keygen::{MinimalRootVerifierProvingKey, RootVerifierProvingKey},
+    prover::{vm::SingleSegmentVmProver, MinimalStarkProver, RootVerifierLocalProver},
     verifier::{
         common::assert_single_segment_vm_exit_successfully_with_connector_air_id,
+        minimal::types::MinimalVmVerifierInput,
         root::types::{RootVmVerifierInput, RootVmVerifierPvs},
     },
     RootSC, F, SC,
@@ -65,7 +66,63 @@ impl RootVerifierProvingKey {
             .write(),
         )
     }
+
+    pub fn generate_dummy_minimal_root_proof(&self, proof: Proof<SC>) -> Proof<RootSC> {
+        let prover = RootVerifierLocalProver::new(self.clone());
+        // 2 * DIGEST_SIZE for exe_commit and leaf_commit
+        let num_public_values = prover
+            .root_verifier_pk
+            .vm_pk
+            .vm_config
+            .system
+            .num_public_values
+            - 2 * DIGEST_SIZE;
+        SingleSegmentVmProver::prove(
+            &prover,
+            MinimalVmVerifierInput {
+                proof,
+                public_values: vec![F::ZERO; num_public_values],
+            }
+            .write(),
+        )
+    }
 }
+
+// impl MinimalRootVerifierProvingKey {
+//     pub fn keygen_static_verifier(
+//         &self,
+//         params: &Halo2Params,
+//         root_proof: Proof<RootSC>,
+//     ) -> Halo2VerifierProvingKey {
+//         let mut witness = Witness::default();
+//         root_proof.write(&mut witness);
+//         let dsl_operations = build_static_verifier_operations(self, &root_proof);
+//         Halo2VerifierProvingKey {
+//             pinning: Halo2Prover::keygen(params, dsl_operations.clone(), witness),
+//             dsl_ops: dsl_operations,
+//         }
+//     }
+
+//     pub fn generate_dummy_root_proof(&self, proof: Proof<SC>) -> Proof<RootSC> {
+//         let prover = MinimalStarkProver::new(self.clone());
+//         let num_public_values = prover
+//             .root_prover
+//             .root_verifier_pk
+//             .vm_pk
+//             .vm_config
+//             .system
+//             .num_public_values
+//             - 1 * DIGEST_SIZE;
+//         SingleSegmentVmProver::prove(
+//             &prover,
+//             MinimalVmVerifierInput {
+//                 proof,
+//                 public_values: vec![F::ZERO; num_public_values],
+//             }
+//             .write(),
+//         )
+//     }
+// }
 
 fn build_static_verifier_operations(
     root_verifier_pk: &RootVerifierProvingKey,
