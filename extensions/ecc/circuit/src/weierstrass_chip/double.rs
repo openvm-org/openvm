@@ -5,7 +5,7 @@ use num_traits::One;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldVariable};
 
-pub fn ec_double_ne_expr(
+pub fn sw_double_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,
     a_biguint: BigUint,
