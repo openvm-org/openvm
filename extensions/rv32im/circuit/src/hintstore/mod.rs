@@ -403,13 +403,17 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
 
         cols.from_state = record.from_state.map(F::from_canonical_u32);
         cols.mem_ptr_ptr = record.instruction.b;
-        cols.mem_ptr_aux_cols =
-            aux_cols_factory.make_read_aux_cols(memory.record_by_id(record.mem_ptr_read));
+        aux_cols_factory.generate_read_aux(
+            memory.record_by_id(record.mem_ptr_read),
+            &mut cols.mem_ptr_aux_cols,
+        );
 
         cols.num_words_ptr = record.instruction.a;
         if let Some(num_words_read) = record.num_words_read {
-            cols.num_words_aux_cols =
-                aux_cols_factory.make_read_aux_cols(memory.record_by_id(num_words_read));
+            aux_cols_factory.generate_read_aux(
+                memory.record_by_id(num_words_read),
+                &mut cols.num_words_aux_cols,
+            );
         }
 
         let mut mem_ptr = record.mem_ptr;
@@ -420,7 +424,7 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
             cols.from_state.timestamp =
                 F::from_canonical_u32(record.from_state.timestamp + (3 * i as u32));
             cols.data = data;
-            cols.write_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(write));
+            aux_cols_factory.generate_write_aux(memory.record_by_id(write), &mut cols.write_aux);
             cols.rem_words_limbs = decompose(rem_words);
             cols.mem_ptr_limbs = decompose(mem_ptr);
             if i != 0 {
