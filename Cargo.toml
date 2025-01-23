@@ -1,7 +1,7 @@
 [workspace.package]
 version = "0.2.0-alpha"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.83"
 authors = ["OpenVM Authors"]
 homepage = "https://openvm.dev"
 repository = "https://github.com/openvm-org/"
