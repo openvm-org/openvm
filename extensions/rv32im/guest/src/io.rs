@@ -4,13 +4,27 @@ use crate::{PhantomImm, PHANTOM_FUNCT3, SYSTEM_OPCODE};
 /// Store the next 4 bytes from the hint stream to [[rd] + imm]_2.
 #[macro_export]
 macro_rules! hint_store_u32 {
-    ($x:expr, $imm:expr) => {
+    ($x:expr) => {
         openvm_platform::custom_insn_i!(
             opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
-            funct3 = openvm_rv32im_guest::HINT_STORE_W_FUNCT3,
+            funct3 = openvm_rv32im_guest::HINT_FUNCT3,
             rd = In $x,
             rs1 = Const "x0",
-            imm = Const $imm
+            imm = Const 0,
+        )
+    };
+}
+
+/// Store the next 4*len bytes from the hint stream to [[rd] + imm]_2.
+#[macro_export]
+macro_rules! hint_buffer_u32 {
+    ($x:expr, $len:expr) => {
+        openvm_platform::custom_insn_i!(
+            opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
+            funct3 = openvm_rv32im_guest::HINT_FUNCT3,
+            rd = In $x,
+            rs1 = In $len,
+            imm = Const 1,
         )
     };
 }

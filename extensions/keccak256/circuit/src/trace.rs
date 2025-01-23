@@ -20,7 +20,7 @@ use tiny_keccak::keccakf;
 use super::{
     columns::{KeccakInstructionCols, KeccakVmCols},
     KeccakVmChip, KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
-    KECCAK_REGISTER_READS, KECCAK_WORD_SIZE, NUM_ABSORB_ROUNDS,
+    KECCAK_REGISTER_READS, NUM_ABSORB_ROUNDS,
 };
 
 impl<SC: StarkGenericConfig> Chip<SC> for KeccakVmChip<Val<SC>>
@@ -163,16 +163,6 @@ where
             .zip(instruction_blocks.into_par_iter())
             .for_each(|((rows, p3_keccak_mat), (instruction, diff, block))| {
                 let height = rows.len() / trace_width;
-                let partial_read_data = if let Some(partial_read_idx) = block.partial_read_idx {
-                    memory
-                        .record_by_id(block.reads[partial_read_idx])
-                        .data
-                        .clone()
-                        .try_into()
-                        .unwrap()
-                } else {
-                    [Val::<SC>::ZERO; KECCAK_WORD_SIZE]
-                };
                 for (row, p3_keccak_row) in rows
                     .chunks_exact_mut(trace_width)
                     .zip(p3_keccak_mat.chunks_exact(NUM_KECCAK_PERM_COLS))
@@ -184,10 +174,13 @@ where
 
                     row_mut.sponge.block_bytes =
                         block.padded_bytes.map(Val::<SC>::from_canonical_u8);
-                    row_mut
-                        .mem_oc
-                        .partial_block
-                        .copy_from_slice(&partial_read_data[1..]);
+                    if let Some(partial_read_idx) = block.partial_read_idx {
+                        let partial_read = memory.record_by_id(block.reads[partial_read_idx]);
+                        row_mut
+                            .mem_oc
+                            .partial_block
+                            .copy_from_slice(&partial_read.data[1..]);
+                    }
                     for (i, is_padding) in row_mut.sponge.is_padding_byte.iter_mut().enumerate() {
                         *is_padding = Val::<SC>::from_bool(i >= block.remaining_len);
                     }

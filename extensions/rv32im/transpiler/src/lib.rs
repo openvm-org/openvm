@@ -5,8 +5,8 @@ use openvm_instructions::{
     SystemOpcode,
 };
 use openvm_rv32im_guest::{
-    PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_STORE_W_FUNCT3, PHANTOM_FUNCT3, REVEAL_FUNCT3,
-    RV32M_FUNCT7, RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
+    PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3, HINT_STOREW_IMM,
+    PHANTOM_FUNCT3, REVEAL_FUNCT3, RV32M_FUNCT7, RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{
@@ -142,22 +142,33 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
         if opcode != SYSTEM_OPCODE {
             return None;
         }
-        if funct3 != HINT_STORE_W_FUNCT3 && funct3 != REVEAL_FUNCT3 {
+        if funct3 != HINT_FUNCT3 && funct3 != REVEAL_FUNCT3 {
             return None;
         }
 
         let instruction = match funct3 {
-            HINT_STORE_W_FUNCT3 => {
+            HINT_FUNCT3 => {
                 let dec_insn = IType::new(instruction_u32);
                 let imm_u16 = (dec_insn.imm as u32) & 0xffff;
-                Some(Instruction::from_isize(
-                    Rv32HintStoreOpcode::HINT_STOREW.global_opcode(),
-                    0,
-                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
-                    imm_u16 as isize,
-                    1,
-                    2,
-                ))
+                match imm_u16 {
+                    HINT_STOREW_IMM => Some(Instruction::from_isize(
+                        Rv32HintStoreOpcode::HINT_STOREW.global_opcode(),
+                        0,
+                        (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                        0,
+                        1,
+                        2,
+                    )),
+                    HINT_BUFFER_IMM => Some(Instruction::from_isize(
+                        Rv32HintStoreOpcode::HINT_BUFFER.global_opcode(),
+                        (RV32_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
+                        (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                        0,
+                        1,
+                        2,
+                    )),
+                    _ => None,
+                }
             }
             REVEAL_FUNCT3 => {
                 let dec_insn = IType::new(instruction_u32);

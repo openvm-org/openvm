@@ -14,7 +14,9 @@ pub const RV32_ALU_OPCODE: u8 = 0b0110011;
 pub const RV32M_FUNCT7: u8 = 0x01;
 
 pub const TERMINATE_FUNCT3: u8 = 0b000;
-pub const HINT_STORE_W_FUNCT3: u8 = 0b001;
+pub const HINT_FUNCT3: u8 = 0b001;
+pub const HINT_STOREW_IMM: u32 = 0;
+pub const HINT_BUFFER_IMM: u32 = 1;
 pub const REVEAL_FUNCT3: u8 = 0b010;
 pub const PHANTOM_FUNCT3: u8 = 0b011;
 pub const CSRRW_FUNCT3: u8 = 0b001;

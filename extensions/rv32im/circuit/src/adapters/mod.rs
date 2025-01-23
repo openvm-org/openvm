@@ -5,7 +5,6 @@ use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 
 mod alu;
 mod branch;
-mod hintstore;
 mod jalr;
 mod loadstore;
 mod mul;
@@ -13,7 +12,6 @@ mod rdwrite;
 
 pub use alu::*;
 pub use branch::*;
-pub use hintstore::*;
 pub use jalr::*;
 pub use loadstore::*;
 pub use mul::*;
@@ -39,6 +37,13 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; RV32_REGISTER_NUM_LIMBS]) -> u32 {
         val += limb << (i * 8);
     }
     val
+}
+
+/// inverse of `compose`
+pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
+    std::array::from_fn(|i| {
+        F::from_canonical_u32((value >> (RV32_CELL_BITS * i)) & ((1 << RV32_CELL_BITS) - 1))
+    })
 }
 
 /// Read register value as [RV32_REGISTER_NUM_LIMBS] limbs from memory.

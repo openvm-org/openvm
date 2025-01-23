@@ -399,7 +399,7 @@ impl<
         let rs = read_record.rs.map(|r| memory.record_by_id(r));
         for (i, r) in rs.iter().enumerate() {
             row_slice.rs_ptr[i] = r.pointer;
-            row_slice.rs_val[i] = r.data.clone().try_into().unwrap();
+            row_slice.rs_val[i].copy_from_slice(&r.data);
             aux_cols_factory.generate_read_aux(r, &mut row_slice.rs_read_aux[i]);
             for (j, x) in read_record.reads[i].iter().enumerate() {
                 let read = memory.record_by_id(*x);
