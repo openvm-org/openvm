@@ -7,7 +7,6 @@
 //! into a hash by applying a sponge construction. `compress` can be used as a hash in the
 //! internal leaves of a Merkle tree but **not** as the leaf hash because `compress` does not
 //! add any padding.
-use std::sync::Arc;
 
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
@@ -15,7 +14,7 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     prover::types::AirProofInput,
     rap::AnyRap,
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 #[cfg(test)]
@@ -56,7 +55,7 @@ impl<SC: StarkGenericConfig> Chip<SC> for Poseidon2PeripheryChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.air(),
             Poseidon2PeripheryChip::Register1(chip) => chip.air(),

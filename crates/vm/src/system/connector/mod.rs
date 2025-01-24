@@ -13,8 +13,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
-    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter, Stateful,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    AirRef, Chip, ChipUsageGetter, Stateful,
 };
 use serde::{Deserialize, Serialize};
 
@@ -177,7 +177,7 @@ where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air)
     }
 

@@ -5,8 +5,7 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
-    rap::AnyRap,
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashSet;
 
@@ -61,7 +60,7 @@ impl<const CHUNK: usize, SC: StarkGenericConfig> Chip<SC> for MemoryMerkleChip<C
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air.clone())
     }
 

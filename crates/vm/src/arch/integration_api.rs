@@ -16,8 +16,8 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter, Stateful,
+    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
+    AirRef, Chip, ChipUsageGetter, Stateful,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -291,7 +291,7 @@ where
         <A::Air as VmAdapterAir<DebugConstraintBuilder<'a, SC>>>::Interface,
     >,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         let air: VmAirWrapper<A::Air, C::Air> = VmAirWrapper {
             adapter: self.adapter.air().clone(),
             core: self.core.air().clone(),

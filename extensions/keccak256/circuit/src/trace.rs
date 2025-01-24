@@ -9,8 +9,8 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap},
-    Chip, ChipUsageGetter,
+    rap::get_air_name,
+    AirRef, Chip, ChipUsageGetter,
 };
 use p3_keccak_air::{
     generate_trace_rows, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, NUM_ROUNDS, U64_LIMBS,
@@ -27,7 +27,7 @@ impl<SC: StarkGenericConfig> Chip<SC> for KeccakVmChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air)
     }
 

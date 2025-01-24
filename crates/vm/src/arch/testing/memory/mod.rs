@@ -8,7 +8,7 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     rap::AnyRap,
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 use rand::{seq::SliceRandom, Rng};
 
@@ -77,7 +77,7 @@ impl<SC: StarkGenericConfig> Chip<SC> for MemoryTester<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(MemoryDummyAir::<WORD_SIZE>::new(self.bus))
     }
 

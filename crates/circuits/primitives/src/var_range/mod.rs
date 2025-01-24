@@ -21,7 +21,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter, Stateful,
 };
 use tracing::instrument;
 
@@ -219,7 +219,7 @@ impl<SC: StarkGenericConfig> Chip<SC> for VariableRangeCheckerChip
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air)
     }
 
@@ -233,7 +233,7 @@ impl<SC: StarkGenericConfig> Chip<SC> for SharedVariableRangeCheckerChip
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         self.0.air()
     }
 

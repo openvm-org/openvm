@@ -5,7 +5,6 @@ use openvm_stark_backend::{
     p3_field::FieldAlgebra,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
-    prover::USE_DEBUG_BUILDER,
     rap::AnyRap,
     verifier::VerificationError,
 };

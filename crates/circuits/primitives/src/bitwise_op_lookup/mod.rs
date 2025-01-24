@@ -16,8 +16,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter, Stateful,
+    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
+    AirRef, Chip, ChipUsageGetter, Stateful,
 };
 
 mod bus;
@@ -210,7 +210,7 @@ impl<const NUM_BITS: usize> SharedBitwiseOperationLookupChip<NUM_BITS> {
 impl<SC: StarkGenericConfig, const NUM_BITS: usize> Chip<SC>
     for BitwiseOperationLookupChip<NUM_BITS>
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air)
     }
 
@@ -223,7 +223,7 @@ impl<SC: StarkGenericConfig, const NUM_BITS: usize> Chip<SC>
 impl<SC: StarkGenericConfig, const NUM_BITS: usize> Chip<SC>
     for SharedBitwiseOperationLookupChip<NUM_BITS>
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         self.0.air()
     }
 

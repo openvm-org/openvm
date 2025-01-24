@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     rap::AnyRap,
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 use crate::arch::{ExecutionBus, ExecutionState};
@@ -53,7 +53,7 @@ impl<SC: StarkGenericConfig> Chip<SC> for ExecutionTester<Val<SC>>
 where
     Val<SC>: Field,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(ExecutionDummyAir::new(self.bus))
     }
 

@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_stark_backend::{
@@ -8,8 +8,8 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap},
-    Chip, ChipUsageGetter,
+    rap::get_air_name,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
@@ -19,7 +19,7 @@ impl<SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<SC>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         self.air.clone()
     }
 

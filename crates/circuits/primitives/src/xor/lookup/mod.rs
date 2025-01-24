@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 use super::bus::XorBus;
@@ -154,7 +154,7 @@ impl<const M: usize> XorLookupChip<M> {
 }
 
 impl<SC: StarkGenericConfig, const M: usize> Chip<SC> for XorLookupChip<M> {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air)
     }
 

@@ -2,7 +2,7 @@ use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError,
+    rap::AnyRap, verifier::VerificationError,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,

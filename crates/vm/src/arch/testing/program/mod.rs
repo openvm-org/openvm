@@ -7,8 +7,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
-    rap::AnyRap,
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 use crate::{
@@ -54,7 +53,7 @@ impl<F: Field> ProgramTester<F> {
 }
 
 impl<SC: StarkGenericConfig> Chip<SC> for ProgramTester<Val<SC>> {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(ProgramDummyAir::new(self.bus))
     }
 

@@ -98,6 +98,7 @@ fn negative_castf_overflow_test() {
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
     tester.build();
 
+    let chip_air = chip.air();
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();
     let row = trace.row_mut(0);
@@ -107,11 +108,16 @@ fn negative_castf_overflow_test() {
         .borrow_mut();
     cols.out_val[3] = F::from_canonical_u32(rng.gen_range(1 << FINAL_LIMB_BITS..1 << LIMB_BITS));
 
+    let rc_air = range_checker_chip.air();
     let rc_p_input = range_checker_chip.generate_air_proof_input();
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![chip_input, rc_p_input]).err(),
+        BabyBearPoseidon2Engine::run_test_fast(
+            vec![chip_air, rc_air],
+            vec![chip_input, rc_p_input]
+        )
+        .err(),
         Some(VerificationError::ChallengePhaseError),
         "Expected verification to fail, but it didn't"
     );
@@ -136,6 +142,7 @@ fn negative_castf_memread_test() {
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
     tester.build();
 
+    let chip_air = chip.air();
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();
     let row = trace.row_mut(0);
@@ -145,11 +152,16 @@ fn negative_castf_memread_test() {
         .borrow_mut();
     cols.b_pointer += F::ONE;
 
+    let rc_air = range_checker_chip.air();
     let rc_p_input = range_checker_chip.generate_air_proof_input();
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![chip_input, rc_p_input]).err(),
+        BabyBearPoseidon2Engine::run_test_fast(
+            vec![chip_air, rc_air],
+            vec![chip_input, rc_p_input]
+        )
+        .err(),
         Some(VerificationError::ChallengePhaseError),
         "Expected verification to fail, but it didn't"
     );
@@ -174,6 +186,7 @@ fn negative_castf_memwrite_test() {
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
     tester.build();
 
+    let chip_air = chip.air();
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();
     let row = trace.row_mut(0);
@@ -183,11 +196,16 @@ fn negative_castf_memwrite_test() {
         .borrow_mut();
     cols.a_pointer += F::ONE;
 
+    let rc_air = range_checker_chip.air();
     let rc_p_input = range_checker_chip.generate_air_proof_input();
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![chip_input, rc_p_input]).err(),
+        BabyBearPoseidon2Engine::run_test_fast(
+            vec![chip_air, rc_air],
+            vec![chip_input, rc_p_input]
+        )
+        .err(),
         Some(VerificationError::ChallengePhaseError),
         "Expected verification to fail, but it didn't"
     );
@@ -212,6 +230,7 @@ fn negative_castf_as_test() {
     prepare_castf_rand_write_execute(&mut tester, &mut chip, y, &mut rng);
     tester.build();
 
+    let chip_air = chip.air();
     let mut chip_input = chip.generate_air_proof_input();
     let trace = chip_input.raw.common_main.as_mut().unwrap();
     let row = trace.row_mut(0);
@@ -221,11 +240,16 @@ fn negative_castf_as_test() {
         .borrow_mut();
     cols.a_as += F::ONE;
 
+    let rc_air = range_checker_chip.air();
     let rc_p_input = range_checker_chip.generate_air_proof_input();
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![chip_input, rc_p_input]).err(),
+        BabyBearPoseidon2Engine::run_test_fast(
+            vec![chip_air, rc_air],
+            vec![chip_input, rc_p_input]
+        )
+        .err(),
         Some(VerificationError::ChallengePhaseError),
         "Expected verification to fail, but it didn't"
     );

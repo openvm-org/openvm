@@ -989,8 +989,8 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         P: Chip<SC>,
     {
         // ATTENTION: The order of AIR MUST be consistent with `generate_proof_input`.
-        let program_rap = Arc::new(self.program_chip().air) as Arc<dyn AnyRap<SC>>;
-        let connector_rap = Arc::new(self.connector_chip().air) as Arc<dyn AnyRap<SC>>;
+        let program_rap = Arc::new(self.program_chip().air) as AirRef<SC>;
+        let connector_rap = Arc::new(self.connector_chip().air) as AirRef<SC>;
         [program_rap, connector_rap]
             .into_iter()
             .chain(self._public_values_chip().map(|chip| chip.air()))
