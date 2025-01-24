@@ -8,11 +8,11 @@ The following modules contain standalone `Air`'s:
 - [range_tuple](./range_tuple/mod.rs)
 - [var_range](./var_range/mod.rs)
 - [xor](./xor/README.md)
+- [bitwise_op_lookup](./bitwise_op_lookup/mod.rs)
 
 The following modules contain `SubAir`'s:
 - [assert_less_than](./assert_less_than/mod.rs)
 - [bigint](./bigint/README.md)
-- [bitwise_op_lookup](./bitwise_op_lookup/mod.rs)
 - [encoder](./encoder/mod.rs)
 - [is_equal](./is_equal/mod.rs)
 - [is_equal_array](./is_equal_array/moxd.rs)
