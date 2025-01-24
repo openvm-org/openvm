@@ -79,13 +79,21 @@ pub fn write_evm_verifier_to_file<P: AsRef<Path>>(verifier: EvmVerifier, path: P
     write_to_file_bytes(path, verifier)
 }
 
-pub fn read_from_file_bitcode<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
+pub fn read_object_from_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
+    read_from_file_bitcode(path)
+}
+
+pub fn write_object_to_file<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
+    write_to_file_bitcode(path, data)
+}
+
+pub(crate) fn read_from_file_bitcode<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
     let data = std::fs::read(path)?;
     let ret = bitcode::deserialize(&data)?;
     Ok(ret)
 }
 
-pub fn write_to_file_bitcode<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
+pub(crate) fn write_to_file_bitcode<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
     let bytes = bitcode::serialize(&data)?;
     if let Some(parent) = path.as_ref().parent() {
         create_dir_all(parent)?;
