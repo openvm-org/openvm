@@ -1,6 +1,6 @@
 use core::ops::Mul;
 
-use openvm_algebra_guest::{Field, IntMod};
+use openvm_algebra_guest::Field;
 
 pub trait TwistedEdwardsPoint: Sized {
     /// The `a` coefficient in the twisted Edwards curve equation `ax^2 + y^2 = 1 + d x^2 y^2`.
@@ -9,9 +9,7 @@ pub trait TwistedEdwardsPoint: Sized {
     const CURVE_D: Self::Coordinate;
     const IDENTITY: Self;
 
-    type Coordinate: IntMod + Field;
-    const ZERO: Self::Coordinate = <Self::Coordinate as IntMod>::ZERO;
-    const ONE: Self::Coordinate = <Self::Coordinate as IntMod>::ONE;
+    type Coordinate: Field;
 
     /// The concatenated `x, y` coordinates of the affine point, where
     /// coordinates are in little endian.
@@ -34,19 +32,8 @@ pub trait TwistedEdwardsPoint: Sized {
     where
         for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
     {
-        if x == Self::ZERO && y == Self::ONE {
-            Some(Self::IDENTITY)
-        } else {
-            Self::from_xy_nonidentity(x, y)
-        }
-    }
-
-    fn from_xy_nonidentity(x: Self::Coordinate, y: Self::Coordinate) -> Option<Self>
-    where
-        for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
-    {
         let lhs = Self::CURVE_A * &x * &x + &y * &y;
-        let rhs = Self::CURVE_D * &x * &x * &y * &y + &Self::ONE;
+        let rhs = Self::CURVE_D * &x * &x * &y * &y + &Self::Coordinate::ONE;
         if lhs != rhs {
             return None;
         }
