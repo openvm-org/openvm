@@ -4242,7 +4242,6 @@ dependencies = [
 name = "openvm-rv32im-circuit"
 version = "0.2.0-alpha"
 dependencies = [
- "bitcode",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",

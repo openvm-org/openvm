@@ -9,7 +9,6 @@ use {
     crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
     core::mem::MaybeUninit,
     openvm_platform::custom_insn_r,
-    openvm_rv32im_guest::hint_buffer_u32,
 };
 
 use super::{Bn254, Fp, Fp12, Fp2};
@@ -362,9 +361,12 @@ impl PairingCheck for Bn254 {
                     rs1 = In &p_fat_ptr,
                     rs2 = In &q_fat_ptr
                 );
-                let ptr = hint.as_ptr() as *const u8;
+                let mut ptr = hint.as_ptr() as *const u8;
                 // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
-                hint_buffer_u32!(ptr, (32 * 12 * 2) / 4);
+                for _ in (0..32 * 12 * 2).step_by(4) {
+                    openvm_rv32im_guest::hint_store_u32!(ptr, 0);
+                    ptr = ptr.add(4);
+                }
                 hint.assume_init()
             }
         }
