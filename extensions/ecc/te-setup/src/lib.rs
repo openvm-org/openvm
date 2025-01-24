@@ -303,13 +303,13 @@ pub fn te_init(input: TokenStream) -> TokenStream {
 
     TokenStream::from(quote::quote_spanned! { span.into() =>
         #[cfg(target_os = "zkvm")]
-        mod openvm_intrinsics_ffi_2 {
+        mod openvm_intrinsics_ffi_2_te {
             use ::openvm_ecc_guest::{TE_OPCODE, TE_FUNCT3, TeBaseFunct7};
 
             #(#externs)*
         }
         #(#setups)*
-        pub fn setup_all_curves() {
+        pub fn setup_all_te_curves() {
             #(#setup_all_curves)*
         }
     })
