@@ -67,7 +67,8 @@ extern "C" {
 #[cfg(target_os = "zkvm")]
 mod openvm_intrinsics_ffi_complex {
     fn complex_add_extern_func_Complex(rd: usize, rs1: usize, rs2: usize) {
-        // send the instructions corresponding to the modulus with the provided `mod_idx`
+        // send the instructions for the corresponding complex chip
+        // If this struct was `init`ed k-th, these operations will be sent to the k-th complex chip
     }
     // implement the other functions
 }
