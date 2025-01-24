@@ -270,7 +270,7 @@ where
 // - when A::Air is an AdapterAir for all AirBuilders needed by stark-backend
 // - and when M::Air is an CoreAir for all AirBuilders needed by stark-backend,
 // then VmAirWrapper<A::Air, M::Air> is an Air for all AirBuilders needed
-// by stark-backend, which is equivalent to saying it implements AnyRap<SC>
+// by stark-backend, which is equivalent to saying it implements AirRef<SC>
 // The where clauses to achieve this statement is unfortunately really verbose.
 impl<SC, A, C> Chip<SC> for VmChipWrapper<Val<SC>, A, C>
 where

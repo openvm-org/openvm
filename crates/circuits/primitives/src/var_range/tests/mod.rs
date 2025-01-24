@@ -2,7 +2,7 @@ use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError,
+    utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
@@ -50,7 +50,7 @@ fn test_variable_range_checker_chip_send() {
 
     let mut all_chips = lists_airs
         .into_iter()
-        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
+        .map(|list| Arc::new(list) as AirRef<_>)
         .collect::<Vec<_>>();
     all_chips.push(Arc::new(var_range_checker.air));
 
@@ -161,7 +161,7 @@ fn test_variable_range_checker_chip_range_check() {
 
     let mut all_chips = lists_airs
         .into_iter()
-        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
+        .map(|list| Arc::new(list) as AirRef<_>)
         .collect::<Vec<_>>();
     all_chips.push(Arc::new(var_range_checker.air));
 

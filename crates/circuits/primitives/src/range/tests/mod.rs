@@ -1,9 +1,7 @@
 use std::{iter, sync::Arc};
 
 use list::ListChip;
-use openvm_stark_backend::{
-    p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, rap::AnyRap,
-};
+use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, AirRef};
 use openvm_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
@@ -53,7 +51,7 @@ fn test_list_range_checker() {
 
     let range_trace = range_checker.generate_trace();
 
-    let mut all_chips: Vec<Arc<dyn AnyRap<_>>> = vec![];
+    let mut all_chips: Vec<AirRef<_>> = vec![];
     for list in lists {
         all_chips.push(Arc::new(list.air));
     }

@@ -2,7 +2,7 @@ use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError,
+    utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
@@ -68,7 +68,7 @@ fn test_xor_limbs_chip() {
 
     let xor_trace = xor_chip.generate_trace();
 
-    let mut all_chips: Vec<Arc<dyn AnyRap<_>>> = vec![];
+    let mut all_chips: Vec<AirRef<_>> = vec![];
     for requester in requesters {
         all_chips.push(Arc::new(requester));
     }
