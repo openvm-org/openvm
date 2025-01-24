@@ -1,17 +1,13 @@
 use alloc::vec::Vec;
 
-use halo2curves_axiom::bn256::{Fq, Fq2, G1Affine, G2Affine, G2Prepared};
+use halo2curves_axiom::bn256::G2Prepared;
 
-use super::assert_miller_results_eq;
-use crate::{
-    halo2curves_shims::{bn254::Bn254, tests::utils::generate_test_points},
-    pairing::MultiMillerLoop,
-};
+use super::{assert_miller_results_eq, generate_test_points_bn254};
+use crate::{halo2curves_shims::bn254::Bn254, pairing::MultiMillerLoop};
 
 #[allow(non_snake_case)]
 fn run_miller_loop_test(rand_seeds: &[u64]) {
-    let (P_vec, Q_vec, P_ecpoints, Q_ecpoints) =
-        generate_test_points::<G1Affine, G2Affine, Fq, Fq2>(rand_seeds);
+    let (P_vec, Q_vec, P_ecpoints, Q_ecpoints) = generate_test_points_bn254(rand_seeds);
 
     // Compare against halo2curves implementation
     let g2_prepareds = Q_vec

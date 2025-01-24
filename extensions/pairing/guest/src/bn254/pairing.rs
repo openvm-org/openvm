@@ -16,6 +16,15 @@ use crate::pairing::{
     Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep, MultiMillerLoop,
     PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
 };
+#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+use crate::{
+    bn254::utils::{
+        convert_bn254_fp2_to_halo2_fq2, convert_bn254_fp_to_halo2_fq,
+        convert_bn254_halo2_fq12_to_fp12,
+    },
+    halo2curves_shims::bn254::Bn254 as Halo2CurvesBn254,
+    pairing::FinalExp,
+};
 
 // TODO[jpw]: make macro
 impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
@@ -307,7 +316,35 @@ impl PairingCheck for Bn254 {
     ) -> (Self::Fp12, Self::Fp12) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            todo!()
+            #[cfg(not(feature = "halo2curves"))]
+            panic!("`halo2curves` feature must be enabled to use pairing check hint on host");
+
+            #[cfg(feature = "halo2curves")]
+            {
+                let p_halo2 = P
+                    .iter()
+                    .map(|p| {
+                        AffinePoint::new(
+                            convert_bn254_fp_to_halo2_fq(p.x.clone()),
+                            convert_bn254_fp_to_halo2_fq(p.y.clone()),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let q_halo2 = Q
+                    .iter()
+                    .map(|q| {
+                        AffinePoint::new(
+                            convert_bn254_fp2_to_halo2_fq2(q.x.clone()),
+                            convert_bn254_fp2_to_halo2_fq2(q.y.clone()),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let fq12 = Halo2CurvesBn254::multi_miller_loop(&p_halo2, &q_halo2);
+                let (c_fq12, s_fq12) = Halo2CurvesBn254::final_exp_hint(&fq12);
+                let c = convert_bn254_halo2_fq12_to_fp12(c_fq12);
+                let s = convert_bn254_halo2_fq12_to_fp12(s_fq12);
+                (c, s)
+            }
         }
         #[cfg(target_os = "zkvm")]
         {

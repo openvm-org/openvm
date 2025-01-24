@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use num_bigint::BigUint;
+use num_traits::Zero;
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
     Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
@@ -292,20 +293,38 @@ where
         if !self.should_finalize || num_records == 0 {
             return;
         }
-        // We will copy over the core part of last row to padded rows (all rows after num_records).
+
         let core_width = <Self::Air as BaseAir<F>>::width(&self.air);
         let adapter_width = trace.width() - core_width;
-        let last_row = trace
-            .rows()
-            .nth(num_records - 1)
-            .unwrap()
-            .collect::<Vec<_>>();
-        let last_row_core = last_row.split_at(adapter_width).1;
+        let dummy_row = self.generate_dummy_trace_row(adapter_width, core_width);
         for row in trace.rows_mut().skip(num_records) {
-            let core_row = row.split_at_mut(adapter_width).1;
-            // The same as last row, except "is_valid" (the first element of core part) is zero.
-            core_row.copy_from_slice(last_row_core);
-            core_row[0] = F::ZERO;
+            row.copy_from_slice(&dummy_row);
         }
+    }
+}
+
+impl FieldExpressionCoreChip {
+    // We will be setting is_valid = 0. That forces all flags be 0 (otherwise setup will be -1).
+    // We generate a dummy row with all flags set to 0, then we set is_valid = 0.
+    fn generate_dummy_trace_row<F: PrimeField32>(
+        &self,
+        adapter_width: usize,
+        core_width: usize,
+    ) -> Vec<F> {
+        let record = FieldExpressionRecord {
+            inputs: vec![BigUint::zero(); self.air.num_inputs()],
+            flags: vec![false; self.air.num_flags()],
+        };
+        let mut row = vec![F::ZERO; adapter_width + core_width];
+        let core_row = &mut row[adapter_width..];
+        // We **do not** want this trace row to update the range checker
+        // so we must create a temporary range checker
+        let tmp_range_checker = SharedVariableRangeCheckerChip::new(self.range_checker.bus());
+        self.air.expr.generate_subrow(
+            (tmp_range_checker.as_ref(), record.inputs, record.flags),
+            core_row,
+        );
+        core_row[0] = F::ZERO; // is_valid = 0
+        row
     }
 }

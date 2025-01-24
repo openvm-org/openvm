@@ -63,15 +63,17 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let modulus = modulus.expect("modulus parameter is required");
         let modulus_bytes = string_to_bytes(&modulus);
         let mut limbs = modulus_bytes.len();
+        let mut block_size = 32;
 
-        if limbs < 32 {
+        if limbs <= 32 {
             limbs = 32;
-            proc_macro::Diagnostic::new(proc_macro::Level::Warning, "`limbs` has been set to 32 because it was too small; this is going to be changed once we support more flexible reads").emit();
+        } else if limbs <= 48 {
+            limbs = 48;
+            block_size = 16;
+        } else {
+            panic!("limbs must be at most 48");
         }
 
-        // The largest power of two so that at most 10% of all space is wasted
-        let block_size = 1usize << ((limbs - 1) ^ (limbs + limbs / 9)).ilog2();
-        let limbs = limbs.next_multiple_of(block_size);
         let modulus_bytes = modulus_bytes
             .into_iter()
             .chain(vec![0u8; limbs])
@@ -717,14 +719,14 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         let modulus_bytes = string_to_bytes(&modulus);
         let mut limbs = modulus_bytes.len();
 
-        if limbs < 32 {
+        if limbs <= 32 {
             limbs = 32;
-            proc_macro::Diagnostic::new(proc_macro::Level::Warning, "`limbs` has been set to 32 because it was too small; this is going to be changed once we support more flexible reads").emit();
+        } else if limbs <= 48 {
+            limbs = 48;
+        } else {
+            panic!("limbs must be at most 48");
         }
 
-        // The largest power of two so that at most 10% of all space is wasted
-        let block_size = 1usize << ((limbs - 1) ^ (limbs + limbs / 9)).ilog2();
-        let limbs = limbs.next_multiple_of(block_size);
         let modulus_bytes = modulus_bytes
             .into_iter()
             .chain(vec![0u8; limbs])

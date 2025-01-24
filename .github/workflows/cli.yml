@@ -48,14 +48,14 @@ jobs:
         run: |
           cargo install --force --locked --path .
 
-      - name: Build book examples
+      - name: Build and run book examples
         working-directory: examples
         run: |
           for dir in */; do
             if [ -f "${dir}Cargo.toml" ]; then
               echo "Building ${dir%/}"
               cd "$dir"
-              cargo openvm build
+              cargo openvm build && cargo openvm run
               cd ..
             fi
           done

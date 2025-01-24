@@ -1,5 +1,5 @@
 use std::{
-    array::{self, from_fn},
+    array::from_fn,
     borrow::{Borrow, BorrowMut},
     iter::once,
     marker::PhantomData,
@@ -285,14 +285,19 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
         let row_slice: &mut Rv32HeapBranchAdapterCols<_, NUM_READS, READ_SIZE> =
             row_slice.borrow_mut();
         row_slice.from_state = write_record.map(F::from_canonical_u32);
+
         let rs_reads = read_record.rs_reads.map(|r| memory.record_by_id(r));
-        row_slice.rs_ptr = array::from_fn(|i| rs_reads[i].pointer);
-        row_slice.rs_val = array::from_fn(|i| rs_reads[i].data.clone().try_into().unwrap());
-        row_slice.rs_read_aux =
-            array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs_reads[i]));
-        row_slice.heap_read_aux = read_record
-            .heap_reads
-            .map(|r| aux_cols_factory.make_read_aux_cols(memory.record_by_id(r)));
+
+        for (i, rs_read) in rs_reads.iter().enumerate() {
+            row_slice.rs_ptr[i] = rs_read.pointer;
+            row_slice.rs_val[i].copy_from_slice(&rs_read.data);
+            aux_cols_factory.generate_read_aux(rs_read, &mut row_slice.rs_read_aux[i]);
+        }
+
+        for (i, heap_read) in read_record.heap_reads.iter().enumerate() {
+            let record = memory.record_by_id(*heap_read);
+            aux_cols_factory.generate_read_aux(record, &mut row_slice.heap_read_aux[i]);
+        }
 
         // Range checks:
         let need_range_check: Vec<u32> = rs_reads

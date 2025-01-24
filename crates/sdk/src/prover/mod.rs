@@ -23,10 +23,7 @@ pub mod vm;
 #[allow(unused_imports)]
 pub use stark::*;
 
-use crate::{
-    keygen::AggProvingKey,
-    prover::{halo2::Halo2Prover, stark::StarkProver},
-};
+use crate::{keygen::AggProvingKey, prover::halo2::Halo2Prover};
 
 pub struct ContinuationProver<VC> {
     stark_prover: StarkProver<VC>,

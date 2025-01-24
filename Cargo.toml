@@ -41,7 +41,8 @@ members = [
     "extensions/algebra/circuit",
     "extensions/algebra/transpiler",
     "extensions/algebra/guest",
-    "extensions/algebra/moduli-setup",
+    "extensions/algebra/moduli-macros",
+    "extensions/algebra/complex-macros",
     "extensions/algebra/tests",
     "extensions/bigint/circuit",
     "extensions/bigint/transpiler",
@@ -58,7 +59,7 @@ members = [
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
-    "extensions/ecc/sw-setup",
+    "extensions/ecc/sw-macros",
     "extensions/ecc/tests",
     "extensions/pairing/circuit",
     "extensions/pairing/transpiler",
@@ -153,12 +154,12 @@ openvm-bigint-guest = { path = "extensions/bigint/guest", default-features = fal
 openvm-algebra-circuit = { path = "extensions/algebra/circuit", default-features = false }
 openvm-algebra-transpiler = { path = "extensions/algebra/transpiler", default-features = false }
 openvm-algebra-guest = { path = "extensions/algebra/guest", default-features = false }
-openvm-algebra-moduli-setup = { path = "extensions/algebra/moduli-setup", default-features = false }
-openvm-algebra-complex-macros = { path = "extensions/algebra/guest/src/field/complex-macros", default-features = false }
+openvm-algebra-moduli-macros = { path = "extensions/algebra/moduli-macros", default-features = false }
+openvm-algebra-complex-macros = { path = "extensions/algebra/complex-macros", default-features = false }
 openvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
 openvm-ecc-transpiler = { path = "extensions/ecc/transpiler", default-features = false }
 openvm-ecc-guest = { path = "extensions/ecc/guest", default-features = false }
-openvm-ecc-sw-setup = { path = "extensions/ecc/sw-setup", default-features = false }
+openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = false }
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }

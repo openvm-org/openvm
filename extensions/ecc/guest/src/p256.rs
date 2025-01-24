@@ -20,7 +20,7 @@ lazy_static! {
     ));
 }
 
-openvm_algebra_moduli_setup::moduli_declare! {
+openvm_algebra_moduli_macros::moduli_declare! {
     P256Coord { modulus = "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff" },
     P256Scalar { modulus = "0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551" },
 }
@@ -38,7 +38,7 @@ pub const CURVE_B: P256Coord = P256Coord::from_const_bytes(hex!(
 
 pub struct P256;
 
-openvm_ecc_sw_setup::sw_declare! {
+openvm_ecc_sw_macros::sw_declare! {
     P256Point { mod_type = P256Coord, a = CURVE_A, b = CURVE_B },
 }
 

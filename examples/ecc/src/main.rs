@@ -11,12 +11,12 @@ use openvm_ecc_guest::{
 // ANCHOR_END: imports
 
 // ANCHOR: init
-openvm_algebra_guest::moduli_setup::moduli_init! {
+openvm_algebra_guest::moduli_macros::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
 }
 
-openvm_ecc_guest::sw_setup::sw_init! {
+openvm_ecc_guest::sw_macros::sw_init! {
     Secp256k1Point,
 }
 // ANCHOR_END: init

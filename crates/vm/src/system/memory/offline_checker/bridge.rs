@@ -282,7 +282,7 @@ impl MemoryOfflineChecker {
     ) {
         let lt_io = AssertLessThanIo::new(base.prev_timestamp, timestamp.clone(), enabled);
         self.timestamp_lt_air
-            .eval(builder, (lt_io, &base.clk_lt_aux.lower_decomp));
+            .eval(builder, (lt_io, &base.timestamp_lt_aux.lower_decomp));
     }
 
     /// At the core, eval_bulk_access is a bunch of push_sends and push_receives.

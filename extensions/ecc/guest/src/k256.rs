@@ -6,8 +6,8 @@ use lazy_static::lazy_static;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint::BigUint;
 use openvm_algebra_guest::{Field, IntMod};
-use openvm_algebra_moduli_setup::moduli_declare;
-use openvm_ecc_sw_setup::sw_declare;
+use openvm_algebra_moduli_macros::moduli_declare;
+use openvm_ecc_sw_macros::sw_declare;
 
 use super::group::{CyclicGroup, Group};
 use crate::weierstrass::{CachedMulTable, IntrinsicCurve};

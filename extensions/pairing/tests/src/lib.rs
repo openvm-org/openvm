@@ -20,7 +20,6 @@ mod bn254 {
     use openvm_instructions::exe::VmExe;
     use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
     use openvm_pairing_guest::{
-        affine_point::AffineCoords,
         bn254::BN254_MODULUS,
         halo2curves_shims::bn254::Bn254,
         pairing::{EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop},
@@ -108,8 +107,8 @@ mod bn254 {
         let c = G2Affine::random(&mut rng);
 
         let f = Fq12::random(&mut rng);
-        let l0 = EvaluatedLine::<Fq2> { b: a.x(), c: a.y() };
-        let l1 = EvaluatedLine::<Fq2> { b: b.x(), c: b.y() };
+        let l0 = EvaluatedLine::<Fq2> { b: a.x, c: a.y };
+        let l1 = EvaluatedLine::<Fq2> { b: b.x, c: b.y };
 
         // Test mul_013_by_013
         let r0 = Bn254::mul_013_by_013(&l0, &l1);
@@ -123,7 +122,7 @@ mod bn254 {
             .collect::<Vec<_>>();
 
         // Test mul_by_01234
-        let x = [c.x(), c.y(), b.x(), b.y(), a.x()];
+        let x = [c.x, c.y, b.x, b.y, a.x];
         let r1 = Bn254::mul_by_01234(&f, &x);
         let io1 = iter::empty()
             .chain(f.to_coeffs())
@@ -162,8 +161,8 @@ mod bn254 {
         let S = G2Affine::random(&mut rng);
         let Q = G2Affine::random(&mut rng);
 
-        let s = AffinePoint::new(S.x(), S.y());
-        let q = AffinePoint::new(Q.x(), Q.y());
+        let s = AffinePoint::new(S.x, S.y);
+        let q = AffinePoint::new(Q.x, Q.y);
 
         // Test miller_double_step
         let (pt, l) = Bn254::miller_double_step(&s);

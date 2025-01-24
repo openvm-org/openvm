@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use derive_new::new;
 use openvm_circuit::system::memory::MemoryTraceHeights;
 use openvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
@@ -13,12 +15,12 @@ pub use super::testing::{
     POSEIDON2_DIRECT_BUS, RANGE_TUPLE_CHECKER_BUS, READ_INSTRUCTION_BUS,
 };
 use super::{
+    segment::{DefaultSegmentationStrategy, SegmentationStrategy},
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
     VmInventoryError, PUBLIC_VALUES_AIR_ID,
 };
 use crate::system::memory::BOUNDARY_AIR_OFFSET;
 
-const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
 // allows log_blowup = 1
 const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
@@ -86,11 +88,18 @@ pub struct SystemConfig {
     /// cannot read public values directly, but they can decommit the public values from the memory
     /// merkle root.
     pub num_public_values: usize,
-    /// When continuations are enabled, a heuristic used to determine when to segment execution.
-    pub max_segment_len: usize,
     /// Whether to collect detailed profiling metrics.
     /// **Warning**: this slows down the runtime.
     pub profiling: bool,
+    /// Segmentation strategy
+    /// This field is skipped in serde as it's only used in execution and
+    /// not needed after any serialize/deserialize.
+    #[serde(skip, default = "get_default_segmentation_strategy")]
+    pub segmentation_strategy: Arc<dyn SegmentationStrategy>,
+}
+
+pub fn get_default_segmentation_strategy() -> Arc<dyn SegmentationStrategy> {
+    Arc::new(DefaultSegmentationStrategy::default())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -105,12 +114,13 @@ impl SystemConfig {
         memory_config: MemoryConfig,
         num_public_values: usize,
     ) -> Self {
+        let segmentation_strategy = get_default_segmentation_strategy();
         Self {
             max_constraint_degree,
             continuation_enabled: false,
             memory_config,
             num_public_values,
-            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+            segmentation_strategy,
             profiling: false,
         }
     }
@@ -136,8 +146,14 @@ impl SystemConfig {
     }
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        self.max_segment_len = max_segment_len;
+        self.segmentation_strategy = Arc::new(
+            DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_len),
+        );
         self
+    }
+
+    pub fn set_segmentation_strategy<S: SegmentationStrategy + 'static>(&mut self, strategy: S) {
+        self.segmentation_strategy = Arc::new(strategy);
     }
 
     pub fn with_profiling(mut self) -> Self {

@@ -78,6 +78,12 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 
 The toolchain, ISA, and VM are simultaneously extendable. All non-system functionality is implemented via extensions, which may be moved to standalone repositories in the future but are presently in this repository for maintainer convenience.
 
+#### Procedural macros for algebraic structs
+
+- [`openvm-algebra-moduli-macros`](../../extensions/algebra/moduli-macros): Procedural macros for use in guest program to generate modular arithmetic struct with custom intrinsics for compile-time modulus.
+- [`openvm-algebra-complex-macros`](../../extensions/algebra/complex-macros): Procedural macros for use in guest program to generate complex field struct with custom intrinsics for compile-time modulus.
+- [`openvm-ecc-sw-macros`](../../extensions/ecc/sw-macros): Procedural macros for use in guest program to generate short Weierstrass curve struct with custom intrinsics for compile-time curve.
+
 #### RV32IM
 
 - [`openvm-rv32im-circuit`](../../extensions/rv32im/circuit): Circuit extension for RV32IM instructions and IO instructions.
@@ -111,8 +117,6 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 - [`openvm-algebra-circuit`](../../extensions/algebra/circuit): Circuit extension for modular arithmetic for arbitrary compile-time modulus. Supports modular arithmetic and complex field extension operations.
 - [`openvm-algebra-transpiler`](../../extensions/algebra/transpiler): Transpiler extension for modular arithmetic for arbitrary compile-time modulus. Supports modular arithmetic and complex field extension operations.
 - [`openvm-algebra-guest`](../../extensions/algebra/guest): Guest library with traits for modular arithmetic and complex field extension operations.
-- [`openvm-algebra-moduli-setup`](../../extensions/algebra/moduli-setup): Procedural macros for use in guest program to generate modular arithmetic struct with custom intrinsics for compile-time modulus.
-- [`openvm-algebra-complex-macros`](../../extensions/algebra/guest/src/field/complex-macros): Procedural macros for use in guest program to generate complex field struct with custom intrinsics for compile-time modulus.
 - [`openvm-algebra-tests`](../../extensions/algebra/tests): Integration tests for the algebra extension.
 
 #### Elliptic Curve Cryptography
@@ -120,7 +124,6 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 - [`openvm-ecc-circuit`](../../extensions/ecc/circuit): Circuit extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
 - [`openvm-ecc-transpiler`](../../extensions/ecc/transpiler): Transpiler extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
 - [`openvm-ecc-guest`](../../extensions/ecc/guest): Guest library with traits for elliptic curve cryptography. Includes implementations of ECDSA and multi-scalar multiplication.
-- [`openvm-ecc-sw-setup`](../../extensions/ecc/sw-setup): Procedural macros for use in guest program to generate short Weierstrass curve struct with custom intrinsics for compile-time curve.
 - [`openvm-ecc-tests`](../../extensions/ecc/tests): Integration tests for the elliptic curve cryptography extension.
 
 #### Elliptic Curve Pairing

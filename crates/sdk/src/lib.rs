@@ -39,6 +39,7 @@ use openvm_transpiler::{
     FromElf,
 };
 use prover::vm::ContinuationVmProof;
+use verifier::root::types::RootVmVerifierInput;
 
 pub mod commit;
 pub mod config;
@@ -54,8 +55,8 @@ pub mod fs;
 
 use crate::{
     config::AggConfig,
-    keygen::AggProvingKey,
-    prover::{AppProver, ContinuationProver},
+    keygen::{AggProvingKey, AggStarkProvingKey},
+    prover::{AppProver, ContinuationProver, StarkProver},
 };
 
 pub type SC = BabyBearPoseidon2Config;
@@ -182,6 +183,22 @@ impl Sdk {
     ) -> Result<AggProvingKey> {
         let agg_pk = AggProvingKey::keygen(config, reader, pv_handler);
         Ok(agg_pk)
+    }
+
+    pub fn generate_root_verifier_input<VC: VmConfig<F>>(
+        &self,
+        app_pk: Arc<AppProvingKey<VC>>,
+        app_exe: Arc<NonRootCommittedExe>,
+        agg_stark_pk: AggStarkProvingKey,
+        inputs: StdIn,
+    ) -> Result<RootVmVerifierInput<SC>>
+    where
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let stark_prover = StarkProver::new(app_pk, app_exe, agg_stark_pk);
+        let proof = stark_prover.generate_root_verifier_input(inputs);
+        Ok(proof)
     }
 
     pub fn generate_evm_proof<VC: VmConfig<F>>(

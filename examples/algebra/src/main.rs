@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm_algebra_guest::{moduli_setup::*, IntMod};
+use openvm_algebra_guest::{moduli_macros::*, IntMod};
 
 openvm::entry!(main);
 

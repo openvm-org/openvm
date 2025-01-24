@@ -187,14 +187,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for BranchNativeAdapterChip<F> {
         let aux_cols_factory = memory.aux_cols_factory();
 
         row_slice.from_state = write_record.map(F::from_canonical_u32);
-        row_slice.reads_aux = read_record.reads.map(|x| {
+        for (i, x) in read_record.reads.iter().enumerate() {
             let read = memory.record_by_id(x.0);
-            let address = MemoryAddress::new(read.address_space, read.pointer);
-            BranchNativeAdapterReadCols {
-                address,
-                read_aux: aux_cols_factory.make_read_or_immediate_aux_cols(read),
-            }
-        });
+
+            row_slice.reads_aux[i].address = MemoryAddress::new(read.address_space, read.pointer);
+            aux_cols_factory
+                .generate_read_or_immediate_aux(read, &mut row_slice.reads_aux[i].read_aux);
+        }
     }
 
     fn air(&self) -> &Self::Air {
