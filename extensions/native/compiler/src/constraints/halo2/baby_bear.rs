@@ -553,15 +553,6 @@ impl BabyBearExt4Chip {
         for s in 0..7 {
             coeffs.push(self.base.special_inner_product(ctx, &mut a.0, &mut b.0, s));
         }
-        // for i in 0..4 {
-        //     for j in 0..4 {
-        //         if i + j < coeffs.len() {
-        //             coeffs[i + j] = self.base.mul_add(ctx, a.0[i], b.0[j], coeffs[i + j]);
-        //         } else {
-        //             coeffs.push(self.base.mul(ctx, a.0[i], b.0[j]));
-        //         }
-        //     }
-        // }
         let w = self
             .base
             .load_constant(ctx, <BabyBear as BinomiallyExtendable<4>>::W);
