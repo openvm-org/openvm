@@ -17,7 +17,6 @@ openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
 
-bitcode.workspace = true
 strum.workspace = true
 itertools.workspace = true
 tracing.workspace = true

@@ -1,8 +1,6 @@
 use core::mem::MaybeUninit;
 
 use openvm_platform::WORD_SIZE;
-#[cfg(target_os = "zkvm")]
-use openvm_rv32im_guest::hint_buffer_u32;
 
 use super::hint_store_word;
 use crate::serde::WordRead;
@@ -30,15 +28,10 @@ impl WordRead for Reader {
     fn read_words(&mut self, words: &mut [u32]) -> crate::serde::Result<()> {
         let num_words = words.len();
         if let Some(new_remaining) = self.bytes_remaining.checked_sub(num_words * WORD_SIZE) {
-            #[cfg(target_os = "zkvm")]
-            hint_buffer_u32!(words.as_mut_ptr(), words.len());
-            #[cfg(not(target_os = "zkvm"))]
-            {
-                for w in words.iter_mut() {
-                    hint_store_word(w as *mut u32);
-                }
-                self.bytes_remaining = new_remaining;
+            for w in words.iter_mut() {
+                hint_store_word(w as *mut u32);
             }
+            self.bytes_remaining = new_remaining;
             Ok(())
         } else {
             Err(crate::serde::Error::DeserializeUnexpectedEnd)
@@ -50,17 +43,11 @@ impl WordRead for Reader {
             return Err(crate::serde::Error::DeserializeUnexpectedEnd);
         }
         let mut num_padded_bytes = bytes.len();
-        #[cfg(target_os = "zkvm")]
-        hint_buffer_u32!(bytes as *mut [u8] as *mut u32, num_padded_bytes / WORD_SIZE);
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            let mut words = bytes.chunks_exact_mut(WORD_SIZE);
-            for word in &mut words {
-                hint_store_word(word as *mut [u8] as *mut u32);
-            }
+        let mut words = bytes.chunks_exact_mut(WORD_SIZE);
+        for word in &mut words {
+            hint_store_word(word as *mut [u8] as *mut u32);
         }
-
-        let remainder = bytes.chunks_exact_mut(WORD_SIZE).into_remainder();
+        let remainder = words.into_remainder();
         if !remainder.is_empty() {
             num_padded_bytes += WORD_SIZE - remainder.len();
             let mut padded = MaybeUninit::<[u8; WORD_SIZE]>::uninit();

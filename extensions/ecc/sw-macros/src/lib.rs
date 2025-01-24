@@ -313,7 +313,10 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                                 #hint_decompress_extern_func(x as *const _ as usize, rec_id as *const u8 as usize);
                                 let mut ptr = y.as_ptr() as *const u8;
                                 // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
-                                openvm_rv32im_guest::hint_buffer_u32!(ptr, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
+                                for _ in (0..<#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS).step_by(4) {
+                                    openvm_rv32im_guest::hint_store_u32!(ptr, 0);
+                                    ptr = ptr.add(4);
+                                }
                                 y.assume_init()
                             }
                         }

@@ -10,8 +10,9 @@ use openvm_stark_sdk::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         setup_tracing, FriParameters,
     },
-    engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
+    engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
+    utils::ProofInputForTest,
 };
 
 use crate::arch::{
