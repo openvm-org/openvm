@@ -157,7 +157,6 @@ fn test_optional_air() {
         let mut send_chip1 = send_chip1.clone();
         let mut send_chip2 = send_chip2.clone();
         let mut recv_chip1 = recv_chip1.clone();
-        let mut challenger = engine.new_challenger();
         send_chip1.load_data(DummyInteractionData {
             count: vec![1, 2, 4],
             fields: vec![vec![1], vec![2], vec![3]],
@@ -195,7 +194,6 @@ fn test_optional_air() {
     {
         let mut send_chip1 = send_chip1.clone();
         let mut recv_chip1 = recv_chip1.clone();
-        let mut challenger = engine.new_challenger();
         send_chip1.load_data(DummyInteractionData {
             count: vec![1, 2, 4],
             fields: vec![vec![1], vec![2], vec![3]],
