@@ -462,13 +462,13 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
 
     TokenStream::from(quote::quote_spanned! { span.into() =>
         #[cfg(target_os = "zkvm")]
-        mod openvm_intrinsics_ffi_2 {
+        mod openvm_intrinsics_ffi_2_sw {
             use ::openvm_ecc_guest::{SW_OPCODE, SW_FUNCT3, SwBaseFunct7};
 
             #(#externs)*
         }
         #(#setups)*
-        pub fn setup_all_curves() {
+        pub fn setup_all_sw_curves() {
             #(#setup_all_curves)*
         }
     })
