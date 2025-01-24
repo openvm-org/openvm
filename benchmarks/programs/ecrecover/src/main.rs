@@ -31,7 +31,7 @@ openvm_ecc_guest::sw_setup::sw_init! {
 
 pub fn main() {
     setup_all_moduli();
-    setup_all_curves();
+    setup_all_sw_curves();
 
     let expected_address = read_vec();
     for _ in 0..5 {

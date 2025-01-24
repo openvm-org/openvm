@@ -20,7 +20,7 @@ sw_init! {
 fn main() {
     setup_all_moduli();
     setup_all_complex_extensions();
-    setup_all_curves();
+    setup_all_sw_curves();
 
     let ctx: PlonkVerifierContext = openvm::io::read();
     ctx.verify().unwrap();

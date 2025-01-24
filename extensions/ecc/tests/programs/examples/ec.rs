@@ -23,7 +23,7 @@ openvm::entry!(main);
 
 pub fn main() {
     setup_all_moduli();
-    setup_all_curves();
+    setup_all_sw_curves();
 
     // Sample points got from https://asecuritysite.com/ecc/ecc_points2 and
     // https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#add
