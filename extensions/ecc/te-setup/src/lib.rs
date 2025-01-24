@@ -240,7 +240,7 @@ pub fn te_init(input: TokenStream) -> TokenStream {
 
     let mut externs = Vec::new();
     let mut setups = Vec::new();
-    let mut setup_all_curves = Vec::new();
+    let mut setup_all_te_curves = Vec::new();
 
     let span = proc_macro::Span::call_site();
 
@@ -296,7 +296,7 @@ pub fn te_init(input: TokenStream) -> TokenStream {
             }
         });
 
-        setup_all_curves.push(quote::quote_spanned! { span.into() =>
+        setup_all_te_curves.push(quote::quote_spanned! { span.into() =>
             #setup_function();
         });
     }
@@ -310,7 +310,7 @@ pub fn te_init(input: TokenStream) -> TokenStream {
         }
         #(#setups)*
         pub fn setup_all_te_curves() {
-            #(#setup_all_curves)*
+            #(#setup_all_te_curves)*
         }
     })
 }
