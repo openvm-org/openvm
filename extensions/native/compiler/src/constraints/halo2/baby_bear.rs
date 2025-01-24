@@ -244,7 +244,7 @@ impl BabyBearChip {
         s: usize,
     ) -> AssignedBabyBear {
         assert!(a.len() == b.len());
-        assert!(a.len() == 4)
+        assert!(a.len() == 4);
         let mut max_bits = 0;
         let lb = if s > 3 { s - 3 } else { 0 };
         let ub = 4.min(s + 1);
