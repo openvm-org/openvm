@@ -1621,6 +1621,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive-new"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cdc8d50f426189eef89dac62fabfa0abb27d5cc008f25bf4156a0203325becc"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.95",
+]
+
+[[package]]
 name = "derive_more"
 version = "0.99.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3370,7 +3381,7 @@ dependencies = [
 name = "openvm-algebra-circuit"
 version = "0.2.0-alpha"
 dependencies = [
- "derive-new",
+ "derive-new 0.6.0",
  "derive_more 1.0.0",
  "halo2curves-axiom",
  "itertools 0.13.0",
@@ -3471,7 +3482,7 @@ dependencies = [
  "bincode 2.0.0-rc.3",
  "clap",
  "criterion",
- "derive-new",
+ "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
  "hex",
@@ -3510,7 +3521,7 @@ dependencies = [
 name = "openvm-bigint-circuit"
 version = "0.2.0-alpha"
 dependencies = [
- "derive-new",
+ "derive-new 0.6.0",
  "derive_more 1.0.0",
  "hex",
  "lazy_static",
@@ -3600,7 +3611,7 @@ dependencies = [
  "bitcode",
  "cfg-if",
  "derivative",
- "derive-new",
+ "derive-new 0.6.0",
  "derive_more 1.0.0",
  "enum_dispatch",
  "eyre",
@@ -3659,7 +3670,7 @@ name = "openvm-circuit-primitives"
 version = "0.2.0-alpha"
 dependencies = [
  "bitcode",
- "derive-new",
+ "derive-new 0.6.0",
  "itertools 0.13.0",
  "lazy_static",
  "num-bigint 0.4.6",
@@ -3700,7 +3711,7 @@ dependencies = [
 name = "openvm-ecc-circuit"
 version = "0.2.0-alpha"
 dependencies = [
- "derive-new",
+ "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
  "itertools 0.13.0",
@@ -3801,7 +3812,7 @@ name = "openvm-instructions"
 version = "0.2.0-alpha"
 dependencies = [
  "backtrace",
- "derive-new",
+ "derive-new 0.6.0",
  "itertools 0.13.0",
  "num-bigint 0.4.6",
  "num-traits",
@@ -3830,7 +3841,7 @@ name = "openvm-keccak256-circuit"
 version = "0.2.0-alpha"
 dependencies = [
  "bitcode",
- "derive-new",
+ "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
  "hex",
@@ -3933,7 +3944,7 @@ name = "openvm-native-circuit"
 version = "0.2.0-alpha"
 dependencies = [
  "bitcode",
- "derive-new",
+ "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
  "hex",
@@ -4076,7 +4087,7 @@ dependencies = [
 name = "openvm-pairing-circuit"
 version = "0.2.0-alpha"
 dependencies = [
- "derive-new",
+ "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
  "halo2curves-axiom",
@@ -4218,7 +4229,7 @@ dependencies = [
 name = "openvm-rv32-adapters"
 version = "0.2.0-alpha"
 dependencies = [
- "derive-new",
+ "derive-new 0.6.0",
  "hex",
  "itertools 0.13.0",
  "lazy_static",
@@ -4243,7 +4254,7 @@ name = "openvm-rv32im-circuit"
 version = "0.2.0-alpha"
 dependencies = [
  "bitcode",
- "derive-new",
+ "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
  "itertools 0.13.0",
@@ -4374,7 +4385,7 @@ name = "openvm-sha256-circuit"
 version = "0.2.0-alpha"
 dependencies = [
  "bitcode",
- "derive-new",
+ "derive-new 0.6.0",
  "derive_more 1.0.0",
  "hex",
  "lazy_static",
@@ -4466,11 +4477,11 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "0.2.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=d2788c#d2788c71e68aa386fc8c0d8f258c25557a1bbb09"
 dependencies = [
  "async-trait",
  "cfg-if",
  "derivative",
+ "derive-new 0.7.0",
  "itertools 0.13.0",
  "metrics",
  "mimalloc",
@@ -4493,8 +4504,8 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "0.2.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=d2788c#d2788c71e68aa386fc8c0d8f258c25557a1bbb09"
 dependencies = [
+ "derivative",
  "derive_more 0.99.18",
  "ff 0.13.0",
  "itertools 0.13.0",

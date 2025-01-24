@@ -216,7 +216,7 @@ impl<SC: StarkGenericConfig, const NUM_BITS: usize> Chip<SC>
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let trace = self.generate_trace::<Val<SC>>();
-        AirProofInput::simple_no_pis(Arc::new(self.air), trace)
+        AirProofInput::simple_no_pis(trace)
     }
 }
 

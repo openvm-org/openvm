@@ -160,7 +160,7 @@ impl<SC: StarkGenericConfig, const M: usize> Chip<SC> for XorLookupChip<M> {
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let trace = self.generate_trace::<Val<SC>>();
-        AirProofInput::simple_no_pis(Arc::new(self.air), trace)
+        AirProofInput::simple_no_pis(trace)
     }
 }
 
