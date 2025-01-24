@@ -443,7 +443,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
 
     let mut externs = Vec::new();
     let mut setups = Vec::new();
-    let mut setup_all_curves = Vec::new();
+    let mut setup_all_sw_curves = Vec::new();
 
     let span = proc_macro::Span::call_site();
 
@@ -561,7 +561,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             }
         });
 
-        setup_all_curves.push(quote::quote_spanned! { span.into() =>
+        setup_all_sw_curves.push(quote::quote_spanned! { span.into() =>
             #setup_function();
         });
     }
@@ -575,7 +575,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
         }
         #(#setups)*
         pub fn setup_all_sw_curves() {
-            #(#setup_all_curves)*
+            #(#setup_all_sw_curves)*
         }
     })
 }

@@ -69,7 +69,7 @@ fn string_to_coord(s: &str) -> Edwards25519Coord {
 
 pub fn main() {
     setup_all_moduli();
-    setup_all_curves();
+    setup_all_te_curves();
 
     // Base point of edwards25519
     let x1 = string_to_coord(
