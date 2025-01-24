@@ -48,16 +48,22 @@ where
 {
     let fib_program = fibonacci_program(a, b, n);
     let vm_config = NativeConfig::new(SystemConfig::default().with_public_values(3), Native);
-    let airs = VmConfig::create_chip_complex(&vm_config).unwrap().airs();
+    let airs = vm_config.create_chip_complex().unwrap().airs();
 
     let executor = VmExecutor::<BabyBear, NativeConfig>::new(vm_config);
 
     let mut result = executor.execute_and_generate(fib_program, vec![]).unwrap();
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");
     let proof_input = result.per_segment.remove(0);
+    // Filter out unused AIRS (where trace is empty)
+    let (used_airs, per_air) = proof_input
+        .per_air
+        .into_iter()
+        .map(|(air_id, x)| (airs[air_id].clone(), x))
+        .unzip();
     ProofInputForTest {
-        airs,
-        per_air: proof_input.per_air.into_iter().map(|(_, x)| x).collect(),
+        airs: used_airs,
+        per_air,
     }
 }
 
