@@ -29,7 +29,7 @@ openvm_algebra_complex_macros::complex_declare! {
 // The order of these structs does not matter,
 // given that we specify the `mod_idx` parameters properly.
 openvm_algebra_complex_macros::complex_init! {
-    Complex2 { mod_idx = 1 }, Complex1 { mod_idx = 0 },
+    Complex1 { mod_idx = 0 }, Complex2 { mod_idx = 1 },
 }
 
 pub fn main() {
