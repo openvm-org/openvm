@@ -10,8 +10,9 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-    engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
+    engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
+    utils::ProofInputForTest,
 };
 
 use crate::hints::InnerVal;

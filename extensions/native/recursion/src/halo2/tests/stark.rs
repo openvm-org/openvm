@@ -4,7 +4,8 @@ use openvm_stark_sdk::{
         baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
         setup_tracing_with_log_level, FriParameters,
     },
-    engine::{ProofInputForTest, StarkFriEngine},
+    engine::StarkFriEngine,
+    utils::ProofInputForTest,
 };
 use tracing::Level;
 

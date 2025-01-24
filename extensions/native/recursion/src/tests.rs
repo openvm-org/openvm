@@ -23,8 +23,8 @@ use openvm_stark_sdk::{
             DummyInteractionAir, DummyInteractionChip, DummyInteractionData,
         },
     },
-    engine::{ProofInputForTest, StarkFriEngine},
-    utils::to_field_vec,
+    engine::StarkFriEngine,
+    utils::{to_field_vec, ProofInputForTest},
 };
 
 use crate::{

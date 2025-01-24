@@ -9,7 +9,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
-    engine::ProofInputForTest, p3_baby_bear::BabyBear,
+    p3_baby_bear::BabyBear, utils::ProofInputForTest,
 };
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {

@@ -4,7 +4,8 @@ use openvm_stark_sdk::{
         baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
         FriParameters,
     },
-    engine::{ProofInputForTest, StarkFriEngine},
+    engine::StarkFriEngine,
+    utils::ProofInputForTest,
 };
 use snark_verifier_sdk::Snark;
 
