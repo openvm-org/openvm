@@ -29,19 +29,7 @@ fn main() {
 
     let config = standard();
 
-    let mut running_product: usize = 1;
-    for _ in 0..40000 {
-        let mut running_sum: usize = 0;
-        for x in openvm::io::read_vec() {
-            running_sum += x as usize;
-        }
-        running_product *= running_sum;
-        running_product %= 25565;
-    }
+    let data = openvm::io::read_vec();
 
-    //let data: (Players, usize) = openvm::io::read();
-
-    //let data = openvm::io::read_vec();
-
-    //let _deser: (Players, usize) = decode_from_slice(&data, config).expect("Failed to deserialize");*/
+    let _deser: (Players, usize) = decode_from_slice(&data, config).expect("Failed to deserialize");
 }
