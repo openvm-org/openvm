@@ -85,7 +85,6 @@ where
         let offline_memory = self.controller.borrow().offline_memory();
         let offline_memory = offline_memory.lock().unwrap();
 
-        let air = self.air();
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
         let mut values = Val::<SC>::zero_vec(2 * height * width);
@@ -113,7 +112,7 @@ where
             row.timestamp = Val::<SC>::from_canonical_u32(record.timestamp);
             row.count = Val::<SC>::ONE;
         }
-        AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
+        AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
     }
 }
 

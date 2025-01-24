@@ -66,7 +66,6 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = Arc::new(self.air);
         assert!(
             self.final_state.is_some(),
             "Merkle chip must finalize before trace generation"
@@ -99,7 +98,7 @@ where
 
         let trace = RowMajorMatrix::new(trace, width);
         let pvs = init_root.into_iter().chain(final_root).collect();
-        AirProofInput::simple(air, trace, pvs)
+        AirProofInput::simple(trace, pvs)
     }
 }
 impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {

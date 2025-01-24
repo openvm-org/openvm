@@ -11,6 +11,7 @@ use openvm_stark_backend::{
     Chip,
 };
 use openvm_stark_sdk::{
+    collect_airs_and_inputs,
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
@@ -36,9 +37,8 @@ where
     Val<SC>: PrimeField32,
 {
     let fib_chip = FibonacciChip::new(0, 1, n);
-    ProofInputForTest {
-        per_air: vec![fib_chip.generate_air_proof_input()],
-    }
+    let (airs, per_air) = collect_airs_and_inputs!(fib_chip);
+    ProofInputForTest { airs, per_air }
 }
 
 pub fn interaction_test_proof_input<SC: StarkGenericConfig>() -> ProofInputForTest<SC>
@@ -62,13 +62,8 @@ where
         fields: vec![vec![1, 1], vec![1, 2], vec![3, 4], vec![9999, 0]],
     });
 
-    ProofInputForTest {
-        per_air: vec![
-            send_chip1.generate_air_proof_input(),
-            send_chip2.generate_air_proof_input(),
-            recv_chip.generate_air_proof_input(),
-        ],
-    }
+    let (airs, per_air) = collect_airs_and_inputs!(send_chip1, send_chip2, recv_chip);
+    ProofInputForTest { airs, per_air }
 }
 
 pub fn unordered_test_proof_input<SC: StarkGenericConfig>() -> ProofInputForTest<SC>
@@ -89,11 +84,11 @@ where
         receiver_air.field_width() + 1,
     );
 
-    let sender_air_proof_input = AirProofInput::simple_no_pis(Arc::new(sender_air), sender_trace);
-    let receiver_air_proof_input =
-        AirProofInput::simple_no_pis(Arc::new(receiver_air), receiver_trace);
+    let sender_air_proof_input = AirProofInput::simple_no_pis(sender_trace);
+    let receiver_air_proof_input = AirProofInput::simple_no_pis(receiver_trace);
 
     ProofInputForTest {
+        airs: vec![Arc::new(sender_air), Arc::new(receiver_air)],
         per_air: vec![sender_air_proof_input, receiver_air_proof_input],
     }
 }
@@ -151,8 +146,6 @@ fn test_optional_air() {
     let send_chip2_id = keygen_builder.add_air(send_chip2.air());
     let recv_chip1_id = keygen_builder.add_air(recv_chip1.air());
     let pk = keygen_builder.generate_pk();
-    let prover = engine.prover();
-    let verifier = engine.verifier();
 
     let m_advice = new_from_inner_multi_vk(&pk.get_vk());
     let vm_config = NativeConfig::aggregation(4, 7);
@@ -177,8 +170,7 @@ fn test_optional_air() {
             count: vec![2, 4, 12],
             fields: vec![vec![1], vec![2], vec![3]],
         });
-        let proof = prover.prove(
-            &mut challenger,
+        let proof = engine.prove(
             &pk,
             ProofInput {
                 per_air: vec![
@@ -189,9 +181,8 @@ fn test_optional_air() {
                 ],
             },
         );
-        let mut challenger = engine.new_challenger();
-        verifier
-            .verify(&mut challenger, &pk.get_vk(), &proof)
+        engine
+            .verify(&pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
         gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
@@ -213,8 +204,7 @@ fn test_optional_air() {
             count: vec![1, 2, 4],
             fields: vec![vec![1], vec![2], vec![3]],
         });
-        let proof = prover.prove(
-            &mut challenger,
+        let proof = engine.prove(
             &pk,
             ProofInput {
                 per_air: vec![
@@ -223,9 +213,8 @@ fn test_optional_air() {
                 ],
             },
         );
-        let mut challenger = engine.new_challenger();
-        verifier
-            .verify(&mut challenger, &pk.get_vk(), &proof)
+        engine
+            .verify(&pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
         gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(

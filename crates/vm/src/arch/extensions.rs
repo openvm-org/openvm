@@ -26,7 +26,7 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     rap::AnyRap,
-    Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter, Stateful,
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -982,7 +982,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .collect()
     }
 
-    pub(crate) fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
+    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<AirRef<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         E: Chip<SC>,

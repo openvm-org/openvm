@@ -259,7 +259,7 @@ where
         }
 
         let trace = RowMajorMatrix::new(rows, width);
-        AirProofInput::simple_no_pis(air, trace)
+        AirProofInput::simple_no_pis(trace)
     }
 }
 

@@ -107,6 +107,7 @@ fn boundary_air_test() {
     );
 
     boundary_chip.finalize(final_memory.clone());
+    let boundary_air = boundary_chip.air();
     let boundary_api: AirProofInput<BabyBearPoseidon2Config> =
         boundary_chip.generate_air_proof_input();
     // test trace height override
@@ -125,11 +126,19 @@ fn boundary_air_test() {
         );
     }
 
-    BabyBearPoseidon2Engine::run_test_fast(vec![
-        boundary_api,
-        range_checker.generate_air_proof_input(),
-        AirProofInput::simple_no_pis(Arc::new(init_memory_dummy_air), init_memory_trace),
-        AirProofInput::simple_no_pis(Arc::new(final_memory_dummy_air), final_memory_trace),
-    ])
+    BabyBearPoseidon2Engine::run_test_fast(
+        vec![
+            boundary_air,
+            range_checker.air(),
+            Arc::new(init_memory_dummy_air),
+            Arc::new(final_memory_dummy_air),
+        ],
+        vec![
+            boundary_api,
+            range_checker.generate_air_proof_input(),
+            AirProofInput::simple_no_pis(init_memory_trace),
+            AirProofInput::simple_no_pis(final_memory_trace),
+        ],
+    )
     .expect("Verification failed");
 }

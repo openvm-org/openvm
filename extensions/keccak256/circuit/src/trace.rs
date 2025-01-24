@@ -32,7 +32,6 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air();
         let trace_width = self.trace_width();
         let records = self.records;
         let total_num_blocks: usize = records.iter().map(|r| r.input_blocks.len()).sum();
@@ -240,7 +239,7 @@ where
                 }
             });
 
-        AirProofInput::simple_no_pis(air, trace)
+        AirProofInput::simple_no_pis(trace)
     }
 }
 

@@ -242,7 +242,6 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = Arc::new(self.air);
         let trace = {
             let width = PersistentBoundaryCols::<Val<SC>, CHUNK>::width();
             // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
@@ -286,7 +285,7 @@ where
                 });
             RowMajorMatrix::new(rows, width)
         };
-        AirProofInput::simple_no_pis(air, trace)
+        AirProofInput::simple_no_pis(trace)
     }
 }
 

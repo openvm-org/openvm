@@ -700,7 +700,6 @@ where
         Arc::new(self.air)
     }
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air();
         let height = next_power_of_two_or_zero(self.height);
         let mut flat_trace = Val::<SC>::zero_vec(OVERALL_WIDTH * height);
         let chunked_trace = {
@@ -723,7 +722,7 @@ where
             });
 
         let matrix = RowMajorMatrix::new(flat_trace, OVERALL_WIDTH);
-        AirProofInput::simple_no_pis(air, matrix)
+        AirProofInput::simple_no_pis(matrix)
     }
 }
 

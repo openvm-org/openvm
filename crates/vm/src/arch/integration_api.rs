@@ -300,7 +300,6 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air();
         let num_records = self.records.len();
         let height = next_power_of_two_or_zero(num_records);
         let core_width = self.core.air().width();
@@ -325,7 +324,7 @@ where
         let mut trace = RowMajorMatrix::new(values, width);
         self.core.finalize(&mut trace, num_records);
 
-        AirProofInput::simple(air, trace, self.core.generate_public_values())
+        AirProofInput::simple(trace, self.core.generate_public_values())
     }
 }
 

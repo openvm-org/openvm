@@ -198,7 +198,7 @@ where
             exit_code: final_state.exit_code,
             is_terminate: final_state.is_terminate,
         };
-        AirProofInput::simple(Arc::new(self.air), trace, public_values)
+        AirProofInput::simple(trace, public_values)
     }
 }
 

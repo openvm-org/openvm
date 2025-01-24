@@ -285,9 +285,8 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air.clone();
         let trace = self.generate_trace();
-        AirProofInput::simple(Arc::new(air), trace, vec![])
+        AirProofInput::simple_no_pis(trace)
     }
 }
 

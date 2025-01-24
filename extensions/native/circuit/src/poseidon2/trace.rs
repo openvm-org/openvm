@@ -507,6 +507,6 @@ where
         Arc::new(self.air.clone())
     }
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        AirProofInput::simple_no_pis(self.air(), self.generate_trace())
+        AirProofInput::simple_no_pis(self.generate_trace())
     }
 }

@@ -217,7 +217,7 @@ where
             });
         let trace = RowMajorMatrix::new(rows, width);
 
-        AirProofInput::simple(self.air(), trace, vec![])
+        AirProofInput::simple(trace, vec![])
     }
 }
 

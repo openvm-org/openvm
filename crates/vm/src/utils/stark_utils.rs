@@ -90,6 +90,7 @@ where
         }
     }
 
+    let airs = config.create_chip_complex().unwrap().airs();
     let executor = VmExecutor::<Val<SC>, VC>::new(config);
 
     let mut result = executor
@@ -108,7 +109,8 @@ where
     }
 
     ProofInputForTest {
-        per_air: result.into_air_proof_input_vec(),
+        airs,
+        per_air: result.per_air.into_iter().map(|(_, x)| x).collect(),
     }
 }
 

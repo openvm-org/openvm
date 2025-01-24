@@ -6,9 +6,10 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
-    rap::{AnyRap, PartitionedBaseAir},
+    rap::PartitionedBaseAir,
     utils::disable_debug_builder,
     verifier::VerificationError,
+    AirRef,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
@@ -46,11 +47,11 @@ fn public_values_happy_path_1() {
         custom_pv_vars: to_field_vec(vec![1, 0]),
         _marker: Default::default(),
     };
-    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 2));
+    let air: AirRef<_> = Arc::new(PublicValuesCoreAir::new(3, 2));
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 12]);
 
-    BabyBearPoseidon2Engine::run_test_fast(vec![AirProofInput::simple(air, trace, pvs)])
+    BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
         .expect("Verification failed");
 }
 
@@ -63,13 +64,14 @@ fn public_values_neg_pv_not_match() {
         custom_pv_vars: to_field_vec(vec![1, 0]),
         _marker: Default::default(),
     };
-    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 2));
+    let air: AirRef<_> = Arc::new(PublicValuesCoreAir::new(3, 2));
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 56456]);
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![AirProofInput::simple(air, trace, pvs)]).err(),
+        BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
+            .err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
 }
@@ -83,13 +85,14 @@ fn public_values_neg_index_out_of_bound() {
         custom_pv_vars: to_field_vec(vec![0, 0]),
         _marker: Default::default(),
     };
-    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 2));
+    let air: AirRef<_> = Arc::new(PublicValuesCoreAir::new(3, 2));
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 0]);
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![AirProofInput::simple(air, trace, pvs)]).err(),
+        BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
+            .err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
 }
@@ -121,12 +124,13 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
     let width = rows[0].width();
     let flatten_rows: Vec<_> = rows.into_iter().flat_map(|r| r.flatten()).collect();
     let trace = RowMajorMatrix::new(flatten_rows, width);
-    let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 2));
+    let air: AirRef<_> = Arc::new(PublicValuesCoreAir::new(3, 2));
     let pvs = to_field_vec(vec![0, 0, actual_pv]);
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![AirProofInput::simple(air, trace, pvs)]).err(),
+        BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
+            .err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
 }

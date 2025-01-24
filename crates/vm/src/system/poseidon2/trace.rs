@@ -24,7 +24,6 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air();
         let height = next_power_of_two_or_zero(self.current_trace_height());
         let width = self.trace_width();
 
@@ -56,7 +55,7 @@ where
                 cols.mult = Val::<SC>::from_canonical_u32(mult);
             });
 
-        AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
+        AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
     }
 }
 
