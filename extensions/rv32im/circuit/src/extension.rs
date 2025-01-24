@@ -36,16 +36,12 @@ pub struct Rv32IConfig {
 }
 
 /// Config for a VM with base extension, IO extension, and multiplication extension
-#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32ImConfig {
-    #[system]
-    pub system: SystemConfig,
-    #[extension]
-    pub base: Rv32I,
+    #[config]
+    pub rv32i: Rv32IConfig,
     #[extension]
     pub mul: Rv32M,
-    #[extension]
-    pub io: Rv32Io,
 }
 
 impl Default for Rv32IConfig {
@@ -54,18 +50,6 @@ impl Default for Rv32IConfig {
         Self {
             system,
             base: Default::default(),
-            io: Default::default(),
-        }
-    }
-}
-
-impl Default for Rv32ImConfig {
-    fn default() -> Self {
-        let inner = Rv32IConfig::default();
-        Self {
-            system: inner.system,
-            base: inner.base,
-            mul: Default::default(),
             io: Default::default(),
         }
     }
@@ -98,22 +82,16 @@ impl Rv32IConfig {
 
 impl Rv32ImConfig {
     pub fn with_public_values(public_values: usize) -> Self {
-        let inner = Rv32IConfig::with_public_values(public_values);
         Self {
-            system: inner.system,
-            base: inner.base,
+            rv32i: Rv32IConfig::with_public_values(public_values),
             mul: Default::default(),
-            io: Default::default(),
         }
     }
 
     pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
-        let inner = Rv32IConfig::with_public_values_and_segment_len(public_values, segment_len);
         Self {
-            system: inner.system,
-            base: inner.base,
+            rv32i: Rv32IConfig::with_public_values_and_segment_len(public_values, segment_len),
             mul: Default::default(),
-            io: Default::default(),
         }
     }
 }
