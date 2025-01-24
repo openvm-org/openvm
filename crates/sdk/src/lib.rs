@@ -21,7 +21,7 @@ use openvm_native_recursion::{
     },
     types::InnerConfig,
 };
-use openvm_stark_backend::{engine::StarkEngine, prover::types::Proof};
+use openvm_stark_backend::{engine::StarkEngine, proof::Proof};
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},

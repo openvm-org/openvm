@@ -7,7 +7,6 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
-    rap::AnyRap,
     AirRef, Chip, ChipUsageGetter,
 };
 use rand::{seq::SliceRandom, Rng};

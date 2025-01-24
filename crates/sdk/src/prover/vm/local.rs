@@ -11,7 +11,7 @@ use openvm_circuit::{
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
-    prover::types::Proof,
+    proof::Proof,
     Chip,
 };
 use openvm_stark_sdk::{config::FriParameters, engine::StarkFriEngine};

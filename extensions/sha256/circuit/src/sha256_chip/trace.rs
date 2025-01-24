@@ -16,7 +16,7 @@ use openvm_stark_backend::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSliceMut,
     },
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap},
+    rap::get_air_name,
     AirRef, Chip, ChipUsageGetter,
 };
 

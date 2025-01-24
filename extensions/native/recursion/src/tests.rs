@@ -138,7 +138,7 @@ fn test_optional_air() {
     let engine = BabyBearPoseidon2Engine::new(fri_params);
     let fib_chip = FibonacciChip::new(0, 1, 8);
     let send_chip1 = DummyInteractionChip::new_without_partition(1, true, 0);
-    let send_chip2 = DummyInteractionChip::new_with_partition(engine.config().pcs(), 1, true, 0);
+    let send_chip2 = DummyInteractionChip::new_with_partition(engine.config(), 1, true, 0);
     let recv_chip1 = DummyInteractionChip::new_without_partition(1, false, 0);
     let mut keygen_builder = engine.keygen_builder();
     let fib_chip_id = keygen_builder.add_air(fib_chip.air());
@@ -227,22 +227,17 @@ fn test_optional_air() {
     {
         disable_debug_builder();
         let mut recv_chip1 = recv_chip1.clone();
-        let mut challenger = engine.new_challenger();
         recv_chip1.load_data(DummyInteractionData {
             count: vec![1, 2, 4],
             fields: vec![vec![1], vec![2], vec![3]],
         });
-        let proof = prover.prove(
-            &mut challenger,
+        let proof = engine.prove(
             &pk,
             ProofInput {
                 per_air: vec![recv_chip1.generate_air_proof_input_with_id(recv_chip1_id)],
             },
         );
-        let mut challenger = engine.new_challenger();
-        assert!(verifier
-            .verify(&mut challenger, &pk.get_vk(), &proof)
-            .is_err());
+        assert!(engine.verify(&pk.get_vk(), &proof).is_err());
         // The VM program should panic when the proof cannot be verified.
         let unwind_res = catch_unwind(|| {
             gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(

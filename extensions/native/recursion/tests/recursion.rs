@@ -1,4 +1,4 @@
-use openvm_circuit::arch::{instructions::program::Program, SystemConfig, VmExecutor};
+use openvm_circuit::arch::{instructions::program::Program, SystemConfig, VmConfig, VmExecutor};
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use openvm_native_recursion::testing_utils::inner::run_recursive_test;
@@ -48,6 +48,7 @@ where
 {
     let fib_program = fibonacci_program(a, b, n);
     let vm_config = NativeConfig::new(SystemConfig::default().with_public_values(3), Native);
+    let airs = VmConfig::create_chip_complex(&vm_config).unwrap().airs();
 
     let executor = VmExecutor::<BabyBear, NativeConfig>::new(vm_config);
 
@@ -55,7 +56,8 @@ where
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");
     let proof_input = result.per_segment.remove(0);
     ProofInputForTest {
-        per_air: proof_input.into_air_proof_input_vec(),
+        airs,
+        per_air: proof_input.per_air.into_iter().map(|(_, x)| x).collect(),
     }
 }
 

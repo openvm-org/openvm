@@ -1,5 +1,4 @@
 use std::{
-    cmp::Reverse,
     collections::HashMap,
     io::BufReader,
     path::{Path, PathBuf},
@@ -8,9 +7,6 @@ use std::{
 
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
-use openvm_stark_backend::{
-    config::StarkGenericConfig, p3_matrix::Matrix, prover::types::AirProofInput,
-};
 use rand::{prelude::StdRng, SeedableRng};
 use snark_verifier_sdk::{
     halo2::{PoseidonTranscript, POSEIDON_SPEC},

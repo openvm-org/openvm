@@ -20,7 +20,7 @@ use openvm_stark_sdk::{
     openvm_stark_backend::{
         config::{Com, StarkGenericConfig},
         keygen::types::MultiStarkVerifyingKey,
-        prover::types::Proof,
+        proof::Proof,
         Chip,
     },
     p3_bn254_fr::Bn254Fr,

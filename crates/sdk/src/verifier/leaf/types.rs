@@ -5,7 +5,7 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     openvm_stark_backend::{
         config::{Com, StarkGenericConfig, Val},
-        prover::types::Proof,
+        proof::Proof,
     },
     p3_baby_bear::BabyBear,
 };
