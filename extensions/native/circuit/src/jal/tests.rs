@@ -85,6 +85,7 @@ fn negative_jal_test() {
     let tester = tester.build();
 
     let jal_trace_width = chip.trace_width();
+    let chip_air = chip.air();
     let mut chip_input = chip.generate_air_proof_input();
     let jal_trace = chip_input.raw.common_main.as_mut().unwrap();
     {
@@ -95,7 +96,9 @@ fn negative_jal_test() {
         *jal_trace = RowMajorMatrix::new(trace_row, jal_trace_width);
     }
     disable_debug_builder();
-    let tester = tester.load_air_proof_input(chip_input).finalize();
+    let tester = tester
+        .load_air_proof_input((chip_air, chip_input))
+        .finalize();
     let msg = format!(
         "Expected verification to fail with {:?}, but it didn't",
         VerificationError::ChallengePhaseError

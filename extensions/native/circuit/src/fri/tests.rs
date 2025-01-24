@@ -125,7 +125,12 @@ fn fri_mat_opening_air_test() {
     // negative test pranking each value
     for height in 0..num_ops {
         // TODO: better way to modify existing traces in tester
-        let trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
+        let trace = tester.air_proof_inputs[2]
+            .1
+            .raw
+            .common_main
+            .as_mut()
+            .unwrap();
         let old_trace = trace.clone();
         for width in 0..OVERALL_WIDTH
         /* num operands */
@@ -141,6 +146,6 @@ fn fri_mat_opening_air_test() {
             "Expected constraint to fail"
         );
 
-        tester.air_proof_inputs[2].raw.common_main = Some(old_trace);
+        tester.air_proof_inputs[2].1.raw.common_main = Some(old_trace);
     }
 }

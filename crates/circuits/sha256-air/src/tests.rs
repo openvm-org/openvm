@@ -59,7 +59,6 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air();
         let trace = crate::generate_trace::<Val<SC>>(
             &self.air.sub_air,
             self.bitwise_lookup_chip.clone(),

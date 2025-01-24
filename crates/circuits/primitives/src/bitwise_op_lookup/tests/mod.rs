@@ -6,6 +6,7 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
     rap::AnyRap,
+    utils::disable_debug_builder,
     verifier::VerificationError,
 };
 use openvm_stark_sdk::{
@@ -128,9 +129,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
         lookup.generate_trace(),
     ];
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(chips, traces).err(),
         Some(VerificationError::ChallengePhaseError),
