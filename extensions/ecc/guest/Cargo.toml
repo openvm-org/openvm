@@ -44,3 +44,4 @@ k256 = ["dep:k256"]
 halo2curves = ["dep:halo2curves-axiom", "openvm-algebra-guest/halo2curves"]
 
 p256 = []
+ed25519 = []
