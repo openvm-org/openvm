@@ -93,7 +93,7 @@ pub fn main() {
     setup_0();
     setup_2();
     setup_4();
-    setup_all_curves();
+    setup_all_sw_curves();
 
     let bytes = read_vec();
     let x = Secp256k1Coord::from_le_bytes(&bytes[..32]);
