@@ -25,7 +25,7 @@ openvm_ecc_sw_macros::sw_init! {
 
 pub fn main() {
     setup_all_moduli();
-    setup_all_curves();
+    setup_all_sw_curves();
 
     // Sample points got from https://asecuritysite.com/ecc/p256p
     let x1 = P256Coord::from_u32(5);

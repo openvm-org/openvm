@@ -20,7 +20,7 @@ openvm_ecc_sw_macros::sw_init! {
 
 pub fn main() {
     setup_0();
-    setup_all_curves();
+    setup_all_sw_curves();
 
     let bytes = read_vec();
     let x = Secp256k1Coord::from_le_bytes(&bytes[..32]);
