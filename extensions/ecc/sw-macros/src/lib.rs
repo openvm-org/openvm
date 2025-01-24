@@ -502,7 +502,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
     TokenStream::from(quote::quote_spanned! { span.into() =>
         #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
-        mod openvm_intrinsics_ffi_2 {
+        mod openvm_intrinsics_ffi_2_sw {
             use ::openvm_ecc_guest::{SW_OPCODE, SW_FUNCT3, SwBaseFunct7};
 
             #(#externs)*
