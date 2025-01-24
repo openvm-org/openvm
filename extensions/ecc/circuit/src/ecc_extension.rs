@@ -44,6 +44,7 @@ pub struct CurveConfig {
 }
 
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum CurveCoeffs {
     SwCurve(SwCurveConfig),
     TeCurve(TeCurveConfig),
