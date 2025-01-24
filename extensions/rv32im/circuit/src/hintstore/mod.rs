@@ -290,6 +290,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
         } = instruction;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+        println!();
+        println!("instruction: {instruction:?}");
+        println!("from_state: {from_state:?}");
 
         let (mem_ptr_read, mem_ptr_limbs) = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, mem_ptr_ptr);
         let (num_words, num_words_read) = if opcode == HINT_STOREW.global_opcode() {
@@ -301,11 +304,14 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
             (compose(num_words_limbs), Some(num_words_read))
         };
         let mem_ptr = compose(mem_ptr_limbs);
+        println!("num_words: {num_words}, mem_ptr: {mem_ptr}");
 
         let mut streams = self.streams.get().unwrap().lock().unwrap();
         if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS {
             return Err(ExecutionError::HintOutOfBounds { pc: from_state.pc });
         }
+        
+        let mut datas = vec![];
 
         let mut record = Rv32HintStoreRecord {
             from_state,
@@ -325,6 +331,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
 
             let data: [F; RV32_REGISTER_NUM_LIMBS] =
                 std::array::from_fn(|_| streams.hint_stream.pop_front().unwrap());
+            //println!("data: {data:?}");
+            datas.push(data);
             let (write, _) = memory.write(
                 e,
                 F::from_canonical_u32(mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index)),
@@ -334,12 +342,16 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
         }
 
         self.height += record.hints.len();
+        println!("datas = {:?}", datas);
+        println!("now height = {}", self.height);
         self.records.push(record);
-
-        Ok(ExecutionState {
+        
+        let to_state = ExecutionState {
             pc: from_state.pc + DEFAULT_PC_STEP,
             timestamp: memory.timestamp(),
-        })
+        };
+        println!("to_state = {to_state:?}");
+        Ok(to_state)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -355,7 +367,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
 
 impl<F: Field> ChipUsageGetter for Rv32HintStoreChip<F> {
     fn air_name(&self) -> String {
-        "FriReducedOpeningAir".to_string()
+        "Rv32HintStoreAir".to_string()
     }
 
     fn current_trace_height(&self) -> usize {
@@ -402,8 +414,25 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         let mut rem_words = record.num_words;
         let mut used_u32s = 0;
         for (i, &(data, write)) in record.hints.iter().enumerate() {
+            /*
+            
+            
+        for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
+            // preventing mem_ptr overflow
+            self.bitwise_operation_lookup_bus
+                .send_range(
+                    local_cols.mem_ptr_limbs[2 * i],
+                    local_cols.mem_ptr_limbs[(2 * i) + 1],
+                )
+                .eval(builder, is_valid.clone());
+            // checking that hint is bytes
+            self.bitwise_operation_lookup_bus
+                .send_range(local_cols.data[2 * i], local_cols.data[(2 * i) + 1])
+                .eval(builder, is_valid.clone());
+        }
+             */
+            let mem_ptr_limbs = decompose::<F>(mem_ptr);
             for half in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
-                let mem_ptr_limbs = decompose::<F>(mem_ptr);
                 bitwise_lookup_chip.request_range(
                     mem_ptr_limbs[2 * half].as_canonical_u32(),
                     mem_ptr_limbs[(2 * half) + 1].as_canonical_u32(),
@@ -420,7 +449,7 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
             cols.data = data;
             aux_cols_factory.generate_write_aux(memory.record_by_id(write), &mut cols.write_aux);
             cols.rem_words_limbs = decompose(rem_words);
-            cols.mem_ptr_limbs = decompose(mem_ptr);
+            cols.mem_ptr_limbs = mem_ptr_limbs;
             if i != 0 {
                 cols.is_buffer = F::ONE;
             }

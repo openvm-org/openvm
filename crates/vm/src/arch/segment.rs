@@ -79,6 +79,8 @@ impl SegmentationStrategy for DefaultSegmentationStrategy {
         trace_heights: &[usize],
         trace_cells: &[usize],
     ) -> bool {
+        //println!("trace_heights: {:?}", trace_heights);
+        //println!("max segment len: {}", self.max_segment_len);
         for (i, &height) in trace_heights.iter().enumerate() {
             if height > self.max_segment_len {
                 tracing::info!(
@@ -87,6 +89,11 @@ impl SegmentationStrategy for DefaultSegmentationStrategy {
                     air_names[i],
                     height
                 );
+                println!("Should segment because chip {} (name: {}) has height {}", i, air_names[i], height);
+                for (i, &height) in trace_heights.iter().enumerate() {
+                    println!("\tchip {} (name: {}) has height {}", i, air_names[i], height);
+                }
+                //panic!();
                 return true;
             }
         }
@@ -204,6 +211,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         &mut self,
         mut pc: u32,
     ) -> Result<ExecutionSegmentState, ExecutionError> {
+        println!("Executing from pc {}", pc);
         let mut timestamp = self.chip_complex.memory_controller().timestamp();
         let mut prev_backtrace: Option<Backtrace> = None;
 
@@ -230,6 +238,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
 
                 let (instruction, debug_info) = program_chip.get_instruction(pc)?;
                 tracing::trace!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
+                //println!("pc: {pc} | time: {timestamp} | {:?}", instruction);
 
                 #[allow(unused_variables)]
                 let (dsl_instr, trace) = debug_info.as_ref().map_or(
@@ -242,6 +251,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
 
                 let &Instruction { opcode, c, .. } = instruction;
                 if opcode == SystemOpcode::TERMINATE.global_opcode() {
+                    println!("terminated execution");
                     did_terminate = true;
                     self.chip_complex.connector_chip_mut().end(
                         ExecutionState::new(pc, timestamp),
@@ -305,6 +315,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             self.update_instruction_metrics(pc, opcode, dsl_instr);
 
             if self.should_segment() {
+                println!("segmenting");
                 self.chip_complex
                     .connector_chip_mut()
                     .end(ExecutionState::new(pc, timestamp), None);
