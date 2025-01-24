@@ -19,7 +19,7 @@ openvm_algebra_complex_macros::complex_declare! {
 }
 
 openvm_algebra_complex_macros::complex_init! {
-    Complex2 { mod_idx = 1 }, Complex1 { mod_idx = 0 },
+    Complex1 { mod_idx = 0 }, Complex2 { mod_idx = 1 },
 }
 
 pub fn main() {
