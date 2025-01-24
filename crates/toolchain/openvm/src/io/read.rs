@@ -37,8 +37,8 @@ impl WordRead for Reader {
                 for w in words.iter_mut() {
                     hint_store_word(w as *mut u32);
                 }
-                self.bytes_remaining = new_remaining;
             }
+            self.bytes_remaining = new_remaining;
             Ok(())
         } else {
             Err(crate::serde::Error::DeserializeUnexpectedEnd)
