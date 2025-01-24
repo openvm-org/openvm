@@ -425,24 +425,11 @@ fn compute_round_alpha_pows<C: Config>(
         let round = builder.iter_ptr_get(&rounds, ptr_vec[0]);
         let mat_alpha_pows: Array<C, Ext<_, _>> = builder.array(round.mats.len());
         iter_zip!(builder, round.mats, mat_alpha_pows).for_each(|ptr_vec, builder| {
+            assert!(!builder.flags.static_only);
             let mat = builder.iter_ptr_get(&round.mats, ptr_vec[0]);
             let local = builder.get(&mat.values, 0);
-            let width = local.len();
-            let mat_alpha_pow: Ext<_, _> = if builder.flags.static_only {
-                let width = width.value();
-                assert!(width < 1 << MAX_LOG_WIDTH);
-                let mut expr = C::EF::ONE.cons();
-                for i in 0..MAX_LOG_WIDTH {
-                    if width & (1 << i) != 0 {
-                        expr *= builder.get(&pow_of_alpha, i);
-                    }
-                }
-                let ret: Ext<_, _> = builder.eval(expr);
-                // Minimize max_bits so following computation becomes cheaper.
-                builder.ext_reduce_circuit(ret);
-                ret
-            } else {
-                let width = width.get_var();
+            let mat_alpha_pow: Ext<_, _> = {
+                let width = local.len().get_var();
                 // This is dynamic only so safe to cast.
                 let width_f = builder.unsafe_cast_var_to_felt(width);
                 let bits = builder.num2bits_f(width_f, MAX_LOG_WIDTH as u32);
