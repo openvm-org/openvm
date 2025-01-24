@@ -40,6 +40,7 @@ default = []
 # only enable for the curves you use as it affects the init! macro
 k256 = ["dep:k256"]
 p256 = ["dep:p256"]
+ed25519 = []
 halo2curves = ["dep:halo2curves-axiom", "openvm-algebra-guest/halo2curves"]
 
 [package.metadata.cargo-shear]
