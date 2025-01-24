@@ -235,7 +235,7 @@ impl BabyBearChip {
         c
     }
 
-    // we assume length is at most 4, since that is the main use case
+    // This inner product function will be used exclusively for optimizing extension element multiplication.
     pub fn special_inner_product(
         &self,
         ctx: &mut Context<Fr>,
@@ -243,6 +243,8 @@ impl BabyBearChip {
         b: &mut [AssignedBabyBear],
         s: usize,
     ) -> AssignedBabyBear {
+        assert!(a.len() == b.len());
+        assert!(a.len() == 4)
         let mut max_bits = 0;
         let lb = if s > 3 { s - 3 } else { 0 };
         let ub = 4.min(s + 1);
