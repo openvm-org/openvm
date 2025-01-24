@@ -38,6 +38,7 @@ default = []
 std = ["serde/std", "openvm/std"]
 k256 = ["dep:openvm-k256"]
 p256 = ["dep:openvm-p256"]
+ed25519 = ["openvm-ecc-guest/ed25519"]
 
 [profile.release]
 panic = "abort"
@@ -63,6 +64,10 @@ required-features = ["k256"]
 [[example]]
 name = "ecdsa"
 required-features = ["k256"]
+
+[[example]]
+name = "edwards_ec"
+required-features = ["ed25519"]
 
 [[example]]
 name = "invalid_setup"

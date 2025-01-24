@@ -50,6 +50,8 @@ const CURVE_D: Edwards25519Coord = Edwards25519Coord::from_const_bytes([
     64, 199, 140, 115, 254, 111, 43, 238, 108, 3, 82,
 ]);
 
+// Note that we are defining the Edwards25519 curve for illustrative purposes only.
+// In practice, we would use the ed25519 module which defines the Edwards25519 curve for us.
 openvm_ecc_guest::te_setup::te_declare! {
     Edwards25519Point {
         mod_type = Edwards25519Coord,

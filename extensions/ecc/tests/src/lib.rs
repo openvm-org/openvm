@@ -205,7 +205,7 @@ mod tests {
         let elf = build_example_program_at_path_with_features::<&str>(
             get_programs_dir!(),
             "edwards_ec",
-            [],
+            ["ed25519"],
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,

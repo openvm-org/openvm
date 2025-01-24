@@ -23,6 +23,9 @@ pub mod edwards;
 /// Weierstrass curve traits
 pub mod weierstrass;
 
+#[cfg(feature = "ed25519")]
+pub mod ed25519;
+
 /// This is custom-1 defined in RISC-V spec document
 pub const SW_OPCODE: u8 = 0x2b;
 pub const SW_FUNCT3: u8 = 0b001;

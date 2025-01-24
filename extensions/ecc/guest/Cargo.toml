@@ -26,6 +26,7 @@ group = "0.13.0"
 
 [features]
 default = []
+ed25519 = []
 halo2curves = ["dep:halo2curves-axiom", "openvm-algebra-guest/halo2curves"]
 std = ["alloc"]
 alloc = []
