@@ -21,7 +21,7 @@ pub fn install_prometheus_recorder() -> &'static PrometheusRecorder {
 /// The default Prometheus recorder handle. We use a global static to ensure that it is only
 /// installed once.
 static PROMETHEUS_RECORDER_HANDLE: LazyLock<PrometheusRecorder> =
-    LazyLock::new(|| PrometheusRecorder::new());
+    LazyLock::new(PrometheusRecorder::new);
 
 pub struct PrometheusRecorder {
     handle: Arc<PrometheusHandle>,
