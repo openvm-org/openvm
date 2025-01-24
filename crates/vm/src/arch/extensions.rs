@@ -93,6 +93,22 @@ pub trait VmExtension<F: PrimeField32> {
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError>;
 }
 
+impl<F: PrimeField32, E: VmExtension<F>> VmExtension<F> for Option<E> {
+    type Executor = E::Executor;
+    type Periphery = E::Periphery;
+
+    fn build(
+        &self,
+        builder: &mut VmInventoryBuilder<F>,
+    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
+        if let Some(extension) = self {
+            extension.build(builder)
+        } else {
+            Ok(VmInventory::new())
+        }
+    }
+}
+
 /// SystemPort combines system resources needed by most extensions
 #[derive(Clone, Copy)]
 pub struct SystemPort {

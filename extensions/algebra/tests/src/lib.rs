@@ -4,9 +4,11 @@ mod tests {
 
     use eyre::Result;
     use num_bigint::BigUint;
-    use openvm_algebra_circuit::{Rv32ModularConfig, Rv32ModularWithFp2Config};
+    use openvm_algebra_circuit::{
+        Fp2Extension, ModularExtension, Rv32ModularConfig, Rv32ModularWithFp2Config,
+    };
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use openvm_circuit::utils::air_test;
+    use openvm_circuit::{arch::SystemConfig, utils::air_test};
     use openvm_ecc_circuit::SECP256K1_CONFIG;
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_transpiler::{
@@ -69,6 +71,35 @@ mod tests {
             BigUint::from_str("998244353").unwrap(),
             BigUint::from_str("1000000007").unwrap(),
         ]);
+        air_test(config, openvm_exe);
+        Ok(())
+    }
+
+    #[test]
+    fn test_complex_redundant_modulus() -> Result<()> {
+        let elf = build_example_program_at_path(get_programs_dir!(), "complex-redundant-modulus")?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        let config = Rv32ModularWithFp2Config {
+            system: SystemConfig::default().with_continuations(),
+            base: Default::default(),
+            mul: Default::default(),
+            io: Default::default(),
+            modular: ModularExtension::new(vec![
+                BigUint::from_str("998244353").unwrap(),
+                BigUint::from_str("1000000007").unwrap(),
+                BigUint::from_str("1000000009").unwrap(),
+                BigUint::from_str("987898789").unwrap(),
+            ]),
+            fp2: Fp2Extension::new(vec![BigUint::from_str("1000000009").unwrap()]),
+        };
         air_test(config, openvm_exe);
         Ok(())
     }

@@ -3413,7 +3413,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "openvm",
  "openvm-algebra-complex-macros",
- "openvm-algebra-moduli-setup",
+ "openvm-algebra-moduli-macros",
  "openvm-platform",
  "serde",
  "serde-big-array",
@@ -3421,7 +3421,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-algebra-moduli-setup"
+name = "openvm-algebra-moduli-macros"
 version = "0.2.0-alpha"
 dependencies = [
  "openvm-macros-common",
@@ -3744,8 +3744,8 @@ dependencies = [
  "num-traits",
  "openvm",
  "openvm-algebra-guest",
- "openvm-algebra-moduli-setup",
- "openvm-ecc-sw-setup",
+ "openvm-algebra-moduli-macros",
+ "openvm-ecc-sw-macros",
  "openvm-platform",
  "openvm-rv32im-guest",
  "rand",
@@ -3775,7 +3775,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-ecc-sw-setup"
+name = "openvm-ecc-sw-macros"
 version = "0.2.0-alpha"
 dependencies = [
  "openvm-macros-common",
@@ -4118,9 +4118,9 @@ dependencies = [
  "openvm",
  "openvm-algebra-complex-macros",
  "openvm-algebra-guest",
- "openvm-algebra-moduli-setup",
+ "openvm-algebra-moduli-macros",
  "openvm-ecc-guest",
- "openvm-ecc-sw-setup",
+ "openvm-ecc-sw-macros",
  "openvm-platform",
  "openvm-rv32im-guest",
  "rand",

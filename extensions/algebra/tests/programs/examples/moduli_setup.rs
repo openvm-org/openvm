@@ -6,16 +6,16 @@ extern crate alloc;
 use openvm_algebra_guest::IntMod;
 
 openvm::entry!(main);
-openvm_algebra_moduli_setup::moduli_declare! {
+openvm_algebra_moduli_macros::moduli_declare! {
     Bls12381 { modulus = "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787" },
     Mod1e18 { modulus = "1000000000000000003" },
 }
 
-openvm_algebra_moduli_setup::moduli_declare! {
+openvm_algebra_moduli_macros::moduli_declare! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
-openvm_algebra_moduli_setup::moduli_init! {
+openvm_algebra_moduli_macros::moduli_init! {
     "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
     "1000000000000000003",
     "0x1fffffffffffffff",
