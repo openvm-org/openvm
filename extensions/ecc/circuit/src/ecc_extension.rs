@@ -231,7 +231,7 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                         );
                         inventory.add_executor(
                             EccExtensionExecutor::TeEcAddRv32_32(te_add_chip),
-                            sw_add_ne_opcodes
+                            te_add_opcodes
                                 .clone()
                                 .map(|x| VmOpcode::from_usize(x + te_start_offset)),
                         )?;
