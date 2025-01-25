@@ -5,8 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
-        Streams,
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor, Streams,
     },
     system::{
         memory::{

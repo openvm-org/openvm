@@ -66,10 +66,9 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
         let layout = Layout::from_size_align(capacity, 4).expect("vec is too large");
         // SAFETY: We populate a `Vec<u8>` by hintstore-ing `num_words` 4 byte words. We set the length to `len` and don't care about the extra `capacity - len` bytes stored.
         let ptr_start = unsafe { alloc::alloc::alloc(layout) };
-        let mut ptr = ptr_start;
 
         // Note: if len % 4 != 0, this will discard some last bytes
-        hint_buffer_u32!(ptr, num_words);
+        hint_buffer_u32!(ptr_start, num_words);
         unsafe { Vec::from_raw_parts(ptr_start, len, capacity) }
     }
     #[cfg(not(target_os = "zkvm"))]
