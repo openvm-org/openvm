@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_stark_backend::{
@@ -8,8 +8,8 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap},
-    Chip, ChipUsageGetter,
+    rap::get_air_name,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
@@ -19,12 +19,11 @@ impl<SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<SC>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         self.air.clone()
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air();
         let height = next_power_of_two_or_zero(self.current_trace_height());
         let width = self.trace_width();
 
@@ -56,7 +55,7 @@ where
                 cols.mult = Val::<SC>::from_canonical_u32(mult);
             });
 
-        AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
+        AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
     }
 }
 

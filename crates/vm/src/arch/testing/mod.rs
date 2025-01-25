@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    iter::zip,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -15,7 +16,7 @@ use openvm_stark_backend::{
     p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
     prover::types::AirProofInput,
     verifier::VerificationError,
-    Chip,
+    AirRef, Chip,
 };
 use openvm_stark_sdk::{
     config::{
@@ -295,7 +296,7 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
 
 pub struct VmChipTester<SC: StarkGenericConfig> {
     pub memory: Option<MemoryTester<Val<SC>>>,
-    pub air_proof_inputs: Vec<AirProofInput<SC>>,
+    pub air_proof_inputs: Vec<(AirRef<SC>, AirProofInput<SC>)>,
 }
 
 impl<SC: StarkGenericConfig> Default for VmChipTester<SC> {
@@ -313,12 +314,10 @@ where
 {
     pub fn load<C: Chip<SC>>(mut self, chip: C) -> Self {
         if chip.current_trace_height() > 0 {
+            let air = chip.air();
             let air_proof_input = chip.generate_air_proof_input();
-            tracing::debug!(
-                "Generated air proof input for {}",
-                air_proof_input.air.name()
-            );
-            self.air_proof_inputs.push(air_proof_input);
+            tracing::debug!("Generated air proof input for {}", air.name());
+            self.air_proof_inputs.push((air, air_proof_input));
         }
 
         self
@@ -330,14 +329,13 @@ where
             let range_checker = memory_controller.borrow().range_checker.clone();
             self = self.load(memory_tester); // dummy memory interactions
             {
+                let airs = memory_controller.borrow().airs();
                 let air_proof_inputs = Rc::try_unwrap(memory_controller)
                     .unwrap_or_else(|_| panic!("Memory controller was not dropped"))
                     .into_inner()
                     .generate_air_proof_inputs();
                 self.air_proof_inputs.extend(
-                    air_proof_inputs
-                        .into_iter()
-                        .filter(|api| api.main_trace_height() > 0),
+                    zip(airs, air_proof_inputs).filter(|(_, input)| input.main_trace_height() > 0),
                 );
             }
             self = self.load(range_checker); // this must be last because other trace generation mutates its state
@@ -345,7 +343,10 @@ where
         self
     }
 
-    pub fn load_air_proof_input(mut self, air_proof_input: AirProofInput<SC>) -> Self {
+    pub fn load_air_proof_input(
+        mut self,
+        air_proof_input: (AirRef<SC>, AirProofInput<SC>),
+    ) -> Self {
         self.air_proof_inputs.push(air_proof_input);
         self
     }
@@ -355,9 +356,10 @@ where
         chip: C,
         trace: RowMajorMatrix<Val<SC>>,
     ) -> Self {
+        let air = chip.air();
         let mut air_proof_input = chip.generate_air_proof_input();
         air_proof_input.raw.common_main = Some(trace);
-        self.air_proof_inputs.push(air_proof_input);
+        self.air_proof_inputs.push((air, air_proof_input));
         self
     }
 
@@ -365,10 +367,11 @@ where
     where
         P: Fn(&mut DenseMatrix<Val<SC>>),
     {
+        let air = chip.air();
         let mut air_proof_input = chip.generate_air_proof_input();
         let trace = air_proof_input.raw.common_main.as_mut().unwrap();
         modify_trace(trace);
-        self.air_proof_inputs.push(air_proof_input);
+        self.air_proof_inputs.push((air, air_proof_input));
         self
     }
 
@@ -379,7 +382,8 @@ where
         engine_provider: P,
     ) -> Result<VerificationData<SC>, VerificationError> {
         assert!(self.memory.is_none(), "Memory must be finalized");
-        engine_provider().run_test_impl(self.air_proof_inputs.clone())
+        let (airs, air_proof_inputs) = self.air_proof_inputs.iter().cloned().unzip();
+        engine_provider().run_test_impl(airs, air_proof_inputs)
     }
 }
 

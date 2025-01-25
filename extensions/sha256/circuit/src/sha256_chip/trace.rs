@@ -16,8 +16,8 @@ use openvm_stark_backend::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSliceMut,
     },
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap},
-    Chip, ChipUsageGetter,
+    rap::get_air_name,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 use super::{
@@ -33,18 +33,17 @@ impl<SC: StarkGenericConfig> Chip<SC> for Sha256VmChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air.clone())
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air();
         let non_padded_height = self.current_trace_height();
         let height = next_power_of_two_or_zero(non_padded_height);
         let width = self.trace_width();
         let mut values = Val::<SC>::zero_vec(height * width);
         if height == 0 {
-            return AirProofInput::simple(air, RowMajorMatrix::new(values, width), vec![]);
+            return AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width));
         }
         let records = self.records;
         let offline_memory = self.offline_memory.lock().unwrap();
@@ -255,7 +254,7 @@ where
                     .generate_missing_cells(chunk, width, SHA256VM_CONTROL_WIDTH);
             });
 
-        AirProofInput::simple(air, RowMajorMatrix::new(values, width), vec![])
+        AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
     }
 }
 

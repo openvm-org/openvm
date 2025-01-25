@@ -107,7 +107,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 .push(syn::parse_quote! { #inner_ty: openvm_stark_backend::Chip<SC> });
             quote! {
                 impl #impl_generics openvm_stark_backend::Chip<SC> for #name #ty_generics #where_clause {
-                    fn air(&self) -> std::sync::Arc<dyn openvm_stark_backend::rap::AnyRap<SC>> {
+                    fn air(&self) -> openvm_stark_backend::AirRef<SC> {
                         self.0.air()
                     }
                     fn generate_air_proof_input(self) -> openvm_stark_backend::prover::types::AirProofInput<SC> {
@@ -195,7 +195,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
 
             quote! {
                 impl #impl_generics openvm_stark_backend::Chip<SC> for #name #ty_generics #where_clause {
-                    fn air(&self) -> std::sync::Arc<dyn openvm_stark_backend::rap::AnyRap<SC>> {
+                    fn air(&self) -> openvm_stark_backend::AirRef<SC> {
                         match self {
                             #(#air_arms,)*
                         }

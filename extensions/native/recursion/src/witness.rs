@@ -4,11 +4,9 @@ use openvm_native_compiler::ir::{
     Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness,
 };
 use openvm_stark_backend::{
+    config::{Com, PcsProof},
     p3_util::log2_strict_usize,
-    prover::{
-        opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
-        types::{AirProofData, Commitments, Proof},
-    },
+    proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, p3_baby_bear::BabyBear,
@@ -19,6 +17,7 @@ use p3_symmetric::Hash;
 use crate::{
     config::outer::{OuterChallenge, OuterConfig, OuterVal},
     digest::{DigestVal, DigestVariable},
+    hints::{InnerChallenge, InnerVal},
     vars::{
         AdjacentOpenedValuesVariable, AirProofDataVariable, CommitmentsVariable,
         OpenedValuesVariable, OpeningProofVariable, StarkProofVariable,
@@ -143,7 +142,7 @@ impl Witnessable<C> for DigestVal<C> {
 }
 impl VectorWitnessable<C> for DigestVal<C> {}
 
-impl VectorWitnessable<C> for AirProofData<BabyBearPoseidon2RootConfig> {}
+impl VectorWitnessable<C> for AirProofData<InnerVal, InnerChallenge> {}
 
 impl Witnessable<C> for Proof<BabyBearPoseidon2RootConfig> {
     type WitnessVariable = StarkProofVariable<C>;
@@ -178,7 +177,7 @@ impl Witnessable<C> for Proof<BabyBearPoseidon2RootConfig> {
     }
 }
 
-impl Witnessable<C> for AirProofData<BabyBearPoseidon2RootConfig> {
+impl Witnessable<C> for AirProofData<OuterVal, OuterChallenge> {
     type WitnessVariable = AirProofDataVariable<C>;
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
         // air_id is constant, skip
@@ -202,7 +201,7 @@ impl Witnessable<C> for AirProofData<BabyBearPoseidon2RootConfig> {
     }
 }
 
-impl Witnessable<OuterConfig> for Commitments<BabyBearPoseidon2RootConfig> {
+impl Witnessable<OuterConfig> for Commitments<Com<BabyBearPoseidon2RootConfig>> {
     type WitnessVariable = CommitmentsVariable<OuterConfig>;
 
     fn read(&self, builder: &mut Builder<OuterConfig>) -> Self::WitnessVariable {
@@ -223,7 +222,7 @@ impl Witnessable<OuterConfig> for Commitments<BabyBearPoseidon2RootConfig> {
     }
 }
 
-impl Witnessable<C> for OpeningProof<BabyBearPoseidon2RootConfig> {
+impl Witnessable<C> for OpeningProof<PcsProof<BabyBearPoseidon2RootConfig>, OuterChallenge> {
     type WitnessVariable = OpeningProofVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {

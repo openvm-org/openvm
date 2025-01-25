@@ -11,6 +11,7 @@ use openvm_stark_backend::{
     Chip,
 };
 use openvm_stark_sdk::{
+    collect_airs_and_inputs,
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
@@ -22,8 +23,8 @@ use openvm_stark_sdk::{
             DummyInteractionAir, DummyInteractionChip, DummyInteractionData,
         },
     },
-    engine::{ProofInputForTest, StarkFriEngine},
-    utils::to_field_vec,
+    engine::StarkFriEngine,
+    utils::{to_field_vec, ProofInputForTest},
 };
 
 use crate::{
@@ -36,9 +37,8 @@ where
     Val<SC>: PrimeField32,
 {
     let fib_chip = FibonacciChip::new(0, 1, n);
-    ProofInputForTest {
-        per_air: vec![fib_chip.generate_air_proof_input()],
-    }
+    let (airs, per_air) = collect_airs_and_inputs!(fib_chip);
+    ProofInputForTest { airs, per_air }
 }
 
 pub fn interaction_test_proof_input<SC: StarkGenericConfig>() -> ProofInputForTest<SC>
@@ -62,13 +62,8 @@ where
         fields: vec![vec![1, 1], vec![1, 2], vec![3, 4], vec![9999, 0]],
     });
 
-    ProofInputForTest {
-        per_air: vec![
-            send_chip1.generate_air_proof_input(),
-            send_chip2.generate_air_proof_input(),
-            recv_chip.generate_air_proof_input(),
-        ],
-    }
+    let (airs, per_air) = collect_airs_and_inputs!(send_chip1, send_chip2, recv_chip);
+    ProofInputForTest { airs, per_air }
 }
 
 pub fn unordered_test_proof_input<SC: StarkGenericConfig>() -> ProofInputForTest<SC>
@@ -89,11 +84,11 @@ where
         receiver_air.field_width() + 1,
     );
 
-    let sender_air_proof_input = AirProofInput::simple_no_pis(Arc::new(sender_air), sender_trace);
-    let receiver_air_proof_input =
-        AirProofInput::simple_no_pis(Arc::new(receiver_air), receiver_trace);
+    let sender_air_proof_input = AirProofInput::simple_no_pis(sender_trace);
+    let receiver_air_proof_input = AirProofInput::simple_no_pis(receiver_trace);
 
     ProofInputForTest {
+        airs: vec![Arc::new(sender_air), Arc::new(receiver_air)],
         per_air: vec![sender_air_proof_input, receiver_air_proof_input],
     }
 }
@@ -143,7 +138,7 @@ fn test_optional_air() {
     let engine = BabyBearPoseidon2Engine::new(fri_params);
     let fib_chip = FibonacciChip::new(0, 1, 8);
     let send_chip1 = DummyInteractionChip::new_without_partition(1, true, 0);
-    let send_chip2 = DummyInteractionChip::new_with_partition(engine.config().pcs(), 1, true, 0);
+    let send_chip2 = DummyInteractionChip::new_with_partition(engine.config(), 1, true, 0);
     let recv_chip1 = DummyInteractionChip::new_without_partition(1, false, 0);
     let mut keygen_builder = engine.keygen_builder();
     let fib_chip_id = keygen_builder.add_air(fib_chip.air());
@@ -151,8 +146,6 @@ fn test_optional_air() {
     let send_chip2_id = keygen_builder.add_air(send_chip2.air());
     let recv_chip1_id = keygen_builder.add_air(recv_chip1.air());
     let pk = keygen_builder.generate_pk();
-    let prover = engine.prover();
-    let verifier = engine.verifier();
 
     let m_advice = new_from_inner_multi_vk(&pk.get_vk());
     let vm_config = NativeConfig::aggregation(4, 7);
@@ -164,7 +157,6 @@ fn test_optional_air() {
         let mut send_chip1 = send_chip1.clone();
         let mut send_chip2 = send_chip2.clone();
         let mut recv_chip1 = recv_chip1.clone();
-        let mut challenger = engine.new_challenger();
         send_chip1.load_data(DummyInteractionData {
             count: vec![1, 2, 4],
             fields: vec![vec![1], vec![2], vec![3]],
@@ -177,8 +169,7 @@ fn test_optional_air() {
             count: vec![2, 4, 12],
             fields: vec![vec![1], vec![2], vec![3]],
         });
-        let proof = prover.prove(
-            &mut challenger,
+        let proof = engine.prove(
             &pk,
             ProofInput {
                 per_air: vec![
@@ -189,9 +180,8 @@ fn test_optional_air() {
                 ],
             },
         );
-        let mut challenger = engine.new_challenger();
-        verifier
-            .verify(&mut challenger, &pk.get_vk(), &proof)
+        engine
+            .verify(&pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
         gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
@@ -204,7 +194,6 @@ fn test_optional_air() {
     {
         let mut send_chip1 = send_chip1.clone();
         let mut recv_chip1 = recv_chip1.clone();
-        let mut challenger = engine.new_challenger();
         send_chip1.load_data(DummyInteractionData {
             count: vec![1, 2, 4],
             fields: vec![vec![1], vec![2], vec![3]],
@@ -213,8 +202,7 @@ fn test_optional_air() {
             count: vec![1, 2, 4],
             fields: vec![vec![1], vec![2], vec![3]],
         });
-        let proof = prover.prove(
-            &mut challenger,
+        let proof = engine.prove(
             &pk,
             ProofInput {
                 per_air: vec![
@@ -223,9 +211,8 @@ fn test_optional_air() {
                 ],
             },
         );
-        let mut challenger = engine.new_challenger();
-        verifier
-            .verify(&mut challenger, &pk.get_vk(), &proof)
+        engine
+            .verify(&pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
         gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
@@ -238,22 +225,17 @@ fn test_optional_air() {
     {
         disable_debug_builder();
         let mut recv_chip1 = recv_chip1.clone();
-        let mut challenger = engine.new_challenger();
         recv_chip1.load_data(DummyInteractionData {
             count: vec![1, 2, 4],
             fields: vec![vec![1], vec![2], vec![3]],
         });
-        let proof = prover.prove(
-            &mut challenger,
+        let proof = engine.prove(
             &pk,
             ProofInput {
                 per_air: vec![recv_chip1.generate_air_proof_input_with_id(recv_chip1_id)],
             },
         );
-        let mut challenger = engine.new_challenger();
-        assert!(verifier
-            .verify(&mut challenger, &pk.get_vk(), &proof)
-            .is_err());
+        assert!(engine.verify(&pk.get_vk(), &proof).is_err());
         // The VM program should panic when the proof cannot be verified.
         let unwind_res = catch_unwind(|| {
             gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(

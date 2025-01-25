@@ -1,4 +1,4 @@
-use std::{iter, sync::Arc};
+use std::iter;
 
 use openvm_instructions::{
     instruction::Instruction,
@@ -15,6 +15,7 @@ use openvm_stark_backend::{
     prover::types::AirProofInput,
 };
 use openvm_stark_sdk::{
+    any_rap_arc_vec,
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
@@ -42,6 +43,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         execution_frequencies[pc_idx as usize] += 1;
         chip.get_instruction(pc_idx * DEFAULT_PC_STEP).unwrap();
     }
+    let program_air = chip.air;
     let program_proof_input = chip.generate_air_proof_input(None);
 
     let counter_air = DummyInteractionAir::new(9, true, bus.0);
@@ -75,10 +77,13 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     println!("trace height = {}", original_height);
     println!("counter trace height = {}", counter_trace.height());
 
-    BabyBearPoseidon2Engine::run_test_fast(vec![
-        program_proof_input,
-        AirProofInput::simple_no_pis(Arc::new(counter_air), counter_trace),
-    ])
+    BabyBearPoseidon2Engine::run_test_fast(
+        any_rap_arc_vec!(program_air, counter_air),
+        vec![
+            program_proof_input,
+            AirProofInput::simple_no_pis(counter_trace),
+        ],
+    )
     .expect("Verification failed");
 }
 
@@ -164,7 +169,7 @@ fn test_program_without_field_arithmetic() {
 }
 
 #[test]
-#[should_panic(expected = "assertion `left == right` failed")]
+#[should_panic(expected = "LogUp multiset equality check failed.")]
 fn test_program_negative() {
     let instructions = vec![
         Instruction::large_from_isize(STOREW.global_opcode(), -1, 0, 0, 0, 1, 0, 1),
@@ -180,6 +185,7 @@ fn test_program_negative() {
         chip.get_instruction(pc_idx as u32 * DEFAULT_PC_STEP)
             .unwrap();
     }
+    let program_air = chip.air;
     let program_proof_input = chip.generate_air_proof_input(None);
 
     let counter_air = DummyInteractionAir::new(7, true, bus.0);
@@ -199,10 +205,13 @@ fn test_program_negative() {
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
     counter_trace.row_mut(1)[1] = BabyBear::ZERO;
 
-    BabyBearPoseidon2Engine::run_test_fast(vec![
-        program_proof_input,
-        AirProofInput::simple_no_pis(Arc::new(counter_air), counter_trace),
-    ])
+    BabyBearPoseidon2Engine::run_test_fast(
+        any_rap_arc_vec!(program_air, counter_air),
+        vec![
+            program_proof_input,
+            AirProofInput::simple_no_pis(counter_trace),
+        ],
+    )
     .expect("Verification failed");
 }
 

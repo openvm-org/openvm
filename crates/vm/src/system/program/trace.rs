@@ -5,13 +5,13 @@ use itertools::Itertools;
 use openvm_instructions::{exe::VmExe, program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::{
     config::{Com, Domain, StarkGenericConfig, Val},
-    p3_commit::PolynomialSpace,
+    p3_commit::{Pcs, PolynomialSpace},
     p3_field::{Field, PrimeField64},
-    p3_matrix::dense::RowMajorMatrix,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::{
         helper::AirProofInputTestHelper,
-        types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
+        types::{AirProofInput, AirProofRawInput, CommittedTraceData},
     },
 };
 use serde::{Deserialize, Serialize};
@@ -37,28 +37,30 @@ where
 {
     pub fn commit(exe: VmExe<Val<SC>>, pcs: &SC::Pcs) -> Self {
         let cached_trace = generate_cached_trace(&exe.program);
+        let domain = pcs.natural_domain_for_degree(cached_trace.height());
+        let (commitment, pcs_data) = pcs.commit(vec![(domain, cached_trace.clone())]);
         Self {
             committed_program: CommittedTraceData {
-                raw_data: Arc::new(cached_trace.clone()),
-                prover_data: TraceCommitter::new(pcs).commit(vec![cached_trace]),
+                trace: Arc::new(cached_trace),
+                commitment,
+                pcs_data: Arc::new(pcs_data),
             },
             exe,
         }
     }
     pub fn get_program_commit(&self) -> Com<SC> {
-        self.committed_program.prover_data.commit.clone()
+        self.committed_program.commitment.clone()
     }
 }
 
 impl<F: PrimeField64> ProgramChip<F> {
     pub fn generate_air_proof_input<SC: StarkGenericConfig>(
         self,
-        cached_trace: Option<CommittedTraceData<SC>>,
+        cached: Option<CommittedTraceData<SC>>,
     ) -> AirProofInput<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let air = Arc::new(self.air);
         let common_trace = RowMajorMatrix::new_col(
             self.execution_frequencies
                 .into_iter()
@@ -68,19 +70,17 @@ impl<F: PrimeField64> ProgramChip<F> {
                 })
                 .collect::<Vec<F>>(),
         );
-        if let Some(cached_trace) = cached_trace {
+        if let Some(cached) = cached {
             AirProofInput {
-                air,
-                cached_mains_pdata: vec![cached_trace.prover_data],
+                cached_mains_pdata: vec![(cached.commitment, cached.pcs_data)],
                 raw: AirProofRawInput {
-                    cached_mains: vec![cached_trace.raw_data],
+                    cached_mains: vec![cached.trace],
                     common_main: Some(common_trace),
                     public_values: vec![],
                 },
             }
         } else {
             AirProofInput::cached_traces_no_pis(
-                air,
                 vec![generate_cached_trace(&self.program)],
                 common_trace,
             )

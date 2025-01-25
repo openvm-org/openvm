@@ -2,7 +2,7 @@ use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError,
+    utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
@@ -61,7 +61,7 @@ fn test_range_gate_chip() {
 
     let mut all_chips = lists
         .into_iter()
-        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
+        .map(|list| Arc::new(list) as AirRef<_>)
         .collect::<Vec<_>>();
     all_chips.push(Arc::new(range_checker.air));
 

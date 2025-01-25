@@ -6,7 +6,7 @@ use openvm_circuit::{
 };
 use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
-    prover::types::Proof,
+    proof::Proof,
 };
 use serde::{Deserialize, Serialize};
 

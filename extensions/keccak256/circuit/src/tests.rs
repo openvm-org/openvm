@@ -83,7 +83,12 @@ fn build_keccak256_test(
     }
     let mut tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
-    let keccak_trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
+    let keccak_trace = tester.air_proof_inputs[2]
+        .1
+        .raw
+        .common_main
+        .as_mut()
+        .unwrap();
     let mut row = 0;
     for (input, _, prank_output) in io {
         let num_blocks = num_keccak_f(input.len());

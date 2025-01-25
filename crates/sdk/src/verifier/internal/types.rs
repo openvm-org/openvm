@@ -11,7 +11,7 @@ use openvm_stark_sdk::{
     openvm_stark_backend::{
         config::{Com, StarkGenericConfig, Val},
         p3_field::PrimeField32,
-        prover::types::Proof,
+        proof::Proof,
     },
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};

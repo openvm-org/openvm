@@ -17,8 +17,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     p3_util::log2_strict_usize,
     prover::types::AirProofInput,
-    rap::AnyRap,
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress};
@@ -97,7 +96,7 @@ impl<F> AccessAdapterInventory<F> {
             .map(|chip| chip.current_trace_cells())
             .collect()
     }
-    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
+    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<AirRef<SC>>
     where
         F: PrimeField32,
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -280,14 +279,13 @@ impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for AccessAdapterChip<Val<
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air.clone())
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air.clone();
         let trace = self.generate_trace();
-        AirProofInput::simple(Arc::new(air), trace, vec![])
+        AirProofInput::simple_no_pis(trace)
     }
 }
 

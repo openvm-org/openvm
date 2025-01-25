@@ -96,6 +96,7 @@ fn test<const CHUNK: usize>(
         chip.final_state.as_ref().unwrap().final_root,
         final_tree_check.hash()
     );
+    let chip_air = chip.air();
     let chip_api = chip.generate_air_proof_input();
 
     let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, merkle_bus.0);
@@ -162,14 +163,20 @@ fn test<const CHUNK: usize>(
         dummy_interaction_trace_rows,
         dummy_interaction_air.field_width() + 1,
     );
-    let dummy_interaction_api =
-        AirProofInput::simple_no_pis(Arc::new(dummy_interaction_air), dummy_interaction_trace);
+    let dummy_interaction_api = AirProofInput::simple_no_pis(dummy_interaction_trace);
 
-    BabyBearPoseidon2Engine::run_test_fast(vec![
-        chip_api,
-        dummy_interaction_api,
-        hash_test_chip.generate_air_proof_input(),
-    ])
+    BabyBearPoseidon2Engine::run_test_fast(
+        vec![
+            chip_air,
+            Arc::new(dummy_interaction_air),
+            Arc::new(hash_test_chip.air()),
+        ],
+        vec![
+            chip_api,
+            dummy_interaction_api,
+            hash_test_chip.generate_air_proof_input(),
+        ],
+    )
     .expect("Verification failed");
 }
 
@@ -283,10 +290,13 @@ fn expand_test_no_accesses() {
 
     let partition = memory_to_partition(&memory);
     chip.finalize(&tree, &partition, &mut hash_test_chip);
-    BabyBearPoseidon2Engine::run_test_fast(vec![
-        chip.generate_air_proof_input(),
-        hash_test_chip.generate_air_proof_input(),
-    ])
+    BabyBearPoseidon2Engine::run_test_fast(
+        vec![chip.air(), Arc::new(hash_test_chip.air())],
+        vec![
+            chip.generate_air_proof_input(),
+            hash_test_chip.generate_air_proof_input(),
+        ],
+    )
     .expect("This should occur");
 }
 
@@ -320,6 +330,7 @@ fn expand_test_negative() {
 
     let partition = memory_to_partition(&memory);
     chip.finalize(&tree, &partition, &mut hash_test_chip);
+    let air = chip.air();
     let mut chip_api = chip.generate_air_proof_input();
     {
         let trace = chip_api.raw.common_main.as_mut().unwrap();
@@ -332,9 +343,10 @@ fn expand_test_negative() {
         }
     }
 
-    BabyBearPoseidon2Engine::run_test_fast(vec![
-        chip_api,
-        hash_test_chip.generate_air_proof_input(),
-    ])
+    let hash_air = Arc::new(hash_test_chip.air());
+    BabyBearPoseidon2Engine::run_test_fast(
+        vec![air, hash_air],
+        vec![chip_api, hash_test_chip.generate_air_proof_input()],
+    )
     .expect("This should occur");
 }

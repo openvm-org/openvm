@@ -55,13 +55,9 @@ impl AppExecutionCommit<F> {
         );
         let hasher = vm_poseidon2_hasher();
         let memory_dimensions = app_vm_config.system().memory_config.memory_dimensions();
-        let app_program_commit: [F; DIGEST_SIZE] =
-            app_exe.committed_program.prover_data.commit.into();
-        let leaf_verifier_program_commit: [F; DIGEST_SIZE] = leaf_vm_verifier_exe
-            .committed_program
-            .prover_data
-            .commit
-            .into();
+        let app_program_commit: [F; DIGEST_SIZE] = app_exe.committed_program.commitment.into();
+        let leaf_verifier_program_commit: [F; DIGEST_SIZE] =
+            leaf_vm_verifier_exe.committed_program.commitment.into();
 
         let mem_config = app_vm_config.system().memory_config;
         let init_memory_commit = MemoryNode::tree_from_memory(

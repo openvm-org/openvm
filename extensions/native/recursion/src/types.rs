@@ -3,7 +3,7 @@ use openvm_native_compiler::{
     ir::{Config, DIGEST_SIZE},
 };
 use openvm_stark_backend::{
-    air_builders::symbolic::symbolic_expression::SymbolicExpression,
+    air_builders::symbolic::SymbolicExpressionDag,
     config::{Com, StarkGenericConfig, Val},
     keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth},
     p3_util::log2_strict_usize,
@@ -32,18 +32,17 @@ pub struct StarkVerificationAdvice<C: Config> {
     /// Number of values to expose to verifier in each trace challenge phase
     pub num_exposed_values_after_challenge: Vec<usize>,
     /// Symbolic representation of all AIR constraints, including logup constraints
-    pub symbolic_constraints: Vec<SymbolicExpression<C::F>>,
+    pub symbolic_constraints: SymbolicExpressionDag<C::F>,
 }
 
 /// Create StarkVerificationAdvice for an inner config.
-// TODO: the bound C::F = Val<SC> is very awkward
 pub(crate) fn new_from_inner_vk<SC: StarkGenericConfig, C: Config<F = Val<SC>>>(
-    vk: StarkVerifyingKey<SC>,
+    vk: StarkVerifyingKey<Val<SC>, Com<SC>>,
 ) -> StarkVerificationAdvice<C>
 where
     Com<SC>: Into<[C::F; DIGEST_SIZE]>,
 {
-    let StarkVerifyingKey::<SC> {
+    let StarkVerifyingKey {
         preprocessed_data,
         params,
         quotient_degree,
@@ -55,7 +54,7 @@ where
             commit: DigestVal::F(data.commit.clone().into().to_vec()),
         }),
         width: params.width,
-        quotient_degree,
+        quotient_degree: quotient_degree as usize,
         num_public_values: params.num_public_values,
         num_challenges_to_sample: params.num_challenges_to_sample,
         num_exposed_values_after_challenge: params.num_exposed_values_after_challenge,
@@ -70,7 +69,6 @@ pub struct MultiStarkVerificationAdvice<C: Config> {
 }
 
 /// Create MultiStarkVerificationAdvice for an inner config.
-// TODO: the bound C::F = Val<SC> is very awkward
 pub fn new_from_inner_multi_vk<SC: StarkGenericConfig, C: Config<F = Val<SC>>>(
     vk: &MultiStarkVerifyingKey<SC>,
 ) -> MultiStarkVerificationAdvice<C>
@@ -80,7 +78,10 @@ where
     let num_challenges_to_sample = vk.num_challenges_per_phase();
     let MultiStarkVerifyingKey::<SC> { per_air } = vk;
     MultiStarkVerificationAdvice {
-        per_air: per_air.clone().into_iter().map(new_from_inner_vk).collect(),
+        per_air: per_air
+            .iter()
+            .map(|vk| new_from_inner_vk::<SC, C>(vk.clone()))
+            .collect(),
         num_challenges_to_sample,
     }
 }

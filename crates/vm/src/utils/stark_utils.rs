@@ -10,8 +10,9 @@ use openvm_stark_sdk::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         setup_tracing, FriParameters,
     },
-    engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
+    engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
+    utils::ProofInputForTest,
 };
 
 use crate::arch::{
@@ -90,6 +91,7 @@ where
         }
     }
 
+    let airs = config.create_chip_complex().unwrap().airs();
     let executor = VmExecutor::<Val<SC>, VC>::new(config);
 
     let mut result = executor
@@ -103,12 +105,16 @@ where
 
     let result = result.per_segment.pop().unwrap();
     #[cfg(feature = "bench-metrics")]
-    {
-        metrics::gauge!("execute_and_trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
-    }
-
+    metrics::gauge!("execute_and_trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
+    // Filter out unused AIRS (where trace is empty)
+    let (used_airs, per_air) = result
+        .per_air
+        .into_iter()
+        .map(|(air_id, x)| (airs[air_id].clone(), x))
+        .unzip();
     ProofInputForTest {
-        per_air: result.into_air_proof_input_vec(),
+        airs: used_airs,
+        per_air,
     }
 }
 

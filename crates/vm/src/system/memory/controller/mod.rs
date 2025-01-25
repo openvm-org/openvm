@@ -22,8 +22,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::log2_strict_usize,
     prover::types::AirProofInput,
-    rap::AnyRap,
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 use serde::{Deserialize, Serialize};
 
@@ -580,11 +579,11 @@ impl<F: PrimeField32> MemoryController<F> {
         ret
     }
 
-    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
+    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<AirRef<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let mut airs = Vec::<Arc<dyn AnyRap<SC>>>::new();
+        let mut airs = Vec::<AirRef<SC>>::new();
 
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {

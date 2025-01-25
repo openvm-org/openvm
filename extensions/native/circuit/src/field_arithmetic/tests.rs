@@ -8,7 +8,6 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldArithmeticOpcode;
 use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    prover::USE_DEBUG_BUILDER,
     utils::disable_debug_builder,
     verifier::VerificationError,
     Chip,
@@ -100,7 +99,12 @@ fn new_field_arithmetic_air_test() {
     // negative test pranking each IO value
     for height in 0..num_ops {
         // TODO: better way to modify existing traces in tester
-        let arith_trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
+        let arith_trace = tester.air_proof_inputs[2]
+            .1
+            .raw
+            .common_main
+            .as_mut()
+            .unwrap();
         let old_trace = arith_trace.clone();
         for width in 0..FieldArithmeticCoreCols::<BabyBear>::width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
@@ -114,7 +118,7 @@ fn new_field_arithmetic_air_test() {
             "Expected constraint to fail"
         );
 
-        tester.air_proof_inputs[2].raw.common_main = Some(old_trace);
+        tester.air_proof_inputs[2].1.raw.common_main = Some(old_trace);
     }
 }
 
@@ -142,6 +146,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
     );
     tester.build();
 
+    let chip_air = chip.air();
     let mut chip_input = chip.generate_air_proof_input();
     // set the value of [c]_f to zero, necessary to bypass trace gen checks
     let row = chip_input.raw.common_main.as_mut().unwrap().row_mut(0);
@@ -151,12 +156,10 @@ fn new_field_arithmetic_air_zero_div_zero() {
         .borrow_mut();
     cols.b = BabyBear::ZERO;
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
 
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![chip_input]).err(),
+        BabyBearPoseidon2Engine::run_test_fast(vec![chip_air], vec![chip_input]).err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );

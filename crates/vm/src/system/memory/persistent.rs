@@ -16,8 +16,8 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut},
     prover::types::AirProofInput,
-    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    AirRef, Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashSet;
 
@@ -237,12 +237,11 @@ impl<const CHUNK: usize, SC: StarkGenericConfig> Chip<SC> for PersistentBoundary
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air.clone())
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = Arc::new(self.air);
         let trace = {
             let width = PersistentBoundaryCols::<Val<SC>, CHUNK>::width();
             // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
@@ -286,7 +285,7 @@ where
                 });
             RowMajorMatrix::new(rows, width)
         };
-        AirProofInput::simple_no_pis(air, trace)
+        AirProofInput::simple_no_pis(trace)
     }
 }
 

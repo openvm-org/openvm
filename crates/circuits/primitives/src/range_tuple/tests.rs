@@ -1,8 +1,7 @@
 use std::{array, iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    rap::AnyRap,
+    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, AirRef,
 };
 use openvm_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Engine,
@@ -46,7 +45,7 @@ fn test_range_tuple_chip() {
 
     let mut all_chips = lists_airs
         .into_iter()
-        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
+        .map(|list| Arc::new(list) as AirRef<_>)
         .collect::<Vec<_>>();
     all_chips.push(Arc::new(range_checker.air));
 

@@ -11,8 +11,7 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
-    rap::AnyRap,
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 use crate::{
@@ -503,10 +502,10 @@ impl<SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<SC>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air.clone())
     }
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        AirProofInput::simple_no_pis(self.air(), self.generate_trace())
+        AirProofInput::simple_no_pis(self.generate_trace())
     }
 }

@@ -16,8 +16,8 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter, Stateful,
+    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
+    AirRef, Chip, ChipUsageGetter, Stateful,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -270,7 +270,7 @@ where
 // - when A::Air is an AdapterAir for all AirBuilders needed by stark-backend
 // - and when M::Air is an CoreAir for all AirBuilders needed by stark-backend,
 // then VmAirWrapper<A::Air, M::Air> is an Air for all AirBuilders needed
-// by stark-backend, which is equivalent to saying it implements AnyRap<SC>
+// by stark-backend, which is equivalent to saying it implements AirRef<SC>
 // The where clauses to achieve this statement is unfortunately really verbose.
 impl<SC, A, C> Chip<SC> for VmChipWrapper<Val<SC>, A, C>
 where
@@ -291,7 +291,7 @@ where
         <A::Air as VmAdapterAir<DebugConstraintBuilder<'a, SC>>>::Interface,
     >,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         let air: VmAirWrapper<A::Air, C::Air> = VmAirWrapper {
             adapter: self.adapter.air().clone(),
             core: self.core.air().clone(),
@@ -300,7 +300,6 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air();
         let num_records = self.records.len();
         let height = next_power_of_two_or_zero(num_records);
         let core_width = self.core.air().width();
@@ -325,7 +324,7 @@ where
         let mut trace = RowMajorMatrix::new(values, width);
         self.core.finalize(&mut trace, num_records);
 
-        AirProofInput::simple(air, trace, self.core.generate_public_values())
+        AirProofInput::simple(trace, self.core.generate_public_values())
     }
 }
 

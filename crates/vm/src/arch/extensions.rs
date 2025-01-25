@@ -25,8 +25,7 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::Matrix,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
-    rap::AnyRap,
-    Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter, Stateful,
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -998,15 +997,15 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .collect()
     }
 
-    pub(crate) fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
+    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<AirRef<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         E: Chip<SC>,
         P: Chip<SC>,
     {
         // ATTENTION: The order of AIR MUST be consistent with `generate_proof_input`.
-        let program_rap = Arc::new(self.program_chip().air) as Arc<dyn AnyRap<SC>>;
-        let connector_rap = Arc::new(self.connector_chip().air) as Arc<dyn AnyRap<SC>>;
+        let program_rap = Arc::new(self.program_chip().air) as AirRef<SC>;
+        let connector_rap = Arc::new(self.connector_chip().air) as AirRef<SC>;
         [program_rap, connector_rap]
             .into_iter()
             .chain(self._public_values_chip().map(|chip| chip.air()))

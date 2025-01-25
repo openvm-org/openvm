@@ -5,7 +5,7 @@ use openvm_native_recursion::{
     halo2::{utils::Halo2ParamsReader, EvmProof, Halo2Params},
     witness::Witnessable,
 };
-use openvm_stark_sdk::openvm_stark_backend::prover::types::Proof;
+use openvm_stark_sdk::openvm_stark_backend::proof::Proof;
 use tracing::info_span;
 
 use crate::{keygen::Halo2ProvingKey, RootSC};
