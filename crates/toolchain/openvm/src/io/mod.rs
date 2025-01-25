@@ -68,6 +68,7 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
         let ptr_start = unsafe { alloc::alloc::alloc(layout) };
         let mut ptr = ptr_start;
 
+        // Note: if len % 4 != 0, this will discard some last bytes
         hint_buffer_u32!(ptr, num_words);
         unsafe { Vec::from_raw_parts(ptr_start, len, capacity) }
     }
