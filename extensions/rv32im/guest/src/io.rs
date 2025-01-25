@@ -15,7 +15,7 @@ macro_rules! hint_store_u32 {
     };
 }
 
-/// Store the next 4*len bytes from the hint stream to [[rd] + imm]_2.
+/// Store the next 4*len bytes from the hint stream to [[rd]_1]_2.
 #[macro_export]
 macro_rules! hint_buffer_u32 {
     ($x:expr, $len:expr) => {
