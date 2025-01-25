@@ -17,6 +17,7 @@ mod bn254 {
         },
         AffinePoint,
     };
+    use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_instructions::exe::VmExe;
     use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
     use openvm_pairing_guest::{
@@ -296,13 +297,14 @@ mod bn254 {
 #[cfg(test)]
 mod bls12_381 {
     use eyre::Result;
+    use num_bigint::BigUint;
     use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::{
         arch::{instructions::exe::VmExe, SystemConfig},
         utils::air_test_with_min_segments,
     };
-    use openvm_ecc_circuit::WeierstrassExtension;
+    use openvm_ecc_circuit::{CurveConfig, WeierstrassExtension};
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         halo2curves::{
@@ -311,9 +313,10 @@ mod bls12_381 {
         },
         AffinePoint,
     };
+    use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
     use openvm_pairing_guest::{
-        bls12_381::BLS12_381_MODULUS,
+        bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER},
         halo2curves_shims::bls12_381::Bls12_381,
         pairing::{EvaluatedLine, FinalExp, LineMulMType, MillerStep, MultiMillerLoop},
     };
@@ -330,6 +333,12 @@ mod bls12_381 {
 
     pub fn get_testing_config() -> Rv32PairingConfig {
         let primes = [BLS12_381_MODULUS.clone()];
+        let bls_curve = CurveConfig {
+            modulus: BLS12_381_MODULUS.clone(),
+            scalar: BLS12_381_ORDER.clone(),
+            a: BigUint::ZERO,
+            b: BigUint::ZERO,
+        };
         Rv32PairingConfig {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
@@ -337,7 +346,7 @@ mod bls12_381 {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes.to_vec()),
-            weierstrass: WeierstrassExtension::new(vec![]),
+            weierstrass: WeierstrassExtension::new(vec![bls_curve]),
             pairing: PairingExtension::new(vec![PairingCurve::Bls12_381]),
         }
     }
@@ -552,6 +561,7 @@ mod bls12_381 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         )?;
 

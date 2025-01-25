@@ -4134,6 +4134,7 @@ name = "openvm-pairing-integration-tests"
 version = "0.2.0-alpha"
 dependencies = [
  "eyre",
+ "num-bigint 0.4.6",
  "openvm",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
@@ -4142,6 +4143,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-ecc-circuit",
  "openvm-ecc-guest",
+ "openvm-ecc-transpiler",
  "openvm-instructions",
  "openvm-pairing-circuit",
  "openvm-pairing-guest",

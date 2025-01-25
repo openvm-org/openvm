@@ -56,7 +56,7 @@ mod bls12_381 {
     use alloc::format;
 
     use openvm_algebra_guest::IntMod;
-    use openvm_pairing_guest::bls12_381::{Bls12_381, Fp, Fp2};
+    use openvm_pairing_guest::bls12_381::{Bls12_381, Bls12_381G1Affine, Fp, Fp2};
 
     use super::*;
 
@@ -69,9 +69,14 @@ mod bls12_381 {
         Bls12_381Fp2 { mod_idx = 0 },
     }
 
+    openvm_ecc_sw_macros::sw_init! {
+        Bls12_381G1Affine,
+    }
+
     pub fn test_pairing_check(io: &[u8]) {
         setup_0();
         setup_all_complex_extensions();
+        setup_all_curves();
         let s0 = &io[0..48 * 2];
         let s1 = &io[48 * 2..48 * 4];
         let q0 = &io[48 * 4..48 * 8];
