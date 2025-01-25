@@ -13,6 +13,7 @@ openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros", default-
 openvm-algebra-guest = { path = "../../../algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { path = "../../../algebra/moduli-macros", default-features = false }
 openvm-keccak256-guest = { path = "../../../keccak256/guest", default-features = false }
+openvm-pairing-guest = { path = "../../../pairing/guest", default-features = false }
 
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
@@ -30,6 +31,7 @@ default = []
 std = ["serde/std", "openvm/std", "openvm-ecc-guest/std"]
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
 p256 = ["openvm-ecc-guest/p256"]
+bls12_381 = ["openvm-pairing-guest/bls12_381"]
 
 [profile.release]
 panic = "abort"
@@ -55,3 +57,7 @@ required-features = ["k256"]
 [[example]]
 name = "ecdsa"
 required-features = ["k256"]
+
+[[example]]
+name = "bls"
+required-features = ["bls12_381"]

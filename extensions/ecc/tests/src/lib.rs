@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use eyre::Result;
+    use num_bigint::BigUint;
     use openvm_algebra_circuit::ModularExtension;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{
@@ -8,10 +9,11 @@ mod tests {
         utils::{air_test, air_test_with_min_segments},
     };
     use openvm_ecc_circuit::{
-        Rv32WeierstrassConfig, WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG,
+        CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+    use openvm_pairing_guest::bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER};
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
@@ -35,6 +37,30 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
         let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        air_test(config, openvm_exe);
+        Ok(())
+    }
+
+    #[test]
+    fn test_bls() -> Result<()> {
+        let elf =
+            build_example_program_at_path_with_features(get_programs_dir!(), "bls", ["bls12_381"])?;
+        let curve = CurveConfig {
+            modulus: BLS12_381_MODULUS.clone(),
+            scalar: BLS12_381_ORDER.clone(),
+            a: BigUint::ZERO,
+            b: BigUint::ZERO,
+        };
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        let config = Rv32WeierstrassConfig::new(vec![curve]);
         air_test(config, openvm_exe);
         Ok(())
     }

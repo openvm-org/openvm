@@ -18,11 +18,13 @@ openvm-algebra-transpiler.workspace = true
 openvm-ecc-transpiler.workspace = true
 openvm-ecc-circuit.workspace = true
 openvm-ecc-guest.workspace = true
+openvm-pairing-guest = { workspace = true, features = ["bls12_381"] }
 openvm-rv32im-transpiler.workspace = true
 openvm-keccak256-transpiler.workspace = true
 openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
 openvm-sdk.workspace = true
 eyre.workspace = true
+num-bigint.workspace = true
 
 [features]
 default = ["parallel"]

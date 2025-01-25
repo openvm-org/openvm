@@ -3821,6 +3821,7 @@ name = "openvm-ecc-integration-tests"
 version = "0.2.0-alpha"
 dependencies = [
  "eyre",
+ "num-bigint 0.4.6",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
  "openvm-circuit",
@@ -3830,6 +3831,7 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-instructions",
  "openvm-keccak256-transpiler",
+ "openvm-pairing-guest",
  "openvm-rv32im-transpiler",
  "openvm-sdk",
  "openvm-stark-sdk",
