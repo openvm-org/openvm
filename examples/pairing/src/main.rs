@@ -23,7 +23,7 @@ openvm_algebra_complex_macros::complex_init! {
     Bls12_381Fp2 { mod_idx = 0 },
 }
 
-openvm_ecc_guest::sw_setup::sw_init! {
+openvm_ecc_guest::sw_macros::sw_init! {
     Bls12_381G1Affine,
 }
 // ANCHOR_END: init
