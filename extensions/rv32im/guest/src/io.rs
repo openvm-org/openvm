@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 use crate::{PhantomImm, PHANTOM_FUNCT3, SYSTEM_OPCODE};
 
-/// Store the next 4 bytes from the hint stream to [[rd] + imm]_2.
+/// Store the next 4 bytes from the hint stream to [[rd]_1]_2.
 #[macro_export]
 macro_rules! hint_store_u32 {
     ($x:expr) => {
