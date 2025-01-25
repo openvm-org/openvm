@@ -27,6 +27,8 @@ openvm-native-compiler.workspace = true
 openvm-native-recursion = { workspace = true, features = ["test-utils"] }
 openvm-rv32im-circuit.workspace = true
 openvm-rv32im-transpiler.workspace = true
+openvm-pairing-transpiler.workspace = true
+openvm-sha256-transpiler.workspace = true
 
 clap = { version = "4.5.9", features = ["derive", "env"] }
 eyre.workspace = true

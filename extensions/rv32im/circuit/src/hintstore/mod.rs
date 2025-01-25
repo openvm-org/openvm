@@ -300,9 +300,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
         let local_opcode =
             Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
-        println!("[hintstore] ");
-        println!("[hintstore] from_state = {:?}", from_state);
-        println!("[hintstore] instruction = {:?}", instruction);
 
         let (mem_ptr_read, mem_ptr_limbs) = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, mem_ptr_ptr);
         let (num_words, num_words_read) = if local_opcode == HINT_STOREW {
@@ -313,7 +310,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
                 memory.read::<RV32_REGISTER_NUM_LIMBS>(d, num_words_ptr);
             (compose(num_words_limbs), Some(num_words_read))
         };
-        println!("[hintstore] num_words = {:?}, num_words_read = {:?}", num_words, num_words_read);
+        debug_assert_ne!(num_words, 0);
         let mem_ptr = compose(mem_ptr_limbs);
 
         let mut streams = self.streams.get().unwrap().lock().unwrap();
@@ -348,14 +345,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
         }
 
         self.height += record.hints.len();
-        println!("[hintstore] height = {}", self.height);
         self.records.push(record);
         
         let next_state = ExecutionState {
             pc: from_state.pc + DEFAULT_PC_STEP,
             timestamp: memory.timestamp(),
         };
-        println!("[hintstore] next_state = {:?}", next_state);
         Ok(next_state)
     }
 

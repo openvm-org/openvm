@@ -18,6 +18,12 @@ use openvm_keccak256_guest; // export native keccak
 use revm_precompile::{
     utilities::right_pad, Error as PrecompileError, PrecompileOutput, PrecompileResult,
 };
+use openvm_algebra_guest::{field::FieldExtension, IntMod};
+use openvm_ecc_guest::AffinePoint;
+use openvm_pairing_guest::{
+    bls12_381::{Bls12_381, Fp, Fp2},
+    pairing::PairingCheck,
+};
 
 openvm::entry!(main);
 
@@ -29,9 +35,21 @@ openvm_ecc_guest::sw_macros::sw_init! {
     Secp256k1Point,
 }
 
+openvm_algebra_moduli_macros::moduli_init! {
+    "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
+    "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+}
+
+openvm_algebra_complex_macros::complex_init! {
+    Bls12_381Fp2 { mod_idx = 0 },
+}
+
 pub fn main() {
     setup_all_moduli();
     setup_all_curves();
+
+    setup_0();
+    setup_all_complex_extensions();
 
     let expected_address = read_vec();
     for _ in 0..5 {
@@ -39,6 +57,7 @@ pub fn main() {
         let recovered = ec_recover_run(&Bytes::from(input), 3000).unwrap();
         assert_eq!(recovered.bytes.as_ref(), expected_address);
     }
+
 }
 
 // OpenVM version of ecrecover precompile.

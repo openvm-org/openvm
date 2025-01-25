@@ -19,13 +19,15 @@ macro_rules! hint_store_u32 {
 #[macro_export]
 macro_rules! hint_buffer_u32 {
     ($x:expr, $len:expr) => {
-        openvm_platform::custom_insn_i!(
-            opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
-            funct3 = openvm_rv32im_guest::HINT_FUNCT3,
-            rd = In $x,
-            rs1 = In $len,
-            imm = Const 1,
-        )
+        if $len != 0 {
+            openvm_platform::custom_insn_i!(
+                opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
+                funct3 = openvm_rv32im_guest::HINT_FUNCT3,
+                rd = In $x,
+                rs1 = In $len,
+                imm = Const 1,
+            )
+        }
     };
 }
 
