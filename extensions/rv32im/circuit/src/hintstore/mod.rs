@@ -5,7 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor, Streams,
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
+        Streams, VmCoreAir,
     },
     system::{
         memory::{
@@ -26,7 +27,10 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW};
+use openvm_rv32im_transpiler::{
+    BaseAluOpcode, Rv32HintStoreOpcode,
+    Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
+};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -72,6 +76,7 @@ pub struct Rv32HintStoreAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub bitwise_operation_lookup_bus: BitwiseOperationLookupBus,
+    pub offset: usize,
 }
 
 impl<F: Field> BaseAir<F> for Rv32HintStoreAir {
@@ -180,13 +185,14 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             )
             .eval(builder, is_valid.clone());
 
+        let expected_opcode = (local_cols.is_single
+            * AB::F::from_canonical_usize(HINT_STOREW as usize + self.offset))
+            + (local_cols.is_buffer
+                * AB::F::from_canonical_usize(HINT_BUFFER as usize + self.offset));
         let to_pc = local_cols.from_state.pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP);
         self.execution_bridge
             .execute(
-                (local_cols.is_single
-                    * AB::F::from_canonical_usize(HINT_STOREW.global_opcode().as_usize()))
-                    + (local_cols.is_buffer
-                        * AB::F::from_canonical_usize(HINT_BUFFER.global_opcode().as_usize())),
+                expected_opcode,
                 [
                     local_cols.is_buffer * (local_cols.num_words_ptr),
                     local_cols.mem_ptr_ptr.into(),
@@ -253,11 +259,13 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         memory_bridge: MemoryBridge,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+        offset: usize,
     ) -> Self {
         let air = Rv32HintStoreAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
             bitwise_operation_lookup_bus: bitwise_lookup_chip.bus(),
+            offset,
         };
         Self {
             records: vec![],
@@ -290,9 +298,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
         } = instruction;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+        let local_opcode =
+            Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let (mem_ptr_read, mem_ptr_limbs) = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, mem_ptr_ptr);
-        let (num_words, num_words_read) = if opcode == HINT_STOREW.global_opcode() {
+        let (num_words, num_words_read) = if local_opcode == HINT_STOREW {
             memory.increment_timestamp();
             (1, None)
         } else {

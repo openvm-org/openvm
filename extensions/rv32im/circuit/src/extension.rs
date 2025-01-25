@@ -449,6 +449,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             bitwise_lu_chip.clone(),
             memory_bridge,
             offline_memory.clone(),
+            Rv32HintStoreOpcode::CLASS_OFFSET,
         );
         hintstore_chip.set_streams(builder.streams().clone());
 

@@ -14,7 +14,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode,
+    LocalOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -67,7 +67,7 @@ fn set_and_execute(
 
     tester.execute(
         chip,
-        &Instruction::from_usize(opcode.global_opcode(), [0, b, 0, 1, 2]),
+        &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, b, 0, 1, 2]),
     );
 
     let write_data = read_data;
@@ -114,7 +114,7 @@ fn set_and_execute_buffer(
 
     tester.execute(
         chip,
-        &Instruction::from_usize(opcode.global_opcode(), [a, b, 0, 1, 2]),
+        &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [a, b, 0, 1, 2]),
     );
 
     for i in 0..num_words {
@@ -148,6 +148,7 @@ fn rand_hintstore_test() {
         bitwise_chip.clone(),
         tester.memory_bridge(),
         tester.offline_memory_mutex_arc(),
+        0,
     );
     chip.set_streams(Arc::new(Mutex::new(Streams::default())));
 
@@ -193,6 +194,7 @@ fn run_negative_hintstore_test(
         bitwise_chip.clone(),
         tester.memory_bridge(),
         tester.offline_memory_mutex_arc(),
+        0,
     );
     chip.set_streams(Arc::new(Mutex::new(Streams::default())));
 
@@ -244,6 +246,7 @@ fn execute_roundtrip_sanity_test() {
         bitwise_chip.clone(),
         tester.memory_bridge(),
         tester.offline_memory_mutex_arc(),
+        0,
     );
     chip.set_streams(Arc::new(Mutex::new(Streams::default())));
 
