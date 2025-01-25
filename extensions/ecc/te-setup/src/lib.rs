@@ -109,14 +109,14 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                     {
                         use openvm_algebra_guest::DivUnsafe;
 
-                        let x1y2 = p1.x() * p2.y();
-                        let y1x2 = p1.y() * p2.x();
-                        let x1x2 = p1.x() * p2.x();
-                        let y1y2 = p1.y() * p2.y();
-                        let dx1x2y1y2 = Self::CURVE_D * &x1x2 * &y1y2;
+                        let x1y2 = p1.x.clone() * p2.y.clone();
+                        let y1x2 = p1.y.clone() * p2.x.clone();
+                        let x1x2 = p1.x.clone() * p2.x.clone();
+                        let y1y2 = p1.y.clone() * p2.y.clone();
+                        let dx1x2y1y2 = <Self as ::openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_D * &x1x2 * &y1y2;
 
                         let x3 = (x1y2 + y1x2).div_unsafe(&<#intmod_type as openvm_algebra_guest::IntMod>::ONE + &dx1x2y1y2);
-                        let y3 = (y1y2 - Self::CURVE_A * x1x2).div_unsafe(&<#intmod_type as openvm_algebra_guest::IntMod>::ONE - &dx1x2y1y2);
+                        let y3 = (y1y2 - <Self as ::openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_A * x1x2).div_unsafe(&<#intmod_type as openvm_algebra_guest::IntMod>::ONE - &dx1x2y1y2);
 
                         #struct_name { x: x3, y: y3 }
                     }
