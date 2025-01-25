@@ -1,6 +1,6 @@
 extern crate core;
 
-use std::{fs::read, panic::catch_unwind, path::Path, sync::Arc};
+use std::{fs::read, path::Path, sync::Arc};
 
 use commit::commit_app_exe;
 use config::AppConfig;
@@ -228,11 +228,13 @@ impl Sdk {
         Ok(evm_verifier)
     }
 
-    pub fn verify_evm_proof(&self, evm_verifier: &EvmVerifier, evm_proof: &EvmProof) -> bool {
-        // FIXME: we should return the concrete error.
-        catch_unwind(|| {
-            Halo2WrapperProvingKey::evm_verify(evm_verifier, evm_proof);
-        })
-        .is_ok()
+    pub fn verify_evm_proof(
+        &self,
+        evm_verifier: &EvmVerifier,
+        evm_proof: &EvmProof,
+    ) -> Result<u64> {
+        let gas_cost = Halo2WrapperProvingKey::evm_verify(evm_verifier, evm_proof)
+            .map_err(|reason| eyre::eyre!("Sdk::verify_evm_proof: {reason:?}"))?;
+        Ok(gas_cost)
     }
 }

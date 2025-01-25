@@ -78,13 +78,12 @@ impl Halo2WrapperProvingKey {
         }
     }
     /// A helper function for testing to verify the proof of this circuit with evm verifier.
-    // FIXME: the signature is not ideal. It should return an Error instead of panicking when the verification fails.
-    pub fn evm_verify(evm_verifier: &EvmVerifier, evm_proof: &EvmProof) {
+    pub fn evm_verify(evm_verifier: &EvmVerifier, evm_proof: &EvmProof) -> Result<u64, String> {
         evm_verify(
             evm_verifier.0.clone(),
             evm_proof.instances.clone(),
             evm_proof.proof.clone(),
-        );
+        )
     }
     /// Return deployment code for EVM verifier which can verify the snark of this circuit.
     pub fn generate_evm_verifier(&self, params: &Halo2Params) -> EvmVerifier {
