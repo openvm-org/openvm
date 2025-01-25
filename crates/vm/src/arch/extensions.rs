@@ -832,7 +832,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     /// This should **only** be called after segment execution has finished.
-    pub(super) fn take_streams(&mut self) -> Streams<F> {
+    pub fn take_streams(&mut self) -> Streams<F> {
         std::mem::take(&mut self.streams.lock().unwrap())
     }
 

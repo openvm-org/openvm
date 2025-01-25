@@ -147,6 +147,8 @@ pub enum NativePhantom {
     HintInput,
     /// Prepare the little-endian bit decomposition of a variable for hinting.
     HintBits,
+    /// Move data from input stream into hint space
+    HintLoad,
 }
 
 #[derive(
