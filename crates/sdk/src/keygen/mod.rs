@@ -203,7 +203,9 @@ impl AggStarkProvingKey {
         );
 
         let root_verifier_pk = {
-            let root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
+            let mut root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
+            // It is currently better for halo2_outer if we do not chunk FRI logup:
+            root_engine.max_constraint_degree = config.root_max_constraint_degree;
             let root_program = RootVmVerifierConfig {
                 leaf_fri_params: config.leaf_fri_params,
                 internal_fri_params: config.internal_fri_params,
