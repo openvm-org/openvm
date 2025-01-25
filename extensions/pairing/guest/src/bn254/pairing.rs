@@ -363,7 +363,6 @@ impl PairingCheck for Bn254 {
                     rs2 = In &q_fat_ptr
                 );
                 let ptr = hint.as_ptr() as *const u8;
-                // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
                 hint_buffer_u32!(ptr, (32 * 12 * 2) / 4);
                 hint.assume_init()
             }
