@@ -268,7 +268,6 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     "main_trace_commit_time_ms",
     "generate_perm_trace_time_ms",
     "perm_trace_commit_time_ms",
-    "quotient_extended_view_time_ms",
     "quotient_poly_compute_time_ms",
     "quotient_poly_commit_time_ms",
     "pcs_opening_time_ms",
