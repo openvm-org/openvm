@@ -258,7 +258,7 @@ pub enum DivRemOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
-#[opcode_offset = 0x300]
+#[opcode_offset = 0x260]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum Rv32HintStoreOpcode {
