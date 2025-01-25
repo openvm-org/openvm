@@ -14,7 +14,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode, VmOpcode,
+    VmOpcode,
 };
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
 use openvm_stark_backend::{
