@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
-        Streams, VmCoreAir,
+        Streams,
     },
     system::{
         memory::{
@@ -28,7 +28,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::{
-    BaseAluOpcode, Rv32HintStoreOpcode,
+    Rv32HintStoreOpcode,
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
 };
 use openvm_stark_backend::{
@@ -346,7 +346,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
 
         self.height += record.hints.len();
         self.records.push(record);
-        
+
         let next_state = ExecutionState {
             pc: from_state.pc + DEFAULT_PC_STEP,
             timestamp: memory.timestamp(),

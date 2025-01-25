@@ -20,9 +20,7 @@ use openvm_ecc_circuit::{
     CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
     SECP256K1_CONFIG,
 };
-use openvm_pairing_transpiler::PairingTranspilerExtension;
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_rv32im_circuit::{
@@ -104,9 +102,7 @@ fn main() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(Keccak256TranspilerExtension)
             .with_extension(ModularTranspilerExtension)
-            .with_extension(EccTranspilerExtension)
-            .with_extension(PairingTranspilerExtension)
-            .with_extension(Sha256TranspilerExtension),
+            .with_extension(EccTranspilerExtension),
     )?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
