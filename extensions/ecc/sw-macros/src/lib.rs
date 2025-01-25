@@ -311,8 +311,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                             let y = core::mem::MaybeUninit::<#intmod_type>::uninit();
                             unsafe {
                                 #hint_decompress_extern_func(x as *const _ as usize, rec_id as *const u8 as usize);
-                                let mut ptr = y.as_ptr() as *const u8;
-                                // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
+                                let ptr = y.as_ptr() as *const u8;
                                 openvm_rv32im_guest::hint_buffer_u32!(ptr, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
                                 y.assume_init()
                             }

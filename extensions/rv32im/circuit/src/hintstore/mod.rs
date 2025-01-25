@@ -367,7 +367,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
 
 impl<F: Field> ChipUsageGetter for Rv32HintStoreChip<F> {
     fn air_name(&self) -> String {
-        "FriReducedOpeningAir".to_string()
+        "Rv32HintStoreAir".to_string()
     }
 
     fn current_trace_height(&self) -> usize {
