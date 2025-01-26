@@ -11,7 +11,7 @@ OpenVM supports an extensible instruction set, with different groups of opcodes 
 - [Elliptic curve](#elliptic-curve-extension): An extension for elliptic curve operations over Weierstrass curves, including addition and doubling. This can be used to implement multi-scalar multiplication and ECDSA scalar multiplication. This extension respects the RISC-V memory format.
 - [Pairing](#pairing-extension): An extension containing opcodes used to implement the optimal Ate pairing on the BN254 and BLS12-381 curves. This extension respects the RISC-V memory format.
 
-In addition to these default extensions, developers are able to extend the ISA by defining their own custom VM extensions. 
+In addition to these default extensions, developers are able to extend the ISA by defining their own custom VM extensions. For reader convenience, we provide a mapping between the code-level representation of opcodes in OpenVM and the opcodes below [here](./isa-table.md).
 
 ## Architecture Overview
 
