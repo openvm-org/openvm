@@ -55,17 +55,6 @@ implemented. At present, there are two types of blocks used in OpenVM:
 While not relevant to the ISA itself, the ZK circuit implementation does usually represent a block `[F; N]` as `N`
 contiguous field elements in the same row of the trace matrix.
 
-### Immediate Values
-
-Immediate values are treated as single field elements. Our VM cannot represent operand values that are greater than the
-prime $p$ and cannot distinguish between $0$ and $p$ (or any two integers whose difference is a multiple of $p$).
-Therefore, any immediate values greater than or equal to $p$ need to be expanded into smaller values.
-
-### Registers
-
-OpenVM treats general purpose registers as pointers to address space 1, which is also comprised of
-addressable cells. Registers are represented using the [LIMB] format with `LIMB_BITS = 8`.
-
 ### Hints
 
 The `input_stream` is a private non-interactive queue of vectors of field elements which is provided at the start of
