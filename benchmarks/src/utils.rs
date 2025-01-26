@@ -116,6 +116,7 @@ impl BenchmarkCli {
                     enable_cycle_tracker: self.profiling,
                     ..Default::default()
                 },
+                root_max_constraint_degree: root_fri_params.max_constraint_degree(),
                 ..Default::default()
             },
             halo2_config: Halo2Config {
