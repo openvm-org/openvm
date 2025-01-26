@@ -291,7 +291,6 @@ macro_rules! impl_sw_affine {
             }
 
             fn double_assign_nonidentity(&mut self) {
-                // TODO: revisit if there are possible optimizations
                 *self = self.double_nonidentity();
             }
 
@@ -307,7 +306,6 @@ macro_rules! impl_sw_affine {
             }
 
             fn add_ne_assign_nonidentity(&mut self, p2: &Self) {
-                // TODO: revisit if there are possible optimizations
                 *self = self.add_ne_nonidentity(p2);
             }
 
@@ -323,7 +321,6 @@ macro_rules! impl_sw_affine {
             }
 
             fn sub_ne_assign_nonidentity(&mut self, p2: &Self) {
-                // TODO: revisit if there are possible optimizations
                 *self = self.sub_ne_nonidentity(p2);
             }
         }

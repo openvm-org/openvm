@@ -388,7 +388,6 @@ where
         self.config.get_subgroup(builder, log_degree)
     }
 
-    // Todo: change TwoAdicPcsRoundVariable to RoundVariable
     fn verify(
         &self,
         builder: &mut Builder<C>,
@@ -411,7 +410,6 @@ fn compute_round_alpha_pows<C: Config>(
         return builder.array(0);
     }
     // Max log of matrix width
-    // TODO: this should be determined by VK.
     const MAX_LOG_WIDTH: usize = 31;
     let pow_of_alpha: Array<C, Ext<_, _>> = builder.array(MAX_LOG_WIDTH);
     let current: Ext<_, _> = builder.eval(alpha);

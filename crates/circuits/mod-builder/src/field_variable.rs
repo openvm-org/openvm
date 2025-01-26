@@ -109,7 +109,7 @@ impl FieldVariable {
         }
     }
 
-    // TODO: rethink about how should auto-save work.
+    // TODO[Lun-Kai]: rethink about how should auto-save work.
     // This implementation requires self and other to be mutable, and might actually mutate them.
     // This might surprise the caller or introduce hard bug if the caller clone the FieldVariable and then call this.
     pub fn add(&mut self, other: &mut FieldVariable) -> FieldVariable {
@@ -278,7 +278,6 @@ impl FieldVariable {
         );
         let carry_bits = new_constraint.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
         if carry_bits > self.range_checker_bits {
-            // TODO: should save the "bigger" one first (the one with higher limb_max_abs)
             self.save();
         }
         // Do it again to check if other needs to be saved.

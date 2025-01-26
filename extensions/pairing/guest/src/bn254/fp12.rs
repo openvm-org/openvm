@@ -165,8 +165,6 @@ impl<'a> Mul<&'a Fp12> for &'a Fp12 {
     }
 }
 
-// TODO[jpw]: make this into a macro
-
 impl MulAssign for Fp12 {
     #[inline(always)]
     fn mul_assign(&mut self, other: Self) {

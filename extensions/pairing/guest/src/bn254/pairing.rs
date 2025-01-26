@@ -27,7 +27,6 @@ use crate::{
     pairing::FinalExp,
 };
 
-// TODO[jpw]: make macro
 impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
     fn evaluate(&self, xy_frac: &(Fp, Fp)) -> EvaluatedLine<Fp2> {
         #[cfg(not(target_os = "zkvm"))]

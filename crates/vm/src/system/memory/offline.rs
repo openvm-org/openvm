@@ -596,7 +596,6 @@ mod tests {
     #[test]
     fn test_records_initial_block_len_1() {
         let initial_memory = MemoryImage::default();
-        // TODO: Ideally we don't need to instantiate all this stuff since we are just testing the data structure.
         let mut memory = OfflineMemory::<BabyBear>::new(
             initial_memory,
             1,

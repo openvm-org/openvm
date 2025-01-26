@@ -82,7 +82,6 @@ pub enum LessThanOpcode {
     SLTU,
 }
 
-// TODO[jpw]: life would be easier if we split LOADB,LOADH into a separate enum
 #[derive(
     Copy,
     Clone,

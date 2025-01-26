@@ -113,9 +113,7 @@ impl AggStarkProver {
         let mut proofs = leaf_proofs;
         let mut wrapper_layers = 0;
         loop {
-            // TODO: what's a good test case for the wrapping logic?
             if proofs.len() == 1 {
-                // TODO: record execution time as a part of root verifier execution time.
                 let actual_air_heights =
                     self.root_prover
                         .execute_for_air_heights(RootVmVerifierInput {

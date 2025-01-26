@@ -89,7 +89,6 @@ impl Fp2 {
         let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
         let carry_bits = constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
         if carry_bits > self.c0.range_checker_bits {
-            // TODO: should save the "bigger" one first (the one with higher limb_max_abs)
             self.save();
         }
         let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
@@ -102,7 +101,6 @@ impl Fp2 {
         let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
         let carry_bits = constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
         if carry_bits > self.c0.range_checker_bits {
-            // TODO: should save the "bigger" one first (the one with higher limb_max_abs)
             self.save();
         }
         let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;

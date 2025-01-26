@@ -65,7 +65,6 @@ pub struct IsLessThanChip {
     pub pairs: Vec<(u32, u32)>,
 }
 
-// Todo: implement Chip<SC> for IsLessThanChip
 impl IsLessThanChip {
     pub fn new(max_bits: usize, range_checker: Arc<VariableRangeCheckerChip>) -> Self {
         let bus = range_checker.bus();

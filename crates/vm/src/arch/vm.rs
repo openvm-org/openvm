@@ -220,13 +220,12 @@ where
         let final_memory = mem::take(&mut last.final_memory);
         let end_state =
             last.chip_complex.connector_chip().boundary_states[1].expect("end state must be set");
-        // TODO[jpw]: add these as execution errors
-        assert_eq!(end_state.is_terminate, 1, "program must terminate");
-        assert_eq!(
-            end_state.exit_code,
-            ExitCode::Success as u32,
-            "program did not exit successfully"
-        );
+        if end_state.is_terminate != 1 {
+            return Err(ExecutionError::DidNotTerminate);
+        }
+        if end_state.exit_code != ExitCode::Success as u32 {
+            return Err(ExecutionError::FailedWithExitCode(end_state.exit_code));
+        }
         Ok(final_memory)
     }
 

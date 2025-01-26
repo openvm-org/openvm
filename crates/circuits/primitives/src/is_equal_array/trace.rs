@@ -40,7 +40,6 @@ impl IsEqualVecAir {
         self.generate_trace_row_aux(x, y, &mut is_equal_cols.aux);
     }
 
-    // TODO: should the input always be u32s? This will make more sense when we have the inverse opt in place
     // Assumes that input of IsEqualVecColsMut is filled out
     pub fn generate_trace_row_aux<F: Field>(
         &self,
@@ -54,7 +53,6 @@ impl IsEqualVecAir {
             transition_index += 1;
         }
 
-        // TODO: test if initializing a mut vec and editting it is more efficient
         let prods: Vec<F> = (0..vec_len - 1)
             .map(|i| {
                 if i < transition_index {

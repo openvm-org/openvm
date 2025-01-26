@@ -87,7 +87,6 @@ where
                 .eval(builder, cols.is_valid);
         }
 
-        // TODO: revisit after opcode change, this core chip currently supports a single opcode
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, MulOpcode::MUL);
 
         AdapterAirContext {

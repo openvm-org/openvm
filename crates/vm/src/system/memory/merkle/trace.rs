@@ -76,7 +76,6 @@ where
         } = self.final_state.unwrap();
         // important that this sort be stable,
         // because we need the initial root to be first and the final root to be second
-        // TODO: do we only need find all height == 0 instead of sorting?
         rows.sort_by_key(|row| Reverse(row.parent_height));
 
         let width = MemoryMerkleCols::<Val<SC>, CHUNK>::width();

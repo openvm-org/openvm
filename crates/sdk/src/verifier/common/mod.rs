@@ -166,7 +166,7 @@ pub fn assert_single_segment_vm_exit_successfully_with_connector_air_id<C: Confi
 }
 
 // TODO: This is a temporary solution. VK should be able to specify which AIRs are required. Once
-// that is implemented, this function can be removed.
+// that is implemented in stark-backend, this function can be removed.
 pub fn assert_required_air_for_agg_vm_present<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,

@@ -40,6 +40,3 @@ pub mod xor;
 
 mod sub_air;
 pub use sub_air::*;
-
-// keeping to clean up later:
-// pub mod offline_checker;

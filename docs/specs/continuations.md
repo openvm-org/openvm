@@ -239,8 +239,6 @@ of field elements in a hash value, `L` where the addresses in an address space a
 the address spaces are `AS_OFFSET..AS_OFFSET + 2^M`, and `H = M + L - log2(C)`. `H` is the height of the Merkle tree in
 the sense that the leaves are at distance `H` from the root. We define the following interactions:
 
-<!--TODO: make a new diagram-->
-
 On the <span style="color:green">MERKLE_BUS</span>, we have interactions of the form
 <span style="color:green">**(expand_direction: {-1, 0, 1}, height: F, labels: (F, F), hash: [F; C])**</span>, where
 

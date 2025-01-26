@@ -14,7 +14,6 @@ use crate::{
     F, SC,
 };
 
-// TODO: remove these type specific functions
 pub fn read_exe_from_file<P: AsRef<Path>>(path: P) -> Result<VmExe<F>> {
     read_from_file_bitcode(path)
 }

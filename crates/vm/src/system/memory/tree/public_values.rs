@@ -116,7 +116,7 @@ pub fn extract_public_values<F: PrimeField32>(
     let f_as_start = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
     let f_as_end = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset + 1;
 
-    // TODO: This clones the entire memory. Ideally this should run in time proportional to
+    // This clones the entire memory. Ideally this should run in time proportional to
     // the size of the PV address space, not entire memory.
     let final_memory: BTreeMap<Address, F> = final_memory.items().collect();
 

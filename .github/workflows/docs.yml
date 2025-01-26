@@ -49,7 +49,6 @@ jobs:
           source ci/scripts/utils.sh
           install_s5cmd
 
-      # TODO: store versioned copy of docs when new v*.*.* tag is pushed
       - name: Sync static S3 bucket
         env:
           S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}

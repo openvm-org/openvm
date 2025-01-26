@@ -126,7 +126,6 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                 num_limbs: 48,
                 limb_bits: 8,
             };
-            // TODO: Better support for different limb sizes. Currently only 32 or 48 limbs are supported.
             if bytes <= 32 {
                 let add_ne_chip = EcAddNeChip::new(
                     Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
@@ -266,7 +265,6 @@ pub(crate) mod phantom {
                 // TODO: Tonelli-Shanks algorithm
             }
             let rs1 = unsafe_read_rv32_register(memory, a);
-            // TODO: Better support for different limb sizes
             let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
                 32
             } else if curve.modulus.bits().div_ceil(8) <= 48 {

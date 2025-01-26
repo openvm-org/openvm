@@ -459,8 +459,7 @@ pub(crate) mod phantom {
             Some(PairingCurve::Bn254) => {
                 use openvm_ecc_guest::halo2curves::bn256::{Fq, Fq12, Fq2};
                 use openvm_pairing_guest::halo2curves_shims::bn254::Bn254;
-                const N: usize = 32;
-                debug_assert_eq!(BN254_NUM_LIMBS, N); // TODO: make this const instead of static
+                const N: usize = BN254_NUM_LIMBS;
                 if p_len != q_len {
                     bail!("hint_pairing: p_len={p_len} != q_len={q_len}");
                 }
@@ -502,8 +501,7 @@ pub(crate) mod phantom {
             Some(PairingCurve::Bls12_381) => {
                 use openvm_ecc_guest::halo2curves::bls12_381::{Fq, Fq12, Fq2};
                 use openvm_pairing_guest::halo2curves_shims::bls12_381::Bls12_381;
-                const N: usize = 48;
-                debug_assert_eq!(BLS12_381_NUM_LIMBS, N); // TODO: make this const instead of static
+                const N: usize = BLS12_381_NUM_LIMBS;
                 if p_len != q_len {
                     bail!("hint_pairing: p_len={p_len} != q_len={q_len}");
                 }

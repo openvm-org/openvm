@@ -86,7 +86,6 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
             .map(|x| format!("{:02x}", x))
             .collect::<Vec<_>>()
             .join("");
-        // TODO: can this be simplified?
         macro_rules! create_extern_func {
             ($name:ident) => {
                 let $name = syn::Ident::new(
@@ -715,7 +714,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         let modulus = item.value();
         println!("[init] modulus #{} = {}", mod_idx, modulus);
 
-        // TODO: chore: move all duplicated code to a function
         let modulus_bytes = string_to_bytes(&modulus);
         let mut limbs = modulus_bytes.len();
 

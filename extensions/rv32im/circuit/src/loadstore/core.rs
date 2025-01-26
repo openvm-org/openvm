@@ -117,7 +117,6 @@ where
         // when sum is 0, is_valid must be 0
         builder.when(get_expr_12(&sum)).assert_zero(is_valid);
 
-        // TODO: generalize this into an opcode encoder
         // We will use the InstructionOpcode enum to encode the opcodes
         // the appended digit to each opcode is the shift amount
         let inv_2 = AB::F::from_canonical_u32(2).inverse();

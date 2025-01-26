@@ -417,7 +417,6 @@ impl<E: Stateful<Vec<u8>>, P: Stateful<Vec<u8>>> Stateful<VmInventoryState> for 
     }
 
     fn store_state(&self) -> VmInventoryState {
-        // TODO: parallelize this. Now some implementations of Executor/Periphery are not Send + Sync.
         let executors = self.executors.iter().map(|e| e.store_state()).collect();
         let periphery = self.periphery.iter().map(|p| p.store_state()).collect();
         VmInventoryState {

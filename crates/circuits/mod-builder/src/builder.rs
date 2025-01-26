@@ -512,7 +512,6 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             .map(|x| vec_isize_to_f::<F>(x.limbs().to_vec()))
             .collect::<Vec<_>>();
 
-        // TODO: avoid all these copies and directly allocate
         sub_row.copy_from_slice(
             &[
                 vec![F::ONE],

@@ -322,9 +322,7 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
         V: Visitor<'de>,
     {
         let len_bytes = self.try_take_word()? as usize;
-        // TODO: Can we use MaybeUninit here instead of zeroing out?
-        // The documentation for sys::io::Read implies that it's not
-        // safe; is there another way to not do double writes here?
+        // Optimization opportunity: consider using MaybeUninit
         let mut bytes = vec![0u8; len_bytes];
         self.reader.read_padded_bytes(&mut bytes)?;
         visitor.visit_string(String::from_utf8(bytes).map_err(|_| Error::DeserializeBadChar)?)

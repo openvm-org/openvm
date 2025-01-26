@@ -20,7 +20,7 @@ where
     } else if bases.len() < 32 {
         3
     } else {
-        // TODO: finetune this if needed
+        // finetune this if needed
         bases.len().ilog2() as usize
     };
 
@@ -117,7 +117,6 @@ where
     acc
 }
 
-// TODO: benchmark to see if this is faster.
 fn get_booth_index(window_index: usize, window_size: usize, el: &[u8]) -> i32 {
     // Booth encoding:
     // * step by `window` size

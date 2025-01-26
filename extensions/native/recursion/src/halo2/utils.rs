@@ -37,12 +37,11 @@ pub(crate) fn gen_kzg_params(k: u32) -> Halo2Params {
 }
 
 lazy_static! {
-    // TODO: this should be dynamic. hard code for now.
     static ref SVK: G1Affine =
         serde_json::from_str("\"0100000000000000000000000000000000000000000000000000000000000000\"")
             .unwrap();
 
-    /// TODO: this is also stored in the pinning jsons. We should read it from the pinning if possible.
+    /// This is also stored in the pinning jsons. We should read it from the pinning if possible.
     /// This commits to the trusted setup used to generate all proving keys.
     /// This MUST be updated whenever the trusted setup is changed.
     pub static ref DK: KzgDecidingKey<Bn256> = serde_json::from_str(r#"

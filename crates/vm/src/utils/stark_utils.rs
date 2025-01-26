@@ -61,7 +61,6 @@ where
     final_memory
 }
 
-// TODO[jpw]: this should be deleted once tests switch to new API
 /// Generates the VM STARK circuit, in the form of AIRs and traces, but does not
 /// do any proving. Output is the payload of everything the prover needs.
 ///

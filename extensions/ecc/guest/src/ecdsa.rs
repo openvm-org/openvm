@@ -74,7 +74,7 @@ where
         assert_ne!(r, Scalar::<C>::ZERO);
         assert_ne!(s, Scalar::<C>::ZERO);
 
-        // TODO: don't use bits2field from ::ecdsa
+        // Perf: don't use bits2field from ::ecdsa
         let z = Scalar::<C>::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
 
         // `r` is in the Scalar field, we now possibly add C::ORDER to it to get `x`
@@ -119,7 +119,7 @@ where
         assert_ne!(r, Scalar::<C>::ZERO);
         assert_ne!(s, Scalar::<C>::ZERO);
 
-        // TODO: don't use bits2field from ::ecdsa
+        // Perf: don't use bits2field from ::ecdsa
         let z = <C as IntrinsicCurve>::Scalar::from_be_bytes(
             bits2field::<C>(prehash).unwrap().as_ref(),
         );

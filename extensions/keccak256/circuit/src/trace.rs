@@ -231,7 +231,6 @@ where
                     * Val::<SC>::from_bool(block.remaining_len < KECCAK_RATE_BYTES);
                 if let Some(digest_writes) = diff.digest_writes {
                     for (i, record_id) in digest_writes.into_iter().enumerate() {
-                        // TODO: these aux columns are only used for the last row - can we share them with aux reads in first row?
                         let record = memory.record_by_id(record_id);
                         aux_cols_factory
                             .generate_write_aux(record, &mut last_row.mem_oc.digest_writes[i]);

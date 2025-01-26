@@ -59,6 +59,10 @@ pub enum ExecutionError {
         discriminant: PhantomDiscriminant,
         inner: eyre::Error,
     },
+    #[error("program must terminate")]
+    DidNotTerminate,
+    #[error("program exit code {0}")]
+    FailedWithExitCode(u32),
 }
 
 pub trait InstructionExecutor<F> {

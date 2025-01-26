@@ -6,7 +6,7 @@ use core::{
 
 use crate::{DivAssignUnsafe, DivUnsafe};
 
-// TODO: the shared parts of Field and IntMod should be moved into a new `IntegralDomain` trait.
+// TODO[jpw]: the shared parts of Field and IntMod should be moved into a new `IntegralDomain` trait.
 /// This is a simplified trait for field elements.
 pub trait Field:
     Sized

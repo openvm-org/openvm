@@ -20,7 +20,6 @@ env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
 
-# TODO: E2E build, transpile, run, keygen, prove, contract, verify on large machine
 jobs:
   app-level-cli:
     runs-on:
@@ -68,7 +67,6 @@ jobs:
             fi
           done
 
-      # TODO: CLI build, transpile, run, (keygen), prove, contract, verify
       - name: Run app-level CLI commands
         working-directory: crates/cli
         run: |

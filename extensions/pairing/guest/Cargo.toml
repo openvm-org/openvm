@@ -23,7 +23,6 @@ openvm-algebra-complex-macros = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 
 # Used for `halo2curves` feature
-# TODO[yj]: transition to PSE halo2curves
 halo2curves-axiom = { workspace = true, optional = true }
 group = "0.13.0"
 
@@ -39,7 +38,6 @@ subtle = "2.6.1"
 [features]
 default = []
 std = ["openvm/std"]
-# TODO[yj]: Switch to PSE `halo2curves`
 halo2curves = ["bls12_381", "bn254", "dep:halo2curves-axiom"]
 # features to enable specific curves in guest programs
 # only enable for the curves you use as it affects the init! macro

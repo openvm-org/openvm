@@ -123,7 +123,6 @@ impl IntrinsicCurve for Bls12_381 {
     type Point = G1Affine;
 
     fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
-        // TODO: msm optimization
         openvm_ecc_guest::msm(coeffs, bases)
     }
 }

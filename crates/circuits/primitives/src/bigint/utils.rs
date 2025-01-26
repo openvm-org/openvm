@@ -87,7 +87,6 @@ pub fn big_uint_to_limbs(x: &BigUint, limb_bits: usize) -> Vec<usize> {
 }
 
 pub fn big_uint_to_num_limbs(x: &BigUint, limb_bits: usize, num_limbs: usize) -> Vec<usize> {
-    // TODO: inefficient, should allocate `num_limbs` ahead of time.
     let limbs = big_uint_to_limbs(x, limb_bits);
     let num_limbs = max(num_limbs, limbs.len());
     limbs

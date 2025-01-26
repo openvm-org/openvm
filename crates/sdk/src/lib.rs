@@ -153,6 +153,11 @@ impl Sdk {
         Ok(proof)
     }
 
+    /// This function is for dev use and not for production verification.
+    /// In particular, it only verifies the individual proofs per segment, and none of the boundary conditions
+    /// or the execution final state.
+    ///
+    /// The `VirtualMachine::verify` function does additional verifications.
     pub fn verify_app_proof(
         &self,
         app_vk: &AppVerifyingKey,
@@ -162,7 +167,6 @@ impl Sdk {
         for seg_proof in &proof.per_segment {
             e.verify(&app_vk.app_vm_vk, seg_proof)?
         }
-        // TODO: verify continuation: requires App VC.
         Ok(())
     }
 

@@ -480,7 +480,6 @@ impl KeccakVmAir {
             timestamp += AB::Expr::ONE;
         }
         // See Rv32VecHeapAdapterAir
-        // TODO[jpw]: reduce code duplication
         // repeat len for even number
         // We range check `len` to `max_ptr_bits` to ensure `remaining_len` doesn't overflow.
         // We could range check it to some other size, but `max_ptr_bits` is convenient.

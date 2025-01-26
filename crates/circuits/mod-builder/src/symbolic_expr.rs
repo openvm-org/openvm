@@ -216,7 +216,7 @@ impl SymbolicExpr {
             SymbolicExpr::IntAdd(lhs, s) => {
                 let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
                 let scalar = BigUint::from_usize(s.unsigned_abs()).unwrap();
-                // TODO[jpw]: since `s` is a constant, we can likely do better than this bound.
+                // Optimization opportunity: since `s` is a constant, we can likely do better than this bound.
                 (lhs_max_pos + &scalar, lhs_max_neg + &scalar)
             }
             SymbolicExpr::IntMul(lhs, s) => {

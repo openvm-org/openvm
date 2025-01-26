@@ -101,8 +101,6 @@ pub struct MemoryController<F> {
     memory: Memory<F>,
 
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
-    ///
-    /// TODO: Remove this as state on `MemoryController` and compute and return this during `finalize()`.
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 
     access_adapters: AccessAdapterInventory<F>,
@@ -697,7 +695,6 @@ impl<F: PrimeField32> MemoryController<F> {
         self.offline_memory.clone()
     }
     pub fn get_memory_logs(&self) -> Vec<MemoryLogEntry<F>> {
-        // TODO: can we avoid clone?
         self.memory.log.clone()
     }
     pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {

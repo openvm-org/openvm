@@ -81,8 +81,6 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             local.expand_direction * local.expand_direction * local.expand_direction,
         );
 
-        // TODO[zach]: Make bus interface.
-        // Interactions.
         let mut expand_fields = vec![
             // direction =  1 => is_final = 0
             // direction = -1 => is_final = 1
@@ -202,7 +200,6 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     ) {
         match &mut self.touched_labels {
             TouchedLabels::Running(touched_labels) => {
-                // TODO: parallelize this.
                 let final_touched_labels = touched_labels
                     .iter()
                     .map(|&(address_space, label)| {

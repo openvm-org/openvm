@@ -93,7 +93,6 @@ fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
     let elf = args.build_bench_program("ecrecover")?;
-    // TODO: update sw_macros and read it from elf.
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
