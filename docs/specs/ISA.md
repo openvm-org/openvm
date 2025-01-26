@@ -147,10 +147,9 @@ Phantom sub-instructions are only allowed to use operands `a,b` and `c_upper = c
 
 The RV32IM extension introduces OpenVM opcodes which support 32-bit RISC-V via transpilation from a standard RV32IM ELF binary, specified [here](./RISCV.md). These consist of opcodes corresponding 1-1 with RV32IM opcodes, as well as additional user IO opcodes and phantom sub-instructions to support input and debug printing on the host. We denote the OpenVM opcode corresponding to a RV32IM opcode by appending `_RV32`.
 
-The RV32IM extension uses address space `0` for immediates, address space `1` for registers, and address space `2` for memory. It assumes that memory cells in address spaces `1` and `2` are field elements in the range
-`[0, 2^LIMB_BITS)` where `LIMB_BITS = 8`, and all instructions in the extension preserve this constraint.
+The RV32IM extension uses address space `0` for immediates, address space `1` for registers, and address space `2` for memory. As explained [here](#address-spaces), cells in address spaces `1` and `2` are constrained to be bytes, and all instructions preserve this constraint.
 
-The `i`th RISC-V register is represented by the block `[4 * i:4]_1` of 4 limbs in address space `1`. Note that all memory addresses in address space `1` behave uniformly, and in particular writes to the block `[0:4]_1` which corresponds to the RISC-V register `x0` are allowed in the RV32IM extension. However, as detailed in [RV32IM Transpilation](./RISCV.md#handling-of-the-x0-register), any OpenVM program transpiled from a RV32IM ELF will never contain such a write and conforms to the RV32IM specification.  
+The `i`th RISC-V register is represented by the block `[4 * i:4]_1` of 4 limbs in address space `1`. All memory addresses in address space `1` behave uniformly, and in particular writes to the block `[0:4]_1` corresponding to the RISC-V register `x0` are allowed in the RV32IM extension. However, as detailed in [RV32IM Transpilation](./RISCV.md#handling-of-the-x0-register), any OpenVM program transpiled from a RV32IM ELF will never contain such a write and conforms to the RV32IM specification.  
 
 #### ALU
 
@@ -285,7 +284,7 @@ The RV32IM extension defines the following phantom sub-instructions.
 
 ### Native Extension
 
-The native extension operates over native field elements and has instructions tailored for STARK proof recursion. The design of this extension was [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with changes suggested by Max Gillet for compatibility with existing ISAs.
+The native extension operates over native field elements and has instructions tailored for STARK proof recursion. It operates over address spaces `0` and `4`, and does not constrain memory elements to be bytes.
 
 #### Base
 
@@ -374,15 +373,15 @@ The native extension defines the following phantom sub-instructions.
 
 ### Keccak Extension
 
-The Keccak extension supports the Keccak256 hash function. It reads and writes to and from memory in the RISC-V address format.
+The Keccak extension supports the Keccak256 hash function. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes. 
 
 | Name           | Operands    | Description                                                                                                                                                              |
 | -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| KECCAK256_RV32 | `a,b,c,1,e` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`.                                                        |
+| KECCAK256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`.                                                        |
 
 ### SHA2-256 Extension
 
-The SHA2-256 extension supports the SHA2-256 hash function. It reads and writes to and from memory in the RISC-V address format.
+The SHA2-256 extension supports the SHA2-256 hash function. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes. 
 
 | Name           | Operands    | Description                                                                                                                                                              |
 | -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -390,9 +389,7 @@ The SHA2-256 extension supports the SHA2-256 hash function. It reads and writes 
 
 ### BigInt Extension
 
-The BigInt extension supports operations on 256-bit signed and unsigned integers. Integer values are
-read/written from/to memory in address space `2`. The address space `2` pointer locations are obtained by reading
-register values in address space `1`. For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`. Each instruction performs block accesses with block size `4` in address space `1` and block size `32` in address space `2`.
+The BigInt extension supports operations on 256-bit signed and unsigned integers. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes. Pointers to the representation of the elements are read from address space `1` and the elements themselves are read/written from address space `2`. Each instruction performs block accesses with block size `4` in address space `1` and block size `32` in address space `2`.
 
 **Note:** These instructions are not the same as instructions on 256-bit registers.
 
@@ -435,9 +432,7 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 
 The algebra extension supports modular arithmetic over arbitrary fields and their complex field extensions. It is configured to specify a list of supported moduli. The configuration of each supported positive integer modulus `N` includes associated configuration parameters `N::NUM_LIMBS` and `N::BLOCK_SIZE` (defined below). 
 
-The instructions perform operations on unsigned big integers representing elements in the modulus. The big integer
-values are read/written from/to memory in address space `2`. The address space `2` pointer locations are obtained by
-reading register values in address space `1`.
+The instructions perform operations on unsigned big integers representing elements in the modulus. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes. Pointers to the representation of the elements are read from address space `1` and the elements themselves are read/written from address space `2`.
 
 An element in the ring of integers modulo `N`is represented as an unsigned big integer with `N::NUM_LIMBS` limbs with
 each limb having `LIMB_BITS = 8` bits. For each instruction, the input elements
@@ -503,7 +498,7 @@ The elliptic curve extension supports arithmetic over elliptic curves `C` in Wei
 equation `C: y^2 = x^3 + C::A * x + C::B` where `C::A` and `C::B` are constants in the coordinate field. We note that the definitions of the
 curve arithmetic operations do not depend on `C::B`. The VM configuration will specify a list of supported curves. For
 each Weierstrass curve `C` there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (
-defined below). For each curve `C`, the instructions below are supported.
+defined below). The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes. 
 
 An affine curve point `EcPoint(x, y)` is a pair of `x,y` where each element is an array of `C::COORD_SIZE` elements each
 with `LIMB_BITS = 8` bits. When the coordinate field `C::Fp` of `C` is prime, the format of `x,y` is guaranteed to be
@@ -537,15 +532,11 @@ The elliptic curve extension defines the following phantom sub-instructions.
 
 ### Pairing Extension
 
-The pairing extension supports opcodes tailored to accelerate pairing checks using the optimal Ate pairing over certain classes of pairing friendly elliptic curves. Currently, the supported curves are BN254 and BLS12-381, which both have embedding degree 12.
-
-For more detailed descriptions of the instructions, refer to [this](https://hackmd.io/NjMhWt1HTDOB7TIKmTOMFw?view). For
-curve `C` to be supported, the VM must have
-enabled instructions for `C::Fp` and `C::Fp2`. The memory block size is `C::Fp::BLOCK_SIZE` for both reads and writes.
+The pairing extension supports opcodes tailored to accelerate pairing checks using the optimal Ate pairing over certain classes of pairing friendly elliptic curves. For a curve `C` to be supported, the VM must have enabled instructions for `C::Fp` and `C::Fp2`. The memory block size is `C::Fp::BLOCK_SIZE` for both reads and writes. The currently supported curves are BN254 and BLS12-381. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes. 
 
 We lay out `Fp12` in memory as `c0, ..., c5` where `c_i: Fp2` and the `Fp12` element is `c0 + c1 w + ... + c5 w^5` where
 `w^6 = C::XI` in `Fp2`, where `C::Xi: Fp2` is an associated constant. Both `UnevaluatedLine<Fp2>` and
-`EvaluatedLine<Fp2>` are laid out in memory the same as `[Fp2; 2]`.
+`EvaluatedLine<Fp2>` are laid out in memory the same as `[Fp2; 2]`. For more detailed descriptions of the instructions, refer to [the detailed spec](https://hackmd.io/NjMhWt1HTDOB7TIKmTOMFw?view). 
 
 | Name                            | Operands    | Description                                                                                                                                                                                                                                                                                                                |
 | ------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -565,3 +556,7 @@ The pairing extension defines the following phantom sub-instructions.
 | Name                      | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | HintFinalExp       | 0x30         | `a,b,c_upper` | Uses `c_upper = PAIRING_IDX` to determine the curve: `BN254 = 0, BLS12-381 = 1`. `a` is a pointer to `(p_ptr, p_len): (u32, u32)` in memory, and `b` is a pointer to `(q_ptr, q_len): (u32, u32)` in memory (e.g., `p_ptr = [r32{0}(a)..r32{0}(a) + 4]_2`). The sub-instruction peeks at `P = [p_ptr..p_ptr + p_len * size_of<Fp>() * 2]_2` and `Q = [q_ptr..q_ptr + q_len * size_of<Fp2>() * 2]_2` and views `P` as a list of `G1Affine` elements and `Q` as a list of `G2Affine` elements. It computes the multi-Miller loop on `(P, Q)` and then the final exponentiation hint `(residue_witness, scaling_factor): (Fp12, Fp12)`. It resets the hint stream to equal `(residue_witness, scaling_factor)` as `NUM_LIMBS * 12 * 2` bytes. |
+
+## Acknowledgements
+
+The design of the native extension was inspired by [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with changes suggested by Max Gillet for compatibility with existing ISAs.
