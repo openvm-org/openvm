@@ -41,3 +41,7 @@ lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes 
 [[example]]
 name = "final_exp_hint"
 required-features = ["bls12_381"]
+
+[[example]]
+name = "bls_ec"
+required-features = ["bls12_381"]
