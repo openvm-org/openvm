@@ -81,7 +81,7 @@ fn inst_med<F: PrimeField64>(
 #[repr(u8)]
 pub enum AS {
     Immediate = 0,
-    Native = 5,
+    Native = 4,
 }
 
 impl AS {

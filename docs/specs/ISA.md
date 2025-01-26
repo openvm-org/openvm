@@ -95,7 +95,7 @@ We support different address spaces of memory.
 We will always have the following fixed address spaces:
 
 | Address Space | Name          |
-|---------------|---------------|
+| ------------- | ------------- |
 | `0`           | Immediates    |
 | `1`           | Registers     |
 | `2`           | User Memory   |
@@ -119,7 +119,7 @@ to a sorting argument.
 OpenVM depends on the following parameters, some of which are fixed and some of which are configurable:
 
 | Name               | Description                                                        | Constraints                                                           |
-|--------------------|--------------------------------------------------------------------|-----------------------------------------------------------------------|
+| ------------------ | ------------------------------------------------------------------ | --------------------------------------------------------------------- |
 | `F`                | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field. |
 | `PC_BITS`          | The number of bits in the program counter.                         | Fixed to 30.                                                          |
 | `DEFAULT_PC_STEP`  | The default program counter step size.                             | Fixed to 4.                                                           |
@@ -157,7 +157,7 @@ We will use the following notation:
 ## System
 
 | Name      | Operands  | Description                                                                                                        |
-|-----------|-----------|--------------------------------------------------------------------------------------------------------------------|
+| --------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
 | TERMINATE | `_, _, c` | Terminates execution with exit code `c`. Sets `to_pc = from_pc`.                                                   |
 | PHANTOM   | `_, _, c` | Sets `to_pc = from_pc + DEFAULT_PC_STEP`. The operand `c` determines which phantom instruction (see below) is run. |
 
@@ -185,7 +185,7 @@ unsigned integer, and convert to field element. In the instructions below, `[c:4
 `c_i16 as i32` sign extended to 32-bits.
 
 | Name      | Operands    | Description                                                                                              |
-|-----------|-------------|----------------------------------------------------------------------------------------------------------|
+| --------- | ----------- | -------------------------------------------------------------------------------------------------------- |
 | ADD_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 + [c:4]_e`. Overflow is ignored and the lower 32-bits are written to the destination. |
 | SUB_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 - [c:4]_e`. Overflow is ignored and the lower 32-bits are written to the destination. |
 | XOR_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 ^ [c:4]_e`                                                                            |
@@ -210,7 +210,7 @@ Memory access to `ptr: i32` is only valid if `0 <= ptr < 2^addr_max_bits`, in wh
 All load/store instructions always do block accesses of block size `4`, even for LOADB_RV32, STOREB_RV32.
 
 | Name        | Operands    | Description                                                                                                                    |
-|-------------|-------------|--------------------------------------------------------------------------------------------------------------------------------|
+| ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | LOADB_RV32  | `a,b,c,1,e` | `[a:4]_1 = sign_extend([r32{c}(b):1]_e)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
 | LOADH_RV32  | `a,b,c,1,e` | `[a:4]_1 = sign_extend([r32{c}(b):2]_e)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
 | LOADW_RV32  | `a,b,c,1,e` | `[a:4]_1 = [r32{c}(b):4]_e`                                                                                                    |
@@ -225,7 +225,7 @@ All load/store instructions always do block accesses of block size `4`, even for
 For branch instructions, we fix `d = e = 1`. For jump instructions, we fix `d = 1`.
 
 | Name       | Operands      | Description                                                                                                                                                                                                                                                                                                                       |
-|------------|---------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ---------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | BEQ_RV32   | `a,b,c,1,1`   | `if([a:4]_1 == [b:4]_1) pc += c`                                                                                                                                                                                                                                                                                                  |
 | BNE_RV32   | `a,b,c,1,1`   | `if([a:4]_1 != [b:4]_1) pc += c`                                                                                                                                                                                                                                                                                                  |
 | BLT_RV32   | `a,b,c,1,1`   | `if(i32([a:4]_1) < i32([b:4]_1)) pc += c`                                                                                                                                                                                                                                                                                         |
@@ -270,7 +270,7 @@ and REMU_RV32 provide the remainder of the corresponding division operation. Int
 Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 
 | Name        | Operands  | Description                                                                                                                                                                                                |
-|-------------|-----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ----------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MUL_RV32    | `a,b,c,1` | `[a:4]_1 = ([b:4]_1 * [c:4]_1)[0:3]`                                                                                                                                                                       |
 | MULH_RV32   | `a,b,c,1` | `[a:4]_1 = (sign_extend([b:4]_1) * sign_extend([c:4]_1))[4:7]`. We sign extend `b` and `c` into 8-limb (i.e. 64-bit) integers                                                                              |
 | MULHSU_RV32 | `a,b,c,1` | `[a:4]_1 = (sign_extend([b:4]_1) * zero_extend([c:4]_1))[4:7]`. We sign extend                                                                                                                             |
@@ -306,16 +306,16 @@ We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(
 
 ### User IO
 
-| Name             | Operands    | Description                                                                                                                                                                     |
-|------------------|-------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| HINT_STOREW_RV32 | `_,b,_,1,2` | `[r32{0}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                                                                        |
+| Name             | Operands    | Description                                                                                                                                                                       |
+| ---------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HINT_STOREW_RV32 | `_,b,_,1,2` | `[r32{0}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                                                                          |
 | HINT_BUFFER_RV32 | `a,b,_,1,2` | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. Very important: `l` should not be 0. |
-| REVEAL_RV32      | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`. Only valid when continuations are enabled.                                             |
+| REVEAL_RV32      | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`. Only valid when continuations are enabled.                                               |
 
 ### Hashes
 
 | Name           | Operands    | Description                                                                                                                                                              |
-|----------------|-------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | KECCAK256_RV32 | `a,b,c,1,e` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`.                                                        |
 | SHA256_RV32    | `a,b,c,1,2` | `[r32{0}(a):32]_2 = sha256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `16` and writes with block size `32`. |
 
@@ -333,7 +333,7 @@ Each instruction performs block accesses with block size `4` in address space `1
 #### 256-bit ALU
 
 | Name         | Operands    | Description                                                                                                                          |
-|--------------|-------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | ADD256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 + [r32{0}(c):32]_2`. Overflow is ignored and the lower 256-bits are written to the destination. |
 | SUB256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 - [r32{0}(c):32]_2`. Overflow is ignored and the lower 256-bits are written to the destination. |
 | XOR256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 ^ [r32{0}(c):32]_2`                                                                             |
@@ -348,7 +348,7 @@ Each instruction performs block accesses with block size `4` in address space `1
 #### 256-bit Branch
 
 | Name         | Operands    | Description                                                    |
-|--------------|-------------|----------------------------------------------------------------|
+| ------------ | ----------- | -------------------------------------------------------------- |
 | BEQ256_RV32  | `a,b,c,1,2` | `if([r32{0}(a):32]_2 == [r32{0}(b):32]_2) pc += c`             |
 | BNE256_RV32  | `a,b,c,1,2` | `if([r32{0}(a):32]_2 != [r32{0}(b):32]_2) pc += c`             |
 | BLT256_RV32  | `a,b,c,1,2` | `if(i256([r32{0}(a):32]_2) < i256([r32{0}(b):32]_2)) pc += c`  |
@@ -362,7 +362,7 @@ Multiplication performs 256-bit×256-bit multiplication and writes the lower 256
 Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 
 | Name        | Operands    | Description                                                       |
-|-------------|-------------|-------------------------------------------------------------------|
+| ----------- | ----------- | ----------------------------------------------------------------- |
 | MUL256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = ([r32{0}(b):32]_2 * [r32{0}(c):32]_2)[0:255]` |
 
 ### Modular Arithmetic
@@ -384,11 +384,10 @@ the same format that is congruent modulo `N` to the respective operation applied
 
 For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`.
 Each instruction performs block accesses with block size `4` in address space `1` and block size `N::BLOCK_SIZE` in
-address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall that `N::BLOCK_SIZE` must be a power of
-2.
+address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall that `N::BLOCK_SIZE` must be a power of 2.
 
 | Name                      | Operands    | Description                                                                                                                                                                                                |
-|---------------------------|-------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ADDMOD_RV32\<N\>          | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 + [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                                                          |
 | SUBMOD_RV32\<N\>          | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 - [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                                                          |
 | SETUP_ADDSUBMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): N::NUM_LIMBS]_2` |
@@ -403,7 +402,7 @@ The configuration of `N` is the same as above. For each instruction, the input e
 format with each limb having `LIMB_BITS` bits.
 
 | Name                    | Operands    | Description                                                                                                                                                                                                                                                                                         |
-|-------------------------|-------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ----------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ISEQMOD_RV32\<N\>       | `a,b,c,1,2` | `[a:4]_1 = [r32{0}(b): N::NUM_LIMBS]_2 == [r32{0}(c): N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are less than `N` and then sets the register value of `[a:4]_1` to `1` or `0` depending on whether the two big integers are equal. |
 | SETUP_ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` in the chip that handles modular equality. For the sake of implementation convenience it also writes something (can be anything) into register value of `[a:4]_1`                                                                                        |
 
@@ -431,7 +430,7 @@ r32_ec_point(a) -> EcPoint {
 ```
 
 | Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
-|----------------------|-------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SW_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
 | SETUP_SW_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
 | SW_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
@@ -459,7 +458,7 @@ r32_fp2(a) -> Fp2 {
 ```
 
 | Name                | Operands    | Description                                                                                                                                                                  |
-|---------------------|-------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ADD\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) + r32_fp2(c)`                                                                                                                                   |
 | SUB\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) - r32_fp2(c)`                                                                                                                                   |
 | SETUP_ADDSUB\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
@@ -480,7 +479,7 @@ We lay out `Fp12` in memory as `c0, ..., c5` where `c_i: Fp2` and the `Fp12` ele
 `EvaluatedLine<Fp2>` are laid out in memory the same as `[Fp2; 2]`.
 
 | Name                            | Operands    | Description                                                                                                                                                                                                                                                                                                                |
-|---------------------------------|-------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MILLER_DOUBLE_STEP\<C\>         | `a,b,_,1,2` | Let `S: EcPoint<Fp2>` be read starting from `[r32{0}(b)]_2`. The output `miller_double_step(S): (EcPoint<Fp2>, UnevaluatedLine<Fp2>)` is written contiguously to memory starting at `[r32{0}(a)]_2`.                                                                                                                       |
 | MILLER_DOUBLE_AND_ADD_STEP\<C\> | `a,b,c,1,2` | Let `S: EcPoint<Fp2>` be read starting from `[r32{0}(b)]_2` and `Q: EcPoint<Fp2>` be read starting from `[r32{0}(c)]_2`. The output `miller_double_and_add_step(S, Q): (EcPoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>)` is written contiguously to memory starting at `[r32{0}(a)]_2`.                          |
 | FP12_MUL\<C\>                   | `a,b,c,1,2` | Set `r32_fp12(a) = r32_fp12(b) * r32_fp12(c)` where `r32_fp12(a)` is 6 `Fp2` elements laid out contiguously in memory starting at `[r32{0}(a)]_2`.                                                                                                                                                                         |
@@ -503,7 +502,7 @@ address space `0` is allowed for non-vectorized reads but not allowed for writes
 `[a]_0` as the immediate value `a`. Base kernel instructions enable memory movement between address spaces.
 
 | Name         | Operands    | Description                                                                                                                                                                                                                                                                                                               |
-|--------------|-------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | LOADW        | `a,b,c,d,e` | Set `[a]_d = [[c]_d + b]_e`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                                |
 | STOREW       | `a,b,c,d,e` | Set `[[c]_d + b]_e = [a]_d`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                                |
 | LOADW4       | `a,b,c,d,e` | Set `[a:4]_d = [[c]_d + b:4]_e`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
@@ -523,7 +522,7 @@ non-zero address space. When either `e` or `f` is zero, `[b]_0` and `[c]_0` shou
 and `c`, respectively.
 
 | Name | Operands      | Description                                               |
-|------|---------------|-----------------------------------------------------------|
+| ---- | ------------- | --------------------------------------------------------- |
 | ADDF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e + [c]_f`.                              |
 | SUBF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e - [c]_f`.                              |
 | MULF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e * [c]_f`.                              |
@@ -541,7 +540,7 @@ polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ over `BabyBear`.
 Below, `d,e` may be any valid non-zero address space. The instructions do block access with block size `4`.
 
 | Name    | Operands  | Description                                                                                   |
-|---------|-----------|-----------------------------------------------------------------------------------------------|
+| ------- | --------- | --------------------------------------------------------------------------------------------- |
 | FE4ADD  | `a, b, c` | Set `[a:4]_d = [b:4]_d + [c:4]_e` with vector addition.                                       |
 | FE4SUB  | `a, b, c` | Set `[a:4]_d = [b:4]_d - [c:4]_e` with vector subtraction.                                    |
 | BBE4MUL | `a, b, c` | Set `[a:4]_d = [b:4]_d * [c:4]_e` with extension field multiplication.                        |
@@ -556,7 +555,7 @@ Below, `d,e` may be any valid address space, and `d,e` are both not allowed to b
 with block size `1` in address space `d` and block size `CHUNK` in address space `e`.
 
 | Name                                                                                                                                                                                                                               | Operands    | Description                                                                                                                                                                                                                                                                                                                                                      |
-|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e` | Applies the Poseidon2 compression function to the inputs `[[b]_d:CHUNK]_e` and `[[c]_d:CHUNK]_e`, writing the result to `[[a]_d:CHUNK]_e`.                                                                                                                                                                                                                       |
 | **PERM_POSEIDON2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a,b,_,d,e` | Applies the Poseidon2 permutation function to `[[b]_d:WIDTH]_e` and writes the result to `[[a]_d:WIDTH]_e`. <br/><br/> Each array of `WIDTH` elements is read/written in two batches of size `CHUNK`. This is nearly the same as `COMPRESS_POSEIDON2` except that the whole input state is contiguous in memory, and the full output state is written to memory. |
 
@@ -564,7 +563,7 @@ For Poseidon2, the `PID` is just some identifier to provide domain separation be
 now we can set:
 
 | `PID` | Description                                                                                                                                                                                                                                                         |
-|-------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0     | [`POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48) but the Mat4 used is Plonky3's with a Monty reduction |
 
 and only support `CHUNK = 8` and `WIDTH = 16` in BabyBear Poseidon2 above. For this setting, the input (of size `WIDTH`)
@@ -573,12 +572,12 @@ size `CHUNK`, depending on the output size of the corresponding opcode.
 
 ### Verification
 
-We have the following special opcode tailored to optimize verification.
+We have the following special opcodes tailored to optimize verification.
 
-| Name                                                                                                                                                                                                                         | Operands        | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **VERIFY_BATCH** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e,f,g` | Due to already having a large number of operands,  the address space is fixed to be `AS::Native = 5`. Computes `mmcs::verify_batch`. In the native address space, `[a], [b], [d], [e], [f]` should be the array start pointers for the dimensions array, the opened values array (which contains more arrays), the proof (which contains arrays of length `CHUNK`) and the commitment (which is an array of length `CHUNK`). `[c]` should be the length of the opened values array (and so should be equal to the length of the dimensions array as well). `g` should be the reciprocal of the size (in field elements) of the values contained in the opened values array: if the opened values array contains field elements, `g` should be 1; if the opened values array contains extension field elements, `g` should be 1/4. |
-| **FRI_REDUCED_OPENING**                                                                                                                                                                                                      | `a,b,c,d,e,f`   | Let `length = [e]_d`, `a_ptr = [a]_d`, `b_ptr = [b]_d`, `alpha = [f:EXT_DEG]_d`. `a_ptr` is the address of Felt array `a_arr` and `b_ptr` is the address of Ext array `b_arr`. Compute `sum((b_arr[i] - a_arr[i]) * alpha ^ i)` for `i=0..length` and write the value into `[c:EXT_DEG]_d`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Name                                                                                                                                                                                                                         | Operands        | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **VERIFY_BATCH** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e,f,g` | Further described [here](../../extensions/native/circuit/src/poseidon2/README.md). Due to already having a large number of operands, the address space is fixed to be `AS::Native = 4`. Computes `mmcs::verify_batch`. In the native address space, `[a], [b], [d], [e], [f]` should be the array start pointers for the dimensions array, the opened values array (which contains more arrays), the proof (which contains arrays of length `CHUNK`) and the commitment (which is an array of length `CHUNK`). `[c]` should be the length of the opened values array (and so should be equal to the length of the dimensions array as well). `g` should be the reciprocal of the size (in field elements) of the values contained in the opened values array: if the opened values array contains field elements, `g` should be 1; if the opened values array contains extension field elements, `g` should be 1/4. |
+| **FRI_REDUCED_OPENING**                                                                                                                                                                                                      | `a,b,c,d,e,f`   | Let `length = [e]_d`, `a_ptr = [a]_d`, `b_ptr = [b]_d`, `alpha = [f:EXT_DEG]_d`. `a_ptr` is the address of Felt array `a_arr` and `b_ptr` is the address of Ext array `b_arr`. Compute `sum((b_arr[i] - a_arr[i]) * alpha ^ i)` for `i=0..length` and write the value into `[c:EXT_DEG]_d`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ## Phantom Sub-Instructions
 
@@ -589,7 +588,7 @@ sub-instruction. We list the phantom sub-instructions below. Phantom sub-instruc
 always advances the program counter by `DEFAULT_PC_STEP`.
 
 | Name                      | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-|---------------------------|--------------|---------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Nop                       | 0x00         | `_`           | Does nothing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | DebugPanic                | 0x01         | `_`           | Causes the runtime to panic on the host machine and prints a backtrace if `RUST_BACKTRACE=1` is set.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | CtStart                   | 0x02         | `_`           | Opens a new span for tracing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |

@@ -118,6 +118,7 @@ fn agg_stark_config_for_test() -> AggStarkConfig {
             enable_cycle_tracker: true,
             ..Default::default()
         },
+        root_max_constraint_degree: (1 << ROOT_LOG_BLOWUP) + 1,
     }
 }
 

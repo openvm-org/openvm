@@ -6,6 +6,7 @@ use openvm_circuit::{
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{
+    conversion::AS,
     Poseidon2Opcode::{COMP_POS2, PERM_POS2},
     VerifyBatchOpcode::VERIFY_BATCH,
 };
@@ -168,7 +169,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
             memory_bridge: port.memory_bridge,
             internal_bus: verify_batch_bus,
             subair: Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
-            address_space: F::from_canonical_u32(5),
+            address_space: F::from_canonical_u32(AS::Native as u32),
         };
         Self {
             record_set: Default::default(),

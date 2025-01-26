@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
     branches: ["**"]
     paths:
       - "benchmarks/**"
@@ -16,6 +16,9 @@ on:
       - "extensions/**"
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
+  pull_request_target:
+    types: [labeled]
+    branches: ["**"]
   workflow_dispatch:
     inputs:
       flamegraphs:

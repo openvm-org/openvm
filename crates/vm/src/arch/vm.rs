@@ -33,6 +33,7 @@ pub type VmMemoryState<F> = MemoryImage<F>;
 pub struct Streams<F> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
+    pub hint_space: Vec<Vec<F>>,
 }
 
 impl<F> Streams<F> {
@@ -40,6 +41,7 @@ impl<F> Streams<F> {
         Self {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
+            hint_space: Vec::default(),
         }
     }
 }

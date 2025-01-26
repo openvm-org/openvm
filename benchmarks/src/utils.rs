@@ -3,10 +3,7 @@ use std::{fs::read, path::PathBuf};
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use openvm_circuit::arch::{
-    instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES},
-    VirtualMachine, VmConfig,
-};
+use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
@@ -111,7 +108,6 @@ impl BenchmarkCli {
 
         AggConfig {
             agg_stark_config: AggStarkConfig {
-                max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
                 leaf_fri_params,
                 internal_fri_params,
                 root_fri_params,
@@ -120,6 +116,8 @@ impl BenchmarkCli {
                     enable_cycle_tracker: self.profiling,
                     ..Default::default()
                 },
+                root_max_constraint_degree: root_fri_params.max_constraint_degree(),
+                ..Default::default()
             },
             halo2_config: Halo2Config {
                 verifier_k: self.halo2_outer_k.unwrap_or(23),

@@ -41,6 +41,8 @@ pub struct AggStarkConfig {
     pub profiling: bool,
     /// Only for AggVM debugging.
     pub compiler_options: CompilerOptions,
+    /// Max constraint degree for FRI logup chunking
+    pub root_max_constraint_degree: usize,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -92,6 +94,7 @@ impl Default for AggStarkConfig {
             ),
             profiling: false,
             compiler_options: Default::default(),
+            root_max_constraint_degree: (1 << DEFAULT_ROOT_LOG_BLOWUP) + 1,
         }
     }
 }

@@ -224,6 +224,11 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             PhantomDiscriminant(NativePhantom::Print as u16),
         )?;
 
+        builder.add_phantom_sub_executor(
+            NativeHintLoadSubEx,
+            PhantomDiscriminant(NativePhantom::HintLoad as u16),
+        )?;
+
         Ok(inventory)
     }
 }
@@ -240,6 +245,7 @@ pub(crate) mod phantom {
     pub struct NativeHintInputSubEx;
     pub struct NativePrintSubEx;
     pub struct NativeHintBitsSubEx;
+    pub struct NativeHintLoadSubEx;
 
     impl<F: Field> PhantomSubExecutor<F> for NativeHintInputSubEx {
         fn phantom_execute(
@@ -305,6 +311,30 @@ pub(crate) mod phantom {
                     .push_back(F::from_canonical_u32(val & 1));
                 val >>= 1;
             }
+            Ok(())
+        }
+    }
+
+    impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintLoadSubEx {
+        fn phantom_execute(
+            &mut self,
+            _: &MemoryController<F>,
+            streams: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            _: F,
+            _: F,
+            _: u16,
+        ) -> eyre::Result<()> {
+            let payload = match streams.input_stream.pop_front() {
+                Some(hint) => hint,
+                None => {
+                    bail!("EndOfInputStream");
+                }
+            };
+            let id = streams.hint_space.len();
+            streams.hint_space.push(payload);
+            streams.hint_stream.clear();
+            streams.hint_stream.push_back(F::from_canonical_usize(id));
             Ok(())
         }
     }

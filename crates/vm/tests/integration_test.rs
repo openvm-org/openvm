@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, iter::zip, sync::Arc};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    iter::zip,
+    sync::Arc,
+};
 
 use derive_more::derive::From;
 use openvm_circuit::{
@@ -962,4 +966,71 @@ fn test_vm_keccak_non_full_round() {
     let program = Program::from_instructions(&instructions);
 
     air_test(NativeKeccakConfig::default(), program);
+}
+
+#[test]
+fn test_hint_load_1() {
+    type F = BabyBear;
+    let instructions = vec![
+        Instruction::phantom(
+            PhantomDiscriminant(NativePhantom::HintLoad as u16),
+            F::ZERO,
+            F::ZERO,
+            0,
+        ),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let program = Program::from_instructions(&instructions);
+
+    let mut segment = ExecutionSegment::new(
+        &NativeConfig::aggregation(0, 3),
+        program,
+        vec![vec![F::ONE, F::TWO]].into(),
+        None,
+        Default::default(),
+    );
+    segment.execute_from_pc(0).unwrap();
+    let streams = segment.chip_complex.take_streams();
+    assert!(streams.input_stream.is_empty());
+    assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ZERO]));
+    assert_eq!(streams.hint_space, vec![vec![F::ONE, F::TWO]]);
+}
+
+#[test]
+fn test_hint_load_2() {
+    type F = BabyBear;
+    let instructions = vec![
+        Instruction::phantom(
+            PhantomDiscriminant(NativePhantom::HintLoad as u16),
+            F::ZERO,
+            F::ZERO,
+            0,
+        ),
+        Instruction::phantom(
+            PhantomDiscriminant(NativePhantom::HintLoad as u16),
+            F::ZERO,
+            F::ZERO,
+            0,
+        ),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let program = Program::from_instructions(&instructions);
+
+    let mut segment = ExecutionSegment::new(
+        &NativeConfig::aggregation(0, 3),
+        program,
+        vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]].into(),
+        None,
+        Default::default(),
+    );
+    segment.execute_from_pc(0).unwrap();
+    let streams = segment.chip_complex.take_streams();
+    assert!(streams.input_stream.is_empty());
+    assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ONE]));
+    assert_eq!(
+        streams.hint_space,
+        vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]]
+    );
 }

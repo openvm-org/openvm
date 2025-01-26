@@ -203,7 +203,8 @@ impl AggStarkProvingKey {
         );
 
         let root_verifier_pk = {
-            let root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
+            let mut root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
+            root_engine.max_constraint_degree = config.root_max_constraint_degree;
             let root_program = RootVmVerifierConfig {
                 leaf_fri_params: config.leaf_fri_params,
                 internal_fri_params: config.internal_fri_params,
