@@ -21,8 +21,8 @@ In addition to the standard RV32IM opcodes, we support the following additional 
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[0:11] | RISC-V description and notes                                                                                                |
 | ----------- | --- | ----------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------- |
-| hintstorew  | I   | 0001011     | 001    | 0x0       | Stores next 4-byte word from hint stream in user memory at `[rd]_2`.                                 |
-| hintbuffer  | I   | 0001011     | 001    | 0x1       | Stores next `4 * rs1` bytes from hint stream in user memory at `[rd:4 * rs1]_2`. Here `rs1` must be non-zero to be a valid instruction.                                 |
+| hintstorew  | I   | 0001011     | 001    | 0x0       | Stores next 4-byte word from hint stream in user memory at `[rd]_2`. Only valid if next 4 values in hint stream are bytes.                                  |
+| hintbuffer  | I   | 0001011     | 001    | 0x1       | Stores next `4 * rs1` bytes from hint stream in user memory at `[rd..rd +4 * rs1]_2`. Only valid if next `4 * rs1` values in hint stream are bytes and `rs1` is  non-zero.                                 |
 | reveal      | I   | 0001011     | 010    |           | Stores the 4-byte word `rs1` at address `rd + imm` in user IO space.                                                        |
 | hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to the vector.                                                      |
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails. |
