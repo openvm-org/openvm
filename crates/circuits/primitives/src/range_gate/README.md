@@ -1,8 +1,9 @@
 # Range Gate
 
 This chip gets requests to verify that a number is in the range `[0, MAX)`.
-In the trace, there is a counter column and a multiplicity column. 
-The counter column is generated using a gate, as opposed tothe [RangeCheckerChip](../range/README.md).
+In the trace, there is a counter column and a multiplicity column.
+The counter column is generated using constraints (gates), as opposed to the [RangeCheckerChip](../range/README.md) which uses preprocessed trace.
+The difference is that this chip does not use any preprocessed trace.
 
 The `RangeCheckerGateAir` constrains that the `counter` column is increasing from 0 to `MAX - 1` and also leaves the `mult` column unconstrained.
 
