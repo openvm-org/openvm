@@ -29,6 +29,8 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 ## RV32IM Extension
 
+#### Instructions
+
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
 | RV32IM | `BaseAluOpcode::ADD` | ADD_RV32 |
@@ -71,7 +73,17 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | RV32IM | `Rv32HintStoreOpcode::HINT_BUFFER` | HINT_BUFFER_RV32 |
 | RV32IM | Pseudo-instruction for `STOREW_RV32` | REVEAL_RV32 |
 
+#### Phantom Sub-Instructions
+
+| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
+| ------------- | ---------- | ------------- |
+| RV32IM | `Rv32Phantom::HintInput` | Rv32HintInput |
+| RV32IM | `Rv32Phantom::PrintStr` | Rv32PrintStr |
+| RV32IM | `Rv32Phantom::HintRandom` | Rv32HintRandom |
+
 ## Native Extension
+
+#### Instructions
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -98,7 +110,18 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Native | `VerifyBatchOpcode::VERIFY_BATCH` | VERIFY_BATCH |
 | Native | `FriOpcode::FRI_REDUCED_OPENING` | FRI_REDUCED_OPENING |
 
+#### Phantom Sub-Instructions
+
+| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
+| ------------- | ---------- | ------------- |
+| Native | `NativePhantom::Print` | NativePrint |
+| Native | `NativePhantom::HintInput` | NativeHintInput |
+| Native | `NativePhantom::HintBits` | NativeHintBits |
+| Native | `NativePhantom::HintLoad` | NativeHintLoad |
+
 ## Keccak Extension
+
+#### Instructions
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -106,11 +129,15 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 ## SHA2-256 Extension
 
+#### Instructions
+
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
 | SHA2-256 | `Rv32Sha256Opcode::SHA256` | SHA256_RV32 |
 
 ## BigInt Extension
+
+#### Instructions
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -134,6 +161,8 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 ## Algebra Extension
 
+#### Instructions
+
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
 | Algebra | `Rv32ModularArithmeticOpcode::ADD` | ADDMOD_RV32\<N\> |
@@ -153,6 +182,8 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 ## Elliptic Curve Extension
 
+#### Instructions
+
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
 | Elliptic Curve | `Rv32WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE\<C\> |
@@ -160,7 +191,15 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE\<C\> |
 | Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE\<C\> |
 
+#### Phantom Sub-Instructions
+
+| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
+| ------------- | ---------- | ------------- |
+| Elliptic Curve | `EccPhantom::HintDecompress` | HintDecompress |
+
 ## Pairing Extension
+
+#### Instructions
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -172,3 +211,9 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Pairing | `PairingOpcode::MUL_BY_01234` | MUL_BY_01234\<C\> |
 | Pairing | `PairingOpcode::MUL_023_BY_023` | MUL_023_BY_023\<C\> |
 | Pairing | `PairingOpcode::MUL_BY_02345` | MUL_BY_02345\<C\> |
+
+#### Phantom Sub-Instructions
+
+| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
+| ------------- | ---------- | ------------- |
+| Pairing | `PairingPhantom::HintDecompress` | HintDecompress |
