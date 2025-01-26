@@ -307,6 +307,19 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 | REM_RV32    | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `i32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`. Overflow: if `i32([b:4]_1) = -2^31` and `i32([c:4]_1) = -1`, set `[a:4]_1 = 0`.         |
 | REMU_RV32   | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `u32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`.                                                                                         |
 
+#### User IO
+
+In addition to opcodes which match 1-1 with the RV32IM opcodes, the following additional
+opcodes interact with address spaces outside of 1 and 2 to enable verification of programs
+with user input-output. We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as in [`LOADW_RV32` and
+`STOREW_RV32`](#loadstore).
+
+| Name             | Operands    | Description                                                                                                                         |
+| ---------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| HINT_STOREW_RV32 | `_,b,c,1,2` | `[r32{c}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                            |
+| HINT_BUFFER_RV32 | `a,b,_,1,2` | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. Very important: `l` should not be 0. |
+| REVEAL_RV32      | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`. Only valid when continuations are enabled. |
+
 #### Phantom Sub-Instructions
 
 The RV32IM extension defines the following phantom sub-instructions.
@@ -316,24 +329,6 @@ The RV32IM extension defines the following phantom sub-instructions.
 | Rv32HintInput             | 0x20         | `_`           | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[(hint.len() as u32).to_le_bytes()), hint].concat()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Rv32PrintStr              | 0x21         | `a,b,_`       | Peeks at `[r32{0}(a)..r32{0}(a) + r32{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
-### RV32 Intrinsics
-
-RV32 intrinsics are custom OpenVM opcodes that are designed to be compatible with the RV32 architecture.
-We continue to use \_RV32 to specify that the operand parsing is specifically targeting 32-bit RISC-V registers.
-
-All instructions below assume that all memory cells in address spaces `1` and `2` are field elements that are in range
-`[0, 2^LIMB_BITS)` where `LIMB_BITS = 8`. The instructions must all ensure that any writes will uphold this constraint.
-
-We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as in [`LOADW_RV32` and
-`STOREW_RV32`](#loadstore).
-
-#### User IO
-
-| Name             | Operands    | Description                                                                                                                                                                       |
-| ---------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HINT_STOREW_RV32 | `_,b,_,1,2` | `[r32{0}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                                                                          |
-| HINT_BUFFER_RV32 | `a,b,_,1,2` | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. Very important: `l` should not be 0. |
-| REVEAL_RV32      | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`. Only valid when continuations are enabled.                                               |
 
 ### Keccak Extension
 
