@@ -46,7 +46,7 @@ mod tests {
             GuestOptions::default().with_features(["std"]),
             get_programs_dir!(),
             &Some(TargetFilter {
-                kind: "bin".to_string(),
+                kind: "example".to_string(),
                 name: "hashmap".to_string(),
             }),
         )?;
