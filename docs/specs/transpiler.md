@@ -21,14 +21,20 @@ We now specify the transpilation for system instructions and the default set of 
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
 | terminate      | TERMINATE `_, _, utof(imm)`                                      |
-| hintstorew     | HINT_STOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2`    |
-| reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`        |
-| hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                             |
-| printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`                 |
 
 ## RV32IM Extension
 
 Transpilation from RV32IM to OpenVM assembly follows the mapping below, which is generally a 1-1 translation. 
+
+### System Level Extensions to RV32IM
+
+| RISC-V Inst    | OpenVM Instruction                                               |
+| -------------- | ---------------------------------------------------------------- |
+| hintstorew     | HINT_STOREW_RV32 `0, ind(rd), _, 1, 2`                           |
+| hintbuffer     | HINT_BUFFER_RV32 `ind(rs1), ind(rd), _, 1, 2`                    |
+| reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`        |
+| hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                             |
+| printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`                 |
 
 ### Handling of the `x0` register
 
@@ -38,7 +44,6 @@ The transpilation handles writes to `x0` as follows:
 - Instructions that write to `x0` with side effects (JAL, JALR, AUIPC) are transpiled to the corresponding custom instruction without a write to `[0:4]_1`.
 
 Because `[0:4]_1` is initialized to `0` and never written to, this guarantees that reads from `x0` yield `0` and enforces that any OpenVM program transpiled from RV32IM conforms to the RV32IM specification for `x0`.
-
 
 | RISC-V Inst | OpenVM Instruction                                                         |
 | ----------- | -------------------------------------------------------------------------- |
