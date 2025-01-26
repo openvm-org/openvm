@@ -43,9 +43,9 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 | hintstorew     | HINT_STOREW_RV32 `0, ind(rd), _, 1, 2`                           |
 | hintbuffer     | HINT_BUFFER_RV32 `ind(rs1), ind(rd), _, 1, 2`                    |
 | reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`        |
-| hintinput      | PHANTOM `_, _, disc(HintInputRv32)`                             |
-| printstr       | PHANTOM `ind(rd), ind(rs1), disc(PrintStrRv32)`                 |
-| hintrandom     | PHANTOM `ind(rd), _, disc(HintRandomRv32)`                      |
+| hintinput      | PHANTOM `_, _, disc(Rv32HintInput)`                             |
+| printstr       | PHANTOM `ind(rd), ind(rs1), disc(Rv32PrintStr)`                 |
+| hintrandom     | PHANTOM `ind(rd), _, disc(Rv32HintRandom)`                      |
 
 ### Standard RV32IM Instructions
 
