@@ -10,7 +10,7 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 ## System Instructions
 
-### Instructions
+#### Instructions
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -18,7 +18,7 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | System | `SystemOpcode::PHANTOM` | PHANTOM |
 | System | `PublishOpcode::PUBLISH` | PUBLISH |
 
-### Phantom Sub-Instructions
+#### Phantom Sub-Instructions
 
 | VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
 | ------------- | ---------- | ------------- |
