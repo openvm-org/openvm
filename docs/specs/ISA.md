@@ -268,10 +268,6 @@ with user input-output. We use the same notation for `r32{c}(b) := i32([b:4]_1) 
 | HINT_BUFFER_RV32 | `a,b,_,1,2` | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. Very important: `l` should not be 0. |
 | REVEAL_RV32      | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`. Only valid when continuations are enabled. |
 
-#### System Calls
-
-Although OpenVM supports operations outside of RV32IM using VM extensions instead of system calls, the RV32IM extension supports the following system calls for compatibility with existing libraries. [TODO]
-
 #### Phantom Sub-Instructions
 
 The RV32IM extension defines the following phantom sub-instructions.
