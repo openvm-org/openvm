@@ -399,7 +399,7 @@ impl<
         let rs = read_record.rs.map(|r| memory.record_by_id(r));
         for (i, r) in rs.iter().enumerate() {
             row_slice.rs_ptr[i] = r.pointer;
-            row_slice.rs_val[i].copy_from_slice(&r.data);
+            row_slice.rs_val[i].copy_from_slice(r.data_slice());
             aux_cols_factory.generate_read_aux(r, &mut row_slice.rs_read_aux[i]);
             for (j, x) in read_record.reads[i].iter().enumerate() {
                 let read = memory.record_by_id(*x);
@@ -414,7 +414,9 @@ impl<
         // Range checks
         let need_range_check: [u32; 2] = from_fn(|i| {
             if i < NUM_READS {
-                rs[i].data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
+                rs[i]
+                    .data_at(RV32_REGISTER_NUM_LIMBS - 1)
+                    .as_canonical_u32()
             } else {
                 0
             }

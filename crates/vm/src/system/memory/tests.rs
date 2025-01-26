@@ -166,30 +166,30 @@ fn generate_trace<F: PrimeField32>(
         row.pointer = record.pointer;
         row.timestamp = F::from_canonical_u32(record.timestamp);
 
-        match (record.data.len(), &record.prev_data) {
+        match (record.data_slice().len(), &record.prev_data_slice()) {
             (1, &None) => {
                 aux_factory.generate_read_aux(&record, &mut row.read_1_aux);
-                row.data_1 = record.data.try_into().unwrap();
+                row.data_1 = record.data_slice().try_into().unwrap();
                 row.is_read_1 = F::ONE;
             }
             (1, &Some(_)) => {
                 aux_factory.generate_write_aux(&record, &mut row.write_1_aux);
-                row.data_1 = record.data.try_into().unwrap();
+                row.data_1 = record.data_slice().try_into().unwrap();
                 row.is_write_1 = F::ONE;
             }
             (4, &None) => {
                 aux_factory.generate_read_aux(&record, &mut row.read_4_aux);
-                row.data_4 = record.data.try_into().unwrap();
+                row.data_4 = record.data_slice().try_into().unwrap();
                 row.is_read_4 = F::ONE;
             }
             (4, &Some(_)) => {
                 aux_factory.generate_write_aux(&record, &mut row.write_4_aux);
-                row.data_4 = record.data.try_into().unwrap();
+                row.data_4 = record.data_slice().try_into().unwrap();
                 row.is_write_4 = F::ONE;
             }
             (MAX, &None) => {
                 aux_factory.generate_read_aux(&record, &mut row.read_max_aux);
-                row.data_max = record.data.try_into().unwrap();
+                row.data_max = record.data_slice().try_into().unwrap();
                 row.is_read_max = F::ONE;
             }
             _ => panic!("unexpected pattern"),

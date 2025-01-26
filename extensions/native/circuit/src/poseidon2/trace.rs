@@ -114,7 +114,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
             &mut specific.read_final_height_or_sibling_array_start,
         );
         specific.root_is_on_right = F::from_bool(root_is_on_right);
-        specific.sibling_array_start = read_sibling_array_start.data[0];
+        specific.sibling_array_start = read_sibling_array_start.data_at(0);
     }
     fn correct_last_top_level_row(
         &self,

@@ -60,10 +60,16 @@ where
             let len_read = offline_memory.record_by_id(record.len_read);
 
             self.bitwise_lookup_chip.request_range(
-                dst_read.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() * mem_ptr_shift,
-                src_read.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() * mem_ptr_shift,
+                dst_read
+                    .data_at(RV32_REGISTER_NUM_LIMBS - 1)
+                    .as_canonical_u32()
+                    * mem_ptr_shift,
+                src_read
+                    .data_at(RV32_REGISTER_NUM_LIMBS - 1)
+                    .as_canonical_u32()
+                    * mem_ptr_shift,
             );
-            let len = compose(len_read.data.clone().try_into().unwrap());
+            let len = compose(len_read.data_slice().try_into().unwrap());
             let mut state = &None;
             for (i, input_message) in record.input_message.iter().enumerate() {
                 let input_message = input_message
@@ -217,9 +223,9 @@ where
                                 cols.rd_ptr = dst_read.pointer;
                                 cols.rs1_ptr = src_read.pointer;
                                 cols.rs2_ptr = len_read.pointer;
-                                cols.dst_ptr.copy_from_slice(&dst_read.data);
-                                cols.src_ptr.copy_from_slice(&src_read.data);
-                                cols.len_data.copy_from_slice(&len_read.data);
+                                cols.dst_ptr.copy_from_slice(dst_read.data_slice());
+                                cols.src_ptr.copy_from_slice(src_read.data_slice());
+                                cols.len_data.copy_from_slice(len_read.data_slice());
                                 memory_aux_cols_factory
                                     .generate_read_aux(dst_read, &mut cols.register_reads_aux[0]);
                                 memory_aux_cols_factory

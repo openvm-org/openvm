@@ -290,7 +290,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
 
         for (i, rs_read) in rs_reads.iter().enumerate() {
             row_slice.rs_ptr[i] = rs_read.pointer;
-            row_slice.rs_val[i].copy_from_slice(&rs_read.data);
+            row_slice.rs_val[i].copy_from_slice(rs_read.data_slice());
             aux_cols_factory.generate_read_aux(rs_read, &mut row_slice.rs_read_aux[i]);
         }
 
@@ -302,7 +302,11 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
         // Range checks:
         let need_range_check: Vec<u32> = rs_reads
             .iter()
-            .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
+            .map(|record| {
+                record
+                    .data_at(RV32_REGISTER_NUM_LIMBS - 1)
+                    .as_canonical_u32()
+            })
             .chain(once(0)) // in case NUM_READS is odd
             .collect();
         debug_assert!(self.air.address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);

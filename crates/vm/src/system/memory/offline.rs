@@ -31,9 +31,25 @@ pub struct MemoryRecord<T> {
     pub pointer: T,
     pub timestamp: u32,
     pub prev_timestamp: u32,
-    pub data: Vec<T>,
+    data: Vec<T>,
     /// None if a read.
-    pub prev_data: Option<Vec<T>>,
+    prev_data: Option<Vec<T>>,
+}
+
+impl<T> MemoryRecord<T> {
+    pub fn data_slice(&self) -> &[T] {
+        self.data.as_slice()
+    }
+
+    pub fn prev_data_slice(&self) -> Option<&[T]> {
+        self.prev_data.as_deref()
+    }
+}
+
+impl<T: Copy> MemoryRecord<T> {
+    pub fn data_at(&self, index: usize) -> T {
+        self.data[index]
+    }
 }
 
 pub struct OfflineMemory<F> {

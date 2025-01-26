@@ -502,11 +502,11 @@ pub(super) fn vec_heap_generate_trace_row_impl<
         .collect::<Vec<_>>();
 
     row_slice.rd_ptr = rd.pointer;
-    row_slice.rd_val.copy_from_slice(&rd.data);
+    row_slice.rd_val.copy_from_slice(rd.data_slice());
 
     for (i, r) in rs.iter().enumerate() {
         row_slice.rs_ptr[i] = r.pointer;
-        row_slice.rs_val[i].copy_from_slice(&r.data);
+        row_slice.rs_val[i].copy_from_slice(r.data_slice());
         aux_cols_factory.generate_read_aux(r, &mut row_slice.rs_read_aux[i]);
     }
 
@@ -528,7 +528,11 @@ pub(super) fn vec_heap_generate_trace_row_impl<
     let need_range_check: Vec<u32> = rs
         .iter()
         .chain(std::iter::repeat(&rd).take(2))
-        .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
+        .map(|record| {
+            record
+                .data_at(RV32_REGISTER_NUM_LIMBS - 1)
+                .as_canonical_u32()
+        })
         .collect();
     debug_assert!(address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
     let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits;

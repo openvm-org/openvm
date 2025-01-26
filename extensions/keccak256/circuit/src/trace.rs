@@ -70,8 +70,14 @@ where
             let len_read = memory.record_by_id(record.len_read);
 
             state = [0u64; 25];
-            let src_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] = from_fn(|i| src_read.data[i + 1]);
-            let len_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] = from_fn(|i| len_read.data[i + 1]);
+            let src_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] = src_read.data_slice()
+                [..RV32_REGISTER_NUM_LIMBS - 1]
+                .try_into()
+                .unwrap();
+            let len_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] = len_read.data_slice()
+                [..RV32_REGISTER_NUM_LIMBS - 1]
+                .try_into()
+                .unwrap();
             let mut instruction = KeccakInstructionCols {
                 pc: record.pc,
                 is_enabled: Val::<SC>::ONE,
@@ -80,7 +86,7 @@ where
                 dst_ptr: dst_read.pointer,
                 src_ptr: src_read.pointer,
                 len_ptr: len_read.pointer,
-                dst: dst_read.data.clone().try_into().unwrap(),
+                dst: dst_read.data_slice().try_into().unwrap(),
                 src_limbs,
                 src: Val::<SC>::from_canonical_usize(record.input_blocks[0].src),
                 len_limbs,
@@ -175,7 +181,7 @@ where
                         row_mut
                             .mem_oc
                             .partial_block
-                            .copy_from_slice(&partial_read.data[1..]);
+                            .copy_from_slice(&partial_read.data_slice()[1..]);
                     }
                     for (i, is_padding) in row_mut.sponge.is_padding_byte.iter_mut().enumerate() {
                         *is_padding = Val::<SC>::from_bool(i >= block.remaining_len);
@@ -196,7 +202,7 @@ where
                     .map(|r| {
                         memory
                             .record_by_id(*r)
-                            .data
+                            .data_slice()
                             .last()
                             .unwrap()
                             .as_canonical_u32()

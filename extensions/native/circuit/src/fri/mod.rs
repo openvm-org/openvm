@@ -1,6 +1,5 @@
 use core::ops::Deref;
 use std::{
-    array,
     borrow::{Borrow, BorrowMut},
     mem::offset_of,
     sync::{Arc, Mutex},
@@ -573,10 +572,10 @@ fn record_to_rows<F: PrimeField32>(
     let a_ptr_read = memory.record_by_id(record.a_ptr_read);
     let b_ptr_read = memory.record_by_id(record.b_ptr_read);
 
-    let length = length_read.data[0].as_canonical_u32() as usize;
-    let alpha: [F; EXT_DEG] = array::from_fn(|i| alpha_read.data[i]);
-    let a_ptr = a_ptr_read.data[0];
-    let b_ptr = b_ptr_read.data[0];
+    let length = length_read.data_at(0).as_canonical_u32() as usize;
+    let alpha: [F; EXT_DEG] = alpha_read.data_slice().try_into().unwrap();
+    let a_ptr = a_ptr_read.data_at(0);
+    let b_ptr = b_ptr_read.data_at(0);
 
     let mut result = [F::ZERO; EXT_DEG];
 
@@ -597,8 +596,8 @@ fn record_to_rows<F: PrimeField32>(
     {
         let a_read = memory.record_by_id(a_record_id);
         let b_read = memory.record_by_id(b_record_id);
-        let a = a_read.data[0];
-        let b: [F; EXT_DEG] = array::from_fn(|i| b_read.data[i]);
+        let a = a_read.data_at(0);
+        let b: [F; EXT_DEG] = b_read.data_slice().try_into().unwrap();
 
         let start = i * OVERALL_WIDTH;
         let cols: &mut WorkloadCols<F> = slice[start..start + WL_WIDTH].borrow_mut();

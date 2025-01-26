@@ -531,9 +531,9 @@ pub(super) fn vec_heap_two_reads_generate_trace_row_impl<
     row_slice.rs1_ptr = rs1.pointer;
     row_slice.rs2_ptr = rs2.pointer;
 
-    row_slice.rd_val.copy_from_slice(&rd.data);
-    row_slice.rs1_val.copy_from_slice(&rs1.data);
-    row_slice.rs2_val.copy_from_slice(&rs2.data);
+    row_slice.rd_val.copy_from_slice(rd.data_slice());
+    row_slice.rs1_val.copy_from_slice(rs1.data_slice());
+    row_slice.rs2_val.copy_from_slice(rs2.data_slice());
 
     aux_cols_factory.generate_read_aux(rs1, &mut row_slice.rs1_read_aux);
     aux_cols_factory.generate_read_aux(rs2, &mut row_slice.rs2_read_aux);
@@ -561,7 +561,10 @@ pub(super) fn vec_heap_two_reads_generate_trace_row_impl<
         &read_record.rd,
     ]
     .map(|record| {
-        memory.record_by_id(*record).data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
+        memory
+            .record_by_id(*record)
+            .data_at(RV32_REGISTER_NUM_LIMBS - 1)
+            .as_canonical_u32()
     });
     debug_assert!(address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
     let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits;
