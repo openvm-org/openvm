@@ -377,7 +377,7 @@ The Keccak extension supports the Keccak256 hash function. The extension operate
 
 | Name           | Operands    | Description                                                                                                                                                              |
 | -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| KECCAK256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`.                                                        |
+| KECCAK256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Performs memory accesses with block size `4`.                                                        |
 
 ### SHA2-256 Extension
 
