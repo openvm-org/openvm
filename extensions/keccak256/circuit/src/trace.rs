@@ -71,11 +71,11 @@ where
 
             state = [0u64; 25];
             let src_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] = src_read.data_slice()
-                [..RV32_REGISTER_NUM_LIMBS - 1]
+                [1..RV32_REGISTER_NUM_LIMBS]
                 .try_into()
                 .unwrap();
             let len_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] = len_read.data_slice()
-                [..RV32_REGISTER_NUM_LIMBS - 1]
+                [1..RV32_REGISTER_NUM_LIMBS]
                 .try_into()
                 .unwrap();
             let mut instruction = KeccakInstructionCols {
