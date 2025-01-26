@@ -94,7 +94,6 @@ impl Default for AggStarkConfig {
             ),
             profiling: false,
             compiler_options: Default::default(),
-            // It is currently better for halo2_outer recursion for there to be no chunking
             root_max_constraint_degree: (1 << DEFAULT_ROOT_LOG_BLOWUP) + 1,
         }
     }
