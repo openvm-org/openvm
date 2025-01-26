@@ -69,13 +69,13 @@ Different address spaces are used for different purposes in OpenVM. Memory cells
 
 ### Inputs and Hints
 
-To enable user input and non-determinism in OpenVM programs, we maintain the following two streams during runtime execution:
+To enable user input and non-determinism in OpenVM programs, we maintain the following three data structures during runtime execution:
 
-- `input_stream`: a private non-interactive queue of vectors of field elements which is provided at the start of
-runtime execution
+- `input_stream`: a private non-interactive queue of vectors of field elements which is provided at the start of runtime execution
 - `hint_stream`: a queue of values populated during runtime execution via [phantom sub-instructions](#phantom-sub-instructions) such as `Rv32HintInput`, `NativeHintInput`, and `NativeHintBits`.
+- `hint_space`: a append-only vector of vectors of field elements used to store hints during runtime execution via [phantom sub-instructions](#phantom-sub-instructions) such as `NativeHintLoad`.
 
-These streams do not live in OpenVM memory, and their state is not constrained in ZK. At runtime, instructions like `HINT_STORE_RV32` (from the RV32IM extension) and `HINT_STOREW`, `HINT_STOREW4` (from the native extension) can read from the `hint_stream` and write them to OpenVM memory to provide non-deterministic hints.  
+These data structures do not live in OpenVM memory, and their state is not constrained in ZK. At runtime, instructions like `HINT_STORE_RV32` (from the RV32IM extension) and `HINT_STOREW`, `HINT_STOREW4` (from the native extension) can read from the `hint_stream` and write them to OpenVM memory to provide non-deterministic hints.  
 
 ### Public Inputs and Outputs
 
@@ -351,7 +351,7 @@ The input (of size `WIDTH`) is read in two batches of size `CHUNK`, and, similar
 
 #### Proof Verification
 
-We have the following special opcodes tailored to optimize verification.
+We have the following special opcodes tailored to optimize FRI proof verification.
 
 | Name                                                                                                                                                                                                                         | Operands        | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -362,19 +362,20 @@ We have the following special opcodes tailored to optimize verification.
 
 The native extension defines the following phantom sub-instructions.
 
-| Name                      | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ------------------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| NativePrint               | 0x10         | `a,_,c_upper` | Prints `[a]_{c_upper}` to stdout on the host machine.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| NativeHintInput           | 0x11         | `_`           | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[[F::from_canonical_usize(hint.len())], hint].concat()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| NativeHintBits            | 0x12         | `a,b,c_upper` | Resets the hint stream to be the least significant `b` bits of `([a]_{c_upper}).as_canonical_u32()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Name                      | Discriminant | Operands      | Description                                                                                                                                                |
+| ------------------------- | ------------ | ------------- | ------------------------------------------------------------ |
+| NativePrint               | 0x10         | `a,_,c_upper` | Prints `[a]_{c_upper}` to stdout on the host machine.  |
+| NativeHintInput           | 0x11         | `_`           | Pops a vector `hint` of field elements from `input_stream` and resets `hint_stream` to equal the vector `[[F::from_canonical_usize(hint.len())], hint].concat()`.|
+| NativeHintBits            | 0x12         | `a,b,c_upper` | Resets `hint_stream` to be the least significant `b` bits of `([a]_{c_upper}).as_canonical_u32()`.|
+| NativeHintLoad            | 0x13         | `_`           | Pops a vector `hint` of field elements from `input_stream` and appends it to `hint_space`. Resets `hint_stream` to contain a length-1 vector containing the index of `hint` in `hint_space`.|
 
 ### Keccak Extension
 
 The Keccak extension supports the Keccak256 hash function. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes. 
 
-| Name           | Operands    | Description                                                                                                                                                              |
-| -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| KECCAK256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Performs memory accesses with block size `4`.                                                        |
+| Name           | Operands    | Description                   |
+| -------------- | ----------- | ------------------------- |
+| KECCAK256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Performs memory accesses with block size `4`.|
 
 ### SHA2-256 Extension
 
