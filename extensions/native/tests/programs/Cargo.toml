@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../../crates/toolchain/openvm" }
-openvm-native-guest-macro = { path = "../../guest-macro", default-features = false }
+openvm-native-guest-macro = { path = "../guest-macro", default-features = false }
 
 [features]
 default = []
