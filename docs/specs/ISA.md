@@ -1,6 +1,6 @@
 # OpenVM Instruction Set Architecture
 
-OpenVM supports an extensible instruction set, with different groups of opcodes supported by different VM extensions. This specification describes the overall architecture and default VM extensions which ship with VM extensions, which are:
+OpenVM supports an extensible instruction set, with different groups of opcodes supported by different VM extensions. This specification describes the overall architecture and default VM extensions which ship with OpenVM, which are:
 
 - [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
 - [Native](#native-extension): An extension supporting native field arithmetic for proof recursion and aggregation.
