@@ -1,6 +1,7 @@
 use std::{
     cmp::{max, min},
     convert::identity,
+    iter::repeat,
     ops::{Add, Div, Mul, Sub},
 };
 
@@ -417,11 +418,22 @@ impl SymbolicExpr {
                     * rhs.evaluate_overflow_isize(inputs, variables, constants, flags)
             }
             SymbolicExpr::Select(flag_id, lhs, rhs) => {
-                if flags[*flag_id] {
-                    lhs.evaluate_overflow_isize(inputs, variables, constants, flags)
+                let left = lhs.evaluate_overflow_isize(inputs, variables, constants, flags);
+                let right = rhs.evaluate_overflow_isize(inputs, variables, constants, flags);
+                let num_limbs = max(left.num_limbs(), right.num_limbs());
+
+                let res = if flags[*flag_id] {
+                    left.limbs().to_vec()
                 } else {
-                    rhs.evaluate_overflow_isize(inputs, variables, constants, flags)
-                }
+                    right.limbs().to_vec()
+                };
+                let res = res.into_iter().chain(repeat(0)).take(num_limbs).collect();
+
+                OverflowInt::from_computed_limbs(
+                    res,
+                    max(left.limb_max_abs(), right.limb_max_abs()),
+                    max(left.max_overflow_bits(), right.max_overflow_bits()),
+                )
             }
             SymbolicExpr::Div(_, _) => unreachable!(), // Division is not allowed in constraints.
         }

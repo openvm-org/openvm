@@ -72,6 +72,9 @@ pub struct ExprBuilder {
 
     pub output_indices: Vec<usize>,
 
+    /// flag for debug mode
+    debug: bool,
+
     /// Whether the builder has been finalized. Only after finalize, we can do generate_subrow and eval etc.
     finalized: bool,
 
@@ -102,8 +105,21 @@ impl ExprBuilder {
             constraints: vec![],
             computes: vec![],
             output_indices: vec![],
+            debug: false,
             finalized: false,
             needs_setup: false,
+        }
+    }
+
+    // This can be used to debug, when we only want to print something in a specific chip.
+    pub fn set_debug(&mut self) {
+        self.debug = true;
+    }
+
+    #[allow(unused)]
+    fn debug_print(&self, msg: &str) {
+        if self.debug {
+            println!("{}", msg);
         }
     }
 
