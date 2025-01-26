@@ -2,7 +2,7 @@
 
 VM extensions consisting of intrinsics are transpiled from [custom RISC-V instructions](./RISCV.md) using a modular transpiler from the RISC-V ELF format to OpenVM assembly. This document specifies the behavior of the transpiler and uses the following notation:
 
-- Let `ind(rd)` denote the register index, which is in `0..32`. In particular, it fits in one field element.
+- Let `ind(rd)` denote `4 * (register index)`, which is in `0..128`. In particular, it fits in one field element.
 - We use `itof` for the function that takes 12-bits (or 21-bits in case of J-type) to a signed integer and then mapping to the corresponding field element. So `0b11…11` goes to `-1` in `F`.
 - We use `sign_extend_24` to convert a 12-bit integer into a 24-bit integer via sign extension. We use this in conjunction with `utof`, which converts 24 bits into an unsigned integer and then maps it to the corresponding field element. Note that each 24-bit unsigned integer fits in one field element.
 - We use `sign_extend_16` for the analogous conversion into a 16-bit integer via sign extension.
