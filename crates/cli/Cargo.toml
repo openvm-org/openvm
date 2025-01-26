@@ -54,6 +54,7 @@ toml = { workspace = true }
 
 [features]
 default = ["parallel", "mimalloc"]
+bench-metrics = ["openvm-sdk/bench-metrics"]
 parallel = ["openvm-circuit/parallel"]
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]

@@ -1109,6 +1109,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         E: ChipUsageGetter,
         P: ChipUsageGetter,
     {
+        tracing::info!(metrics.cycle_count);
         counter!("total_cycles").absolute(metrics.cycle_count as u64);
         counter!("main_cells_used")
             .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
