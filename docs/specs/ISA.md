@@ -367,7 +367,7 @@ and `c`, respectively.
 #### Extension Field Arithmetic
 
 This is only enabled when the native field is `BabyBear`. The quartic extension field is defined by the irreducible
-polynomial $x^4 - 11$ (this choice matches Plonky3, but we note that Risc0 uses the polynomial $x^4 + 11$ instead).
+polynomial $x^4 - 11$, which matches Plonky3.
 All elements in the field extension can be represented as a vector `[a_0,a_1,a_2,a_3]` which represents the
 polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ over `BabyBear`.
 
@@ -382,9 +382,6 @@ Below, `d,e` may be any valid non-zero address space. The instructions do block 
 
 #### Hashes
 
-We have special opcodes to enable different precompiled hash functions.
-Only subsets of these opcodes will be turned on depending on the VM use case.
-
 Below, `d,e` may be any valid address space, and `d,e` are both not allowed to be zero. The instructions do block access
 with block size `1` in address space `d` and block size `CHUNK` in address space `e`.
 
@@ -393,16 +390,13 @@ with block size `1` in address space `d` and block size `CHUNK` in address space
 | **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e` | Applies the Poseidon2 compression function to the inputs `[[b]_d:CHUNK]_e` and `[[c]_d:CHUNK]_e`, writing the result to `[[a]_d:CHUNK]_e`.                                                                                                                                                                                                                       |
 | **PERM_POSEIDON2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a,b,_,d,e` | Applies the Poseidon2 permutation function to `[[b]_d:WIDTH]_e` and writes the result to `[[a]_d:WIDTH]_e`. <br/><br/> Each array of `WIDTH` elements is read/written in two batches of size `CHUNK`. This is nearly the same as `COMPRESS_POSEIDON2` except that the whole input state is contiguous in memory, and the full output state is written to memory. |
 
-For Poseidon2, the `PID` is just some identifier to provide domain separation between different Poseidon2 constants. For
-now we can set:
+The native extension uses the following Poseidon2 constants:
 
-| `PID` | Description                                                                                                                                                                                                                                                         |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | [`POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48) but the Mat4 used is Plonky3's with a Monty reduction |
+- `PID`: This identifier provides domain separation between different Poseidon2 constants. We use `0` to identify [`POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48), but the Mat4 used is Plonky3's with a Montgomery reduction.
+- `CHUNK`: We use `CHUNK = 8` for the native extension.
+- `WIDTH`: We use `WIDTH = 16` for the native extension.
 
-and only support `CHUNK = 8` and `WIDTH = 16` in BabyBear Poseidon2 above. For this setting, the input (of size `WIDTH`)
-is read in two batches of size `CHUNK`, and, similarly, the output is written in either one or two batches of
-size `CHUNK`, depending on the output size of the corresponding opcode.
+The input (of size `WIDTH`) is read in two batches of size `CHUNK`, and, similarly, the output is written in either one or two batches of size `CHUNK`, depending on the output size of the corresponding opcode.
 
 #### Proof Verification
 
