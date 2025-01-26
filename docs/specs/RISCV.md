@@ -146,6 +146,16 @@ The transpilation will only be valid for programs where:
 
 ## RV32IM Transpilation
 
+Transpilation from RV32IM to OpenVM assembly follows the mapping below, which is generally a 1-1 translation. 
+
+### Handling of the `x0` register
+
+The transpilation handles writes to `x0` as follows:
+
+- Instructions that write to `x0` with no side effects are transpiled to the PHANTOM instruction with `c = 0x00` (`Nop`).
+- Instructions that write to `x0` with side effects (JAL, JALR, AUIPC) are transpiled to the corresponding custom instruction without a write to `[0:4]_1`.
+
+
 | RISC-V Inst | OpenVM Instruction                                                         |
 | ----------- | -------------------------------------------------------------------------- |
 | add         | ADD_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
