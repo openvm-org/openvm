@@ -42,8 +42,8 @@ instructions can be stored at any locations, we will by default follow RISC-V in
 
 Memory is comprised of addressable cells which represent a single field element indexed by **address space** and **pointer**. The number of supported address spaces and the size of each address space are configurable constants.  
 
-- Valid address spaces not used for immediates lie in `[as_offset, as_offset + 2^as_height)` for configuration constants `as_offset` and `as_height`. By default `as_offset = 1` to preclude address space `0`.
-- Valid pointers lie in `[0, 2^pointer_max_bits)` fora configuration constant `pointer_max_bits`. 
+- Valid address spaces not used for immediates lie in `[as_offset, as_offset + 2^as_height)` for `as_offset = 1` and configuration constant `as_height`.
+- Valid pointers lie in `[0, 2^pointer_max_bits)` for configuration constant `pointer_max_bits`. 
 
 These configuration constants must satisfy `as_height, pointer_max_bits <= F::bits() - 2` in OpenVM to enable the underlying ZK verification. We use the following notation to denote cells in memory:
 
@@ -67,13 +67,15 @@ Different address spaces are used for different purposes in OpenVM. Memory cells
 | `3`           | User IO       |                                                                                     |
 | `4`           | Native        | Elements are typically full native field elements.                                  |
 
-### Hints
+### Inputs and Hints
 
-The `input_stream` is a private non-interactive queue of vectors of field elements which is provided at the start of
-runtime execution. The `hint_stream` is a queue of values that can be written to memory by calling the
-`HINT_STOREW_RV32` and `HINT_STORE_RV32` instructions. The `hint_stream` is populated
-via [phantom sub-instructions](#phantom-sub-instructions) such
-as `HINT_INPUT` and `HINT_BITS`.
+To enable user input and non-determinism in OpenVM programs, we maintain the following two streams during runtime execution:
+
+- `input_stream`: a private non-interactive queue of vectors of field elements which is provided at the start of
+runtime execution
+- `hint_stream`: a queue of values populated during runtime execution via [phantom sub-instructions](#phantom-sub-instructions) such as `Rv32HintInput`, `NativeHintInput`, and `NativeHintBits`.
+
+These streams do not live in OpenVM memory, and their state is not constrained in ZK. At runtime, instructions like `HINT_STORE_RV32` (from the RV32IM extension) and `HINT_STOREW, HINT_STOREW4` (from the native extension) can read from the `hint_stream` and write them to OpenVM memory to provide non-deterministic hints.  
 
 ### Public Outputs
 
