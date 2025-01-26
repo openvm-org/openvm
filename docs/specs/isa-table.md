@@ -1,14 +1,14 @@
 # OpenVM Instruction Mapping
 
-Instructions in OpenVM implement the `LocalOpcode` trait. Different groups of 
-`LocalOpcode`s from different VM extensions may be combined to form a set of
-instructions for a customized VM using several extensions. In this document, we
-provide a mapping between the `LocalOpcode` representation of instructions and the
-instructions in the [ISA specification](../specs/ISA.md).
+In this document, we provide a mapping between the representation of instructions
+in the OpenVM codebase and the instructions in the [ISA specification](../specs/ISA.md).
 
-## Instruction Mapping
+- Instructions in OpenVM implement the `LocalOpcode` trait. Different groups of `LocalOpcode`s from different VM extensions may be combined to form a set of instructions for a customized VM using several extensions. 
+- The PHANTOM instruction may be extended in each VM extension by adding new sub-instructions with different `PhantomDiscriminant` values. 
 
-### System Instructions
+In the tables below, we provide the mapping between the `LocalOpcode` and `PhantomDiscriminant` and instructions and phantom sub-instructions in the ISA specification.
+
+## System Instructions
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -16,7 +16,14 @@ instructions in the [ISA specification](../specs/ISA.md).
 | System | `SystemOpcode::PHANTOM` | PHANTOM |
 | System | `PublishOpcode::PUBLISH` | PUBLISH |
 
-### RV32IM Extension
+| VM Extension | `PhantomDiscriminant` | ISA Instruction |
+| ------------- | ---------- | ------------- |
+| System | `SysPhantom::Nop` | NOP |
+| System | `SysPhantom::DebugPanic` | DEBUG_PANIC |
+| System | `SysPhantom::CtStart` | CT_START |
+| System | `SysPhantom::CtEnd` | CT_END |
+
+## RV32IM Extension
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -60,7 +67,7 @@ instructions in the [ISA specification](../specs/ISA.md).
 | RV32IM | `Rv32HintStoreOpcode::HINT_BUFFER` | HINT_BUFFER_RV32 |
 | RV32IM | Pseudo-instruction for `STOREW_RV32` | REVEAL_RV32 |
 
-### Native Extension
+## Native Extension
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -87,19 +94,19 @@ instructions in the [ISA specification](../specs/ISA.md).
 | Native | `VerifyBatchOpcode::VERIFY_BATCH` | VERIFY_BATCH |
 | Native | `FriOpcode::FRI_REDUCED_OPENING` | FRI_REDUCED_OPENING |
 
-### Keccak Extension
+## Keccak Extension
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
 | Keccak | `Rv32KeccakOpcode::KECCAK256` | KECCAK256_RV32 |
 
-### SHA2-256 Extension
+## SHA2-256 Extension
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
 | SHA2-256 | `Rv32Sha256Opcode::SHA256` | SHA256_RV32 |
 
-### BigInt Extension
+## BigInt Extension
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -121,7 +128,7 @@ instructions in the [ISA specification](../specs/ISA.md).
 | BigInt | `Rv32BranchLessThan256Opcode::BGEU256` | BGEU256_RV32 |
 | BigInt | `Rv32Mul256Opcode::MUL256` | MUL256_RV32 |
 
-### Algebra Extension
+## Algebra Extension
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -140,7 +147,7 @@ instructions in the [ISA specification](../specs/ISA.md).
 | Algebra | `Fp2Opcode::DIV` | DIV\<Fp2\> |
 | Algebra | `Fp2Opcode::SETUP_MULDIV` | SETUP_MULDIV\<Fp2\> |
 
-### Elliptic Curve Extension
+## Elliptic Curve Extension
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -149,7 +156,7 @@ instructions in the [ISA specification](../specs/ISA.md).
 | Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE\<C\> |
 | Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE\<C\> |
 
-### Pairing Extension
+## Pairing Extension
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
@@ -161,5 +168,3 @@ instructions in the [ISA specification](../specs/ISA.md).
 | Pairing | `PairingOpcode::MUL_BY_01234` | MUL_BY_01234\<C\> |
 | Pairing | `PairingOpcode::MUL_023_BY_023` | MUL_023_BY_023\<C\> |
 | Pairing | `PairingOpcode::MUL_BY_02345` | MUL_BY_02345\<C\> |
-
-## Phantom Instruction Mapping
