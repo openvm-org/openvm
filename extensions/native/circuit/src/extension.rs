@@ -333,6 +333,7 @@ pub(crate) mod phantom {
             };
             let id = streams.hint_space.len();
             streams.hint_space.push(payload);
+            streams.hint_stream.clear();
             streams.hint_stream.push_back(F::from_canonical_usize(id));
             Ok(())
         }
