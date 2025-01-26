@@ -296,13 +296,15 @@ mod bn254 {
 #[cfg(test)]
 mod bls12_381 {
     use eyre::Result;
+    use num_bigint::BigUint;
+    use num_traits::{self, FromPrimitive};
     use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::{
         arch::{instructions::exe::VmExe, SystemConfig},
-        utils::air_test_with_min_segments,
+        utils::{air_test, air_test_with_min_segments},
     };
-    use openvm_ecc_circuit::WeierstrassExtension;
+    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         halo2curves::{
@@ -311,9 +313,10 @@ mod bls12_381 {
         },
         AffinePoint,
     };
+    use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
     use openvm_pairing_guest::{
-        bls12_381::BLS12_381_MODULUS,
+        bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER},
         halo2curves_shims::bls12_381::Bls12_381,
         pairing::{EvaluatedLine, FinalExp, LineMulMType, MillerStep, MultiMillerLoop},
     };
@@ -340,6 +343,33 @@ mod bls12_381 {
             weierstrass: WeierstrassExtension::new(vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bls12_381]),
         }
+    }
+
+    #[test]
+    fn test_bls_ec() -> Result<()> {
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "bls_ec",
+            ["bls12_381"],
+        )?;
+        let curve = CurveConfig {
+            modulus: BLS12_381_MODULUS.clone(),
+            scalar: BLS12_381_ORDER.clone(),
+            a: BigUint::ZERO,
+            b: BigUint::from_u8(4).unwrap(),
+        };
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        let config = Rv32WeierstrassConfig::new(vec![curve]);
+        air_test(config, openvm_exe);
+        Ok(())
     }
 
     #[test]
