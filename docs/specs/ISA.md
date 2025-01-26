@@ -1,14 +1,14 @@
 # OpenVM Instruction Set Architecture
 
-# OpenVM Architecture
+## Overall Architecture
 
-## Instruction format
+### Instruction format
 
 Instructions are encoded as a global opcode (field element) followed by `NUM_OPERANDS = 7` operands (field elements):
 `opcode, a, b, c, d, e, f, g`. An instruction does not need to use all operands, and trailing unused operands should be
 set to zero.
 
-## Program ROM
+### Program ROM
 
 Our VM operates under the Harvard architecture, where program code is stored separately from main
 memory. Code is addressed by any field element in range `[0, 2^PC_BITS)` where `PC_BITS = 30`.
@@ -22,7 +22,7 @@ outside of ZK. A valid program code must have all instructions stored at locatio
 instructions can be stored at any locations, we will by default follow RISC-V in storing instructions at multiples of
 `DEFAULT_PC_STEP = 4`.
 
-## Memory
+### Memory
 
 Memory is comprised of addressable cells, each cell containing a single field element.
 Instructions of the VM may access (read or write) memory
@@ -45,18 +45,18 @@ implemented. At present there are two types of blocks we have in mind
 While not relevant to the ISA itself, the ZK circuit implementation does usually represent a block `[F; N]` as `N`
 contiguous field elements in the same row of the trace matrix.
 
-## Immediate Values
+### Immediate Values
 
 Immediate values are treated as single field elements. Our VM cannot represent operand values that are greater than the
 prime $p$ and cannot distinguish between $0$ and $p$ (or any two integers whose difference is a multiple of $p$).
 Therefore, any immediate values greater than or equal to $p$ need to be expanded into smaller values.
 
-## Registers
+### Registers
 
 Our zkVM treats general purpose registers simply as pointers to a separate address space, which is also comprised of
 addressable cells. Registers are represented using the [LIMB] format with `LIMB_BITS = 8`.
 
-## Hints
+### Hints
 
 The `input_stream` is a private non-interactive queue of vectors of field elements which is provided at the start of
 runtime execution. The `hint_stream` is a queue of values that can be written to memory by calling the
@@ -64,7 +64,7 @@ runtime execution. The `hint_stream` is a queue of values that can be written to
 via [phantom sub-instructions](#phantom-sub-instructions) such
 as `HINT_INPUT` and `HINT_BITS`.
 
-## Public Outputs
+### Public Outputs
 
 By default, all inputs to the program are private (see [Hints](#hints)). At the end of program execution, a public list
 of user-specified field elements is output. The length of the list is a VM configuration parameter, and the list is
@@ -72,19 +72,19 @@ initialized with zero elements. The VM has two configuration modes: continuation
 When continuations are enabled, users can store values into the public output list via the `REVEAL_RV32` instruction.
 When continuations are disabled, users can store values into the public output list via the `PUBLISH` instruction.
 
-## Notation
+### Notation
 
 The following notation is used throughout this document:
 
-### Operand values
+#### Operand values
 
 `a, b, c, d, e, f, g` denote the value encoded in the corresponding operand of the current instruction.
 
-### Program counter
+#### Program counter
 
 `pc` denotes the value of the current program counter.
 
-### Addressing
+#### Addressing
 
 We support different address spaces of memory.
 
@@ -114,7 +114,7 @@ to a sorting argument.
 > A memory cell in any address space is always a field element, but the VM _may_ later impose additional bit size
 > constraints on certain address spaces (e.g., everything in address space `2` must be a byte).
 
-## Constants and Configuration Parameters
+### Constants and Configuration Parameters
 
 OpenVM depends on the following parameters, some of which are fixed and some of which are configurable:
 
@@ -128,7 +128,7 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | `as_height`        | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `as_height <= F::bits() - 2`               |
 | `pointer_max_bits` | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`        |
 
-# OpenVM Instruction Set
+## OpenVM Instruction Set
 
 All instruction types are divided into classes, mostly based on purpose and nature of the operation (e.g., ALU
 instructions, U256 instructions, Modular arithmetic instructions, etc).
@@ -154,14 +154,14 @@ We will use the following notation:
   `c.as_canonical_u32() - F::modulus() as i32` otherwise.
 - `decompose(c)` where `c` is a field element means `c.as_canonical_u32().to_le_bytes()`.
 
-## System
+### System
 
 | Name      | Operands  | Description                                                                                                        |
 | --------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
 | TERMINATE | `_, _, c` | Terminates execution with exit code `c`. Sets `to_pc = from_pc`.                                                   |
 | PHANTOM   | `_, _, c` | Sets `to_pc = from_pc + DEFAULT_PC_STEP`. The operand `c` determines which phantom instruction (see below) is run. |
 
-## RV32IM Support
+### RV32IM Support
 
 While the architecture allows creation of VMs without RISC-V support, we define a set of instructions that are meant to
 be transpiled from RISC-V instructions such that the resulting VM is able to run RISC-V ELF binaries. We use \_RV32 to
@@ -176,7 +176,7 @@ All instructions below assume that all memory cells in address spaces `1` and `2
 1. `[0:4]_1` has all zeroes in initial memory.
 2. No instruction in the program writes to `[0:4]_1`.
 
-### ALU
+#### ALU
 
 In all ALU instructions, the operand `d` is fixed to be `1`. The operand `e` must be either `0` or `1`. When `e = 0`,
 the `c` operand is expected to be of the form `F::from_canonical_u32(c_i16 as i24 as u24 as u32)` where `c_i16` is type
@@ -197,7 +197,7 @@ unsigned integer, and convert to field element. In the instructions below, `[c:4
 | SLT_RV32  | `a,b,c,1,e` | `[a:4]_1 = i32([b:4]_1) < i32([c:4]_e) ? 1 : 0`                                                          |
 | SLTU_RV32 | `a,b,c,1,e` | `[a:4]_1 = u32([b:4]_1) < u32([c:4]_e) ? 1 : 0`                                                          |
 
-### Load/Store
+#### Load/Store
 
 For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
 The address space `e` can be any [valid address space](#addressing).
@@ -220,7 +220,7 @@ All load/store instructions always do block accesses of block size `4`, even for
 | STOREH_RV32 | `a,b,c,1,e` | `[r32{c}(b):2]_e <- [a:2]_1`                                                                                                   |
 | STOREW_RV32 | `a,b,c,1,e` | `[r32{c}(b):4]_e <- [a:4]_1`                                                                                                   |
 
-### Branch/Jump/Upper Immediate
+#### Branch/Jump/Upper Immediate
 
 For branch instructions, we fix `d = e = 1`. For jump instructions, we fix `d = 1`.
 
@@ -255,7 +255,7 @@ level.
 
 Note that AUIPC_RV32 does not have any condition for the register write.
 
-### Multiplication Extension
+#### Multiplication Extension
 
 For multiplication extension instructions, we fix `d = 1`.
 MUL_RV32 performs an 32-bit×32-bit multiplication and places the lower 32 bits in the
@@ -280,7 +280,7 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 | REM_RV32    | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `i32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`. Overflow: if `i32([b:4]_1) = -2^31` and `i32([c:4]_1) = -1`, set `[a:4]_1 = 0`.         |
 | REMU_RV32   | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `u32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`.                                                                                         |
 
-### System Calls
+#### System Calls
 
 There are currently no system calls. System calls are used when the ISA and system are customized separately.
 Since OpenVM controls both the ISA and the underlying virtual machine, we use custom opcodes directly whenever possible.
@@ -293,7 +293,7 @@ Currently we have no need for `ECALLBREAK`, but we include it for future use.
 | ECALLBREAK | `_,_,c`  | This instruction has no operands except immediate `c = 0x0` or `0x1`. `c = 0x0` is ECALL. Custom functionality determined by reading register values. `c = 0x1` is EBREAK. Transfer control to debugger. |
 -->
 
-## RV32 Intrinsics
+### RV32 Intrinsics
 
 RV32 intrinsics are custom OpenVM opcodes that are designed to be compatible with the RV32 architecture.
 We continue to use \_RV32 to specify that the operand parsing is specifically targeting 32-bit RISC-V registers.
@@ -304,7 +304,7 @@ All instructions below assume that all memory cells in address spaces `1` and `2
 We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as in [`LOADW_RV32` and
 `STOREW_RV32`](#loadstore).
 
-### User IO
+#### User IO
 
 | Name             | Operands    | Description                                                                                                                                                                       |
 | ---------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -312,14 +312,14 @@ We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(
 | HINT_BUFFER_RV32 | `a,b,_,1,2` | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. Very important: `l` should not be 0. |
 | REVEAL_RV32      | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`. Only valid when continuations are enabled.                                               |
 
-### Hashes
+#### Hashes
 
 | Name           | Operands    | Description                                                                                                                                                              |
 | -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | KECCAK256_RV32 | `a,b,c,1,e` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`.                                                        |
 | SHA256_RV32    | `a,b,c,1,2` | `[r32{0}(a):32]_2 = sha256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `16` and writes with block size `32`. |
 
-### 256-bit Integers
+#### 256-bit Integers
 
 The 256-bit ALU intrinsic instructions perform operations on 256-bit signed/unsigned integers where integer values are
 read/written from/to memory in address space `2`. The address space `2` pointer locations are obtained by reading
@@ -330,7 +330,7 @@ For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be 
 Each instruction performs block accesses with block size `4` in address space `1` and block size `32` in address space
 `2`.
 
-#### 256-bit ALU
+##### 256-bit ALU
 
 | Name         | Operands    | Description                                                                                                                          |
 | ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -345,7 +345,7 @@ Each instruction performs block accesses with block size `4` in address space `1
 | SLT256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = i256([r32{0}(b):32]_2) < i256([r32{0}(c):32]_2) ? 1 : 0`                                                         |
 | SLTU256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = u256([r32{0}(b):32]_2) < u256([r32{0}(c):32]_2) ? 1 : 0`                                                         |
 
-#### 256-bit Branch
+##### 256-bit Branch
 
 | Name         | Operands    | Description                                                    |
 | ------------ | ----------- | -------------------------------------------------------------- |
@@ -356,7 +356,7 @@ Each instruction performs block accesses with block size `4` in address space `1
 | BLTU256_RV32 | `a,b,c,1,2` | `if(u256([r32{0}(a):32]_2) < u256([r32{0}(b):32]_2)) pc += c`  |
 | BGEU256_RV32 | `a,b,c,1,2` | `if(u256([r32{0}(a):32]_2) >= u256([r32{0}(b):32]_2)) pc += c` |
 
-#### 256-bit Multiplication
+##### 256-bit Multiplication
 
 Multiplication performs 256-bit×256-bit multiplication and writes the lower 256-bits to memory.
 Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
@@ -365,7 +365,7 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 | ----------- | ----------- | ----------------------------------------------------------------- |
 | MUL256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = ([r32{0}(b):32]_2 * [r32{0}(c):32]_2)[0:255]` |
 
-### Modular Arithmetic
+#### Modular Arithmetic
 
 The VM can be configured to support intrinsic instructions for modular arithmetic. The VM configuration will specify a
 list of supported moduli. For each positive integer modulus `N` there will be associated configuration parameters
@@ -395,7 +395,7 @@ address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall 
 | DIVMOD_RV32\<N\>          | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 / [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`. Undefined behavior if `gcd([r32{0}(c): N::NUM_LIMBS]_2, N) != 1`.                                       |
 | SETUP_MULDIVMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): N::NUM_LIMBS]_2` |
 
-### Modular Branching
+#### Modular Branching
 
 The configuration of `N` is the same as above. For each instruction, the input elements
 `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are assumed to be unsigned big integers in little-endian
@@ -406,7 +406,7 @@ format with each limb having `LIMB_BITS` bits.
 | ISEQMOD_RV32\<N\>       | `a,b,c,1,2` | `[a:4]_1 = [r32{0}(b): N::NUM_LIMBS]_2 == [r32{0}(c): N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are less than `N` and then sets the register value of `[a:4]_1` to `1` or `0` depending on whether the two big integers are equal. |
 | SETUP_ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` in the chip that handles modular equality. For the sake of implementation convenience it also writes something (can be anything) into register value of `[a:4]_1`                                                                                        |
 
-### Short Weierstrass Elliptic Curve Arithmetic
+#### Short Weierstrass Elliptic Curve Arithmetic
 
 The VM can be configured to support intrinsic instructions for elliptic curves `C` in short Weierstrass form given by
 equation `C: y^2 = x^3 + C::B` where `C::B` is a constant of the coordinate field. We note that the definitions of the
@@ -436,7 +436,7 @@ r32_ec_point(a) -> EcPoint {
 | SW_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
 | SETUP_SW_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
 
-### Complex Extension Field
+#### Complex Extension Field
 
 The VM can be configured to support intrinsic instructions for complex extension fields of prime fields. A complex
 extension field `Fp2` is the quadratic extension of a prime field `Fp` with irreducible polynomial `X^2 + 1`. An element
@@ -466,7 +466,7 @@ r32_fp2(a) -> Fp2 {
 | DIV\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)`                                                                                                                                   |
 | SETUP_MULDIV\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
 
-### Optimal Ate Pairing
+#### Optimal Ate Pairing
 
 The VM can be configured to enable intrinsic instructions for accelerating the optimal Ate pairing.
 Currently the supported pairing friendly elliptic curves are BN254 and BLS12-381, which both have embedding degree 12.
@@ -489,13 +489,13 @@ We lay out `Fp12` in memory as `c0, ..., c5` where `c_i: Fp2` and the `Fp12` ele
 | MUL_023_BY_023\<C\>             | `a,b,c,1,2` | Let `line_0: EvaluatedLine<Fp2>` be read starting from `[r32{0}(b)]_2` and `line_1: EvaluatedLine<Fp2>` be read starting from `[r32{0}(c)]_2`. The output `mul_023_by_023(line_0, line_1): [Fp2; 5]` is written contiguously to memory starting at `[r32{0}(a)]_2`. Only enabled if the sextic twist of `C` is **M-type**. |
 | MUL_BY_02345\<C\>               | `a,b,c,1,2` | Let `f: Fp12` be read starting from `[r32{0}(b)]_2` and `x: [Fp2; 5]` be read starting from `[r32{0}(c)]_2`. The output `mul_by_02345(f, line): Fp12` is written contiguously to memory starting at `[r32{0}(a)]_2`. Only enabled if the sextic twist of `C` is **M-type**.                                                |
 
-## Native Kernel
+### Native Kernel
 
 The native kernel instructions were adapted from [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with
 changes to the
 instruction format suggested by Max Gillet to enable easier compatibility with other existing ISAs.
 
-### Base
+#### Base
 
 In the instructions below, `d,e` may be any valid address space unless otherwise specified. In particular, the immediate
 address space `0` is allowed for non-vectorized reads but not allowed for writes. When using immediates, we interpret
@@ -515,7 +515,7 @@ address space `0` is allowed for non-vectorized reads but not allowed for writes
 | PUBLISH      | `a,b,_,d,e` | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                                                                                    |
 | CASTF        | `a,b,_,d,e` | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. Both `d, e` must be non-zero. |
 
-### Native Field Arithmetic
+#### Native Field Arithmetic
 
 This instruction set does native field operations. Below, `e,f` may be any valid address space, `d` may be any valid
 non-zero address space. When either `e` or `f` is zero, `[b]_0` and `[c]_0` should be interpreted as the immediates `b`
@@ -528,9 +528,9 @@ and `c`, respectively.
 | MULF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e * [c]_f`.                              |
 | DIVF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e / [c]_f`. Division by zero is invalid. |
 
-### Native Extension Field Arithmetic
+#### Native Extension Field Arithmetic
 
-#### BabyBear Quartic Extension Field
+##### BabyBear Quartic Extension Field
 
 This is only enabled when the native field is `BabyBear`. The quartic extension field is defined by the irreducible
 polynomial $x^4 - 11$ (this choice matches Plonky3, but we note that Risc0 uses the polynomial $x^4 + 11$ instead).
@@ -546,7 +546,7 @@ Below, `d,e` may be any valid non-zero address space. The instructions do block 
 | BBE4MUL | `a, b, c` | Set `[a:4]_d = [b:4]_d * [c:4]_e` with extension field multiplication.                        |
 | BBE4DIV | `a, b, c` | Set `[a:4]_d = [b:4]_d / [c:4]_e` with extension field division. Division by zero is invalid. |
 
-### Hashes
+#### Hashes
 
 We have special opcodes to enable different precompiled hash functions.
 Only subsets of these opcodes will be turned on depending on the VM use case.
@@ -570,7 +570,7 @@ and only support `CHUNK = 8` and `WIDTH = 16` in BabyBear Poseidon2 above. For t
 is read in two batches of size `CHUNK`, and, similarly, the output is written in either one or two batches of
 size `CHUNK`, depending on the output size of the corresponding opcode.
 
-### Verification
+#### Verification
 
 We have the following special opcodes tailored to optimize verification.
 
@@ -579,7 +579,7 @@ We have the following special opcodes tailored to optimize verification.
 | **VERIFY_BATCH** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e,f,g` | Further described [here](../../extensions/native/circuit/src/poseidon2/README.md). Due to already having a large number of operands, the address space is fixed to be `AS::Native = 4`. Computes `mmcs::verify_batch`. In the native address space, `[a], [b], [d], [e], [f]` should be the array start pointers for the dimensions array, the opened values array (which contains more arrays), the proof (which contains arrays of length `CHUNK`) and the commitment (which is an array of length `CHUNK`). `[c]` should be the length of the opened values array (and so should be equal to the length of the dimensions array as well). `g` should be the reciprocal of the size (in field elements) of the values contained in the opened values array: if the opened values array contains field elements, `g` should be 1; if the opened values array contains extension field elements, `g` should be 1/4. |
 | **FRI_REDUCED_OPENING**                                                                                                                                                                                                      | `a,b,c,d,e,f`   | Let `length = [e]_d`, `a_ptr = [a]_d`, `b_ptr = [b]_d`, `alpha = [f:EXT_DEG]_d`. `a_ptr` is the address of Felt array `a_arr` and `b_ptr` is the address of Ext array `b_arr`. Compute `sum((b_arr[i] - a_arr[i]) * alpha ^ i)` for `i=0..length` and write the value into `[c:EXT_DEG]_d`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
-## Phantom Sub-Instructions
+### Phantom Sub-Instructions
 
 As mentioned in [System](#system), the **PHANTOM** instruction has different behavior based on the operand `c`.
 More specifically, the low 16-bits `c.as_canonical_u32() & 0xffff` are used as the discriminant to determine a phantom
