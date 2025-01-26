@@ -18,7 +18,12 @@ In addition to these default extensions, developers are able to extend the ISA b
 ### Instruction format
 
 Instructions are encoded as a global opcode (field element) followed by `NUM_OPERANDS = 7` operands (field elements):
-`opcode, a, b, c, d, e, f, g`. An instruction does not need to use all operands, and trailing unused operands should be
+
+```
+opcode, a, b, c, d, e, f, g
+```
+
+An instruction does not need to use all operands, and trailing unused operands should be
 set to zero.
 
 ### Program ROM
@@ -35,25 +40,32 @@ instructions can be stored at any locations, we will by default follow RISC-V in
 
 ### Memory
 
-Memory is comprised of addressable cells indexed by **address space** and **pointer**. Each cell is a single field element, and VM instructions may access (read or write) memory
-as single cells or as a contiguous list of cells in a single address space. Such a contiguous list is called a **block**, and
-a memory access (read/write) to a block is a **block access**.
-The architecture distinguishes between block accesses of different sizes as this has significant performance
-implications.
-The number of cells in a block access is restricted to powers of two in: 1, 2, 4, 8,
-16, 32, 64. Block accesses do not need to be
-aligned, i.e., a block access of size $N$ can start from a pointer with value not dividing $N$ (as an integer).
+Memory is comprised of addressable cells which represent a single field element indexed by **address space** and **pointer**. The number of supported address spaces and the size of each address space are configurable constants.  
 
-We leave open the future possibility that different address spaces (see below) can be dedicated to handling
-data with certain block sizes, effectively declaring a word-size for that address space, but this is not currently
-implemented. At present, there are two types of blocks used in OpenVM:
+- Valid address spaces not used for immediates lie in `[as_offset, as_offset + 2^as_height)` for configuration constants `as_offset` and `as_height`. By default `as_offset = 1` to preclude address space `0`.
+- Valid pointers lie in `[0, 2^pointer_max_bits)` fora configuration constant `pointer_max_bits`. 
 
-- **[FVEC]** A block consisting of `[F; N]` arbitrary field elements.
-- **[LIMB]** A block consisting of `[F; N]` field elements, where each field element has as its canonical representation
-  a limb in `[0, 2^LIMB_BITS)`. This is used to emulate a word in RISC-V memory.
+These configuration constants must satisfy `as_height, pointer_max_bits <= F::bits() - 2` in OpenVM to enable the underlying ZK verification. We use the following notation to denote cells in memory:
 
-While not relevant to the ISA itself, the ZK circuit implementation does usually represent a block `[F; N]` as `N`
-contiguous field elements in the same row of the trace matrix.
+- `[a]_d` denotes the single-cell value at pointer location `a` in address space `d`. This is a single
+  field element.
+- `[a:N]_d` denotes the slice `[a..a + N]_d` -- this is a length-`N` array of field elements.
+
+#### Memory Accesses and Block Accesses
+
+VM instructions can access (read or write) a contiguous list of cells (called a **block**) in a single address space. The block size must be in the set `{1, 2, 4, 8, 16, 32, 64}`, and the access does not need to be aligned, meaning that it can start from any pointer address, even those not divisible by the block size. An access is called a **block access** if it has size greater than 1. 
+
+#### Address Spaces
+
+Different address spaces are used for different purposes in OpenVM. Memory cells in all address spaces are always field elements, but certain address spaces may impose the additional constraint that all elements fit into a maximum number of bits. The existing extensions reference the following set of address spaces, but user-defined extensions are free to use additional address spaces:
+
+| Address Space | Name          | Notes and Constraints                                                               |
+| ------------- | ------------- | ----------------------------------------------------------------------------------- |
+| `0`           | Immediates    | Address space `0` is reserved for denoting immediates, and we define `[a]_0 = a`.   |
+| `1`           | Registers     | Elements are constrained to be bytes.                                               |
+| `2`           | User Memory   | Elements are constrained to be bytes.                                               |
+| `3`           | User IO       |                                                                                     |
+| `4`           | Native        | Elements are typically full native field elements.                                  |
 
 ### Hints
 
@@ -71,46 +83,6 @@ initialized with zero elements. The VM has two configuration modes: continuation
 When continuations are enabled, users can store values into the public output list via the `REVEAL_RV32` instruction.
 When continuations are disabled, users can store values into the public output list via the `PUBLISH` instruction.
 
-### Notation
-
-The following notation is used throughout this document:
-
-#### Operand values
-
-`a, b, c, d, e, f, g` denote the value encoded in the corresponding operand of the current instruction.
-
-#### Program counter
-
-`pc` denotes the value of the current program counter.
-
-#### Addressing
-
-We support different address spaces of memory.
-
-- We use `[a]_d` to denote the single-cell value at pointer location `a` in address space `d`. This is a single
-  field element.
-- We use `[a:N]_d` to denote the slice `[a..a + N]_d` -- this is a length-`N` array of field elements.
-
-We will always have the following fixed address spaces:
-
-| Address Space | Name          |
-| ------------- | ------------- |
-| `0`           | Immediates    |
-| `1`           | Registers     |
-| `2`           | User Memory   |
-| `3`           | User IO       |
-| `4`           | Native Kernel |
-
-Address space `0` is not a real address space: it is reserved for denoting immediates: We define `[a]_0 = a`.
-
-The number of address spaces supported is a configurable constant of the VM. The address spaces in
-`[as_offset, as_offset + 2^as_height)` are supported. By default `as_offset = 1` to preclude address space `0`.
-
-The size (= number of pointers) of each address space is also a configurable constant of the VM.
-The pointers can have values in `[0, 2^pointer_max_bits)`. We require `as_height, pointer_max_bits <= F::bits() - 2` due to a sorting argument.
-
-> A memory cell in any address space is always a field element, but the VM _may_ later impose additional bit size
-> constraints on certain address spaces (e.g., everything in address space `2` must be a byte).
 
 ### Constants and Configuration Parameters
 
