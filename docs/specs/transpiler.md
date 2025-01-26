@@ -145,7 +145,7 @@ Each VM extension's behavior is specified below.
 | mulmod\<N\>    | MULMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
 | divmod\<N\>    | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
 | iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`            |
-| setup\<N\>     | SETUP_ADDSUB_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 0`, SETUP_MULDIV_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 1`, SETUP_ISEQ_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 2` |
+| setup\<N\>     | SETUP_ADDSUBMOD_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 0`, SETUP_MULDIVMOD_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 1`, SETUP_ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 2` |
 
 #### Complex Extension Field Arithmetic
 
@@ -155,6 +155,7 @@ Each VM extension's behavior is specified below.
 | subcomplex  | SUB\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 | mulcomplex  | MUL\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 | divcomplex  | DIV\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| setupcomplex| SETUP_ADDSUB_RV32\<Fp2\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 0`, SETUP_MULDIV_RV32\<Fp2\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 1` |
 
 ### Elliptic Curve Extension
 
