@@ -24,7 +24,15 @@ We now specify the transpilation for system instructions and the default set of 
 
 ## RV32IM Extension
 
-Transpilation from RV32IM to OpenVM assembly follows the mapping below, which is generally a 1-1 translation. 
+Transpilation from RV32IM to OpenVM assembly follows the mapping below, which is generally 
+a 1-1 translation between RV32IM instructions and OpenVM instructions. The main exception relates
+to handling of the `x0` register, which discards writes and has value `0` in all reads.
+We handle writes to `x0` in transpilation as follows:
+
+- Instructions that write to `x0` with no side effects are transpiled to the PHANTOM instruction with `c = 0x00` (`Nop`).
+- Instructions that write to `x0` with side effects (JAL, JALR, AUIPC) are transpiled to the corresponding custom instruction without a write to `[0:4]_1`.
+
+Because `[0:4]_1` is initialized to `0` and never written to, this guarantees that reads from `x0` yield `0` and enforces that any OpenVM program transpiled from RV32IM conforms to the RV32IM specification for `x0`.
 
 ### System Level Extensions to RV32IM
 
@@ -36,14 +44,7 @@ Transpilation from RV32IM to OpenVM assembly follows the mapping below, which is
 | hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                             |
 | printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`                 |
 
-### Handling of the `x0` register
-
-The transpilation handles writes to `x0` as follows:
-
-- Instructions that write to `x0` with no side effects are transpiled to the PHANTOM instruction with `c = 0x00` (`Nop`).
-- Instructions that write to `x0` with side effects (JAL, JALR, AUIPC) are transpiled to the corresponding custom instruction without a write to `[0:4]_1`.
-
-Because `[0:4]_1` is initialized to `0` and never written to, this guarantees that reads from `x0` yield `0` and enforces that any OpenVM program transpiled from RV32IM conforms to the RV32IM specification for `x0`.
+### Standard RV32IM Instructions
 
 | RISC-V Inst | OpenVM Instruction                                                         |
 | ----------- | -------------------------------------------------------------------------- |

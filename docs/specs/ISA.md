@@ -149,7 +149,7 @@ The RV32IM extension introduces OpenVM opcodes which support 32-bit RISC-V via t
 
 The RV32IM extension uses address space `0` for immediates, address space `1` for registers, and address space `2` for memory. As explained [here](#address-spaces), cells in address spaces `1` and `2` are constrained to be bytes, and all instructions preserve this constraint.
 
-The `i`th RISC-V register is represented by the block `[4 * i:4]_1` of 4 limbs in address space `1`. All memory addresses in address space `1` behave uniformly, and in particular writes to the block `[0:4]_1` corresponding to the RISC-V register `x0` are allowed in the RV32IM extension. However, as detailed in [RV32IM Transpilation](./transpiler.md#handling-of-the-x0-register), any OpenVM program transpiled from a RV32IM ELF will never contain such a write and conforms to the RV32IM specification.  
+The `i`th RISC-V register is represented by the block `[4 * i:4]_1` of 4 limbs in address space `1`. All memory addresses in address space `1` behave uniformly, and in particular writes to the block `[0:4]_1` corresponding to the RISC-V register `x0` are allowed in the RV32IM extension. However, as detailed in [RV32IM Transpilation](./transpiler.md#rv32im-transpilation), any OpenVM program transpiled from a RV32IM ELF will never contain such a write and conforms to the RV32IM specification.  
 
 #### ALU
 
