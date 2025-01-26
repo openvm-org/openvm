@@ -43,6 +43,18 @@ pub fn hint_input() {
     );
 }
 
+/// Reset the hint stream with `len` random `u32`s
+#[inline(always)]
+pub fn hint_random(len: usize) {
+    openvm_platform::custom_insn_i!(
+        opcode = SYSTEM_OPCODE,
+        funct3 = PHANTOM_FUNCT3,
+        rd = In len,
+        rs1 = Const "x0",
+        imm = Const PhantomImm::HintRandom as u16
+    );
+}
+
 /// Store rs1 to [[rd] + imm]_2.
 #[macro_export]
 macro_rules! reveal {

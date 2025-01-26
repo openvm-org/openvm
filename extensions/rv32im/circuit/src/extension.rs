@@ -331,6 +331,10 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             PhantomDiscriminant(Rv32Phantom::HintInput as u16),
         )?;
         builder.add_phantom_sub_executor(
+            phantom::Rv32HintRandomSubEx::new(),
+            PhantomDiscriminant(Rv32Phantom::HintRandom as u16),
+        )?;
+        builder.add_phantom_sub_executor(
             phantom::Rv32PrintStrSubEx,
             PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
         )?;
@@ -471,10 +475,19 @@ mod phantom {
     };
     use openvm_instructions::PhantomDiscriminant;
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
+    use rand::{rngs::OsRng, Rng};
 
     use crate::adapters::unsafe_read_rv32_register;
 
     pub struct Rv32HintInputSubEx;
+    pub struct Rv32HintRandomSubEx {
+        rng: OsRng,
+    }
+    impl Rv32HintRandomSubEx {
+        pub fn new() -> Self {
+            Self { rng: OsRng }
+        }
+    }
     pub struct Rv32PrintStrSubEx;
 
     impl<F: Field> PhantomSubExecutor<F> for Rv32HintInputSubEx {
@@ -504,6 +517,25 @@ mod phantom {
             let capacity = hint.len().div_ceil(4) * 4;
             hint.resize(capacity, F::ZERO);
             streams.hint_stream.extend(hint);
+            Ok(())
+        }
+    }
+
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintRandomSubEx {
+        fn phantom_execute(
+            &mut self,
+            _: &MemoryController<F>,
+            streams: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            len: F,
+            _: F,
+            _: u16,
+        ) -> eyre::Result<()> {
+            let len = len.as_canonical_u32() as usize;
+            streams.hint_stream.clear();
+            streams.hint_stream.extend(
+                std::iter::repeat_with(|| F::from_canonical_u8(self.rng.gen::<u8>())).take(len),
+            );
             Ok(())
         }
     }

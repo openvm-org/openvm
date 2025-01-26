@@ -275,6 +275,8 @@ pub enum Rv32HintStoreOpcode {
 pub enum Rv32Phantom {
     /// Prepare the next input vector for hinting, but prepend it with a 4-byte decomposition of its length instead of one field element.
     HintInput = 0x20,
+    /// Prepare given amount of random numbers for hinting.
+    HintRandom,
     /// Peek string from memory and print it to stdout.
     PrintStr,
 }

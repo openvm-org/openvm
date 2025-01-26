@@ -37,4 +37,29 @@ mod tests {
         air_test(Rv32WithKernelsConfig::default(), exe);
         Ok(())
     }
+
+    #[test]
+    fn test_hashmap() -> Result<()> {
+        let sdk = Sdk;
+
+        let elf = sdk.build(
+            GuestOptions::default().with_features(["std"]),
+            get_programs_dir!(),
+            &Some(TargetFilter {
+                kind: "bin".to_string(),
+                name: "hashmap".to_string(),
+            }),
+        )?;
+        let exe = VmExe::from_elf(
+            elf.clone(),
+            Transpiler::<BabyBear>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(LongFormTranspilerExtension),
+        )?;
+
+        air_test(Rv32WithKernelsConfig::default(), exe);
+        Ok(())
+    }
 }

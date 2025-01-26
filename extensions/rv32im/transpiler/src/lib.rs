@@ -78,6 +78,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
                         F::ZERO,
                         0,
                     ),
+                    PhantomImm::HintRandom => Instruction::phantom(
+                        PhantomDiscriminant(Rv32Phantom::HintRandom as u16),
+                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
+                        F::ZERO,
+                        0,
+                    ),
                     PhantomImm::PrintStr => Instruction::phantom(
                         PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
                         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
