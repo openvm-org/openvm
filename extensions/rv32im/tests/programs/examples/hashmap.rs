@@ -14,5 +14,5 @@ fn main() {
     assert!(map.get(&1) == Some(&2));
     assert!(map.get(&2) == Some(&8));
     assert!(!map.contains_key(&3));
-    openvm::io::println(format!("{:?}", map.get(&1).unwrap()));
+    println!("{:?}", map.get(&1).unwrap());
 }

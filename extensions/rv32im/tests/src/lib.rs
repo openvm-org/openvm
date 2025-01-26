@@ -167,6 +167,22 @@ mod tests {
     }
 
     #[test]
+    fn test_hashmap() -> Result<()> {
+        let elf =
+            build_example_program_at_path_with_features(get_programs_dir!(), "hashmap", ["std"])?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )?;
+        let config = Rv32ImConfig::default();
+        air_test(config, exe);
+        Ok(())
+    }
+
+    #[test]
     fn test_tiny_mem_test() -> Result<()> {
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),

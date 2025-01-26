@@ -531,12 +531,11 @@ mod phantom {
             _: F,
             _: u16,
         ) -> eyre::Result<()> {
-            let rd = unsafe_read_rv32_register(memory, a);
-            let len = memory.unsafe_read_cell(F::TWO, F::from_canonical_u32(rd));
-            let len = len.as_canonical_u32() as usize;
+            let len = unsafe_read_rv32_register(memory, a) as usize;
+            eprintln!("len: {}", len);
             streams.hint_stream.clear();
             streams.hint_stream.extend(
-                std::iter::repeat_with(|| F::from_canonical_u8(self.rng.gen::<u8>())).take(len),
+                std::iter::repeat_with(|| F::from_canonical_u8(self.rng.gen::<u8>())).take(len * 4),
             );
             Ok(())
         }

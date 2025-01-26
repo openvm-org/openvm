@@ -7,7 +7,6 @@ edition = "2021"
 [dependencies]
 openvm = { path = "../../../../crates/toolchain/openvm" }
 openvm-native-guest-macro = { path = "../../guest-macro", default-features = false }
-openvm-platform = { path = "../../../../crates/toolchain/platform", default-features = false }
 
 [features]
 default = []
@@ -19,7 +18,3 @@ openvm-native-transpiler = { path = "../../transpiler", default-features = false
 openvm-instructions = { path = "../../../../crates/toolchain/instructions", default-features = false }
 openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "8c9f94", default-features = false }
 openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "8c9f94", default-features = false }
-
-[[example]]
-name = "hashmap"
-path = "src/examples/hashmap.rs"
