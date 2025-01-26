@@ -532,7 +532,6 @@ mod phantom {
             _: u16,
         ) -> eyre::Result<()> {
             let len = unsafe_read_rv32_register(memory, a) as usize;
-            eprintln!("len: {}", len);
             streams.hint_stream.clear();
             streams.hint_stream.extend(
                 std::iter::repeat_with(|| F::from_canonical_u8(self.rng.gen::<u8>())).take(len * 4),
