@@ -48,8 +48,6 @@ pub struct KeccakInstructionCols<T> {
     pub src_ptr: T,
     /// Pointer to address space 1 `len` register
     pub len_ptr: T,
-    /// Memory address space
-    pub e: T,
     // Register values
     /// dst <- \[dst_ptr:4\]_1
     pub dst: [T; RV32_REGISTER_NUM_LIMBS],
@@ -140,7 +138,6 @@ impl<T: Copy> KeccakInstructionCols<T> {
         builder.assert_eq(self.dst_ptr, other.dst_ptr);
         builder.assert_eq(self.src_ptr, other.src_ptr);
         builder.assert_eq(self.len_ptr, other.len_ptr);
-        builder.assert_eq(self.e, other.e);
         assert_array_eq(builder, self.dst, other.dst);
         assert_array_eq(builder, self.src_limbs, other.src_limbs);
         builder.assert_eq(self.src, other.src);

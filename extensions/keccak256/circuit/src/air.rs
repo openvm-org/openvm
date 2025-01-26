@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not, select},
 };
-use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS};
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_rv32im_circuit::adapters::abstract_compose;
 use openvm_stark_backend::{
@@ -139,8 +139,6 @@ impl KeccakVmAir {
             local.instruction.dst,
             next.instruction.dst,
         );
-        // needed for memory reads
-        block_transition.assert_eq(local.instruction.e, next.instruction.e);
         // these are not used and hence not necessary, but putting for safety until performance becomes an issue:
         block_transition.assert_eq(local.instruction.dst_ptr, next.instruction.dst_ptr);
         block_transition.assert_eq(local.instruction.src_ptr, next.instruction.src_ptr);
@@ -433,7 +431,7 @@ impl KeccakVmAir {
                     src_ptr.into(),
                     len_ptr.into(),
                     reg_addr_sp.into(),
-                    instruction.e.into(),
+                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
                 ],
                 ExecutionState::new(instruction.pc, instruction.start_timestamp),
                 timestamp_change,
@@ -559,7 +557,7 @@ impl KeccakVmAir {
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(local.instruction.e, ptr),
+                    MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), ptr),
                     word, // degree 2
                     timestamp.clone(),
                     mem_aux,
@@ -612,7 +610,7 @@ impl KeccakVmAir {
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
-                        instruction.e,
+                        AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
                         dst.clone() + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE),
                     ),
                     digest_bytes.try_into().unwrap(),

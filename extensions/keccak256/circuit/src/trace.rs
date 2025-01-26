@@ -69,8 +69,6 @@ where
             let src_read = memory.record_by_id(record.src_read);
             let len_read = memory.record_by_id(record.len_read);
 
-            let digest_writes = record.digest_writes.map(|id| memory.record_by_id(id));
-
             state = [0u64; 25];
             let src_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] = from_fn(|i| src_read.data[i + 1]);
             let len_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] = from_fn(|i| len_read.data[i + 1]);
@@ -82,7 +80,6 @@ where
                 dst_ptr: dst_read.pointer,
                 src_ptr: src_read.pointer,
                 len_ptr: len_read.pointer,
-                e: digest_writes[0].address_space,
                 dst: dst_read.data.clone().try_into().unwrap(),
                 src_limbs,
                 src: Val::<SC>::from_canonical_usize(record.input_blocks[0].src),
