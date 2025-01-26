@@ -26,6 +26,6 @@ pub const CSRRW_FUNCT3: u8 = 0b001;
 #[repr(u16)]
 pub enum PhantomImm {
     HintInput = 0,
-    HintRandom,
     PrintStr,
+    HintRandom,
 }
