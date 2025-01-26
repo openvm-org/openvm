@@ -10,13 +10,17 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 ## System Instructions
 
+### Instructions
+
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
 | System | `SystemOpcode::TERMINATE` | TERMINATE |
 | System | `SystemOpcode::PHANTOM` | PHANTOM |
 | System | `PublishOpcode::PUBLISH` | PUBLISH |
 
-| VM Extension | `PhantomDiscriminant` | ISA Instruction |
+### Phantom Sub-Instructions
+
+| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
 | ------------- | ---------- | ------------- |
 | System | `SysPhantom::Nop` | NOP |
 | System | `SysPhantom::DebugPanic` | DEBUG_PANIC |
