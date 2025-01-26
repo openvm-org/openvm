@@ -161,11 +161,21 @@ Each VM extension's behavior is specified below.
 
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
-| sw_add_ne\<C\> | SW_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
-| sw_double\<C\> | SW_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                 |
+| sw_add_ne\<C\> | EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| sw_double\<C\> | EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                 |
+| setup\<C\>     | SETUP_EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) != 0`, SETUP_EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 0` |
+| hint_decompress| PHANTOM `ind(rd), ind(rs1), HintDecompress as u16` |
 
 ### Pairing Extension
 
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
+| miller_double_step| MILLER_DOUBLE_STEP_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2` |
+| miller_double_and_add_step| MILLER_DOUBLE_AND_ADD_STEP_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
+| fp12_mul| FP12_MUL_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
+| evaluate_line| EVALUATE_LINE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
+| mul_013_by_013| MUL_013_BY_013_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
+| mul_by_01234| MUL_BY_01234_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
+| mul_023_by_023| MUL_023_BY_023_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
+| mul_by_02345| MUL_BY_02345_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
 | hint_final_exp | PHANTOM `ind(rs1), pairing_idx, HintFinalExp as u16`             |
