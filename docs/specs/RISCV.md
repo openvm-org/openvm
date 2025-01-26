@@ -1,6 +1,6 @@
 # RISC-V Custom Instructions for VM Extensions
 
-VM extensions in OpenVM consisting of intrinsics are supported in the Rust frontend by inserting custom RISC-V directives to be passed through LLVM into the RISC-V ELF using a standard 32-bit RISC-V encoding. This document specifies the custom instruction format used for the default set of intrinsic VM extensions.
+VM extensions in OpenVM consisting of intrinsics are supported in the Rust frontend by inserting custom RISC-V directives to be passed through LLVM into the RISC-V ELF using a standard 32-bit RISC-V encoding. This document specifies the custom instruction format used for the default set of intrinsic VM extensions. These custom instructions will be transpiled to OpenVM assembly using the modular transpiler specified [here](./transpiler.md).
 
 The custom instruction format in OpenVM conforms to the extension convention in the [RISC-V spec v2.2](https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf) (Chapter 21) to avoid collisions with existing RISC-V extensions. The format is specified as follows:
 
