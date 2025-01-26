@@ -167,7 +167,7 @@ Each VM extension's behavior is specified below.
 | sw_add_ne\<C\> | EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 | sw_double\<C\> | EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                 |
 | setup\<C\>     | SETUP_EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) != 0`, SETUP_EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 0` |
-| hint_decompress| PHANTOM `ind(rd), ind(rs1), phantom_c(idx, HintDecompress)` |
+| hint_decompress| PHANTOM `ind(rd), ind(rs1), phantom_c(curve_idx, HintDecompress)` |
 
 ### Pairing Extension
 
@@ -181,4 +181,4 @@ Each VM extension's behavior is specified below.
 | mul_by_01234| MUL_BY_01234_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
 | mul_023_by_023| MUL_023_BY_023_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
 | mul_by_02345| MUL_BY_02345_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
-| hint_final_exp | PHANTOM `ind(rs1), pairing_idx, phantom_c(idx, HintFinalExp)`             |
+| hint_final_exp | PHANTOM `ind(rs1), pairing_idx, phantom_c(pairing_idx, HintFinalExp)`             |
