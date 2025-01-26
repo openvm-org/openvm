@@ -109,8 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // 11. Verify the EVM proof
-    let success = sdk.verify_evm_proof(&verifier, &proof);
-    assert!(success);
+    sdk.verify_evm_proof(&verifier, &proof)?;
     // ANCHOR_END: evm_verification
 
     Ok(())
