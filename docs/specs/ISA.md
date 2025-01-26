@@ -77,14 +77,15 @@ runtime execution
 
 These streams do not live in OpenVM memory, and their state is not constrained in ZK. At runtime, instructions like `HINT_STORE_RV32` (from the RV32IM extension) and `HINT_STOREW, HINT_STOREW4` (from the native extension) can read from the `hint_stream` and write them to OpenVM memory to provide non-deterministic hints.  
 
-### Public Outputs
+### Public Inputs and Outputs
 
-By default, all inputs to the program are private (see [Hints](#hints)). At the end of program execution, a public list
-of user-specified field elements is output. The length of the list is a VM configuration parameter, and the list is
-initialized with zero elements. The VM has two configuration modes: continuations enabled and continuations disabled.
-When continuations are enabled, users can store values into the public output list via the `REVEAL_RV32` instruction.
-When continuations are disabled, users can store values into the public output list via the `PUBLISH` instruction.
+To make program inputs or outputs public, OpenVM allows the user to specify a list of field elements to make public. To populate this list, users can use:
 
+- If continuations are enabled: `REVEAL_RV32` (from the RV32IM extension)
+- If continuations are disabled: `PUBLISH` (from the system extension)
+
+/// TODO[yi]: Fill in the parameter name.
+The list is initially empty and has a maximum length given by a VM configuration parameter.
 
 ### Constants and Configuration Parameters
 
