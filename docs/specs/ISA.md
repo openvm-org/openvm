@@ -174,6 +174,20 @@ The opcodes below are supported by the OpenVM system and do not belong to any VM
 | PHANTOM   | `_, _, c` | Sets `to_pc = from_pc + DEFAULT_PC_STEP`. The operand `c` determines which phantom instruction (see below) is run. |
 | PUBLISH      | `a,b,_,d,e` | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                                                                                    |
 
+The **PHANTOM** instruction has different behavior at runtime based on the operand `c`.
+More specifically, the low 16-bits `c.as_canonical_u32() & 0xffff` are used as a discriminant to determine a phantom
+sub-instruction. Phantom sub-instructions supported by the system are listed below, and VM extensions can define additional phantom sub-instructions.
+Phantom sub-instructions are only allowed to use operands `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
+Besides the description below, recall that the phantom instruction always advances the program counter by `DEFAULT_PC_STEP`.
+always advances the program counter by `DEFAULT_PC_STEP`.
+
+| Name                      | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Nop                       | 0x00         | `_`           | Does nothing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| DebugPanic                | 0x01         | `_`           | Causes the runtime to panic on the host machine and prints a backtrace if `RUST_BACKTRACE=1` is set.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| CtStart                   | 0x02         | `_`           | Opens a new span for tracing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| CtEnd                     | 0x03         | `_`           | Closes the current span.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+
 ### RV32IM Extension
 
 While the architecture allows creation of VMs without RISC-V support, we define a set of instructions that are meant to
@@ -268,7 +282,7 @@ level.
 
 Note that AUIPC_RV32 does not have any condition for the register write.
 
-#### Multiplication Extension
+#### RV32M Extension
 
 For multiplication extension instructions, we fix `d = 1`.
 MUL_RV32 performs an 32-bit×32-bit multiplication and places the lower 32 bits in the
@@ -293,6 +307,15 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 | REM_RV32    | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `i32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`. Overflow: if `i32([b:4]_1) = -2^31` and `i32([c:4]_1) = -1`, set `[a:4]_1 = 0`.         |
 | REMU_RV32   | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `u32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`.                                                                                         |
 
+#### Phantom Sub-Instructions
+
+The RV32IM extension defines the following phantom sub-instructions.
+
+| Name                      | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Rv32HintInput             | 0x20         | `_`           | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[(hint.len() as u32).to_le_bytes()), hint].concat()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Rv32PrintStr              | 0x21         | `a,b,_`       | Peeks at `[r32{0}(a)..r32{0}(a) + r32{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+
 ### RV32 Intrinsics
 
 RV32 intrinsics are custom OpenVM opcodes that are designed to be compatible with the RV32 architecture.
@@ -312,14 +335,19 @@ We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(
 | HINT_BUFFER_RV32 | `a,b,_,1,2` | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. Very important: `l` should not be 0. |
 | REVEAL_RV32      | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`. Only valid when continuations are enabled.                                               |
 
-#### Hashes
+### Keccak Extension
 
 | Name           | Operands    | Description                                                                                                                                                              |
 | -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | KECCAK256_RV32 | `a,b,c,1,e` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`.                                                        |
+
+### SHA2-256 Extension
+
+| Name           | Operands    | Description                                                                                                                                                              |
+| -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | SHA256_RV32    | `a,b,c,1,2` | `[r32{0}(a):32]_2 = sha256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `16` and writes with block size `32`. |
 
-#### 256-bit Integers
+### BigInt Extension
 
 The 256-bit ALU intrinsic instructions perform operations on 256-bit signed/unsigned integers where integer values are
 read/written from/to memory in address space `2`. The address space `2` pointer locations are obtained by reading
@@ -330,7 +358,7 @@ For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be 
 Each instruction performs block accesses with block size `4` in address space `1` and block size `32` in address space
 `2`.
 
-##### 256-bit ALU
+#### 256-bit ALU
 
 | Name         | Operands    | Description                                                                                                                          |
 | ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -345,7 +373,7 @@ Each instruction performs block accesses with block size `4` in address space `1
 | SLT256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = i256([r32{0}(b):32]_2) < i256([r32{0}(c):32]_2) ? 1 : 0`                                                         |
 | SLTU256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = u256([r32{0}(b):32]_2) < u256([r32{0}(c):32]_2) ? 1 : 0`                                                         |
 
-##### 256-bit Branch
+#### 256-bit Branch
 
 | Name         | Operands    | Description                                                    |
 | ------------ | ----------- | -------------------------------------------------------------- |
@@ -356,7 +384,7 @@ Each instruction performs block accesses with block size `4` in address space `1
 | BLTU256_RV32 | `a,b,c,1,2` | `if(u256([r32{0}(a):32]_2) < u256([r32{0}(b):32]_2)) pc += c`  |
 | BGEU256_RV32 | `a,b,c,1,2` | `if(u256([r32{0}(a):32]_2) >= u256([r32{0}(b):32]_2)) pc += c` |
 
-##### 256-bit Multiplication
+#### 256-bit Multiplication
 
 Multiplication performs 256-bit×256-bit multiplication and writes the lower 256-bits to memory.
 Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
@@ -365,7 +393,7 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 | ----------- | ----------- | ----------------------------------------------------------------- |
 | MUL256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = ([r32{0}(b):32]_2 * [r32{0}(c):32]_2)[0:255]` |
 
-#### Modular Arithmetic
+### Modular Arithmetic Extension
 
 The VM can be configured to support intrinsic instructions for modular arithmetic. The VM configuration will specify a
 list of supported moduli. For each positive integer modulus `N` there will be associated configuration parameters
@@ -406,36 +434,6 @@ format with each limb having `LIMB_BITS` bits.
 | ISEQMOD_RV32\<N\>       | `a,b,c,1,2` | `[a:4]_1 = [r32{0}(b): N::NUM_LIMBS]_2 == [r32{0}(c): N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are less than `N` and then sets the register value of `[a:4]_1` to `1` or `0` depending on whether the two big integers are equal. |
 | SETUP_ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` in the chip that handles modular equality. For the sake of implementation convenience it also writes something (can be anything) into register value of `[a:4]_1`                                                                                        |
 
-#### Short Weierstrass Elliptic Curve Arithmetic
-
-The VM can be configured to support intrinsic instructions for elliptic curves `C` in short Weierstrass form given by
-equation `C: y^2 = x^3 + C::B` where `C::B` is a constant of the coordinate field. We note that the definitions of the
-curve arithmetic operations do not depend on `C::B`. The VM configuration will specify a list of supported curves. For
-each short Weierstrass curve `C` there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (
-defined below). For each curve `C`, the instructions below are supported.
-
-An affine curve point `EcPoint(x, y)` is a pair of `x,y` where each element is an array of `C::COORD_SIZE` elements each
-with `LIMB_BITS = 8` bits. When the coordinate field `C::Fp` of `C` is prime, the format of `x,y` is guaranteed to be
-the same as the format used in the [modular arithmetic instructions](#modular-arithmetic). A curve point will be
-represented as `2 * C::COORD_SIZE` contiguous cells in memory.
-
-We use the following notation below:
-
-```
-r32_ec_point(a) -> EcPoint {
-    let x = [r32{0}(a): C::COORD_SIZE]_2;
-    let y = [r32{0}(a) + C::COORD_SIZE: C::COORD_SIZE]_2;
-    return EcPoint(x, y);
-}
-```
-
-| Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
-| -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SW_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
-| SETUP_SW_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
-| SW_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
-| SETUP_SW_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
-
 #### Complex Extension Field
 
 The VM can be configured to support intrinsic instructions for complex extension fields of prime fields. A complex
@@ -466,7 +464,37 @@ r32_fp2(a) -> Fp2 {
 | DIV\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)`                                                                                                                                   |
 | SETUP_MULDIV\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
 
-#### Optimal Ate Pairing
+### Elliptic Curve Extension
+
+The VM can be configured to support intrinsic instructions for elliptic curves `C` in short Weierstrass form given by
+equation `C: y^2 = x^3 + C::B` where `C::B` is a constant of the coordinate field. We note that the definitions of the
+curve arithmetic operations do not depend on `C::B`. The VM configuration will specify a list of supported curves. For
+each short Weierstrass curve `C` there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (
+defined below). For each curve `C`, the instructions below are supported.
+
+An affine curve point `EcPoint(x, y)` is a pair of `x,y` where each element is an array of `C::COORD_SIZE` elements each
+with `LIMB_BITS = 8` bits. When the coordinate field `C::Fp` of `C` is prime, the format of `x,y` is guaranteed to be
+the same as the format used in the [modular arithmetic instructions](#modular-arithmetic). A curve point will be
+represented as `2 * C::COORD_SIZE` contiguous cells in memory.
+
+We use the following notation below:
+
+```
+r32_ec_point(a) -> EcPoint {
+    let x = [r32{0}(a): C::COORD_SIZE]_2;
+    let y = [r32{0}(a) + C::COORD_SIZE: C::COORD_SIZE]_2;
+    return EcPoint(x, y);
+}
+```
+
+| Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
+| -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SW_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
+| SETUP_SW_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
+| SW_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
+| SETUP_SW_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
+
+### Pairing Extension
 
 The VM can be configured to enable intrinsic instructions for accelerating the optimal Ate pairing.
 Currently the supported pairing friendly elliptic curves are BN254 and BLS12-381, which both have embedding degree 12.
@@ -489,7 +517,16 @@ We lay out `Fp12` in memory as `c0, ..., c5` where `c_i: Fp2` and the `Fp12` ele
 | MUL_023_BY_023\<C\>             | `a,b,c,1,2` | Let `line_0: EvaluatedLine<Fp2>` be read starting from `[r32{0}(b)]_2` and `line_1: EvaluatedLine<Fp2>` be read starting from `[r32{0}(c)]_2`. The output `mul_023_by_023(line_0, line_1): [Fp2; 5]` is written contiguously to memory starting at `[r32{0}(a)]_2`. Only enabled if the sextic twist of `C` is **M-type**. |
 | MUL_BY_02345\<C\>               | `a,b,c,1,2` | Let `f: Fp12` be read starting from `[r32{0}(b)]_2` and `x: [Fp2; 5]` be read starting from `[r32{0}(c)]_2`. The output `mul_by_02345(f, line): Fp12` is written contiguously to memory starting at `[r32{0}(a)]_2`. Only enabled if the sextic twist of `C` is **M-type**.                                                |
 
-### Native Kernel
+#### Phantom Sub-Instructions
+
+The pairing extension defines the following phantom sub-instructions.
+
+| Name                      | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| PairingHintFinalExp       | 0x30         | `a,b,c_upper` | Uses `c_upper = PAIRING_IDX` to determine the curve: `BN254 = 0, BLS12-381 = 1`. `a` is a pointer to `(p_ptr, p_len): (u32, u32)` in memory, and `b` is a pointer to `(q_ptr, q_len): (u32, u32)` in memory (e.g., `p_ptr = [r32{0}(a)..r32{0}(a) + 4]_2`). The sub-instruction peeks at `P = [p_ptr..p_ptr + p_len * size_of<Fp>() * 2]_2` and `Q = [q_ptr..q_ptr + q_len * size_of<Fp2>() * 2]_2` and views `P` as a list of `G1Affine` elements and `Q` as a list of `G2Affine` elements. It computes the multi-Miller loop on `(P, Q)` and then the final exponentiation hint `(residue_witness, scaling_factor): (Fp12, Fp12)`. It resets the hint stream to equal `(residue_witness, scaling_factor)` as `NUM_LIMBS * 12 * 2` bytes. |
+| WeierstrassHintDecompress | 0x40         | `a,b,c_upper` | Uses `c_upper = C::IDX` to determine the index of the curve `C`, from the list of enabled curves. Read from memory `x = [r32{0}(a): C::COORD_SIZE]_2` for an element in the coordinate field of `C`. Let `rec_id = [r32{0}(b)]_2` be a byte in memory for the recovery id, where the lowest bit is 1 if and only if the `y` coordinate of the corresponding point is odd. The sub-instruction resets the hint stream to equal the unique `y: [_; C::COORD_SIZE]` such that `(x, y)` is a point on `C` with parity matching `rec_id`, if it exists, or to undefined `C::COORD_SIZE` elements otherwise.                                                                                                                                     |
+
+### Native Extension
 
 The native kernel instructions were adapted from [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with
 changes to the
@@ -514,7 +551,7 @@ address space `0` is allowed for non-vectorized reads but not allowed for writes
 | HINT_STOREW4 | `_,b,c,d,e` | Set `[[c]_d + b:4]_e = next 4 elements from hint stream`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                   |
 | CASTF        | `a,b,_,d,e` | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. Both `d, e` must be non-zero. |
 
-#### Native Field Arithmetic
+#### Field Arithmetic
 
 This instruction set does native field operations. Below, `e,f` may be any valid address space, `d` may be any valid
 non-zero address space. When either `e` or `f` is zero, `[b]_0` and `[c]_0` should be interpreted as the immediates `b`
@@ -527,9 +564,7 @@ and `c`, respectively.
 | MULF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e * [c]_f`.                              |
 | DIVF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e / [c]_f`. Division by zero is invalid. |
 
-#### Native Extension Field Arithmetic
-
-##### BabyBear Quartic Extension Field
+#### Extension Field Arithmetic
 
 This is only enabled when the native field is `BabyBear`. The quartic extension field is defined by the irreducible
 polynomial $x^4 - 11$ (this choice matches Plonky3, but we note that Risc0 uses the polynomial $x^4 + 11$ instead).
@@ -569,7 +604,7 @@ and only support `CHUNK = 8` and `WIDTH = 16` in BabyBear Poseidon2 above. For t
 is read in two batches of size `CHUNK`, and, similarly, the output is written in either one or two batches of
 size `CHUNK`, depending on the output size of the corresponding opcode.
 
-#### Verification
+#### Proof Verification
 
 We have the following special opcodes tailored to optimize verification.
 
@@ -578,24 +613,12 @@ We have the following special opcodes tailored to optimize verification.
 | **VERIFY_BATCH** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e,f,g` | Further described [here](../../extensions/native/circuit/src/poseidon2/README.md). Due to already having a large number of operands, the address space is fixed to be `AS::Native = 4`. Computes `mmcs::verify_batch`. In the native address space, `[a], [b], [d], [e], [f]` should be the array start pointers for the dimensions array, the opened values array (which contains more arrays), the proof (which contains arrays of length `CHUNK`) and the commitment (which is an array of length `CHUNK`). `[c]` should be the length of the opened values array (and so should be equal to the length of the dimensions array as well). `g` should be the reciprocal of the size (in field elements) of the values contained in the opened values array: if the opened values array contains field elements, `g` should be 1; if the opened values array contains extension field elements, `g` should be 1/4. |
 | **FRI_REDUCED_OPENING**                                                                                                                                                                                                      | `a,b,c,d,e,f`   | Let `length = [e]_d`, `a_ptr = [a]_d`, `b_ptr = [b]_d`, `alpha = [f:EXT_DEG]_d`. `a_ptr` is the address of Felt array `a_arr` and `b_ptr` is the address of Ext array `b_arr`. Compute `sum((b_arr[i] - a_arr[i]) * alpha ^ i)` for `i=0..length` and write the value into `[c:EXT_DEG]_d`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
-### Phantom Sub-Instructions
+#### Phantom Sub-Instructions
 
-As mentioned in [System](#system), the **PHANTOM** instruction has different behavior based on the operand `c`.
-More specifically, the low 16-bits `c.as_canonical_u32() & 0xffff` are used as the discriminant to determine a phantom
-sub-instruction. We list the phantom sub-instructions below. Phantom sub-instructions are only allowed to use operands
-`a,b` and `c_upper = c.as_canonical_u32() >> 16`. Besides the description below, recall that the phantom instruction
-always advances the program counter by `DEFAULT_PC_STEP`.
+The native extension defines the following phantom sub-instructions.
 
 | Name                      | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Nop                       | 0x00         | `_`           | Does nothing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| DebugPanic                | 0x01         | `_`           | Causes the runtime to panic on the host machine and prints a backtrace if `RUST_BACKTRACE=1` is set.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| CtStart                   | 0x02         | `_`           | Opens a new span for tracing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| CtEnd                     | 0x03         | `_`           | Closes the current span.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | NativePrint               | 0x10         | `a,_,c_upper` | Prints `[a]_{c_upper}` to stdout on the host machine.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | NativeHintInput           | 0x11         | `_`           | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[[F::from_canonical_usize(hint.len())], hint].concat()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | NativeHintBits            | 0x12         | `a,b,c_upper` | Resets the hint stream to be the least significant `b` bits of `([a]_{c_upper}).as_canonical_u32()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| Rv32HintInput             | 0x20         | `_`           | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[(hint.len() as u32).to_le_bytes()), hint].concat()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Rv32PrintStr              | 0x21         | `a,b,_`       | Peeks at `[r32{0}(a)..r32{0}(a) + r32{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| PairingHintFinalExp       | 0x30         | `a,b,c_upper` | Uses `c_upper = PAIRING_IDX` to determine the curve: `BN254 = 0, BLS12-381 = 1`. `a` is a pointer to `(p_ptr, p_len): (u32, u32)` in memory, and `b` is a pointer to `(q_ptr, q_len): (u32, u32)` in memory (e.g., `p_ptr = [r32{0}(a)..r32{0}(a) + 4]_2`). The sub-instruction peeks at `P = [p_ptr..p_ptr + p_len * size_of<Fp>() * 2]_2` and `Q = [q_ptr..q_ptr + q_len * size_of<Fp2>() * 2]_2` and views `P` as a list of `G1Affine` elements and `Q` as a list of `G2Affine` elements. It computes the multi-Miller loop on `(P, Q)` and then the final exponentiation hint `(residue_witness, scaling_factor): (Fp12, Fp12)`. It resets the hint stream to equal `(residue_witness, scaling_factor)` as `NUM_LIMBS * 12 * 2` bytes. |
-| WeierstrassHintDecompress | 0x40         | `a,b,c_upper` | Uses `c_upper = C::IDX` to determine the index of the curve `C`, from the list of enabled curves. Read from memory `x = [r32{0}(a): C::COORD_SIZE]_2` for an element in the coordinate field of `C`. Let `rec_id = [r32{0}(b)]_2` be a byte in memory for the recovery id, where the lowest bit is 1 if and only if the `y` coordinate of the corresponding point is odd. The sub-instruction resets the hint stream to equal the unique `y: [_; C::COORD_SIZE]` such that `(x, y)` is a point on `C` with parity matching `rec_id`, if it exists, or to undefined `C::COORD_SIZE` elements otherwise.                                                                                                                                     |
