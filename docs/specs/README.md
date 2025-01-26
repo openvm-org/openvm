@@ -36,6 +36,7 @@ More details about OpenVM are provided in the specific pages below.
 
 - [Circuit Architecture](./circuit.md)
 - [Instruction Set Architecture](./ISA.md)
+- [Code-Level Instruction Mapping](./isa-table.md)
 - [RISC-V custom instructions](./RISCV.md)
 - [Transpiler from RISC-V ELF to OpenVM assembly](./transpiler.md)
 - [Continuations](./continuations.md)
