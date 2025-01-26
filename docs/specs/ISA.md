@@ -112,11 +112,6 @@ The pointers can have values in `[0, 2^pointer_max_bits)`. We require `as_height
 > A memory cell in any address space is always a field element, but the VM _may_ later impose additional bit size
 > constraints on certain address spaces (e.g., everything in address space `2` must be a byte).
 
-### System Calls
-
-There are currently no system calls supported in OpenVM. Traditionally, system calls are used when the ISA and system are customized separately.
-Since OpenVM controls both the ISA and the underlying virtual machine, we instead use custom opcodes to introduce additional functionality.
-
 ### Constants and Configuration Parameters
 
 OpenVM depends on the following parameters, some of which are fixed and some of which are configurable:
@@ -306,6 +301,10 @@ with user input-output. We use the same notation for `r32{c}(b) := i32([b:4]_1) 
 | HINT_STOREW_RV32 | `_,b,c,1,2` | `[r32{c}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                            |
 | HINT_BUFFER_RV32 | `a,b,_,1,2` | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. Very important: `l` should not be 0. |
 | REVEAL_RV32      | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`. Only valid when continuations are enabled. |
+
+#### System Calls
+
+Although OpenVM supports operations outside of RV32IM using VM extensions instead of system calls, the RV32IM extension supports the following system calls for compatibility with existing libraries. [TODO]
 
 #### Phantom Sub-Instructions
 
