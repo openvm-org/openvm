@@ -43,6 +43,7 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 | reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`        |
 | hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                             |
 | printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`                 |
+| hintrandom     | PHANTOM `ind(rd), _, HintRandomRv32 as u16`                      |
 
 ### Standard RV32IM Instructions
 

@@ -26,7 +26,7 @@ In addition to the standard RV32IM opcodes, we support the following additional 
 | reveal      | I   | 0001011     | 010    |           | Stores the 4-byte word `rs1` at address `rd + imm` in user IO space.                                                        |
 | hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to the vector.                                                      |
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails. |
-| hintrandom  | I   | 0001011     | 011    | 0x2       | Resets the hint stream to `4 * r32{0}(a)` random bytes from `rand::rngs::OsRng` on the host. |
+| hintrandom  | I   | 0001011     | 011    | 0x2       | Resets the hint stream to `4 * rd` random bytes from `rand::rngs::OsRng` on the host. |
 
 ## Keccak Extension
 
