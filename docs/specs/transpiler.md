@@ -136,6 +136,8 @@ Each VM extension's behavior is specified below.
 
 ### Algebra Extension
 
+#### Modular Arithmetic
+
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
 | addmod\<N\>    | ADDMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
@@ -143,7 +145,16 @@ Each VM extension's behavior is specified below.
 | mulmod\<N\>    | MULMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
 | divmod\<N\>    | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
 | iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`            |
-| setup\<N\>     | SETUP_ADDSUB,MULDIV,ISEQ_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` |
+| setup\<N\>     | SETUP_ADDSUB_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 0`, SETUP_MULDIV_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 1`, SETUP_ISEQ_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 2` |
+
+#### Complex Extension Field Arithmetic
+
+| RISC-V Inst    | OpenVM Instruction                                               |
+| -------------- | ---------------------------------------------------------------- |
+| addcomplex  | ADD\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| subcomplex  | SUB\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| mulcomplex  | MUL\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| divcomplex  | DIV\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 
 ### Elliptic Curve Extension
 

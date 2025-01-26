@@ -100,10 +100,10 @@ Complex extension field arithmetic over `Fp2` depends on `Fp` where `-1` is not 
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                              |
 | ----------- | --- | ----------- | ------ | --------- | ----------------------------------------------------------------------------------------- |
-| add         | R   | 0101011     | 010    | `idx*8`   | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x + y` to `[rd..]_2` |
-| sub         | R   | 0101011     | 010    | `idx*8+1` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x - y` to `[rd..]_2` |
-| mul         | R   | 0101011     | 010    | `idx*8+2` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x * y` to `[rd..]_2` |
-| div         | R   | 0101011     | 010    | `idx*8+3` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x / y` to `[rd..]_2` |
+| addcomplex  | R   | 0101011     | 010    | `idx*8`   | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x + y` to `[rd..]_2` |
+| subcomplex  | R   | 0101011     | 010    | `idx*8+1` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x - y` to `[rd..]_2` |
+| mulcomplex  | R   | 0101011     | 010    | `idx*8+2` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x * y` to `[rd..]_2` |
+| divcomplex  | R   | 0101011     | 010    | `idx*8+3` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x / y` to `[rd..]_2` |
 
 ## Elliptic Curve Extension
 
