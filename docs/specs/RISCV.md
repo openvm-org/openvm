@@ -1,7 +1,5 @@
 # RISC-V Custom Instructions
 
-Although 
-
 OpenVM intrinsic opcodes are callable from a RISC-V ELF as custom RISC-V instructions.
 For these instructions, we will use the standard 32-bit RISC-V encoding unless otherwise specified.
 We follow Chapter 21 of the [RISC-V spec v2.2](https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf) on how to extend the ISA, aiming to avoid collisions with existing standard instruction formats. As suggested by Chapter 19, for instructions which fit into 32-bits, we will use the _custom-0_ opcode[6:0] prefix **0001011** and _custom-1_ opcode[6:0] prefix **0101011**. Note that instructions are parsed from right to left, and opcode[1:0] = 11 is typical for standard 32-bit instructions (opcode[1:0]=00 is used for compressed 16-bit instructions). We will use _custom-0_ for intrinsics that don’t require additional configuration parameters, and _custom-1_ for ones that do (e.g., prime field arithmetic and elliptic curve arithmetic).
