@@ -14,10 +14,6 @@ We now specify the custom instructions for the default set of VM extensions.
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[0:11] | RISC-V description and notes                                                                                                |
 | ----------- | --- | ----------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------- |
 | terminate   | I   | 0001011     | 000    | `code`    | terminate with exit code `code`                                                                                             |
-| nop
-| debugpanic
-| ctstart
-| ctend
 
 ## RV32IM Extension
 
