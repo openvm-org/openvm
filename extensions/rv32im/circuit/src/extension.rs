@@ -524,13 +524,15 @@ mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintRandomSubEx {
         fn phantom_execute(
             &mut self,
-            _: &MemoryController<F>,
+            memory: &MemoryController<F>,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            len: F,
+            a: F,
             _: F,
             _: u16,
         ) -> eyre::Result<()> {
+            let rd = unsafe_read_rv32_register(memory, a);
+            let len = memory.unsafe_read_cell(F::TWO, F::from_canonical_u32(rd));
             let len = len.as_canonical_u32() as usize;
             streams.hint_stream.clear();
             streams.hint_stream.extend(
