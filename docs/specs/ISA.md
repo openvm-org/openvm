@@ -7,7 +7,7 @@ OpenVM supports an extensible instruction set, with different groups of opcodes 
 - [Keccak-256](#keccak-extension): An extension implementing the Keccak-256 hash function compatibly with RISC-V memory.
 - [SHA2-256](#sha2-256-extension): An extension implementing the SHA2-256 hash function compatibly with RISC-V memory.
 - [BigInt](#bigint-extension): An extension supporting 256-bit signed and unsigned integer arithmetic, including multiplication. This extension respects the RISC-V memory format. 
-- [Modular Arithmetic](#modular-arithmetic-extension): An extension supporting modular arithmetic over arbitrary fields and quadratic field extensions. This extension respects the RISC-V memory format.
+- [Algebra](#algebra-extension): An extension supporting modular arithmetic over arbitrary fields and their complex field extensions. This extension respects the RISC-V memory format.
 - [Elliptic curve](#elliptic-curve-extension): An extension for elliptic curve operations over Weierstrass curves, including addition and doubling. This can be used to implement multi-scalar multiplication and ECDSA scalar multiplication. This extension respects the RISC-V memory format.
 - [Pairing](#pairing-extension): An extension containing opcodes used to implement the optimal Ate pairing on the BN254 and BLS12-381 curves. This extension respects the RISC-V memory format.
 
@@ -148,7 +148,7 @@ We now specify instructions supported by the default VM extensions shipping with
 In the specification, operands marked with `_` are not used and should be set to zero. Trailing unused operands should also be set to zero.
 Unless otherwise specified, instructions will by default set `to_pc = from_pc + DEFAULT_PC_STEP`.
 
-### System
+### System Instructions
 
 The opcodes below are supported by the OpenVM system and do not belong to any VM extension.
 
@@ -402,11 +402,15 @@ The native extension defines the following phantom sub-instructions.
 
 ### Keccak Extension
 
+The Keccak extension supports the Keccak256 hash function. It reads and writes to and from memory in the RISC-V address format.
+
 | Name           | Operands    | Description                                                                                                                                                              |
 | -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | KECCAK256_RV32 | `a,b,c,1,e` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`.                                                        |
 
 ### SHA2-256 Extension
+
+The SHA2-256 extension supports the SHA2-256 hash function. It reads and writes to and from memory in the RISC-V address format.
 
 | Name           | Operands    | Description                                                                                                                                                              |
 | -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -414,14 +418,11 @@ The native extension defines the following phantom sub-instructions.
 
 ### BigInt Extension
 
-The 256-bit ALU intrinsic instructions perform operations on 256-bit signed/unsigned integers where integer values are
+The BigInt extension supports operations on 256-bit signed and unsigned integers. Integer values are
 read/written from/to memory in address space `2`. The address space `2` pointer locations are obtained by reading
-register values in address space `1`. Note that these instructions are not the same as instructions on 256-bit
-registers.
+register values in address space `1`. For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`. Each instruction performs block accesses with block size `4` in address space `1` and block size `32` in address space `2`.
 
-For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`.
-Each instruction performs block accesses with block size `4` in address space `1` and block size `32` in address space
-`2`.
+**Note:** These instructions are not the same as instructions on 256-bit registers.
 
 #### 256-bit ALU
 
@@ -458,11 +459,9 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 | ----------- | ----------- | ----------------------------------------------------------------- |
 | MUL256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = ([r32{0}(b):32]_2 * [r32{0}(c):32]_2)[0:255]` |
 
-### Modular Arithmetic Extension
+### Algebra Extension
 
-The VM can be configured to support intrinsic instructions for modular arithmetic. The VM configuration will specify a
-list of supported moduli. For each positive integer modulus `N` there will be associated configuration parameters
-`N::NUM_LIMBS` and `N::BLOCK_SIZE` (defined below). For each modulus `N`, the instructions below are supported.
+The algebra extension supports modular arithmetic over arbitrary fields and their complex field extensions. It is configured to specify a list of supported moduli. The configuration of each supported positive integer modulus `N` includes associated configuration parameters `N::NUM_LIMBS` and `N::BLOCK_SIZE` (defined below). 
 
 The instructions perform operations on unsigned big integers representing elements in the modulus. The big integer
 values are read/written from/to memory in address space `2`. The address space `2` pointer locations are obtained by
@@ -501,14 +500,11 @@ format with each limb having `LIMB_BITS` bits.
 
 #### Complex Extension Field
 
-The VM can be configured to support intrinsic instructions for complex extension fields of prime fields. A complex
-extension field `Fp2` is the quadratic extension of a prime field `Fp` with irreducible polynomial `X^2 + 1`. An element
-in `Fp2` is a pair `c0: Fp, c1: Fp` such that `c0 + c1 u`
-represents a point in `Fp2` where `u^2 = -1`.
+A complex extension field `Fp2` is the quadratic extension of a prime field `Fp` with irreducible polynomial `X^2 + 1`. An element in `Fp2` is a pair `c0: Fp, c1: Fp` such that `c0 + c1 u` represents a point in `Fp2` where `u^2 = -1`.
 
-The VM will only be configured for `Fp2` if the modular arithmetic instructions for `Fp::MODULUS` are also configured.
+The complex extension field `Fp2` is supported only if the modular arithmetic instructions for `Fp::MODULUS` is also supported.
 The memory layout of `Fp2` is then that of two concatenated `Fp` elements,
-and the block size for memory accesses is set to equal the block size of `Fp`.
+and the block size for memory accesses is the block size of `Fp`.
 
 We use the following notation below:
 
@@ -531,10 +527,10 @@ r32_fp2(a) -> Fp2 {
 
 ### Elliptic Curve Extension
 
-The VM can be configured to support intrinsic instructions for elliptic curves `C` in short Weierstrass form given by
-equation `C: y^2 = x^3 + C::B` where `C::B` is a constant of the coordinate field. We note that the definitions of the
+The elliptic curve extension supports arithmetic over elliptic curves `C` in Weierstrass form given by
+equation `C: y^2 = x^3 + C::A * x + C::B` where `C::A` and `C::B` are constants in the coordinate field. We note that the definitions of the
 curve arithmetic operations do not depend on `C::B`. The VM configuration will specify a list of supported curves. For
-each short Weierstrass curve `C` there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (
+each Weierstrass curve `C` there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (
 defined below). For each curve `C`, the instructions below are supported.
 
 An affine curve point `EcPoint(x, y)` is a pair of `x,y` where each element is an array of `C::COORD_SIZE` elements each
@@ -554,10 +550,10 @@ r32_ec_point(a) -> EcPoint {
 
 | Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
 | -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SW_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
-| SETUP_SW_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
-| SW_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
-| SETUP_SW_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
+| EC_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
+| SETUP_EC_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
+| EC_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
+| SETUP_EC_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
 
 #### Phantom Sub-Instructions
 
@@ -565,7 +561,7 @@ The elliptic curve extension defines the following phantom sub-instructions.
 
 | Name                      | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| WeierstrassHintDecompress | 0x40         | `a,b,c_upper` | Uses `c_upper = C::IDX` to determine the index of the curve `C`, from the list of enabled curves. Read from memory `x = [r32{0}(a): C::COORD_SIZE]_2` for an element in the coordinate field of `C`. Let `rec_id = [r32{0}(b)]_2` be a byte in memory for the recovery id, where the lowest bit is 1 if and only if the `y` coordinate of the corresponding point is odd. The sub-instruction resets the hint stream to equal the unique `y: [_; C::COORD_SIZE]` such that `(x, y)` is a point on `C` with parity matching `rec_id`, if it exists, or to undefined `C::COORD_SIZE` elements otherwise.                                                                                                                                     |
+| HintDecompress | 0x40         | `a,b,c_upper` | Uses `c_upper = C::IDX` to determine the index of the curve `C`, from the list of enabled curves. Read from memory `x = [r32{0}(a): C::COORD_SIZE]_2` for an element in the coordinate field of `C`. Let `rec_id = [r32{0}(b)]_2` be a byte in memory for the recovery id, where the lowest bit is 1 if and only if the `y` coordinate of the corresponding point is odd. The sub-instruction resets the hint stream to equal the unique `y: [_; C::COORD_SIZE]` such that `(x, y)` is a point on `C` with parity matching `rec_id`, if it exists, or to undefined `C::COORD_SIZE` elements otherwise.                                                                                                                                     |
 
 ### Pairing Extension
 
