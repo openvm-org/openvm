@@ -175,15 +175,10 @@ Besides the description below, recall that the phantom instruction always advanc
 
 The RV32IM extension introduces OpenVM opcodes which support 32-bit RISC-V via transpilation from a standard RV32IM ELF binary, specified [here](./RISCV.md). These consist of opcodes corresponding 1-1 with RV32IM opcodes, as well as additional user IO opcodes and phantom sub-instructions to support input and debug printing on the host. We denote the OpenVM opcode corresponding to a RV32IM opcode by appending `_RV32`.
 
-The RV32IM extension uses address space `0` for immediates, address space `1` for registers, and address space `2` for memory. All instructions below assume that memory cells in address spaces `1` and `2` are field elements in the range
-`[0, 2^LIMB_BITS)` where `LIMB_BITS = 8`. The instructions must all ensure that any memory writes respect this constraint.
+The RV32IM extension uses address space `0` for immediates, address space `1` for registers, and address space `2` for memory. It assumes that memory cells in address spaces `1` and `2` are field elements in the range
+`[0, 2^LIMB_BITS)` where `LIMB_BITS = 8`, and all instructions in the extension preserve this constraint.
 
-Note that the RV32IM extension opcodes in OpenVM do **not** discard writes to `[0:4]_1`, which corresponds to the `x0` register in RISC-V. However, we enforce that any transpiled RV32IM program has the following properties:
-
-1. `[0:4]_1` has all zeroes in initial memory.
-2. No instruction in the program writes to `[0:4]_1`.
-
-This guarantees that any OpenVM program transpiled from RV32IM conforms to the specification for `x0`. 
+The `i`th RISC-V register is represented by the block `[4 * i:4]_1` of 4 limbs in address space `1`. Note that all memory addresses in address space `1` behave uniformly, and in particular writes to the block `[0:4]_1` which corresponds to the RISC-V register `x0` are allowed in the RV32IM extension. However, as detailed in [RV32IM Transpilation](./RISCV.md#handling-of-the-x0-register), any OpenVM program transpiled from a RV32IM ELF will never contain such a write and conforms to the RV32IM specification.  
 
 #### ALU
 
