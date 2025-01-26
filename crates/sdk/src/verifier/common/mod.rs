@@ -157,7 +157,6 @@ pub fn assert_single_segment_vm_exit_successfully_with_connector_air_id<C: Confi
     connector_air_id: usize,
 ) {
     let connector_pvs = get_connector_pvs_impl(builder, proof, connector_air_id);
-    // FIXME: does single segment VM program always have pc_start = 0?
     // Start PC should be 0
     builder.assert_felt_eq(connector_pvs.initial_pc, C::F::ZERO);
     // Terminate should be 1
@@ -172,7 +171,6 @@ pub fn assert_required_air_for_agg_vm_present<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,
 ) {
-    // FIXME: what if PUBLIC_VALUES_AIR_ID(3) >= proof.per_air.len()?
     let program_air = builder.get(&proof.per_air, PROGRAM_AIR_ID);
     builder.assert_eq::<Usize<_>>(program_air.air_id, RVar::from(PROGRAM_AIR_ID));
     let connector_air = builder.get(&proof.per_air, CONNECTOR_AIR_ID);
@@ -187,7 +185,6 @@ pub fn assert_required_air_for_app_vm_present<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,
 ) {
-    // FIXME: what if MERKLE_AIR_ID(4) >= proof.per_air.len()?
     let program_air = builder.get(&proof.per_air, PROGRAM_AIR_ID);
     builder.assert_eq::<Usize<_>>(program_air.air_id, RVar::from(PROGRAM_AIR_ID));
     let connector_air = builder.get(&proof.per_air, CONNECTOR_AIR_ID);

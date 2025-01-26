@@ -467,7 +467,7 @@ pub fn convert_efr<F: PrimeField, EF: ExtensionField<F>>(a: &EF) -> Vec<Fr> {
 fn stats_snapshot(ctx: &Context<Fr>, range_chip: Arc<RangeChip<Fr>>) -> Halo2Stats {
     Halo2Stats {
         total_gate_cell: ctx.advice.len(),
-        // FIXME: this is inaccurate because of duplicated constants. But it's too slow if we always
+        // Note[Xinding]: this is inaccurate because of duplicated constants. But it's too slow if we always
         // check for duplicates.
         total_fixed: ctx.copy_manager.lock().unwrap().constant_equalities.len(),
         total_lookup_cell: range_chip.lookup_manager()[0].total_rows(),

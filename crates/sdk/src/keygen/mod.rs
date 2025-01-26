@@ -312,7 +312,6 @@ impl AggProvingKey {
         let dummy_root_proof = agg_stark_pk
             .root_verifier_pk
             .generate_dummy_root_proof(dummy_internal_proof);
-        // FIXME: Halo2VerifierProvingKey is not Send + Sync because Array/Usize use Rc<RefCell>.
         let verifier = agg_stark_pk.root_verifier_pk.keygen_static_verifier(
             &reader.read_params(halo2_config.verifier_k),
             dummy_root_proof,

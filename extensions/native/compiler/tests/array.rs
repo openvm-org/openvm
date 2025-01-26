@@ -174,7 +174,7 @@ fn test_fixed_array_var() {
         .range(0, fixed_array.len())
         .for_each(|i_vec, builder| {
             let value: Usize<_> = builder.get(&fixed_array, i_vec[0]);
-            // `len` instructions to initialize variables. FIXME: this is not optimal.
+            // `len` instructions to initialize variables.
             // `len` instructions of `assert_eq`
             builder.assert_eq::<Var<_>>(value, RVar::from(2));
         });

@@ -4,7 +4,6 @@ use openvm_circuit::arch::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_I
 
 use crate::verifier::common::types::SpecialAirIds;
 
-// FIXME: is there a good crate to replace this?
 pub struct AirIdPermutation {
     pub perm: Vec<usize>,
 }

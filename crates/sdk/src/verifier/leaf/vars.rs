@@ -45,7 +45,6 @@ impl Hintable<C> for UserPublicValuesRootProof<F> {
         let len = builder.hint_var();
         let sibling_hashes = builder.array(len);
         builder.range(0, len).for_each(|i_vec, builder| {
-            // FIXME: add hint support for slices.
             let hash = array::from_fn(|_| builder.hint_felt());
             builder.set_value(&sibling_hashes, i_vec[0], hash);
         });

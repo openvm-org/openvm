@@ -7,7 +7,6 @@ use super::Group;
 
 /// Multi-scalar multiplication via Pippenger's algorithm
 // Reference: https://github.com/privacy-scaling-explorations/halo2curves/blob/8771fe5a5d54fc03e74dbc8915db5dad3ab46a83/src/msm.rs#L335
-// FIXME[jpw]: there are many memcpy in this function
 pub fn msm<EcPoint: Group, Scalar: IntMod>(coeffs: &[Scalar], bases: &[EcPoint]) -> EcPoint
 where
     for<'a> &'a EcPoint: Add<&'a EcPoint, Output = EcPoint>,

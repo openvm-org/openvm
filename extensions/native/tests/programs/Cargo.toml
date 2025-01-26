@@ -16,5 +16,5 @@ std = ["openvm/std"]
 openvm-native-compiler = { path = "../../compiler", default-features = false }
 openvm-native-transpiler = { path = "../../transpiler", default-features = false }
 openvm-instructions = { path = "../../../../crates/toolchain/instructions", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "8c9f94", default-features = false }     # FIXME
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "8c9f94", default-features = false }
 openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "8c9f94", default-features = false }
