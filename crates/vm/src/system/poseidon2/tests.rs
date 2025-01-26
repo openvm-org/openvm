@@ -10,8 +10,7 @@ use rand::RngCore;
 use crate::{
     arch::{
         hasher::{Hasher, HasherChip},
-        testing::VmChipTestBuilder,
-        POSEIDON2_DIRECT_BUS,
+        testing::{VmChipTestBuilder, POSEIDON2_DIRECT_BUS},
     },
     system::poseidon2::{
         Poseidon2PeripheryChip, PERIPHERY_POSEIDON2_CHUNK_SIZE, PERIPHERY_POSEIDON2_WIDTH,

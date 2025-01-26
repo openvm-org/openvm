@@ -31,8 +31,8 @@ use rand::{
 use super::{merkle::DirectCompressionBus, MemoryController};
 use crate::{
     arch::{
-        testing::memory::gen_pointer, MemoryConfig, MEMORY_BUS, MEMORY_MERKLE_BUS,
-        POSEIDON2_DIRECT_BUS,
+        testing::{memory::gen_pointer, MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
+        MemoryConfig,
     },
     system::{
         memory::{

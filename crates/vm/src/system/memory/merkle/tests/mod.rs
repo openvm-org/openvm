@@ -18,7 +18,7 @@ use rand::RngCore;
 
 use super::DirectCompressionBus;
 use crate::{
-    arch::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
+    arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
     system::memory::{
         merkle::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,

@@ -4,8 +4,8 @@ use openvm_bigint_transpiler::{
 };
 use openvm_circuit::{
     arch::{
-        testing::VmChipTestBuilder, InstructionExecutor, BITWISE_OP_LOOKUP_BUS,
-        RANGE_TUPLE_CHECKER_BUS,
+        testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS},
+        InstructionExecutor,
     },
     utils::generate_long_number,
 };

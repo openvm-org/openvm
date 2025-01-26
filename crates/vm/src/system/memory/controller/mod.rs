@@ -815,7 +815,7 @@ mod tests {
 
     use super::MemoryController;
     use crate::{
-        arch::{MemoryConfig, MEMORY_BUS},
+        arch::{testing::MEMORY_BUS, MemoryConfig},
         system::memory::offline_checker::MemoryBus,
     };
 

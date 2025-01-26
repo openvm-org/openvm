@@ -1,5 +1,8 @@
 use num_bigint::BigUint;
-use openvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS};
+use openvm_circuit::arch::{
+    testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    VmChipWrapper,
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };

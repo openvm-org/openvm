@@ -1,7 +1,8 @@
 use std::{array, cmp::max, sync::Arc};
 
 use openvm_circuit::arch::{
-    instructions::riscv::RV32_CELL_BITS, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+    instructions::riscv::RV32_CELL_BITS,
+    testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},

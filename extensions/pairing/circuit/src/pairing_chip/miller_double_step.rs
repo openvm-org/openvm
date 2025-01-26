@@ -92,7 +92,7 @@ pub fn miller_double_step_expr(
 
 #[cfg(test)]
 mod tests {
-    use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+    use openvm_circuit::arch::testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use openvm_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };

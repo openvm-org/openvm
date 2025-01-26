@@ -2,9 +2,9 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
+        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
         BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAdapterChip,
-        VmChipWrapper, VmCoreChip, BITWISE_OP_LOOKUP_BUS,
+        VmChipWrapper, VmCoreChip,
     },
     utils::{generate_long_number, i32_to_f},
 };

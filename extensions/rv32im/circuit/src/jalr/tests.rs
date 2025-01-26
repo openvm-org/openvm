@@ -1,6 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip, BITWISE_OP_LOOKUP_BUS};
+use openvm_circuit::arch::{
+    testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    VmAdapterChip,
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };

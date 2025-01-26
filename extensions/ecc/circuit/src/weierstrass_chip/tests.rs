@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
-use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+use openvm_circuit::arch::testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime},
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},

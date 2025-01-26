@@ -2,9 +2,11 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
-        RANGE_TUPLE_CHECKER_BUS,
+        testing::{
+            memory::gen_pointer, TestAdapterChip, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+            RANGE_TUPLE_CHECKER_BUS,
+        },
+        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
     },
     utils::generate_long_number,
 };

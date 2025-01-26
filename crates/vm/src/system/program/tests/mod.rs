@@ -28,7 +28,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use static_assertions::assert_impl_all;
 
 use crate::{
-    arch::{instructions::SystemOpcode::*, READ_INSTRUCTION_BUS},
+    arch::{instructions::SystemOpcode::*, testing::READ_INSTRUCTION_BUS},
     system::program::{trace::VmCommittedExe, ProgramBus, ProgramChip},
 };
 

@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
-    SystemPort, BITWISE_OP_LOOKUP_BUS,
+    testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    SystemPort,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,

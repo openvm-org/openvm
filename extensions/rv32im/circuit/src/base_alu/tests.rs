@@ -2,8 +2,8 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{
-        testing::{TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
+        testing::{TestAdapterChip, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        ExecutionBridge, VmAdapterChip, VmChipWrapper,
     },
     utils::generate_long_number,
 };

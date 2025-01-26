@@ -7,13 +7,6 @@ use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter, Stateful};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-// TODO[jpw]: re-exporting hardcoded bus constants for tests. Import paths should be
-// updated directly but it changes many files.
-#[cfg(any(test, feature = "test-utils"))]
-pub use super::testing::{
-    BITWISE_OP_LOOKUP_BUS, BYTE_XOR_BUS, EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS,
-    POSEIDON2_DIRECT_BUS, RANGE_TUPLE_CHECKER_BUS, READ_INSTRUCTION_BUS,
-};
 use super::{
     segment::{DefaultSegmentationStrategy, SegmentationStrategy},
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,

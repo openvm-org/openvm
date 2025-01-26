@@ -76,7 +76,7 @@ pub fn fp12_mul_expr(
 mod tests {
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use itertools::Itertools;
-    use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+    use openvm_circuit::arch::testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use openvm_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };

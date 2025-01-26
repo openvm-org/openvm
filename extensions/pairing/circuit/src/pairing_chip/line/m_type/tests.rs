@@ -2,7 +2,7 @@ use halo2curves_axiom::{
     bls12_381::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
 };
-use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+use openvm_circuit::arch::testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };

@@ -12,7 +12,7 @@ use openvm_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInter
 
 use crate::arch::{
     hasher::{Hasher, HasherChip},
-    POSEIDON2_DIRECT_BUS,
+    testing::POSEIDON2_DIRECT_BUS,
 };
 
 pub fn test_hash_sum<const CHUNK: usize, F: Field>(

@@ -4,7 +4,8 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{
-    instructions::LocalOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+    instructions::LocalOpcode,
+    testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
 };
 use openvm_circuit_primitives::{
     bigint::utils::{big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime},
