@@ -42,7 +42,7 @@ instructions can be stored at any locations, we will by default follow RISC-V in
 
 Memory is comprised of addressable cells which represent a single field element indexed by **address space** and **pointer**. The number of supported address spaces and the size of each address space are configurable constants.  
 
-- Valid address spaces not used for immediates lie in `[as_offset, as_offset + 2^as_height)` for `as_offset = 1` and configuration constant `as_height`.
+- Valid address spaces not used for immediates lie in `[1, 1 + 2^as_height)` for configuration constant `as_height`.
 - Valid pointers lie in `[0, 2^pointer_max_bits)` for configuration constant `pointer_max_bits`. 
 
 These configuration constants must satisfy `as_height, pointer_max_bits <= F::bits() - 2` in OpenVM to enable the underlying ZK verification. We use the following notation to denote cells in memory:
