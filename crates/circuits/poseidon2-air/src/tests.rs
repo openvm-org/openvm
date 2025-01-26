@@ -9,7 +9,7 @@ use openvm_stark_sdk::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
-    engine::StarkEngine,
+    engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
