@@ -12,6 +12,7 @@ use openvm_sdk::{
 };
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
+    collect_airs_and_inputs,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     dummy_airs::fib_air::chip::FibonacciChip,
     engine::StarkFriEngine,
@@ -35,9 +36,8 @@ fn main() -> Result<()> {
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         // run_test tries to setup tracing, but it will be ignored since run_with_metric_collection already sets it.
-        let vdata = engine
-            .run_test(vec![fib_chip.generate_air_proof_input()])
-            .unwrap();
+        let (fib_air, fib_input) = collect_airs_and_inputs!(fib_chip);
+        let vdata = engine.run_test(fib_air, fib_input).unwrap();
         // Unlike other apps, this "app" does not have continuations enabled.
         let app_fri_params =
             FriParameters::standard_with_100_bits_conjectured_security(leaf_log_blowup);

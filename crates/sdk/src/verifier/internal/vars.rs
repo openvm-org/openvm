@@ -2,7 +2,7 @@ use std::array;
 
 use openvm_native_compiler::{ir::DIGEST_SIZE, prelude::*};
 use openvm_native_recursion::{hints::Hintable, vars::StarkProofVariable};
-use openvm_stark_sdk::openvm_stark_backend::prover::types::Proof;
+use openvm_stark_sdk::openvm_stark_backend::proof::Proof;
 
 use crate::{
     verifier::{internal::types::InternalVmVerifierInput, utils::write_field_slice},

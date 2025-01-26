@@ -9,8 +9,8 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap},
-    Chip, ChipUsageGetter,
+    rap::get_air_name,
+    AirRef, Chip, ChipUsageGetter,
 };
 use p3_keccak_air::{
     generate_trace_rows, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, NUM_ROUNDS, U64_LIMBS,
@@ -20,19 +20,18 @@ use tiny_keccak::keccakf;
 use super::{
     columns::{KeccakInstructionCols, KeccakVmCols},
     KeccakVmChip, KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
-    KECCAK_REGISTER_READS, KECCAK_WORD_SIZE, NUM_ABSORB_ROUNDS,
+    KECCAK_REGISTER_READS, NUM_ABSORB_ROUNDS,
 };
 
 impl<SC: StarkGenericConfig> Chip<SC> for KeccakVmChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air)
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air();
         let trace_width = self.trace_width();
         let records = self.records;
         let total_num_blocks: usize = records.iter().map(|r| r.input_blocks.len()).sum();
@@ -163,16 +162,6 @@ where
             .zip(instruction_blocks.into_par_iter())
             .for_each(|((rows, p3_keccak_mat), (instruction, diff, block))| {
                 let height = rows.len() / trace_width;
-                let partial_read_data = if let Some(partial_read_idx) = block.partial_read_idx {
-                    memory
-                        .record_by_id(block.reads[partial_read_idx])
-                        .data
-                        .clone()
-                        .try_into()
-                        .unwrap()
-                } else {
-                    [Val::<SC>::ZERO; KECCAK_WORD_SIZE]
-                };
                 for (row, p3_keccak_row) in rows
                     .chunks_exact_mut(trace_width)
                     .zip(p3_keccak_mat.chunks_exact(NUM_KECCAK_PERM_COLS))
@@ -184,10 +173,13 @@ where
 
                     row_mut.sponge.block_bytes =
                         block.padded_bytes.map(Val::<SC>::from_canonical_u8);
-                    row_mut
-                        .mem_oc
-                        .partial_block
-                        .copy_from_slice(&partial_read_data[1..]);
+                    if let Some(partial_read_idx) = block.partial_read_idx {
+                        let partial_read = memory.record_by_id(block.reads[partial_read_idx]);
+                        row_mut
+                            .mem_oc
+                            .partial_block
+                            .copy_from_slice(&partial_read.data[1..]);
+                    }
                     for (i, is_padding) in row_mut.sponge.is_padding_byte.iter_mut().enumerate() {
                         *is_padding = Val::<SC>::from_bool(i >= block.remaining_len);
                     }
@@ -247,7 +239,7 @@ where
                 }
             });
 
-        AirProofInput::simple_no_pis(air, trace)
+        AirProofInput::simple_no_pis(trace)
     }
 }
 

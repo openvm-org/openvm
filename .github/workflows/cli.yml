@@ -48,6 +48,14 @@ jobs:
         run: |
           cargo install --force --locked --path .
 
+      - name: check build consistency
+        working-directory: examples/ecc
+        run: |
+          cargo openvm build
+          mv openvm/app.vmexe app1.vmexe
+          cargo openvm build
+          cmp app1.vmexe openvm/app.vmexe || (echo "Build is not deterministic!" && exit 1)
+
       - name: Build and run book examples
         working-directory: examples
         run: |

@@ -1,4 +1,4 @@
-use openvm_circuit::arch::{instructions::program::Program, SystemConfig, VmExecutor};
+use openvm_circuit::arch::{instructions::program::Program, SystemConfig, VmConfig, VmExecutor};
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use openvm_native_recursion::testing_utils::inner::run_recursive_test;
@@ -9,7 +9,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
-    engine::ProofInputForTest, p3_baby_bear::BabyBear,
+    p3_baby_bear::BabyBear, utils::ProofInputForTest,
 };
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
@@ -48,14 +48,22 @@ where
 {
     let fib_program = fibonacci_program(a, b, n);
     let vm_config = NativeConfig::new(SystemConfig::default().with_public_values(3), Native);
+    let airs = vm_config.create_chip_complex().unwrap().airs();
 
     let executor = VmExecutor::<BabyBear, NativeConfig>::new(vm_config);
 
     let mut result = executor.execute_and_generate(fib_program, vec![]).unwrap();
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");
     let proof_input = result.per_segment.remove(0);
+    // Filter out unused AIRS (where trace is empty)
+    let (used_airs, per_air) = proof_input
+        .per_air
+        .into_iter()
+        .map(|(air_id, x)| (airs[air_id].clone(), x))
+        .unzip();
     ProofInputForTest {
-        per_air: proof_input.into_air_proof_input_vec(),
+        airs: used_airs,
+        per_air,
     }
 }
 

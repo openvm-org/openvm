@@ -190,8 +190,13 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
 }
 
 // VmConfig derive macro
+#[derive(Debug)]
+enum Source {
+    System(Ident),
+    Config(Ident),
+}
 
-#[proc_macro_derive(VmConfig, attributes(system, extension))]
+#[proc_macro_derive(VmConfig, attributes(system, config, extension))]
 pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);
     let name = &ast.ident;
@@ -217,13 +222,24 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                 Fields::Unit => vec![],
             };
 
-            let system = fields
+            let source = fields
                 .iter()
-                .filter(|f| f.attrs.iter().any(|attr| attr.path().is_ident("system")))
+                .filter_map(|f| {
+                    if f.attrs.iter().any(|attr| attr.path().is_ident("system")) {
+                        Some(Source::System(f.ident.clone().unwrap()))
+                    } else if f.attrs.iter().any(|attr| attr.path().is_ident("config")) {
+                        Some(Source::Config(f.ident.clone().unwrap()))
+                    } else {
+                        None
+                    }
+                })
                 .exactly_one()
-                .expect("Exactly one field must have #[system] attribute");
-            let (system_name, system_name_upper) =
-                gen_name_with_uppercase_idents(&system.ident.clone().unwrap());
+                .expect("Exactly one field must have #[system] or #[config] attribute");
+            let (source_name, source_name_upper) = match &source {
+                Source::System(ident) | Source::Config(ident) => {
+                    gen_name_with_uppercase_idents(ident)
+                }
+            };
 
             let extensions = fields
                 .iter()
@@ -305,20 +321,40 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                 });
             }
 
+            let (source_executor_type, source_periphery_type) = match &source {
+                Source::System(_) => (quote! { SystemExecutor }, quote! { SystemPeriphery }),
+                Source::Config(field_ident) => {
+                    let field_type = fields
+                        .iter()
+                        .find(|f| f.ident.as_ref() == Some(field_ident))
+                        .map(|f| &f.ty)
+                        .expect("Field not found");
+
+                    let executor_type = format!("{}Executor", quote!(#field_type));
+                    let periphery_type = format!("{}Periphery", quote!(#field_type));
+
+                    let executor_ident = Ident::new(&executor_type, field_ident.span());
+                    let periphery_ident = Ident::new(&periphery_type, field_ident.span());
+
+                    (quote! { #executor_ident }, quote! { #periphery_ident })
+                }
+            };
+
             let executor_type = Ident::new(&format!("{}Executor", name), name.span());
             let periphery_type = Ident::new(&format!("{}Periphery", name), name.span());
+
             TokenStream::from(quote! {
                 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, ::openvm_circuit_primitives_derive::BytesStateful)]
                 pub enum #executor_type<F: PrimeField32> {
                     #[any_enum]
-                    #system_name_upper(SystemExecutor<F>),
+                    #source_name_upper(#source_executor_type<F>),
                     #(#executor_enum_fields)*
                 }
 
                 #[derive(ChipUsageGetter, Chip, From, AnyEnum, ::openvm_circuit_primitives_derive::BytesStateful)]
                 pub enum #periphery_type<F: PrimeField32> {
                     #[any_enum]
-                    #system_name_upper(SystemPeriphery<F>),
+                    #source_name_upper(#source_periphery_type<F>),
                     #(#periphery_enum_fields)*
                 }
 
@@ -327,16 +363,16 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                     type Periphery = #periphery_type<F>;
 
                     fn system(&self) -> &SystemConfig {
-                        &self.#system_name
+                        VmConfig::<F>::system(&self.#source_name)
                     }
                     fn system_mut(&mut self) -> &mut SystemConfig {
-                        &mut self.#system_name
+                        VmConfig::<F>::system_mut(&mut self.#source_name)
                     }
 
                     fn create_chip_complex(
                         &self,
                     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-                        let complex = self.#system_name.create_chip_complex()?;
+                        let complex = self.#source_name.create_chip_complex()?;
                         #(#create_chip_complex)*
                         Ok(complex)
                     }

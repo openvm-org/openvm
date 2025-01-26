@@ -1,4 +1,4 @@
-use std::{array::from_fn, sync::Arc};
+use std::array::from_fn;
 
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -51,7 +51,7 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        AirProofInput::simple_no_pis(Arc::new(self.air()), self.trace())
+        AirProofInput::simple_no_pis(self.trace())
     }
 }
 

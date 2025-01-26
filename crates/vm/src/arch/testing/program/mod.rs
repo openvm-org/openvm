@@ -7,8 +7,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
-    rap::AnyRap,
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 use crate::{
@@ -54,12 +53,11 @@ impl<F: Field> ProgramTester<F> {
 }
 
 impl<SC: StarkGenericConfig> Chip<SC> for ProgramTester<Val<SC>> {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(ProgramDummyAir::new(self.bus))
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air();
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
         let mut values = Val::<SC>::zero_vec(height * width);
@@ -69,7 +67,7 @@ impl<SC: StarkGenericConfig> Chip<SC> for ProgramTester<Val<SC>> {
             *(row[..width - 1]).borrow_mut() = record;
             row[width - 1] = Val::<SC>::ONE;
         }
-        AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
+        AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
     }
 }
 

@@ -579,7 +579,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                         opcode = openvm_algebra_guest::OPCODE,
                         funct3 = openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
                         funct7 = openvm_algebra_guest::ComplexExtFieldBaseFunct7::#local_opcode as usize
-                            + #mod_idx * (openvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                            + #complex_idx * (openvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         rd = In rd,
                         rs1 = In rs1,
                         rs2 = In rs2
@@ -608,7 +608,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                         opcode = ::openvm_algebra_guest::OPCODE,
                         funct3 = ::openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
                         funct7 = ::openvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
-                            + #mod_idx
+                            + #complex_idx
                                 * (::openvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         rd = In uninit.as_mut_ptr(),
                         rs1 = In two_modulus_bytes.as_ptr(),
@@ -618,7 +618,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                         opcode = ::openvm_algebra_guest::OPCODE,
                         funct3 = ::openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
                         funct7 = ::openvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
-                            + #mod_idx
+                            + #complex_idx
                                 * (::openvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         rd = In uninit.as_mut_ptr(),
                         rs1 = In two_modulus_bytes.as_ptr(),

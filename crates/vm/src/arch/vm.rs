@@ -7,7 +7,8 @@ use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
-    prover::types::{CommittedTraceData, Proof, ProofInput},
+    proof::Proof,
+    prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
     verifier::VerificationError,
     Chip,
@@ -32,6 +33,7 @@ pub type VmMemoryState<F> = MemoryImage<F>;
 pub struct Streams<F> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
+    pub hint_space: Vec<Vec<F>>,
 }
 
 impl<F> Streams<F> {
@@ -39,6 +41,7 @@ impl<F> Streams<F> {
         Self {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
+            hint_space: Vec::default(),
         }
     }
 }
@@ -78,7 +81,6 @@ pub struct VmExecutorNextSegmentState<F: PrimeField32> {
     pub memory: MemoryImage<F>,
     pub input: Streams<F>,
     pub pc: u32,
-    pub segment_idx: usize,
 }
 
 pub struct VmExecutorOneSegmentResult<F: PrimeField32, VC: VmConfig<F>> {
@@ -136,9 +138,9 @@ where
         let mut segment_idx = 0;
 
         loop {
-            let mut one_segment_result =
-                self.execute_until_segment(exe.clone(), memory, streams, segment_idx, pc)?;
-            streams = one_segment_result.segment.chip_complex.take_streams();
+            let _span = info_span!("execute_segment", segment = segment_idx).entered();
+            let one_segment_result =
+                self.execute_until_segment(exe.clone(), memory, streams, pc)?;
             segments.push(one_segment_result.segment);
             if one_segment_result.next_state.is_none() {
                 break;
@@ -146,7 +148,8 @@ where
             let next_state = one_segment_result.next_state.unwrap();
             memory = next_state.memory;
             pc = next_state.pc;
-            segment_idx = next_state.segment_idx;
+            streams = next_state.input;
+            segment_idx += 1;
         }
         tracing::debug!("Number of continuation segments: {}", segments.len());
 
@@ -161,7 +164,6 @@ where
         exe: impl Into<VmExe<F>>,
         memory: MemoryImage<F>,
         input: impl Into<Streams<F>>,
-        segment_idx: usize,
         pc: u32,
     ) -> Result<VmExecutorOneSegmentResult<F, VC>, ExecutionError> {
         let exe = exe.into();
@@ -176,7 +178,6 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        let _span = info_span!("execute_segment", segment = segment_idx).entered();
         let state = metrics_span("execute_time_ms", || segment.execute_from_pc(pc))?;
 
         if state.is_terminated {
@@ -205,7 +206,6 @@ where
                 memory: final_memory,
                 input: streams,
                 pc: state.pc,
-                segment_idx: segment_idx + 1,
             }),
         })
     }

@@ -31,8 +31,6 @@ extern crate self as openvm_ecc;
 pub use halo2curves_axiom as halo2curves;
 pub use openvm_algebra_guest as algebra;
 
-pub mod affine_point;
-
 /// Implementation of this library's traits on halo2curves types.
 /// Used for testing and also VM runtime execution.
 /// These should **only** be importable on a host machine.

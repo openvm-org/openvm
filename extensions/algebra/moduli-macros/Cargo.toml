@@ -1,5 +1,5 @@
 [package]
-name = "openvm-algebra-moduli-setup"
+name = "openvm-algebra-moduli-macros"
 version = { workspace = true }
 edition = "2021"
 

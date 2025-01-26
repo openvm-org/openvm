@@ -10,7 +10,7 @@ members = []
 openvm = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-algebra-moduli-setup = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-algebra-moduli-macros = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-pairing-guest = { git = "https://github.com/openvm-org/openvm.git", features = ["bls12_381"] }

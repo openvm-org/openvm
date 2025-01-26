@@ -5,8 +5,7 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
-    rap::AnyRap,
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashSet;
 
@@ -61,12 +60,11 @@ impl<const CHUNK: usize, SC: StarkGenericConfig> Chip<SC> for MemoryMerkleChip<C
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air.clone())
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = Arc::new(self.air);
         assert!(
             self.final_state.is_some(),
             "Merkle chip must finalize before trace generation"
@@ -99,7 +97,7 @@ where
 
         let trace = RowMajorMatrix::new(trace, width);
         let pvs = init_root.into_iter().chain(final_root).collect();
-        AirProofInput::simple(air, trace, pvs)
+        AirProofInput::simple(trace, pvs)
     }
 }
 impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {

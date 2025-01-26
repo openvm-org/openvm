@@ -4,29 +4,28 @@ use openvm_stark_sdk::{
         baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
         FriParameters,
     },
-    engine::{ProofInputForTest, StarkFriEngine},
+    engine::StarkFriEngine,
+    utils::ProofInputForTest,
 };
 use snark_verifier_sdk::Snark;
 
 use crate::{
     config::outer::new_from_outer_multi_vk,
     halo2::{
-        utils::{sort_chips, CacheHalo2ParamsReader, Halo2ParamsReader},
+        utils::{CacheHalo2ParamsReader, Halo2ParamsReader},
         verifier::{generate_halo2_verifier_proving_key, Halo2VerifierProvingKey},
     },
     witness::Witnessable,
 };
 
 pub fn run_static_verifier_test(
-    test_proof_input: ProofInputForTest<BabyBearPoseidon2RootConfig>,
+    mut test_proof_input: ProofInputForTest<BabyBearPoseidon2RootConfig>,
     fri_params: FriParameters,
 ) -> (Halo2VerifierProvingKey, Snark) {
     let k = 21;
     let halo2_params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
     let params = &halo2_params_reader.read_params(k);
-    let test_proof_input = ProofInputForTest {
-        per_air: sort_chips(test_proof_input.per_air),
-    };
+    test_proof_input.sort_chips();
     let info_span =
         tracing::info_span!("prove outer stark to verify", step = "outer_stark_prove").entered();
     let engine = BabyBearPoseidon2RootEngine::new(fri_params);

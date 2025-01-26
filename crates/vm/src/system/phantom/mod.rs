@@ -16,8 +16,8 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter, Stateful,
+    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
+    AirRef, Chip, ChipUsageGetter, Stateful,
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -201,7 +201,7 @@ impl<SC: StarkGenericConfig> Chip<SC> for PhantomChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air.clone())
     }
 
@@ -217,7 +217,7 @@ where
             });
         let trace = RowMajorMatrix::new(rows, width);
 
-        AirProofInput::simple(self.air(), trace, vec![])
+        AirProofInput::simple(trace, vec![])
     }
 }
 

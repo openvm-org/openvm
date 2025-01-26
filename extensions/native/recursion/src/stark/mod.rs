@@ -9,14 +9,12 @@ use openvm_native_compiler::{
 };
 use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::{
-    air_builders::{
-        symbolic::symbolic_expression::SymbolicExpression,
-        verifier::GenericVerifierConstraintFolder,
-    },
+    air_builders::symbolic::SymbolicExpressionDag,
     p3_commit::LagrangeSelectors,
     p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField},
     p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair},
-    prover::{opener::AdjacentOpenedValues, types::Proof},
+    proof::{AdjacentOpenedValues, Proof},
+    verifier::GenericVerifierConstraintFolder,
 };
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
@@ -835,7 +833,7 @@ where
     #[allow(clippy::too_many_arguments)]
     fn eval_constraints(
         builder: &mut Builder<C>,
-        constraints: &[SymbolicExpression<C::F>],
+        constraints: &SymbolicExpressionDag<C::F>,
         preprocessed_values: AdjacentOpenedValues<Ext<C::F, C::EF>>,
         partitioned_main_values: &[AdjacentOpenedValues<Ext<C::F, C::EF>>],
         public_values: &[Felt<C::F>],

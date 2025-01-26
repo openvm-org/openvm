@@ -156,6 +156,7 @@ fn run_negative_jalr_test(
     let tester = tester.build();
 
     let jalr_trace_width = chip.trace_width();
+    let air = chip.air();
     let mut chip_input = chip.generate_air_proof_input();
     let jalr_trace = chip_input.raw.common_main.as_mut().unwrap();
     {
@@ -191,7 +192,7 @@ fn run_negative_jalr_test(
     drop(range_checker_chip);
     disable_debug_builder();
     let tester = tester
-        .load_air_proof_input(chip_input)
+        .load_air_proof_input((air, chip_input))
         .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(expected_error);

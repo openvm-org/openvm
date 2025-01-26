@@ -2,9 +2,10 @@ use openvm_native_compiler::ir::Witness;
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
-        setup_tracing_with_log_level,
+        setup_tracing_with_log_level, FriParameters,
     },
-    engine::{ProofInputForTest, StarkFriEngine},
+    engine::StarkFriEngine,
+    utils::ProofInputForTest,
 };
 use tracing::Level;
 
@@ -30,13 +31,11 @@ fn test_interactions() {
 
 fn run_recursive_test(mut test_proof_input: ProofInputForTest<BabyBearPoseidon2RootConfig>) {
     setup_tracing_with_log_level(Level::WARN);
-    test_proof_input
-        .per_air
-        .sort_by(|a, b| b.raw.height().cmp(&a.raw.height()));
-    let vparams =
-        <BabyBearPoseidon2RootEngine as StarkFriEngine<BabyBearPoseidon2RootConfig>>::run_test_fast(
-            test_proof_input.per_air,
-        )
+    test_proof_input.sort_chips();
+    let vparams = test_proof_input
+        .run_test(&BabyBearPoseidon2RootEngine::new(
+            FriParameters::standard_fast(),
+        ))
         .unwrap();
     let advice = new_from_outer_multi_vk(&vparams.data.vk);
     let proof = vparams.data.proof;

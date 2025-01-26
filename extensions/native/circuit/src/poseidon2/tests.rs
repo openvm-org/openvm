@@ -6,7 +6,8 @@ use openvm_circuit::arch::{
 };
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
 use openvm_native_compiler::{
-    FieldArithmeticOpcode, Poseidon2Opcode, Poseidon2Opcode::*, VerifyBatchOpcode::VERIFY_BATCH,
+    conversion::AS, FieldArithmeticOpcode, Poseidon2Opcode, Poseidon2Opcode::*,
+    VerifyBatchOpcode::VERIFY_BATCH,
 };
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
@@ -148,7 +149,7 @@ fn test<const N: usize>(cases: [Case; N]) {
     }
 
     // single op
-    let address_space = 5;
+    let address_space = AS::Native as usize;
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
@@ -254,7 +255,12 @@ fn test<const N: usize>(cases: [Case; N]) {
     tester.simple_test().expect("Verification failed");
 
     disable_debug_builder();
-    let trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
+    let trace = tester.air_proof_inputs[2]
+        .1
+        .raw
+        .common_main
+        .as_mut()
+        .unwrap();
     let row_index = 0;
     trace.row_mut(row_index);
 

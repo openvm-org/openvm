@@ -13,7 +13,7 @@ use openvm_native_recursion::{
     witness::Witnessable,
 };
 use openvm_stark_sdk::{
-    openvm_stark_backend::{p3_field::FieldAlgebra, prover::types::Proof},
+    openvm_stark_backend::{p3_field::FieldAlgebra, proof::Proof},
     p3_bn254_fr::Bn254Fr,
 };
 

@@ -46,7 +46,11 @@ static-verifier = [
     "dep:once_cell",
 ]
 test-utils = ["openvm-circuit/test-utils"]
-bench-metrics = ["dep:metrics", "openvm-circuit/bench-metrics", "openvm-native-compiler/bench-metrics"]
+bench-metrics = [
+    "dep:metrics",
+    "openvm-circuit/bench-metrics",
+    "openvm-native-compiler/bench-metrics",
+]
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 nightly-features = ["openvm-circuit/nightly-features"]

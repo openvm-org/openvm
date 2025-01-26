@@ -5,9 +5,9 @@ use openvm_stark_backend::{
     p3_field::FieldAlgebra,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
-    prover::USE_DEBUG_BUILDER,
-    rap::AnyRap,
+    utils::disable_debug_builder,
     verifier::VerificationError,
+    AirRef,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
@@ -70,9 +70,9 @@ fn test_bitwise_operation_lookup() {
 
     let chips = dummies
         .into_iter()
-        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
-        .chain(iter::once(Arc::new(lookup.air) as Arc<dyn AnyRap<_>>))
-        .collect::<Vec<Arc<dyn AnyRap<_>>>>();
+        .map(|list| Arc::new(list) as AirRef<_>)
+        .chain(iter::once(Arc::new(lookup.air) as AirRef<_>))
+        .collect::<Vec<AirRef<_>>>();
 
     let mut traces = lists
         .par_iter()
@@ -129,9 +129,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
         lookup.generate_trace(),
     ];
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(chips, traces).err(),
         Some(VerificationError::ChallengePhaseError),

@@ -1,5 +1,5 @@
 use openvm_native_compiler::ir::Builder;
-use openvm_stark_backend::prover::types::Proof;
+use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::config::{
     baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, FriParameters,
 };

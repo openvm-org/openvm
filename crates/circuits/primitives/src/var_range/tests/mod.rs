@@ -2,7 +2,7 @@ use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError,
+    utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
@@ -50,7 +50,7 @@ fn test_variable_range_checker_chip_send() {
 
     let mut all_chips = lists_airs
         .into_iter()
-        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
+        .map(|list| Arc::new(list) as AirRef<_>)
         .collect::<Vec<_>>();
     all_chips.push(Arc::new(var_range_checker.air));
 
@@ -123,9 +123,7 @@ fn negative_test_variable_range_checker_chip_send() {
     let var_range_trace = var_range_checker.generate_trace();
     let all_traces = vec![list_trace, var_range_trace];
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
         Some(VerificationError::ChallengePhaseError),
@@ -163,7 +161,7 @@ fn test_variable_range_checker_chip_range_check() {
 
     let mut all_chips = lists_airs
         .into_iter()
-        .map(|list| Arc::new(list) as Arc<dyn AnyRap<_>>)
+        .map(|list| Arc::new(list) as AirRef<_>)
         .collect::<Vec<_>>();
     all_chips.push(Arc::new(var_range_checker.air));
 
@@ -234,9 +232,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
     let var_range_trace = var_range_checker.generate_trace();
     let all_traces = vec![list_trace, var_range_trace];
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    disable_debug_builder();
     assert_eq!(
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
         Some(VerificationError::ChallengePhaseError),

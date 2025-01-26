@@ -25,8 +25,7 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::Matrix,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
-    rap::AnyRap,
-    Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter, Stateful,
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -91,6 +90,22 @@ pub trait VmExtension<F: PrimeField32> {
         &self,
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError>;
+}
+
+impl<F: PrimeField32, E: VmExtension<F>> VmExtension<F> for Option<E> {
+    type Executor = E::Executor;
+    type Periphery = E::Periphery;
+
+    fn build(
+        &self,
+        builder: &mut VmInventoryBuilder<F>,
+    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
+        if let Some(extension) = self {
+            extension.build(builder)
+        } else {
+            Ok(VmInventory::new())
+        }
+    }
 }
 
 /// SystemPort combines system resources needed by most extensions
@@ -817,7 +832,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     /// This should **only** be called after segment execution has finished.
-    pub(super) fn take_streams(&mut self) -> Streams<F> {
+    pub fn take_streams(&mut self) -> Streams<F> {
         std::mem::take(&mut self.streams.lock().unwrap())
     }
 
@@ -982,15 +997,15 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .collect()
     }
 
-    pub(crate) fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
+    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<AirRef<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         E: Chip<SC>,
         P: Chip<SC>,
     {
         // ATTENTION: The order of AIR MUST be consistent with `generate_proof_input`.
-        let program_rap = Arc::new(self.program_chip().air) as Arc<dyn AnyRap<SC>>;
-        let connector_rap = Arc::new(self.connector_chip().air) as Arc<dyn AnyRap<SC>>;
+        let program_rap = Arc::new(self.program_chip().air) as AirRef<SC>;
+        let connector_rap = Arc::new(self.connector_chip().air) as AirRef<SC>;
         [program_rap, connector_rap]
             .into_iter()
             .chain(self._public_values_chip().map(|chip| chip.air()))

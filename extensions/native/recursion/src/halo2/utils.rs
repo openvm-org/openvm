@@ -1,5 +1,4 @@
 use std::{
-    cmp::Reverse,
     collections::HashMap,
     io::BufReader,
     path::{Path, PathBuf},
@@ -8,9 +7,6 @@ use std::{
 
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
-use openvm_stark_backend::{
-    config::StarkGenericConfig, p3_matrix::Matrix, prover::types::AirProofInput,
-};
 use rand::{prelude::StdRng, SeedableRng};
 use snark_verifier_sdk::{
     halo2::{PoseidonTranscript, POSEIDON_SPEC},
@@ -144,24 +140,4 @@ fn read_params(k: u32) -> Arc<Halo2Params> {
     } else {
         Arc::new(read_params_impl(k))
     }
-}
-
-/// Sort AIRs by their trace height in descending order. This should not be used outside
-/// static-verifier because a dynamic verifier should support any AIR order.
-/// This is related to an implementation detail of FieldMerkleTreeMMCS which is used in most configs.
-/// Reference: <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53>
-pub fn sort_chips<SC: StarkGenericConfig>(
-    mut air_proof_inputs: Vec<AirProofInput<SC>>,
-) -> Vec<AirProofInput<SC>> {
-    air_proof_inputs.sort_by_key(|air_proof_input| {
-        Reverse(
-            air_proof_input
-                .raw
-                .common_main
-                .as_ref()
-                .map(|trace| trace.height())
-                .unwrap_or(0),
-        )
-    });
-    air_proof_inputs
 }

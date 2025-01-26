@@ -226,14 +226,14 @@ fn test_memory_controller() {
         trace
     };
 
+    let mut airs = memory_controller.airs();
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
-    air_proof_inputs.push(AirProofInput::simple_no_pis(
-        memory_requester_air,
-        memory_requester_trace,
-    ));
+    airs.push(memory_requester_air);
+    air_proof_inputs.push(AirProofInput::simple_no_pis(memory_requester_trace));
+    airs.push(range_checker.air());
     air_proof_inputs.push(range_checker.generate_air_proof_input());
 
-    BabyBearPoseidon2Engine::run_test_fast(air_proof_inputs).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_test_fast(airs, air_proof_inputs).expect("Verification failed");
 }
 
 #[test]
@@ -271,15 +271,20 @@ fn test_memory_controller_persistent() {
         trace
     };
 
+    let mut airs = memory_controller.airs();
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
-    air_proof_inputs.push(AirProofInput::simple_no_pis(
+    airs.extend([
         Arc::new(memory_requester_air),
-        memory_requester_trace,
-    ));
-    air_proof_inputs.push(poseidon_chip.generate_air_proof_input());
-    air_proof_inputs.push(range_checker.generate_air_proof_input());
+        poseidon_chip.air(),
+        range_checker.air(),
+    ]);
+    air_proof_inputs.extend([
+        AirProofInput::simple_no_pis(memory_requester_trace),
+        poseidon_chip.generate_air_proof_input(),
+        range_checker.generate_air_proof_input(),
+    ]);
 
-    BabyBearPoseidon2Engine::run_test_fast(air_proof_inputs).expect("Verification failed");
+    BabyBearPoseidon2Engine::run_test_fast(airs, air_proof_inputs).expect("Verification failed");
 }
 
 fn make_random_accesses<F: PrimeField32>(

@@ -6,7 +6,7 @@ extern crate alloc;
 #[cfg(feature = "halo2curves")]
 pub use halo2curves_axiom as halo2curves;
 pub use openvm_algebra_guest as algebra;
-pub use openvm_ecc_sw_setup as sw_setup;
+pub use openvm_ecc_sw_macros as sw_macros;
 use strum_macros::FromRepr;
 
 mod affine_point;

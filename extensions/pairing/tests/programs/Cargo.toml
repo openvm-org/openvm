@@ -9,10 +9,10 @@ openvm = { path = "../../../../crates/toolchain/openvm" }
 openvm-platform = { path = "../../../../crates/toolchain/platform" }
 
 openvm-algebra-guest = { path = "../../../../extensions/algebra/guest", default-features = false }
-openvm-algebra-moduli-setup = { path = "../../../../extensions/algebra/moduli-setup", default-features = false }
-openvm-algebra-complex-macros = { path = "../../../../extensions/algebra/guest/src/field/complex-macros", default-features = false }
+openvm-algebra-moduli-macros = { path = "../../../../extensions/algebra/moduli-macros", default-features = false }
+openvm-algebra-complex-macros = { path = "../../../../extensions/algebra/complex-macros", default-features = false }
 openvm-ecc-guest = { path = "../../../../extensions/ecc/guest", default-features = false }
-openvm-ecc-sw-setup = { path = "../../../../extensions/ecc/sw-setup", default-features = false }
+openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros", default-features = false }
 openvm-pairing-guest = { path = "../../../../extensions/pairing/guest", default-features = false }
 
 serde = { version = "1.0", default-features = false, features = [

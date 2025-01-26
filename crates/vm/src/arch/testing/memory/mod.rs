@@ -7,8 +7,7 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
-    rap::AnyRap,
-    Chip, ChipUsageGetter,
+    AirRef, Chip, ChipUsageGetter,
 };
 use rand::{seq::SliceRandom, Rng};
 
@@ -77,7 +76,7 @@ impl<SC: StarkGenericConfig> Chip<SC> for MemoryTester<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(MemoryDummyAir::<WORD_SIZE>::new(self.bus))
     }
 
@@ -85,7 +84,6 @@ where
         let offline_memory = self.controller.borrow().offline_memory();
         let offline_memory = offline_memory.lock().unwrap();
 
-        let air = self.air();
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
         let mut values = Val::<SC>::zero_vec(2 * height * width);
@@ -99,10 +97,8 @@ where
                 address_space: record.address_space,
                 pointer: record.pointer,
             };
-            row.data = match &record.prev_data {
-                Some(prev_data) => prev_data.clone().try_into().unwrap(),
-                None => record.data.clone().try_into().unwrap(),
-            };
+            row.data
+                .copy_from_slice(record.prev_data.as_ref().unwrap_or(&record.data));
             row.timestamp = Val::<SC>::from_canonical_u32(record.prev_timestamp);
             row.count = -Val::<SC>::ONE;
 
@@ -111,11 +107,11 @@ where
                 address_space: record.address_space,
                 pointer: record.pointer,
             };
-            row.data = record.data.clone().try_into().unwrap();
+            row.data.copy_from_slice(&record.data);
             row.timestamp = Val::<SC>::from_canonical_u32(record.timestamp);
             row.count = Val::<SC>::ONE;
         }
-        AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
+        AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
     }
 }
 

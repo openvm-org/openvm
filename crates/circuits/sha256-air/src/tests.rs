@@ -13,8 +13,8 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeField32},
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
+    AirRef, Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
@@ -54,18 +54,17 @@ impl<SC: StarkGenericConfig> Chip<SC> for Sha256TestChip
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air.clone())
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let air = self.air();
         let trace = crate::generate_trace::<Val<SC>>(
             &self.air.sub_air,
             self.bitwise_lookup_chip.clone(),
             self.records,
         );
-        AirProofInput::simple(air, trace, vec![])
+        AirProofInput::simple_no_pis(trace)
     }
 }
 

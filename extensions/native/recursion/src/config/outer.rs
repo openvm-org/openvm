@@ -1,5 +1,6 @@
 use openvm_native_compiler::ir::Config;
 use openvm_stark_backend::{
+    config::Com,
     keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey},
     p3_challenger::MultiField32Challenger,
     p3_commit::ExtensionMmcs,
@@ -57,7 +58,7 @@ pub type OuterFriProof = FriProof<OuterChallenge, OuterChallengeMmcs, OuterVal, 
 pub type OuterBatchOpening = BatchOpening<OuterVal, OuterValMmcs>;
 
 pub(crate) fn new_from_outer_vkv2(
-    vk: StarkVerifyingKey<BabyBearPoseidon2RootConfig>,
+    vk: StarkVerifyingKey<BabyBear, Com<BabyBearPoseidon2RootConfig>>,
 ) -> StarkVerificationAdvice<OuterConfig> {
     let StarkVerifyingKey {
         preprocessed_data,
@@ -74,7 +75,7 @@ pub(crate) fn new_from_outer_vkv2(
             }
         }),
         width: params.width,
-        quotient_degree,
+        quotient_degree: quotient_degree as usize,
         num_public_values: params.num_public_values,
         num_challenges_to_sample: params.num_challenges_to_sample,
         num_exposed_values_after_challenge: params.num_exposed_values_after_challenge,

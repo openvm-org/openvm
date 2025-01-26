@@ -19,8 +19,8 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter, Stateful,
+    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
+    AirRef, Chip, ChipUsageGetter, Stateful,
 };
 
 mod bus;
@@ -188,13 +188,13 @@ impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for RangeTupleCheckerChip<
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         Arc::new(self.air)
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let trace = self.generate_trace::<Val<SC>>();
-        AirProofInput::simple_no_pis(Arc::new(self.air), trace)
+        AirProofInput::simple_no_pis(trace)
     }
 }
 
@@ -202,7 +202,7 @@ impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for SharedRangeTupleChecke
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+    fn air(&self) -> AirRef<SC> {
         self.0.air()
     }
 
