@@ -9,12 +9,20 @@ The custom instruction format in OpenVM conforms to the extension convention in 
 
 We now specify the custom instructions for the default set of VM extensions.
 
-## System
+## System Instructions
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[0:11] | RISC-V description and notes                                                                                                |
 | ----------- | --- | ----------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------- |
 | terminate   | I   | 0001011     | 000    | `code`    | terminate with exit code `code`                                                                                             |
-| hintstorew  | I   | 0001011     | 001    |           | Stores next 4-byte word from hint stream in user memory at `[rd + imm]_2` (`i32` addition).                                 |
+
+## RV32IM Extension
+
+In addition to the standard RV32IM opcodes, we support the following additional instructions to handle system interactions
+
+| RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[0:11] | RISC-V description and notes                                                                                                |
+| ----------- | --- | ----------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| hintstorew  | I   | 0001011     | 001    | 0x0       | Stores next 4-byte word from hint stream in user memory at `[rd]_2`.                                 |
+| hintbuffer  | I   | 0001011     | 001    | 0x1       | Stores next `4 * rs1` bytes from hint stream in user memory at `[rd:4 * rs1]_2`. Here `rs1` must be non-zero to be a valid instruction.                                 |
 | reveal      | I   | 0001011     | 010    |           | Stores the 4-byte word `rs1` at address `rd + imm` in user IO space.                                                        |
 | hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to the vector.                                                      |
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails. |
