@@ -62,8 +62,8 @@ Different address spaces are used for different purposes in OpenVM. Memory cells
 | Address Space | Name          | Notes and Constraints                                                               |
 | ------------- | ------------- | ----------------------------------------------------------------------------------- |
 | `0`           | Immediates    | Address space `0` is reserved for denoting immediates, and we define `[a]_0 = a`.   |
-| `1`           | Registers     | Elements are constrained to be bytes.                                               |
-| `2`           | User Memory   | Elements are constrained to be bytes.                                               |
+| `1`           | Registers     | Elements are constrained to lie in `[0, 2^LIMB_BITS)` for `LIMB_BITS = 8`.          |
+| `2`           | User Memory   | Elements are constrained to lie in `[0, 2^LIMB_BITS)` for `LIMB_BITS = 8`.          |
 | `3`           | User IO       |                                                                                     |
 | `4`           | Native        | Elements are typically full native field elements.                                  |
 
@@ -84,8 +84,11 @@ To make program inputs or outputs public, OpenVM allows the user to specify a li
 - If continuations are enabled: `REVEAL_RV32` (from the RV32IM extension)
 - If continuations are disabled: `PUBLISH` (from the system extension)
 
-/// TODO[yi]: Fill in the parameter name.
-The list is initially empty and has a maximum length given by a VM configuration parameter.
+The list is initially empty and has maximum length `max_num_public_values` given by a VM configuration parameter.
+
+### Phantom Instructions
+
+To facilitate hinting and debugging on the host, OpenVM supports the notion of **phantom instructions**. These are instructions which are identical to a no-op at the level of the OpenVM state, but which may be used to specify unconstrained behavior on the host. Use cases of phantom instructions include interacting with the input or hint streams or displaying debug information on the host machine.
 
 ### Constants and Configuration Parameters
 
@@ -100,16 +103,12 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | `as_offset`        | The index of the first writable address space.                     | Fixed to 1.                                                           |
 | `as_height`        | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `as_height <= F::bits() - 2`               |
 | `pointer_max_bits` | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`        |
+| `max_num_public_values` | The maximum number of public values.                          | Configurable.                                                         |
 
 ## OpenVM Instruction Set
 
-OpenVM opcodes within a VM extension are divided into classes, mostly based on purpose and nature of the operation (e.g., ALU, U256, Modular arithmetic).
-Instructions within each class are usually handled by the same chip, but this is not always the case (for example, if
-one of the operations requires many more trace columns than all others).
-Non-intersecting ranges of opcodes (represented as `usize`) are distributed among the
-enabled operation classes, so that there is no collision between classes.
-
-We now specify instructions supported by the default VM extensions shipping with OpenVM. We will use the following notation:
+We now specify instructions supported by the default VM extensions shipping with OpenVM. Unless otherwise specified, 
+instructions will set `to_pc = from_pc + DEFAULT_PC_STEP`. We will use the following notation:
 
 - `u32(x)` where `x: [F; 4]` consists of 4 bytes will mean the casting from little-endian bytes in 2's complement to
   unsigned 32-bit integer.
@@ -121,7 +120,6 @@ We now specify instructions supported by the default VM extensions shipping with
 - `decompose(c)` where `c` is a field element means `c.as_canonical_u32().to_le_bytes()`.
 
 In the specification, operands marked with `_` are not used and should be set to zero. Trailing unused operands should also be set to zero.
-Unless otherwise specified, instructions will by default set `to_pc = from_pc + DEFAULT_PC_STEP`.
 
 ### System Instructions
 
@@ -131,13 +129,12 @@ The opcodes below are supported by the OpenVM system and do not belong to any VM
 | --------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
 | TERMINATE | `_, _, c` | Terminates execution with exit code `c`. Sets `to_pc = from_pc`.                                                   |
 | PHANTOM   | `_, _, c` | Sets `to_pc = from_pc + DEFAULT_PC_STEP`. The operand `c` determines which phantom instruction (see below) is run. |
-| PUBLISH      | `a,b,_,d,e` | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                                                                                    |
+| PUBLISH      | `a,b,_,d,e` | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to `max_num_public_values`. Only valid when continuations are disabled.                                                                                                                    |
 
-The behavior of the PHANTOM instruction is specified by the operand `c`.
+The behavior of the PHANTOM opcode is determined by the operand `c`.
 More specifically, the low 16-bits `c.as_canonical_u32() & 0xffff` are used as a discriminant to determine a phantom
 sub-instruction. Phantom sub-instructions supported by the system are listed below, and VM extensions can define additional phantom sub-instructions.
-Phantom sub-instructions are only allowed to use operands `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
-Besides the description below, recall that the phantom instruction always advances the program counter by `DEFAULT_PC_STEP`.
+Phantom sub-instructions are only allowed to use operands `a,b` and `c_upper = c.as_canonical_u32() >> 16` and must always advance the program counter by `DEFAULT_PC_STEP`.
 
 | Name                      | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
