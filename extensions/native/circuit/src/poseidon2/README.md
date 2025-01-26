@@ -21,9 +21,9 @@ We are also given the siblings encountered in the path to the root with whom we 
 
 ## Precise Specification
 
-More precisely, we are given the following inputs. Assumem that the original matrices `M_1, ..., M_n` are specified in decreasing order of height.
+More precisely, we are given the following inputs. Assume that the original matrices `M_1, ..., M_n` are specified in decreasing order of height.
 
-| Name         | Abstract type                   | Type in edSL                                                        | Meaning                                                                                         |
+| Name         | Abstract type                   | Type in eDSL                                                        | Meaning                                                                                         |
 |--------------|---------------------------------|---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
 | `dimensions` | `Vec<F>`                        | `Array<C, Usize<C::F>>`                                             | `dimensions[i]` is the height of `M_i`                                                          |
 | `opened_values` | `Vec<Vec<F>>` or `Vec<Vec<EF>>` | `Array<C, Array<C, Felt<C::F>>>` or `Array<C, Array<C, Ext<C::F>>>` | `opened_values[i]` is row `floor(index * dimensions[i]/h_max)` of `M_i`                         |
@@ -62,7 +62,7 @@ It is assumed that the `opened_values` array consists of elements of size 2 fiel
 
 The above verification process consists of two essential types of operations; as a result we handle these using two different types of rows:
 - `InsideRow`: These rows are responsible for concatenating the opened values and computing the rolling hash.
-- `TopLevel`: These rows are responsible for computing Poisedon2 compression. There are two subtypes:
+- `TopLevel`: These rows are responsible for computing Poseidon2 compression. There are two subtypes:
   - `IncorporateSibling`: These rows are responsible for compressing a sibling with the current node. As part of this, they read both `sibling` and `index_bits` in order to determine whether to compute `p2_compress(sibling, node)` or `p2_compress(node, sibling)`.
   - `IncorporateRow`: These rows are responsible for compressing the rolling hash of a (concatenated) row of opened values with the current node.
 
@@ -70,10 +70,10 @@ As the `NativePoseidon2Chip` is also responsible for handling basic `PERM_POS2` 
 - `SimplePoseidon`
 
 As the three different types of rows require cells representing different things, in order to avoid having many unused cells in each row, we use the following strategy for columns.
-The `NatiivePoseidon2Cols` struct contains cells that are used by both `InsideRow` and `TopLevel` rows (in addition to a couple cells that cannot safely be used in different ways by both), some of which are also used by `SimplePoseidon` rows.
+The `NativePoseidon2Cols` struct contains cells that are used by both `InsideRow` and `TopLevel` rows (in addition to a couple cells that cannot safely be used in different ways by both), some of which are also used by `SimplePoseidon` rows.
 This naturally includes the auxiliary columns used by the actual Poseidon2 hash Subair.
 In addition, `NativePoseidon2Cols` contains a `specific` field whose type is simply an array of `F`.
-`specific` is used in different ways by different tyeps of rows; we accomplish this by having a different struct for each type of row:
+`specific` is used in different ways by different types of rows; we accomplish this by having a different struct for each type of row:
 - `TopLevelSpecificCols`
 - `InsideRowSpecificCols`
 - `SimplePoseidonSpecificCols`
