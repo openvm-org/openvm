@@ -4506,32 +4506,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-snark-verifier"
-version = "0.2.0-alpha"
-dependencies = [
- "eyre",
- "ff 0.13.0",
- "halo2curves-axiom",
- "itertools 0.13.0",
- "lazy_static",
- "openvm",
- "openvm-algebra-circuit",
- "openvm-algebra-guest",
- "openvm-build",
- "openvm-circuit",
- "openvm-ecc-circuit",
- "openvm-ecc-guest",
- "openvm-keccak256-guest",
- "openvm-pairing-circuit",
- "openvm-pairing-guest",
- "openvm-sdk",
- "openvm-toolchain-tests",
- "rand",
- "serde",
- "snark-verifier-sdk",
-]
-
-[[package]]
 name = "openvm-stark-backend"
 version = "0.4.1-alpha"
 source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.4.1-alpha#b2646cf91afd6e162bfba77c50d869a6c8dbaf09"

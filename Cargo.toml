@@ -65,7 +65,6 @@ members = [
     "extensions/pairing/transpiler",
     "extensions/pairing/guest",
     "extensions/pairing/tests",
-    "extensions/snark-verifier",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
@@ -163,7 +162,6 @@ openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = f
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
-openvm-snark-verifier = { path = "extensions/snark-verifier", default-features = false }
 
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
