@@ -14,10 +14,10 @@ See the [examples section](#examples) for code examples to follow along with.
 
 5. Use the `FieldVariable`s to build the expression.
    Just use the `FieldVariables` as algebraic variables to construct expressions.
-   You can use the `+`, `-`, `*`, `/`, operators and the `square`, `int_add` (add a scalar), `int_mul` (multiply by a scalar) methods
+   You can use the `+`, `-`, `*`, `/`, operators and the `square`, `int_add` (add a scalar), `int_mul` (multiply by a scalar) methods.
    You can also use the `select` method to select between two `FieldVariable`s based on a flag.
 
-   Each `FieldVariable` holds a binary tree representation of its expression.
+   Each `FieldVariable` holds a binary syntax tree representation of its expression.
 
 6. Use the `save_output` method to save the result `FieldVariable` and to mark it as an output variable.
    What this does is that it creates a new variable in the AIR and adds a constraint to the AIR that the new variable is equal to the expression.
@@ -28,9 +28,9 @@ See the [examples section](#examples) for code examples to follow along with.
    But it gives greater control over how the expression is broken down into constraints, if that's needed.
 
 7. Finally, pull out a copy of the builder as follows: `let builder = builder.borrow().clone()`, and pass it into the `FieldExpr` constructor: `FieldExpr::new(builder, range_bus, needs_setup)`.
-   The needs_setup argument is true if the chip has a setup instruction, false otherwise.
+   The `needs_setup` argument is true if the chip has a setup instruction, false otherwise.
 
-8. If the chip has a setup instruction that checks if the modulus is correct, then you are done. 
+8. If the chip has a setup instruction that checks if the modulus is correct, then you are done.
    But if your chip's setup instruction checks the correctness of more than just the modulus, you can use the `new_with_setup_values` constructor to pass in a `Vec` of `BigUint` values that will be used in setup.
    The setup row should be filled with the modulus followed by values you passed in, in the order you passed them in.
 
@@ -51,11 +51,11 @@ and we will create a default flag for it on finalizing.
 
 There are two independent properties of the chip built by `ExprBuilder`: whether it needs setup, and whether it supports multiple (2 for now) flags, and hence four types of chips:
 
-| needs_setup | multi_flags | Example |
-|-------------|-------------|---------|
-| true        | true        | modular, Fp2 |
-| true        | false       | EcAdd and EcDouble |
-| false       | true        | Not supported, no such chips |
+| needs_setup | multi_flags | Example                                            |
+| ----------- | ----------- | -------------------------------------------------- |
+| true        | true        | modular, Fp2                                       |
+| true        | false       | EcAdd and EcDouble                                 |
+| false       | true        | Not supported, no such chips                       |
 | false       | false       | Pairing ones, hardcoded modulus so no setup needed |
 
 1. For the first type (modular and Fp2), there are two flags (e.g. `add_flag` and `sub_flag`) and `setup = is_valid - sum(all_flags)`. That is, when doing setup both flags are 0.
@@ -68,7 +68,7 @@ There are two independent properties of the chip built by `ExprBuilder`: whether
 The STARK backend requires the trace height to be a power of 2. Usually we pad the trace with empty (all 0) rows to make the height a power of 2. Since `is_valid` is 0 for padded rows, the constraints including interaction with memory are satisfied.
 However, there are some cases that all-0 row doesn't satisfy the constraints: when the computation involves non-zero constant values:
 
-- Some chips involve constant value, so their constraints will not be satisfied by all-0 rows.
+- Some chips involve constant values, so their constraints will not be satisfied by all-0 rows.
   For these chips, we will pad the trace with a "dummy row".
   This dummy row will be created by evaluating the constraints with all-0 inputs and all-0 flags, and setting `is_valid` to 0.
   See the `FieldExpressionCoreChip::finalize` method for details.
