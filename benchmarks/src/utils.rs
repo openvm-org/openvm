@@ -3,7 +3,9 @@ use std::{fs::read, path::PathBuf};
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
+use openvm_circuit::arch::{
+    instructions::exe::VmExe, DefaultSegmentationStrategy, VirtualMachine, VmConfig,
+};
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
@@ -78,6 +80,11 @@ impl BenchmarkCli {
         let leaf_log_blowup = self.leaf_log_blowup.unwrap_or(DEFAULT_LEAF_LOG_BLOWUP);
 
         app_vm_config.system_mut().profiling = self.profiling;
+        if let Some(max_segment_length) = self.max_segment_length {
+            app_vm_config.system_mut().set_segmentation_strategy(
+                DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_length),
+            );
+        }
         AppConfig {
             app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
                 app_log_blowup,

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, mem};
 
 use cycle_tracker::CycleTracker;
 use metrics::counter;
@@ -84,6 +84,18 @@ impl VmMetrics {
             }
         }
         self.current_trace_cells = now_trace_cells;
+    }
+
+    /// Clear statistics that are local to a segment
+    // Important: chip and cycle count metrics should start over for SegmentationStrategy,
+    // but we need to carry over the cycle tracker so spans can cross segments
+    pub(super) fn clear(&mut self) {
+        *self = Self {
+            cycle_tracker: mem::take(&mut self.cycle_tracker),
+            fn_bounds: mem::take(&mut self.fn_bounds),
+            current_fn: mem::take(&mut self.current_fn),
+            ..Default::default()
+        }
     }
 
     #[cfg(feature = "function-span")]
