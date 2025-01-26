@@ -121,7 +121,7 @@ Since `funct7` is 7-bits, up to 16 curves can be supported simultaneously. We us
 
 ## Pairing Extension
 
-Instructions for accelerating optimal Ate pairing depend on a pairing friend elliptic curve `C` and associated `Fp, Fp2, Fp12` and constant `XI: Fp2`. Presently only the curves BN254 and BLS12-381 are supported, with `pairing_idx(Bn254) = 0` and `pairing_idx(Bls12_381) = 1`. In the list below, `idx` denotes `pairing_idx(C)`.
+Instructions for accelerating optimal Ate pairing depend on a pairing friendly elliptic curve `C` and associated `Fp, Fp2, Fp12` and constant `XI: Fp2`. Presently only the curves BN254 and BLS12-381 are supported, with `pairing_idx(Bn254) = 0` and `pairing_idx(Bls12_381) = 1`. In the list below, `idx` denotes `pairing_idx(C)`.
 
 | RISC-V Inst                | FMT | opcode[6:0] | funct3 | funct7        | RISC-V description and notes                                                                                                                                                                                                 |
 | -------------------------- | --- | ----------- | ------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
