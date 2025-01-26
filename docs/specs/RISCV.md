@@ -1,17 +1,13 @@
 # RISC-V Custom Instructions for VM Extensions
 
-OpenVM intrinsic opcodes are callable from a RISC-V ELF as custom RISC-V instructions.
-For these instructions, we will use the standard 32-bit RISC-V encoding unless otherwise specified.
-We follow Chapter 21 of the [RISC-V spec v2.2](https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf) on how to extend the ISA, aiming to avoid collisions with existing standard instruction formats. As suggested by Chapter 19, for instructions which fit into 32-bits, we will use the _custom-0_ opcode[6:0] prefix **0001011** and _custom-1_ opcode[6:0] prefix **0101011**. Note that instructions are parsed from right to left, and opcode[1:0] = 11 is typical for standard 32-bit instructions (opcode[1:0]=00 is used for compressed 16-bit instructions). We will use _custom-0_ for intrinsics that don’t require additional configuration parameters, and _custom-1_ for ones that do (e.g., prime field arithmetic and elliptic curve arithmetic).
+VM extensions in OpenVM consisting of intrinsics are supported in the Rust frontend by inserting custom RISC-V directives to be passed through LLVM into the RISC-V ELF using a standard 32-bit RISC-V encoding. This document specifies the custom instruction format used for the default set of intrinsic VM extensions.
 
-Almost all intrinsics will be R-type or I-type.
+The custom instruction format in OpenVM conforms to the extension convention in the [RISC-V spec v2.2](https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf) (Chapter 21) to avoid collisions with existing RISC-V extensions. The format is specified as follows:
 
-R-type format: `[funct7] [rs2] [rs1] [funct3] [rd] [opcode]`.
-I-type format: `[imm[11:0]] [rs1] [funct3] [rd] [opcode]`.
+- Intrinsics use _custom-0_ opcode[6:0] prefix **0001011** and _custom-1_ opcode[6:0] prefix **0101011**. Intrinsics which do not require additional configuration parameters use _custom-0_, and ones which do (e.g., prime field arithmetic and elliptic curve arithmetic) use _custom-1_.
+- We use funct3 as the top level distinguisher between opcode classes, and then funct7 (if R-type) or imm (if I-type or B-type) for more specific specification. In the tables below, the funct7 column specifies the value of imm[11:0] when the instruction is I-type.
 
-We will use funct3 as the top level distinguisher between opcode classes, and then funct7 (if R-type) or imm (if I-type) for more specific specification. In the tables below, the funct7 column will specify the value of imm[11:0] when the instruction is I-type.
-
-We start with the instructions using _custom-0_ opcode[6:0] prefix **0001011**..
+We now specify the custom instructions for the default set of VM extensions.
 
 ## System
 
@@ -23,14 +19,19 @@ We start with the instructions using _custom-0_ opcode[6:0] prefix **0001011**..
 | hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to the vector.                                                      |
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails. |
 
-## Hashes
+## Keccak Extension
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes                |
 | ----------- | --- | ----------- | ------ | ------ | ------------------------------------------- |
 | keccak256   | R   | 0001011     | 100    | 0x0    | `[rd:32]_2 = keccak256([rs1..rs1 + rs2]_2)` |
+
+## SHA2-256 Extension
+
+| RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes                |
+| ----------- | --- | ----------- | ------ | ------ | ------------------------------------------- |
 | sha256      | R   | 0001011     | 100    | 0x1    | `[rd:32]_2 = sha256([rs1..rs1 + rs2]_2)`    |
 
-## 256-bit Integers
+## BigInt Extension
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes                              |
 | ----------- | --- | ----------- | ------ | ------ | --------------------------------------------------------- |
@@ -52,11 +53,9 @@ We support a single branch instruction, `beq256`, which is B-type.
 | ----------- | --- | ----------- | ------ | ---------------------------------------- |
 | beq256      | B   | 0001011     | 110    | `if([rs1:32]_2 == [rs2:32]_2) pc += imm` |
 
-## Modular Arithmetic
+## Algebra Extension
 
-We next proceed to the instructions using _custom-1_ opcode[6:0] prefix **0101011**..
-
-Modular arithmetic instructions depend on the modulus `N`. The ordered list of supported moduli should be saved in the `.openvm` section of the ELF file in the serialized format. This is achieved by the `moduli_declare!` macro: for example, the following code
+Modular arithmetic instructions depend on the modulus `N`. The ordered list of supported moduli should be saved in the `.openvm` section of the ELF file in the serialized format. This is achieved by the `moduli_declare!` macro; for example, the following code
 
 ```rust
 moduli_declare! {
@@ -67,11 +66,13 @@ moduli_declare! {
 
 generates classes `Bls12381` and `Bn254` that represent the elements of the corresponding modular fields. Hexadecimal and decimal formats are supported.
 
+### Field Arithmetic
+
 For each created modular class, one must call a corresponding `setup_*` function once at the beginning of the program. For example, for the structs above this would be `setup_0()` and `setup_1()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to..
 
 We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list below, `idx` denotes `config.mod_idx(N)`.
 
-**Note:** The output for the first 4 instructions is not guaranteed to be less than `N`. See [above](#modular-arithmetic) for more details.
+**Note:** The output for the first 4 instructions is not guaranteed to be less than `N`. See the [ISA specification](./ISA.md#algebra-extension) for more details.
 
 | RISC-V Inst  | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                                                                                                                                                                                                                                                                    |
 | ------------ | --- | ----------- | ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -84,9 +85,20 @@ We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list 
 
 Since `funct7` is 7-bits, up to 16 moduli can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 
-## Short Weierstrass Elliptic Curve Arithmetic
+### Complex Extension Field Arithmetic
 
-Short Weierstrass elliptic curve arithmetic depends on elliptic curve `C`. The instruction set and VM can be simultaneously configured _ahead of time_ to support a fixed ordered list of supported curves. We use `config.curve_idx(C)` to denote the index of `C` in this list. In the list below, `idx` denotes `config.curve_idx(C)`.
+Complex extension field arithmetic over `Fp2` depends on `Fp` where `-1` is not a quadratic residue. The extension can be configured to support `Fp2` arithmetic for a subset of the `Fp` with modular arithmetic enabled. We use **the same** `config.mod_idx(Fp::MODULUS)` to denote the index of `Fp2` in this list. In the list below, `idx` denotes `config.mod_idx(Fp::MODULUS)`.
+
+| RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                              |
+| ----------- | --- | ----------- | ------ | --------- | ----------------------------------------------------------------------------------------- |
+| add         | R   | 0101011     | 010    | `idx*8`   | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x + y` to `[rd..]_2` |
+| sub         | R   | 0101011     | 010    | `idx*8+1` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x - y` to `[rd..]_2` |
+| mul         | R   | 0101011     | 010    | `idx*8+2` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x * y` to `[rd..]_2` |
+| div         | R   | 0101011     | 010    | `idx*8+3` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x / y` to `[rd..]_2` |
+
+## Elliptic Curve Extension
+
+The elliptic curve extension supports arithmetic over short Weierstrass curves, which requires specification of the elliptic curve `C`. The extension must be configured to support a fixed ordered list of supported curves. We use `config.curve_idx(C)` to denote the index of `C` in this list. In the list below, `idx` denotes `config.curve_idx(C)`.
 
 | RISC-V Inst     | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | --------------- | --- | ----------- | ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -97,20 +109,9 @@ Short Weierstrass elliptic curve arithmetic depends on elliptic curve `C`. The i
 
 Since `funct7` is 7-bits, up to 16 curves can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 
-## Complex Extension Field Arithmetic
+## Pairing Extension
 
-Complex extension field arithmetic over `Fp2` depends on `Fp` where `-1` is not a quadratic residue. The instruction set and VM can be simultaneously configured _ahead of time_ to support `Fp2` arithmetic for a subset of the `Fp` with modular arithmetic enabled. We use **the same** `config.mod_idx(Fp::MODULUS)` to denote the index of `Fp2` in this list. In the list below, `idx` denotes `config.mod_idx(Fp::MODULUS)`.
-
-| RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                              |
-| ----------- | --- | ----------- | ------ | --------- | ----------------------------------------------------------------------------------------- |
-| add         | R   | 0101011     | 010    | `idx*8`   | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x + y` to `[rd..]_2` |
-| sub         | R   | 0101011     | 010    | `idx*8+1` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x - y` to `[rd..]_2` |
-| mul         | R   | 0101011     | 010    | `idx*8+2` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x * y` to `[rd..]_2` |
-| div         | R   | 0101011     | 010    | `idx*8+3` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x / y` to `[rd..]_2` |
-
-## Optimal Ate Pairing
-
-Instruction for accelerating optimal Ate pairing depend on a pairing friend elliptic curve `C` and associated `Fp, Fp2, Fp12` and constant `XI: Fp2`. Presently only the curves BN254 and BLS12-381 are supported, with `pairing_idx(Bn254) = 0` and `pairing_idx(Bls12_381) = 1`. In the list below, `idx` denotes `pairing_idx(C)`.
+Instructions for accelerating optimal Ate pairing depend on a pairing friend elliptic curve `C` and associated `Fp, Fp2, Fp12` and constant `XI: Fp2`. Presently only the curves BN254 and BLS12-381 are supported, with `pairing_idx(Bn254) = 0` and `pairing_idx(Bls12_381) = 1`. In the list below, `idx` denotes `pairing_idx(C)`.
 
 | RISC-V Inst                | FMT | opcode[6:0] | funct3 | funct7        | RISC-V description and notes                                                                                                                                                                                                 |
 | -------------------------- | --- | ----------- | ------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
