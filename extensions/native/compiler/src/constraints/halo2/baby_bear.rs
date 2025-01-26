@@ -236,7 +236,7 @@ impl BabyBearChip {
     }
 
     // This inner product function will be used exclusively for optimizing extension element multiplication.
-    pub fn special_inner_product(
+    fn special_inner_product(
         &self,
         ctx: &mut Context<Fr>,
         a: &mut [AssignedBabyBear],
