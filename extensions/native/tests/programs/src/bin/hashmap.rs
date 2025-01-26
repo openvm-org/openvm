@@ -13,6 +13,6 @@ fn main() {
     map.insert(2, 8);
     assert!(map.get(&1) == Some(&2));
     assert!(map.get(&2) == Some(&8));
-    assert!(map.get(&3) == None);
+    assert!(map.get(&3).is_none());
     openvm::io::println(format!("{:?}", map.get(&1).unwrap()));
 }
