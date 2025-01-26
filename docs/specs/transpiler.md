@@ -1,8 +1,6 @@
 # RISC-V to OpenVM Transpilation
 
-We describe the transpilation of the RV32IM instruction set and our [custom RISC-V instructions](#risc-v-custom-instructions) to the OpenVM instruction set.
-
-We use the following notation for the transpilation:
+VM extensions consisting of intrinsics are transpiled from [custom RISC-V instructions](./RISCV.md) using a modular transpiler from the RISC-V ELF format to OpenVM assembly. This document specifies the behavior of the transpiler and uses the following notation:
 
 - Let `ind(rd)` denote the register index, which is in `0..32`. In particular, it fits in one field element.
 - We use `itof` for the function that takes 12-bits (or 21-bits in case of J-type) to a signed integer and then mapping to the corresponding field element. So `0b11…11` goes to `-1` in `F`.
@@ -16,7 +14,19 @@ The transpilation will only be valid for programs where:
 - The program code does not have program address greater than or equal to `2^PC_BITS`.
 - The program does not access memory outside the range `[0, 2^addr_max_bits)`.
 
-## RV32IM Transpilation
+We now specify the transpilation for system instructions and the default set of VM extensions.
+
+## System Instructions
+
+| RISC-V Inst    | OpenVM Instruction                                               |
+| -------------- | ---------------------------------------------------------------- |
+| terminate      | TERMINATE `_, _, utof(imm)`                                      |
+| hintstorew     | HINT_STOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2`    |
+| reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`        |
+| hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                             |
+| printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`                 |
+
+## RV32IM Extension
 
 Transpilation from RV32IM to OpenVM assembly follows the mapping below, which is generally a 1-1 translation. 
 
@@ -78,17 +88,22 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 | rem         | REM_RV32 `ind(rd), ind(rs1), ind(rs2), 1`                                  |
 | remu        | REMU_RV32 `ind(rd), ind(rs1), ind(rs2), 1`                                 |
 
-## Custom Instruction Transpilation
+## Keccak Extension
 
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
-| terminate      | TERMINATE `_, _, utof(imm)`                                      |
-| hintstorew     | HINT_STOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2`    |
-| reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`        |
-| hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                             |
-| printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`                 |
 | keccak256      | KECCAK256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+
+## SHA2-256 Extension
+
+| RISC-V Inst    | OpenVM Instruction                                               |
+| -------------- | ---------------------------------------------------------------- |
 | sha256         | SHA256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
+
+## BigInt Extension
+
+| RISC-V Inst    | OpenVM Instruction                                               |
+| -------------- | ---------------------------------------------------------------- |
 | add256         | ADD256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
 | sub256         | SUB256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
 | xor256         | XOR256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
@@ -101,12 +116,27 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 | sltu256        | SLTU256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                 |
 | mul256         | MUL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
 | beq256         | BEQ256_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 2`                |
+
+## Algebra Extension
+
+| RISC-V Inst    | OpenVM Instruction                                               |
+| -------------- | ---------------------------------------------------------------- |
 | addmod\<N\>    | ADDMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
 | submod\<N\>    | SUBMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
 | mulmod\<N\>    | MULMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
 | divmod\<N\>    | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
 | iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`            |
 | setup\<N\>     | SETUP_ADDSUB,MULDIV,ISEQ_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` |
+
+## Elliptic Curve Extension
+
+| RISC-V Inst    | OpenVM Instruction                                               |
+| -------------- | ---------------------------------------------------------------- |
 | sw_add_ne\<C\> | SW_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 | sw_double\<C\> | SW_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                 |
+
+## Pairing Extension
+
+| RISC-V Inst    | OpenVM Instruction                                               |
+| -------------- | ---------------------------------------------------------------- |
 | hint_final_exp | PHANTOM `ind(rs1), pairing_idx, HintFinalExp as u16`             |
