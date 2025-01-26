@@ -1,6 +1,19 @@
 # OpenVM Instruction Set Architecture
 
-## Overall Architecture
+OpenVM supports an extensible instruction set, with different groups of opcodes supported by different VM extensions. This specification describes the overall architecture and default VM extensions which ship with VM extensions, which are:
+
+- RV32IM 
+- A native field arithmetic extension for proof recursion and aggregation
+- Keccak-256 hash
+- SHA2-256 hash
+- Int256 arithmetic
+- Modular arithmetic over arbitrary fields
+- Elliptic curve operations, including multi-scalar multiplication and ECDSA scalar multiplication.
+- Pairing operations on the BN254 and BLS12-381 curves.
+
+In addition to these default extensions, developers are able to extend the ISA by defining their own custom VM extensions. 
+
+## Architecture Overview
 
 ### Instruction format
 
@@ -10,12 +23,10 @@ set to zero.
 
 ### Program ROM
 
-Our VM operates under the Harvard architecture, where program code is stored separately from main
+OpenVM operates under the Harvard architecture, where program code is stored separately from main
 memory. Code is addressed by any field element in range `[0, 2^PC_BITS)` where `PC_BITS = 30`.
 
-There is a single special purpose register `pc` for the program counter of type `F` which stores the location of the
-instruction being executed.
-(We may extend `pc` to multiple field elements to increase the program address space size in the future.)
+There is a single special purpose register `pc` for the program counter of type `F` which stores the location of the instruction being executed. (We may extend `pc` to multiple field elements to increase the program address space size in the future.)
 
 The program code is committed as a cached trace. The validity of the program code and its cached trace must be checked
 outside of ZK. A valid program code must have all instructions stored at locations in range `[0, 2^PC_BITS)`. While the
@@ -24,23 +35,22 @@ instructions can be stored at any locations, we will by default follow RISC-V in
 
 ### Memory
 
-Memory is comprised of addressable cells, each cell containing a single field element.
-Instructions of the VM may access (read or write) memory
-as single cells or as a contiguous list of cells. Such a contiguous list is called a _block_, and
-a memory access (read/write) to a block is a _block access_.
+Memory is comprised of addressable cells indexed by **address space** and **pointer**. Each cell is a single field element, and VM instructions may access (read or write) memory
+as single cells or as a contiguous list of cells in a single address space. Such a contiguous list is called a **block**, and
+a memory access (read/write) to a block is a **block access**.
 The architecture distinguishes between block accesses of different sizes as this has significant performance
 implications.
-The number of cells in a block access is restricted to powers of two, of which the following are supported: 1, 2, 4, 8,
+The number of cells in a block access is restricted to powers of two in: 1, 2, 4, 8,
 16, 32, 64. Block accesses do not need to be
 aligned, i.e., a block access of size $N$ can start from a pointer with value not dividing $N$ (as an integer).
 
-We also leave open the possibility in the future that different address spaces (see below) can be dedicated to handling
+We leave open the future possibility that different address spaces (see below) can be dedicated to handling
 data with certain block sizes, effectively declaring a word-size for that address space, but this is not currently
-implemented. At present there are two types of blocks we have in mind
+implemented. At present, there are two types of blocks used in OpenVM:
 
 - **[FVEC]** A block consisting of `[F; N]` arbitrary field elements.
 - **[LIMB]** A block consisting of `[F; N]` field elements, where each field element has as its canonical representation
-  a limb in `[0, 2^LIMB_BITS)`. This would emulate a word in RISC-V memory.
+  a limb in `[0, 2^LIMB_BITS)`. This is used to emulate a word in RISC-V memory.
 
 While not relevant to the ISA itself, the ZK circuit implementation does usually represent a block `[F; N]` as `N`
 contiguous field elements in the same row of the trace matrix.
@@ -53,7 +63,7 @@ Therefore, any immediate values greater than or equal to $p$ need to be expanded
 
 ### Registers
 
-Our zkVM treats general purpose registers simply as pointers to a separate address space, which is also comprised of
+OpenVM treats general purpose registers as pointers to address space 1, which is also comprised of
 addressable cells. Registers are represented using the [LIMB] format with `LIMB_BITS = 8`.
 
 ### Hints
@@ -108,11 +118,15 @@ The number of address spaces supported is a configurable constant of the VM. The
 `[as_offset, as_offset + 2^as_height)` are supported. By default `as_offset = 1` to preclude address space `0`.
 
 The size (= number of pointers) of each address space is also a configurable constant of the VM.
-The pointers can have values in `[0, 2^pointer_max_bits)`. We require `as_height, pointer_max_bits <= F::bits() - 2` due
-to a sorting argument.
+The pointers can have values in `[0, 2^pointer_max_bits)`. We require `as_height, pointer_max_bits <= F::bits() - 2` due to a sorting argument.
 
 > A memory cell in any address space is always a field element, but the VM _may_ later impose additional bit size
 > constraints on certain address spaces (e.g., everything in address space `2` must be a byte).
+
+### System Calls
+
+There are currently no system calls supported in OpenVM. Traditionally, system calls are used when the ISA and system are customized separately.
+Since OpenVM controls both the ISA and the underlying virtual machine, we instead use custom opcodes to introduce additional functionality.
 
 ### Constants and Configuration Parameters
 
@@ -130,20 +144,13 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 
 ## OpenVM Instruction Set
 
-All instruction types are divided into classes, mostly based on purpose and nature of the operation (e.g., ALU
-instructions, U256 instructions, Modular arithmetic instructions, etc).
+OpenVM opcodes within a VM extension are divided into classes, mostly based on purpose and nature of the operation (e.g., ALU, U256, Modular arithmetic).
 Instructions within each class are usually handled by the same chip, but this is not always the case (for example, if
-one of the operations requires much more trace columns than all others).
-Internally, certain non-intersecting ranges of opcodes (which are internally just a `usize`) are distributed among the
-enabled operation classes, so that there is no collision between the classes.
+one of the operations requires many more trace columns than all others).
+Non-intersecting ranges of opcodes (represented as `usize`) are distributed among the
+enabled operation classes, so that there is no collision between classes.
 
-Operands marked with `_` are not used and should be set to zero. Trailing unused operands should also be set to zero.
-Unless otherwise specified, instructions will by default set `to_pc = from_pc + DEFAULT_PC_STEP`.
-
-The architecture is independent of RISC-V, but for transpilation purposes we specify additional information such as the
-RISC-V Opcode (7-bit), `funct3` (3-bit), and `funct7` (7-bit) or `imm` fields depending on the RISC-V instruction type.
-
-We will use the following notation:
+We now specify instructions supported by the default VM extensions shipping with OpenVM. We will use the following notation:
 
 - `u32(x)` where `x: [F; 4]` consists of 4 bytes will mean the casting from little-endian bytes in 2's complement to
   unsigned 32-bit integer.
@@ -154,14 +161,20 @@ We will use the following notation:
   `c.as_canonical_u32() - F::modulus() as i32` otherwise.
 - `decompose(c)` where `c` is a field element means `c.as_canonical_u32().to_le_bytes()`.
 
+In the specification, operands marked with `_` are not used and should be set to zero. Trailing unused operands should also be set to zero.
+Unless otherwise specified, instructions will by default set `to_pc = from_pc + DEFAULT_PC_STEP`.
+
 ### System
+
+The opcodes below are supported by the OpenVM system and do not belong to any VM extension.
 
 | Name      | Operands  | Description                                                                                                        |
 | --------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
 | TERMINATE | `_, _, c` | Terminates execution with exit code `c`. Sets `to_pc = from_pc`.                                                   |
 | PHANTOM   | `_, _, c` | Sets `to_pc = from_pc + DEFAULT_PC_STEP`. The operand `c` determines which phantom instruction (see below) is run. |
+| PUBLISH      | `a,b,_,d,e` | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                                                                                    |
 
-### RV32IM Support
+### RV32IM Extension
 
 While the architecture allows creation of VMs without RISC-V support, we define a set of instructions that are meant to
 be transpiled from RISC-V instructions such that the resulting VM is able to run RISC-V ELF binaries. We use \_RV32 to
@@ -279,19 +292,6 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 | DIVU_RV32   | `a,b,c,1` | `[a:4]_1 = [b:4]_1 / [c:4]_1` integer division. Division by zero: if `u32([c:4]_1) = 0`, set `u32([a:4]_1) = 2^32 - 1`.                                                                                    |
 | REM_RV32    | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `i32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`. Overflow: if `i32([b:4]_1) = -2^31` and `i32([c:4]_1) = -1`, set `[a:4]_1 = 0`.         |
 | REMU_RV32   | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `u32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`.                                                                                         |
-
-#### System Calls
-
-There are currently no system calls. System calls are used when the ISA and system are customized separately.
-Since OpenVM controls both the ISA and the underlying virtual machine, we use custom opcodes directly whenever possible.
-
-<!--
-Currently we have no need for `ECALLBREAK`, but we include it for future use.
-
-| Name       | Operands | Description                                                                                                                                                                                              |
-| ---------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ECALLBREAK | `_,_,c`  | This instruction has no operands except immediate `c = 0x0` or `0x1`. `c = 0x0` is ECALL. Custom functionality determined by reading register values. `c = 0x1` is EBREAK. Transfer control to debugger. |
--->
 
 ### RV32 Intrinsics
 
@@ -512,7 +512,6 @@ address space `0` is allowed for non-vectorized reads but not allowed for writes
 | BNE\<W\>     | `a,b,c,d,e` | If `[a:W]_d != [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                                                          |
 | HINT_STOREW  | `_,b,c,d,e` | Set `[[c]_d + b]_e = next element from hint stream`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                        |
 | HINT_STOREW4 | `_,b,c,d,e` | Set `[[c]_d + b:4]_e = next 4 elements from hint stream`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                   |
-| PUBLISH      | `a,b,_,d,e` | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                                                                                    |
 | CASTF        | `a,b,_,d,e` | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. Both `d, e` must be non-zero. |
 
 #### Native Field Arithmetic
