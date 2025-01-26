@@ -30,7 +30,7 @@ to handling of the `x0` register, which discards writes and has value `0` in all
 We handle writes to `x0` in transpilation as follows:
 
 - Instructions that write to `x0` with no side effects are transpiled to the PHANTOM instruction with `c = 0x00` (`Nop`).
-- Instructions that write to `x0` with side effects (JAL, JALR, AUIPC) are transpiled to the corresponding custom instruction without a write to `[0:4]_1`.
+- Instructions that write to a register which might be `x0` with side effects (JAL, JALR) are transpiled to the corresponding custom instruction whose write behavior is controlled by a flag specifying whether the target register is `x0`.
 
 Because `[0:4]_1` is initialized to `0` and never written to, this guarantees that reads from `x0` yield `0` and enforces that any OpenVM program transpiled from RV32IM conforms to the RV32IM specification for `x0`.
 
@@ -48,30 +48,30 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 
 | RISC-V Inst | OpenVM Instruction                                                         |
 | ----------- | -------------------------------------------------------------------------- |
-| add         | ADD_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
-| sub         | SUB_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
-| xor         | XOR_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
-| or          | OR_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                                |
-| and         | AND_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
-| sll         | SLL_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
-| srl         | SRL_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
-| sra         | SRA_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
-| slt         | SLT_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
-| sltu        | SLTU_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                              |
-| addi        | ADD_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0`              |
-| xori        | XOR_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0`              |
-| ori         | OR_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0`               |
-| andi        | AND_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0`              |
-| slli        | SLL_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0`         |
-| srli        | SRL_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0`         |
-| srai        | SRA_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0`         |
-| slti        | SLT_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0`              |
-| sltiu       | SLTU_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0`             |
-| lb          | LOADB_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2`            |
-| lh          | LOADH_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2`            |
-| lw          | LOADW_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2`            |
-| lbu         | LOADBU_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2`           |
-| lhu         | LOADHU_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2`           |
+| add         | ADD_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| sub         | SUB_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| xor         | XOR_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| or          | OR_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| and         | AND_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| sll         | SLL_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| srl         | SRL_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| sra         | SRA_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| slt         | SLT_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| sltu        | SLTU_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| addi        | ADD_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| xori        | XOR_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| ori         | OR_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| andi        | AND_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| slli        | SLL_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| srli        | SRL_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| srai        | SRA_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| slti        | SLT_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| sltiu       | SLTU_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| lb          | LOADB_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| lh          | LOADH_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| lw          | LOADW_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| lbu         | LOADBU_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| lhu         | LOADHU_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
 | sb          | STOREB_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2`          |
 | sh          | STOREH_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2`          |
 | sw          | STOREW_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2`          |
@@ -83,30 +83,41 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 | bgeu        | BGEU_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                            |
 | jal         | JAL_RV32 `ind(rd), 0, itof(imm), 1, 0, (rd != x0)`                         |
 | jalr        | JALR_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 0, (rd != x0)` |
-| lui         | LUI_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31])), 1, 0, 1`           |
-| auipc       | AUIPC_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31]) << 4), 1`          |
-| mul         | MUL_RV32 `ind(rd), ind(rs1), ind(rs2), 1`                                  |
-| mulh        | MULH_RV32 `ind(rd), ind(rs1), ind(rs2), 1`                                 |
-| mulhsu      | MULHSU_RV32 `ind(rd), ind(rs1), ind(rs2), 1`                               |
-| mulhu       | MULHU_RV32 `ind(rd), ind(rs1), ind(rs2), 1`                                |
-| div         | DIV_RV32 `ind(rd), ind(rs1), ind(rs2), 1`                                  |
-| divu        | DIVU_RV32 `ind(rd), ind(rs1), ind(rs2), 1`                                 |
-| rem         | REM_RV32 `ind(rd), ind(rs1), ind(rs2), 1`                                  |
-| remu        | REMU_RV32 `ind(rd), ind(rs1), ind(rs2), 1`                                 |
+| lui         | LUI_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31])), 1, 0, 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| auipc       | AUIPC_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31]) << 4), 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| mul         | MUL_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| mulh        | MULH_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| mulhsu      | MULHSU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| mulhu       | MULHU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| div         | DIV_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| divu        | DIVU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| rem         | REM_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
+| remu        | REMU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`|
 
-## Keccak Extension
+## OpenVM Intrinsic VM Extensions
+
+The following sections specify the transpilation of the default set of intrinsic extensions
+to OpenVM. In order to preserve correctness of handling of `x0`, the transpilation must respect
+the constraint that any instruction that writes to a register must:
+
+- Transpile to `Nop` if the register is `x0` and there are no side effects.
+- Transpile to an OpenVM assembly instruction that does not write to `[0:4]_1` and processes side effects if the register is `x0` and there are side effects.
+
+Each VM extension's behavior is specified below.
+
+### Keccak Extension
 
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
 | keccak256      | KECCAK256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
 
-## SHA2-256 Extension
+### SHA2-256 Extension
 
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
 | sha256         | SHA256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
 
-## BigInt Extension
+### BigInt Extension
 
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
@@ -123,7 +134,7 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 | mul256         | MUL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
 | beq256         | BEQ256_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 2`                |
 
-## Algebra Extension
+### Algebra Extension
 
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
@@ -131,17 +142,17 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 | submod\<N\>    | SUBMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
 | mulmod\<N\>    | MULMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
 | divmod\<N\>    | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
-| iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`            |
+| iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `rd != x0`, otherwise PHANTOM `_, _, Nop as u16`            |
 | setup\<N\>     | SETUP_ADDSUB,MULDIV,ISEQ_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` |
 
-## Elliptic Curve Extension
+### Elliptic Curve Extension
 
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
 | sw_add_ne\<C\> | SW_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 | sw_double\<C\> | SW_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                 |
 
-## Pairing Extension
+### Pairing Extension
 
 | RISC-V Inst    | OpenVM Instruction                                               |
 | -------------- | ---------------------------------------------------------------- |
