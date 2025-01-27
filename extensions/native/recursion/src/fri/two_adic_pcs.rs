@@ -409,7 +409,8 @@ fn compute_round_alpha_pows<C: Config>(
     if builder.flags.static_only {
         return builder.array(0);
     }
-    // Max log of matrix width
+    // This maximum is safe because the log width of any matrix in an AIR must fit
+    // within a single field element.
     const MAX_LOG_WIDTH: usize = 31;
     let pow_of_alpha: Array<C, Ext<_, _>> = builder.array(MAX_LOG_WIDTH);
     let current: Ext<_, _> = builder.eval(alpha);
