@@ -165,7 +165,7 @@ p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
 p3-commit = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
 p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
 p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", features = [
-    "nightly-features",
+  "nightly-features",
 ], rev = "b0591e9" }
 p3-util = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
 p3-challenger = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
@@ -187,9 +187,9 @@ p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e
 p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
 
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "zkvm-v0.1", default-features = false, features = [
-    "loader_halo2",
-    "halo2-axiom",
-    "display",
+  "loader_halo2",
+  "halo2-axiom",
+  "display",
 ] }
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 halo2curves-axiom = "0.5.3"
@@ -210,7 +210,7 @@ strum_macros = "0.26.4"
 strum = { version = "0.26.3", features = ["derive"] }
 enum-utils = "0.1.1"
 backtrace = "0.3.71"
-metrics = "0.23.0"
+metrics = "0.24.1"
 metrics-derive = "0.1.0"
 cfg-if = "1.0.0"
 inferno = "0.11.21"
