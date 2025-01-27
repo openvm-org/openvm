@@ -4,22 +4,19 @@ use std::{
     sync::Arc,
 };
 
-use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         ChipId, ExecutionSegment, MemoryConfig, SingleSegmentVmExecutor, SystemConfig,
-        SystemExecutor, SystemPeriphery, SystemTraceHeights, VirtualMachine, VmChipComplex,
-        VmComplexTraceHeights, VmConfig, VmInventoryError, VmInventoryTraceHeights,
+        SystemTraceHeights, VirtualMachine, VmComplexTraceHeights, VmConfig,
+        VmInventoryTraceHeights,
     },
-    derive::{AnyEnum, InstructionExecutor, VmConfig},
     system::{
         memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
         program::trace::VmCommittedExe,
     },
     utils::{air_test, air_test_with_min_segments},
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
@@ -29,20 +26,14 @@ use openvm_instructions::{
     SysPhantom,
     SystemOpcode::*,
 };
-use openvm_keccak256_circuit::{
-    utils::keccak256, Keccak256, Keccak256Executor, Keccak256Periphery,
-};
-use openvm_keccak256_transpiler::Rv32KeccakOpcode::*;
-use openvm_native_circuit::{Native, NativeConfig, NativeExecutor, NativePeriphery};
+use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::{
     FieldArithmeticOpcode::*, FieldExtensionOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
     NativeLoadStoreOpcode::*, NativePhantom,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
-    config::StarkGenericConfig,
-    engine::StarkEngine,
-    p3_field::{FieldAlgebra, PrimeField32},
+    config::StarkGenericConfig, engine::StarkEngine, p3_field::FieldAlgebra,
 };
 use openvm_stark_sdk::{
     config::{
@@ -54,10 +45,7 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use rand::Rng;
-use serde::{Deserialize, Serialize};
 use test_log::test;
-
-const LIMB_BITS: usize = 29;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
 where
