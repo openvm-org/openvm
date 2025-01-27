@@ -174,9 +174,7 @@ unsigned integer, and convert to field element. In the instructions below, `[c:4
 
 #### Load/Store
 
-For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
-The address space `e` can be any [valid address space](#addressing).
-We will use shorthand `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as `i32`. This means we interpret `c`
+For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1` and `e = 2`. We will use the shorthand `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as `i32`. This means we interpret `c`
 as the 2's complement encoding of a 16-bit integer, sign extend it to 32-bits, and then perform signed 32-bit addition
 with the value of the register `[b:4]_1`.
 Memory access to `ptr: i32` is only valid if `0 <= ptr < 2^addr_max_bits`, in which case it is an access to
@@ -186,14 +184,14 @@ All load/store instructions always do block accesses of block size `4`, even for
 
 | Name        | Operands    | Description                                                                                                                    |
 | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| LOADB_RV32  | `a,b,c,1,e` | `[a:4]_1 = sign_extend([r32{c}(b):1]_e)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
-| LOADH_RV32  | `a,b,c,1,e` | `[a:4]_1 = sign_extend([r32{c}(b):2]_e)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
-| LOADW_RV32  | `a,b,c,1,e` | `[a:4]_1 = [r32{c}(b):4]_e`                                                                                                    |
-| LOADBU_RV32 | `a,b,c,1,e` | `[a:4]_1 = zero_extend([r32{c}(b):1]_e)` Must zero-extend the number read from memory.                                         |
-| LOADHU_RV32 | `a,b,c,1,e` | `[a:4]_1 = zero_extend([r32{c}(b):2]_e)` Must zero-extend the number read from memory.                                         |
-| STOREB_RV32 | `a,b,c,1,e` | `[r32{c}(b):1]_e <- [a:1]_1`                                                                                                   |
-| STOREH_RV32 | `a,b,c,1,e` | `[r32{c}(b):2]_e <- [a:2]_1`                                                                                                   |
-| STOREW_RV32 | `a,b,c,1,e` | `[r32{c}(b):4]_e <- [a:4]_1`                                                                                                   |
+| LOADB_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([r32{c}(b):1]_2)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
+| LOADH_RV32  | `a,b,c,1,2` | `[a:4]_1 = sign_extend([r32{c}(b):2]_2)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
+| LOADW_RV32  | `a,b,c,1,2` | `[a:4]_1 = [r32{c}(b):4]_2`                                                       |
+| LOADBU_RV32 | `a,b,c,1,2` | `[a:4]_1 = zero_extend([r32{c}(b):1]_2)` Must zero-extend the number read from memory.                                         |
+| LOADHU_RV32 | `a,b,c,1,2` | `[a:4]_1 = zero_extend([r32{c}(b):2]_2)` Must zero-extend the number read from memory.                                         |
+| STOREB_RV32 | `a,b,c,1,2` | `[r32{c}(b):1]_2 <- [a:1]_1`                                                                                                   |
+| STOREH_RV32 | `a,b,c,1,2` | `[r32{c}(b):2]_2 <- [a:2]_1`                                                                                                   |
+| STOREW_RV32 | `a,b,c,1,2` | `[r32{c}(b):4]_2 <- [a:4]_1`                                                                                                   |
 
 #### Branch/Jump/Upper Immediate
 

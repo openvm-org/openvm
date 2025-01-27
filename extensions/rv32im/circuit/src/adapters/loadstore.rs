@@ -27,7 +27,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+    riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
@@ -130,7 +130,6 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
     pub imm: F,
     pub imm_sign: bool,
     pub mem_ptr_limbs: [u32; 2],
-    pub mem_as: F,
     pub shift_amount: u32,
 }
 
@@ -158,7 +157,6 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub imm_sign: T,
     /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
     pub mem_ptr_limbs: [T; 2],
-    pub mem_as: T,
     /// prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
     pub write_base_aux: MemoryBaseAuxCols<T>,
 }
@@ -255,7 +253,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         // read_as is 2 for loads and 1 for stores
         let read_as = select::<AB::Expr>(
             is_load.clone(),
-            local_cols.mem_as,
+            AB::F::from_canonical_u32(RV32_MEMORY_AS),
             AB::F::from_canonical_u32(RV32_REGISTER_AS),
         );
 
@@ -281,7 +279,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let write_as = select::<AB::Expr>(
             is_load.clone(),
             AB::F::from_canonical_u32(RV32_REGISTER_AS),
-            local_cols.mem_as,
+            AB::F::from_canonical_u32(RV32_MEMORY_AS),
         );
 
         // write_ptr is rd_rs2_ptr for loads and mem_ptr for stores
@@ -308,7 +306,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
                     AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
-                    local_cols.mem_as.into(),
+                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
                 ],
                 local_cols.from_state,
                 ExecutionState {
@@ -403,7 +401,6 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                 imm_sign: imm_sign == 1,
                 shift_amount,
                 mem_ptr_limbs,
-                mem_as: e,
             },
         ))
     }
@@ -477,7 +474,6 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
         let write = memory.record_by_id(write_record.write_id);
         aux_cols_factory.generate_base_aux(write, &mut adapter_cols.write_base_aux);
-        adapter_cols.mem_as = read_record.mem_as;
     }
 
     fn air(&self) -> &Self::Air {
