@@ -6,8 +6,8 @@ use elliptic_curve::{sec1::Tag, PrimeCurve};
 use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
 
 use crate::{
-    weierstrass::{FromCompressed, IntrinsicCurve, WeierstrassPoint},
-    CyclicGroup, Group,
+    weierstrass::{FromCompressed, WeierstrassPoint},
+    CyclicGroup, Group, IntrinsicCurve,
 };
 
 pub type Coordinate<C> = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::Coordinate;

@@ -8,7 +8,7 @@ use num_bigint::BigUint;
 use openvm_algebra_guest::{Field, IntMod};
 
 use super::group::{CyclicGroup, Group};
-use crate::weierstrass::{CachedMulTable, IntrinsicCurve};
+use crate::{weierstrass::CachedMulTable, IntrinsicCurve};
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
