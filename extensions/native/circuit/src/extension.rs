@@ -1,4 +1,5 @@
 use air::VerifyBatchBus;
+use alu_native_adapter::AluNativeAdapterChip;
 use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
 use jal_native_adapter::JalNativeAdapterChip;
@@ -9,7 +10,7 @@ use openvm_circuit::{
         MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex,
         VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
-    system::{native_adapter::NativeAdapterChip, phantom::PhantomChip},
+    system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
@@ -164,7 +165,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         inventory.add_executor(jal_chip, NativeJalOpcode::iter().map(|x| x.global_opcode()))?;
 
         let field_arithmetic_chip = FieldArithmeticChip::new(
-            NativeAdapterChip::<F, 2, 1>::new(execution_bus, program_bus, memory_bridge),
+            AluNativeAdapterChip::<F>::new(execution_bus, program_bus, memory_bridge),
             FieldArithmeticCoreChip::new(),
             offline_memory.clone(),
         );

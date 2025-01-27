@@ -1,3 +1,4 @@
+pub mod alu_native_adapter;
 // 2 reads, 0 writes, imm support, jump support
 pub mod branch_native_adapter;
 // 1 read, 1 write, arbitrary read size, arbitrary write size, no imm support

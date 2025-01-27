@@ -1,7 +1,6 @@
-use openvm_circuit::{
-    arch::{VmAirWrapper, VmChipWrapper},
-    system::native_adapter::{NativeAdapterAir, NativeAdapterChip},
-};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+
+use crate::adapters::alu_native_adapter::{AluNativeAdapterAir, AluNativeAdapterChip};
 
 #[cfg(test)]
 mod tests;
@@ -9,6 +8,6 @@ mod tests;
 mod core;
 pub use core::*;
 
-pub type FieldArithmeticAir = VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir>;
+pub type FieldArithmeticAir = VmAirWrapper<AluNativeAdapterAir, FieldArithmeticCoreAir>;
 pub type FieldArithmeticChip<F> =
-    VmChipWrapper<F, NativeAdapterChip<F, 2, 1>, FieldArithmeticCoreChip>;
+    VmChipWrapper<F, AluNativeAdapterChip<F>, FieldArithmeticCoreChip>;

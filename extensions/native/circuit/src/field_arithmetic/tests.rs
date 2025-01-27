@@ -1,9 +1,6 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::{
-    arch::testing::{memory::gen_pointer, VmChipTestBuilder},
-    system::native_adapter::{NativeAdapterChip, NativeAdapterCols},
-};
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldArithmeticOpcode;
 use openvm_stark_backend::{
@@ -22,6 +19,7 @@ use strum::EnumCount;
 use super::{
     core::FieldArithmeticCoreChip, FieldArithmetic, FieldArithmeticChip, FieldArithmeticCoreCols,
 };
+use crate::adapters::alu_native_adapter::{AluNativeAdapterChip, AluNativeAdapterCols};
 
 #[test]
 fn new_field_arithmetic_air_test() {
@@ -32,7 +30,7 @@ fn new_field_arithmetic_air_test() {
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = FieldArithmeticChip::new(
-        NativeAdapterChip::new(
+        AluNativeAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
@@ -126,7 +124,7 @@ fn new_field_arithmetic_air_test() {
 fn new_field_arithmetic_air_zero_div_zero() {
     let mut tester = VmChipTestBuilder::default();
     let mut chip = FieldArithmeticChip::new(
-        NativeAdapterChip::new(
+        AluNativeAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
@@ -151,7 +149,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
     // set the value of [c]_f to zero, necessary to bypass trace gen checks
     let row = chip_input.raw.common_main.as_mut().unwrap().row_mut(0);
     let cols: &mut FieldArithmeticCoreCols<BabyBear> = row
-        .split_at_mut(NativeAdapterCols::<BabyBear, 2, 1>::width())
+        .split_at_mut(AluNativeAdapterCols::<BabyBear>::width())
         .1
         .borrow_mut();
     cols.b = BabyBear::ZERO;
@@ -170,7 +168,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
 fn new_field_arithmetic_air_test_panic() {
     let mut tester = VmChipTestBuilder::default();
     let mut chip = FieldArithmeticChip::new(
-        NativeAdapterChip::new(
+        AluNativeAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
