@@ -60,3 +60,15 @@ pub enum TeBaseFunct7 {
 impl TeBaseFunct7 {
     pub const TWISTED_EDWARDS_MAX_KINDS: u8 = 8;
 }
+
+/// A trait for elliptic curves that bridges the openvm types and external types with CurveArithmetic etc.
+/// Implement this for external curves with corresponding openvm point and scalar types.
+pub trait IntrinsicCurve {
+    type Scalar: Clone;
+    type Point: Clone;
+
+    /// Multi-scalar multiplication.
+    /// The implementation may be specialized to use properties of the curve
+    /// (e.g., if the curve order is prime).
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point;
+}
