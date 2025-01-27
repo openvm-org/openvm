@@ -409,9 +409,9 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
         ]
         .map(|elem| elem.as_canonical_u64() as usize);
 
-        let dst = gen_pointer(&mut rng, CHUNK);
-        let lhs = gen_pointer(&mut rng, CHUNK);
-        let rhs = gen_pointer(&mut rng, CHUNK);
+        let dst = gen_pointer(&mut rng, CHUNK) / 2;
+        let lhs = gen_pointer(&mut rng, CHUNK) / 2;
+        let rhs = gen_pointer(&mut rng, CHUNK) / 2;
 
         let data: [_; 2 * CHUNK] =
             std::array::from_fn(|_| BabyBear::from_canonical_usize(rng.gen_range(elem_range())));
