@@ -19,8 +19,12 @@ pub fn from_r_type<F: PrimeField32>(
     opcode: usize,
     e_as: usize,
     dec_insn: &RType,
+    allow_rd_zero: bool,
 ) -> Instruction<F> {
-    if dec_insn.rd == 0 {
+    // If `rd` is not allowed to be zero, we transpile to `NOP` to prevent a write
+    // to `x0`. In the cases where `allow_rd_zero` is true, it is the responsibility of
+    // the caller to guarantee that the resulting instruction does not write to `rd`.
+    if !allow_rd_zero && dec_insn.rd == 0 {
         return nop();
     }
     Instruction::new(

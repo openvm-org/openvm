@@ -39,6 +39,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Sha256TranspilerExtension {
             Rv32Sha256Opcode::SHA256.global_opcode().as_usize(),
             RV32_MEMORY_AS as usize,
             &dec_insn,
+            true,
         );
         Some(TranspilerOutput::one_to_one(instruction))
     }

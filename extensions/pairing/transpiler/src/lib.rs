@@ -146,6 +146,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for PairingTranspilerExtension {
             global_opcode,
             2,
             &dec_insn,
+            true,
         )))
     }
 }

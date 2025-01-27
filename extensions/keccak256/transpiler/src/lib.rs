@@ -38,6 +38,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Keccak256TranspilerExtension {
             Rv32KeccakOpcode::KECCAK256.global_opcode().as_usize(),
             2,
             &dec_insn,
+            true,
         );
         Some(TranspilerOutput::one_to_one(instruction))
     }

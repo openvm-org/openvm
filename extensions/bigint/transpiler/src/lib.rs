@@ -134,7 +134,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
                     }
                     _ => unimplemented!(),
                 };
-                Some(from_r_type(global_opcode, 2, &dec_insn))
+                Some(from_r_type(global_opcode, 2, &dec_insn, true))
             }
             BEQ256_FUNCT3 => {
                 let dec_insn = BType::new(instruction_u32);

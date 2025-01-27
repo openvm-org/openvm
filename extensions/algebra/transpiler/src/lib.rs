@@ -119,7 +119,11 @@ impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
                     _ => unimplemented!(),
                 };
                 let global_opcode = global_opcode + mod_idx_shift;
-                Some(from_r_type(global_opcode, 2, &dec_insn))
+                // The only opcode in this extension which can write to rd is `IsEqMod`
+                // so we cannot allow rd to be zero in this case.
+                let allow_rd_zero =
+                    ModArithBaseFunct7::from_repr(base_funct7) != Some(ModArithBaseFunct7::IsEqMod);
+                Some(from_r_type(global_opcode, 2, &dec_insn, allow_rd_zero))
             }
         };
         instruction.map(TranspilerOutput::one_to_one)
@@ -189,7 +193,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Fp2TranspilerExtension {
                     _ => unimplemented!(),
                 };
                 let global_opcode = global_opcode + complex_idx_shift;
-                Some(from_r_type(global_opcode, 2, &dec_insn))
+                Some(from_r_type(global_opcode, 2, &dec_insn, true))
             }
         };
         instruction.map(TranspilerOutput::one_to_one)
