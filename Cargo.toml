@@ -116,6 +116,7 @@ openvm-sha256-air = { path = "crates/circuits/sha256-air", default-features = fa
 openvm-circuit-primitives = { path = "crates/circuits/primitives", default-features = false }
 openvm-circuit-primitives-derive = { path = "crates/circuits/primitives/derive", default-features = false }
 openvm = { path = "crates/toolchain/openvm", default-features = false }
+openvm-entry = { path = "crates/toolchain/openvm/entry", default-features = false }
 openvm-build = { path = "crates/toolchain/build", default-features = false }
 openvm-instructions = { path = "crates/toolchain/instructions", default-features = false }
 openvm-instructions-derive = { path = "crates/toolchain/instructions/derive", default-features = false }

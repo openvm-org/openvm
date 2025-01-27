@@ -3,8 +3,7 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-openvm::entry!(main);
-
+#[openvm::entry]
 pub fn main() {
     let mut v = Vec::new();
     for i in 1..10 {

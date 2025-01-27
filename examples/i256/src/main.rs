@@ -2,7 +2,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(clippy::needless_range_loop)]
 
-openvm::entry!(main);
 use core::array;
 
 use openvm_bigint_guest::I256;
@@ -34,6 +33,7 @@ pub fn get_identity_matrix() -> Matrix {
     res
 }
 
+#[openvm::entry]
 pub fn main() {
     let a: Matrix = get_identity_matrix();
     let b: Matrix = get_matrix(-28);

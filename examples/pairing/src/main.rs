@@ -25,8 +25,7 @@ openvm_algebra_complex_macros::complex_init! {
 // ANCHOR_END: init
 
 // ANCHOR: main
-openvm::entry!(main);
-
+#[openvm::entry]
 pub fn main() {
     // ANCHOR: setup
     setup_0();

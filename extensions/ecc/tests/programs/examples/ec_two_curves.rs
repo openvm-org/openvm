@@ -23,8 +23,7 @@ openvm_ecc_sw_macros::sw_init! {
     P256Point,
 }
 
-openvm::entry!(main);
-
+#[openvm::entry]
 pub fn main() {
     setup_all_moduli();
     setup_all_curves();

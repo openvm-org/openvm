@@ -22,8 +22,7 @@ The `examples` folder contains the test programs in `rust`.
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-openvm::entry!(main);
-
+#[openvm::entry]
 pub fn main() {
     let n = core::hint::black_box(1 << 10);
     let mut a: u32 = 0;

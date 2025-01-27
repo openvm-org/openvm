@@ -1,0 +1,16 @@
+[package]
+name = "openvm-entry"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2.0", features = ["parsing"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+[features]
+std = []
+default = []

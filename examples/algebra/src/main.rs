@@ -3,8 +3,6 @@
 
 use openvm_algebra_guest::{moduli_macros::*, IntMod};
 
-openvm::entry!(main);
-
 // This macro will create two structs, `Mod1` and `Mod2`,
 // one for arithmetic modulo 998244353, and the other for arithmetic modulo 1000000007.
 moduli_declare! {
@@ -32,6 +30,7 @@ openvm_algebra_complex_macros::complex_init! {
     Complex1 { mod_idx = 0 }, Complex2 { mod_idx = 1 },
 }
 
+#[openvm::entry]
 pub fn main() {
     // Since we only use an arithmetic operation with `Mod1` and not `Mod2`,
     // we only need to call `setup_0()` here.

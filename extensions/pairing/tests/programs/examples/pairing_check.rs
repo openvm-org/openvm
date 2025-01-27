@@ -9,8 +9,6 @@ use openvm::io::read_vec;
 use openvm_ecc_guest::AffinePoint;
 use openvm_pairing_guest::pairing::PairingCheck;
 
-openvm::entry!(main);
-
 #[cfg(feature = "bn254")]
 mod bn254 {
     use alloc::format;
@@ -90,6 +88,7 @@ mod bls12_381 {
     }
 }
 
+#[openvm::entry]
 pub fn main() {
     #[allow(unused_variables)]
     let io = read_vec();
