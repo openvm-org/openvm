@@ -281,7 +281,7 @@ The RV32IM extension defines the following phantom sub-instructions.
 
 ### Native Extension
 
-The native extension operates over native field elements and has instructions tailored for STARK proof recursion. It operates over address spaces `0` and `4`, and does not constrain memory elements to be bytes.
+The native extension operates over native field elements and has instructions tailored for STARK proof recursion. It does not constrain memory elements to be bytes and most instructions only write to address space `4`, with the notable exception of CASTF.
 
 #### Base
 
@@ -304,7 +304,7 @@ reads but not allowed for writes. When using immediates, we interpret `[a]_0` as
 
 #### Field Arithmetic
 
-This instruction set does native field operations. Below, `e,f` may be either `0` or `4`. 
+This instruction set does native field operations. Below, `e,f` may be any address space. 
 When either `e` or `f` is zero, `[b]_0` and `[c]_0` should be interpreted as the immediates `b`
 and `c`, respectively.
 

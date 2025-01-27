@@ -91,16 +91,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for AluNativeAdapterAir {
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
-        // check that e and f are in {0, 4}
-        builder.assert_eq(
-            cols.e_as * (cols.e_as - AB::F::from_canonical_u32(AS::Native as u32)),
-            AB::F::ZERO,
-        );
-        builder.assert_eq(
-            cols.f_as * (cols.f_as - AB::F::from_canonical_u32(AS::Native as u32)),
-            AB::F::ZERO,
-        );
-
         let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
 
         self.memory_bridge
