@@ -285,35 +285,35 @@ The native extension operates over native field elements and has instructions ta
 
 #### Base
 
-In the instructions below, `d,e` may be any valid address space unless otherwise specified. In particular, the immediate
-address space `0` is allowed for non-vectorized reads but not allowed for writes. When using immediates, we interpret
-`[a]_0` as the immediate value `a`. Base kernel instructions enable memory movement between address spaces.
+In the instructions below, `d,e` must be either `0` or `4` except in CASTF, which may write to address space `2`.
+Additional restrictions are applied on a per-instruction basis. In particular, the immediate address space `0` is allowed for non-vectorized
+reads but not allowed for writes. When using immediates, we interpret `[a]_0` as the immediate value `a`. 
 
-| Name         | Operands    | Description                                                                                                                                                                                                                                                                                                               |
-| ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LOADW        | `a,b,c,d,e` | Set `[a]_d = [[c]_d + b]_e`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                                |
-| STOREW       | `a,b,c,d,e` | Set `[[c]_d + b]_e = [a]_d`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                                |
-| LOADW4       | `a,b,c,d,e` | Set `[a:4]_d = [[c]_d + b:4]_e`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
-| STOREW4      | `a,b,c,d,e` | Set `[[c]_d + b:4]_e = [a:4]_d`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
-| JAL          | `a,b,c,d`   | Jump to address and link: set `[a]_d = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`. Here `d` must be non-zero.                                                                                                                                                                                                              |
-| BEQ          | `a,b,c,d,e` | If `[a]_d == [b]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                                                          |
-| BNE          | `a,b,c,d,e` | If `[a]_d != [b]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                                                          |
-| HINT_STOREW  | `_,b,c,d,e` | Set `[[c]_d + b]_e = next element from hint stream`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                        |
-| HINT_STOREW4 | `_,b,c,d,e` | Set `[[c]_d + b:4]_e = next 4 elements from hint stream`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                   |
-| CASTF        | `a,b,_,d,e` | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. Both `d, e` must be non-zero. |
+| Name         | Operands    | Description                           |
+| ------------ | ----------- | ------------------------------------------------ |
+| LOADW        | `a,b,c,4,4` | Set `[a]_4 = [[c]_4 + b]_4`.                                          |
+| STOREW       | `a,b,c,4,4` | Set `[[c]_4 + b]_4 = [a]_4`.                                        |
+| LOADW4       | `a,b,c,4,4` | Set `[a:4]_4 = [[c]_4 + b:4]_4`.                                          |
+| STOREW4      | `a,b,c,4,4` | Set `[[c]_4 + b:4]_4 = [a:4]_4`.                                        |
+| JAL          | `a,b,c,4`   | Jump to address and link: set `[a]_4 = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`.               |
+| BEQ          | `a,b,c,d,e` | If `[a]_d == [b]_e`, then set `pc = pc + c`.                                                      |
+| BNE          | `a,b,c,d,e` | If `[a]_d != [b]_e`, then set `pc = pc + c`.                                                     |
+| HINT_STOREW  | `_,b,c,4,4` | Set `[[c]_4 + b]_4 = next element from hint stream`.                     |
+| HINT_STOREW4 | `_,b,c,4,4` | Set `[[c]_4 + b:4]_4 = next 4 elements from hint stream`.                |
+| CASTF        | `a,b,_,2,4` | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_2` to the unique array such that `sum_{i=0}^3 [a + i]_2 * 2^{8i} = [b]_4` where `[a + i]_2 < 2^8` for `i = 0..2` and `[a + 3]_2 < 2^6`. This opcode constrains that `[b]_4` must be at most 30-bits. |
 
 #### Field Arithmetic
 
-This instruction set does native field operations. Below, `e,f` may be any valid address space, `d` may be any valid
-non-zero address space. When either `e` or `f` is zero, `[b]_0` and `[c]_0` should be interpreted as the immediates `b`
+This instruction set does native field operations. Below, `e,f` may be either `0` or `4`. 
+When either `e` or `f` is zero, `[b]_0` and `[c]_0` should be interpreted as the immediates `b`
 and `c`, respectively.
 
 | Name | Operands      | Description                                               |
 | ---- | ------------- | --------------------------------------------------------- |
-| ADDF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e + [c]_f`.                              |
-| SUBF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e - [c]_f`.                              |
-| MULF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e * [c]_f`.                              |
-| DIVF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e / [c]_f`. Division by zero is invalid. |
+| ADDF | `a,b,c,4,e,f` | Set `[a]_4 = [b]_e + [c]_f`.                              |
+| SUBF | `a,b,c,4,e,f` | Set `[a]_4 = [b]_e - [c]_f`.                              |
+| MULF | `a,b,c,4,e,f` | Set `[a]_4 = [b]_e * [c]_f`.                              |
+| DIVF | `a,b,c,4,e,f` | Set `[a]_4 = [b]_e / [c]_f`. Division by zero is invalid. |
 
 #### Extension Field Arithmetic
 
@@ -322,24 +322,23 @@ polynomial $x^4 - 11$, which matches Plonky3.
 All elements in the field extension can be represented as a vector `[a_0,a_1,a_2,a_3]` which represents the
 polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ over `BabyBear`.
 
-Below, `d,e` may be any valid non-zero address space. The instructions do block access with block size `4`.
+The instructions read and write from address space `4` and do block access with block size `4`.
 
 | Name    | Operands  | Description                                                                                   |
 | ------- | --------- | --------------------------------------------------------------------------------------------- |
-| FE4ADD  | `a, b, c` | Set `[a:4]_d = [b:4]_d + [c:4]_e` with vector addition.                                       |
-| FE4SUB  | `a, b, c` | Set `[a:4]_d = [b:4]_d - [c:4]_e` with vector subtraction.                                    |
-| BBE4MUL | `a, b, c` | Set `[a:4]_d = [b:4]_d * [c:4]_e` with extension field multiplication.                        |
-| BBE4DIV | `a, b, c` | Set `[a:4]_d = [b:4]_d / [c:4]_e` with extension field division. Division by zero is invalid. |
+| FE4ADD  | `a, b, c, 4, 4` | Set `[a:4]_4 = [b:4]_4 + [c:4]_4` with vector addition.                                       |
+| FE4SUB  | `a, b, c, 4, 4` | Set `[a:4]_4 = [b:4]_4 - [c:4]_4` with vector subtraction.                                    |
+| BBE4MUL | `a, b, c, 4, 4` | Set `[a:4]_4 = [b:4]_4 * [c:4]_4` with extension field multiplication.                        |
+| BBE4DIV | `a, b, c, 4, 4` | Set `[a:4]_4 = [b:4]_4 / [c:4]_4` with extension field division. Division by zero is invalid. |
 
 #### Hashes
 
-Below, `d,e` may be any valid address space, and `d,e` are both not allowed to be zero. The instructions do block access
-with block size `1` in address space `d` and block size `CHUNK` in address space `e`.
+The instructions below do block accesses with block size `1` and `CHUNK` in address space `4`.
 
-| Name                                                                                                                                                                                                                               | Operands    | Description                                                                                                                                                                                                                                                                                                                                                      |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **COMP_POS2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e` | Applies the Poseidon2 compression function to the inputs `[[b]_d:CHUNK]_e` and `[[c]_d:CHUNK]_e`, writing the result to `[[a]_d:CHUNK]_e`.                                                                                                                                                                                                                       |
-| **PERM_POS2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a,b,_,d,e` | Applies the Poseidon2 permutation function to `[[b]_d:WIDTH]_e` and writes the result to `[[a]_d:WIDTH]_e`. <br/><br/> Each array of `WIDTH` elements is read/written in two batches of size `CHUNK`. This is nearly the same as `COMP_POS2` except that the whole input state is contiguous in memory, and the full output state is written to memory. |
+| Name                                                                                                                                                                                                                               | Operands    | Description                                               |
+| --------------- | ----------- | ----------------------------------------------------- |
+| COMP_POS2 `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,4,4` | Applies the Poseidon2 compression function to the inputs `[[b]_4:CHUNK]_4` and `[[c]_4:CHUNK]_4`, writing the result to `[[a]_4:CHUNK]_4`.     |
+| PERM_POS2 `[WIDTH, PID]`             | `a,b,_,4,4` | Applies the Poseidon2 permutation function to `[[b]_4:WIDTH]_4` and writes the result to `[[a]_4:WIDTH]_4`. <br/><br/> Each array of `WIDTH` elements is read/written in two batches of size `CHUNK`. This is nearly the same as `COMP_POS2` except that the whole input state is contiguous in memory, and the full output state is written to memory. |
 
 The native extension uses the following Poseidon2 constants:
 
@@ -351,12 +350,12 @@ The input (of size `WIDTH`) is read in two batches of size `CHUNK`, and, similar
 
 #### Proof Verification
 
-We have the following special opcodes tailored to optimize FRI proof verification.
+We have the following special opcodes tailored to optimize FRI proof verification. They access address space `4`.
 
-| Name                                                                                                                                                                                                                         | Operands        | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **VERIFY_BATCH** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e,f,g` | Further described [here](../../extensions/native/circuit/src/poseidon2/README.md). Due to already having a large number of operands, the address space is fixed to be `AS::Native = 4`. Computes `mmcs::verify_batch`. In the native address space, `[a], [b], [d], [e], [f]` should be the array start pointers for the dimensions array, the opened values array (which contains more arrays), the proof (which contains arrays of length `CHUNK`) and the commitment (which is an array of length `CHUNK`). `[c]` should be the length of the opened values array (and so should be equal to the length of the dimensions array as well). `g` should be the reciprocal of the size (in field elements) of the values contained in the opened values array: if the opened values array contains field elements, `g` should be 1; if the opened values array contains extension field elements, `g` should be 1/4. |
-| **FRI_REDUCED_OPENING**                                                                                                                                                                                                      | `a,b,c,d,e,f`   | Let `length = [e]_d`, `a_ptr = [a]_d`, `b_ptr = [b]_d`, `alpha = [f:EXT_DEG]_d`. `a_ptr` is the address of Felt array `a_arr` and `b_ptr` is the address of Ext array `b_arr`. Compute `sum((b_arr[i] - a_arr[i]) * alpha ^ i)` for `i=0..length` and write the value into `[c:EXT_DEG]_d`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Name      | Operands        | Description                          |
+| ---------- | --------------- | -------------------------------------|
+| VERIFY_BATCH `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e,f,g` | Further described [here](../../extensions/native/circuit/src/poseidon2/README.md). Due to already having a large number of operands, the address space is fixed to be `AS::Native = 4`. Computes `mmcs::verify_batch`. In the native address space, `[a], [b], [d], [e], [f]` should be the array start pointers for the dimensions array, the opened values array (which contains more arrays), the proof (which contains arrays of length `CHUNK`) and the commitment (which is an array of length `CHUNK`). `[c]` should be the length of the opened values array (and so should be equal to the length of the dimensions array as well). `g` should be the reciprocal of the size (in field elements) of the values contained in the opened values array: if the opened values array contains field elements, `g` should be 1; if the opened values array contains extension field elements, `g` should be 1/4. |
+| FRI_REDUCED_OPENING          | `a,b,c,4,e,f`   | Let `length = [e]_4`, `a_ptr = [a]_4`, `b_ptr = [b]_4`, `alpha = [f:EXT_DEG]_4`. `a_ptr` is the address of Felt array `a_arr` and `b_ptr` is the address of Ext array `b_arr`. Compute `sum((b_arr[i] - a_arr[i]) * alpha ^ i)` for `i=0..length` and write the value into `[c:EXT_DEG]_4`.           |
 
 #### Phantom Sub-Instructions
 
