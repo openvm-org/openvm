@@ -104,7 +104,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for JalNativeAdapterAir {
                     cols.a_pointer.into(),
                     ctx.instruction.immediate,
                     AB::Expr::ZERO,
-                    d.into(),
+                    d,
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),

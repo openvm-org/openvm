@@ -315,7 +315,7 @@ impl FriReducedOpeningAir {
                     local.a_ptr_ptr.into(),
                     local.b_ptr_ptr.into(),
                     next.result_ptr.into(),
-                    native_as.clone().into(),
+                    native_as.clone(),
                     next.length_ptr.into(),
                     next.alpha_ptr.into(),
                 ],

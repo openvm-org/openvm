@@ -137,7 +137,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for AluNativeAdapterAir {
                     cols.a_pointer.into(),
                     cols.b_pointer.into(),
                     cols.c_pointer.into(),
-                    native_as.clone().into(),
+                    native_as.clone(),
                     cols.e_as.into(),
                     cols.f_as.into(),
                 ],
