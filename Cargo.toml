@@ -36,8 +36,6 @@ members = [
     "extensions/native/compiler/derive",
     "extensions/native/recursion",
     "extensions/native/transpiler",
-    "extensions/native/tests",
-    "extensions/native/tests/guest-macro",
     "extensions/algebra/circuit",
     "extensions/algebra/transpiler",
     "extensions/algebra/guest",

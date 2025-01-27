@@ -4069,37 +4069,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-native-guest-macro"
-version = "0.2.0-alpha"
-dependencies = [
- "openvm-instructions",
- "openvm-native-compiler",
- "openvm-native-transpiler",
- "p3-baby-bear",
- "p3-field",
- "proc-macro2",
- "quote",
- "strum",
- "strum_macros",
-]
-
-[[package]]
-name = "openvm-native-integration-tests"
-version = "0.2.0-alpha"
-dependencies = [
- "eyre",
- "openvm-build",
- "openvm-circuit",
- "openvm-native-circuit",
- "openvm-native-transpiler",
- "openvm-rv32im-transpiler",
- "openvm-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
- "p3-baby-bear",
-]
-
-[[package]]
 name = "openvm-native-recursion"
 version = "0.2.0-alpha"
 dependencies = [
