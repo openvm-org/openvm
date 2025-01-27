@@ -24,6 +24,7 @@ use crate::{
         common::{
             assert_single_segment_vm_exit_successfully_with_connector_air_id, types::SpecialAirIds,
         },
+        minimal::types::MinimalVmVerifierInput,
         root::types::{RootVmVerifierInput, RootVmVerifierPvs},
         utils::compress_babybear_var_to_bn254,
     },

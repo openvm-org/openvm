@@ -61,6 +61,7 @@ impl RootVmVerifierConfig {
             };
             builder.cycle_tracker_end("InitializePcsConst");
             builder.cycle_tracker_start("VerifyProofs");
+            builder.print_debug(1559);
             let internal_program_commit =
                 array::from_fn(|i| builder.eval(self.internal_vm_verifier_commit[i]));
             let non_leaf_verifier = NonLeafVerifierVariables {

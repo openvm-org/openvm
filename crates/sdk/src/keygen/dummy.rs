@@ -34,6 +34,7 @@ use crate::{
     verifier::{
         internal::types::InternalVmVerifierInput,
         leaf::{types::LeafVmVerifierInput, LeafVmVerifierConfig},
+        minimal::types::MinimalVmVerifierInput,
         root::types::RootVmVerifierInput,
     },
     NonRootCommittedExe, F, SC,
@@ -67,6 +68,30 @@ pub(super) fn compute_root_proof_heights(
     internal_heights.round_to_next_power_of_two_or_zero();
     println!("air_heights: {:?}", air_heights);
     println!("internal_heights: {:?}", internal_heights);
+    (air_heights, internal_heights)
+}
+
+pub(super) fn compute_minimal_root_proof_heights(
+    root_vm_config: NativeConfig,
+    root_exe: VmExe<F>,
+    dummy_app_proof: &Proof<SC>,
+) -> (Vec<usize>, VmComplexTraceHeights) {
+    let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
+    let root_input = MinimalVmVerifierInput {
+        proof: dummy_app_proof.clone(),
+        public_values: vec![F::ZERO; num_user_public_values],
+    };
+    let vm = SingleSegmentVmExecutor::new(root_vm_config);
+    let res = vm
+        .execute_and_compute_heights(root_exe, root_input.write())
+        .unwrap();
+    let air_heights: Vec<_> = res
+        .air_heights
+        .into_iter()
+        .map(next_power_of_two_or_zero)
+        .collect();
+    let mut internal_heights = res.internal_heights;
+    internal_heights.round_to_next_power_of_two_or_zero();
     (air_heights, internal_heights)
 }
 

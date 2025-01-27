@@ -53,38 +53,38 @@ impl MinimalVmVerifierConfig {
             builder.cycle_tracker_end("InitializePcsConst");
 
             builder.cycle_tracker_start("ReadProofsFromInput");
-            // let proofs: Array<C, StarkProofVariable<_>> =
-            //     <Vec<Proof<BabyBearPoseidon2Config>> as Hintable<C>>::read(&mut builder);
-            let proof: StarkProofVariable<_> = Proof::<BabyBearPoseidon2Config>::read(&mut builder);
+            let proofs: Array<C, StarkProofVariable<_>> =
+                <Vec<Proof<BabyBearPoseidon2Config>> as Hintable<C>>::read(&mut builder);
+            println!("proofs: {:?}", proofs.len());
             // Only one proof should be provided.
-            // builder.assert_eq::<Usize<_>>(proofs.len(), RVar::one());
+            builder.assert_eq::<Usize<_>>(proofs.len(), RVar::one());
             builder.cycle_tracker_end("ReadProofsFromInput");
 
             builder.cycle_tracker_start("VerifyProofs");
             let pvs = VmVerifierPvs::<Felt<F>>::uninit(&mut builder);
-            // let proof = builder.get(&proofs, RVar::zero());
-            assert_required_air_for_app_vm_present(&mut builder, &proof);
-            StarkVerifier::verify::<DuplexChallengerVariable<C>>(
-                &mut builder,
-                &pcs,
-                &m_advice,
-                &proof,
-            );
-            {
-                let commit = get_program_commit(&mut builder, &proof);
-                builder.assign(&pvs.app_commit, commit);
-            }
+            builder.range(0, proofs.len()).for_each(|i_vec, builder| {
+                let i = i_vec[0];
+                let proof = builder.get(&proofs, i);
+                assert_required_air_for_app_vm_present(builder, &proof);
+                StarkVerifier::verify::<DuplexChallengerVariable<C>>(
+                    builder, &pcs, &m_advice, &proof,
+                );
+                {
+                    let commit = get_program_commit(builder, &proof);
+                    builder.if_eq(i, RVar::zero()).then_or_else(
+                        |builder| {
+                            builder.assign(&pvs.app_commit, commit);
+                        },
+                        |builder| builder.assert_eq::<[_; DIGEST_SIZE]>(pvs.app_commit, commit),
+                    );
+                }
 
-            let proof_connector_pvs = get_connector_pvs(&mut builder, &proof);
-            assert_or_assign_connector_pvs(
-                &mut builder,
-                &pvs.connector,
-                RVar::zero(),
-                &proof_connector_pvs,
-            );
+                let proof_connector_pvs = get_connector_pvs(builder, &proof);
+                assert_or_assign_connector_pvs(builder, &pvs.connector, i, &proof_connector_pvs);
 
-            let proof_memory_pvs = get_memory_pvs(&mut builder, &proof);
-            assert_or_assign_memory_pvs(&mut builder, &pvs.memory, RVar::zero(), &proof_memory_pvs);
+                let proof_memory_pvs = get_memory_pvs(builder, &proof);
+                assert_or_assign_memory_pvs(builder, &pvs.memory, i, &proof_memory_pvs);
+            });
             builder.cycle_tracker_end("VerifyProofs");
 
             builder.cycle_tracker_start("ExtractPublicValues");

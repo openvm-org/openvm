@@ -13,10 +13,10 @@ use tracing::info_span;
 use super::{
     app::AppProver,
     vm::{ContinuationVmProof, SingleSegmentVmProver},
-    LeafProver, RootVerifierLocalProver, F, SC,
+    RootVerifierLocalProver, F, SC,
 };
 use crate::{
-    keygen::{AppProvingKey, MinimalStarkProvingKey},
+    keygen::MinimalStarkProvingKey,
     verifier::{root::types::RootVmVerifierInput, utils::heights_le},
     NonRootCommittedExe, RootSC, StdIn,
 };

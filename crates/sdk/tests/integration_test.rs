@@ -17,7 +17,9 @@ use openvm_native_recursion::{
 use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use openvm_sdk::{
     commit::AppExecutionCommit,
-    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
+    config::{
+        AggConfig, AggStarkConfig, AppConfig, Halo2Config, MinimalConfig, MinimalStarkConfig,
+    },
     keygen::{AppProvingKey, RootVerifierProvingKey},
     static_verifier::StaticVerifierPvHandler,
     verifier::{
@@ -128,6 +130,7 @@ fn minimal_config_for_test(app_log_blowup: usize) -> MinimalConfig<NativeConfig>
             app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
             app_vm_config: NativeConfig::new(
                 SystemConfig::default()
+                    // .with_max_segment_len(200)
                     .with_continuations()
                     .with_public_values(NUM_PUB_VALUES),
                 Native,
@@ -138,13 +141,13 @@ fn minimal_config_for_test(app_log_blowup: usize) -> MinimalConfig<NativeConfig>
             profiling: true,
             compiler_options: CompilerOptions {
                 enable_cycle_tracker: true,
-                compile_prints: true,
                 ..Default::default()
             },
         },
         halo2_config: Halo2Config {
             verifier_k: 24,
             wrapper_k: None,
+            profiling: true,
         },
     }
 }
@@ -455,7 +458,7 @@ fn test_e2e_minimal_proof_generation_and_verification() {
     //     .generate_minimal_snark_verifier_contract(&params_reader, &minimal_pk)
     //     .unwrap();
     println!("generate_minimal_evm_proof");
-    let evm_proof = Sdk
+    let _evm_proof = Sdk
         .generate_minimal_evm_proof(
             &params_reader,
             app_committed_exe_for_test(app_log_blowup),

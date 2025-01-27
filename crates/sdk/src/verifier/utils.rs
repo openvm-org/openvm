@@ -5,7 +5,7 @@ use openvm_circuit::{
 };
 use openvm_native_compiler::prelude::*;
 use openvm_native_recursion::{config::outer::OuterConfig, hints::Hintable, types::InnerConfig};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use openvm_stark_sdk::{
     openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
 };
