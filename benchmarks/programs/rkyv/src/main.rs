@@ -9,8 +9,7 @@ use core::hint::black_box;
 use rkyv::{access_unchecked, Archive};
 use types::Players;
 
-openvm::entry!(main);
-
+#[openvm::entry]
 fn main() {
     // Uncomment to generate a minecraft save file:
     // // nothing up our sleeves, state and stream are first 20 digits of pi

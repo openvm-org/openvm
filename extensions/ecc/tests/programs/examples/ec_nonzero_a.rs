@@ -12,8 +12,6 @@ use openvm_ecc_guest::{
     CyclicGroup, Group,
 };
 
-openvm::entry!(main);
-
 openvm_algebra_moduli_macros::moduli_init! {
     "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
     "0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
@@ -23,6 +21,7 @@ openvm_ecc_sw_macros::sw_init! {
     P256Point,
 }
 
+#[openvm::entry]
 pub fn main() {
     setup_all_moduli();
     setup_all_curves();

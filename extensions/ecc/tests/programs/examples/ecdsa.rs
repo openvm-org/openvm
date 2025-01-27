@@ -13,7 +13,6 @@ use openvm_ecc_guest::{
     algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
 };
 use openvm_keccak256_guest::keccak256;
-openvm::entry!(main);
 
 openvm_algebra_moduli_macros::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
@@ -24,6 +23,7 @@ openvm_ecc_sw_macros::sw_init! {
 }
 
 // Ref: https://docs.rs/k256/latest/k256/ecdsa/index.html
+#[openvm::entry]
 pub fn main() {
     setup_all_moduli();
     setup_all_curves();

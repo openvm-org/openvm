@@ -3424,6 +3424,7 @@ dependencies = [
  "hex-literal",
  "num-bigint 0.4.6",
  "num-traits",
+ "openvm-entry",
  "openvm-platform",
  "openvm-rv32im-guest",
  "serde",
@@ -3859,6 +3860,15 @@ dependencies = [
  "openvm-transpiler",
  "rrs-lib",
  "strum",
+]
+
+[[package]]
+name = "openvm-entry"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.96",
 ]
 
 [[package]]

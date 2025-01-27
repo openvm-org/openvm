@@ -5,10 +5,9 @@ use core::mem::transmute;
 
 use regex::Regex;
 
-openvm::entry!(main);
-
 const PATTERN: &str = r"(?m)(\r\n|^)From:([^\r\n]+<)?(?P<email>[^<>]+)>?";
 
+#[openvm::entry]
 pub fn main() {
     let data = openvm::io::read_vec();
     let data = core::str::from_utf8(&data).expect("Invalid UTF-8");

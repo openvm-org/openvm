@@ -10,8 +10,6 @@ use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::AffinePoint;
 use openvm_pairing_guest::pairing::MultiMillerLoop;
 
-openvm::entry!(main);
-
 #[cfg(feature = "bn254")]
 mod bn254 {
     use openvm_pairing_guest::bn254::{Bn254, Fp, Fp2};
@@ -100,6 +98,7 @@ mod bls12_381 {
     }
 }
 
+#[openvm::entry]
 pub fn main() {
     #[allow(unused_variables)]
     let io = read_vec();

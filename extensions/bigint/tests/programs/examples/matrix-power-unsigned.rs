@@ -3,7 +3,6 @@
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::eq_op)]
 
-openvm::entry!(main);
 use core::array;
 
 use openvm::io::print;
@@ -50,6 +49,7 @@ pub fn bin_exp(mut base: Matrix, mut exp: U256) -> Matrix {
     result
 }
 
+#[openvm::entry]
 pub fn main() {
     let a: Matrix = get_identity_matrix();
     let c = bin_exp(a, U256::from_u32(1234567));

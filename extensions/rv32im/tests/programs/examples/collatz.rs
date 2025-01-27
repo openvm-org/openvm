@@ -1,8 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-openvm::entry!(main);
-
+#[openvm::entry]
 pub fn main() {
     let mut x: u32 = core::hint::black_box(837799);
     let mut count: u32 = 0;
