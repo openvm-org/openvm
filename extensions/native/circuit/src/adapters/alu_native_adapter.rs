@@ -93,11 +93,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for AluNativeAdapterAir {
 
         // check that e and f are in {0, 4}
         builder.assert_eq(
-            cols.e_as * (cols.e_as - AB::F::from_canonical_usize(4)),
+            cols.e_as * (cols.e_as - AB::F::from_canonical_u32(AS::Native as u32)),
             AB::F::ZERO,
         );
         builder.assert_eq(
-            cols.f_as * (cols.f_as - AB::F::from_canonical_usize(4)),
+            cols.f_as * (cols.f_as - AB::F::from_canonical_u32(AS::Native as u32)),
             AB::F::ZERO,
         );
 

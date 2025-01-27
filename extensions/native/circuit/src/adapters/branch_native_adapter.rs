@@ -94,8 +94,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BranchNativeAdapterAir {
         // check that d and e are in {0, 4}
         let d = cols.reads_aux[0].address.address_space;
         let e = cols.reads_aux[1].address.address_space;
-        builder.assert_eq(d * (d - AB::F::from_canonical_usize(4)), AB::F::ZERO);
-        builder.assert_eq(e * (e - AB::F::from_canonical_usize(4)), AB::F::ZERO);
+        builder.assert_eq(
+            d * (d - AB::F::from_canonical_u32(AS::Native as u32)),
+            AB::F::ZERO,
+        );
+        builder.assert_eq(
+            e * (e - AB::F::from_canonical_u32(AS::Native as u32)),
+            AB::F::ZERO,
+        );
 
         self.memory_bridge
             .read_or_immediate(
