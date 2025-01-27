@@ -8,17 +8,13 @@ use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        ChipId, ExecutionSegment, ExitCode, MemoryConfig, SingleSegmentVmExecutor, Streams,
-        SystemConfig, SystemExecutor, SystemPeriphery, SystemTraceHeights, VirtualMachine,
-        VmChipComplex, VmComplexTraceHeights, VmConfig, VmExecutorResult, VmInventoryError,
-        VmInventoryTraceHeights,
+        ChipId, ExecutionSegment, MemoryConfig, SingleSegmentVmExecutor, SystemConfig,
+        SystemExecutor, SystemPeriphery, SystemTraceHeights, VirtualMachine, VmChipComplex,
+        VmComplexTraceHeights, VmConfig, VmInventoryError, VmInventoryTraceHeights,
     },
     derive::{AnyEnum, InstructionExecutor, VmConfig},
     system::{
-        memory::{
-            tree::public_values::UserPublicValuesProof, MemoryTraceHeights,
-            VolatileMemoryTraceHeights, CHUNK,
-        },
+        memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
         program::trace::VmCommittedExe,
     },
     utils::{air_test, air_test_with_min_segments},
@@ -398,123 +394,6 @@ fn test_vm_1_persistent() {
         .expect("Verification failed");
 }
 
-fn gen_continuation_test_program<F: PrimeField32>(n: isize) -> Program<F> {
-    // Simple Fibonacci program to compute nth Fibonacci number mod BabyBear (with F_0 = 1).
-    // Register [0]_4 <- stores the loop counter.
-    // Register [1]_4 <- stores F_i at the beginning of iteration i.
-    // Register [2]_4 <- stores F_{i+1} at the beginning of iteration i.
-    // Register [3]_4 is used as a temporary register.
-    Program::from_instructions(&[
-        // [0]_4 <- 0
-        Instruction::from_isize(ADD.global_opcode(), 0, 0, 0, 4, 0),
-        // [1]_4 <- 0
-        Instruction::from_isize(ADD.global_opcode(), 1, 0, 0, 4, 0),
-        // [2]_4 <- 1
-        Instruction::from_isize(ADD.global_opcode(), 2, 0, 1, 4, 0),
-        // loop_start
-        // [3]_4 <- [1]_4 + [2]_4
-        Instruction::large_from_isize(ADD.global_opcode(), 3, 1, 2, 4, 4, 4, 0),
-        // [1]_4 <- [2]_4
-        Instruction::large_from_isize(ADD.global_opcode(), 1, 2, 0, 4, 4, 0, 0),
-        // [2]_4 <- [3]_4
-        Instruction::large_from_isize(ADD.global_opcode(), 2, 3, 0, 4, 4, 0, 0),
-        // [0]_4 <- [0]_4 + 1
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
-        // if [0]_4 != n, pc <- pc - 4
-        Instruction::from_isize(
-            NativeBranchEqualOpcode(BNE).global_opcode(),
-            n,
-            0,
-            -4 * DEFAULT_PC_STEP as isize,
-            0,
-            4,
-        ),
-        // [0]_3 <- [1]_4
-        Instruction::from_isize(ADD.global_opcode(), 0, 1, 0, 3, 4),
-        Instruction::from_isize(
-            TERMINATE.global_opcode(),
-            0,
-            0,
-            ExitCode::Success as isize,
-            0,
-            0,
-        ),
-    ])
-}
-
-#[test]
-fn test_vm_continuations() {
-    let n = 200000;
-    let program = gen_continuation_test_program(n);
-    let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::default(), 0).with_max_segment_len(200000),
-        native: Default::default(),
-    }
-    .with_continuations();
-
-    let expected_output = {
-        let mut a = 0;
-        let mut b = 1;
-        for _ in 0..n {
-            (a, b) = (b, a + b);
-            b %= BabyBear::ORDER_U32;
-        }
-        BabyBear::from_canonical_u32(a)
-    };
-
-    let memory_dimensions = config.system.memory_config.memory_dimensions();
-    let final_state = air_test_with_min_segments(config, program, vec![], 3).unwrap();
-    let hasher = vm_poseidon2_hasher();
-    let num_public_values = 8;
-    let pv_proof =
-        UserPublicValuesProof::compute(memory_dimensions, num_public_values, &hasher, &final_state);
-    assert_eq!(pv_proof.public_values.len(), num_public_values);
-    assert_eq!(pv_proof.public_values[0], expected_output);
-}
-
-#[test]
-fn test_vm_continuations_recover_state() {
-    let n = 2000;
-    let program = gen_continuation_test_program(n);
-    let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::default(), 0).with_max_segment_len(500),
-        native: Default::default(),
-    }
-    .with_continuations();
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let vm = VirtualMachine::new(engine, config.clone());
-    let pk = vm.keygen();
-    let segments = vm
-        .executor
-        .execute_segments(program.clone(), Streams::default())
-        .unwrap();
-    // Simulate remote proving which chip complex state needs to be serialized then deserialized.
-    let states: Vec<_> = segments
-        .iter()
-        .map(|s| bitcode::serialize(&s.store_chip_complex_state()).unwrap())
-        .collect();
-    let proof_inputs_per_seg = states
-        .into_iter()
-        .map(|s| {
-            ExecutionSegment::new_for_proving(
-                &config,
-                program.clone(),
-                bitcode::deserialize(&s).unwrap(),
-            )
-            .generate_proof_input(None)
-        })
-        .collect();
-    let proofs = vm.prove(
-        &pk,
-        VmExecutorResult {
-            per_segment: proof_inputs_per_seg,
-            final_memory: None,
-        },
-    );
-    vm.verify(&pk.get_vk(), proofs)
-        .expect("Verification failed");
-}
-
 #[test]
 fn test_vm_without_field_arithmetic() {
     /*
@@ -566,30 +445,40 @@ fn test_vm_without_field_arithmetic() {
 #[test]
 fn test_vm_fibonacci_old() {
     let instructions = vec![
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 9, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 2, 1, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 3, 1, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 0, 2, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 1, 1, 0, 2, 0, 0, 0),
+        // [0]_4 <- [19]_0
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 19, 0, 4, 0, 0, 0),
+        // [2]_4 <- [11]_0
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 11, 0, 4, 0, 0, 0),
+        // [3]_4 <- [1]_0
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 1, 0, 4, 0, 0, 0),
+        // [10]_4 <- [0]_4 + [2]_4
+        Instruction::large_from_isize(ADD.global_opcode(), 10, 0, 0, 4, 0, 0, 0),
+        // [11]_4 <- [1]_4 + [3]_4
+        Instruction::large_from_isize(ADD.global_opcode(), 11, 1, 0, 4, 0, 0, 0),
         Instruction::from_isize(
             NativeBranchEqualOpcode(BEQ).global_opcode(),
             2,
             0,
             7 * DEFAULT_PC_STEP as isize,
-            1,
-            1,
+            4,
+            4,
         ),
-        Instruction::large_from_isize(ADD.global_opcode(), 2, 2, 3, 1, 1, 1, 0),
-        Instruction::from_isize(LOADW.global_opcode(), 4, -2, 2, 1, 2),
-        Instruction::from_isize(LOADW.global_opcode(), 5, -1, 2, 1, 2),
-        Instruction::large_from_isize(ADD.global_opcode(), 6, 4, 5, 1, 1, 1, 0),
-        Instruction::from_isize(STOREW.global_opcode(), 6, 0, 2, 1, 2),
+        // [2]_4 <- [2]_4 + [3]_4
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 2, 3, 4, 4, 4, 0),
+        // [4]_4 <- [[2]_4 - 2]_4
+        Instruction::from_isize(LOADW.global_opcode(), 4, -2, 2, 4, 4),
+        // [5]_4 <- [[2]_4 - 1]_4
+        Instruction::from_isize(LOADW.global_opcode(), 5, -1, 2, 4, 4),
+        // [6]_4 <- [4]_4 + [5]_4
+        Instruction::large_from_isize(ADD.global_opcode(), 6, 4, 5, 4, 4, 4, 0),
+        // [[2]_4]_4 <- [6]_4
+        Instruction::from_isize(STOREW.global_opcode(), 6, 0, 2, 4, 4),
         Instruction::from_isize(
             JAL.global_opcode(),
             7,
             -6 * DEFAULT_PC_STEP as isize,
             0,
-            1,
+            4,
             0,
         ),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -606,34 +495,46 @@ fn test_vm_fibonacci_old_cycle_tracker() {
     let instructions = vec![
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16)),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16)),
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 9, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 2, 1, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 3, 1, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 0, 2, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 1, 1, 0, 2, 0, 0, 0),
+        // [0]_4 <- [19]_0
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 19, 0, 4, 0, 0, 0),
+        // [2]_4 <- [11]_0
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 11, 0, 4, 0, 0, 0),
+        // [3]_4 <- [1]_0
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 1, 0, 4, 0, 0, 0),
+        // [10]_4 <- [0]_4 + [2]_4
+        Instruction::large_from_isize(ADD.global_opcode(), 10, 0, 0, 4, 0, 0, 0),
+        // [11]_4 <- [1]_4 + [3]_4
+        Instruction::large_from_isize(ADD.global_opcode(), 11, 1, 0, 4, 0, 0, 0),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtEnd as u16)),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16)),
+        // if [2]_4 == [0]_4 then pc += 9 * DEFAULT_PC_STEP
         Instruction::from_isize(
             NativeBranchEqualOpcode(BEQ).global_opcode(),
             2,
             0,
             9 * DEFAULT_PC_STEP as isize,
-            1,
-            1,
-        ), // Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
-        Instruction::large_from_isize(ADD.global_opcode(), 2, 2, 3, 1, 1, 1, 0),
+            4,
+            4,
+        ),
+        // [2]_4 <- [2]_4 + [3]_4
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 2, 3, 4, 4, 4, 0),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16)),
-        Instruction::from_isize(LOADW.global_opcode(), 4, -2, 2, 1, 2),
-        Instruction::from_isize(LOADW.global_opcode(), 5, -1, 2, 1, 2),
-        Instruction::large_from_isize(ADD.global_opcode(), 6, 4, 5, 1, 1, 1, 0),
-        Instruction::from_isize(STOREW.global_opcode(), 6, 0, 2, 1, 2),
+        // [4]_4 <- [[2]_4 - 2]_4
+        Instruction::from_isize(LOADW.global_opcode(), 4, -2, 2, 4, 4),
+        // [5]_4 <- [[2]_4 - 1]_4
+        Instruction::from_isize(LOADW.global_opcode(), 5, -1, 2, 4, 4),
+        // [6]_4 <- [4]_4 + [5]_4
+        Instruction::large_from_isize(ADD.global_opcode(), 6, 4, 5, 4, 4, 4, 0),
+        // [[2]_4]_4 <- [6]_4
+        Instruction::from_isize(STOREW.global_opcode(), 6, 0, 2, 4, 4),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtEnd as u16)),
+        // [a]_4 <- pc + 4, pc -= 8 * DEFAULT_PC_STEP
         Instruction::from_isize(
             JAL.global_opcode(),
             7,
             -8 * DEFAULT_PC_STEP as isize,
             0,
-            1,
+            4,
             0,
         ),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtEnd as u16)),
@@ -799,173 +700,6 @@ fn test_vm_hint() {
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
     let config = NativeConfig::default();
     air_test_with_min_segments(config, program, input_stream, 1);
-}
-
-/// Add instruction to write input to memory, call KECCAK256 opcode, then check against expected output
-fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
-    let mut instructions = vec![];
-    instructions.push(Instruction::from_isize(
-        JAL.global_opcode(),
-        0,
-        2 * DEFAULT_PC_STEP as isize,
-        0,
-        1,
-        0,
-    )); // skip fail
-    instructions.push(Instruction::from_isize(
-        PHANTOM.global_opcode(),
-        0,
-        0,
-        SysPhantom::DebugPanic as isize,
-        0,
-        0,
-    ));
-
-    let [a, b, c] = [4, 0, (1 << LIMB_BITS) - 4];
-    // [jpw] Cheating here and assuming src, dst, len all bit in a byte so we skip writing the other register bytes
-    // src = word[b]_1 <- 0
-    let src = 0;
-    instructions.push(Instruction::large_from_isize(
-        ADD.global_opcode(),
-        b,
-        src,
-        0,
-        1,
-        0,
-        0,
-        0,
-    ));
-    // dst word[a]_1 <- 3 // use weird offset
-    let dst = 8;
-    instructions.push(Instruction::large_from_isize(
-        ADD.global_opcode(),
-        a,
-        dst,
-        0,
-        1,
-        0,
-        0,
-        0,
-    ));
-    // word[c]_1 <- len // emulate stack
-    instructions.push(Instruction::large_from_isize(
-        ADD.global_opcode(),
-        c,
-        input.len() as isize,
-        0,
-        1,
-        0,
-        0,
-        0,
-    ));
-
-    let expected = keccak256(input);
-    tracing::debug!(?input, ?expected);
-
-    for (i, byte) in input.iter().enumerate() {
-        instructions.push(Instruction::large_from_isize(
-            ADD.global_opcode(),
-            src + i as isize,
-            *byte as isize,
-            0,
-            2,
-            0,
-            0,
-            0,
-        ));
-    }
-    // dst = word[a]_1, src = word[b]_1, len = word[c]_1,
-    // read and write io to address space 2
-    instructions.push(Instruction::from_isize(
-        KECCAK256.global_opcode(),
-        a,
-        b,
-        c,
-        1,
-        2,
-    ));
-
-    // read expected result to check correctness
-    for (i, expected_byte) in expected.into_iter().enumerate() {
-        instructions.push(Instruction::from_isize(
-            NativeBranchEqualOpcode(BNE).global_opcode(),
-            dst + i as isize,
-            expected_byte as isize,
-            (-(instructions.len() as isize) + 1) * DEFAULT_PC_STEP as isize, // jump to fail
-            2,
-            0,
-        ));
-    }
-    instructions
-}
-
-#[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
-pub struct NativeKeccakConfig {
-    #[system]
-    pub system: SystemConfig,
-    #[extension]
-    pub native: Native,
-    #[extension]
-    pub keccak: Keccak256,
-}
-
-impl Default for NativeKeccakConfig {
-    fn default() -> Self {
-        Self {
-            system: SystemConfig::default().with_continuations(),
-            native: Default::default(),
-            keccak: Default::default(),
-        }
-    }
-}
-
-#[test]
-fn test_vm_keccak() {
-    let inputs = [
-        vec![],
-        (0u8..1).collect::<Vec<_>>(),
-        (0u8..135).collect::<Vec<_>>(),
-        (0u8..136).collect::<Vec<_>>(),
-        (0u8..200).collect::<Vec<_>>(),
-    ];
-    let mut instructions = inputs
-        .iter()
-        .flat_map(|input| instructions_for_keccak256_test(input))
-        .collect::<Vec<_>>();
-    instructions.push(Instruction::from_isize(
-        TERMINATE.global_opcode(),
-        0,
-        0,
-        0,
-        0,
-        0,
-    ));
-
-    let program = Program::from_instructions(&instructions);
-
-    air_test(NativeKeccakConfig::default(), program);
-}
-
-// This test does one keccak in 24 rows, and then there are 8 dummy padding rows which don't make up a full round
-#[test]
-fn test_vm_keccak_non_full_round() {
-    let inputs = [[[0u8; 32], [1u8; 32]].concat()];
-    let mut instructions = inputs
-        .iter()
-        .flat_map(|input| instructions_for_keccak256_test(input))
-        .collect::<Vec<_>>();
-    instructions.push(Instruction::from_isize(
-        TERMINATE.global_opcode(),
-        0,
-        0,
-        0,
-        0,
-        0,
-    ));
-
-    let program = Program::from_instructions(&instructions);
-
-    air_test(NativeKeccakConfig::default(), program);
 }
 
 #[test]

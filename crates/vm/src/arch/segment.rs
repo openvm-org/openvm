@@ -70,6 +70,13 @@ impl DefaultSegmentationStrategy {
             max_cells_per_chip_in_segment: max_segment_len * 120,
         }
     }
+
+    pub fn new(max_segment_len: usize, max_cells_per_chip_in_segment: usize) -> Self {
+        Self {
+            max_segment_len,
+            max_cells_per_chip_in_segment,
+        }
+    }
 }
 
 impl SegmentationStrategy for DefaultSegmentationStrategy {
