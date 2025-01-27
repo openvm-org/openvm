@@ -298,7 +298,7 @@ fn test_vm_public_values() {
 
 #[test]
 fn test_vm_initial_memory() {
-    // Program that fails if mem[(1, 0)] != 101.
+    // Program that fails if mem[(1, 7)] != 101.
     let program = Program::from_instructions(&[
         Instruction::<BabyBear>::from_isize(
             NativeBranchEqualOpcode(BEQ).global_opcode(),
@@ -319,7 +319,7 @@ fn test_vm_initial_memory() {
         Instruction::<BabyBear>::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ]);
 
-    let init_memory: BTreeMap<_, _> = [((1, 7), BabyBear::from_canonical_u32(101))]
+    let init_memory: BTreeMap<_, _> = [((4, 7), BabyBear::from_canonical_u32(101))]
         .into_iter()
         .collect();
 
@@ -649,19 +649,19 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 #[test]
 fn test_vm_field_extension_arithmetic() {
     let instructions = vec![
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 1, 0, 0, 0),
-        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
-        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
-        Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 1, 1),
-        Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 1, 1),
-        Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 4, 0, 0, 0),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+        Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 4, 4),
+        Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 4, 4),
+        Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 4, 4),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
@@ -673,19 +673,19 @@ fn test_vm_field_extension_arithmetic() {
 #[test]
 fn test_vm_max_access_adapter_8() {
     let instructions = vec![
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 1, 0, 0, 0),
-        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
-        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
-        Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 1, 1),
-        Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 1, 1),
-        Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 4, 0, 0, 0),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+        Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 4, 4),
+        Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 4, 4),
+        Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 4, 4),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
@@ -715,25 +715,25 @@ fn test_vm_max_access_adapter_8() {
 #[test]
 fn test_vm_field_extension_arithmetic_persistent() {
     let instructions = vec![
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 1, 0, 0, 0),
-        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
-        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 1, 1),
-        Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 1, 1),
-        Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 1, 1),
-        Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 1, 1),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 4, 0, 0, 0),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+        Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 4, 4),
+        Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 4, 4),
+        Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 4, 4),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(1, 1, 16, 10, 6, 64, 1024), 0)
+        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 10, 6, 64, 1024), 0)
             .with_continuations(),
         native: Default::default(),
     };
@@ -743,10 +743,10 @@ fn test_vm_field_extension_arithmetic_persistent() {
 #[test]
 fn test_vm_hint() {
     let instructions = vec![
-        Instruction::large_from_isize(ADD.global_opcode(), 16, 0, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 20, 16, 16777220, 1, 1, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 32, 20, 0, 1, 1, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 20, 20, 1, 1, 1, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 16, 0, 0, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 20, 16, 16777220, 4, 4, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 32, 20, 0, 4, 4, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 20, 20, 1, 4, 4, 0, 0),
         Instruction::from_isize(
             PHANTOM.global_opcode(),
             0,
@@ -755,39 +755,39 @@ fn test_vm_hint() {
             0,
             0,
         ),
-        Instruction::from_isize(HINT_STOREW.global_opcode(), 32, 0, 0, 1, 2),
-        Instruction::from_isize(LOADW.global_opcode(), 38, 0, 32, 1, 2),
-        Instruction::large_from_isize(ADD.global_opcode(), 44, 20, 0, 1, 1, 0, 0),
-        Instruction::from_isize(MUL.global_opcode(), 24, 38, 1, 1, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 20, 20, 24, 1, 1, 1, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 50, 16, 0, 1, 1, 0, 0),
+        Instruction::from_isize(HINT_STOREW.global_opcode(), 32, 0, 0, 4, 4),
+        Instruction::from_isize(LOADW.global_opcode(), 38, 0, 32, 4, 4),
+        Instruction::large_from_isize(ADD.global_opcode(), 44, 20, 0, 4, 4, 0, 0),
+        Instruction::from_isize(MUL.global_opcode(), 24, 38, 1, 4, 4),
+        Instruction::large_from_isize(ADD.global_opcode(), 20, 20, 24, 4, 4, 1, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 50, 16, 0, 4, 4, 0, 0),
         Instruction::from_isize(
             JAL.global_opcode(),
             24,
             6 * DEFAULT_PC_STEP as isize,
             0,
-            1,
+            4,
             0,
         ),
-        Instruction::from_isize(MUL.global_opcode(), 0, 50, 1, 1, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 44, 0, 1, 1, 1, 0),
-        Instruction::from_isize(HINT_STOREW.global_opcode(), 0, 0, 0, 1, 2),
-        Instruction::large_from_isize(ADD.global_opcode(), 50, 50, 1, 1, 1, 0, 0),
+        Instruction::from_isize(MUL.global_opcode(), 0, 50, 1, 4, 4),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 44, 0, 4, 4, 4, 0),
+        Instruction::from_isize(HINT_STOREW.global_opcode(), 0, 0, 0, 4, 4),
+        Instruction::large_from_isize(ADD.global_opcode(), 50, 50, 1, 4, 4, 0, 0),
         Instruction::from_isize(
             NativeBranchEqualOpcode(BNE).global_opcode(),
             50,
             38,
             -4 * (DEFAULT_PC_STEP as isize),
-            1,
-            1,
+            4,
+            4,
         ),
         Instruction::from_isize(
             NativeBranchEqualOpcode(BNE).global_opcode(),
             50,
             38,
             -5 * (DEFAULT_PC_STEP as isize),
-            1,
-            1,
+            4,
+            4,
         ),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
