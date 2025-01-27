@@ -282,7 +282,7 @@ fn test_vm_public_values() {
 
 #[test]
 fn test_vm_initial_memory() {
-    // Program that fails if mem[(1, 7)] != 101.
+    // Program that fails if mem[(4, 7)] != 101.
     let program = Program::from_instructions(&[
         Instruction::<BabyBear>::from_isize(
             NativeBranchEqualOpcode(BEQ).global_opcode(),
