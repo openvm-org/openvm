@@ -1,5 +1,7 @@
 # Circuit Architecture
 
+A draft formal writeup of the OpenVM circuit architecture is provided [here](../../assets/OpenVM_Circuit_Architecture.pdf). We give an informal overview below.
+
 We build our virtual machines in a STARK proving system with a multi-matrix commitment scheme and shared verifier
 randomness between AIR matrices to enable permutation arguments such as log-up.
 
