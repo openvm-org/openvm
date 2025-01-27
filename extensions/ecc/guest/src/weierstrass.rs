@@ -4,6 +4,7 @@ use core::ops::{AddAssign, Mul};
 use openvm_algebra_guest::{Field, IntMod};
 
 use super::group::Group;
+use crate::IntrinsicCurve;
 
 /// Short Weierstrass curve affine point.
 pub trait WeierstrassPoint: Sized {
@@ -98,18 +99,6 @@ pub trait FromCompressed<Coordinate> {
     ///
     /// Returns None if the `DecompressionHint::possible` flag in the hint stream is not a boolean.
     fn hint_decompress(x: &Coordinate, rec_id: &u8) -> Option<DecompressionHint<Coordinate>>;
-}
-
-/// A trait for elliptic curves that bridges the openvm types and external types with CurveArithmetic etc.
-/// Implement this for external curves with corresponding openvm point and scalar types.
-pub trait IntrinsicCurve {
-    type Scalar: Clone;
-    type Point: Clone;
-
-    /// Multi-scalar multiplication.
-    /// The implementation may be specialized to use properties of the curve
-    /// (e.g., if the curve order is prime).
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point;
 }
 
 // MSM using preprocessed table (windowed method)
