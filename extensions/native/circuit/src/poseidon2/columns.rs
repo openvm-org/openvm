@@ -113,12 +113,10 @@ pub struct VerifyBatchCellCols<T> {
 pub struct SimplePoseidonSpecificCols<T> {
     pub pc: T,
     pub is_compress: T,
-    // instruction (a, b, c, d, e)
+    // instruction (a, b, c)
     pub output_register: T,
     pub input_register_1: T,
     pub input_register_2: T,
-    pub register_address_space: T,
-    pub data_address_space: T,
 
     pub output_pointer: T,
     pub input_pointer_1: T,

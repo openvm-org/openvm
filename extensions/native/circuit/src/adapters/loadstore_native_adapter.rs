@@ -16,13 +16,15 @@ use openvm_circuit::{
         program::ProgramBus,
     },
 };
-use openvm_circuit_primitives::utils;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
-use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
+use openvm_native_compiler::{
+    conversion::AS,
+    NativeLoadStoreOpcode::{self, *},
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::{AirBuilder, BaseAir},
+    p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 use serde::{Deserialize, Serialize};
@@ -100,10 +102,7 @@ pub struct NativeLoadStoreAdapterCols<T, const NUM_CELLS: usize> {
     pub a: T,
     pub b: T,
     pub c: T,
-    pub d: T,
-    pub e: T,
 
-    pub data_write_as: T,
     pub data_write_pointer: T,
 
     pub pointer_read_aux_cols: MemoryReadAuxCols<T>,
@@ -143,10 +142,12 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         let is_storew = ctx.instruction.is_storew;
         let is_hint_storew = ctx.instruction.is_hint_storew;
 
+        let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
+
         // first pointer read is always [c]_d
         self.memory_bridge
             .read(
-                MemoryAddress::new(cols.d, cols.c),
+                MemoryAddress::new(native_as.clone(), cols.c),
                 [ctx.reads.0.clone()],
                 timestamp + timestamp_delta.clone(),
                 &cols.pointer_read_aux_cols,
@@ -157,7 +158,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    utils::select::<AB::Expr>(is_loadw.clone(), cols.e, cols.d),
+                    native_as.clone(),
                     is_storew.clone() * cols.a + is_loadw.clone() * (ctx.reads.0.clone() + cols.b),
                 ),
                 ctx.reads.1.clone(),
@@ -167,12 +168,6 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
             .eval(builder, is_valid.clone() - is_hint_storew.clone());
         timestamp_delta += is_valid.clone() - is_hint_storew.clone();
 
-        // data write
-        builder.when(is_valid.clone()).assert_eq(
-            cols.data_write_as,
-            utils::select::<AB::Expr>(is_loadw.clone(), cols.d, cols.e),
-        );
-
         builder.assert_eq(
             is_valid.clone() * cols.data_write_pointer,
             is_loadw.clone() * cols.a
@@ -180,7 +175,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         );
         self.memory_bridge
             .write(
-                MemoryAddress::new(cols.data_write_as, cols.data_write_pointer),
+                MemoryAddress::new(native_as.clone(), cols.data_write_pointer),
                 ctx.writes.clone(),
                 timestamp + timestamp_delta.clone(),
                 &cols.data_write_aux_cols,
@@ -191,7 +186,13 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         self.execution_bridge
             .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
-                [cols.a, cols.b, cols.c, cols.d, cols.e],
+                [
+                    cols.a.into(),
+                    cols.b.into(),
+                    cols.c.into(),
+                    native_as.clone().into(),
+                    native_as.clone().into(),
+                ],
                 cols.from_state,
                 timestamp_delta.clone(),
                 (DEFAULT_PC_STEP, ctx.to_pc),
@@ -306,8 +307,6 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         cols.a = read_record.a;
         cols.b = read_record.b;
         cols.c = read_record.c;
-        cols.d = read_record.d;
-        cols.e = read_record.e;
 
         let data_read = read_record.data_read.map(|read| memory.record_by_id(read));
         if let Some(data_read) = data_read {
@@ -315,7 +314,6 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         }
 
         let write = memory.record_by_id(write_record.write_id);
-        cols.data_write_as = write.address_space;
         cols.data_write_pointer = write.pointer;
 
         aux_cols_factory.generate_read_aux(

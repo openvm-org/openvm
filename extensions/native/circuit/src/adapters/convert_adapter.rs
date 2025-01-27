@@ -19,6 +19,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_native_compiler::conversion::AS;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -70,8 +71,6 @@ pub struct ConvertAdapterCols<T, const READ_SIZE: usize, const WRITE_SIZE: usize
     pub from_state: ExecutionState<T>,
     pub a_pointer: T,
     pub b_pointer: T,
-    pub a_as: T,
-    pub b_as: T,
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; 1],
     pub reads_aux: [MemoryReadAuxCols<T>; 1],
 }
@@ -110,9 +109,12 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
+        let d = AB::Expr::TWO;
+        let e = AB::Expr::from_canonical_u32(AS::Native as u32);
+
         self.memory_bridge
             .read(
-                MemoryAddress::new(cols.b_as, cols.b_pointer),
+                MemoryAddress::new(e.clone(), cols.b_pointer),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &cols.reads_aux[0],
@@ -121,7 +123,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(cols.a_as, cols.a_pointer),
+                MemoryAddress::new(d.clone(), cols.a_pointer),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &cols.writes_aux[0],
@@ -135,8 +137,8 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
                     cols.a_pointer.into(),
                     cols.b_pointer.into(),
                     AB::Expr::ZERO,
-                    cols.a_as.into(),
-                    cols.b_as.into(),
+                    d,
+                    e,
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
@@ -212,9 +214,7 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.a_pointer = write.pointer;
-        row_slice.a_as = write.address_space;
         row_slice.b_pointer = read.pointer;
-        row_slice.b_as = read.address_space;
 
         aux_cols_factory.generate_read_aux(read, &mut row_slice.reads_aux[0]);
         aux_cols_factory.generate_write_aux(write, &mut row_slice.writes_aux[0]);

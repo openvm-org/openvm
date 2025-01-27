@@ -1,6 +1,6 @@
-This document explains the specification of the `VERIFY_BATCH` opcode and its implementation by `NativePoseidon2Chip`. `CHUNK` is 8.
-
 # Specification
+
+This document explains the specification of the `VERIFY_BATCH` opcode and its implementation by `NativePoseidon2Chip`. `CHUNK` is 8.
 
 ## Context
 
@@ -42,7 +42,7 @@ A `VERIFY_BATCH` instruction does the following:
 
 ## Instruction Format
 
-The instruction uses the following seven operands. As seven is the current maximum number of operands, the address space for all reads is fixed to be `AS::Native = 5`.
+The instruction uses the following seven operands. As seven is the current maximum number of operands, the address space for all reads is fixed to be `AS::Native = 4`.
 
 | Operand | Name | Meaning                                                                                                                                                                                                                          |
 |---------|------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

@@ -19,6 +19,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_native_compiler::conversion::AS;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -66,10 +67,8 @@ pub struct NativeVectorizedWriteRecord<const N: usize> {
 pub struct NativeVectorizedAdapterCols<T, const N: usize> {
     pub from_state: ExecutionState<T>,
     pub a_pointer: T,
-    pub ab_as: T,
     pub b_pointer: T,
     pub c_pointer: T,
-    pub c_as: T,
     pub reads_aux: [MemoryReadAuxCols<T>; 2],
     pub writes_aux: [MemoryWriteAuxCols<T, N>; 1],
 }
@@ -103,9 +102,11 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
+        let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
+
         self.memory_bridge
             .read(
-                MemoryAddress::new(cols.ab_as, cols.b_pointer),
+                MemoryAddress::new(native_as.clone(), cols.b_pointer),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &cols.reads_aux[0],
@@ -114,7 +115,7 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(cols.c_as, cols.c_pointer),
+                MemoryAddress::new(native_as.clone(), cols.c_pointer),
                 ctx.reads[1].clone(),
                 timestamp_pp(),
                 &cols.reads_aux[1],
@@ -123,7 +124,7 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(cols.ab_as, cols.a_pointer),
+                MemoryAddress::new(native_as.clone(), cols.a_pointer),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &cols.writes_aux[0],
@@ -134,11 +135,11 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
             .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
                 [
-                    cols.a_pointer,
-                    cols.b_pointer,
-                    cols.c_pointer,
-                    cols.ab_as,
-                    cols.c_as,
+                    cols.a_pointer.into(),
+                    cols.b_pointer.into(),
+                    cols.c_pointer.into(),
+                    native_as.clone().into(),
+                    native_as.clone().into(),
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
@@ -219,10 +220,8 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         let a_record = memory.record_by_id(write_record.a);
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.a_pointer = a_record.pointer;
-        row_slice.ab_as = a_record.address_space;
         row_slice.b_pointer = b_record.pointer;
         row_slice.c_pointer = c_record.pointer;
-        row_slice.c_as = c_record.address_space;
         aux_cols_factory.generate_read_aux(b_record, &mut row_slice.reads_aux[0]);
         aux_cols_factory.generate_read_aux(c_record, &mut row_slice.reads_aux[1]);
         aux_cols_factory.generate_write_aux(a_record, &mut row_slice.writes_aux[0]);

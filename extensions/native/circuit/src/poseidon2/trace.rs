@@ -394,8 +394,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
                     a: output_register,
                     b: input_register_1,
                     c: input_register_2,
-                    d: register_address_space,
-                    e: data_address_space,
                     ..
                 },
             read_input_pointer_1,
@@ -436,8 +434,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         specific.output_register = output_register;
         specific.input_register_1 = input_register_1;
         specific.input_register_2 = input_register_2;
-        specific.register_address_space = register_address_space;
-        specific.data_address_space = data_address_space;
         specific.output_pointer = output_pointer;
         specific.input_pointer_1 = input_pointer_1;
         specific.input_pointer_2 = input_pointer_2;

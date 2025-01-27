@@ -20,6 +20,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_native_compiler::conversion::AS;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -53,7 +54,6 @@ impl<F: PrimeField32> JalNativeAdapterChip<F> {
 pub struct JalNativeAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub a_pointer: T,
-    pub a_as: T,
     pub writes_aux: MemoryWriteAuxCols<T, 1>,
 }
 
@@ -86,9 +86,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for JalNativeAdapterAir {
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
+        let d = AB::Expr::from_canonical_u32(AS::Native as u32);
+
         self.memory_bridge
             .write(
-                MemoryAddress::new(cols.a_as, cols.a_pointer),
+                MemoryAddress::new(d.clone(), cols.a_pointer),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &cols.writes_aux,
@@ -102,7 +104,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for JalNativeAdapterAir {
                     cols.a_pointer.into(),
                     ctx.instruction.immediate,
                     AB::Expr::ZERO,
-                    cols.a_as.into(),
+                    d.into(),
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
@@ -170,7 +172,6 @@ impl<F: PrimeField32> VmAdapterChip<F> for JalNativeAdapterChip<F> {
         let write = memory.record_by_id(write_record.writes[0].0);
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.a_pointer = write.pointer;
-        row_slice.a_as = write.address_space;
         aux_cols_factory.generate_write_aux(write, &mut row_slice.writes_aux);
     }
 

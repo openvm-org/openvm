@@ -595,8 +595,6 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             output_register,
             input_register_1,
             input_register_2,
-            register_address_space,
-            data_address_space,
             output_pointer,
             input_pointer_1,
             input_pointer_2,
@@ -621,8 +619,8 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                     output_register.into(),
                     input_register_1.into(),
                     input_register_2.into(),
-                    register_address_space.into(),
-                    data_address_space.into(),
+                    self.address_space.into(),
+                    self.address_space.into(),
                 ],
                 ExecutionState::new(pc, start_timestamp),
                 AB::Expr::from_canonical_u32(NUM_SIMPLE_ACCESSES),
@@ -631,7 +629,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(register_address_space, output_register),
+                MemoryAddress::new(self.address_space, output_register),
                 [output_pointer],
                 start_timestamp,
                 &read_output_pointer,
@@ -640,7 +638,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(register_address_space, input_register_1),
+                MemoryAddress::new(self.address_space, input_register_1),
                 [input_pointer_1],
                 start_timestamp + AB::F::ONE,
                 &read_input_pointer_1,
@@ -649,7 +647,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(register_address_space, input_register_2),
+                MemoryAddress::new(self.address_space, input_register_2),
                 [input_pointer_2],
                 start_timestamp + AB::F::TWO,
                 &read_input_pointer_2,
@@ -662,7 +660,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(data_address_space, input_pointer_1),
+                MemoryAddress::new(self.address_space, input_pointer_1),
                 left_input,
                 start_timestamp + AB::F::from_canonical_usize(3),
                 &read_data_1,
@@ -671,7 +669,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(data_address_space, input_pointer_2),
+                MemoryAddress::new(self.address_space, input_pointer_2),
                 right_input,
                 start_timestamp + AB::F::from_canonical_usize(4),
                 &read_data_2,
@@ -680,7 +678,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(data_address_space, output_pointer),
+                MemoryAddress::new(self.address_space, output_pointer),
                 left_output,
                 start_timestamp + AB::F::from_canonical_usize(5),
                 &write_data_1,
@@ -690,7 +688,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    data_address_space,
+                    self.address_space,
                     output_pointer + AB::F::from_canonical_usize(CHUNK),
                 ),
                 right_output,

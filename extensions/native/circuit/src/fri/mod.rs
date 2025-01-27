@@ -19,7 +19,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_native_compiler::FriOpcode::FRI_REDUCED_OPENING;
+use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -49,7 +49,7 @@ struct WorkloadCols<T> {
     b_aux: MemoryReadAuxCols<T>,
 }
 const WL_WIDTH: usize = WorkloadCols::<u8>::width();
-const_assert_eq!(WL_WIDTH, 26);
+const_assert_eq!(WL_WIDTH, 25);
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -65,7 +65,7 @@ struct Instruction1Cols<T> {
     b_ptr_aux: MemoryReadAuxCols<T>,
 }
 const INS_1_WIDTH: usize = Instruction1Cols::<u8>::width();
-const_assert_eq!(INS_1_WIDTH, 25);
+const_assert_eq!(INS_1_WIDTH, 24);
 const_assert_eq!(
     offset_of!(WorkloadCols<u8>, prefix),
     offset_of!(Instruction1Cols<u8>, prefix)
@@ -102,7 +102,7 @@ const fn const_max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]
 }
 pub const OVERALL_WIDTH: usize = const_max(const_max(WL_WIDTH, INS_1_WIDTH), INS_2_WIDTH);
-const_assert_eq!(OVERALL_WIDTH, 26);
+const_assert_eq!(OVERALL_WIDTH, 25);
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -119,7 +119,6 @@ const_assert_eq!(GENERAL_WIDTH, 3);
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
 struct DataCols<T> {
-    addr_space: T,
     a_ptr: T,
     b_ptr: T,
     idx: T,
@@ -128,7 +127,7 @@ struct DataCols<T> {
 }
 #[allow(dead_code)]
 const DATA_WIDTH: usize = DataCols::<u8>::width();
-const_assert_eq!(DATA_WIDTH, 12);
+const_assert_eq!(DATA_WIDTH, 11);
 
 /// Prefix of `WorkloadCols` and `Instruction1Cols`
 #[repr(C)]
@@ -141,7 +140,7 @@ struct PrefixCols<T> {
     data: DataCols<T>,
 }
 const PREFIX_WIDTH: usize = PrefixCols::<u8>::width();
-const_assert_eq!(PREFIX_WIDTH, 16);
+const_assert_eq!(PREFIX_WIDTH, 15);
 
 #[derive(Copy, Clone, Debug)]
 struct FriReducedOpeningAir {
@@ -206,10 +205,11 @@ impl FriReducedOpeningAir {
         let multiplicity = local.prefix.general.is_workload_row;
         // a_ptr/b_ptr/length/result
         let ptr_reads = AB::F::from_canonical_usize(4);
+        let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
         // read a
         self.memory_bridge
             .read(
-                MemoryAddress::new(local_data.addr_space, next.data.a_ptr),
+                MemoryAddress::new(native_as.clone(), next.data.a_ptr),
                 [local.prefix.a_or_is_first],
                 start_timestamp + ptr_reads,
                 &local.a_aux,
@@ -218,7 +218,7 @@ impl FriReducedOpeningAir {
         // read b
         self.memory_bridge
             .read(
-                MemoryAddress::new(local_data.addr_space, next.data.b_ptr),
+                MemoryAddress::new(native_as.clone(), next.data.b_ptr),
                 local.b,
                 start_timestamp + ptr_reads + AB::Expr::ONE,
                 &local.b_aux,
@@ -237,8 +237,6 @@ impl FriReducedOpeningAir {
             builder.assert_eq(local_data.idx + AB::Expr::ONE, next.data.idx);
             // local.alpha = next.alpha
             assert_array_eq(&mut builder, local_data.alpha, next.data.alpha);
-            // local.addr_space = next.addr_space
-            builder.assert_eq(local_data.addr_space, next.data.addr_space);
             // local.a_ptr = next.a_ptr + 1
             builder.assert_eq(local_data.a_ptr, next.data.a_ptr + AB::F::ONE);
             // local.b_ptr = next.b_ptr + EXT_DEG
@@ -309,16 +307,17 @@ impl FriReducedOpeningAir {
         let write_timestamp =
             start_timestamp + AB::Expr::TWO * length + AB::Expr::from_canonical_usize(4);
         let end_timestamp = write_timestamp.clone() + AB::Expr::ONE;
+        let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
         self.execution_bridge
             .execute(
                 AB::F::from_canonical_usize(FRI_REDUCED_OPENING.global_opcode().as_usize()),
                 [
-                    local.a_ptr_ptr,
-                    local.b_ptr_ptr,
-                    next.result_ptr,
-                    local_data.addr_space,
-                    next.length_ptr,
-                    next.alpha_ptr,
+                    local.a_ptr_ptr.into(),
+                    local.b_ptr_ptr.into(),
+                    next.result_ptr.into(),
+                    native_as.clone().into(),
+                    next.length_ptr.into(),
+                    next.alpha_ptr.into(),
                 ],
                 ExecutionState::new(local.pc, local.prefix.general.timestamp),
                 ExecutionState::<AB::Expr>::new(
@@ -330,7 +329,7 @@ impl FriReducedOpeningAir {
         // Read alpha
         self.memory_bridge
             .read(
-                MemoryAddress::new(local_data.addr_space, next.alpha_ptr),
+                MemoryAddress::new(native_as.clone(), next.alpha_ptr),
                 local_data.alpha,
                 start_timestamp,
                 &next.alpha_aux,
@@ -339,7 +338,7 @@ impl FriReducedOpeningAir {
         // Read length
         self.memory_bridge
             .read(
-                MemoryAddress::new(local_data.addr_space, next.length_ptr),
+                MemoryAddress::new(native_as.clone(), next.length_ptr),
                 [length],
                 start_timestamp + AB::Expr::ONE,
                 &next.length_aux,
@@ -348,7 +347,7 @@ impl FriReducedOpeningAir {
         // Read a_ptr
         self.memory_bridge
             .read(
-                MemoryAddress::new(local_data.addr_space, local.a_ptr_ptr),
+                MemoryAddress::new(native_as.clone(), local.a_ptr_ptr),
                 [local_data.a_ptr],
                 start_timestamp + AB::Expr::TWO,
                 &local.a_ptr_aux,
@@ -357,7 +356,7 @@ impl FriReducedOpeningAir {
         // Read b_ptr
         self.memory_bridge
             .read(
-                MemoryAddress::new(local_data.addr_space, local.b_ptr_ptr),
+                MemoryAddress::new(native_as.clone(), local.b_ptr_ptr),
                 [local_data.b_ptr],
                 start_timestamp + AB::Expr::from_canonical_u32(3),
                 &local.b_ptr_aux,
@@ -365,7 +364,7 @@ impl FriReducedOpeningAir {
             .eval(builder, multiplicity.clone());
         self.memory_bridge
             .write(
-                MemoryAddress::new(local_data.addr_space, next.result_ptr),
+                MemoryAddress::new(native_as.clone(), next.result_ptr),
                 local_data.result,
                 write_timestamp,
                 &next.result_aux,
@@ -561,7 +560,6 @@ fn record_to_rows<F: PrimeField32>(
         a: a_ptr_ptr,
         b: b_ptr_ptr,
         c: result_ptr,
-        d: addr_space,
         e: length_ptr,
         f: alpha_ptr,
         ..
@@ -610,7 +608,6 @@ fn record_to_rows<F: PrimeField32>(
                 },
                 a_or_is_first: a,
                 data: DataCols {
-                    addr_space,
                     a_ptr: a_ptr + F::from_canonical_usize(length - i),
                     b_ptr: b_ptr + F::from_canonical_usize((length - i) * EXT_DEG),
                     idx: F::from_canonical_usize(i),
@@ -641,7 +638,6 @@ fn record_to_rows<F: PrimeField32>(
                 },
                 a_or_is_first: F::ONE,
                 data: DataCols {
-                    addr_space,
                     a_ptr,
                     b_ptr,
                     idx: F::from_canonical_usize(length),
