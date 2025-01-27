@@ -79,3 +79,13 @@ impl CyclicGroup for Ed25519Point {
         )),
     };
 }
+
+impl IntrinsicCurve for Ed25519Point {
+    type Scalar = Ed25519Scalar;
+    type Point = Ed25519Point;
+
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
+        // TODO: idk if this can be optimized
+        openvm_ecc_guest::msm(coeffs, bases)
+    }
+}
