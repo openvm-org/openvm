@@ -75,34 +75,34 @@ where
 fn test_vm_1() {
     let n = 6;
     /*
-    Instruction 0 assigns word[0]_1 to n.
+    Instruction 0 assigns word[0]_4 to n.
     Instruction 4 terminates
-    The remainder is a loop that decrements word[0]_1 until it reaches 0, then terminates.
-    Instruction 1 checks if word[0]_1 is 0 yet, and if so sets pc to 5 in order to terminate
-    Instruction 2 decrements word[0]_1 (using word[1]_1)
+    The remainder is a loop that decrements word[0]_4 until it reaches 0, then terminates.
+    Instruction 1 checks if word[0]_4 is 0 yet, and if so sets pc to 5 in order to terminate
+    Instruction 2 decrements word[0]_4 (using word[1]_4)
     Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
      */
     let instructions = vec![
-        // word[0]_1 <- word[n]_0
-        Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 1, 0, 0, 0),
-        // if word[0]_1 == 0 then pc += 3 * DEFAULT_PC_STEP
+        // word[0]_4 <- word[n]_0
+        Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 4, 0, 0, 0),
+        // if word[0]_4 == 0 then pc += 3 * DEFAULT_PC_STEP
         Instruction::from_isize(
             NativeBranchEqualOpcode(BEQ).global_opcode(),
             0,
             0,
             3 * DEFAULT_PC_STEP as isize,
-            1,
+            4,
             0,
         ),
-        // word[0]_1 <- word[0]_1 - word[1]_0
-        Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 1, 1, 0, 0),
-        // word[2]_1 <- pc + DEFAULT_PC_STEP, pc -= 2 * DEFAULT_PC_STEP
+        // word[0]_4 <- word[0]_4 - word[1]_4
+        Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
+        // word[2]_4 <- pc + DEFAULT_PC_STEP, pc -= 2 * DEFAULT_PC_STEP
         Instruction::from_isize(
             JAL.global_opcode(),
             2,
             -2 * DEFAULT_PC_STEP as isize,
             0,
-            1,
+            4,
             0,
         ),
         // terminate
@@ -119,7 +119,7 @@ fn test_vm_override_executor_height() {
     let fri_params = FriParameters::standard_fast();
     let e = BabyBearPoseidon2Engine::new(fri_params);
     let program = Program::<BabyBear>::from_instructions(&[
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 1, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 4, 0, 0, 0),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ]);
     let committed_exe = Arc::new(VmCommittedExe::<BabyBearPoseidon2Config>::commit(
@@ -225,14 +225,14 @@ fn test_vm_1_optional_air() {
     {
         let n = 6;
         let instructions = vec![
-            Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 1, 0, 0, 0),
-            Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 1, 1, 0, 0),
+            Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 4, 0, 0, 0),
+            Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
             Instruction::from_isize(
                 NativeBranchEqualOpcode(BNE).global_opcode(),
                 0,
                 0,
                 -(DEFAULT_PC_STEP as isize),
-                1,
+                4,
                 0,
             ),
             Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -305,7 +305,7 @@ fn test_vm_initial_memory() {
             7,
             101,
             2 * DEFAULT_PC_STEP as isize,
-            1,
+            4,
             0,
         ),
         Instruction::<BabyBear>::from_isize(
@@ -337,7 +337,7 @@ fn test_vm_initial_memory() {
 fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(1, 1, 16, 10, 6, 64, 1024), 0),
+        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 10, 6, 64, 1024), 0),
         native: Default::default(),
     }
     .with_continuations();
@@ -350,14 +350,14 @@ fn test_vm_1_persistent() {
 
     let n = 6;
     let instructions = vec![
-        Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 1, 0, 0, 0),
-        Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 1, 1, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 4, 0, 0, 0),
+        Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
         Instruction::from_isize(
             NativeBranchEqualOpcode(BNE).global_opcode(),
             0,
             0,
             -(DEFAULT_PC_STEP as isize),
-            1,
+            4,
             0,
         ),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -379,14 +379,14 @@ fn test_vm_1_persistent() {
         );
         let mut digest = [BabyBear::ZERO; CHUNK];
         let compression = vm_poseidon2_hasher();
-        for _ in 0..15 {
+        for _ in 0..16 {
             digest = compression.compress(&digest, &digest);
         }
         assert_eq!(
             merkle_air_proof_input.raw.public_values[..8],
             // The value when you start with zeros and repeatedly hash the value with itself
-            // 15 times. We use 15 because addr_space_max_bits = 1 and pointer_max_bits = 16,
-            // so the height of the tree is 1 + 16 - 3 = 14. The leaf also must be hashed once
+            // 16 times. We use 16 because addr_space_max_bits = 2 and pointer_max_bits = 16,
+            // so the height of the tree is 2 + 16 - 3 = 15. The leaf also must be hashed once
             // with padding for security.
             digest
         );
@@ -400,37 +400,37 @@ fn test_vm_1_persistent() {
 
 fn gen_continuation_test_program<F: PrimeField32>(n: isize) -> Program<F> {
     // Simple Fibonacci program to compute nth Fibonacci number mod BabyBear (with F_0 = 1).
-    // Register [0]_1 <- stores the loop counter.
-    // Register [1]_1 <- stores F_i at the beginning of iteration i.
-    // Register [2]_1 <- stores F_{i+1} at the beginning of iteration i.
-    // Register [3]_1 is used as a temporary register.
+    // Register [0]_4 <- stores the loop counter.
+    // Register [1]_4 <- stores F_i at the beginning of iteration i.
+    // Register [2]_4 <- stores F_{i+1} at the beginning of iteration i.
+    // Register [3]_4 is used as a temporary register.
     Program::from_instructions(&[
-        // [0]_1 <- 0
-        Instruction::from_isize(ADD.global_opcode(), 0, 0, 0, 1, 0),
-        // [1]_1 <- 0
-        Instruction::from_isize(ADD.global_opcode(), 1, 0, 0, 1, 0),
-        // [2]_1 <- 1
-        Instruction::from_isize(ADD.global_opcode(), 2, 0, 1, 1, 0),
+        // [0]_4 <- 0
+        Instruction::from_isize(ADD.global_opcode(), 0, 0, 0, 4, 0),
+        // [1]_4 <- 0
+        Instruction::from_isize(ADD.global_opcode(), 1, 0, 0, 4, 0),
+        // [2]_4 <- 1
+        Instruction::from_isize(ADD.global_opcode(), 2, 0, 1, 4, 0),
         // loop_start
-        // [3]_1 <- [1]_1 + [2]_1
-        Instruction::large_from_isize(ADD.global_opcode(), 3, 1, 2, 1, 1, 1, 0),
-        // [1]_1 <- [2]_1
-        Instruction::large_from_isize(ADD.global_opcode(), 1, 2, 0, 1, 1, 0, 0),
-        // [2]_1 <- [3]_1
-        Instruction::large_from_isize(ADD.global_opcode(), 2, 3, 0, 1, 1, 0, 0),
-        // [0]_1 <- [0]_1 + 1
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 1, 1, 0, 0),
-        // if [0]_1 != n, pc <- pc - 3
+        // [3]_4 <- [1]_4 + [2]_4
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 1, 2, 4, 4, 4, 0),
+        // [1]_4 <- [2]_4
+        Instruction::large_from_isize(ADD.global_opcode(), 1, 2, 0, 4, 4, 0, 0),
+        // [2]_4 <- [3]_4
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 3, 0, 4, 4, 0, 0),
+        // [0]_4 <- [0]_4 + 1
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
+        // if [0]_4 != n, pc <- pc - 4
         Instruction::from_isize(
             NativeBranchEqualOpcode(BNE).global_opcode(),
             n,
             0,
             -4 * DEFAULT_PC_STEP as isize,
             0,
-            1,
+            4,
         ),
-        // [0]_3 <- [1]_1
-        Instruction::from_isize(ADD.global_opcode(), 0, 1, 0, 3, 1),
+        // [0]_3 <- [1]_4
+        Instruction::from_isize(ADD.global_opcode(), 0, 1, 0, 3, 4),
         Instruction::from_isize(
             TERMINATE.global_opcode(),
             0,
@@ -518,42 +518,42 @@ fn test_vm_continuations_recover_state() {
 #[test]
 fn test_vm_without_field_arithmetic() {
     /*
-    Instruction 0 assigns word[0]_1 to 5.
-    Instruction 1 checks if word[0]_1 is *not* 4, and if so jumps to instruction 4.
+    Instruction 0 assigns word[0]_4 to 5.
+    Instruction 1 checks if word[0]_4 is *not* 4, and if so jumps to instruction 4.
     Instruction 2 is never run.
     Instruction 3 terminates.
-    Instruction 4 checks if word[0]_1 is 5, and if so jumps to instruction 3 to terminate.
+    Instruction 4 checks if word[0]_4 is 5, and if so jumps to instruction 3 to terminate.
      */
     let instructions = vec![
-        // word[0]_1 <- word[5]_0
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 5, 0, 1, 0, 0, 0),
-        // if word[0]_1 != 4 then pc += 3 * DEFAULT_PC_STEP
+        // word[0]_4 <- word[5]_0
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 5, 0, 4, 0, 0, 0),
+        // if word[0]_4 != 4 then pc += 3 * DEFAULT_PC_STEP
         Instruction::from_isize(
             NativeBranchEqualOpcode(BNE).global_opcode(),
             0,
             4,
             3 * DEFAULT_PC_STEP as isize,
-            1,
+            4,
             0,
         ),
-        // word[2]_1 <- pc + DEFAULT_PC_STEP, pc -= 2 * DEFAULT_PC_STEP
+        // word[2]_4 <- pc + DEFAULT_PC_STEP, pc -= 2 * DEFAULT_PC_STEP
         Instruction::from_isize(
             JAL.global_opcode(),
             2,
             -2 * DEFAULT_PC_STEP as isize,
             0,
-            1,
+            4,
             0,
         ),
         // terminate
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-        // if word[0]_1 == 5 then pc -= 1
+        // if word[0]_4 == 5 then pc -= 1
         Instruction::from_isize(
             NativeBranchEqualOpcode(BEQ).global_opcode(),
             0,
             5,
             -(DEFAULT_PC_STEP as isize),
-            1,
+            4,
             0,
         ),
     ];
