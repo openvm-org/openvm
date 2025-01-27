@@ -1,10 +1,11 @@
 use std::{array, iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, AirRef,
+    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_blake3::BabyBearBlake3Engine,
+    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
@@ -78,41 +79,41 @@ fn test_range_tuple_chip() {
         .expect("Verification failed");
 }
 
-// #[test]
-// fn negative_test_range_tuple_chip() {
-//     let bus_index = 0;
-//     let sizes = [2, 2, 8];
+#[test]
+fn negative_test_range_tuple_chip() {
+    let bus_index = 0;
+    let sizes = [2, 2, 8];
 
-//     let bus = RangeTupleCheckerBus::new(bus_index, sizes);
-//     let range_checker = RangeTupleCheckerChip::new(bus);
+    let bus = RangeTupleCheckerBus::new(bus_index, sizes);
+    let range_checker = RangeTupleCheckerChip::new(bus);
 
-//     let height = sizes.iter().product();
-//     let range_trace = RowMajorMatrix::new(
-//         (1..=height)
-//             .flat_map(|idx| {
-//                 let mut idx = idx;
-//                 let mut v = vec![];
-//                 for size in sizes.iter().rev() {
-//                     let val = idx % size;
-//                     idx /= size;
-//                     v.push(val);
-//                 }
-//                 v.reverse();
-//                 v.into_iter().chain(iter::once(0))
-//             })
-//             .map(FieldAlgebra::from_wrapped_u32)
-//             .collect(),
-//         sizes.len() + 1,
-//     );
+    let height = sizes.iter().product();
+    let range_trace = RowMajorMatrix::new(
+        (1..=height)
+            .flat_map(|idx| {
+                let mut idx = idx;
+                let mut v = vec![];
+                for size in sizes.iter().rev() {
+                    let val = idx % size;
+                    idx /= size;
+                    v.push(val);
+                }
+                v.reverse();
+                v.into_iter().chain(iter::once(0))
+            })
+            .map(FieldAlgebra::from_wrapped_u32)
+            .collect(),
+        sizes.len() + 1,
+    );
 
-//     disable_debug_builder();
-//     assert_eq!(
-//         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-//             any_rap_arc_vec![range_checker.air],
-//             vec![range_trace]
-//         )
-//         .err(),
-//         Some(VerificationError::ChallengePhaseError),
-//         "Expected constraint to fail"
-//     );
-// }
+    disable_debug_builder();
+    assert_eq!(
+        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+            any_rap_arc_vec![range_checker.air],
+            vec![range_trace]
+        )
+        .err(),
+        Some(VerificationError::ChallengePhaseError),
+        "Expected constraint to fail"
+    );
+}
