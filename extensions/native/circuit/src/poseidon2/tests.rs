@@ -510,20 +510,20 @@ fn air_test_with_compress_poseidon2(
 }
 
 #[test]
-fn test_vm_compress_poseidon2_as2() {
+fn test_vm_compress_poseidon2_as4() {
     let mut rng = create_seeded_rng();
 
     let mut instructions = vec![];
 
     let lhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
     for i in 0..CHUNK as isize {
-        // [lhs_ptr + i]_2 <- rnd()
+        // [lhs_ptr + i]_4 <- rnd()
         instructions.push(Instruction::large_from_isize(
             FieldArithmeticOpcode::ADD.global_opcode(),
             lhs_ptr + i,
             rng.gen_range(1..1 << 20),
             0,
-            2,
+            4,
             0,
             0,
             0,
@@ -531,13 +531,13 @@ fn test_vm_compress_poseidon2_as2() {
     }
     let rhs_ptr = gen_pointer(&mut rng, CHUNK) as isize;
     for i in 0..CHUNK as isize {
-        // [rhs_ptr + i]_2 <- rnd()
+        // [rhs_ptr + i]_4 <- rnd()
         instructions.push(Instruction::large_from_isize(
             FieldArithmeticOpcode::ADD.global_opcode(),
             rhs_ptr + i,
             rng.gen_range(1..1 << 20),
             0,
-            2,
+            4,
             0,
             0,
             0,
@@ -545,36 +545,36 @@ fn test_vm_compress_poseidon2_as2() {
     }
     let dst_ptr = gen_pointer(&mut rng, CHUNK) as isize;
 
-    // [11]_1 <- lhs_ptr
+    // [11]_4 <- lhs_ptr
     instructions.push(Instruction::large_from_isize(
         FieldArithmeticOpcode::ADD.global_opcode(),
         11,
         lhs_ptr,
         0,
-        1,
+        4,
         0,
         0,
         0,
     ));
 
-    // [22]_1 <- rhs_ptr
+    // [22]_4 <- rhs_ptr
     instructions.push(Instruction::large_from_isize(
         FieldArithmeticOpcode::ADD.global_opcode(),
         22,
         rhs_ptr,
         0,
-        1,
+        4,
         0,
         0,
         0,
     ));
-    // [33]_1 <- dst_ptr
+    // [33]_4 <- dst_ptr
     instructions.push(Instruction::large_from_isize(
         FieldArithmeticOpcode::ADD.global_opcode(),
         33,
         0,
         dst_ptr,
-        1,
+        4,
         0,
         0,
         0,
@@ -585,8 +585,8 @@ fn test_vm_compress_poseidon2_as2() {
         33,
         11,
         22,
-        1,
-        2,
+        4,
+        4,
     ));
     instructions.push(Instruction::from_isize(
         SystemOpcode::TERMINATE.global_opcode(),
