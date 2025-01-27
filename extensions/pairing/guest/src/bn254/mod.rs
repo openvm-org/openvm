@@ -7,10 +7,7 @@ use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use openvm_algebra_guest::{Field, IntMod};
 use openvm_algebra_moduli_setup::moduli_declare;
-use openvm_ecc_guest::{
-    weierstrass::{CachedMulTable, IntrinsicCurve},
-    CyclicGroup, Group,
-};
+use openvm_ecc_guest::{weierstrass::CachedMulTable, CyclicGroup, Group, IntrinsicCurve};
 use openvm_ecc_sw_setup::sw_declare;
 
 use crate::pairing::PairingIntrinsics;
