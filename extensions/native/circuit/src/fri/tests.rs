@@ -34,7 +34,6 @@ fn compute_fri_mat_opening<F: Field>(
 fn fri_mat_opening_air_test() {
     let num_ops = 3; // non-power-of-2 to also test padding
     let elem_range = || 1..=100;
-    let address_space_range = || 1usize..=2;
     let length_range = || 1..=49;
 
     let mut tester = VmChipTestBuilder::default();
@@ -73,7 +72,7 @@ fn fri_mat_opening_air_test() {
         let a_pointer = gen_pointer(&mut rng, 1);
         let b_pointer = gen_pointer(&mut rng, 4);
 
-        let address_space = rng.gen_range(address_space_range());
+        let address_space = 4usize;
 
         /*tracing::debug!(
             "{opcode:?} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {}, x = {}, y = {}",

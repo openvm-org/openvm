@@ -44,18 +44,14 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeLoadStoreChip<F, 1>) {
     (rng, tester, chip)
 }
 
-fn gen_test_data(rng: &mut StdRng, is_immediate: bool, opcode: NativeLoadStoreOpcode) -> TestData {
+fn gen_test_data(rng: &mut StdRng, opcode: NativeLoadStoreOpcode) -> TestData {
     let is_load = matches!(opcode, NativeLoadStoreOpcode::LOADW);
 
     let a = rng.gen_range(0..1 << 20);
     let b = rng.gen_range(0..1 << 20);
     let c = rng.gen_range(0..1 << 20);
-    let d = if is_immediate {
-        F::ZERO
-    } else {
-        F::from_canonical_u32(rng.gen_range(1..4))
-    };
-    let e = F::from_canonical_u32(rng.gen_range(1..4));
+    let d = F::from_canonical_u32(4u32);
+    let e = F::from_canonical_u32(4u32);
 
     TestData {
         a: F::from_canonical_u32(a),
@@ -148,10 +144,9 @@ fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut NativeLoadStoreChip<F, 1>,
     rng: &mut StdRng,
-    is_immediate: bool,
     opcode: NativeLoadStoreOpcode,
 ) {
-    let data = gen_test_data(rng, is_immediate, opcode);
+    let data = gen_test_data(rng, opcode);
     set_values(tester, chip, &data);
 
     tester.execute_with_pc(
@@ -171,9 +166,9 @@ fn rand_native_loadstore_test() {
     setup_tracing();
     let (mut rng, mut tester, mut chip) = setup();
     for _ in 0..20 {
-        set_and_execute(&mut tester, &mut chip, &mut rng, false, STOREW);
-        set_and_execute(&mut tester, &mut chip, &mut rng, false, HINT_STOREW);
-        set_and_execute(&mut tester, &mut chip, &mut rng, false, LOADW);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREW);
+        set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADW);
     }
     let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");

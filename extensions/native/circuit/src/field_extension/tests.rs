@@ -3,10 +3,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use openvm_circuit::arch::testing::{
-    memory::{gen_address_space, gen_pointer},
-    VmChipTestBuilder,
-};
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldExtensionOpcode;
 use openvm_stark_backend::{
@@ -47,8 +44,8 @@ fn new_field_extension_air_test() {
         let opcode =
             FieldExtensionOpcode::from_usize(rng.gen_range(0..FieldExtensionOpcode::COUNT));
 
-        let as_d = gen_address_space(&mut rng);
-        let as_e = gen_address_space(&mut rng);
+        let as_d = 4usize;
+        let as_e = 4usize;
         let address1 = gen_pointer(&mut rng, 4);
         let address2 = gen_pointer(&mut rng, 4);
         let result_address = gen_pointer(&mut rng, 4);

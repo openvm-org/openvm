@@ -28,12 +28,10 @@ fn prepare_castf_rand_write_execute(
     y: u32,
     rng: &mut StdRng,
 ) {
-    let address_space_range = || 1usize..=2;
-
     let operand1 = y;
 
-    let as_x = rng.gen_range(address_space_range()); // d
-    let as_y = rng.gen_range(address_space_range()); // e
+    let as_x = 2usize; // d
+    let as_y = 4usize; // e
     let address_x = gen_pointer(rng, 32); // a
     let address_y = gen_pointer(rng, 32); // b
 

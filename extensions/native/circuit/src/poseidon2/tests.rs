@@ -372,8 +372,8 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
                 a,
                 b,
                 c,
-                d: BabyBear::ONE,
-                e: BabyBear::TWO,
+                d: BabyBear::from_canonical_usize(4),
+                e: BabyBear::from_canonical_usize(4),
                 f: BabyBear::ZERO,
                 g: BabyBear::ZERO,
             }

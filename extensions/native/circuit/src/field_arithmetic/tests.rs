@@ -25,8 +25,7 @@ use crate::adapters::alu_native_adapter::{AluNativeAdapterChip, AluNativeAdapter
 fn new_field_arithmetic_air_test() {
     let num_ops = 3; // non-power-of-2 to also test padding
     let elem_range = || 1..=100;
-    let z_address_space_range = || 1usize..=2;
-    let xy_address_space_range = || 0usize..=2;
+    let xy_address_space_range = || 0usize..=1;
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = FieldArithmeticChip::new(
@@ -52,9 +51,9 @@ fn new_field_arithmetic_air_test() {
             continue;
         }
 
-        let result_as = rng.gen_range(z_address_space_range());
-        let as1 = rng.gen_range(xy_address_space_range());
-        let as2 = rng.gen_range(xy_address_space_range());
+        let result_as = 4usize;
+        let as1 = rng.gen_range(xy_address_space_range()) * 4;
+        let as2 = rng.gen_range(xy_address_space_range()) * 4;
         let address1 = if as1 == 0 {
             operand1.as_canonical_u32() as usize
         } else {
@@ -132,14 +131,14 @@ fn new_field_arithmetic_air_zero_div_zero() {
         FieldArithmeticCoreChip::new(),
         tester.offline_memory_mutex_arc(),
     );
-    tester.write_cell(1, 6, BabyBear::from_canonical_u32(111));
-    tester.write_cell(1, 7, BabyBear::from_canonical_u32(222));
+    tester.write_cell(4, 6, BabyBear::from_canonical_u32(111));
+    tester.write_cell(4, 7, BabyBear::from_canonical_u32(222));
 
     tester.execute(
         &mut chip,
         &Instruction::from_usize(
             FieldArithmeticOpcode::DIV.global_opcode(),
-            [5, 6, 7, 1, 1, 1],
+            [5, 6, 7, 4, 4, 4],
         ),
     );
     tester.build();
@@ -176,13 +175,13 @@ fn new_field_arithmetic_air_test_panic() {
         FieldArithmeticCoreChip::new(),
         tester.offline_memory_mutex_arc(),
     );
-    tester.write_cell(1, 0, BabyBear::ZERO);
+    tester.write_cell(4, 0, BabyBear::ZERO);
     // should panic
     tester.execute(
         &mut chip,
         &Instruction::from_usize(
             FieldArithmeticOpcode::DIV.global_opcode(),
-            [0, 0, 0, 1, 1, 1],
+            [0, 0, 0, 4, 4, 4],
         ),
     );
 }

@@ -33,7 +33,7 @@ fn set_and_execute(
 ) {
     let imm = initial_imm.unwrap_or(rng.gen_range(0..20));
     let a = rng.gen_range(0..32) << 2;
-    let d = rng.gen_range(1..4);
+    let d = 4usize;
 
     tester.execute_with_pc(
         chip,
