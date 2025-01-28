@@ -39,7 +39,7 @@ The secp256k1 and secp256r1 curves are supported out of the box, and developers 
 
 For elliptic curve cryptography, the `openvm-ecc-guest` crate provides macros similar to those in [`openvm-algebra-guest`](./algebra.md):
 
-1. **Declare**: Use `sw_declare!` or `te_declare!` to define weierstrass or twisted edwards elliptic curves, respectively,over the previously declared moduli. For example:
+1. **Declare**: Use `sw_declare!` or `te_declare!` to define short Weierstrass or twisted Edwards elliptic curves, respectively, over the previously declared moduli. For example:
 
 ```rust
 sw_declare! {
