@@ -1,11 +1,11 @@
 | group | app.proof_time_ms | app.cycles | app.cells_used | leaf.proof_time_ms | leaf.cycles | leaf.cells_used |
 | -- | -- | -- | -- | -- | -- | -- |
-| [verify_fibair](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks/verify_fibair-35f1128f0517a1036d7b39b493640c702ced5929.md) | 2,170 |  513,767 |  18,710,224 |- | - | - |
-| [fibonacci_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks/fibonacci-35f1128f0517a1036d7b39b493640c702ced5929.md) | 5,305 |  1,500,095 |  51,485,080 | 7,028 |  1,924,975 |  69,419,266 |
-| [regex_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks/regex-35f1128f0517a1036d7b39b493640c702ced5929.md) | 15,356 |  1,914,103 |  165,455,373 | 29,325 |  5,883,622 |  258,897,702 |
-| [ecrecover_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks/ecrecover-35f1128f0517a1036d7b39b493640c702ced5929.md) | 2,563 |  284,567 |  15,055,723 | 18,242 |  4,157,560 |  186,729,619 |
+| [verify_fibair](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks/verify_fibair-8b5d4483dd95b179d468ab012a1371b150c098fa.md) |<span style='color: red'>(+7 [+0.3%])</span> 2,201 |  513,827 |  18,710,764 |- | - | - |
+| [fibonacci_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks/fibonacci-8b5d4483dd95b179d468ab012a1371b150c098fa.md) |<span style='color: green'>(-23 [-0.4%])</span> 5,284 |  1,500,095 |  51,485,080 |- | - | - |
+| [regex_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks/regex-8b5d4483dd95b179d468ab012a1371b150c098fa.md) | 15,304 |  1,914,103 |  165,455,373 | 29,438 |  5,883,386 |  258,895,578 |
+| [ecrecover_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks/ecrecover-8b5d4483dd95b179d468ab012a1371b150c098fa.md) | 2,566 |  284,567 |  15,055,723 | 18,110 |  4,158,085 |  186,734,344 |
 
 
-Commit: https://github.com/openvm-org/openvm/commit/35f1128f0517a1036d7b39b493640c702ced5929
+Commit: https://github.com/openvm-org/openvm/commit/8b5d4483dd95b179d468ab012a1371b150c098fa
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/13017522180)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/13018305898)
