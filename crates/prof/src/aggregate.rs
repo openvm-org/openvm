@@ -346,7 +346,7 @@ impl BenchmarkOutput {
                 .or_default()
                 .extend(metrics);
         }
-        self.by_name.insert(
+        if let Some(e) = self.by_name.insert(
             name.to_owned(),
             HashMap::from_iter([
                 ("total_proof_time".to_owned(), metrics.total_proof_time),
@@ -355,7 +355,9 @@ impl BenchmarkOutput {
                     metrics.total_par_proof_time,
                 ),
             ]),
-        );
+        ) {
+            panic!("Duplicate metric: {e:?}");
+        }
     }
 }
 
