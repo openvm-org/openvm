@@ -72,7 +72,7 @@ te_init! {
 - `sw_declare!`: Declares short Weierstrass elliptic curve structures.
 - `te_declare!`: Declares twisted Edwards elliptic curve structures.
 - `sw_init!`: Initializes the short Weierstrass elliptic curves once, linking them to the underlying moduli.
-- `te_init!`: Initializes the twisted Edwards elliptic curves once, linking it to the underlying moduli.
+- `te_init!`: Initializes the twisted Edwards elliptic curves once, linking them to the underlying moduli.
 - `setup_sw_<i>()`/`setup_all_sw_curves()`/`setup_te_<i>()`/`setup_all_te_curves()`: Secures runtime correctness.
 
 To use elliptic curve operations on a struct defined with `sw_declare!` or `te_declare!`, it is expected that the struct for the curve's coordinate field was defined using `moduli_declare!`. In particular, the coordinate field needs to be initialized and set up as described in the [algebra extension](./algebra.md) chapter.
