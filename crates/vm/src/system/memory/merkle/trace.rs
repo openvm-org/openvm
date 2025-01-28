@@ -140,10 +140,10 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
             left: initial_left_node,
             right: initial_right_node,
             ..
-        } = initial_node.clone()
+        } = initial_node
         {
             // Tell the hasher about this hash.
-            hasher.compress_and_record(&initial_left_node.hash(), &initial_right_node.hash());
+            hasher.record(&initial_left_node.hash(), &initial_right_node.hash());
 
             let is_as_section = height > self.memory_dimensions.address_height;
 
@@ -164,11 +164,11 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
                     .contains(&(height - 1, left_as_label, left_address_label));
 
             let final_left_node = if left_is_final {
-                initial_left_node
+                initial_left_node.clone()
             } else {
                 Arc::new(self.recur(
                     height - 1,
-                    &initial_left_node,
+                    initial_left_node,
                     left_as_label,
                     left_address_label,
                     hasher,
@@ -181,11 +181,11 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
                     .contains(&(height - 1, right_as_label, right_address_label));
 
             let final_right_node = if right_is_final {
-                initial_right_node
+                initial_right_node.clone()
             } else {
                 Arc::new(self.recur(
                     height - 1,
-                    &initial_right_node,
+                    initial_right_node,
                     right_as_label,
                     right_address_label,
                     hasher,

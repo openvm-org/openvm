@@ -106,6 +106,16 @@ impl<F: PrimeField32> Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2Per
 }
 
 impl<F: PrimeField32> HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2PeripheryChip<F> {
+    fn record(
+        &mut self,
+        lhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
+        rhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
+    ) {
+        match self {
+            Poseidon2PeripheryChip::Register0(chip) => chip.record(lhs, rhs),
+            Poseidon2PeripheryChip::Register1(chip) => chip.record(lhs, rhs),
+        }
+    }
     fn compress_and_record(
         &mut self,
         lhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],

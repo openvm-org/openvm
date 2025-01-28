@@ -50,6 +50,19 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Hasher<PERIPHERY_POSEIDON2_CH
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F>
     for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
 {
+    fn record(
+        &mut self,
+        lhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
+        rhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
+    ) {
+        let mut input = [F::ZERO; PERIPHERY_POSEIDON2_WIDTH];
+        input[..PERIPHERY_POSEIDON2_CHUNK_SIZE].copy_from_slice(lhs);
+        input[PERIPHERY_POSEIDON2_CHUNK_SIZE..].copy_from_slice(rhs);
+
+        let count = self.records.entry(input).or_insert(AtomicU32::new(0));
+        count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
     /// Key method for Hasher trait.
     ///
     /// Takes two chunks, hashes them, and returns the result. Total width 3 * CHUNK, exposed in `direct_interaction_width()`.

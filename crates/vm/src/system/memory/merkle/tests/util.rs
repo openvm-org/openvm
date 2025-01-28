@@ -61,6 +61,9 @@ impl<const CHUNK: usize, F: Field> Hasher<CHUNK, F> for HashTestChip<CHUNK, F> {
     }
 }
 impl<const CHUNK: usize, F: Field> HasherChip<CHUNK, F> for HashTestChip<CHUNK, F> {
+    fn record(&mut self, left: &[F; CHUNK], right: &[F; CHUNK]) {
+        self.compress_and_record(left, right);
+    }
     fn compress_and_record(&mut self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK] {
         let result = test_hash_sum(*left, *right);
         self.requests.push([*left, *right, result]);
