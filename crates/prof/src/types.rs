@@ -154,9 +154,9 @@ impl From<MdTableCell> for BencherValue {
 // For serialization purposes
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MetricsFile {
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub counter: Vec<MetricEntry>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub gauge: Vec<MetricEntry>,
 }
 
