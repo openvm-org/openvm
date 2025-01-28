@@ -4720,6 +4720,7 @@ dependencies = [
  "hex-literal 0.4.1",
  "num-bigint 0.4.6",
  "openvm-algebra-circuit",
+ "openvm-algebra-guest",
  "openvm-algebra-transpiler",
  "openvm-circuit",
  "openvm-ecc-circuit",

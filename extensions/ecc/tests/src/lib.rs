@@ -12,9 +12,9 @@ mod tests {
         utils::{air_test, air_test_with_min_segments},
     };
     use openvm_ecc_circuit::{
-        CurveCoeffs, CurveConfig, EccExtension, Rv32EccConfig, TeCurveConfig, P256_CONFIG,
-        SECP256K1_CONFIG,
+        CurveConfig, EccExtension, Rv32EccConfig, ED25519_CONFIG, P256_CONFIG, SECP256K1_CONFIG,
     };
+    use openvm_ecc_guest::CyclicGroup;
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_rv32im_transpiler::{
@@ -97,7 +97,10 @@ mod tests {
 
     #[test]
     fn test_decompress() -> Result<()> {
+        use ed25519::Ed25519Point;
+        use edwards::TwistedEdwardsPoint;
         use halo2curves_axiom::{group::Curve, secp256k1::Secp256k1Affine};
+        use openvm_algebra_guest::IntMod;
 
         let config =
             Rv32EccConfig::new(vec![SECP256K1_CONFIG.clone(),
@@ -126,8 +129,7 @@ mod tests {
                             .unwrap(),
                     }),
                 },
-            ]);
-
+            ], vec![ED25519_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "decompress",
@@ -156,11 +158,23 @@ mod tests {
         let r_y: [u8; 32] =
             hex!("347E00859981D5446447075AA07543CDE6DF224CFB23F7B5886337BD00000000");
 
-        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y, r_x, r_y]
+        let coords1 = [p1.x.to_bytes(), p1.y.to_bytes(), q_x, q_y, r_x, r_y]
             .concat()
             .into_iter()
             .map(FieldAlgebra::from_canonical_u8)
             .collect();
+
+        let p2 = Ed25519Point::GENERATOR.clone();
+        let p2 = &p2 + &p2 + &p2;
+        println!("ed25519 decompressed: {:?}", &p2);
+
+        let coords2: Vec<_> = [p2.x().as_le_bytes(), p2.y().as_le_bytes()]
+            .concat()
+            .into_iter()
+            .map(FieldAlgebra::from_canonical_u8)
+            .collect();
+
+        let coords = [coords1, coords2].concat();
         air_test_with_min_segments(config, openvm_exe, vec![coords], 1);
         Ok(())
     }
@@ -177,7 +191,7 @@ mod tests {
                 SECP256K1_CONFIG.scalar.clone(),
             ]))
             .keccak(Default::default())
-            .ecc(EccExtension::new(vec![SECP256K1_CONFIG.clone()]))
+            .ecc(EccExtension::new(vec![SECP256K1_CONFIG.clone()], vec![]))
             .build();
 
         let elf = build_example_program_at_path_with_features(
@@ -216,23 +230,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config =
-            Rv32EccConfig::new(vec![CurveConfig {
-            modulus: BigUint::from_str(
-                "57896044618658097711785492504343953926634992332820282019728792003956564819949",
-            ).unwrap(),
-            scalar: BigUint::from_str(
-                "7237005577332262213973186563042994240857116359379907606001950938285454250989",
-            ).unwrap(),
-            coeffs: CurveCoeffs::TeCurve(TeCurveConfig {
-                a: BigUint::from_str(
-                    "57896044618658097711785492504343953926634992332820282019728792003956564819948",
-                ).unwrap(),
-                d: BigUint::from_str(
-                    "37095705934669439343138083508754565189542113879843219016388785533085940283555",
-                ).unwrap(),
-            }),
-        }]);
+        let config = Rv32EccConfig::new(vec![], vec![ED25519_CONFIG.clone()]);
         air_test(config, openvm_exe);
         Ok(())
     }

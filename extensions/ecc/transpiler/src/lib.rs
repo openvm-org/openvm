@@ -25,7 +25,7 @@ pub enum Rv32WeierstrassOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
-#[opcode_offset = 0x600] // same as for weierstrass
+#[opcode_offset = 0x680]
 #[allow(non_camel_case_types)]
 #[repr(usize)]
 pub enum Rv32EdwardsOpcode {
@@ -36,7 +36,8 @@ pub enum Rv32EdwardsOpcode {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
 #[repr(u16)]
 pub enum EccPhantom {
-    HintDecompress = 0x40,
+    SwHintDecompress = 0x40,
+    TeHintDecompress = 0x41,
     HintNonQr = 0x41,
 }
 
@@ -78,6 +79,15 @@ impl EccTranspilerExtension {
                 ((dec_insn.funct7 as u8) / TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS) as usize;
             let curve_idx_shift = curve_idx * Rv32EdwardsOpcode::COUNT;
 
+            if let Some(TeBaseFunct7::TeHintDecompress) = TeBaseFunct7::from_repr(base_funct7) {
+                assert_eq!(dec_insn.rd, 0);
+                return Some(TranspilerOutput::one_to_one(Instruction::phantom(
+                    PhantomDiscriminant(EccPhantom::TeHintDecompress as u16),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    curve_idx as u16,
+                )));
+            }
             if base_funct7 == TeBaseFunct7::TeSetup as u8 {
                 let local_opcode = Rv32EdwardsOpcode::SETUP_EC_ADD;
                 Some(Instruction::new(
@@ -92,12 +102,10 @@ impl EccTranspilerExtension {
                 ))
             } else {
                 let global_opcode = match TeBaseFunct7::from_repr(base_funct7) {
-                    Some(TeBaseFunct7::TeAdd) => {
-                        Rv32EdwardsOpcode::EC_ADD as usize + Rv32EdwardsOpcode::CLASS_OFFSET
-                    }
+                    Some(TeBaseFunct7::TeAdd) => Rv32EdwardsOpcode::EC_ADD.global_opcode(),
                     _ => unimplemented!(),
                 };
-                let global_opcode = global_opcode + curve_idx_shift;
+                let global_opcode = global_opcode.as_usize() + curve_idx_shift;
                 Some(from_r_type(global_opcode, 2, &dec_insn))
             }
         };
@@ -132,10 +140,11 @@ impl EccTranspilerExtension {
             let curve_idx =
                 ((dec_insn.funct7 as u8) / SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS) as usize;
             let curve_idx_shift = curve_idx * Rv32WeierstrassOpcode::COUNT;
-            if let Some(SwBaseFunct7::HintDecompress) = SwBaseFunct7::from_repr(base_funct7) {
+
+            if let Some(SwBaseFunct7::SwHintDecompress) = SwBaseFunct7::from_repr(base_funct7) {
                 assert_eq!(dec_insn.rd, 0);
                 return Some(TranspilerOutput::one_to_one(Instruction::phantom(
-                    PhantomDiscriminant(EccPhantom::HintDecompress as u16),
+                    PhantomDiscriminant(EccPhantom::SwHintDecompress as u16),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
                     curve_idx as u16,
@@ -169,18 +178,14 @@ impl EccTranspilerExtension {
                 ))
             } else {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
-                    Some(SwBaseFunct7::SwAddNe) => {
-                        Rv32WeierstrassOpcode::EC_ADD_NE as usize
-                            + Rv32WeierstrassOpcode::CLASS_OFFSET
-                    }
+                    Some(SwBaseFunct7::SwAddNe) => Rv32WeierstrassOpcode::EC_ADD_NE.global_opcode(),
                     Some(SwBaseFunct7::SwDouble) => {
                         assert!(dec_insn.rs2 == 0);
-                        Rv32WeierstrassOpcode::EC_DOUBLE as usize
-                            + Rv32WeierstrassOpcode::CLASS_OFFSET
+                        Rv32WeierstrassOpcode::EC_DOUBLE.global_opcode()
                     }
                     _ => unimplemented!(),
                 };
-                let global_opcode = global_opcode + curve_idx_shift;
+                let global_opcode = global_opcode.as_usize() + curve_idx_shift;
                 Some(from_r_type(global_opcode, 2, &dec_insn, true))
             }
         };

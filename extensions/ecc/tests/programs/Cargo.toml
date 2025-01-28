@@ -11,6 +11,7 @@ openvm-custom-insn = { path = "../../../../crates/toolchain/custom_insn", defaul
 
 openvm-ecc-guest = { path = "../../guest", default-features = false }
 openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros", default-features = false }
+openvm-ecc-te-macros = { path = "../../../../extensions/ecc/te-macros", default-features = false }
 openvm-algebra-guest = { path = "../../../algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { path = "../../../algebra/moduli-macros", default-features = false }
 openvm-rv32im-guest = { path = "../../../../extensions/rv32im/guest", default-features = false }
@@ -59,7 +60,7 @@ required-features = ["k256", "p256"]
 
 [[example]]
 name = "decompress"
-required-features = ["k256"]
+required-features = ["k256", "ed25519"]
 
 [[example]]
 name = "ecdsa"

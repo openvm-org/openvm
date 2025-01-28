@@ -7,9 +7,12 @@ extern crate alloc;
 use hex_literal::hex;
 use openvm::io::read_vec;
 use openvm_ecc_guest::{
-    algebra::IntMod,
-    weierstrass::{FromCompressed, WeierstrassPoint},
-    Group,
+    algebra::{Field, IntMod},
+    ed25519::{Ed25519Coord, Ed25519Point},
+    edwards::TwistedEdwardsPoint,
+    k256::{Secp256k1Coord, Secp256k1Point},
+    weierstrass::WeierstrassPoint,
+    FromCompressed, Group,
 };
 use openvm_k256::{Secp256k1Coord, Secp256k1Point};
 
@@ -48,6 +51,8 @@ openvm::init!("openvm_init_decompress_k256.rs");
 // test decompression under an honest host
 pub fn main() {
     let bytes = read_vec();
+
+    // secp256k1
     let x = Secp256k1Coord::from_le_bytes(&bytes[..32]);
     let y = Secp256k1Coord::from_le_bytes(&bytes[32..64]);
     let rec_id = y.as_le_bytes()[0] & 1;
@@ -71,6 +76,18 @@ pub fn main() {
     test_possible_decompression::<CurvePoint1mod4>(&x, &y, rec_id);
     // x = 1 is not on the x-coordinate of any point on the CurvePoint1mod4 curve
     test_impossible_decompression::<CurvePoint1mod4>(&Fp1mod4::from_u8(1), rec_id);
+
+    // ed25519
+    let x = Ed25519Coord::from_le_bytes(&bytes[64..96]);
+    let y = Ed25519Coord::from_le_bytes(&bytes[96..128]);
+    let rec_id = x.as_le_bytes()[0] & 1;
+
+    let p = Ed25519Point::decompress(y.clone(), &rec_id);
+    assert_eq!(p.x(), &x);
+    assert_eq!(p.y(), &y);
+
+    let p = Ed25519Point::decompress(&Ed25519Coord::from_u8(2), &rec_id);
+    assert!(p.is_none());
 }
 
 fn test_possible_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinate>>(

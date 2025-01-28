@@ -10,16 +10,16 @@ use crate::IntrinsicCurve;
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
-    pub static ref Ed25519_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
+    pub static ref ED25519_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
         "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED"
     ));
-    pub static ref Ed25519_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
+    pub static ref ED25519_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
         "1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED"
     ));
-    pub static ref Ed25519_A: BigUint = BigUint::from_bytes_be(&hex!(
+    pub static ref ED25519_A: BigUint = BigUint::from_bytes_be(&hex!(
         "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEC"
     ));
-    pub static ref Ed25519_D: BigUint = BigUint::from_bytes_be(&hex!(
+    pub static ref ED25519_D: BigUint = BigUint::from_bytes_be(&hex!(
         "52036CEE2B6FFE738CC740797779E89800700A4D4141D8AB75EB4DCA135978A3"
     ));
 }

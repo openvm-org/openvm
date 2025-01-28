@@ -87,16 +87,16 @@ pub fn main() {
     #[allow(clippy::op_ref)]
     let _p3 = &p1 + &p2;
 
-    let x1 = Edwards25519Coord::from_le_bytes(&hex!(
+    let x1 = Edwards25519Coord::from_be_bytes(&hex!(
         "216936D3CD6E53FEC0A4E231FDD6DC5C692CC7609525A7B2C9562D608F25D51A"
     ));
-    let y1 = Edwards25519Coord::from_le_bytes(&hex!(
+    let y1 = Edwards25519Coord::from_be_bytes(&hex!(
         "6666666666666666666666666666666666666666666666666666666666666658"
     ));
     let p1 = Edwards25519Point::from_xy(x1, y1).unwrap();
 
     let x2 = Edwards25519Coord::from_u32(2);
-    let y2 = Edwards25519Coord::from_le_bytes(&hex!(
+    let y2 = Edwards25519Coord::from_be_bytes(&hex!(
         "1A43BF127BDDC4D71FF910403C11DDB5BA2BCDD2815393924657EF111E712631"
     ));
     let p2 = Edwards25519Point::from_xy(x2, y2).unwrap();

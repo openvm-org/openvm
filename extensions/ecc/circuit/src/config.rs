@@ -24,18 +24,26 @@ pub struct Rv32EccConfig {
 }
 
 impl Rv32EccConfig {
-    pub fn new(curves: Vec<CurveConfig>) -> Self {
-        let primes: Vec<_> = curves
+    pub fn new(
+        sw_curves: Vec<CurveConfig<SwCurveCoeffs>>,
+        te_curves: Vec<CurveConfig<TeCurveCoeffs>>,
+    ) -> Self {
+        let sw_primes: Vec<_> = sw_curves
             .iter()
             .flat_map(|c| [c.modulus.clone(), c.scalar.clone()])
             .collect();
+        let te_primes: Vec<_> = te_curves
+            .iter()
+            .flat_map(|c| [c.modulus.clone(), c.scalar.clone()])
+            .collect();
+        let primes = sw_primes.into_iter().chain(te_primes).collect();
         Self {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
             modular: ModularExtension::new(primes),
-            ecc: EccExtension::new(curves),
+            ecc: EccExtension::new(sw_curves, te_curves),
         }
     }
 }

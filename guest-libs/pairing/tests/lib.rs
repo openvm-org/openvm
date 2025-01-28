@@ -54,7 +54,7 @@ mod bn254 {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes_with_names),
-            weierstrass: EccExtension::new(vec![]),
+            weierstrass: EccExtension::new(vec![], vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bn254]),
         }
     }
@@ -503,7 +503,7 @@ mod bls12_381 {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes_with_names),
-            weierstrass: EccExtension::new(vec![]),
+            weierstrass: EccExtension::new(vec![], vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bls12_381]),
         }
     }
