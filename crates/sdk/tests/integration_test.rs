@@ -447,7 +447,7 @@ fn test_e2e_proof_generation_and_verification() {
 
 #[test]
 fn test_e2e_minimal_proof_generation_and_verification() {
-    let app_log_blowup = 1;
+    let app_log_blowup = 3;
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
     println!("minimal_keygen");
     let minimal_pk = Sdk

@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use derivative::Derivative;
-use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm, dummy_minimal_proof};
+use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
     arch::{VirtualMachine, VmConfig},
     system::program::trace::VmCommittedExe,

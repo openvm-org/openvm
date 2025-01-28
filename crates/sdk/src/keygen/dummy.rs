@@ -74,16 +74,18 @@ pub(super) fn compute_root_proof_heights(
 pub(super) fn compute_minimal_root_proof_heights(
     root_vm_config: NativeConfig,
     root_exe: VmExe<F>,
-    dummy_app_proof: &Proof<SC>,
+    // dummy_single_segment_app_proof: &Proof<SC>,
+    app_proof: &ContinuationVmProof<SC>,
 ) -> (Vec<usize>, VmComplexTraceHeights) {
-    let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
-    let root_input = MinimalVmVerifierInput {
-        proof: dummy_app_proof.clone(),
-        public_values: vec![F::ZERO; num_user_public_values],
-    };
+    // let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
+    // let root_input = MinimalVmVerifierInput {
+    //     proof: dummy_single_segment_app_proof.clone(),
+    //     public_values: vec![F::ZERO; num_user_public_values],
+    // };
+    let minimal_vm_input = MinimalVmVerifierInput::get_continuation_vm_proof(app_proof);
     let vm = SingleSegmentVmExecutor::new(root_vm_config);
     let res = vm
-        .execute_and_compute_heights(root_exe, root_input.write())
+        .execute_and_compute_heights(root_exe, minimal_vm_input.write())
         .unwrap();
     let air_heights: Vec<_> = res
         .air_heights
@@ -95,14 +97,12 @@ pub(super) fn compute_minimal_root_proof_heights(
     (air_heights, internal_heights)
 }
 
-pub(super) fn dummy_minimal_proof(
+pub(super) fn dummy_single_segment_app_proof(
     app_fri_params: FriParameters,
     num_public_values: usize,
-) -> Proof<SC> {
+) -> ContinuationVmProof<SC> {
     let app_vm_pk = Arc::new(dummy_riscv_app_vm_pk(num_public_values, app_fri_params));
-    let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), None);
-    assert_eq!(app_proof.per_segment.len(), 1);
-    app_proof.per_segment.into_iter().next().unwrap()
+    dummy_app_proof_impl(app_vm_pk.clone(), None)
 }
 
 pub(super) fn dummy_internal_proof(

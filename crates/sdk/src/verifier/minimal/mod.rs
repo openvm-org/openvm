@@ -12,7 +12,8 @@ use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, p3_field::FieldAlgebra, prover::types::Proof,
 };
 use openvm_stark_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
-use types::MinimalVmVerifierPvs;
+use types::{MinimalVmVerifierInput, MinimalVmVerifierPvs};
+use vars::MinimalVmVerifierInputVariable;
 
 use super::{
     common::{
@@ -53,64 +54,75 @@ impl MinimalVmVerifierConfig {
             builder.cycle_tracker_end("InitializePcsConst");
 
             builder.cycle_tracker_start("ReadProofsFromInput");
-            let proofs: Array<C, StarkProofVariable<_>> =
-                <Vec<Proof<BabyBearPoseidon2Config>> as Hintable<C>>::read(&mut builder);
-            println!("proofs: {:?}", proofs.len());
+            // let MinimalVmVerifierInputVariable {
+            //     proof,
+            //     public_values,
+            // } = MinimalVmVerifierInput::<SC>::read(&mut builder);
+            let proof: StarkProofVariable<_> =
+                <Proof<BabyBearPoseidon2Config> as Hintable<C>>::read(&mut builder);
+            let public_values = VmVerifierPvs::<Felt<F>>::uninit(&mut builder);
             // Only one proof should be provided.
-            builder.assert_eq::<Usize<_>>(proofs.len(), RVar::one());
+            // builder.assert_eq::<Usize<_>>(proofs.len(), RVar::one());
             builder.cycle_tracker_end("ReadProofsFromInput");
 
             builder.cycle_tracker_start("VerifyProofs");
-            let pvs = VmVerifierPvs::<Felt<F>>::uninit(&mut builder);
-            builder.range(0, proofs.len()).for_each(|i_vec, builder| {
-                let i = i_vec[0];
-                let proof = builder.get(&proofs, i);
-                assert_required_air_for_app_vm_present(builder, &proof);
-                StarkVerifier::verify::<DuplexChallengerVariable<C>>(
-                    builder, &pcs, &m_advice, &proof,
-                );
-                {
-                    let commit = get_program_commit(builder, &proof);
-                    builder.if_eq(i, RVar::zero()).then_or_else(
-                        |builder| {
-                            builder.assign(&pvs.app_commit, commit);
-                        },
-                        |builder| builder.assert_eq::<[_; DIGEST_SIZE]>(pvs.app_commit, commit),
-                    );
-                }
+            // let proof = builder.get(&proof, RVar::zero());
+            assert_required_air_for_app_vm_present(&mut builder, &proof);
+            StarkVerifier::verify::<DuplexChallengerVariable<C>>(
+                &mut builder,
+                &pcs,
+                &m_advice,
+                &proof,
+            );
+            {
+                let commit = get_program_commit(&mut builder, &proof);
+                builder.assign(&public_values.app_commit, commit);
+            }
 
-                let proof_connector_pvs = get_connector_pvs(builder, &proof);
-                assert_or_assign_connector_pvs(builder, &pvs.connector, i, &proof_connector_pvs);
+            let proof_connector_pvs = get_connector_pvs(&mut builder, &proof);
+            assert_or_assign_connector_pvs(
+                &mut builder,
+                &public_values.connector,
+                RVar::zero(),
+                &proof_connector_pvs,
+            );
 
-                let proof_memory_pvs = get_memory_pvs(builder, &proof);
-                assert_or_assign_memory_pvs(builder, &pvs.memory, i, &proof_memory_pvs);
-            });
+            let proof_memory_pvs = get_memory_pvs(&mut builder, &proof);
+            assert_or_assign_memory_pvs(
+                &mut builder,
+                &public_values.memory,
+                RVar::zero(),
+                &proof_memory_pvs,
+            );
             builder.cycle_tracker_end("VerifyProofs");
 
             builder.cycle_tracker_start("ExtractPublicValues");
-            let is_terminate = builder.cast_felt_to_var(pvs.connector.is_terminate);
+            let is_terminate = builder.cast_felt_to_var(public_values.connector.is_terminate);
             builder.if_eq(is_terminate, F::ONE).then(|builder| {
                 let (pv_commit, expected_memory_root) = verify_user_public_values_root(
                     builder,
                     self.app_system_config.num_public_values,
                     self.app_system_config.memory_config,
                 );
-                builder.assert_eq::<[_; DIGEST_SIZE]>(pvs.memory.final_root, expected_memory_root);
-                builder.assign(&pvs.public_values_commit, pv_commit);
+                builder.assert_eq::<[_; DIGEST_SIZE]>(
+                    public_values.memory.final_root,
+                    expected_memory_root,
+                );
+                builder.assign(&public_values.public_values_commit, pv_commit);
             });
             let hasher = VariableP2Hasher::new(&mut builder);
-            let public_values_vec: Vec<Felt<F>> = pvs.flatten();
+            let public_values_vec: Vec<Felt<F>> = public_values.flatten();
             builder.cycle_tracker_end("ExtractPublicValues");
 
             let root_pvs = MinimalVmVerifierPvs {
                 exe_commit: compute_exe_commit(
                     &mut builder,
                     &hasher,
-                    pvs.app_commit,
-                    pvs.memory.initial_root,
-                    pvs.connector.initial_pc,
+                    public_values.app_commit,
+                    public_values.memory.initial_root,
+                    public_values.connector.initial_pc,
                 ),
-                leaf_verifier_commit: pvs.app_commit,
+                leaf_verifier_commit: public_values.app_commit,
                 public_values: public_values_vec,
             };
             root_pvs

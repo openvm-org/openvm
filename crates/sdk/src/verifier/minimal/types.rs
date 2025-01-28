@@ -8,7 +8,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use static_assertions::assert_impl_all;
 
-use crate::verifier::leaf::types::UserPublicValuesRootProof;
+use crate::{prover::vm::ContinuationVmProof, verifier::leaf::types::UserPublicValuesRootProof};
 
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound = "")]
@@ -16,10 +16,24 @@ use crate::verifier::leaf::types::UserPublicValuesRootProof;
 pub struct MinimalVmVerifierInput<SC: StarkGenericConfig> {
     /// App VM proof
     pub proof: Proof<SC>,
-    /// Public values to expose directly
-    pub public_values: Vec<Val<SC>>,
+    /// Public values root proof
+    pub public_values_root_proof: UserPublicValuesRootProof<Val<SC>>,
 }
 assert_impl_all!(MinimalVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
+
+impl<SC: StarkGenericConfig> MinimalVmVerifierInput<SC> {
+    pub fn get_continuation_vm_proof(proof: &ContinuationVmProof<SC>) -> Self {
+        let ContinuationVmProof {
+            per_segment,
+            user_public_values,
+        } = proof;
+        assert_eq!(per_segment.len(), 1);
+        Self {
+            proof: per_segment[0].clone(),
+            public_values_root_proof: UserPublicValuesRootProof::extract(user_public_values),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct MinimalVmVerifierPvs<T> {

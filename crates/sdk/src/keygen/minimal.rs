@@ -33,7 +33,7 @@ use crate::{
     keygen::{
         dummy::{
             compute_minimal_root_proof_heights, compute_root_proof_heights,
-            dummy_internal_proof_riscv_app_vm, dummy_minimal_proof,
+            dummy_internal_proof_riscv_app_vm, dummy_single_segment_app_proof,
         },
         perm::AirIdPermutation,
         AppVerifyingKey, Halo2ProvingKey, RootVerifierProvingKey,
@@ -96,8 +96,10 @@ where
             }
         });
 
-        let dummy_app_proof =
-            dummy_minimal_proof(config.app_fri_params, config.max_num_user_public_values);
+        let dummy_app_proof = dummy_single_segment_app_proof(
+            config.app_fri_params,
+            config.max_num_user_public_values,
+        );
 
         let root_verifier_pk = {
             let root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
@@ -141,7 +143,7 @@ where
                 app_vm_pk: app_vm_pk.clone(),
                 root_verifier_pk,
             },
-            dummy_app_proof,
+            dummy_app_proof.per_segment.into_iter().next().unwrap(),
         )
     }
 

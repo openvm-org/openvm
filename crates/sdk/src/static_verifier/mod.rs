@@ -24,6 +24,7 @@ use crate::{
         common::{
             assert_single_segment_vm_exit_successfully_with_connector_air_id, types::SpecialAirIds,
         },
+        leaf::types::UserPublicValuesRootProof,
         minimal::types::MinimalVmVerifierInput,
         root::types::{RootVmVerifierInput, RootVmVerifierPvs},
         utils::compress_babybear_var_to_bn254,
@@ -71,18 +72,21 @@ impl RootVerifierProvingKey {
     pub fn generate_dummy_minimal_root_proof(&self, proof: Proof<SC>) -> Proof<RootSC> {
         let prover = RootVerifierLocalProver::new(self.clone());
         // 2 * DIGEST_SIZE for exe_commit and leaf_commit
-        let num_public_values = prover
-            .root_verifier_pk
-            .vm_pk
-            .vm_config
-            .system
-            .num_public_values
-            - 2 * DIGEST_SIZE;
+        // let num_public_values = prover
+        //     .root_verifier_pk
+        //     .vm_pk
+        //     .vm_config
+        //     .system
+        //     .num_public_values
+        //     - 2 * DIGEST_SIZE;
         SingleSegmentVmProver::prove(
             &prover,
             MinimalVmVerifierInput {
                 proof,
-                public_values: vec![F::ZERO; num_public_values],
+                public_values_root_proof: UserPublicValuesRootProof {
+                    sibling_hashes: vec![],
+                    public_values_commit: [F::ZERO; DIGEST_SIZE],
+                },
             }
             .write(),
         )

@@ -1,7 +1,4 @@
-use openvm_circuit::{
-    arch::{instructions::program::Program, SystemConfig},
-    system::memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
-};
+use openvm_circuit::arch::{instructions::program::Program, SystemConfig};
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use openvm_native_recursion::{
     challenger::duplex::DuplexChallengerVariable, fri::TwoAdicFriPcsVariable, hints::Hintable,
@@ -11,8 +8,7 @@ use openvm_native_recursion::{
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
     openvm_stark_backend::{
-        keygen::types::MultiStarkVerifyingKey, p3_field::FieldAlgebra, p3_util::log2_strict_usize,
-        prover::types::Proof,
+        keygen::types::MultiStarkVerifyingKey, p3_field::FieldAlgebra, prover::types::Proof,
     },
 };
 
@@ -23,8 +19,7 @@ use crate::{
             assert_required_air_for_app_vm_present, get_connector_pvs, get_memory_pvs,
             get_program_commit, types::VmVerifierPvs,
         },
-        leaf::types::UserPublicValuesRootProof,
-        utils::{verify_user_public_values_root, VariableP2Compressor},
+        utils::verify_user_public_values_root,
     },
     C, F,
 };
