@@ -1,10 +1,9 @@
 use std::{collections::HashMap, io::Write};
 
 use eyre::Result;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::types::{BencherValue, Labels, MdTableCell, MetricDb};
+use crate::types::{BencherValue, BenchmarkOutput, Labels, MdTableCell, MetricDb};
 
 type MetricName = String;
 type MetricsByName = HashMap<MetricName, Vec<(f64, Labels)>>;
@@ -29,9 +28,8 @@ pub struct AggregateMetrics {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BencherAggregateMetrics {
-    // BMF max depth is 2
     #[serde(flatten)]
-    pub by_group: HashMap<String, BencherValue>,
+    pub by_group: HashMap<String, HashMap<String, BencherValue>>,
     /// In seconds
     pub total_proof_time: BencherValue,
     /// In seconds
@@ -232,17 +230,14 @@ impl AggregateMetrics {
         let by_group = self
             .by_group
             .iter()
-            .flat_map(|(group_name, metrics)| {
-                metrics
+            .map(|(group_name, metrics)| {
+                let metrics = metrics
                     .iter()
                     .flat_map(|(metric_name, stats)| {
                         [
+                            (format!("{metric_name}::sum"), stats.sum.into()),
                             (
-                                format!("{group_name}::{metric_name}::sum"),
-                                stats.sum.into(),
-                            ),
-                            (
-                                format!("{group_name}::{metric_name}"),
+                                metric_name.clone(),
                                 BencherValue {
                                     value: stats.avg.val,
                                     lower_value: Some(stats.min.val),
@@ -251,7 +246,8 @@ impl AggregateMetrics {
                             ),
                         ]
                     })
-                    .collect_vec()
+                    .collect();
+                (group_name.clone(), metrics)
             })
             .collect();
         let total_proof_time = self.total_proof_time.into();
@@ -339,6 +335,28 @@ impl AggregateMetrics {
             .find(|k| group_weight(k) == 0)
             .unwrap_or_else(|| self.by_group.keys().next().unwrap())
             .clone()
+    }
+}
+
+impl BenchmarkOutput {
+    pub fn insert(&mut self, name: &str, metrics: BencherAggregateMetrics) {
+        for (group_name, metrics) in metrics.by_group {
+            self.by_name
+                .entry(format!("{name}::{group_name}"))
+                .or_default()
+                .extend(metrics);
+        }
+        self.by_name.insert(
+            name.to_owned(),
+            HashMap::from_iter([("total_proof_time".to_owned(), metrics.total_proof_time)]),
+        );
+        self.by_name.insert(
+            name.to_owned(),
+            HashMap::from_iter([(
+                "total_par_proof_time".to_owned(),
+                metrics.total_par_proof_time,
+            )]),
+        );
     }
 }
 

@@ -72,9 +72,7 @@ fn main() -> Result<()> {
             }
         }
 
-        output
-            .by_name
-            .insert(aggregated.name(), aggregated.to_bencher_metrics());
+        output.insert(&aggregated.name(), aggregated.to_bencher_metrics());
         let mut writer = Vec::new();
         aggregated.write_markdown(&mut writer, VM_METRIC_NAMES)?;
 
