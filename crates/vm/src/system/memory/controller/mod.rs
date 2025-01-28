@@ -471,9 +471,9 @@ impl<F: PrimeField32> MemoryController<F> {
         entry: MemoryLogEntry<F>,
         offline_memory: &mut OfflineMemory<F>,
         interface_chip: &mut MemoryInterface<F>,
-        access_adapters: &mut AccessAdapterInventory<F>,
+        adapter_records: &mut AccessAdapterInventory<F>,
     ) {
-        let records = match entry {
+        match entry {
             MemoryLogEntry::Read {
                 address_space,
                 pointer,
@@ -482,7 +482,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 if address_space != 0 {
                     interface_chip.touch_range(address_space, pointer, len as u32);
                 }
-                offline_memory.read(address_space, pointer, len)
+                offline_memory.read(address_space, pointer, len, adapter_records);
             }
             MemoryLogEntry::Write {
                 address_space,
@@ -492,14 +492,12 @@ impl<F: PrimeField32> MemoryController<F> {
                 if address_space != 0 {
                     interface_chip.touch_range(address_space, pointer, data.len() as u32);
                 }
-                offline_memory.write(address_space, pointer, data)
+                offline_memory.write(address_space, pointer, data, adapter_records);
             }
             MemoryLogEntry::IncrementTimestampBy(amount) => {
                 offline_memory.increment_timestamp_by(amount);
-                Vec::new()
             }
         };
-        access_adapters.extend_records(records);
     }
 
     /// Returns the final memory state if persistent.
@@ -513,9 +511,7 @@ impl<F: PrimeField32> MemoryController<F> {
 
         match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                let (final_memory, records) = offline_memory.finalize::<1>();
-                self.access_adapters.extend_records(records);
-
+                let final_memory = offline_memory.finalize::<1>(&mut self.access_adapters);
                 boundary_chip.finalize(final_memory);
                 self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
             }
@@ -525,9 +521,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 initial_memory,
             } => {
                 let hasher = hasher.unwrap();
-
-                let (final_partition, records) = offline_memory.finalize::<CHUNK>();
-                self.access_adapters.extend_records(records);
+                let final_partition = offline_memory.finalize::<CHUNK>(&mut self.access_adapters);
 
                 boundary_chip.finalize(initial_memory, &final_partition, hasher);
                 let final_memory_values = final_partition
