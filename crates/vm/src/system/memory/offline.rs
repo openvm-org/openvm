@@ -63,7 +63,7 @@ pub struct OfflineMemory<F> {
     memory_bus: MemoryBus,
     range_checker: SharedVariableRangeCheckerChip,
 
-    log: Vec<Option<MemoryRecord<F>>>,
+    pub log: Vec<Option<MemoryRecord<F>>>,
 }
 
 impl<F: PrimeField32> OfflineMemory<F> {
@@ -88,7 +88,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
             timestamp_max_bits: config.clk_max_bits,
             memory_bus,
             range_checker,
-            log: vec![],
+            log: Vec::with_capacity(config.access_capacity),
         }
     }
 
@@ -111,11 +111,6 @@ impl<F: PrimeField32> OfflineMemory<F> {
             paged_vec[(addr_space - config.as_offset) as usize].set(pointer as usize, value);
         }
         paged_vec
-    }
-
-    pub(super) fn set_log_capacity(&mut self, access_capacity: usize) {
-        assert!(self.log.is_empty());
-        self.log = Vec::with_capacity(access_capacity);
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {

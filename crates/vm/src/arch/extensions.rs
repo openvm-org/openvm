@@ -39,10 +39,8 @@ use crate::metrics::VmMetrics;
 use crate::system::{
     connector::VmConnectorChip,
     memory::{
-        interface::MemoryInterface,
         merkle::{DirectCompressionBus, MemoryMerkleBus},
         offline_checker::{MemoryBridge, MemoryBus},
-        online::MemoryLogEntry,
         MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
     },
     native_adapter::NativeAdapterChip,
@@ -501,7 +499,6 @@ pub struct SystemBase<F> {
 pub struct SystemBaseState<F> {
     pub range_checker_chip: Vec<u8>,
     pub initial_memory: Option<MemoryImage<F>>,
-    pub memory_logs: Vec<MemoryLogEntry<F>>,
     pub connector_chip: Vec<u8>,
     pub program_chip: Vec<u8>,
 }
@@ -554,18 +551,13 @@ impl<F: PrimeField32> Stateful<SystemBaseState<F>> for SystemBase<F> {
         if let Some(initial_memory) = state.initial_memory {
             self.memory_controller.set_initial_memory(initial_memory);
         }
-        self.memory_controller.set_memory_logs(state.memory_logs);
         self.connector_chip.load_state(state.connector_chip);
         self.program_chip.load_state(state.program_chip);
     }
     fn store_state(&self) -> SystemBaseState<F> {
         SystemBaseState {
             range_checker_chip: self.range_checker_chip.store_state(),
-            initial_memory: match &self.memory_controller.interface_chip {
-                MemoryInterface::Volatile { .. } => None,
-                MemoryInterface::Persistent { initial_memory, .. } => Some(initial_memory.clone()),
-            },
-            memory_logs: self.memory_controller.get_memory_logs(),
+            initial_memory: self.memory_controller.initial_memory_image(),
             connector_chip: self.connector_chip.store_state(),
             program_chip: self.program_chip.store_state(),
         }
@@ -634,11 +626,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             // This is **not** an instruction executor.
             // Currently we never use poseidon2 opcodes when continuations is enabled: we will need
             // special handling when that happens
-            let direct_bus_idx = memory_controller
-                .interface_chip
-                .compression_bus()
-                .unwrap()
-                .0;
+            let direct_bus_idx = memory_controller.compression_bus().0;
             let chip = Poseidon2PeripheryChip::new(
                 vm_poseidon2_config(),
                 direct_bus_idx,

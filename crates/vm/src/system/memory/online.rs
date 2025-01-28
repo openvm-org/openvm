@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 
 use openvm_stark_backend::p3_field::PrimeField32;
-use serde::{Deserialize, Serialize};
 
 use super::paged_vec::{AddressMap, PAGE_SIZE};
 use crate::{
@@ -9,28 +8,13 @@ use crate::{
     system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MemoryLogEntry<T> {
-    Read {
-        address_space: u32,
-        pointer: u32,
-        len: usize,
-    },
-    Write {
-        address_space: u32,
-        pointer: u32,
-        data: Vec<T>,
-    },
-    IncrementTimestampBy(u32),
-}
-
 /// A simple data structure to read to/write from memory.
 ///
 /// Stores a log of memory accesses to reconstruct aspects of memory state for trace generation.
 #[derive(Debug)]
 pub struct Memory<F> {
     pub(super) data: AddressMap<F, PAGE_SIZE>,
-    pub(super) log: Vec<MemoryLogEntry<F>>,
+    next_record_id: usize,
     timestamp: u32,
 }
 
@@ -39,21 +23,17 @@ impl<F: PrimeField32> Memory<F> {
         Self {
             data: AddressMap::from_mem_config(mem_config),
             timestamp: INITIAL_TIMESTAMP + 1,
-            log: Vec::with_capacity(mem_config.access_capacity),
+            next_record_id: 0,
         }
     }
 
     /// Instantiates a new `Memory` data structure from an image.
-    pub fn from_image(image: MemoryImage<F>, access_capacity: usize) -> Self {
+    pub fn from_image(image: MemoryImage<F>) -> Self {
         Self {
             data: image,
             timestamp: INITIAL_TIMESTAMP + 1,
-            log: Vec::with_capacity(access_capacity),
+            next_record_id: 0,
         }
-    }
-
-    fn last_record_id(&self) -> RecordId {
-        RecordId(self.log.len() - 1)
     }
 
     /// Writes an array of values to the memory at the specified address space and start index.
@@ -68,26 +48,15 @@ impl<F: PrimeField32> Memory<F> {
         assert!(N.is_power_of_two());
 
         let prev_data = self.data.set_range(&(address_space, pointer), &values);
-
-        self.log.push(MemoryLogEntry::Write {
-            address_space,
-            pointer,
-            data: values.to_vec(),
-        });
+        self.next_record_id += 1;
         self.timestamp += 1;
 
-        (self.last_record_id(), prev_data)
+        (RecordId(self.next_record_id - 1), prev_data)
     }
 
     /// Reads an array of values from the memory at the specified address space and start index.
     pub fn read<const N: usize>(&mut self, address_space: u32, pointer: u32) -> (RecordId, [F; N]) {
         assert!(N.is_power_of_two());
-
-        self.log.push(MemoryLogEntry::Read {
-            address_space,
-            pointer,
-            len: N,
-        });
 
         let values = if address_space == 0 {
             assert_eq!(N, 1, "cannot batch read from address space 0");
@@ -95,13 +64,14 @@ impl<F: PrimeField32> Memory<F> {
         } else {
             self.range_array::<N>(address_space, pointer)
         };
+        self.next_record_id += 1;
         self.timestamp += 1;
-        (self.last_record_id(), values)
+        (RecordId(self.next_record_id - 1), values)
     }
 
     pub fn increment_timestamp_by(&mut self, amount: u32) {
         self.timestamp += amount;
-        self.log.push(MemoryLogEntry::IncrementTimestampBy(amount))
+        self.next_record_id += 1;
     }
 
     pub fn timestamp(&self) -> u32 {

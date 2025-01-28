@@ -3,11 +3,12 @@ use std::{
     collections::BTreeMap,
     iter,
     marker::PhantomData,
-    mem,
+    ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
 };
 
 use getset::Getters;
+use openvm_circuit::system::memory::controller::worker::MemoryTask;
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_zero::IsZeroSubAir,
@@ -36,6 +37,7 @@ use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
     system::memory::{
         adapter::AccessAdapterInventory,
+        controller::worker::MemoryBackgroundWorker,
         dimensions::MemoryDimensions,
         merkle::{MemoryMerkleBus, MemoryMerkleChip},
         offline::{MemoryRecord, OfflineMemory, INITIAL_TIMESTAMP},
@@ -43,7 +45,7 @@ use crate::{
             MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
             MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols, AUX_LEN,
         },
-        online::{Memory, MemoryLogEntry},
+        online::Memory,
         persistent::PersistentBoundaryChip,
         tree::MemoryNode,
     },
@@ -51,6 +53,7 @@ use crate::{
 
 pub mod dimensions;
 pub mod interface;
+mod worker;
 
 pub const CHUNK: usize = 8;
 /// The offset of the Merkle AIR in AIRs of MemoryController.
@@ -58,10 +61,10 @@ pub const MERKLE_AIR_OFFSET: usize = 1;
 /// The offset of the boundary AIR in AIRs of MemoryController.
 pub const BOUNDARY_AIR_OFFSET: usize = 0;
 
+pub type MemoryImage<F> = AddressMap<F, PAGE_SIZE>;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct RecordId(pub usize);
-
-pub type MemoryImage<F> = AddressMap<F, PAGE_SIZE>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimestampedValues<T, const N: usize> {
@@ -89,7 +92,7 @@ pub type Equipartition<F, const N: usize> = BTreeMap<(u32, u32), [F; N]>;
 #[derive(Getters)]
 pub struct MemoryController<F> {
     pub memory_bus: MemoryBus,
-    pub interface_chip: MemoryInterface<F>,
+    pub interface_chip: Arc<Mutex<MemoryInterface<F>>>,
 
     #[getset(get = "pub")]
     pub(crate) mem_config: MemoryConfig,
@@ -103,10 +106,17 @@ pub struct MemoryController<F> {
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 
-    access_adapters: AccessAdapterInventory<F>,
+    // this could probably be Arc<RefCell>
+    access_adapters: Arc<Mutex<AccessAdapterInventory<F>>>,
 
     // Filled during finalization.
     final_state: Option<FinalState<F>>,
+
+    is_persistent: bool,
+    num_airs: usize,
+    num_access_adapters: usize,
+
+    background_worker: Option<MemoryBackgroundWorker<F>>,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -218,10 +228,7 @@ impl PersistentMemoryTraceHeights {
 
 impl<F: PrimeField32> MemoryController<F> {
     pub fn continuation_enabled(&self) -> bool {
-        match &self.interface_chip {
-            MemoryInterface::Volatile { .. } => false,
-            MemoryInterface::Persistent { .. } => true,
-        }
+        self.is_persistent
     }
     pub fn with_volatile_memory(
         memory_bus: MemoryBus,
@@ -230,34 +237,50 @@ impl<F: PrimeField32> MemoryController<F> {
     ) -> Self {
         let range_checker_bus = range_checker.bus();
         let initial_memory = AddressMap::from_mem_config(&mem_config);
+
+        let offline_memory = Arc::new(Mutex::new(OfflineMemory::new(
+            initial_memory,
+            1,
+            memory_bus,
+            range_checker.clone(),
+            mem_config,
+        )));
+        let interface_chip = Arc::new(Mutex::new(MemoryInterface::Volatile {
+            boundary_chip: VolatileBoundaryChip::new(
+                memory_bus,
+                mem_config.as_height,
+                mem_config.pointer_max_bits,
+                range_checker.clone(),
+            ),
+        }));
+        let access_adapters = AccessAdapterInventory::new(
+            range_checker.clone(),
+            memory_bus,
+            mem_config.clk_max_bits,
+            mem_config.max_access_adapter_n,
+        );
+        let num_access_adapters = access_adapters.num_access_adapters();
+        let access_adapters = Arc::new(Mutex::new(access_adapters));
+
+        let background_worker = Some(MemoryBackgroundWorker::spawn(
+            offline_memory.clone(),
+            interface_chip.clone(),
+            access_adapters.clone(),
+        ));
         Self {
             memory_bus,
             mem_config,
-            interface_chip: MemoryInterface::Volatile {
-                boundary_chip: VolatileBoundaryChip::new(
-                    memory_bus,
-                    mem_config.as_height,
-                    mem_config.pointer_max_bits,
-                    range_checker.clone(),
-                ),
-            },
+            interface_chip,
             memory: Memory::new(&mem_config),
-            offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
-                initial_memory,
-                1,
-                memory_bus,
-                range_checker.clone(),
-                mem_config,
-            ))),
-            access_adapters: AccessAdapterInventory::new(
-                range_checker.clone(),
-                memory_bus,
-                mem_config.clk_max_bits,
-                mem_config.max_access_adapter_n,
-            ),
+            offline_memory,
+            access_adapters,
             range_checker,
             range_checker_bus,
             final_state: None,
+            num_access_adapters,
+            num_airs: 1 + num_access_adapters,
+            is_persistent: false,
+            background_worker,
         }
     }
 
@@ -277,7 +300,7 @@ impl<F: PrimeField32> MemoryController<F> {
             as_offset: 1,
         };
         let range_checker_bus = range_checker.bus();
-        let interface_chip = MemoryInterface::Persistent {
+        let interface_chip = Arc::new(Mutex::new(MemoryInterface::Persistent {
             boundary_chip: PersistentBoundaryChip::new(
                 memory_dims,
                 memory_bus,
@@ -286,28 +309,45 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus, compression_bus),
             initial_memory: AddressMap::from_mem_config(&mem_config),
-        };
+        }));
+
+        let offline_memory = Arc::new(Mutex::new(OfflineMemory::new(
+            AddressMap::from_mem_config(&mem_config),
+            CHUNK,
+            memory_bus,
+            range_checker.clone(),
+            mem_config,
+        )));
+
+        let access_adapters = AccessAdapterInventory::new(
+            range_checker.clone(),
+            memory_bus,
+            mem_config.clk_max_bits,
+            mem_config.max_access_adapter_n,
+        );
+        let num_access_adapters = access_adapters.num_access_adapters();
+        let access_adapters = Arc::new(Mutex::new(access_adapters));
+
+        let background_worker = Some(MemoryBackgroundWorker::spawn(
+            offline_memory.clone(),
+            interface_chip.clone(),
+            access_adapters.clone(),
+        ));
+
         Self {
             memory_bus,
             mem_config,
             interface_chip,
             memory: Memory::new(&mem_config), // it is expected that the memory will be set later
-            offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
-                AddressMap::from_mem_config(&mem_config),
-                CHUNK,
-                memory_bus,
-                range_checker.clone(),
-                mem_config,
-            ))),
-            access_adapters: AccessAdapterInventory::new(
-                range_checker.clone(),
-                memory_bus,
-                mem_config.clk_max_bits,
-                mem_config.max_access_adapter_n,
-            ),
+            offline_memory,
+            access_adapters,
             range_checker,
             range_checker_bus,
             final_state: None,
+            is_persistent: true,
+            num_airs: 2 + num_access_adapters,
+            num_access_adapters,
+            background_worker,
         }
     }
 
@@ -316,11 +356,13 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn set_override_trace_heights(&mut self, overridden_heights: MemoryTraceHeights) {
-        match &mut self.interface_chip {
+        match self.interface_chip.lock().unwrap().deref_mut() {
             MemoryInterface::Volatile { boundary_chip } => match overridden_heights {
                 MemoryTraceHeights::Volatile(oh) => {
                     boundary_chip.set_overridden_height(oh.boundary);
                     self.access_adapters
+                        .lock()
+                        .unwrap()
                         .set_override_trace_heights(oh.access_adapters);
                 }
                 _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Volatile"),
@@ -334,6 +376,8 @@ impl<F: PrimeField32> MemoryController<F> {
                     boundary_chip.set_overridden_height(oh.boundary);
                     merkle_chip.set_overridden_height(oh.merkle);
                     self.access_adapters
+                        .lock()
+                        .unwrap()
                         .set_override_trace_heights(oh.access_adapters);
                 }
                 _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Persistent"),
@@ -348,9 +392,9 @@ impl<F: PrimeField32> MemoryController<F> {
         let mut offline_memory = self.offline_memory.lock().unwrap();
         offline_memory.set_initial_memory(memory.clone(), self.mem_config);
 
-        self.memory = Memory::from_image(memory.clone(), self.mem_config.access_capacity);
+        self.memory = Memory::from_image(memory.clone());
 
-        match &mut self.interface_chip {
+        match self.interface_chip.lock().unwrap().deref_mut() {
             MemoryInterface::Volatile { .. } => {
                 assert!(
                     memory.is_empty(),
@@ -361,6 +405,21 @@ impl<F: PrimeField32> MemoryController<F> {
                 *initial_memory = memory;
             }
         }
+    }
+
+    pub fn initial_memory_image(&self) -> Option<MemoryImage<F>> {
+        match self.interface_chip.lock().unwrap().deref() {
+            MemoryInterface::Volatile { .. } => None,
+            MemoryInterface::Persistent { initial_memory, .. } => Some(initial_memory.clone()),
+        }
+    }
+
+    pub fn compression_bus(&self) -> DirectCompressionBus {
+        self.interface_chip
+            .lock()
+            .unwrap()
+            .compression_bus()
+            .unwrap()
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {
@@ -384,9 +443,15 @@ impl<F: PrimeField32> MemoryController<F> {
             "memory out of bounds: {ptr_u32:?}",
         );
 
-        let (record_id, values) = self.memory.read::<N>(address_space_u32, ptr_u32);
+        if let Some(worker) = &self.background_worker {
+            worker.send_task(MemoryTask::Read {
+                address_space: address_space_u32,
+                pointer: ptr_u32,
+                len: N,
+            });
+        }
 
-        (record_id, values)
+        self.memory.read::<N>(address_space_u32, ptr_u32)
     }
 
     /// Reads a word directly from memory without updating internal state.
@@ -427,6 +492,13 @@ impl<F: PrimeField32> MemoryController<F> {
             "memory out of bounds: {ptr_u32:?}",
         );
 
+        if let Some(worker) = &self.background_worker {
+            worker.send_task(MemoryTask::Write {
+                address_space: address_space_u32,
+                pointer: ptr_u32,
+                data: data.to_vec(),
+            });
+        }
         self.memory.write(address_space_u32, ptr_u32, data)
     }
 
@@ -440,64 +512,18 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn increment_timestamp(&mut self) {
-        self.memory.increment_timestamp_by(1);
+        self.increment_timestamp_by(1);
     }
 
     pub fn increment_timestamp_by(&mut self, change: u32) {
+        if let Some(worker) = &self.background_worker {
+            worker.send_task(MemoryTask::IncrementTimestampBy(change));
+        }
         self.memory.increment_timestamp_by(change);
     }
 
     pub fn timestamp(&self) -> u32 {
         self.memory.timestamp()
-    }
-
-    fn replay_access_log(&mut self) {
-        let log = mem::take(&mut self.memory.log);
-
-        let mut offline_memory = self.offline_memory.lock().unwrap();
-        offline_memory.set_log_capacity(log.len());
-
-        for entry in log {
-            Self::replay_access(
-                entry,
-                &mut offline_memory,
-                &mut self.interface_chip,
-                &mut self.access_adapters,
-            );
-        }
-    }
-
-    fn replay_access(
-        entry: MemoryLogEntry<F>,
-        offline_memory: &mut OfflineMemory<F>,
-        interface_chip: &mut MemoryInterface<F>,
-        adapter_records: &mut AccessAdapterInventory<F>,
-    ) {
-        match entry {
-            MemoryLogEntry::Read {
-                address_space,
-                pointer,
-                len,
-            } => {
-                if address_space != 0 {
-                    interface_chip.touch_range(address_space, pointer, len as u32);
-                }
-                offline_memory.read(address_space, pointer, len, adapter_records);
-            }
-            MemoryLogEntry::Write {
-                address_space,
-                pointer,
-                data,
-            } => {
-                if address_space != 0 {
-                    interface_chip.touch_range(address_space, pointer, data.len() as u32);
-                }
-                offline_memory.write(address_space, pointer, data, adapter_records);
-            }
-            MemoryLogEntry::IncrementTimestampBy(amount) => {
-                offline_memory.increment_timestamp_by(amount);
-            }
-        };
     }
 
     /// Returns the final memory state if persistent.
@@ -506,12 +532,17 @@ impl<F: PrimeField32> MemoryController<F> {
             return;
         }
 
-        self.replay_access_log();
-        let mut offline_memory = self.offline_memory.lock().unwrap();
+        if let Some(worker) = self.background_worker.take() {
+            worker.wait_for_completion();
+        }
 
-        match &mut self.interface_chip {
+        let mut offline_memory = self.offline_memory.lock().unwrap();
+        let mut access_adapters = self.access_adapters.lock().unwrap();
+        let mut interface_chip = self.interface_chip.lock().unwrap();
+
+        match interface_chip.deref_mut() {
             MemoryInterface::Volatile { boundary_chip } => {
-                let final_memory = offline_memory.finalize::<1>(&mut self.access_adapters);
+                let final_memory = offline_memory.finalize::<1>(&mut access_adapters);
                 boundary_chip.finalize(final_memory);
                 self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
             }
@@ -521,7 +552,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 initial_memory,
             } => {
                 let hasher = hasher.unwrap();
-                let final_partition = offline_memory.finalize::<CHUNK>(&mut self.access_adapters);
+                let final_partition = offline_memory.finalize::<CHUNK>(&mut access_adapters);
 
                 boundary_chip.finalize(initial_memory, &final_partition, hasher);
                 let final_memory_values = final_partition
@@ -552,6 +583,10 @@ impl<F: PrimeField32> MemoryController<F> {
             access_adapters,
             ..
         } = self;
+        let interface_chip = Arc::try_unwrap(interface_chip)
+            .unwrap_or_else(|_| panic!("still have references"))
+            .into_inner()
+            .unwrap();
         match interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 ret.push(boundary_chip.generate_air_proof_input());
@@ -567,6 +602,10 @@ impl<F: PrimeField32> MemoryController<F> {
                 ret.push(merkle_chip.generate_air_proof_input());
             }
         }
+        let access_adapters = Arc::try_unwrap(access_adapters)
+            .unwrap_or_else(|_| panic!("still have references to access adapters"))
+            .into_inner()
+            .unwrap();
         ret.extend(access_adapters.generate_air_proof_inputs());
         ret
     }
@@ -577,7 +616,7 @@ impl<F: PrimeField32> MemoryController<F> {
     {
         let mut airs = Vec::<AirRef<SC>>::new();
 
-        match &self.interface_chip {
+        match self.interface_chip.lock().unwrap().deref() {
             MemoryInterface::Volatile { boundary_chip } => {
                 debug_assert_eq!(airs.len(), BOUNDARY_AIR_OFFSET);
                 airs.push(boundary_chip.air())
@@ -593,19 +632,14 @@ impl<F: PrimeField32> MemoryController<F> {
                 airs.push(merkle_chip.air());
             }
         }
-        airs.extend(self.access_adapters.airs());
+        airs.extend(self.access_adapters.lock().unwrap().airs());
 
         airs
     }
 
     /// Return the number of AIRs in the memory controller.
     pub fn num_airs(&self) -> usize {
-        let mut num_airs = 1;
-        if self.continuation_enabled() {
-            num_airs += 1;
-        }
-        num_airs += self.access_adapters.num_access_adapters();
-        num_airs
+        self.num_airs
     }
 
     pub fn air_names(&self) -> Vec<String> {
@@ -613,7 +647,7 @@ impl<F: PrimeField32> MemoryController<F> {
         if self.continuation_enabled() {
             air_names.push("Merkle".to_string());
         }
-        air_names.extend(self.access_adapters.air_names());
+        air_names.extend(self.access_adapters.lock().unwrap().air_names());
         air_names
     }
 
@@ -621,13 +655,32 @@ impl<F: PrimeField32> MemoryController<F> {
         self.get_memory_trace_heights().flatten()
     }
 
+    fn is_finalized(&self) -> bool {
+        self.final_state.is_some()
+    }
+
+    /// If memory is not finalized, this returns all zeroes.
     pub fn get_memory_trace_heights(&self) -> MemoryTraceHeights {
-        let access_adapters = self.access_adapters.get_heights();
-        match &self.interface_chip {
+        if !self.is_finalized() {
+            return if self.is_persistent {
+                MemoryTraceHeights::Persistent(PersistentMemoryTraceHeights {
+                    boundary: 0,
+                    merkle: 0,
+                    access_adapters: vec![0; self.num_access_adapters],
+                })
+            } else {
+                MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
+                    boundary: 0,
+                    access_adapters: vec![0; self.num_access_adapters],
+                })
+            };
+        };
+        let access_adapters = self.access_adapters.lock().unwrap();
+        match self.interface_chip.lock().unwrap().deref() {
             MemoryInterface::Volatile { boundary_chip } => {
                 MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
                     boundary: boundary_chip.current_trace_height(),
-                    access_adapters,
+                    access_adapters: access_adapters.get_heights(),
                 })
             }
             MemoryInterface::Persistent {
@@ -637,13 +690,14 @@ impl<F: PrimeField32> MemoryController<F> {
             } => MemoryTraceHeights::Persistent(PersistentMemoryTraceHeights {
                 boundary: boundary_chip.current_trace_height(),
                 merkle: merkle_chip.current_trace_height(),
-                access_adapters,
+                access_adapters: access_adapters.get_heights(),
             }),
         }
     }
     pub fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
-        let access_adapters = vec![1; self.access_adapters.num_access_adapters()];
-        match &self.interface_chip {
+        let access_adapters = self.access_adapters.lock().unwrap();
+        let access_adapters = vec![1; access_adapters.num_access_adapters()];
+        match self.interface_chip.lock().unwrap().deref() {
             MemoryInterface::Volatile { .. } => {
                 MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
                     boundary: 1,
@@ -660,9 +714,14 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
+    /// If memory is not finalized, this returns all zeroes.
     pub fn current_trace_cells(&self) -> Vec<usize> {
-        let mut ret = Vec::new();
-        match &self.interface_chip {
+        let num_airs = self.num_airs;
+        if !self.is_finalized() {
+            return vec![0; num_airs];
+        };
+        let mut ret = Vec::with_capacity(num_airs);
+        match self.interface_chip.lock().unwrap().deref() {
             MemoryInterface::Volatile { boundary_chip } => {
                 ret.push(boundary_chip.current_trace_cells())
             }
@@ -675,7 +734,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 ret.push(merkle_chip.current_trace_cells());
             }
         }
-        ret.extend(self.access_adapters.get_cells());
+        ret.extend(self.access_adapters.lock().unwrap().get_cells());
         ret
     }
 
@@ -687,12 +746,6 @@ impl<F: PrimeField32> MemoryController<F> {
     /// and store the returned reference for later use.
     pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
         self.offline_memory.clone()
-    }
-    pub fn get_memory_logs(&self) -> Vec<MemoryLogEntry<F>> {
-        self.memory.log.clone()
-    }
-    pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {
-        self.memory.log = logs;
     }
 }
 
@@ -845,6 +898,8 @@ mod tests {
         }
         assert!(memory_controller
             .access_adapters
+            .lock()
+            .unwrap()
             .get_heights()
             .iter()
             .all(|&h| h == 0));
