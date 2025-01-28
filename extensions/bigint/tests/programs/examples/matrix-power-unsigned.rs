@@ -49,7 +49,7 @@ pub fn bin_exp(mut base: Matrix, mut exp: U256) -> Matrix {
     result
 }
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     let a: Matrix = get_identity_matrix();
     let c = bin_exp(a, U256::from_u32(1234567));

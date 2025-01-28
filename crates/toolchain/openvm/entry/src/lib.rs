@@ -17,11 +17,11 @@ use syn::{parse_macro_input, ItemFn};
 /// #![no_main]
 /// #![no_std]
 ///
-/// #[openvm::entry]
+/// #[openvm::main]
 /// fn main() { }
 /// ```
 #[proc_macro_attribute]
-pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
 
     let fn_name = &input.sig.ident;

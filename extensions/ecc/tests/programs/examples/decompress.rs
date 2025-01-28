@@ -16,7 +16,7 @@ openvm_ecc_sw_macros::sw_init! {
     Secp256k1Point,
 }
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     setup_0();
     setup_all_curves();

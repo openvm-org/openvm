@@ -7,7 +7,7 @@ use base64::engine::{general_purpose, Engine};
 use openvm_json_program::UserProfile;
 use serde_json_core::de::from_str;
 
-#[openvm::entry]
+#[openvm::main]
 fn main() {
     let data_b64 = openvm::io::read_vec();
     let data_b64 = core::str::from_utf8(&data_b64).expect("Invalid UTF-8");

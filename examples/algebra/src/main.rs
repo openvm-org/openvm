@@ -30,7 +30,7 @@ openvm_algebra_complex_macros::complex_init! {
     Complex1 { mod_idx = 0 }, Complex2 { mod_idx = 1 },
 }
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     // Since we only use an arithmetic operation with `Mod1` and not `Mod2`,
     // we only need to call `setup_0()` here.

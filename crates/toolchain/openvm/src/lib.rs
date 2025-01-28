@@ -54,7 +54,7 @@ fn _fault() -> ! {
 //     }
 // }
 
-pub use openvm_entry::entry;
+pub use openvm_entry::main;
 
 #[cfg(target_os = "zkvm")]
 #[no_mangle]

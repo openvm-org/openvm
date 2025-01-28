@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(target_os = "zkvm", no_std)]
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     let n = core::hint::black_box(1 << 10);
     let mut a: u32 = 0;

@@ -12,7 +12,7 @@ use openvm_keccak256_guest::keccak256;
 // ANCHOR_END: imports
 
 // ANCHOR: main
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     let test_vectors = [
         (

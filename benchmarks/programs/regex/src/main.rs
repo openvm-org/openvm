@@ -7,7 +7,7 @@ use regex::Regex;
 
 const PATTERN: &str = r"(?m)(\r\n|^)From:([^\r\n]+<)?(?P<email>[^<>]+)>?";
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     let data = openvm::io::read_vec();
     let data = core::str::from_utf8(&data).expect("Invalid UTF-8");

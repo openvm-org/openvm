@@ -21,7 +21,7 @@ openvm_algebra_complex_macros::complex_init! {
     Complex2 { mod_idx = 2 },
 }
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     setup_all_moduli();
     setup_all_complex_extensions();

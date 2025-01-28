@@ -48,7 +48,7 @@ pub fn matrix_exp(mut base: Matrix, mut exp: I256) -> Matrix {
     result
 }
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     let a: Matrix = get_identity_matrix();
     let c = matrix_exp(a, I256::from_i32(1234567));

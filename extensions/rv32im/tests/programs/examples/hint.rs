@@ -2,7 +2,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use openvm::io::read_vec;
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     let vec = read_vec();
     // assert_eq!(vec.len(), 4);

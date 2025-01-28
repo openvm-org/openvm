@@ -23,7 +23,7 @@ openvm_ecc_sw_macros::sw_init! {
 }
 
 // Ref: https://docs.rs/k256/latest/k256/ecdsa/index.html
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     setup_all_moduli();
     setup_all_curves();

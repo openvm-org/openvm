@@ -30,7 +30,7 @@ openvm_ecc_guest::sw_macros::sw_init! {
     Secp256k1Point,
 }
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     setup_all_moduli();
     setup_all_curves();

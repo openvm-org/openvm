@@ -20,7 +20,7 @@ openvm_algebra_moduli_macros::moduli_init! {
     "0x1fffffffffffffff",
 }
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     setup_all_moduli();
     let x = Bls12381::from_repr(core::array::from_fn(|i| i as u8));

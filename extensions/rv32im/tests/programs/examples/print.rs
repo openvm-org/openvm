@@ -3,7 +3,7 @@
 
 use openvm::io::print;
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     print("Hello, world!");
 }

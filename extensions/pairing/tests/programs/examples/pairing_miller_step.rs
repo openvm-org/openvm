@@ -160,7 +160,7 @@ mod bls12_381 {
     }
 }
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     #[allow(unused_variables)]
     let io = read_vec();

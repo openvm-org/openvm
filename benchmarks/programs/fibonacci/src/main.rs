@@ -3,7 +3,7 @@
 
 use openvm::io::{read, reveal};
 
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     let n: u64 = read();
     let mut a: u64 = 0;

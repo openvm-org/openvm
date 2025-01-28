@@ -10,7 +10,7 @@ struct Foo {
 }
 
 #[allow(clippy::disallowed_names)]
-#[openvm::entry]
+#[openvm::main]
 pub fn main() {
     let foo: Foo = read();
     if foo.baz.len() != 4 {
