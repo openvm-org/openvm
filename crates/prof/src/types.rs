@@ -3,8 +3,6 @@ use std::collections::{BTreeMap, HashMap};
 use num_format::{Locale, ToFormattedString};
 use serde::{Deserialize, Serialize};
 
-use crate::aggregate::BencherAggregateMetrics;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metric {
     pub name: String,
@@ -39,8 +37,9 @@ pub struct BencherValue {
 /// Benchmark output in [Bencher Metric Format](https://bencher.dev/docs/reference/bencher-metric-format/).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BenchmarkOutput {
+    // BMF max depth is 2
     #[serde(flatten)]
-    pub by_name: HashMap<String, BencherAggregateMetrics>,
+    pub by_name: HashMap<String, HashMap<String, BencherValue>>,
 }
 
 impl Labels {
