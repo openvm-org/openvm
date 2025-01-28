@@ -348,14 +348,13 @@ impl BenchmarkOutput {
         }
         self.by_name.insert(
             name.to_owned(),
-            HashMap::from_iter([("total_proof_time".to_owned(), metrics.total_proof_time)]),
-        );
-        self.by_name.insert(
-            name.to_owned(),
-            HashMap::from_iter([(
-                "total_par_proof_time".to_owned(),
-                metrics.total_par_proof_time,
-            )]),
+            HashMap::from_iter([
+                ("total_proof_time".to_owned(), metrics.total_proof_time),
+                (
+                    "total_par_proof_time".to_owned(),
+                    metrics.total_par_proof_time,
+                ),
+            ]),
         );
     }
 }
