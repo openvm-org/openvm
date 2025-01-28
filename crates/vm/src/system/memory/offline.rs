@@ -535,7 +535,7 @@ mod tests {
         let range_checker =
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29));
         let mem_config = MemoryConfig {
-            as_offset: 0,
+            as_offset: 1,
             ..Default::default()
         };
         let memory = OfflineMemory::new(
@@ -559,7 +559,7 @@ mod tests {
         let initial_memory = AddressMap::new(0, 1, 16);
         let (mut memory, _) = setup_test(initial_memory, 8);
         assert_eq!(
-            memory.block_containing(0, 13),
+            memory.block_containing(1, 13),
             BlockData {
                 pointer: 8,
                 size: 8,
@@ -568,7 +568,7 @@ mod tests {
         );
 
         assert_eq!(
-            memory.block_containing(0, 8),
+            memory.block_containing(1, 8),
             BlockData {
                 pointer: 8,
                 size: 8,
@@ -577,7 +577,7 @@ mod tests {
         );
 
         assert_eq!(
-            memory.block_containing(0, 15),
+            memory.block_containing(1, 15),
             BlockData {
                 pointer: 8,
                 size: 8,
@@ -586,7 +586,7 @@ mod tests {
         );
 
         assert_eq!(
-            memory.block_containing(0, 16),
+            memory.block_containing(1, 16),
             BlockData {
                 pointer: 16,
                 size: 8,
@@ -864,30 +864,30 @@ mod tests {
     fn test_get_initial_block_len_1() {
         let (mut memory, mut adapter_records) = setup_test(MemoryImage::default(), 1);
 
-        memory.write(1, 0, bbvec![4, 3, 2, 1], &mut adapter_records);
+        memory.write(2, 0, bbvec![4, 3, 2, 1], &mut adapter_records);
 
-        assert_eq!(memory.get(1, 0), BabyBear::from_canonical_u32(4));
-        assert_eq!(memory.get(1, 1), BabyBear::from_canonical_u32(3));
-        assert_eq!(memory.get(1, 2), BabyBear::from_canonical_u32(2));
-        assert_eq!(memory.get(1, 3), BabyBear::from_canonical_u32(1));
-        assert_eq!(memory.get(1, 5), BabyBear::ZERO);
+        assert_eq!(memory.get(2, 0), BabyBear::from_canonical_u32(4));
+        assert_eq!(memory.get(2, 1), BabyBear::from_canonical_u32(3));
+        assert_eq!(memory.get(2, 2), BabyBear::from_canonical_u32(2));
+        assert_eq!(memory.get(2, 3), BabyBear::from_canonical_u32(1));
+        assert_eq!(memory.get(2, 5), BabyBear::ZERO);
 
-        assert_eq!(memory.get(0, 0), BabyBear::ZERO);
+        assert_eq!(memory.get(1, 0), BabyBear::ZERO);
     }
 
     #[test]
     fn test_get_initial_block_len_8() {
         let (mut memory, mut adapter_records) = setup_test(MemoryImage::default(), 8);
 
-        memory.write(1, 0, bbvec![4, 3, 2, 1], &mut adapter_records);
+        memory.write(2, 0, bbvec![4, 3, 2, 1], &mut adapter_records);
 
-        assert_eq!(memory.get(1, 0), BabyBear::from_canonical_u32(4));
-        assert_eq!(memory.get(1, 1), BabyBear::from_canonical_u32(3));
-        assert_eq!(memory.get(1, 2), BabyBear::from_canonical_u32(2));
-        assert_eq!(memory.get(1, 3), BabyBear::from_canonical_u32(1));
-        assert_eq!(memory.get(1, 5), BabyBear::ZERO);
-        assert_eq!(memory.get(1, 9), BabyBear::ZERO);
-        assert_eq!(memory.get(0, 0), BabyBear::ZERO);
+        assert_eq!(memory.get(2, 0), BabyBear::from_canonical_u32(4));
+        assert_eq!(memory.get(2, 1), BabyBear::from_canonical_u32(3));
+        assert_eq!(memory.get(2, 2), BabyBear::from_canonical_u32(2));
+        assert_eq!(memory.get(2, 3), BabyBear::from_canonical_u32(1));
+        assert_eq!(memory.get(2, 5), BabyBear::ZERO);
+        assert_eq!(memory.get(2, 9), BabyBear::ZERO);
+        assert_eq!(memory.get(1, 0), BabyBear::ZERO);
     }
 
     #[test]
