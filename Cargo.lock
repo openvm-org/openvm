@@ -3946,6 +3946,7 @@ dependencies = [
  "eyre",
  "num-bigint 0.4.6",
  "openvm-algebra-circuit",
+ "openvm-algebra-guest",
  "openvm-algebra-transpiler",
  "openvm-circuit",
  "openvm-circuit-primitives-derive",

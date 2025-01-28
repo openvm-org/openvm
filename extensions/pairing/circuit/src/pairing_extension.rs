@@ -10,7 +10,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
-use openvm_ecc_circuit::{CurveCoeffs, CurveConfig, SwCurveConfig};
+use openvm_ecc_circuit::{CurveConfig, SwCurveCoeffs};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_pairing_guest::{
@@ -34,23 +34,23 @@ pub enum PairingCurve {
 }
 
 impl PairingCurve {
-    pub fn curve_config(&self) -> CurveConfig {
+    pub fn curve_config(&self) -> CurveConfig<SwCurveCoeffs> {
         match self {
             PairingCurve::Bn254 => CurveConfig::new(
                 BN254_MODULUS.clone(),
                 BN254_ORDER.clone(),
-                CurveCoeffs::SwCurve(SwCurveConfig {
+                SwCurveCoeffs {
                     a: BigUint::zero(),
                     b: BigUint::from_u8(3).unwrap(),
-                }),
+                },
             ),
             PairingCurve::Bls12_381 => CurveConfig::new(
                 BLS12_381_MODULUS.clone(),
                 BLS12_381_ORDER.clone(),
-                CurveCoeffs::SwCurve(SwCurveConfig {
+                SwCurveCoeffs {
                     a: BigUint::zero(),
                     b: BigUint::from_u8(4).unwrap(),
-                }),
+                },
             ),
         }
     }

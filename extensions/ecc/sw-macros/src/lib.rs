@@ -84,7 +84,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         }
         create_extern_func!(sw_add_ne_extern_func);
         create_extern_func!(sw_double_extern_func);
-        create_extern_func!(hint_decompress_extern_func);
+        create_extern_func!(sw_hint_decompress_extern_func);
 
         let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
 
@@ -92,7 +92,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             extern "C" {
                 fn #sw_add_ne_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #sw_double_extern_func(rd: usize, rs1: usize);
-                fn #hint_decompress_extern_func(rs1: usize, rs2: usize);
+                fn #sw_hint_decompress_extern_func(rs1: usize, rs2: usize);
             }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -285,7 +285,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             mod #group_ops_mod_name {
-                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed}, impl_sw_group_ops};
+                use ::openvm_ecc_guest::{weierstrass::WeierstrassPoint, FromCompressed, impl_sw_group_ops};
                 use super::*;
 
                 impl_sw_group_ops!(#struct_name, #intmod_type);
@@ -310,7 +310,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
 
                             let y = core::mem::MaybeUninit::<#intmod_type>::uninit();
                             unsafe {
-                                #hint_decompress_extern_func(x as *const _ as usize, rec_id as *const u8 as usize);
+                                #sw_hint_decompress_extern_func(x as *const _ as usize, rec_id as *const u8 as usize);
                                 let ptr = y.as_ptr() as *const u8;
                                 openvm_rv32im_guest::hint_buffer_u32!(ptr, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
                                 y.assume_init()
@@ -369,8 +369,8 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             syn::Ident::new(&format!("sw_add_ne_extern_func_{}", str_path), span.into());
         let double_extern_func =
             syn::Ident::new(&format!("sw_double_extern_func_{}", str_path), span.into());
-        let hint_decompress_extern_func = syn::Ident::new(
-            &format!("hint_decompress_extern_func_{}", str_path),
+        let sw_hint_decompress_extern_func = syn::Ident::new(
+            &format!("sw_hint_decompress_extern_func_{}", str_path),
             span.into(),
         );
         externs.push(quote::quote_spanned! { span.into() =>
@@ -401,11 +401,11 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             }
 
             #[no_mangle]
-            extern "C" fn #hint_decompress_extern_func(rs1: usize, rs2: usize) {
+            extern "C" fn #sw_hint_decompress_extern_func(rs1: usize, rs2: usize) {
                 openvm::platform::custom_insn_r!(
                     opcode = SW_OPCODE,
                     funct3 = SW_FUNCT3 as usize,
-                    funct7 = SwBaseFunct7::HintDecompress as usize + #ec_idx
+                    funct7 = SwBaseFunct7::SwHintDecompress as usize + #ec_idx
                         * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                     rd = Const "x0",
                     rs1 = In rs1,

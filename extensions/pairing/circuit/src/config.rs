@@ -46,7 +46,10 @@ impl Rv32PairingConfig {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes.to_vec()),
-            weierstrass: EccExtension::new(curves.iter().map(|c| c.curve_config()).collect()),
+            weierstrass: EccExtension::new(
+                curves.iter().map(|c| c.curve_config()).collect(),
+                vec![],
+            ),
             pairing: PairingExtension::new(curves),
         }
     }

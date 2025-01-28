@@ -68,30 +68,6 @@ pub trait WeierstrassPoint: Sized {
     }
 }
 
-pub trait FromCompressed<Coordinate> {
-    /// Given `x`-coordinate,
-    ///
-    /// ## Panics
-    /// If the input is not a valid compressed point.
-    /// The zkVM panics instead of returning an [Option] because this function
-    /// can only guarantee correct behavior when decompression is possible,
-    /// but the function cannot compute the boolean equal to true if and only
-    /// if decompression is possible.
-    // This is because we rely on a hint for the correct decompressed value
-    // and then constrain its correctness. A malicious prover could hint
-    // incorrectly, so there is no way to use a hint to prove that the input
-    // **cannot** be decompressed.
-    fn decompress(x: Coordinate, rec_id: &u8) -> Self;
-
-    /// If it exists, hints the unique `y` coordinate that is less than `Coordinate::MODULUS`
-    /// such that `(x, y)` is a point on the curve and `y` has parity equal to `rec_id`.
-    /// If such `y` does not exist, undefined behavior.
-    ///
-    /// This is only a hint, and the returned `y` does not guarantee any of the above properties.
-    /// They must be checked separately. Normal users should use `decompress` directly.
-    fn hint_decompress(x: &Coordinate, rec_id: &u8) -> Coordinate;
-}
-
 // MSM using preprocessed table (windowed method)
 // Reference: modified from https://github.com/arkworks-rs/algebra/blob/master/ec/src/scalar_mul/mod.rs
 //
