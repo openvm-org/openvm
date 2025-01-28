@@ -1,9 +1,10 @@
 use std::{collections::HashMap, io::Write};
 
 use eyre::Result;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Labels, MdTableCell, MetricDb};
+use crate::types::{BencherValue, Labels, MdTableCell, MetricDb};
 
 type MetricName = String;
 type MetricsByName = HashMap<MetricName, Vec<(f64, Labels)>>;
@@ -20,6 +21,21 @@ pub struct AggregateMetrics {
     /// "group" label => metric aggregate statitics
     #[serde(flatten)]
     pub by_group: HashMap<String, HashMap<MetricName, Stats>>,
+    /// In seconds
+    pub total_proof_time: MdTableCell,
+    /// In seconds
+    pub total_par_proof_time: MdTableCell,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BencherAggregateMetrics {
+    // BMF max depth is 2
+    #[serde(flatten)]
+    pub by_group: HashMap<String, BencherValue>,
+    /// In seconds
+    pub total_proof_time: BencherValue,
+    /// In seconds
+    pub total_par_proof_time: BencherValue,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -28,6 +44,7 @@ pub struct Stats {
     pub max: MdTableCell,
     pub min: MdTableCell,
     pub avg: MdTableCell,
+    #[serde(skip)]
     pub count: usize,
 }
 
@@ -121,7 +138,12 @@ impl GroupedMetrics {
                 (group_name.clone(), group_summaries)
             })
             .collect();
-        AggregateMetrics { by_group }
+        let mut metrics = AggregateMetrics {
+            by_group,
+            ..Default::default()
+        };
+        metrics.compute_total();
+        metrics
     }
 }
 
@@ -140,6 +162,38 @@ pub(crate) fn group_weight(name: &str) -> usize {
 }
 
 impl AggregateMetrics {
+    pub fn compute_total(&mut self) {
+        let mut total_proof_time = MdTableCell::new(0.0, Some(0.0));
+        let mut total_par_proof_time = MdTableCell::new(0.0, Some(0.0));
+        for (group_name, metrics) in &self.by_group {
+            let stats = metrics.get(PROOF_TIME_LABEL);
+            if stats.is_none() {
+                continue;
+            }
+            let stats = stats.unwrap();
+            let mut sum = stats.sum;
+            let mut max = stats.max;
+            // convert ms to s
+            sum.val /= 1000.0;
+            max.val /= 1000.0;
+            if let Some(diff) = &mut sum.diff {
+                *diff /= 1000.0;
+            }
+            if let Some(diff) = &mut max.diff {
+                *diff /= 1000.0;
+            }
+            if !group_name.contains("keygen") {
+                // Proving time in keygen group is dummy and not part of total.
+                total_proof_time.val += sum.val;
+                *total_proof_time.diff.as_mut().unwrap() += sum.diff.unwrap_or(0.0);
+                total_par_proof_time.val += max.val;
+                *total_par_proof_time.diff.as_mut().unwrap() += max.diff.unwrap_or(0.0);
+            }
+        }
+        self.total_proof_time = total_proof_time;
+        self.total_par_proof_time = total_par_proof_time;
+    }
+
     pub fn set_diff(&mut self, prev: &Self) {
         for (group_name, metrics) in self.by_group.iter_mut() {
             if let Some(prev_metrics) = prev.by_group.get(group_name) {
@@ -150,6 +204,7 @@ impl AggregateMetrics {
                 }
             }
         }
+        self.compute_total();
     }
 
     pub fn to_vec(&self) -> Vec<(String, HashMap<MetricName, Stats>)> {
@@ -171,6 +226,41 @@ impl AggregateMetrics {
                 (key, value)
             })
             .collect()
+    }
+
+    pub fn to_bencher_metrics(&self) -> BencherAggregateMetrics {
+        let by_group = self
+            .by_group
+            .iter()
+            .flat_map(|(group_name, metrics)| {
+                metrics
+                    .iter()
+                    .flat_map(|(metric_name, stats)| {
+                        [
+                            (
+                                format!("{group_name}::{metric_name}::sum"),
+                                stats.sum.into(),
+                            ),
+                            (
+                                format!("{group_name}::{metric_name}"),
+                                BencherValue {
+                                    value: stats.avg.val,
+                                    lower_value: Some(stats.min.val),
+                                    upper_value: Some(stats.max.val),
+                                },
+                            ),
+                        ]
+                    })
+                    .collect_vec()
+            })
+            .collect();
+        let total_proof_time = self.total_proof_time.into();
+        let total_par_proof_time = self.total_par_proof_time.into();
+        BencherAggregateMetrics {
+            by_group,
+            total_proof_time,
+            total_par_proof_time,
+        }
     }
 
     pub fn write_markdown(&self, writer: &mut impl Write, metric_names: &[&str]) -> Result<()> {
@@ -204,15 +294,13 @@ impl AggregateMetrics {
         Ok(())
     }
 
-    pub fn write_summary_markdown(&self, writer: &mut impl Write) -> Result<()> {
+    fn write_summary_markdown(&self, writer: &mut impl Write) -> Result<()> {
         writeln!(
             writer,
             "| Summary | Proof Time (s) | Parallel Proof Time (s) |"
         )?;
         writeln!(writer, "|:---|---:|---:|")?;
         let mut rows = Vec::new();
-        let mut total_proof_time = MdTableCell::new(0.0, Some(0.0));
-        let mut total_par_proof_time = MdTableCell::new(0.0, Some(0.0));
         for (group_name, summaries) in self.to_vec() {
             let stats = summaries.get(PROOF_TIME_LABEL);
             if stats.is_none() {
@@ -230,24 +318,27 @@ impl AggregateMetrics {
             if let Some(diff) = &mut max.diff {
                 *diff /= 1000.0;
             }
-            if !group_name.contains("keygen") {
-                // Proving time in keygen group is dummy and not part of total.
-                total_proof_time.val += sum.val;
-                *total_proof_time.diff.as_mut().unwrap() += sum.diff.unwrap_or(0.0);
-                total_par_proof_time.val += max.val;
-                *total_par_proof_time.diff.as_mut().unwrap() += max.diff.unwrap_or(0.0);
-            }
             rows.push((group_name, sum, max));
         }
         writeln!(
             writer,
-            "| Total | {total_proof_time} | {total_par_proof_time} |"
+            "| Total | {} | {} |",
+            self.total_proof_time, self.total_par_proof_time
         )?;
         for (group_name, proof_time, par_proof_time) in rows {
             writeln!(writer, "| {group_name} | {proof_time} | {par_proof_time} |")?;
         }
         writeln!(writer)?;
         Ok(())
+    }
+
+    pub fn name(&self) -> String {
+        // A hacky way to determine the app name
+        self.by_group
+            .keys()
+            .find(|k| group_weight(k) == 0)
+            .unwrap_or_else(|| self.by_group.keys().next().unwrap())
+            .clone()
     }
 }
 

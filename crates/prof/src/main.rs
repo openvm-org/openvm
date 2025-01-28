@@ -10,7 +10,7 @@ use itertools::Itertools;
 use openvm_prof::{
     aggregate::{GroupedMetrics, VM_METRIC_NAMES},
     summary::GithubSummary,
-    types::MetricDb,
+    types::{BenchmarkOutput, MetricDb},
 };
 
 #[derive(Parser, Debug)]
@@ -28,6 +28,10 @@ struct Cli {
     /// Some file paths may be passed in that do not exist to account for new benchmarks.
     #[arg(long, value_delimiter = ',')]
     prev_json_paths: Option<Vec<PathBuf>>,
+
+    /// Path to write the output JSON in BMF format
+    #[arg(long)]
+    output_json: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -53,6 +57,7 @@ fn main() -> Result<()> {
     };
     let mut aggregated_metrics = Vec::new();
     let mut md_paths = Vec::new();
+    let mut output = BenchmarkOutput::default();
     for (metrics_path, prev_metrics_path) in args.json_paths.into_iter().zip_eq(prev_json_paths) {
         let db = MetricDb::new(&metrics_path)?;
         let grouped = GroupedMetrics::new(&db, "group")?;
@@ -67,8 +72,12 @@ fn main() -> Result<()> {
             }
         }
 
+        output
+            .by_name
+            .insert(aggregated.name(), aggregated.to_bencher_metrics());
         let mut writer = Vec::new();
         aggregated.write_markdown(&mut writer, VM_METRIC_NAMES)?;
+
         let mut markdown_output = String::from_utf8(writer)?;
 
         // TODO: calculate diffs for detailed metrics
@@ -81,6 +90,9 @@ fn main() -> Result<()> {
         fs::write(&md_path, markdown_output)?;
         md_paths.push(md_path);
         aggregated_metrics.push((aggregated, prev_aggregated));
+    }
+    if let Some(path) = args.output_json {
+        fs::write(&path, serde_json::to_string_pretty(&output)?)?;
     }
     if let Some(command) = args.command {
         match command {
