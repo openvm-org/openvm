@@ -79,12 +79,14 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
             };
         }
         create_extern_func!(te_add_extern_func);
+        create_extern_func!(te_hint_decompress_extern_func);
 
         let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
                 fn #te_add_extern_func(rd: usize, rs1: usize, rs2: usize);
+                fn #te_hint_decompress_extern_func(rs1: usize, rs2: usize);
             }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -200,11 +202,44 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
             }
 
             mod #group_ops_mod_name {
-                use ::openvm_ecc_guest::{edwards::TwistedEdwardsPoint, impl_te_group_ops};
+                use ::openvm_ecc_guest::{edwards::TwistedEdwardsPoint, FromCompressed, impl_te_group_ops};
                 use super::*;
 
                 impl_te_group_ops!(#struct_name, #intmod_type);
-           }
+
+                impl FromCompressed<#intmod_type> for #struct_name {
+                    fn decompress(y: #intmod_type, rec_id: &u8) -> Self {
+                        let x = <#struct_name as FromCompressed<#intmod_type>>::hint_decompress(&y, rec_id);
+                        // Must assert unique so we can check the parity
+                        x.assert_unique();
+                        assert_eq!(x.as_le_bytes()[0] & 1, *rec_id & 1);
+                        <#struct_name as ::openvm_ecc_guest::edwards::TwistedEdwardsPoint>::from_xy(x, y).expect("decompressed point not on curve")
+                    }
+
+                    fn hint_decompress(y: &#intmod_type, rec_id: &u8) -> #intmod_type {
+                        #[cfg(not(target_os = "zkvm"))]
+                        {
+                            unimplemented!()
+                        }
+                        #[cfg(target_os = "zkvm")]
+                        {
+                            use openvm::platform as openvm_platform; // needed for hint_store_u32!
+
+                            let x = core::mem::MaybeUninit::<#intmod_type>::uninit();
+                            unsafe {
+                                #te_hint_decompress_extern_func(y as *const _ as usize, rec_id as *const u8 as usize);
+                                let mut ptr = x.as_ptr() as *const u8;
+                                // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
+                                for _ in (0..<#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS).step_by(4) {
+                                    openvm_rv32im_guest::hint_store_u32!(ptr, 0);
+                                    ptr = ptr.add(4);
+                                }
+                                x.assume_init()
+                            }
+                        }
+                    }
+                }
+            }
         });
         output.push(result);
     }
@@ -253,6 +288,10 @@ pub fn te_init(input: TokenStream) -> TokenStream {
             .join("_");
         let add_extern_func =
             syn::Ident::new(&format!("te_add_extern_func_{}", str_path), span.into());
+        let te_hint_decompress_extern_func = syn::Ident::new(
+            &format!("te_hint_decompress_extern_func_{}", str_path),
+            span.into(),
+        );
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #add_extern_func(rd: usize, rs1: usize, rs2: usize) {
@@ -262,6 +301,19 @@ pub fn te_init(input: TokenStream) -> TokenStream {
                     funct7 = TeBaseFunct7::TeAdd as usize + #ec_idx
                         * (TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS as usize),
                     rd = In rd,
+                    rs1 = In rs1,
+                    rs2 = In rs2
+                );
+            }
+
+            #[no_mangle]
+            extern "C" fn #te_hint_decompress_extern_func(rs1: usize, rs2: usize) {
+                openvm::platform::custom_insn_r!(
+                    opcode = TE_OPCODE,
+                    funct3 = TE_FUNCT3 as usize,
+                    funct7 = TeBaseFunct7::TeHintDecompress as usize + #ec_idx
+                        * (TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS as usize),
+                    rd = Const "x0",
                     rs1 = In rs1,
                     rs2 = In rs2
                 );
