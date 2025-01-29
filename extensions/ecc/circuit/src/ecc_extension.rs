@@ -98,6 +98,28 @@ pub struct EccExtension {
     pub supported_te_curves: Vec<CurveConfig<TeCurveCoeffs>>,
 }
 
+impl EccExtension {
+    pub fn generate_ecc_init(&self) -> String {
+        let supported_sw_curves = self
+            .supported_sw_curves
+            .iter()
+            .map(|curve_config| curve_config.struct_name.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let supported_te_curves = self
+            .supported_te_curves
+            .iter()
+            .map(|curve_config| curve_config.struct_name.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        format!(
+            "openvm_ecc_guest::sw_macros::sw_init! {{ {supported_sw_curves} }}\nopenvm_ecc_guest::te_macros::te_init! {{ {supported_te_curves} }}"
+        )
+    }
+}
+
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, BytesStateful)]
 pub enum EccExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
