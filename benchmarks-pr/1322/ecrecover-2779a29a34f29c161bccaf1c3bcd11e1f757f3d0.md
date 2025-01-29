@@ -1,24 +1,24 @@
 | Summary | Proof Time (s) | Parallel Proof Time (s) |
 |:---|---:|---:|
-| Total | <span style='color: red'>(+0 [+0.6%])</span> 2.56 | <span style='color: red'>(+0 [+0.6%])</span> 2.56 |
-| ecrecover_program | <span style='color: red'>(+0 [+0.6%])</span> 2.56 | <span style='color: red'>(+0 [+0.6%])</span> 2.56 |
+| Total | <span style='color: green'>(-0 [-0.5%])</span> 2.54 | <span style='color: green'>(-0 [-0.5%])</span> 2.54 |
+| ecrecover_program | <span style='color: green'>(-0 [-0.5%])</span> 2.54 | <span style='color: green'>(-0 [-0.5%])</span> 2.54 |
 
 
 | ecrecover_program |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` | <span style='color: red'>(+15 [+0.6%])</span> 2,564 | <span style='color: red'>(+15 [+0.6%])</span> 2,564 | <span style='color: red'>(+15 [+0.6%])</span> 2,564 | <span style='color: red'>(+15 [+0.6%])</span> 2,564 |
+| `total_proof_time_ms ` | <span style='color: green'>(-14 [-0.5%])</span> 2,535 | <span style='color: green'>(-14 [-0.5%])</span> 2,535 | <span style='color: green'>(-14 [-0.5%])</span> 2,535 | <span style='color: green'>(-14 [-0.5%])</span> 2,535 |
 | `main_cells_used     ` |  15,055,723 |  15,055,723 |  15,055,723 |  15,055,723 |
 | `total_cycles        ` |  284,567 |  284,567 |  284,567 |  284,567 |
 | `execute_time_ms     ` | <span style='color: green'>(-4 [-2.6%])</span> 149 | <span style='color: green'>(-4 [-2.6%])</span> 149 | <span style='color: green'>(-4 [-2.6%])</span> 149 | <span style='color: green'>(-4 [-2.6%])</span> 149 |
-| `trace_gen_time_ms   ` | <span style='color: green'>(-25 [-10.0%])</span> 224 | <span style='color: green'>(-25 [-10.0%])</span> 224 | <span style='color: green'>(-25 [-10.0%])</span> 224 | <span style='color: green'>(-25 [-10.0%])</span> 224 |
-| `stark_prove_excluding_trace_time_ms` | <span style='color: red'>(+44 [+2.0%])</span> 2,191 | <span style='color: red'>(+44 [+2.0%])</span> 2,191 | <span style='color: red'>(+44 [+2.0%])</span> 2,191 | <span style='color: red'>(+44 [+2.0%])</span> 2,191 |
-| `main_trace_commit_time_ms` | <span style='color: red'>(+13 [+3.4%])</span> 400 | <span style='color: red'>(+13 [+3.4%])</span> 400 | <span style='color: red'>(+13 [+3.4%])</span> 400 | <span style='color: red'>(+13 [+3.4%])</span> 400 |
-| `generate_perm_trace_time_ms` | <span style='color: red'>(+1 [+3.1%])</span> 33 | <span style='color: red'>(+1 [+3.1%])</span> 33 | <span style='color: red'>(+1 [+3.1%])</span> 33 | <span style='color: red'>(+1 [+3.1%])</span> 33 |
-| `perm_trace_commit_time_ms` | <span style='color: red'>(+12 [+3.4%])</span> 360 | <span style='color: red'>(+12 [+3.4%])</span> 360 | <span style='color: red'>(+12 [+3.4%])</span> 360 | <span style='color: red'>(+12 [+3.4%])</span> 360 |
-| `quotient_poly_compute_time_ms` |  226 |  226 |  226 |  226 |
-| `quotient_poly_commit_time_ms` | <span style='color: green'>(-2 [-0.4%])</span> 487 | <span style='color: green'>(-2 [-0.4%])</span> 487 | <span style='color: green'>(-2 [-0.4%])</span> 487 | <span style='color: green'>(-2 [-0.4%])</span> 487 |
-| `pcs_opening_time_ms ` | <span style='color: red'>(+20 [+3.1%])</span> 673 | <span style='color: red'>(+20 [+3.1%])</span> 673 | <span style='color: red'>(+20 [+3.1%])</span> 673 | <span style='color: red'>(+20 [+3.1%])</span> 673 |
+| `trace_gen_time_ms   ` | <span style='color: green'>(-27 [-10.8%])</span> 222 | <span style='color: green'>(-27 [-10.8%])</span> 222 | <span style='color: green'>(-27 [-10.8%])</span> 222 | <span style='color: green'>(-27 [-10.8%])</span> 222 |
+| `stark_prove_excluding_trace_time_ms` | <span style='color: red'>(+17 [+0.8%])</span> 2,164 | <span style='color: red'>(+17 [+0.8%])</span> 2,164 | <span style='color: red'>(+17 [+0.8%])</span> 2,164 | <span style='color: red'>(+17 [+0.8%])</span> 2,164 |
+| `main_trace_commit_time_ms` | <span style='color: red'>(+7 [+1.8%])</span> 394 | <span style='color: red'>(+7 [+1.8%])</span> 394 | <span style='color: red'>(+7 [+1.8%])</span> 394 | <span style='color: red'>(+7 [+1.8%])</span> 394 |
+| `generate_perm_trace_time_ms` | <span style='color: red'>(+3 [+9.4%])</span> 35 | <span style='color: red'>(+3 [+9.4%])</span> 35 | <span style='color: red'>(+3 [+9.4%])</span> 35 | <span style='color: red'>(+3 [+9.4%])</span> 35 |
+| `perm_trace_commit_time_ms` | <span style='color: red'>(+7 [+2.0%])</span> 355 | <span style='color: red'>(+7 [+2.0%])</span> 355 | <span style='color: red'>(+7 [+2.0%])</span> 355 | <span style='color: red'>(+7 [+2.0%])</span> 355 |
+| `quotient_poly_compute_time_ms` | <span style='color: red'>(+5 [+2.2%])</span> 231 | <span style='color: red'>(+5 [+2.2%])</span> 231 | <span style='color: red'>(+5 [+2.2%])</span> 231 | <span style='color: red'>(+5 [+2.2%])</span> 231 |
+| `quotient_poly_commit_time_ms` | <span style='color: green'>(-9 [-1.8%])</span> 480 | <span style='color: green'>(-9 [-1.8%])</span> 480 | <span style='color: green'>(-9 [-1.8%])</span> 480 | <span style='color: green'>(-9 [-1.8%])</span> 480 |
+| `pcs_opening_time_ms ` | <span style='color: red'>(+3 [+0.5%])</span> 656 | <span style='color: red'>(+3 [+0.5%])</span> 656 | <span style='color: red'>(+3 [+0.5%])</span> 656 | <span style='color: red'>(+3 [+0.5%])</span> 656 |
 
 
 
@@ -27,7 +27,7 @@
 
 | group | num_segments | keygen_time_ms | commit_exe_time_ms |
 | --- | --- | --- | --- |
-| ecrecover_program | 1 | 1,161 | 13 | 
+| ecrecover_program | 1 | 1,172 | 11 | 
 
 | group | air_name | quotient_deg | interactions | constraints |
 | --- | --- | --- | --- | --- |
@@ -103,7 +103,7 @@
 
 | group | segment | trace_gen_time_ms | total_proof_time_ms | total_cycles | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ecrecover_program | 0 | 224 | 2,564 | 284,567 | 38,417,467 | 2,191 | 226 | 487 | 360 | 673 | 400 | 15,055,723 | 33 | 149 | 
+| ecrecover_program | 0 | 222 | 2,535 | 284,567 | 38,417,467 | 2,164 | 231 | 480 | 355 | 656 | 394 | 15,055,723 | 35 | 149 | 
 
 </details>
 
@@ -116,4 +116,4 @@ Instance Type: 64cpu-linux-arm64
 
 Memory Allocator: mimalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/13024445898)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/13041811653)
