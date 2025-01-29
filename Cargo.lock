@@ -3563,6 +3563,8 @@ dependencies = [
  "openvm-algebra-moduli-macros",
  "openvm-custom-insn",
  "openvm-ecc-sw-macros",
+ "openvm-ecc-te-macros",
+ "openvm-platform",
  "openvm-rv32im-guest",
  "p256 0.13.2",
  "serde",
@@ -3574,9 +3576,9 @@ name = "openvm-ecc-integration-tests"
 version = "1.0.0"
 dependencies = [
  "eyre",
- "hex-literal",
  "num-bigint 0.4.6",
  "openvm-algebra-circuit",
+ "openvm-algebra-guest",
  "openvm-algebra-transpiler",
  "openvm-circuit",
  "openvm-ecc-circuit",
@@ -3605,9 +3607,19 @@ version = "1.0.0-rc.0"
 dependencies = [
  "num-bigint 0.4.6",
  "openvm-macros-common",
+ "quote",
+ "syn 2.0.96",
+]
+
+[[package]]
+name = "openvm-ecc-te-macros"
+version = "1.0.0-rc.0"
+dependencies = [
+ "num-bigint 0.4.6",
+ "openvm-macros-common",
  "proc-macro2",
  "quote",
- "syn 2.0.98",
+ "syn 2.0.96",
 ]
 
 [[package]]
