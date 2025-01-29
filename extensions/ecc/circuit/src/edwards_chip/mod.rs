@@ -53,8 +53,8 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             expr,
             offset,
             vec![
-                Rv32EdwardsOpcode::EC_ADD as usize,
-                Rv32EdwardsOpcode::SETUP_EC_ADD as usize,
+                Rv32EdwardsOpcode::TE_ADD as usize,
+                Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
             ],
             vec![],
             range_checker,

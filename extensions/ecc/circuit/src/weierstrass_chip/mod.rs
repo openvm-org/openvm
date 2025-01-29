@@ -49,8 +49,8 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             expr,
             offset,
             vec![
-                Rv32WeierstrassOpcode::EC_ADD_NE as usize,
-                Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+                Rv32WeierstrassOpcode::SW_ADD_NE as usize,
+                Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize,
             ],
             vec![],
             range_checker,
@@ -86,8 +86,8 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             expr,
             offset,
             vec![
-                Rv32WeierstrassOpcode::EC_DOUBLE as usize,
-                Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+                Rv32WeierstrassOpcode::SW_DOUBLE as usize,
+                Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize,
             ],
             vec![],
             range_checker,

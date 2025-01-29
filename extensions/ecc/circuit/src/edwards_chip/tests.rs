@@ -170,7 +170,7 @@ fn test_add() {
         &mut tester,
         vec![prime_limbs, *Edwards25519_A_LIMBS],
         vec![*Edwards25519_D_LIMBS],
-        chip.0.core.air.offset + Rv32EdwardsOpcode::SETUP_EC_ADD as usize,
+        chip.0.core.air.offset + Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -178,7 +178,7 @@ fn test_add() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        chip.0.core.air.offset + Rv32EdwardsOpcode::EC_ADD as usize,
+        chip.0.core.air.offset + Rv32EdwardsOpcode::TE_ADD as usize,
     );
 
     tester.execute(&mut chip, &instruction);
