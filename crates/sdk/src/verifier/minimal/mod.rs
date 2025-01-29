@@ -68,6 +68,12 @@ impl MinimalVmVerifierConfig {
             builder.cycle_tracker_start("VerifyProofs");
             // let proof = builder.get(&proof, RVar::zero());
             assert_required_air_for_app_vm_present(&mut builder, &proof);
+            StarkVerifier::verify::<DuplexChallengerVariable<C>>(
+                &mut builder,
+                &pcs,
+                &m_advice,
+                &proof,
+            );
             {
                 let commit = get_program_commit(&mut builder, &proof);
                 builder.assign(&public_values.app_commit, commit);
@@ -119,14 +125,6 @@ impl MinimalVmVerifierConfig {
                 leaf_verifier_commit: public_values.app_commit,
                 public_values: public_values_vec,
             };
-
-            StarkVerifier::verify::<DuplexChallengerVariable<C>>(
-                &mut builder,
-                &pcs,
-                &m_advice,
-                &proof,
-            );
-
             root_pvs
                 .flatten()
                 .into_iter()
