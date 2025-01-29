@@ -1,5 +1,5 @@
 [package]
-name = "openvm-ecc-te-setup"
+name = "openvm-ecc-te-macros"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
