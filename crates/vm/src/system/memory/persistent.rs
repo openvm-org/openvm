@@ -187,9 +187,12 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         self.overridden_height = Some(overridden_height);
     }
 
-    pub fn touch_address(&mut self, address_space: u32, pointer: u32) {
-        let label = pointer / CHUNK as u32;
-        self.touched_labels.touch(address_space, label);
+    pub fn touch_range(&mut self, address_space: u32, pointer: u32, len: u32) {
+        let start_label = pointer / CHUNK as u32;
+        let end_label = (pointer + len - 1) / CHUNK as u32;
+        for label in start_label..=end_label {
+            self.touched_labels.touch(address_space, label);
+        }
     }
 
     pub fn finalize(

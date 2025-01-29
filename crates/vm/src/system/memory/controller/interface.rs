@@ -20,20 +20,6 @@ pub enum MemoryInterface<F> {
 }
 
 impl<F: PrimeField32> MemoryInterface<F> {
-    pub fn touch_address(&mut self, addr_space: u32, pointer: u32) {
-        match self {
-            MemoryInterface::Volatile { .. } => {}
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                ..
-            } => {
-                boundary_chip.touch_address(addr_space, pointer);
-                merkle_chip.touch_address(addr_space, pointer);
-            }
-        }
-    }
-
     pub fn touch_range(&mut self, addr_space: u32, pointer: u32, len: u32) {
         match self {
             MemoryInterface::Volatile { .. } => {}
@@ -42,10 +28,8 @@ impl<F: PrimeField32> MemoryInterface<F> {
                 merkle_chip,
                 ..
             } => {
-                for offset in 0..len {
-                    boundary_chip.touch_address(addr_space, pointer + offset);
-                    merkle_chip.touch_address(addr_space, pointer + offset);
-                }
+                boundary_chip.touch_range(addr_space, pointer, len);
+                merkle_chip.touch_range(addr_space, pointer, len);
             }
         }
     }

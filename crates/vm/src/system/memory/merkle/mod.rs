@@ -69,11 +69,12 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         }
     }
 
-    pub fn touch_address(&mut self, address_space: u32, address: u32) {
-        self.touch_node(
-            0,
-            address_space - self.air.memory_dimensions.as_offset,
-            address / CHUNK as u32,
-        );
+    pub fn touch_range(&mut self, address_space: u32, address: u32, len: u32) {
+        let as_label = address_space - self.air.memory_dimensions.as_offset;
+        let first_address_label = address / CHUNK as u32;
+        let last_address_label = (address + len - 1) / CHUNK as u32;
+        for address_label in first_address_label..=last_address_label {
+            self.touch_node(0, as_label, address_label);
+        }
     }
 }
