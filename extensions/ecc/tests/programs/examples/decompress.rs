@@ -92,7 +92,7 @@ openvm_ecc_sw_macros::sw_init! {
     CurvePoint1mod4,
 }
 
-openvm_ecc_te_setup::te_init! {
+openvm_ecc_te_macros::te_init! {
     Ed25519Point,
 }
 
