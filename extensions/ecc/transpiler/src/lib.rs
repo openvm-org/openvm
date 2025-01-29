@@ -106,7 +106,7 @@ impl EccTranspilerExtension {
                     _ => unimplemented!(),
                 };
                 let global_opcode = global_opcode.as_usize() + curve_idx_shift;
-                Some(from_r_type(global_opcode, 2, &dec_insn))
+                Some(from_r_type(global_opcode, 2, &dec_insn, true))
             }
         };
         instruction.map(TranspilerOutput::one_to_one)
