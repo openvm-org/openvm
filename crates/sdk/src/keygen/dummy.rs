@@ -33,7 +33,10 @@ use crate::{
     },
     verifier::{
         internal::types::InternalVmVerifierInput,
-        leaf::{types::LeafVmVerifierInput, LeafVmVerifierConfig},
+        leaf::{
+            types::{LeafVmVerifierInput, UserPublicValuesRootProof},
+            LeafVmVerifierConfig,
+        },
         minimal::types::MinimalVmVerifierInput,
         root::types::RootVmVerifierInput,
     },
@@ -74,18 +77,20 @@ pub(super) fn compute_root_proof_heights(
 pub(super) fn compute_minimal_root_proof_heights(
     root_vm_config: NativeConfig,
     root_exe: VmExe<F>,
-    // dummy_single_segment_app_proof: &Proof<SC>,
     app_proof: &ContinuationVmProof<SC>,
 ) -> (Vec<usize>, VmComplexTraceHeights) {
     // let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
     // let root_input = MinimalVmVerifierInput {
-    //     proof: dummy_single_segment_app_proof.clone(),
-    //     public_values: vec![F::ZERO; num_user_public_values],
+    //     proof: app_proof.per_segment[0].clone(),
+    //     public_values_root_proof: UserPublicValuesRootProof::new(vec![
+    //         F::ZERO;
+    //         num_user_public_values
+    //     ]),
     // };
     let minimal_vm_input = MinimalVmVerifierInput::get_continuation_vm_proof(app_proof);
     let vm = SingleSegmentVmExecutor::new(root_vm_config);
     let res = vm
-        .execute_and_compute_heights(root_exe, minimal_vm_input.write())
+        .execute_and_compute_heights(root_exe, minimal_vm_input.write_to_stream())
         .unwrap();
     let air_heights: Vec<_> = res
         .air_heights
