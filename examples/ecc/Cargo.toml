@@ -15,6 +15,7 @@ openvm-rv32im-guest = { path = "../../extensions/rv32im/guest" }
 
 hex-literal = { version = "0.4.1", default-features = false }
 serde = { version = "1.0", default-features = false, features = [ "derive" ] }
+num-bigint = { version = "0.4.6", default-features = false }
 
 [features]
 default = []
