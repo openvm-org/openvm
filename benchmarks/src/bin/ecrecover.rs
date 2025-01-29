@@ -12,7 +12,8 @@ use openvm_circuit::{
     derive::VmConfig,
 };
 use openvm_ecc_circuit::{
-    CurveConfig, EccExtension, EccExtensionExecutor, EccExtensionPeriphery, SECP256K1_CONFIG,
+    CurveConfig, EccExtension, EccExtensionExecutor, EccExtensionPeriphery, SwCurveCoeffs,
+    TeCurveCoeffs, SECP256K1_CONFIG,
 };
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
@@ -62,15 +63,23 @@ pub struct Rv32ImEcRecoverConfig {
     #[extension]
     pub keccak: Keccak256,
     #[extension]
-    pub weierstrass: EccExtension,
+    pub ecc: EccExtension,
 }
 
 impl Rv32ImEcRecoverConfig {
-    pub fn for_curves(curves: Vec<CurveConfig>) -> Self {
-        let primes: Vec<BigUint> = curves
+    pub fn for_curves(
+        sw_curves: Vec<CurveConfig<SwCurveCoeffs>>,
+        te_curves: Vec<CurveConfig<TeCurveCoeffs>>,
+    ) -> Self {
+        let sw_primes: Vec<BigUint> = sw_curves
             .iter()
             .flat_map(|c| [c.modulus.clone(), c.scalar.clone()])
             .collect();
+        let te_primes: Vec<BigUint> = te_curves
+            .iter()
+            .flat_map(|c| [c.modulus.clone(), c.scalar.clone()])
+            .collect();
+        let primes = [sw_primes, te_primes].concat();
         Self {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
@@ -78,7 +87,7 @@ impl Rv32ImEcRecoverConfig {
             io: Default::default(),
             modular: ModularExtension::new(primes),
             keccak: Default::default(),
-            weierstrass: EccExtension::new(curves),
+            ecc: EccExtension::new(sw_curves, te_curves),
         }
     }
 }
@@ -124,7 +133,7 @@ fn main() -> Result<()> {
         );
         args.bench_from_exe(
             "ecrecover_program",
-            Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]),
+            Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()], vec![]),
             exe,
             input_stream.into(),
         )
