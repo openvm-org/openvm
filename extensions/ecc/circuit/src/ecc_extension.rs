@@ -147,13 +147,13 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
         let range_checker = builder.system_base().range_checker_chip.clone();
         let pointer_bits = builder.system_config().memory_config.pointer_max_bits;
 
-        let sw_add_ne_opcodes = (Rv32WeierstrassOpcode::EC_ADD_NE as usize)
-            ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize);
-        let sw_double_opcodes = (Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-            ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize);
+        let sw_add_ne_opcodes = (Rv32WeierstrassOpcode::SW_ADD_NE as usize)
+            ..=(Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize);
+        let sw_double_opcodes = (Rv32WeierstrassOpcode::SW_DOUBLE as usize)
+            ..=(Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize);
 
         let te_add_opcodes =
-            (Rv32EdwardsOpcode::EC_ADD as usize)..=(Rv32EdwardsOpcode::SETUP_EC_ADD as usize);
+            (Rv32EdwardsOpcode::TE_ADD as usize)..=(Rv32EdwardsOpcode::SETUP_TE_ADD as usize);
 
         for (sw_idx, curve) in self.supported_sw_curves.iter().enumerate() {
             let bytes = curve.modulus.bits().div_ceil(8);

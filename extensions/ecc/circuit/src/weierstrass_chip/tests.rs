@@ -131,7 +131,7 @@ fn test_add_ne() {
         &mut tester,
         vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
         vec![one_limbs, one_limbs],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -139,7 +139,7 @@ fn test_add_ne() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SW_ADD_NE as usize,
     );
 
     tester.execute(&mut chip, &instruction);
@@ -195,7 +195,7 @@ fn test_double() {
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -203,7 +203,7 @@ fn test_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SW_DOUBLE as usize,
     );
 
     tester.execute(&mut chip, &instruction);
@@ -284,7 +284,7 @@ fn test_p256_double() {
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -292,7 +292,7 @@ fn test_p256_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SW_DOUBLE as usize,
     );
 
     tester.execute(&mut chip, &instruction);

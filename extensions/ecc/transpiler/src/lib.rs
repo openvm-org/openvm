@@ -16,10 +16,10 @@ use strum::{EnumCount, EnumIter, FromRepr};
 #[allow(non_camel_case_types)]
 #[repr(usize)]
 pub enum Rv32WeierstrassOpcode {
-    EC_ADD_NE,
-    SETUP_EC_ADD_NE,
-    EC_DOUBLE,
-    SETUP_EC_DOUBLE,
+    SW_ADD_NE,
+    SETUP_SW_ADD_NE,
+    SW_DOUBLE,
+    SETUP_SW_DOUBLE,
 }
 
 #[derive(
@@ -29,8 +29,8 @@ pub enum Rv32WeierstrassOpcode {
 #[allow(non_camel_case_types)]
 #[repr(usize)]
 pub enum Rv32EdwardsOpcode {
-    EC_ADD,
-    SETUP_EC_ADD,
+    TE_ADD,
+    SETUP_TE_ADD,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
@@ -89,7 +89,7 @@ impl EccTranspilerExtension {
                 )));
             }
             if base_funct7 == TeBaseFunct7::TeSetup as u8 {
-                let local_opcode = Rv32EdwardsOpcode::SETUP_EC_ADD;
+                let local_opcode = Rv32EdwardsOpcode::SETUP_TE_ADD;
                 Some(Instruction::new(
                     VmOpcode::from_usize(local_opcode.global_opcode().as_usize() + curve_idx_shift),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
@@ -102,7 +102,7 @@ impl EccTranspilerExtension {
                 ))
             } else {
                 let global_opcode = match TeBaseFunct7::from_repr(base_funct7) {
-                    Some(TeBaseFunct7::TeAdd) => Rv32EdwardsOpcode::EC_ADD.global_opcode(),
+                    Some(TeBaseFunct7::TeAdd) => Rv32EdwardsOpcode::TE_ADD.global_opcode(),
                     _ => unimplemented!(),
                 };
                 let global_opcode = global_opcode.as_usize() + curve_idx_shift;
@@ -163,8 +163,8 @@ impl EccTranspilerExtension {
             }
             if base_funct7 == SwBaseFunct7::SwSetup as u8 {
                 let local_opcode = match dec_insn.rs2 {
-                    0 => Rv32WeierstrassOpcode::SETUP_EC_DOUBLE,
-                    _ => Rv32WeierstrassOpcode::SETUP_EC_ADD_NE,
+                    0 => Rv32WeierstrassOpcode::SETUP_SW_DOUBLE,
+                    _ => Rv32WeierstrassOpcode::SETUP_SW_ADD_NE,
                 };
                 Some(Instruction::new(
                     VmOpcode::from_usize(local_opcode.global_opcode().as_usize() + curve_idx_shift),
@@ -178,10 +178,10 @@ impl EccTranspilerExtension {
                 ))
             } else {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
-                    Some(SwBaseFunct7::SwAddNe) => Rv32WeierstrassOpcode::EC_ADD_NE.global_opcode(),
+                    Some(SwBaseFunct7::SwAddNe) => Rv32WeierstrassOpcode::SW_ADD_NE.global_opcode(),
                     Some(SwBaseFunct7::SwDouble) => {
                         assert!(dec_insn.rs2 == 0);
-                        Rv32WeierstrassOpcode::EC_DOUBLE.global_opcode()
+                        Rv32WeierstrassOpcode::SW_DOUBLE.global_opcode()
                     }
                     _ => unimplemented!(),
                 };
