@@ -15,6 +15,7 @@ openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-k256 = { git = "https://github.com/openvm-org/openvm.git", package = "k256" }
 hex-literal = { version = "0.4.1", default-features = false }
 serde = { version = "1.0", default-features = false, features = [ "derive" ] }
+num-bigint = { version = "0.4.6", default-features = false }
 
 [features]
 default = []

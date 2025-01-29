@@ -8,7 +8,7 @@ use openvm_ecc_guest::{
 };
 use openvm_k256::{Secp256k1Coord, Secp256k1Point};
 // ANCHOR_END: imports
-openvm_algebra_guest::moduli_setup::moduli_declare! {
+openvm_algebra_guest::moduli_macros::moduli_declare! {
     // The Secp256k1 modulus and scalar field modulus are already declared in the k256 module
     Edwards25519Coord { modulus = "57896044618658097711785492504343953926634992332820282019728792003956564819949" },
 }
@@ -52,7 +52,7 @@ const CURVE_D: Edwards25519Coord = Edwards25519Coord::from_const_bytes([
 
 // Note that we are defining the Edwards25519 curve for illustrative purposes only.
 // In practice, we would use the ed25519 module which defines the Edwards25519 curve for us.
-openvm_ecc_guest::te_setup::te_declare! {
+openvm_ecc_guest::te_macros::te_declare! {
     Edwards25519Point {
         mod_type = Edwards25519Coord,
         a = CURVE_A,
@@ -60,7 +60,7 @@ openvm_ecc_guest::te_setup::te_declare! {
     }
 }
 
-openvm_ecc_guest::te_setup::te_init! {
+openvm_ecc_guest::te_macros::te_init! {
     Edwards25519Point,
 }
 
