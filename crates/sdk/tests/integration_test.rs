@@ -135,9 +135,7 @@ fn minimal_config_for_test(app_log_blowup: usize) -> MinimalConfig<NativeConfig>
                     .with_public_values(NUM_PUB_VALUES),
                 Native,
             ),
-            root_fri_params: standard_fri_params_with_100_bits_conjectured_security(
-                ROOT_LOG_BLOWUP,
-            ),
+            root_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
             profiling: true,
             compiler_options: CompilerOptions {
                 enable_cycle_tracker: true,

@@ -63,10 +63,10 @@ impl MinimalVmVerifierConfig {
             let public_values = VmVerifierPvs::<Felt<F>>::uninit(&mut builder);
             // Only one proof should be provided.
             // builder.assert_eq::<Usize<_>>(proofs.len(), RVar::one());
+            // let proof = builder.get(&proof, RVar::zero());
             builder.cycle_tracker_end("ReadProofsFromInput");
 
             builder.cycle_tracker_start("VerifyProofs");
-            // let proof = builder.get(&proof, RVar::zero());
             assert_required_air_for_app_vm_present(&mut builder, &proof);
             StarkVerifier::verify::<DuplexChallengerVariable<C>>(
                 &mut builder,
