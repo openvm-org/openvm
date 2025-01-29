@@ -10,9 +10,12 @@ openvm-platform = { path = "../../../../crates/toolchain/platform" }
 
 openvm-ecc-guest = { path = "../../guest", default-features = false }
 openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros", default-features = false }
+openvm-ecc-te-macros = { path = "../../../../extensions/ecc/te-macros", default-features = false }
 openvm-algebra-guest = { path = "../../../algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { path = "../../../algebra/moduli-macros", default-features = false }
 openvm-keccak256-guest = { path = "../../../keccak256/guest", default-features = false }
+
+num-bigint = "0.4.6"
 
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
@@ -26,10 +29,11 @@ k256 = { version = "0.13.3", default-features = false, features = [
 ], optional = true }
 
 [features]
-default = []
+default = ["std"]
 std = ["serde/std", "openvm/std", "openvm-ecc-guest/std"]
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
 p256 = ["openvm-ecc-guest/p256"]
+ed25519 = ["openvm-ecc-guest/ed25519"]
 
 [profile.release]
 panic = "abort"
@@ -50,8 +54,12 @@ required-features = ["k256", "p256"]
 
 [[example]]
 name = "decompress"
-required-features = ["k256"]
+required-features = ["k256", "ed25519"]
 
 [[example]]
 name = "ecdsa"
 required-features = ["k256"]
+
+[[example]]
+name = "edwards_ec"
+required-features = ["ed25519"]

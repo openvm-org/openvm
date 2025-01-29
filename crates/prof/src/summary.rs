@@ -4,7 +4,7 @@ use eyre::Result;
 use itertools::Itertools;
 
 use crate::{
-    aggregate::{group_weight, AggregateMetrics, CELLS_USED_LABEL, CYCLES_LABEL, PROOF_TIME_LABEL},
+    aggregate::{AggregateMetrics, CELLS_USED_LABEL, CYCLES_LABEL, PROOF_TIME_LABEL},
     types::MdTableCell,
 };
 
@@ -166,9 +166,8 @@ impl AggregateMetrics {
 
     /// Returns `None` if no group for app is found.
     pub fn get_summary_row(&self, md_filename: &str) -> Option<SummaryRow> {
-        // A hacky way to determine the app name
-        let app_name = self.by_group.keys().find(|k| group_weight(k) == 0)?;
-        let app = self.get_single_summary(app_name)?;
+        let app_name = self.name();
+        let app = self.get_single_summary(&app_name)?;
         let leaf = self.get_single_summary("leaf");
         let mut internals = Vec::new();
         let mut hgt = 0;

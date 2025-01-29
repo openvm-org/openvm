@@ -80,6 +80,18 @@ impl<F> AccessAdapterInventory<F> {
         }
     }
 
+    #[cfg(test)]
+    pub fn records_for_n(&self, n: usize) -> &[AccessAdapterRecord<F>] {
+        let idx = log2_strict_usize(n) - 1;
+        let chip = &self.chips[idx];
+        chip.records()
+    }
+
+    #[cfg(test)]
+    pub fn total_records(&self) -> usize {
+        self.chips.iter().map(|chip| chip.records().len()).sum()
+    }
+
     pub fn get_heights(&self) -> Vec<usize> {
         self.chips
             .iter()
@@ -192,6 +204,18 @@ impl<F> GenericAccessAdapterChip<F> {
             32 => GenericAccessAdapterChip::N32(AccessAdapterChip::new(rc, mb, cmb)),
             64 => GenericAccessAdapterChip::N64(AccessAdapterChip::new(rc, mb, cmb)),
             _ => panic!("Only supports N in (2, 4, 8, 16, 32, 64)"),
+        }
+    }
+
+    #[cfg(test)]
+    fn records(&self) -> &[AccessAdapterRecord<F>] {
+        match &self {
+            GenericAccessAdapterChip::N2(chip) => &chip.records,
+            GenericAccessAdapterChip::N4(chip) => &chip.records,
+            GenericAccessAdapterChip::N8(chip) => &chip.records,
+            GenericAccessAdapterChip::N16(chip) => &chip.records,
+            GenericAccessAdapterChip::N32(chip) => &chip.records,
+            GenericAccessAdapterChip::N64(chip) => &chip.records,
         }
     }
 }

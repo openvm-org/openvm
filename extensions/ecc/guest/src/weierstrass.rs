@@ -4,6 +4,7 @@ use core::ops::{AddAssign, Mul};
 use openvm_algebra_guest::{Field, IntMod};
 
 use super::group::Group;
+use crate::IntrinsicCurve;
 
 /// Short Weierstrass curve affine point.
 pub trait WeierstrassPoint: Sized {
@@ -65,42 +66,6 @@ pub trait WeierstrassPoint: Sized {
         }
         Some(Self::from_xy_unchecked(x, y))
     }
-}
-
-pub trait FromCompressed<Coordinate> {
-    /// Given `x`-coordinate,
-    ///
-    /// ## Panics
-    /// If the input is not a valid compressed point.
-    /// The zkVM panics instead of returning an [Option] because this function
-    /// can only guarantee correct behavior when decompression is possible,
-    /// but the function cannot compute the boolean equal to true if and only
-    /// if decompression is possible.
-    // This is because we rely on a hint for the correct decompressed value
-    // and then constrain its correctness. A malicious prover could hint
-    // incorrectly, so there is no way to use a hint to prove that the input
-    // **cannot** be decompressed.
-    fn decompress(x: Coordinate, rec_id: &u8) -> Self;
-
-    /// If it exists, hints the unique `y` coordinate that is less than `Coordinate::MODULUS`
-    /// such that `(x, y)` is a point on the curve and `y` has parity equal to `rec_id`.
-    /// If such `y` does not exist, undefined behavior.
-    ///
-    /// This is only a hint, and the returned `y` does not guarantee any of the above properties.
-    /// They must be checked separately. Normal users should use `decompress` directly.
-    fn hint_decompress(x: &Coordinate, rec_id: &u8) -> Coordinate;
-}
-
-/// A trait for elliptic curves that bridges the openvm types and external types with CurveArithmetic etc.
-/// Implement this for external curves with corresponding openvm point and scalar types.
-pub trait IntrinsicCurve {
-    type Scalar: Clone;
-    type Point: Clone;
-
-    /// Multi-scalar multiplication.
-    /// The implementation may be specialized to use properties of the curve
-    /// (e.g., if the curve order is prime).
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point;
 }
 
 // MSM using preprocessed table (windowed method)

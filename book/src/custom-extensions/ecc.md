@@ -15,11 +15,19 @@ The OpenVM Elliptic Curve Cryptography Extension provides support for elliptic c
 - `WeierstrassPoint` trait:
   It represents an affine point on a Weierstrass elliptic curve and it extends `Group`.
 
-  - `Coordinate` type is the type of the coordinates of the point, and it implements `IntMod`.
-  - `x()`, `y()` are used to get the affine coordinates
+  - `Coordinate` type is the type of the coordinates of the point, and it implements `Field`.
+  - `x()`, `y()` are used to get the affine coordinates.
   - `from_xy` is a constructor for the point, which checks if the point is either identity or on the affine curve.
   - The point supports elliptic curve operations through intrinsic functions `add_ne_nonidentity` and `double_nonidentity`.
   - `decompress`: Sometimes an elliptic curve point is compressed and represented by its `x` coordinate and the odd/even parity of the `y` coordinate. `decompress` is used to decompress the point back to `(x, y)`.
+
+- `TwistedEdwardsPoint` trait:
+  It represents an affine point on a twisted Edwards elliptic curve and it extends `Group`.
+
+  - `Coordinate` type is the type of the coordinates of the point, and it implements `Field`.
+  - `x()`, `y()` are used to get the affine coordinates.
+  - `from_xy` is a constructor for the point, which checks if the point is on the affine curve.
+  - The point supports elliptic curve addition through the `add_impl` method.
 
 - `msm`: for multi-scalar multiplication.
 
@@ -29,17 +37,20 @@ The OpenVM Elliptic Curve Cryptography Extension provides support for elliptic c
 
 For elliptic curve cryptography, the `openvm-ecc-guest` crate provides macros similar to those in [`openvm-algebra-guest`](./algebra.md):
 
-1. **Declare**: Use `sw_declare!` to define elliptic curves over the previously declared moduli. For example:
+1. **Declare**: Use `sw_declare!` or `te_declare!` to define short Weierstrass or twisted Edwards elliptic curves, respectively, over the previously declared moduli. For example:
 
 ```rust
 sw_declare! {
     Bls12_381G1Affine { mod_type = Bls12_381Fp, b = BLS12_381_B },
     P256Affine { mod_type = P256Coord, a = P256_A, b = P256_B },
 }
+te_declare! {
+    Edwards25519 { mod_type = Edwards25519Coord, a = CURVE_A, d = CURVE_D },
+}
 ```
+This creates `Bls12_381G1Affine` and `P256Affine` structs which implement the `Group` and `WeierstrassPoint` traits, and the `Edwards25519` struct which implements the `Group` and `TwistedEdwardsPoint` traits. The underlying memory layout of the structs uses the memory layout of the `Bls12_381Fp`, `P256Coord`, and `Edwards25519Coord` structs, respectively.
 
-Each declared curve must specify the `mod_type` (implementing `IntMod`) and a constant `b` for the Weierstrass curve equation \\(y^2 = x^3 + ax + b\\). `a` is optional and defaults to 0 for short Weierstrass curves.
-This creates `Bls12_381G1Affine` and `P256Affine` structs which implement the `Group` and `WeierstrassPoint` traits. The underlying memory layout of the structs uses the memory layout of the `Bls12_381Fp` and `P256Coord` structs, respectively.
+Each declared curve must specify the `mod_type` (implementing `Field`) and a constant `b` for the Weierstrass curve equation \\(y^2 = x^3 + ax + b\\) or `a` and `d` for the twisted Edwards curve equation \\(ax^2 + y^2 = 1 + dx^2y^2\\). For short Weierstrass curves, `a` is optional and defaults to 0.
 
 2. **Init**: Called once, it enumerates these curves and allows the compiler to produce optimized instructions:
 
@@ -47,19 +58,24 @@ This creates `Bls12_381G1Affine` and `P256Affine` structs which implement the `G
 sw_init! {
     Bls12_381G1Affine, P256Affine,
 }
+te_init! {
+    Edwards25519,
+}
 ```
 
 3. **Setup**: Similar to the moduli and complex extensions, runtime setup instructions ensure that the correct curve parameters are being used, guaranteeing secure operation.
 
 **Summary**:
 
-- `sw_declare!`: Declares elliptic curve structures.
-- `sw_init!`: Initializes them once, linking them to the underlying moduli.
-- `setup_sw_<i>()`/`setup_all_curves()`: Secures runtime correctness.
+- `sw_declare!`: Declares short Weierstrass elliptic curve structures.
+- `te_declare!`: Declares twisted Edwards elliptic curve structures.
+- `sw_init!`: Initializes the short Weierstrass elliptic curves once, linking them to the underlying moduli.
+- `te_init!`: Initializes the twisted Edwards elliptic curves once, linking them to the underlying moduli.
+- `setup_sw_<i>()`/`setup_all_sw_curves()`/`setup_te_<i>()`/`setup_all_te_curves()`: Secures runtime correctness.
 
-To use elliptic curve operations on a struct defined with `sw_declare!`, it is expected that the struct for the curve's coordinate field was defined using `moduli_declare!`. In particular, the coordinate field needs to be initialized and set up as described in the [algebra extension](./algebra.md) chapter.
+To use elliptic curve operations on a struct defined with `sw_declare!` or `te_declare!`, it is expected that the struct for the curve's coordinate field was defined using `moduli_declare!`. In particular, the coordinate field needs to be initialized and set up as described in the [algebra extension](./algebra.md) chapter.
 
-For the basic operations provided by the `WeierstrassPoint` trait, the scalar field is not needed. For the ECDSA functions in the `ecdsa` module, the scalar field must also be declared, initialized, and set up.
+For the basic operations provided by the `WeierstrassPoint` or `TwistedEdwardsPoint` traits, the scalar field is not needed. For the ECDSA functions in the `ecdsa` module, the scalar field must also be declared, initialized, and set up.
 
 ## Example program
 
@@ -93,13 +109,25 @@ For the guest program to build successfully, all used moduli and curves must be 
 
 ```toml
 [app_vm_config.modular]
-supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663", "115792089237316195423570985008687907852837564279074904382605163141518161494337"]
+supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663", "115792089237316195423570985008687907852837564279074904382605163141518161494337", "57896044618658097711785492504343953926634992332820282019728792003956564819949"]
 
-[[app_vm_config.ecc.supported_curves]]
+[[app_vm_config.ecc.supported_sw_curves]]
 modulus = "115792089237316195423570985008687907853269984665640564039457584007908834671663"
 scalar = "115792089237316195423570985008687907852837564279074904382605163141518161494337"
+
+[app_vm_config.ecc.supported_sw_curves.coeffs]
 a = "0"
 b = "7"
+
+[[app_vm_config.ecc.supported_te_curves]]
+modulus = "57896044618658097711785492504343953926634992332820282019728792003956564819949"
+scalar = "7237005577332262213973186563042994240857116359379907606001950938285454250989"
+
+[app_vm_config.ecc.supported_te_curves.coeffs]
+a = "57896044618658097711785492504343953926634992332820282019728792003956564819948"
+d = "37095705934669439343138083508754565189542113879843219016388785533085940283555"
 ```
 
 The `supported_modulus` parameter is a list of moduli that the guest program will use. The `ecc.supported_curves` parameter is a list of supported curves that the guest program will use. They must be provided in decimal format in the `.toml` file. For multiple curves create multiple `[[app_vm_config.ecc.supported_curves]]` sections.
+
+The `type` field must be `SwCurve` for short Weierstrass curves and `TeCurve` for twisted Edwards curves.
