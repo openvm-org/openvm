@@ -2,11 +2,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use hex_literal::hex;
-use openvm_algebra_guest::{moduli_setup::moduli_init, IntMod};
+use openvm_algebra_guest::{moduli_macros::moduli_init, IntMod};
 use openvm_ecc_guest::{
     ed25519::{Ed25519Coord, Ed25519Point},
     edwards::TwistedEdwardsPoint,
-    te_setup::te_init,
+    te_macros::te_init,
     CyclicGroup, Group,
 };
 

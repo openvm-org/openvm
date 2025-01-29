@@ -317,7 +317,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                         }
                         #[cfg(target_os = "zkvm")]
                         {
-                            use openvm::platform as openvm_platform; // needed for hint_store_u32!
+                            use openvm::platform as openvm_platform; // needed for hint_buffer_u32!
 
                             let possible = core::mem::MaybeUninit::<u32>::uninit();
                             let sqrt = core::mem::MaybeUninit::<#intmod_type>::uninit();

@@ -24,7 +24,7 @@ lazy_static! {
     ));
 }
 
-openvm_algebra_moduli_setup::moduli_declare! {
+openvm_algebra_moduli_macros::moduli_declare! {
     Ed25519Coord { modulus = "0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED" },
     Ed25519Scalar { modulus = "0x1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED" },
 }
@@ -40,7 +40,7 @@ pub const CURVE_D: Ed25519Coord = Ed25519Coord::from_const_bytes(hex!(
     "A3785913CA4DEB75ABD841414D0A700098E879777940C78C73FE6F2BEE6C0352"
 ));
 
-openvm_ecc_te_setup::te_declare! {
+openvm_ecc_te_macros::te_declare! {
     Ed25519Point { mod_type = Ed25519Coord, a = CURVE_A, d = CURVE_D },
 }
 
