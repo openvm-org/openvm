@@ -6,7 +6,6 @@ use core::array;
 
 use openvm::io::print;
 use openvm_bigint_guest::I256;
-openvm::entry!(main);
 
 const N: usize = 16;
 type Matrix = [[I256; N]; N];
@@ -49,6 +48,7 @@ pub fn matrix_exp(mut base: Matrix, mut exp: I256) -> Matrix {
     result
 }
 
+#[openvm::main]
 pub fn main() {
     let a: Matrix = get_identity_matrix();
     let c = matrix_exp(a, I256::from_i32(1234567));

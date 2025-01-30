@@ -9,8 +9,7 @@ use core::hint::black_box;
 use hex::FromHex;
 use openvm_keccak256_guest::keccak256;
 
-openvm::entry!(main);
-
+#[openvm::main]
 pub fn main() {
     let test_vectors = [
         ("", "C5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470"), // ShortMsgKAT_256 Len = 0
