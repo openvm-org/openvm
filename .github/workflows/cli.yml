@@ -11,6 +11,7 @@ on:
       - "crates/sdk/**"
       - "crates/cli/**"
       - "examples/**"
+      - ".github/workflows/cli.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -22,10 +23,23 @@ env:
 
 jobs:
   app-level-cli:
-    runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=32cpu-linux-arm64
-      - extras=s3-cache
+    strategy:
+      matrix:
+        include:
+          - runs-on:
+              - runs-on=${{ github.run_id }}
+              - runner=32cpu-linux-arm64
+              - extras=s3-cache
+          - runs-on:
+              - runs-on=${{ github.run_id }}
+              - runner=32cpu-linux-x64
+              - extras=s3-cache
+          - runs-on:
+              - runs-on=${{ github.run_id }}
+              - image=windows22-base-x64
+              - family=m7i-8xlarge
+              - extras=s3-cache
+    runs-on: ${{ matrix.runs-on }}
 
     steps:
       - uses: runs-on/action@v1
