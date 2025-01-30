@@ -3,8 +3,7 @@
 
 use openvm::io::reveal;
 
-openvm::entry!(main);
-
+#[openvm::main]
 pub fn main() {
     let x: u32 = core::hint::black_box(123);
     let y: u32 = core::hint::black_box(456);

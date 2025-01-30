@@ -3,8 +3,6 @@
 
 use openvm_algebra_guest::IntMod;
 
-openvm::entry!(main);
-
 openvm_algebra_moduli_macros::moduli_declare! {
     Mod1 { modulus = "998244353" },
     Mod2 { modulus = "1000000007" },
@@ -23,6 +21,7 @@ openvm_algebra_complex_macros::complex_init! {
     Complex2 { mod_idx = 2 },
 }
 
+#[openvm::main]
 pub fn main() {
     setup_all_moduli();
     setup_all_complex_extensions();

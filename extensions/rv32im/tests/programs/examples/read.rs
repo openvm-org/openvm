@@ -3,8 +3,6 @@
 extern crate alloc;
 use openvm::io::read;
 
-openvm::entry!(main);
-
 #[derive(serde::Deserialize)]
 struct Foo {
     bar: u32,
@@ -12,6 +10,7 @@ struct Foo {
 }
 
 #[allow(clippy::disallowed_names)]
+#[openvm::main]
 pub fn main() {
     let foo: Foo = read();
     if foo.baz.len() != 4 {
