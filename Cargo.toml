@@ -34,6 +34,7 @@ members = [
     "extensions/native/circuit",
     "extensions/native/compiler",
     "extensions/native/compiler/derive",
+    "extensions/native/custom-ef",
     "extensions/native/recursion",
     "extensions/native/transpiler",
     "extensions/algebra/circuit",
@@ -134,6 +135,7 @@ openvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = fal
 openvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
 openvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
 openvm-native-compiler = { path = "extensions/native/compiler", default-features = false }
+openvm-native-custom-ef = { path = "extensions/native/custom-ef", default-features = false }
 openvm-native-compiler-derive = { path = "extensions/native/compiler/derive", default-features = false }
 openvm-native-recursion = { path = "extensions/native/recursion", default-features = false }
 openvm-native-transpiler = { path = "extensions/native/transpiler", default-features = false }
