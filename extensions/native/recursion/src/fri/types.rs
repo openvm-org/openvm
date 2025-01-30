@@ -63,12 +63,6 @@ pub struct DimensionsVariable<C: Config> {
 }
 
 #[derive(DslVariable, Clone)]
-pub struct TwoAdicPcsProofVariable<C: Config> {
-    pub fri_proof: FriProofVariable<C>,
-    pub query_openings: Array<C, Array<C, BatchOpeningVariable<C>>>,
-}
-
-#[derive(DslVariable, Clone)]
 pub struct BatchOpeningVariable<C: Config> {
     #[allow(clippy::type_complexity)]
     pub opened_values: Array<C, Array<C, Felt<C::F>>>,

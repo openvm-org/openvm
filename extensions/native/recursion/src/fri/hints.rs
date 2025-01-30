@@ -119,8 +119,12 @@ impl Hintable<C> for InnerBatchOpening {
     type HintVariable = BatchOpeningVariable<C>;
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
+        builder.cycle_tracker_start("HintOpenedValues");
         let opened_values = Vec::<Vec<InnerVal>>::read(builder);
+        builder.cycle_tracker_end("HintOpenedValues");
+        builder.cycle_tracker_start("HintOpeningProof");
         let opening_proof = Vec::<InnerDigest>::read(builder);
+        builder.cycle_tracker_end("HintOpeningProof");
         Self::HintVariable {
             opened_values,
             opening_proof,
