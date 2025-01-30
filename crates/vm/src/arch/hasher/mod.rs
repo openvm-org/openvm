@@ -24,7 +24,7 @@ pub trait Hasher<const CHUNK: usize, F: Field> {
         leaves[0]
     }
 }
-pub trait HasherChip<const CHUNK: usize, F: Field>: Hasher<CHUNK, F> {
+pub trait HasherChip<const CHUNK: usize, F: Field>: Hasher<CHUNK, F> + Send {
     /// Stateful version of `hash` for recording the event in the chip.
     fn compress_and_record(&mut self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK];
     fn hash_and_record(&mut self, values: &[F; CHUNK]) -> [F; CHUNK] {

@@ -2,7 +2,7 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     iter,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -14,7 +14,9 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut},
+    p3_maybe_rayon::prelude::{
+        IntoParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSliceMut,
+    },
     prover::types::AirProofInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
@@ -200,8 +202,9 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     ) {
         match &mut self.touched_labels {
             TouchedLabels::Running(touched_labels) => {
+                let hasher = Arc::new(Mutex::new(hasher));
                 let final_touched_labels = touched_labels
-                    .iter()
+                    .par_iter()
                     .map(|&(address_space, label)| {
                         let pointer = label * CHUNK as u32;
                         let init_values = array::from_fn(|i| {
@@ -209,9 +212,12 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                                 .get(&(address_space, pointer + i as u32))
                                 .unwrap_or(&F::ZERO)
                         });
-                        let initial_hash = hasher.hash_and_record(&init_values);
+                        let initial_hash = hasher.lock().unwrap().hash_and_record(&init_values);
                         let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
-                        let final_hash = hasher.hash_and_record(&timestamped_values.values);
+                        let final_hash = hasher
+                            .lock()
+                            .unwrap()
+                            .hash_and_record(&timestamped_values.values);
                         FinalTouchedLabel {
                             address_space,
                             label,
