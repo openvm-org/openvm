@@ -29,7 +29,7 @@ chrono = { version = "0.4", default-features = false, features = ["serde"] }
 default = []
 # The zkVM exposes a getrandom implementation that panics by default. This will
 # expose a getrandom implementation that uses the `sys_random` ecall.
-getrandom = ["openvm-platform/getrandom"]
+getrandom = ["openvm-platform/getrandom", "std"]
 # The zkVM uses a bump-pointer heap allocator by default which does not free
 # memory. This will use a slower linked-list heap allocator to reclaim memory.
 heap-embedded-alloc = ["openvm-platform/heap-embedded-alloc"]
