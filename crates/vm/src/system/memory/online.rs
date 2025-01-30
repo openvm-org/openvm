@@ -1,7 +1,9 @@
 use std::fmt::Debug;
 
+use openvm_circuit::system::memory::smallvec::SerdeSmallVec;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 
 use super::paged_vec::{AddressMap, PAGE_SIZE};
 use crate::{
@@ -19,7 +21,7 @@ pub enum MemoryLogEntry<T> {
     Write {
         address_space: u32,
         pointer: u32,
-        data: Vec<T>,
+        data: SerdeSmallVec<[T; 4]>,
     },
     IncrementTimestampBy(u32),
 }
@@ -72,7 +74,7 @@ impl<F: PrimeField32> Memory<F> {
         self.log.push(MemoryLogEntry::Write {
             address_space,
             pointer,
-            data: values.to_vec(),
+            data: SmallVec::from_slice(&values).into(),
         });
         self.timestamp += 1;
 

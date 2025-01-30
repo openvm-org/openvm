@@ -42,6 +42,7 @@ static_assertions.workspace = true
 async-trait.workspace = true
 getset.workspace = true
 rayon = { workspace = true, optional = true }
+smallvec.workspace = true
 
 [dev-dependencies]
 p3-dft = { workspace = true }

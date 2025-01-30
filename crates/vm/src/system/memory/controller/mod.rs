@@ -492,7 +492,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 if address_space != 0 {
                     interface_chip.touch_range(address_space, pointer, data.len() as u32);
                 }
-                offline_memory.write(address_space, pointer, data, adapter_records);
+                offline_memory.write(address_space, pointer, &data, adapter_records);
             }
             MemoryLogEntry::IncrementTimestampBy(amount) => {
                 offline_memory.increment_timestamp_by(amount);

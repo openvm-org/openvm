@@ -146,7 +146,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         &mut self,
         address_space: u32,
         pointer: u32,
-        values: Vec<F>,
+        values: &[F],
         records: &mut AccessAdapterInventory<F>,
     ) {
         let len = values.len();
@@ -159,14 +159,14 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
         let pointer = pointer as usize;
         let prev_data = self.data[(address_space - self.as_offset) as usize]
-            .set_range(pointer..pointer + len, &values);
+            .set_range(pointer..pointer + len, values);
 
         let record = MemoryRecord {
             address_space: F::from_canonical_u32(address_space),
             pointer: F::from_canonical_usize(pointer),
             timestamp: self.timestamp,
             prev_timestamp,
-            data: values,
+            data: values.to_vec(),
             prev_data: Some(prev_data),
         };
         self.log.push(Some(record));
@@ -600,13 +600,13 @@ mod tests {
         let (mut memory, mut access_adapters) = setup_test(MemoryImage::default(), 1);
         let address_space = 1;
 
-        memory.write(address_space, 0, bbvec![1, 2, 3, 4], &mut access_adapters);
+        memory.write(address_space, 0, &bba![1, 2, 3, 4], &mut access_adapters);
 
         memory.read(address_space, 0, 2, &mut access_adapters);
         let read_record = memory.last_record();
         assert_eq!(read_record.data, bba![1, 2]);
 
-        memory.write(address_space, 2, bbvec![100], &mut access_adapters);
+        memory.write(address_space, 2, &bba![100], &mut access_adapters);
 
         memory.read(address_space, 0, 4, &mut access_adapters);
         let read_record = memory.last_record();
@@ -617,7 +617,7 @@ mod tests {
     fn test_records_initial_block_len_1() {
         let (mut memory, mut adapter_records) = setup_test(MemoryImage::default(), 1);
 
-        memory.write(1, 0, bbvec![1, 2, 3, 4], &mut adapter_records);
+        memory.write(1, 0, &bba![1, 2, 3, 4], &mut adapter_records);
 
         // Above write first causes merge of [0:1] and [1:2] into [0:2].
         assert_eq!(
@@ -694,7 +694,7 @@ mod tests {
         );
         assert_eq!(memory.timestamp(), 3);
 
-        memory.write(1, 0, bbvec![10, 11], &mut adapter_records);
+        memory.write(1, 0, &bba![10, 11], &mut adapter_records);
         let write_record = memory.last_record();
         // write causes split [0:4] into [0:2] and [2:4] (to prepare for write to [0:2]).
         assert_eq!(adapter_records.total_records(), 4);
@@ -756,7 +756,7 @@ mod tests {
     fn test_records_initial_block_len_8() {
         let (mut memory, mut adapter_records) = setup_test(MemoryImage::default(), 8);
 
-        memory.write(1, 0, bbvec![1, 2, 3, 4], &mut adapter_records);
+        memory.write(1, 0, &bba![1, 2, 3, 4], &mut adapter_records);
         let write_record = memory.last_record();
 
         // Above write first causes split of [0:8] into [0:4] and [4:8].
@@ -802,7 +802,7 @@ mod tests {
         );
         assert_eq!(memory.timestamp(), 3);
 
-        memory.write(1, 0, bbvec![10, 11], &mut adapter_records);
+        memory.write(1, 0, &bba![10, 11], &mut adapter_records);
         let write_record = memory.last_record();
         // write causes split [0:4] into [0:2] and [2:4] (to prepare for write to [0:2]).
         assert_eq!(adapter_records.total_records(), 2);
@@ -864,7 +864,7 @@ mod tests {
     fn test_get_initial_block_len_1() {
         let (mut memory, mut adapter_records) = setup_test(MemoryImage::default(), 1);
 
-        memory.write(2, 0, bbvec![4, 3, 2, 1], &mut adapter_records);
+        memory.write(2, 0, &bba![4, 3, 2, 1], &mut adapter_records);
 
         assert_eq!(memory.get(2, 0), BabyBear::from_canonical_u32(4));
         assert_eq!(memory.get(2, 1), BabyBear::from_canonical_u32(3));
@@ -879,7 +879,7 @@ mod tests {
     fn test_get_initial_block_len_8() {
         let (mut memory, mut adapter_records) = setup_test(MemoryImage::default(), 8);
 
-        memory.write(2, 0, bbvec![4, 3, 2, 1], &mut adapter_records);
+        memory.write(2, 0, &bba![4, 3, 2, 1], &mut adapter_records);
 
         assert_eq!(memory.get(2, 0), BabyBear::from_canonical_u32(4));
         assert_eq!(memory.get(2, 1), BabyBear::from_canonical_u32(3));
@@ -903,18 +903,18 @@ mod tests {
     fn test_finalize_block_len_8() {
         let (mut memory, mut adapter_records) = setup_test(MemoryImage::default(), 8);
         // Make block 0:4 in address space 1 active.
-        memory.write(1, 0, bbvec![1, 2, 3, 4], &mut adapter_records);
+        memory.write(1, 0, &bba![1, 2, 3, 4], &mut adapter_records);
 
         // Make block 16:32 in address space 1 active.
         memory.write(
             1,
             16,
-            bbvec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            &bba![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             &mut adapter_records,
         );
 
         // Make block 64:72 in address space 2 active.
-        memory.write(2, 64, bbvec![8, 7, 6, 5, 4, 3, 2, 1], &mut adapter_records);
+        memory.write(2, 64, &bba![8, 7, 6, 5, 4, 3, 2, 1], &mut adapter_records);
 
         let num_records_before_finalize = adapter_records.total_records();
 
@@ -984,7 +984,7 @@ mod tests {
         assert_eq!(initial_read_record_2.data, bbvec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         // Test: Write a partial block to block 0 (pointer 0) and read back partially and fully
-        memory.write(1, 0, bbvec![9, 9, 9, 9], &mut adapter_records);
+        memory.write(1, 0, &bba![9, 9, 9, 9], &mut adapter_records);
         memory.read(1, 0, 2, &mut adapter_records);
         let partial_read_record = memory.last_record();
         assert_eq!(partial_read_record.data, bbvec![9, 9]);
@@ -994,7 +994,7 @@ mod tests {
         assert_eq!(full_read_record_0.data, bbvec![9, 9, 9, 9, 5, 6, 7, 8]);
 
         // Test: Write a single element to pointer 2 and verify read in different lengths
-        memory.write(1, 2, bbvec![100], &mut adapter_records);
+        memory.write(1, 2, &bba![100], &mut adapter_records);
         memory.read(1, 1, 4, &mut adapter_records);
         let read_record_4 = memory.last_record();
         assert_eq!(read_record_4.data, bbvec![9, 100, 9, 5]);
@@ -1004,7 +1004,7 @@ mod tests {
         assert_eq!(full_read_record_2.data, bba![100, 9, 5, 6, 7, 8, 0, 0]);
 
         // Test: Write and read at the last pointer in block 2 (pointer 23, part of key (1, 2))
-        memory.write(1, 23, bbvec![77], &mut adapter_records);
+        memory.write(1, 23, &bba![77], &mut adapter_records);
         memory.read(1, 23, 2, &mut adapter_records);
         let boundary_read_record = memory.last_record();
         assert_eq!(boundary_read_record.data, bba![77, 0]); // Last byte modified, ensuring boundary check
@@ -1022,7 +1022,7 @@ mod tests {
         memory.write(
             1,
             16,
-            bbvec![50, 50, 50, 50, 50, 50, 50, 50],
+            &bba![50, 50, 50, 50, 50, 50, 50, 50],
             &mut adapter_records,
         );
         memory.read(1, 16, 8, &mut adapter_records);
