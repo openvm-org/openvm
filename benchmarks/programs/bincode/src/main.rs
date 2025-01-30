@@ -7,8 +7,7 @@ mod types;
 use bincode::{config::standard, decode_from_slice};
 use types::Players;
 
-openvm::entry!(main);
-
+#[openvm::main]
 fn main() {
     // nothing up our sleeves, state and stream are first 20 digits of pi
     // const STATE: u64 = 3141592653;

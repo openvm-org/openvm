@@ -3,8 +3,6 @@
 
 use openvm_algebra_guest::{field::ComplexConjugate, DivAssignUnsafe, DivUnsafe, IntMod};
 
-openvm::entry!(main);
-
 openvm_algebra_moduli_macros::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" }
 }
@@ -20,6 +18,7 @@ openvm_algebra_complex_macros::complex_init! {
     Complex { mod_idx = 0},
 }
 
+#[openvm::main]
 pub fn main() {
     setup_all_moduli();
     setup_all_complex_extensions();

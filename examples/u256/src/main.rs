@@ -35,6 +35,7 @@ pub fn get_identity_matrix() -> Matrix {
     res
 }
 
+#[openvm::main]
 pub fn main() {
     let a: Matrix = get_identity_matrix();
     let b: Matrix = get_matrix(28);

@@ -22,8 +22,7 @@ openvm_ecc_guest::sw_macros::sw_init! {
 // ANCHOR_END: init
 
 // ANCHOR: main
-openvm::entry!(main);
-
+#[openvm::main]
 pub fn main() {
     setup_all_moduli();
     setup_all_curves();

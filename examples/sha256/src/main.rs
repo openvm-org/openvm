@@ -12,8 +12,7 @@ use openvm_sha256_guest::sha256;
 // ANCHOR_END: imports
 
 // ANCHOR: main
-openvm::entry!(main);
-
+#[openvm::main]
 pub fn main() {
     let test_vectors = [(
         "",

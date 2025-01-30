@@ -54,49 +54,7 @@ fn _fault() -> ! {
 //     }
 // }
 
-/// Used for defining the guest's entrypoint and main function.
-///
-/// When `#![no_main]` is used, the programs entrypoint and main function is left undefined. The
-/// `entry` macro is required to indicate the main function and link it to an entrypoint provided
-/// by the `openvm` crate.
-///
-/// When `std` is enabled, the entrypoint will be linked automatically and this macro is not
-/// required.
-///
-/// # Example
-///
-/// ```ignore
-/// #![no_main]
-/// #![no_std]
-///
-/// openvm::entry!(main);
-///
-/// fn main() { }
-/// ```
-#[cfg(all(not(feature = "std"), target_os = "zkvm"))]
-#[macro_export]
-macro_rules! entry {
-    ($path:path) => {
-        // Type check the given path
-        const ZKVM_ENTRY: fn() = $path;
-
-        // Include generated main in a module so we don't conflict
-        // with any other definitions of "main" in this file.
-        mod zkvm_generated_main {
-            #[no_mangle]
-            fn main() {
-                super::ZKVM_ENTRY()
-            }
-        }
-    };
-}
-/// This macro does nothing. You should name the function `main` so that the normal rust main function
-/// setup is used.
-#[cfg(any(feature = "std", not(target_os = "zkvm")))]
-#[macro_export]
-macro_rules! entry {
-    ($path:path) => {};
-}
+pub use openvm_entry::main;
 
 #[cfg(target_os = "zkvm")]
 #[no_mangle]
