@@ -1,3 +1,5 @@
+use core::ops::Add;
+
 use hex_literal::hex;
 #[cfg(not(target_os = "zkvm"))]
 use lazy_static::lazy_static;
@@ -6,7 +8,7 @@ use num_bigint::BigUint;
 use openvm_algebra_guest::{Field, IntMod};
 
 use super::group::{CyclicGroup, Group};
-use crate::IntrinsicCurve;
+use crate::{edwards::CachedMulTable, IntrinsicCurve};
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
@@ -80,6 +82,7 @@ impl CyclicGroup for Ed25519Point {
     };
 }
 
+/*
 impl IntrinsicCurve for Ed25519Point {
     type Scalar = Ed25519Scalar;
     type Point = Ed25519Point;
@@ -87,5 +90,23 @@ impl IntrinsicCurve for Ed25519Point {
     fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
         // TODO: idk if this can be optimized
         openvm_ecc_guest::msm(coeffs, bases)
+    }
+}
+*/
+
+impl IntrinsicCurve for Ed25519Point {
+    type Scalar = Ed25519Scalar;
+    type Point = Ed25519Point;
+
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
+    where
+        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
+    {
+        if coeffs.len() < 25 {
+            let table = CachedMulTable::<Self>::new(bases, 4);
+            table.windowed_mul(coeffs)
+        } else {
+            crate::msm(coeffs, bases)
+        }
     }
 }
