@@ -37,8 +37,7 @@ jobs:
           - runs-on:
               - runs-on=${{ github.run_id }}
               - image=windows22-base-x64
-              - family=m7i-8xlarge
-              - extras=s3-cache
+              - family=m7i
     runs-on: ${{ matrix.runs-on }}
 
     steps:
