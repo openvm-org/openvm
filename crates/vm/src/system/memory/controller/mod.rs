@@ -3,7 +3,6 @@ use std::{
     collections::BTreeMap,
     iter,
     marker::PhantomData,
-    mem,
     sync::{Arc, Mutex},
 };
 
@@ -452,12 +451,10 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     fn replay_access_log(&mut self) {
-        let log = mem::take(&mut self.memory.log);
-
         let mut offline_memory = self.offline_memory.lock().unwrap();
-        offline_memory.set_log_capacity(log.len());
+        offline_memory.set_log_capacity(self.memory.log.len());
 
-        for entry in log {
+        for entry in &self.memory.log {
             Self::replay_access(
                 entry,
                 &mut offline_memory,
@@ -468,7 +465,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     fn replay_access(
-        entry: MemoryLogEntry<F>,
+        entry: &MemoryLogEntry<F>,
         offline_memory: &mut OfflineMemory<F>,
         interface_chip: &mut MemoryInterface<F>,
         adapter_records: &mut AccessAdapterInventory<F>,
@@ -479,23 +476,23 @@ impl<F: PrimeField32> MemoryController<F> {
                 pointer,
                 len,
             } => {
-                if address_space != 0 {
-                    interface_chip.touch_range(address_space, pointer, len as u32);
+                if *address_space != 0 {
+                    interface_chip.touch_range(*address_space, *pointer, *len as u32);
                 }
-                offline_memory.read(address_space, pointer, len, adapter_records);
+                offline_memory.read(*address_space, *pointer, *len, adapter_records);
             }
             MemoryLogEntry::Write {
                 address_space,
                 pointer,
                 data,
             } => {
-                if address_space != 0 {
-                    interface_chip.touch_range(address_space, pointer, data.len() as u32);
+                if *address_space != 0 {
+                    interface_chip.touch_range(*address_space, *pointer, data.len() as u32);
                 }
-                offline_memory.write(address_space, pointer, &data, adapter_records);
+                offline_memory.write(*address_space, *pointer, data, adapter_records);
             }
             MemoryLogEntry::IncrementTimestampBy(amount) => {
-                offline_memory.increment_timestamp_by(amount);
+                offline_memory.increment_timestamp_by(*amount);
             }
         };
     }
