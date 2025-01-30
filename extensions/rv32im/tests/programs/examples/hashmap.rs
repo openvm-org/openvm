@@ -5,8 +5,7 @@ extern crate alloc;
 
 use std::collections::HashMap;
 
-openvm::entry!(main);
-
+#[openvm::main]
 fn main() {
     let mut map = HashMap::new();
     map.insert(1, 2);
