@@ -8,14 +8,14 @@ impl<C: Config> Builder<C> {
         &mut self,
         dimensions: &Array<C, Usize<C::F>>,
         opened_values: &Array<C, Array<C, Felt<C::F>>>,
-        proof: &Array<C, Array<C, Felt<C::F>>>,
+        proof_id: Var<C::N>,
         index_bits: &Array<C, Var<C::N>>,
         commit: &Array<C, Felt<C::F>>,
     ) {
         self.push(DslIr::VerifyBatchFelt(
             dimensions.clone(),
             opened_values.clone(),
-            proof.clone(),
+            proof_id,
             index_bits.clone(),
             commit.clone(),
         ));
@@ -29,14 +29,14 @@ impl<C: Config> Builder<C> {
         &mut self,
         dimensions: &Array<C, Usize<C::F>>,
         opened_values: &Array<C, Array<C, Ext<C::F, C::EF>>>,
-        proof: &Array<C, Array<C, Felt<C::F>>>,
+        proof_id: Var<C::N>,
         index_bits: &Array<C, Var<C::N>>,
         commit: &Array<C, Felt<C::F>>,
     ) {
         self.push(DslIr::VerifyBatchExt(
             dimensions.clone(),
             opened_values.clone(),
-            proof.clone(),
+            proof_id,
             index_bits.clone(),
             commit.clone(),
         ));

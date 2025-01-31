@@ -291,6 +291,9 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::HintBits(src, len) => vec![
             Instruction::phantom(PhantomDiscriminant(NativePhantom::HintBits as u16), i32_f(src), F::from_canonical_u32(len), AS::Native as u16)
         ],
+        AsmInstruction::HintLoad() => vec![
+            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintLoad as u16), F::ZERO, F::ZERO, 0)
+        ],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             options.opcode_with_offset(NativeLoadStoreOpcode::HINT_STOREW),
             F::ZERO,

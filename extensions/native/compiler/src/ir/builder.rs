@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,
-    SymbolicFelt, SymbolicVar, Usize, Var, Variable,
+    SymbolicFelt, SymbolicVar, Usize, Var, Variable, WitnessRef,
 };
 use crate::ir::{collections::ArrayLike, Ptr};
 
@@ -104,6 +104,7 @@ pub struct Builder<C: Config> {
     pub(crate) witness_var_count: u32,
     pub(crate) witness_felt_count: u32,
     pub(crate) witness_ext_count: u32,
+    pub(crate) witness_space: Vec<Vec<WitnessRef>>,
     pub flags: BuilderFlags,
     pub is_sub_builder: bool,
 }
@@ -120,6 +121,7 @@ impl<C: Config> Builder<C> {
             witness_var_count: 0,
             witness_felt_count: 0,
             witness_ext_count: 0,
+            witness_space: Default::default(),
             operations: Default::default(),
             nb_public_values: self.nb_public_values,
             flags: self.flags,
@@ -442,6 +444,23 @@ impl<C: Config> Builder<C> {
         }
     }
 
+    /// Move data from input stream into hint space. Return an ID which can be used to load the
+    /// data at runtime.
+    pub fn hint_load(&mut self) -> Var<C::N> {
+        self.trace_push(DslIr::HintLoad());
+        let ptr = self.alloc(RVar::one(), 1);
+        let index = MemIndex {
+            index: RVar::zero(),
+            offset: 0,
+            size: 1,
+        };
+        // MemIndex.index share the same pointer, but it doesn't matter.
+        self.operations.push(DslIr::StoreHintWord(ptr, index));
+        let id: Var<C::N> = self.uninit();
+        self.load(id, ptr, index);
+        id
+    }
+
     pub fn witness_var(&mut self) -> Var<C::N> {
         assert!(
             !self.is_sub_builder,
@@ -457,7 +476,7 @@ impl<C: Config> Builder<C> {
     pub fn witness_felt(&mut self) -> Felt<C::F> {
         assert!(
             !self.is_sub_builder,
-            "Cannot create a witness var with a sub builder"
+            "Cannot create a witness felt with a sub builder"
         );
         let witness = self.uninit();
         self.operations
@@ -469,13 +488,27 @@ impl<C: Config> Builder<C> {
     pub fn witness_ext(&mut self) -> Ext<C::F, C::EF> {
         assert!(
             !self.is_sub_builder,
-            "Cannot create a witness var with a sub builder"
+            "Cannot create a witness ext with a sub builder"
         );
         let witness = self.uninit();
         self.operations
             .push(DslIr::WitnessExt(witness, self.witness_ext_count));
         self.witness_ext_count += 1;
         witness
+    }
+
+    pub fn witness_load(&mut self, witness_refs: Vec<WitnessRef>) -> Usize<C::N> {
+        assert!(
+            !self.is_sub_builder,
+            "Cannot load witness refs with a sub builder"
+        );
+        let ret = self.witness_space.len();
+        self.witness_space.push(witness_refs);
+        ret.into()
+    }
+
+    pub fn get_witness_refs(&self, id: Usize<C::N>) -> &[WitnessRef] {
+        self.witness_space.get(id.value()).unwrap()
     }
 
     /// Throws an error.

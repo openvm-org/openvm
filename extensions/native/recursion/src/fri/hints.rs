@@ -1,7 +1,8 @@
 use openvm_native_compiler::{
     asm::AsmConfig,
-    ir::{Builder, Config, DIGEST_SIZE},
+    ir::{Builder, Config, Usize, DIGEST_SIZE},
 };
+use openvm_stark_backend::p3_field::FieldAlgebra;
 
 use super::types::BatchOpeningVariable;
 use crate::{
@@ -12,6 +13,7 @@ use crate::{
         InnerFriProof, InnerQueryProof, InnerVal, VecAutoHintable,
     },
     types::InnerConfig,
+    vars::HintSlice,
 };
 
 type C = InnerConfig;
@@ -36,7 +38,7 @@ impl Hintable<C> for InnerCommitPhaseStep {
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         let sibling_value = builder.hint_ext();
-        let opening_proof = Vec::<InnerDigest>::read(builder);
+        let opening_proof = read_opening_proof(builder);
         Self::HintVariable {
             sibling_value,
             opening_proof,
@@ -47,7 +49,7 @@ impl Hintable<C> for InnerCommitPhaseStep {
         let mut stream = Vec::new();
 
         stream.extend(Hintable::<C>::write(&vec![self.sibling_value]));
-        stream.extend(Vec::<InnerDigest>::write(&self.opening_proof));
+        stream.extend(write_opening_proof(&self.opening_proof));
 
         stream
     }
@@ -123,7 +125,7 @@ impl Hintable<C> for InnerBatchOpening {
         let opened_values = Vec::<Vec<InnerVal>>::read(builder);
         builder.cycle_tracker_end("HintOpenedValues");
         builder.cycle_tracker_start("HintOpeningProof");
-        let opening_proof = Vec::<InnerDigest>::read(builder);
+        let opening_proof = read_opening_proof(builder);
         builder.cycle_tracker_end("HintOpeningProof");
         Self::HintVariable {
             opened_values,
@@ -134,10 +136,24 @@ impl Hintable<C> for InnerBatchOpening {
     fn write(&self) -> Vec<Vec<<C as Config>::F>> {
         let mut stream = Vec::new();
         stream.extend(Vec::<Vec<InnerVal>>::write(&self.opened_values));
-        stream.extend(Vec::<InnerDigest>::write(&self.opening_proof));
+        stream.extend(write_opening_proof(&self.opening_proof));
         stream
     }
 }
 
 impl VecAutoHintable for InnerBatchOpening {}
 impl VecAutoHintable for Vec<InnerBatchOpening> {}
+
+fn read_opening_proof(builder: &mut Builder<C>) -> HintSlice<C> {
+    let length = Usize::from(builder.hint_var());
+    let id = Usize::from(builder.hint_load());
+    builder.print_v(id.get_var());
+    HintSlice { length, id }
+}
+
+fn write_opening_proof(opening_proof: &[InnerDigest]) -> Vec<Vec<InnerVal>> {
+    vec![
+        vec![InnerVal::from_canonical_usize(opening_proof.len())],
+        opening_proof.iter().flatten().copied().collect(),
+    ]
+}

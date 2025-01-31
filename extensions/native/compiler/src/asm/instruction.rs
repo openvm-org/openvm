@@ -144,6 +144,8 @@ pub enum AsmInstruction<F, EF> {
     /// Bit decompose the field element at pointer `src` to the first `len` little endian bits and add to hint stream.
     HintBits(i32, u32),
 
+    HintLoad(),
+
     /// Stores the next hint stream word into value stored at addr + value.
     StoreHintWordI(i32, F),
 
@@ -349,6 +351,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::StoreHintExtI(dst, offset) => {
                 write!(f, "shinte ({})fp {}", dst, offset)
             }
+            AsmInstruction::HintLoad() => write!(f, "hint_load"),
             AsmInstruction::Publish(val, index) => {
                 write!(f, "commit ({})fp ({})fp", val, index)
             }

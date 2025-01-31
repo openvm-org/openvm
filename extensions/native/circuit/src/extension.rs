@@ -200,6 +200,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             offline_memory.clone(),
             Poseidon2Config::default(),
             VerifyBatchBus(builder.new_bus_idx()),
+            builder.streams().clone(),
         );
         inventory.add_executor(
             poseidon2_chip,
@@ -334,7 +335,8 @@ pub(crate) mod phantom {
             };
             let id = streams.hint_space.len();
             streams.hint_space.push(payload);
-            streams.hint_stream.clear();
+            // Hint stream should have already been consumed.
+            debug_assert!(streams.hint_stream.is_empty());
             streams.hint_stream.push_back(F::from_canonical_usize(id));
             Ok(())
         }
