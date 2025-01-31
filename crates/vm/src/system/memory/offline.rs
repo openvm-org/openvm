@@ -52,12 +52,22 @@ impl BlockMap {
         }
     }
 
+    pub fn get_without_adding(&self, address: &(u32, u32)) -> BlockData {
+        let idx = self.id.get(address).unwrap_or(&0);
+        if idx == &0 {
+            Self::initial_block_data(address.1, self.initial_block_size)
+        } else {
+            self.storage[idx - 1].clone()
+        }
+    }
+
     pub fn get(&mut self, address: &(u32, u32)) -> &BlockData {
         let (address_space, pointer) = *address;
         let idx = self.id.get(&(address_space, pointer)).unwrap_or(&0);
         if idx == &0 {
+            let pointer = pointer - pointer % self.initial_block_size as u32;
             self.set_range(
-                address,
+                &(address_space, pointer),
                 self.initial_block_size,
                 Self::initial_block_data(pointer, self.initial_block_size),
             );
@@ -71,8 +81,9 @@ impl BlockMap {
         let (address_space, pointer) = *address;
         let idx = self.id.get(&(address_space, pointer)).unwrap_or(&0);
         if idx == &0 {
+            let pointer = pointer - pointer % self.initial_block_size as u32;
             self.set_range(
-                address,
+                &(address_space, pointer),
                 self.initial_block_size,
                 Self::initial_block_data(pointer, self.initial_block_size),
             );
@@ -91,11 +102,11 @@ impl BlockMap {
         }
     }
 
-    pub fn items(&self) -> impl Iterator<Item = ((u32, u32), &BlockData)> {
-        self.id.items().map(|(address, idx)| {
-            debug_assert!(idx > 0);
-            (address, &self.storage[idx - 1])
-        })
+    pub fn items(&self) -> impl Iterator<Item = ((u32, u32), &BlockData)> + '_ {
+        self.id
+            .items()
+            .filter(|(_, idx)| *idx > 0)
+            .map(|(address, idx)| (address, &self.storage[idx - 1]))
     }
 }
 
@@ -489,7 +500,8 @@ impl<F: PrimeField32> OfflineMemory<F> {
     }
 
     fn block_containing(&mut self, address_space: u32, pointer: u32) -> BlockData {
-        self.block_data.get(&(address_space, pointer)).clone()
+        self.block_data
+            .get_without_adding(&(address_space, pointer))
     }
 
     pub fn get(&self, address_space: u32, pointer: u32) -> F {
