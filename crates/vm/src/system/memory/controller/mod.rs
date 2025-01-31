@@ -22,6 +22,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::log2_strict_usize,
     prover::types::AirProofInput,
+    utils::metrics_span,
     AirRef, Chip, ChipUsageGetter,
 };
 use serde::{Deserialize, Serialize};
@@ -502,43 +503,47 @@ impl<F: PrimeField32> MemoryController<F> {
 
     /// Returns the final memory state if persistent.
     pub fn finalize(&mut self, hasher: Option<&mut impl HasherChip<CHUNK, F>>) {
-        if self.final_state.is_some() {
-            return;
-        }
-
-        self.replay_access_log();
-        let mut offline_memory = self.offline_memory.lock().unwrap();
-
-        match &mut self.interface_chip {
-            MemoryInterface::Volatile { boundary_chip } => {
-                let final_memory = offline_memory.finalize::<1>(&mut self.access_adapters);
-                boundary_chip.finalize(final_memory);
-                self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
+        // The span should be moved into `VmChipComplex::generate_proof_input`.
+        metrics_span("memory_finalize_time_ms", || {
+            if self.final_state.is_some() {
+                return;
             }
-            MemoryInterface::Persistent {
-                merkle_chip,
-                boundary_chip,
-                initial_memory,
-            } => {
-                let hasher = hasher.unwrap();
-                let final_partition = offline_memory.finalize::<CHUNK>(&mut self.access_adapters);
 
-                boundary_chip.finalize(initial_memory, &final_partition, hasher);
-                let final_memory_values = final_partition
-                    .into_par_iter()
-                    .map(|(key, value)| (key, value.values))
-                    .collect();
-                let initial_node = MemoryNode::tree_from_memory(
-                    merkle_chip.air.memory_dimensions,
+            self.replay_access_log();
+            let mut offline_memory = self.offline_memory.lock().unwrap();
+
+            match &mut self.interface_chip {
+                MemoryInterface::Volatile { boundary_chip } => {
+                    let final_memory = offline_memory.finalize::<1>(&mut self.access_adapters);
+                    boundary_chip.finalize(final_memory);
+                    self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
+                }
+                MemoryInterface::Persistent {
+                    merkle_chip,
+                    boundary_chip,
                     initial_memory,
-                    hasher,
-                );
-                merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
-                self.final_state = Some(FinalState::Persistent(PersistentFinalState {
-                    final_memory: final_memory_values.clone(),
-                }));
-            }
-        };
+                } => {
+                    let hasher = hasher.unwrap();
+                    let final_partition =
+                        offline_memory.finalize::<CHUNK>(&mut self.access_adapters);
+
+                    boundary_chip.finalize(initial_memory, &final_partition, hasher);
+                    let final_memory_values = final_partition
+                        .into_par_iter()
+                        .map(|(key, value)| (key, value.values))
+                        .collect();
+                    let initial_node = MemoryNode::tree_from_memory(
+                        merkle_chip.air.memory_dimensions,
+                        initial_memory,
+                        hasher,
+                    );
+                    merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
+                    self.final_state = Some(FinalState::Persistent(PersistentFinalState {
+                        final_memory: final_memory_values.clone(),
+                    }));
+                }
+            };
+        });
     }
 
     pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>

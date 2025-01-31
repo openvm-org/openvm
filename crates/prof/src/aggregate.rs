@@ -375,6 +375,7 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     EXECUTE_TIME_LABEL,
     TRACE_GEN_TIME_LABEL,
     PROVE_EXCL_TRACE_TIME_LABEL,
+    "memory_finalize_time_ms",
     "main_trace_commit_time_ms",
     "generate_perm_trace_time_ms",
     "perm_trace_commit_time_ms",
