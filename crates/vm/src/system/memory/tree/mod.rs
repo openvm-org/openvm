@@ -72,10 +72,6 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         from: u64,
         hasher: &impl Hasher<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
-        eprintln!(
-            "from: {}, height: {}, range: {:?}",
-            from, height, lookup_range
-        );
         if height == 0 {
             if lookup_range.is_empty() {
                 MemoryNode::new_leaf(hasher.hash(&[F::ZERO; CHUNK]))
