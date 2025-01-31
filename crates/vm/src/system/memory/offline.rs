@@ -342,14 +342,23 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
         let mut prev_timestamp = None;
 
-        for i in 0..size as u32 {
-            let block = self.block_data.get(&(address_space, pointer + i));
-            if block.is_none() || block.unwrap().size == 0 {
-                self.block_data.insert(
-                    &(address_space, pointer + i),
-                    Self::initial_block_data(pointer + i, self.initial_block_size),
-                );
+        {
+            let mut i = 0;
+            while i < size as u32 {
+                let block = self.block_data.get(&(address_space, pointer + i));
+                if block.is_none() || block.unwrap().size == 0 {
+                    self.block_data.insert(
+                        &(address_space, pointer + i),
+                        Self::initial_block_data(pointer + i, self.initial_block_size),
+                    );
+                    i += self.initial_block_size as u32;
+                } else {
+                    i = block.unwrap().pointer + block.unwrap().size as u32;
+                }
             }
+        }
+
+        for i in 0..size as u32 {
             let block = self
                 .block_data
                 .get_mut(&(address_space, pointer + i))
