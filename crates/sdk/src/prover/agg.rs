@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
-use openvm_stark_backend::p3_maybe_rayon::prelude::*;
+use openvm_stark_backend::{p3_maybe_rayon::prelude::*, utils::metrics_span};
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, openvm_stark_backend::proof::Proof,
 };
@@ -155,27 +155,39 @@ impl AggStarkProver {
                 let offset = internal_node_idx_offset;
                 internal_node_idx_offset += internal_inputs.len();
 
-                #[cfg(feature = "parallel")]
-                let result = internal_inputs
-                    .into_par_iter()
-                    .enumerate()
-                    .map(|(layer_idx, input)| {
-                        info_span!("single_internal_agg", idx = layer_idx + offset).in_scope(|| {
-                            SingleSegmentVmProver::prove(&self.internal_prover, input.write())
+                metrics_span("real_layer_proof_time_ms", || {
+                    #[cfg(feature = "parallel")]
+                    let result = internal_inputs
+                        .into_par_iter()
+                        .enumerate()
+                        .map(|(layer_idx, input)| {
+                            info_span!("single_internal_agg", idx = layer_idx + offset).in_scope(
+                                || {
+                                    SingleSegmentVmProver::prove(
+                                        &self.internal_prover,
+                                        input.write(),
+                                    )
+                                },
+                            )
                         })
-                    })
-                    .collect();
-                #[cfg(not(feature = "parallel"))]
-                let result = internal_inputs
-                    .into_iter()
-                    .enumerate()
-                    .map(|(layer_idx, input)| {
-                        info_span!("single_internal_agg", idx = layer_idx + offset).in_scope(|| {
-                            SingleSegmentVmProver::prove(&self.internal_prover, input.write())
+                        .collect();
+                    #[cfg(not(feature = "parallel"))]
+                    let result = internal_inputs
+                        .into_iter()
+                        .enumerate()
+                        .map(|(layer_idx, input)| {
+                            info_span!("single_internal_agg", idx = layer_idx + offset).in_scope(
+                                || {
+                                    SingleSegmentVmProver::prove(
+                                        &self.internal_prover,
+                                        input.write(),
+                                    )
+                                },
+                            )
                         })
-                    })
-                    .collect();
-                result
+                        .collect();
+                    result
+                })
             });
             internal_node_height += 1;
         }
@@ -213,25 +225,29 @@ impl LeafProvingController {
             let leaf_inputs =
                 LeafVmVerifierInput::chunk_continuation_vm_proof(app_proofs, self.num_children);
             tracing::info!("num_leaf_proofs={}", leaf_inputs.len());
-            #[cfg(feature = "parallel")]
-            let result = leaf_inputs
-                .into_par_iter()
-                .enumerate()
-                .map(|(leaf_node_idx, input)| {
-                    info_span!("single_leaf_agg", idx = leaf_node_idx)
-                        .in_scope(|| SingleSegmentVmProver::prove(prover, input.write_to_stream()))
-                })
-                .collect::<Vec<_>>();
-            #[cfg(not(feature = "parallel"))]
-            let result = leaf_inputs
-                .into_iter()
-                .enumerate()
-                .map(|(leaf_node_idx, input)| {
-                    info_span!("single_leaf_agg", idx = leaf_node_idx)
-                        .in_scope(|| SingleSegmentVmProver::prove(prover, input.write_to_stream()))
-                })
-                .collect::<Vec<_>>();
-            result
+            metrics_span("real_layer_proof_time_ms", || {
+                #[cfg(feature = "parallel")]
+                let result = leaf_inputs
+                    .into_par_iter()
+                    .enumerate()
+                    .map(|(leaf_node_idx, input)| {
+                        info_span!("single_leaf_agg", idx = leaf_node_idx).in_scope(|| {
+                            SingleSegmentVmProver::prove(prover, input.write_to_stream())
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                #[cfg(not(feature = "parallel"))]
+                let result = leaf_inputs
+                    .into_iter()
+                    .enumerate()
+                    .map(|(leaf_node_idx, input)| {
+                        info_span!("single_leaf_agg", idx = leaf_node_idx).in_scope(|| {
+                            SingleSegmentVmProver::prove(prover, input.write_to_stream())
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                result
+            })
         })
     }
 }
