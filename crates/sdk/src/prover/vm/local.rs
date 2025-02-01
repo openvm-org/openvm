@@ -25,7 +25,7 @@ pub struct VmLocalProver<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> {
     pub pk: Arc<VmProvingKey<SC, VC>>,
     pub committed_exe: Arc<VmCommittedExe<SC>>,
     overridden_heights: Option<VmComplexTraceHeights>,
-    _marker: PhantomData<E>,
+    _marker: PhantomData<fn() -> E>,
 }
 
 impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E> {
