@@ -1,7 +1,4 @@
-use std::{
-    array,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use openvm_circuit::{
     arch::{
@@ -18,6 +15,7 @@ use openvm_native_compiler::{
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip};
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
+    p3_maybe_rayon::prelude::{ParallelIterator, ParallelSlice},
     Stateful,
 };
 use serde::{Deserialize, Serialize};
@@ -324,9 +322,14 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
             let mut top_level = vec![];
 
             let mut root = [F::ZERO; CHUNK];
-            let streams = self.streams.lock().unwrap();
-            let sibling_id_val = sibling_id.as_canonical_u32() as usize;
-            let sibling = &streams.hint_space[sibling_id_val];
+            let sibling: Vec<[F; CHUNK]> = {
+                let streams = self.streams.lock().unwrap();
+                let sibling_id_val = sibling_id.as_canonical_u32() as usize;
+                streams.hint_space[sibling_id_val]
+                    .par_chunks(CHUNK)
+                    .map(|c| c.try_into().unwrap())
+                    .collect()
+            };
 
             while height >= 1 {
                 let incorporate_row = if opened_index < opened_length
@@ -458,7 +461,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                         index_base_pointer + F::from_canonical_usize(proof_index),
                     );
                     let root_is_on_right = root_is_on_right == F::ONE;
-                    let sibling = array::from_fn(|i| sibling[proof_index * CHUNK + i]);
+                    let sibling = sibling[proof_index];
                     let (p2_input, new_root) = if root_is_on_right {
                         self.compress(sibling, root)
                     } else {
