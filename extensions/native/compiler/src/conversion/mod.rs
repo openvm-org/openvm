@@ -288,6 +288,9 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::HintInputVec() => vec![
             Instruction::phantom(PhantomDiscriminant(NativePhantom::HintInput as u16), F::ZERO, F::ZERO, 0)
         ],
+        AsmInstruction::HintFelt() => vec![
+            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintFelt as u16), F::ZERO, F::ZERO, 0)
+        ],
         AsmInstruction::HintBits(src, len) => vec![
             Instruction::phantom(PhantomDiscriminant(NativePhantom::HintBits as u16), i32_f(src), F::from_canonical_u32(len), AS::Native as u16)
         ],
