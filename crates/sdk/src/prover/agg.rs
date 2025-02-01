@@ -219,6 +219,10 @@ impl LeafProvingController {
         info_span!("agg_layer", group = "leaf").in_scope(|| {
             #[cfg(feature = "bench-metrics")]
             {
+                #[cfg(feature = "parallel")]
+                metrics::counter!("parallel_bool").absolute(1);
+                #[cfg(not(feature = "parallel"))]
+                metrics::counter!("parallel_bool").absolute(0);
                 metrics::counter!("fri.log_blowup").absolute(prover.fri_params().log_blowup as u64);
                 metrics::counter!("num_children").absolute(self.num_children as u64);
             }
