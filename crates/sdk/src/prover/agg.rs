@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
-use openvm_stark_backend::{p3_maybe_rayon::prelude::*, utils::metrics_span};
+#[cfg(feature = "parallel")]
+use openvm_stark_backend::p3_maybe_rayon::prelude::*;
+use openvm_stark_backend::utils::metrics_span;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, openvm_stark_backend::proof::Proof,
 };
@@ -219,16 +221,16 @@ impl LeafProvingController {
         info_span!("agg_layer", group = "leaf").in_scope(|| {
             #[cfg(feature = "bench-metrics")]
             {
-                #[cfg(feature = "parallel")]
-                metrics::counter!("parallel_bool").absolute(1);
-                #[cfg(not(feature = "parallel"))]
-                metrics::counter!("parallel_bool").absolute(0);
                 metrics::counter!("fri.log_blowup").absolute(prover.fri_params().log_blowup as u64);
                 metrics::counter!("num_children").absolute(self.num_children as u64);
             }
             let leaf_inputs =
                 LeafVmVerifierInput::chunk_continuation_vm_proof(app_proofs, self.num_children);
             tracing::info!("num_leaf_proofs={}", leaf_inputs.len());
+            #[cfg(feature = "parallel")]
+            tracing::info!("parallel_bool: YES");
+            #[cfg(not(feature = "parallel"))]
+            tracing::info!("parallel_bool: NO");
             metrics_span("real_layer_proof_time_ms", || {
                 #[cfg(feature = "parallel")]
                 let result = leaf_inputs
