@@ -265,7 +265,7 @@ pub(crate) mod phantom {
                     bail!("EndOfInputStream");
                 }
             };
-            streams.hint_stream.clear();
+            assert!(streams.hint_stream.is_empty());
             streams
                 .hint_stream
                 .push_back(F::from_canonical_usize(hint.len()));
@@ -306,7 +306,7 @@ pub(crate) mod phantom {
             let mut val = val.as_canonical_u32();
 
             let len = b.as_canonical_u32();
-            streams.hint_stream.clear();
+            assert!(streams.hint_stream.is_empty());
             for _ in 0..len {
                 streams
                     .hint_stream
@@ -336,7 +336,7 @@ pub(crate) mod phantom {
             let id = streams.hint_space.len();
             streams.hint_space.push(payload);
             // Hint stream should have already been consumed.
-            debug_assert!(streams.hint_stream.is_empty());
+            assert!(streams.hint_stream.is_empty());
             streams.hint_stream.push_back(F::from_canonical_usize(id));
             Ok(())
         }
