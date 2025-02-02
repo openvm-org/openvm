@@ -147,7 +147,6 @@ impl VecAutoHintable for Vec<InnerBatchOpening> {}
 fn read_opening_proof(builder: &mut Builder<C>) -> HintSlice<C> {
     let length = Usize::from(builder.hint_var());
     let id = Usize::from(builder.hint_load());
-    builder.print_v(id.get_var());
     HintSlice { length, id }
 }
 

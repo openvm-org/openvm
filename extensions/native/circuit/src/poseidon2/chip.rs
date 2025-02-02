@@ -317,12 +317,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 .unsafe_read_cell(address_space, dim_base_pointer)
                 .as_canonical_u32();
             let mut height = initial_height;
-            let mut proof_index = 0;
+            let mut sibling_index = 0;
             let mut opened_index = 0;
             let mut top_level = vec![];
 
             let mut root = [F::ZERO; CHUNK];
-            let sibling: Vec<[F; CHUNK]> = {
+            let sibling_proof: Vec<[F; CHUNK]> = {
                 let streams = self.streams.lock().unwrap();
                 let sibling_id_val = sibling_id.as_canonical_u32() as usize;
                 streams.hint_space[sibling_id_val]
@@ -458,10 +458,10 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 
                     let (read_root_is_on_right, root_is_on_right) = memory.read_cell(
                         address_space,
-                        index_base_pointer + F::from_canonical_usize(proof_index),
+                        index_base_pointer + F::from_canonical_usize(sibling_index),
                     );
                     let root_is_on_right = root_is_on_right == F::ONE;
-                    let sibling = sibling[proof_index];
+                    let sibling = sibling_proof[sibling_index];
                     let (p2_input, new_root) = if root_is_on_right {
                         self.compress(sibling, root)
                     } else {
@@ -483,7 +483,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 });
 
                 height /= 2;
-                proof_index += 1;
+                sibling_index += 1;
             }
 
             assert_eq!(commit, root);
