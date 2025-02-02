@@ -56,11 +56,11 @@ pprof = { version = "0.13", features = [
 
 [features]
 default = ["parallel", "mimalloc", "bench-metrics"]
-bench-metrics = ["openvm-native-recursion/bench-metrics"]
+bench-metrics = ["openvm-native-recursion/bench-metrics", "openvm-sdk/bench-metrics"]
 profiling = ["openvm-sdk/profiling"]
 aggregation = []
 static-verifier = ["openvm-native-recursion/static-verifier"]
-parallel = ["openvm-native-recursion/parallel"]
+parallel = ["openvm-native-recursion/parallel", "openvm-sdk/parallel"]
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
