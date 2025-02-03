@@ -1,6 +1,7 @@
 use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_poseidon2_air::Poseidon2SubCols;
+use static_assertions::const_assert_eq;
 
 use crate::poseidon2::CHUNK;
 
@@ -90,12 +91,14 @@ pub struct TopLevelSpecificCols<T> {
     pub commit_pointer: T,
     pub commit_read: MemoryReadAuxCols<T>,
 }
+const_assert_eq!(TopLevelSpecificCols::<usize>::width(), 69);
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct InsideRowSpecificCols<T> {
     pub cells: [VerifyBatchCellCols<T>; CHUNK],
 }
+const_assert_eq!(InsideRowSpecificCols::<usize>::width(), 80);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Copy, Clone)]
@@ -107,6 +110,7 @@ pub struct VerifyBatchCellCols<T> {
     pub row_end: T,
     pub is_first_in_row: T,
 }
+const_assert_eq!(VerifyBatchCellCols::<usize>::width(), 10);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Copy, Clone)]
@@ -130,3 +134,4 @@ pub struct SimplePoseidonSpecificCols<T> {
     pub write_data_1: MemoryWriteAuxCols<T, { CHUNK }>,
     pub write_data_2: MemoryWriteAuxCols<T, { CHUNK }>,
 }
+const_assert_eq!(SimplePoseidonSpecificCols::<usize>::width(), 45);

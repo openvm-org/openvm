@@ -163,6 +163,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     builder.eval(domain.log_n + RVar::from(log_blowup))
                 };
 
+                builder.cycle_tracker_start("permute-opened-values");
                 let batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
                 // `poseidon2` requires `permed_opened_values` to be in the committed order.
                 let permed_opened_values = builder.array(opened_values.len());
@@ -179,6 +180,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     let opened_value = builder.get(&opened_values, mat_index);
                     builder.set_value(&permed_opened_values, k, opened_value);
                 });
+                builder.cycle_tracker_end("permute-opened-values");
 
                 let permed_opened_values = NestedOpenedValues::Felt(permed_opened_values);
 
