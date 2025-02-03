@@ -6,6 +6,7 @@
 | [User Book](https://book.openvm.dev)
 | [Contributor Docs](./docs)
 | [Crate Docs](https://docs.openvm.dev/openvm)
+| [Brand Assets](https://github.com/openvm-org/openvm/tree/main/assets)
 
 [tg-badge]: https://img.shields.io/endpoint?color=neon&logo=telegram&label=chat&url=https://tg.sumanjay.workers.dev/openvm
 
@@ -39,7 +40,7 @@ See the [Book](https://book.openvm.dev) for more information on how to use OpenV
 
 ## For Contributors
 
-See the [Contributor Docs](./docs) for more information on the project. A good starting point is [Project Layout](./docs/repo/layout.md).
+See the [Contributor Docs](./docs) for more information on the project. A good starting point is [Project Layout](./docs/repo/layout.md). See the [Brand Assets](https://github.com/openvm-org/openvm/tree/main/assets) folder for OpenVM's logo and favicon. 
 
 ## Acknowledgements
 
