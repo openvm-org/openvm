@@ -108,6 +108,27 @@ impl BlockMap {
             .filter(|(_, idx)| *idx > 0)
             .map(|(address, idx)| (address, &self.storage[idx - 1]))
     }
+
+    /// Merges the block starting at `address` and the one immediately after it. The blocks must have the same size.
+    pub fn merge_block_with_next(&mut self, address: &(u32, u32)) {
+        let &(address_space, pointer) = address;
+        let left = *self.id.get(address).unwrap();
+        let size = self.storage[left - 1].size;
+        let timestamp = self.storage[left - 1].timestamp.max(
+            self.storage[self
+                .id
+                .get(&(address_space, pointer + size as u32))
+                .unwrap()
+                - 1]
+            .timestamp,
+        );
+        self.storage[left - 1].size += size;
+        self.storage[left - 1].timestamp = timestamp;
+        for i in 0..size {
+            self.id
+                .insert(&(address_space, pointer + size as u32 + i as u32), left);
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -385,7 +406,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
                 self.block_data
                     .set_range(&(address_space, mid_ptr), half_size, block);
             }
-            if query >= cur_ptr + half_size_u32 {
+            if query >= mid_ptr {
                 // The left is finalized; add it to the partition.
                 let block = BlockData {
                     pointer: cur_ptr,
@@ -478,15 +499,8 @@ impl<F: PrimeField32> OfflineMemory<F> {
             .timestamp;
 
         let timestamp = max(left_timestamp, right_timestamp);
-        self.block_data.set_range(
-            &(address_space, pointer),
-            2 * size,
-            BlockData {
-                pointer,
-                size: 2 * size,
-                timestamp,
-            },
-        );
+        self.block_data
+            .merge_block_with_next(&(address_space, pointer));
         records.add_record(AccessAdapterRecord {
             timestamp,
             address_space: F::from_canonical_u32(address_space),
