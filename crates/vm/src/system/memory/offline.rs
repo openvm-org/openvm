@@ -65,7 +65,8 @@ impl BlockMap {
         let (address_space, pointer) = *address;
         let idx = self.id.get(&(address_space, pointer)).unwrap_or(&0);
         if idx == &0 {
-            let pointer = pointer - pointer % self.initial_block_size as u32;
+            // `initial_block_size` is a power of two, as asserted in `from_mem_config`.
+            let pointer = pointer & (self.initial_block_size as u32 - 1);
             self.set_range(
                 &(address_space, pointer),
                 self.initial_block_size,
