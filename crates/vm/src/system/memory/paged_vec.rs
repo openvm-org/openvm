@@ -10,36 +10,73 @@ pub(crate) const PAGE_SIZE: usize = 1 << 12;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct PagedVec<T, const PAGE_SIZE: usize> {
-    pages: Vec<Option<Vec<T>>>,
+    pages: Vec<usize>,
+    storage: Vec<T>,
+}
+
+impl<T, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
+    pub fn new(num_pages: usize) -> Self {
+        Self {
+            pages: vec![0; num_pages],
+            storage: vec![],
+        }
+    }
+
+    fn page_ref_by_idx(&self, index: usize) -> Option<&[T]> {
+        let page_idx = index / PAGE_SIZE;
+        if page_idx == 0 {
+            None
+        } else {
+            let start_idx = (page_idx - 1) * PAGE_SIZE;
+            let end_idx = page_idx * PAGE_SIZE;
+            Some(&self.storage[start_idx..end_idx])
+        }
+    }
+
+    fn page_mut_by_idx(&mut self, index: usize) -> Option<&mut [T]> {
+        let page_idx = index / PAGE_SIZE;
+        if page_idx == 0 {
+            None
+        } else {
+            let start_idx = (page_idx - 1) * PAGE_SIZE;
+            let end_idx = page_idx * PAGE_SIZE;
+            Some(&mut self.storage[start_idx..end_idx])
+        }
+    }
 }
 
 impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
-    pub fn new(num_pages: usize) -> Self {
-        Self {
-            pages: vec![None; num_pages],
+    fn get_page_or_insert_default(&mut self, page_idx: usize) -> &mut [T] {
+        if self.pages[page_idx] == 0 {
+            self.storage
+                .resize_with(self.storage.len() + PAGE_SIZE, T::default);
+            let final_len = self.storage.len();
+            self.pages[page_idx] = final_len / PAGE_SIZE;
+            &mut self.storage[final_len - PAGE_SIZE..final_len]
+        } else {
+            &mut self.storage
+                [(self.pages[page_idx] - 1) * PAGE_SIZE..self.pages[page_idx] * PAGE_SIZE]
         }
     }
 
     pub fn get(&self, index: usize) -> Option<&T> {
         let page_idx = index / PAGE_SIZE;
-        self.pages[page_idx]
-            .as_ref()
+        self.page_ref_by_idx(page_idx)
             .map(|page| &page[index % PAGE_SIZE])
     }
 
     pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
         let page_idx = index / PAGE_SIZE;
-        self.pages[page_idx]
-            .as_mut()
+        self.page_mut_by_idx(page_idx)
             .map(|page| &mut page[index % PAGE_SIZE])
     }
 
     pub fn set(&mut self, index: usize, value: T) -> Option<T> {
         let page_idx = index / PAGE_SIZE;
-        if let Some(page) = self.pages[page_idx].as_mut() {
+        if let Some(page) = self.page_mut_by_idx(page_idx) {
             Some(std::mem::replace(&mut page[index % PAGE_SIZE], value))
         } else {
-            let page = self.pages[page_idx].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
+            let page = self.get_page_or_insert_default(page_idx);
             page[index % PAGE_SIZE] = value;
             None
         }
@@ -51,7 +88,7 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         for page_idx in (range.start / PAGE_SIZE)..range.end.div_ceil(PAGE_SIZE) {
             let in_page_start = range.start.saturating_sub(page_idx * PAGE_SIZE);
             let in_page_end = (range.end - page_idx * PAGE_SIZE).min(PAGE_SIZE);
-            if let Some(page) = self.pages[page_idx].as_ref() {
+            if let Some(page) = self.page_ref_by_idx(page_idx) {
                 result.extend(page[in_page_start..in_page_end].iter().cloned());
             } else {
                 result.extend(vec![T::default(); in_page_end - in_page_start]);
@@ -66,7 +103,7 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         for page_idx in (range.start / PAGE_SIZE)..range.end.div_ceil(PAGE_SIZE) {
             let in_page_start = range.start.saturating_sub(page_idx * PAGE_SIZE);
             let in_page_end = (range.end - page_idx * PAGE_SIZE).min(PAGE_SIZE);
-            let page = self.pages[page_idx].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
+            let page = self.get_page_or_insert_default(page_idx);
             result.extend(
                 page[in_page_start..in_page_end]
                     .iter_mut()
@@ -81,7 +118,7 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.pages.iter().all(|page| page.is_none())
+        self.pages.iter().all(|idx| *idx == 0)
     }
 }
 
@@ -105,7 +142,7 @@ impl<T: Default + Copy, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         let end_page = (from + N - 1) / PAGE_SIZE;
 
         if start_page == end_page {
-            if let Some(page) = self.pages[start_page].as_ref() {
+            if let Some(page) = self.page_ref_by_idx(start_page) {
                 // Copy data from the page into result_slice.
                 let page_offset = from - start_page * PAGE_SIZE;
                 let src = &page[page_offset..page_offset + N];
@@ -117,14 +154,14 @@ impl<T: Default + Copy, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         } else {
             debug_assert!(start_page + 1 == end_page);
             let first_part = PAGE_SIZE - (from - start_page * PAGE_SIZE);
-            if let Some(page) = self.pages[start_page].as_ref() {
+            if let Some(page) = self.page_ref_by_idx(start_page) {
                 let page_offset = from - start_page * PAGE_SIZE;
                 let src = &page[page_offset..];
                 result_slice[..first_part].copy_from_slice(src);
             } else {
                 result_slice[..first_part].fill(T::default());
             }
-            if let Some(page) = self.pages[end_page].as_ref() {
+            if let Some(page) = self.page_ref_by_idx(end_page) {
                 let second_part = N - first_part;
                 let src = &page[0..second_part];
                 result_slice[first_part..].copy_from_slice(src);
@@ -155,10 +192,7 @@ impl<T: Default + Copy, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
 
         if start_page == end_page {
             // Ensure the page exists; if not, allocate and fill with defaults.
-            if self.pages[start_page].is_none() {
-                self.pages[start_page] = Some(vec![T::default(); PAGE_SIZE]);
-            }
-            let page = self.pages[start_page].as_mut().unwrap();
+            let page = self.get_page_or_insert_default(start_page);
             let page_offset = from - start_page * PAGE_SIZE;
 
             // Copy old values from the page into result_slice.
@@ -170,10 +204,7 @@ impl<T: Default + Copy, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
             let first_part = PAGE_SIZE - (from - start_page * PAGE_SIZE);
 
             // Handle the first page.
-            if self.pages[start_page].is_none() {
-                self.pages[start_page] = Some(vec![T::default(); PAGE_SIZE]);
-            }
-            let page0 = self.pages[start_page].as_mut().unwrap();
+            let page0 = self.get_page_or_insert_default(start_page);
             let page_offset = from - start_page * PAGE_SIZE;
 
             result_slice[..first_part].copy_from_slice(&page0[page_offset..]);
@@ -181,10 +212,7 @@ impl<T: Default + Copy, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
 
             // Handle the second page.
             let second_part = N - first_part;
-            if self.pages[end_page].is_none() {
-                self.pages[end_page] = Some(vec![T::default(); PAGE_SIZE]);
-            }
-            let page1 = self.pages[end_page].as_mut().unwrap();
+            let page1 = self.get_page_or_insert_default(end_page);
 
             result_slice[first_part..].copy_from_slice(&page1[0..second_part]);
             page1[0..second_part].copy_from_slice(&values[first_part..]);
@@ -215,9 +243,7 @@ impl<T: Clone, const PAGE_SIZE: usize> Iterator for PagedVecIter<'_, T, PAGE_SIZ
     type Item = (usize, T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.current_page < self.vec.pages.len()
-            && self.vec.pages[self.current_page].is_none()
-        {
+        while self.current_page < self.vec.pages.len() && self.vec.pages[self.current_page] == 0 {
             self.current_page += 1;
             debug_assert_eq!(self.current_index_in_page, 0);
             self.current_index_in_page = 0;
@@ -227,7 +253,7 @@ impl<T: Clone, const PAGE_SIZE: usize> Iterator for PagedVecIter<'_, T, PAGE_SIZ
         }
         let global_index = self.current_page * PAGE_SIZE + self.current_index_in_page;
 
-        let page = self.vec.pages[self.current_page].as_ref()?;
+        let page = self.vec.page_ref_by_idx(self.current_page)?;
         let value = page[self.current_index_in_page].clone();
 
         self.current_index_in_page += 1;
