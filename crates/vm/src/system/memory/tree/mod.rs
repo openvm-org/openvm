@@ -47,9 +47,26 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         }
     }
 
+    /// Returns a tree of height `height` with all leaves set to `leaf_value`.
+    pub fn construct_uniform(
+        height: usize,
+        leaf_value: [F; CHUNK],
+        hasher: &impl Hasher<CHUNK, F>,
+    ) -> MemoryNode<CHUNK, F> {
+        if height == 0 {
+            Self::new_leaf(leaf_value)
+        } else {
+            let child = Arc::new(Self::construct_uniform(height - 1, leaf_value, hasher));
+            NonLeaf {
+                hash: hasher.compress(&child.hash(), &child.hash()),
+                left: child.clone(),
+                right: child,
+            }
+        }
+    }
+
     fn from_memory(
         memory: &Vec<(u64, [F; CHUNK])>,
-        zero_nodes: &Vec<MemoryNode<CHUNK, F>>,
         lookup_range: Range<usize>,
         height: usize,
         from: u64,
@@ -57,14 +74,15 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
             if lookup_range.is_empty() {
-                zero_nodes[height].clone()
+                MemoryNode::new_leaf(hasher.hash(&[F::ZERO; CHUNK]))
             } else {
                 debug_assert_eq!(memory[lookup_range.start].0, from);
                 debug_assert_eq!(lookup_range.end - lookup_range.start, 1);
                 MemoryNode::new_leaf(hasher.hash(&memory[lookup_range.start].1))
             }
         } else if lookup_range.is_empty() {
-            zero_nodes[height].clone()
+            let leaf_value = hasher.hash(&[F::ZERO; CHUNK]);
+            MemoryNode::construct_uniform(height, leaf_value, hasher)
         } else {
             let midpoint = from + (1 << (height - 1));
             let mid = {
@@ -84,22 +102,9 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
                     right
                 }
             };
-            let left = Self::from_memory(
-                memory,
-                zero_nodes,
-                lookup_range.start..mid,
-                height - 1,
-                from,
-                hasher,
-            );
-            let right = Self::from_memory(
-                memory,
-                zero_nodes,
-                mid..lookup_range.end,
-                height - 1,
-                midpoint,
-                hasher,
-            );
+            let left = Self::from_memory(memory, lookup_range.start..mid, height - 1, from, hasher);
+            let right =
+                Self::from_memory(memory, mid..lookup_range.end, height - 1, midpoint, hasher);
             NonLeaf {
                 hash: hasher.compress(&left.hash(), &right.hash()),
                 left: Arc::new(left),
@@ -138,20 +143,8 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             memory_partition.last().map_or(0, |(addr, _)| *addr)
                 < (1 << memory_dimensions.overall_height())
         );
-
-        let mut zero_nodes = vec![Self::new_leaf([F::ZERO; CHUNK])];
-        for _ in 0..memory_dimensions.overall_height() {
-            let child = Arc::new(zero_nodes.last().unwrap().clone());
-            zero_nodes.push(NonLeaf {
-                hash: hasher.compress(&child.hash(), &child.hash()),
-                left: child.clone(),
-                right: child,
-            });
-        }
-
         Self::from_memory(
             &memory_partition,
-            &zero_nodes,
             0..memory_partition.len(),
             memory_dimensions.overall_height(),
             0,
