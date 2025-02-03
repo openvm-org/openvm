@@ -3700,6 +3700,8 @@ dependencies = [
  "rustc-hash 2.1.0",
  "serde",
  "serde-big-array",
+ "serde_with",
+ "smallvec",
  "static_assertions",
  "test-case",
  "test-log",

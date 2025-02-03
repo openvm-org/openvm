@@ -24,6 +24,7 @@ use openvm_stark_backend::{
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
 };
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
@@ -76,7 +77,7 @@ pub struct TimestampedValues<T, const N: usize> {
 ///
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
 pub type TimestampedEquipartition<F, const N: usize> =
-    BTreeMap<(u32, u32), TimestampedValues<F, N>>;
+    FxHashMap<(u32, u32), TimestampedValues<F, N>>;
 
 /// An equipartition of memory values.
 ///

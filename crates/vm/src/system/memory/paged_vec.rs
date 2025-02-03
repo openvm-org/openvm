@@ -1,8 +1,9 @@
-use std::{mem::MaybeUninit, ops::Range, ptr};
+use std::{iter, mem::MaybeUninit, ops::Range, ptr};
 
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 
-use crate::arch::MemoryConfig;
+use crate::{arch::MemoryConfig, system::memory::smallvec::SerdeSmallVec};
 
 /// (address_space, pointer)
 pub(crate) type Address = (u32, u32);
@@ -46,22 +47,22 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
     }
 
     #[inline(always)]
-    pub fn range_vec(&self, range: Range<usize>) -> Vec<T> {
-        let mut result = Vec::with_capacity(range.len());
+    pub fn range_vec(&self, range: Range<usize>) -> SerdeSmallVec<[T; 4]> {
+        let mut result: SerdeSmallVec<_> = SmallVec::with_capacity(range.len()).into();
         for page_idx in (range.start / PAGE_SIZE)..range.end.div_ceil(PAGE_SIZE) {
             let in_page_start = range.start.saturating_sub(page_idx * PAGE_SIZE);
             let in_page_end = (range.end - page_idx * PAGE_SIZE).min(PAGE_SIZE);
             if let Some(page) = self.pages[page_idx].as_ref() {
                 result.extend(page[in_page_start..in_page_end].iter().cloned());
             } else {
-                result.extend(vec![T::default(); in_page_end - in_page_start]);
+                result.extend(iter::repeat(T::default()).take(in_page_end - in_page_start));
             }
         }
         result
     }
 
-    pub fn set_range(&mut self, range: Range<usize>, values: &[T]) -> Vec<T> {
-        let mut result = Vec::with_capacity(range.len());
+    pub fn set_range(&mut self, range: Range<usize>, values: &[T]) -> SerdeSmallVec<[T; 4]> {
+        let mut result: SerdeSmallVec<_> = SmallVec::with_capacity(range.len()).into();
         let mut values = values.iter();
         for page_idx in (range.start / PAGE_SIZE)..range.end.div_ceil(PAGE_SIZE) {
             let in_page_start = range.start.saturating_sub(page_idx * PAGE_SIZE);

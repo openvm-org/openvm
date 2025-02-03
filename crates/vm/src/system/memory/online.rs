@@ -2,11 +2,12 @@ use std::fmt::Debug;
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
+use smallvec::ToSmallVec;
 
 use super::paged_vec::{AddressMap, PAGE_SIZE};
 use crate::{
     arch::MemoryConfig,
-    system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId},
+    system::memory::{offline::INITIAL_TIMESTAMP, smallvec::SerdeSmallVec, MemoryImage, RecordId},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,7 +20,7 @@ pub enum MemoryLogEntry<T> {
     Write {
         address_space: u32,
         pointer: u32,
-        data: Vec<T>,
+        data: SerdeSmallVec<[T; 4]>,
     },
     IncrementTimestampBy(u32),
 }
@@ -72,7 +73,7 @@ impl<F: PrimeField32> Memory<F> {
         self.log.push(MemoryLogEntry::Write {
             address_space,
             pointer,
-            data: values.to_vec(),
+            data: values.to_smallvec().into(),
         });
         self.timestamp += 1;
 

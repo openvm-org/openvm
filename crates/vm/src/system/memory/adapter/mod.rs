@@ -20,7 +20,7 @@ use openvm_stark_backend::{
     AirRef, Chip, ChipUsageGetter,
 };
 
-use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress};
+use crate::system::memory::{offline_checker::MemoryBus, smallvec::SerdeSmallVec, MemoryAddress};
 
 mod air;
 mod columns;
@@ -156,12 +156,12 @@ pub enum AccessAdapterRecordKind {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct AccessAdapterRecord<T> {
     pub timestamp: u32,
     pub address_space: T,
     pub start_index: T,
-    pub data: Vec<T>,
+    pub data: SerdeSmallVec<[T; 4]>,
     pub kind: AccessAdapterRecordKind,
 }
 
@@ -274,7 +274,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                 let row: &mut AccessAdapterCols<F, N> = row.borrow_mut();
 
                 row.is_valid = F::ONE;
-                row.values = record.data.try_into().unwrap();
+                row.values.copy_from_slice(&record.data);
                 row.address = MemoryAddress::new(record.address_space, record.start_index);
 
                 let (left_timestamp, right_timestamp) = match record.kind {

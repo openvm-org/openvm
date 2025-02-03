@@ -8,6 +8,7 @@ pub mod offline_checker;
 pub mod online;
 pub mod paged_vec;
 mod persistent;
+mod smallvec;
 #[cfg(test)]
 mod tests;
 pub mod tree;

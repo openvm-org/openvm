@@ -5,6 +5,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashSet;
+use smallvec::{smallvec, ToSmallVec};
 
 use super::{AddressMap, PagedVec, PAGE_SIZE};
 use crate::{
@@ -12,6 +13,7 @@ use crate::{
     system::memory::{
         adapter::{AccessAdapterInventory, AccessAdapterRecord, AccessAdapterRecordKind},
         offline_checker::{MemoryBridge, MemoryBus},
+        smallvec::SerdeSmallVec,
         MemoryAuxColsFactory, MemoryImage, RecordId, TimestampedEquipartition, TimestampedValues,
     },
 };
@@ -25,15 +27,15 @@ struct BlockData {
     size: usize,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct MemoryRecord<T> {
     pub address_space: T,
     pub pointer: T,
     pub timestamp: u32,
     pub prev_timestamp: u32,
-    data: Vec<T>,
+    data: SerdeSmallVec<[T; 4]>,
     /// None if a read.
-    prev_data: Option<Vec<T>>,
+    prev_data: Option<SerdeSmallVec<[T; 4]>>,
 }
 
 impl<T> MemoryRecord<T> {
@@ -42,7 +44,7 @@ impl<T> MemoryRecord<T> {
     }
 
     pub fn prev_data_slice(&self) -> Option<&[T]> {
-        self.prev_data.as_deref()
+        self.prev_data.as_ref().map(|x| x.as_slice())
     }
 }
 
@@ -146,7 +148,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         &mut self,
         address_space: u32,
         pointer: u32,
-        values: Vec<F>,
+        values: SerdeSmallVec<[F; 4]>,
         records: &mut AccessAdapterInventory<F>,
     ) {
         let len = values.len();
@@ -189,7 +191,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
                 pointer,
                 timestamp: self.timestamp,
                 prev_timestamp: 0,
-                data: vec![pointer],
+                data: smallvec![pointer].into(),
                 prev_data: None,
             }));
             self.timestamp += 1;
@@ -237,7 +239,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
             }
         }
 
-        let mut equipartition = TimestampedEquipartition::<F, N>::new();
+        let mut equipartition = TimestampedEquipartition::<F, N>::default();
         for (address_space, pointer) in to_access {
             let block = self.block_data.get(&(address_space, pointer)).unwrap();
             if block.size == 0 {
@@ -289,7 +291,8 @@ impl<F: PrimeField32> OfflineMemory<F> {
                 start_index: F::from_canonical_u32(cur_ptr),
                 data: data[(cur_ptr - original_block.pointer) as usize
                     ..(cur_ptr - original_block.pointer) as usize + cur_size]
-                    .to_vec(),
+                    .to_smallvec()
+                    .into(),
                 kind: AccessAdapterRecordKind::Split,
             });
 
@@ -469,7 +472,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         array::from_fn(|i| self.get(address_space, pointer + i as u32))
     }
 
-    fn range_vec(&self, address_space: u32, pointer: u32, len: usize) -> Vec<F> {
+    fn range_vec(&self, address_space: u32, pointer: u32, len: usize) -> SerdeSmallVec<[F; 4]> {
         let pointer = pointer as usize;
         self.data[(address_space - self.as_offset) as usize].range_vec(pointer..pointer + len)
     }
