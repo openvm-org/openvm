@@ -22,24 +22,24 @@ impl<T, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         }
     }
 
-    fn page_ref_by_idx(&self, index: usize) -> Option<&[T]> {
-        let page_id = self.pages[index / PAGE_SIZE];
-        if page_id == 0 {
+    fn page_ref_by_idx(&self, page_idx: usize) -> Option<&[T]> {
+        let storage_idx = self.pages[page_idx];
+        if storage_idx == 0 {
             None
         } else {
-            let start_idx = (page_id - 1) * PAGE_SIZE;
-            let end_idx = page_id * PAGE_SIZE;
+            let start_idx = (storage_idx - 1) * PAGE_SIZE;
+            let end_idx = storage_idx * PAGE_SIZE;
             Some(&self.storage[start_idx..end_idx])
         }
     }
 
-    fn page_mut_by_idx(&mut self, index: usize) -> Option<&mut [T]> {
-        let page_id = self.pages[index / PAGE_SIZE];
-        if page_id == 0 {
+    fn page_mut_by_idx(&mut self, page_idx: usize) -> Option<&mut [T]> {
+        let storage_idx = self.pages[page_idx];
+        if storage_idx == 0 {
             None
         } else {
-            let start_idx = (page_id - 1) * PAGE_SIZE;
-            let end_idx = page_id * PAGE_SIZE;
+            let start_idx = (storage_idx - 1) * PAGE_SIZE;
+            let end_idx = storage_idx * PAGE_SIZE;
             Some(&mut self.storage[start_idx..end_idx])
         }
     }
