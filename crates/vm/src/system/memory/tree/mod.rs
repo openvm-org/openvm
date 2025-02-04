@@ -120,7 +120,22 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     ) -> MemoryNode<CHUNK, F> {
         // Construct a Vec that includes the address space in the label calculation,
         // representing the entire memory tree.
-        let mut memory_partition: Vec<(u64, [F; CHUNK])> = Vec::new();
+        let capacity = {
+            let mut capacity = 0;
+            let mut last = (0, 0);
+            for ((address_space, pointer), _) in memory.items() {
+                if pointer as usize / CHUNK >= (1 << memory_dimensions.address_height) {
+                    continue;
+                }
+                let label = (address_space, pointer / CHUNK as u32);
+                if label != last {
+                    capacity += 1;
+                    last = label;
+                }
+            }
+            capacity
+        };
+        let mut memory_partition: Vec<(u64, [F; CHUNK])> = Vec::with_capacity(capacity);
         for ((address_space, pointer), value) in memory.items() {
             if pointer as usize / CHUNK >= (1 << memory_dimensions.address_height) {
                 continue;
