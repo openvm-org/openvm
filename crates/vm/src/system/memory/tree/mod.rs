@@ -71,10 +71,11 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         height: usize,
         from: u64,
         hasher: &impl Hasher<CHUNK, F>,
+        zero_leaf: &MemoryNode<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
             if lookup_range.is_empty() {
-                MemoryNode::new_leaf(hasher.hash(&[F::ZERO; CHUNK]))
+                zero_leaf.clone()
             } else {
                 debug_assert_eq!(memory[lookup_range.start].0, from);
                 debug_assert_eq!(lookup_range.end - lookup_range.start, 1);
@@ -102,9 +103,22 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
                     right
                 }
             };
-            let left = Self::from_memory(memory, lookup_range.start..mid, height - 1, from, hasher);
-            let right =
-                Self::from_memory(memory, mid..lookup_range.end, height - 1, midpoint, hasher);
+            let left = Self::from_memory(
+                memory,
+                lookup_range.start..mid,
+                height - 1,
+                from,
+                hasher,
+                zero_leaf,
+            );
+            let right = Self::from_memory(
+                memory,
+                mid..lookup_range.end,
+                height - 1,
+                midpoint,
+                hasher,
+                zero_leaf,
+            );
             NonLeaf {
                 hash: hasher.compress(&left.hash(), &right.hash()),
                 left: Arc::new(left),
@@ -143,12 +157,14 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             memory_partition.last().map_or(0, |(addr, _)| *addr)
                 < (1 << memory_dimensions.overall_height())
         );
+        let zero_leaf = MemoryNode::new_leaf(hasher.hash(&[F::ZERO; CHUNK]));
         Self::from_memory(
             &memory_partition,
             0..memory_partition.len(),
             memory_dimensions.overall_height(),
             0,
             hasher,
+            &zero_leaf,
         )
     }
 }
