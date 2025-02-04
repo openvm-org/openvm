@@ -360,13 +360,13 @@ We have the following special opcodes tailored to optimize FRI proof verificatio
 
 The native extension defines the following phantom sub-instructions.
 
-| Name            | Discriminant | Operands      | Description                                                                                                                                                                                                                          |
-| --------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| NativePrint     | 0x10         | `a,_,c_upper` | Prints `[a]_{c_upper}` to stdout on the host machine.                                                                                                                                                                                |
-| NativeHintInput | 0x11         | `_`           | Pops a vector `hint` of field elements from `input_stream` and sets `hint_stream` to equal the vector `[[F::from_canonical_usize(hint.len())], hint].concat()`. The hint stream must previously be empty.                            |
-| NativeHintBits  | 0x12         | `a,b,c_upper` | Sets `hint_stream` to be the least significant `b` bits of `([a]_{c_upper}).as_canonical_u32()`. The hint stream must previously be empty.                                                                                           |
-| NativeHintLoad  | 0x13         | `_`           | Pops a vector `hint` of field elements from `input_stream` and appends it to `hint_space`. Sets `hint_stream` to contain a length-1 vector containing the index of `hint` in `hint_space`. The hint stream must previously be empty. |
-
+| Name             | Discriminant | Operands      | Description                                                                                                                                                                                                                          |
+|------------------|--------------|---------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| NativePrint      | 0x10         | `a,_,c_upper` | Prints `[a]_{c_upper}` to stdout on the host machine.                                                                                                                                                                                |
+| NativeHintInput  | 0x11         | `_`           | Pops a vector `hint` of field elements from `input_stream` and sets `hint_stream` to equal the vector `[[F::from_canonical_usize(hint.len())], hint].concat()`. The hint stream must previously be empty.                            |
+| NativeHintBits   | 0x12         | `a,b,c_upper` | Sets `hint_stream` to be the least significant `b` bits of `([a]_{c_upper}).as_canonical_u32()`. The hint stream must previously be empty.                                                                                           |
+| NativeHintLoad   | 0x13         | `_`           | Pops a vector `hint` of field elements from `input_stream` and appends it to `hint_space`. Sets `hint_stream` to contain a length-1 vector containing the index of `hint` in `hint_space`. The hint stream must previously be empty. |
+| NativeHintFelt   | 0x14         | `_`           | Pops a field element from `input_stream` and set `hint_stream` equal to it. The hint stream must previously be empty.                                                                                                                |
 ### Keccak Extension
 
 The Keccak extension supports the Keccak256 hash function. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes.

@@ -217,6 +217,11 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         )?;
 
         builder.add_phantom_sub_executor(
+            NativeHintSliceSubEx::<1>,
+            PhantomDiscriminant(NativePhantom::HintFelt as u16),
+        )?;
+
+        builder.add_phantom_sub_executor(
             NativeHintBitsSubEx,
             PhantomDiscriminant(NativePhantom::HintBits as u16),
         )?;
@@ -245,6 +250,7 @@ pub(crate) mod phantom {
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
     pub struct NativeHintInputSubEx;
+    pub struct NativeHintSliceSubEx<const N: usize>;
     pub struct NativePrintSubEx;
     pub struct NativeHintBitsSubEx;
     pub struct NativeHintLoadSubEx;
@@ -270,6 +276,29 @@ pub(crate) mod phantom {
                 .hint_stream
                 .push_back(F::from_canonical_usize(hint.len()));
             streams.hint_stream.extend(hint);
+            Ok(())
+        }
+    }
+
+    impl<F: Field, const N: usize> PhantomSubExecutor<F> for NativeHintSliceSubEx<N> {
+        fn phantom_execute(
+            &mut self,
+            _: &MemoryController<F>,
+            streams: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            _: F,
+            _: F,
+            _: u16,
+        ) -> eyre::Result<()> {
+            let hint = match streams.input_stream.pop_front() {
+                Some(hint) => hint,
+                None => {
+                    bail!("EndOfInputStream");
+                }
+            };
+            assert!(streams.hint_stream.is_empty());
+            assert_eq!(hint.len(), N);
+            streams.hint_stream = hint.into();
             Ok(())
         }
     }

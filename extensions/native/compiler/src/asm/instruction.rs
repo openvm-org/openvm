@@ -138,6 +138,8 @@ pub enum AsmInstruction<F, EF> {
 
     /// Add next input vector to hint stream.
     HintInputVec(),
+    /// Add next felt to hint stream,
+    HintFelt(),
 
     /// HintBits(src, len).
     ///
@@ -345,6 +347,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(f, "print_e ({})fp", dst)
             }
             AsmInstruction::HintInputVec() => write!(f, "hint_vec"),
+            AsmInstruction::HintFelt() => write!(f, "hint_felt"),
             AsmInstruction::StoreHintWordI(dst, offset) => {
                 write!(f, "shintw ({})fp {}", dst, offset)
             }

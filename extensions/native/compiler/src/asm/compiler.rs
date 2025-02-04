@@ -513,6 +513,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::HintInputVec() => {
                     self.push(AsmInstruction::HintInputVec(), debug_info);
                 }
+                DslIr::HintFelt() => {
+                    self.push(AsmInstruction::HintFelt(), debug_info);
+                }
                 DslIr::StoreHintWord(ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
                         AsmInstruction::StoreHintWordI(ptr.fp(), size * index + offset),

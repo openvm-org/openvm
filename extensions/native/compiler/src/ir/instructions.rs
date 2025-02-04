@@ -209,6 +209,8 @@ pub enum DslIr<C: Config> {
 
     /// Prepare next input vector (preceded by its length) for hinting.
     HintInputVec(),
+    /// Prepare next felt for hinting
+    HintFelt(),
     /// Prepare bit decomposition for hinting.
     HintBitsF(Felt<C::F>, u32),
 

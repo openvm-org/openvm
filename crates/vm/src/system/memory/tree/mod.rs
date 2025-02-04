@@ -2,7 +2,7 @@ pub mod public_values;
 
 use std::{ops::Range, sync::Arc};
 
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
 use MemoryNode::*;
 
 use super::controller::dimensions::MemoryDimensions;
@@ -70,7 +70,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         lookup_range: Range<usize>,
         height: usize,
         from: u64,
-        hasher: &impl Hasher<CHUNK, F>,
+        hasher: &(impl Hasher<CHUNK, F> + Sync),
         zero_leaf: &MemoryNode<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
@@ -103,21 +103,27 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
                     right
                 }
             };
-            let left = Self::from_memory(
-                memory,
-                lookup_range.start..mid,
-                height - 1,
-                from,
-                hasher,
-                zero_leaf,
-            );
-            let right = Self::from_memory(
-                memory,
-                mid..lookup_range.end,
-                height - 1,
-                midpoint,
-                hasher,
-                zero_leaf,
+            let (left, right) = join(
+                || {
+                    Self::from_memory(
+                        memory,
+                        lookup_range.start..mid,
+                        height - 1,
+                        from,
+                        hasher,
+                        zero_leaf,
+                    )
+                },
+                || {
+                    Self::from_memory(
+                        memory,
+                        mid..lookup_range.end,
+                        height - 1,
+                        midpoint,
+                        hasher,
+                        zero_leaf,
+                    )
+                },
             );
             NonLeaf {
                 hash: hasher.compress(&left.hash(), &right.hash()),
@@ -130,7 +136,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     pub fn tree_from_memory(
         memory_dimensions: MemoryDimensions,
         memory: &MemoryImage<F>,
-        hasher: &impl Hasher<CHUNK, F>,
+        hasher: &(impl Hasher<CHUNK, F> + Sync),
     ) -> MemoryNode<CHUNK, F> {
         // Construct a Vec that includes the address space in the label calculation,
         // representing the entire memory tree.

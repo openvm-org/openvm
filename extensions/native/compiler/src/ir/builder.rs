@@ -355,13 +355,33 @@ impl<C: Config> Builder<C> {
     }
 
     pub fn hint_var(&mut self) -> Var<C::N> {
-        let arr = self.hint_vars();
-        self.get(&arr, RVar::zero())
+        let ptr = self.alloc(RVar::one(), 1);
+        // Prepare data for hinting.
+        self.operations.push(DslIr::HintFelt());
+        let index = MemIndex {
+            index: RVar::zero(),
+            offset: 0,
+            size: 1,
+        };
+        self.operations.push(DslIr::StoreHintWord(ptr, index));
+        let v: Var<C::N> = self.uninit();
+        self.load(v, ptr, index);
+        v
     }
 
     pub fn hint_felt(&mut self) -> Felt<C::F> {
-        let arr = self.hint_felts();
-        self.get(&arr, RVar::zero())
+        let ptr = self.alloc(RVar::one(), 1);
+        // Prepare data for hinting.
+        self.operations.push(DslIr::HintFelt());
+        let index = MemIndex {
+            index: RVar::zero(),
+            offset: 0,
+            size: 1,
+        };
+        self.operations.push(DslIr::StoreHintWord(ptr, index));
+        let f: Felt<C::F> = self.uninit();
+        self.load(f, ptr, index);
+        f
     }
 
     pub fn hint_ext(&mut self) -> Ext<C::F, C::EF> {
