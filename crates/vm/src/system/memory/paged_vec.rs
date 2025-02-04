@@ -211,8 +211,8 @@ pub struct PagedVecIter<'a, T, const PAGE_SIZE: usize> {
     current_index_in_page: usize,
 }
 
-impl<'a, T: Clone, const PAGE_SIZE: usize> Iterator for PagedVecIter<'a, T, PAGE_SIZE> {
-    type Item = (usize, &'a T);
+impl<T: Clone, const PAGE_SIZE: usize> Iterator for PagedVecIter<'_, T, PAGE_SIZE> {
+    type Item = (usize, T);
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.current_page < self.vec.pages.len()
@@ -228,7 +228,7 @@ impl<'a, T: Clone, const PAGE_SIZE: usize> Iterator for PagedVecIter<'a, T, PAGE
         let global_index = self.current_page * PAGE_SIZE + self.current_index_in_page;
 
         let page = self.vec.pages[self.current_page].as_ref()?;
-        let value = &page[self.current_index_in_page];
+        let value = page[self.current_index_in_page].clone();
 
         self.current_index_in_page += 1;
         if self.current_index_in_page == PAGE_SIZE {
@@ -265,7 +265,7 @@ impl<T: Clone + Default, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
             1 << mem_config.pointer_max_bits,
         )
     }
-    pub fn items(&self) -> impl Iterator<Item = (Address, &T)> + '_ {
+    pub fn items(&self) -> impl Iterator<Item = (Address, T)> + '_ {
         self.paged_vecs
             .iter()
             .enumerate()
@@ -451,9 +451,9 @@ mod tests {
             .take(6)
             .enumerate()
             .for_each(|(i, &(idx, val))| {
-                assert_eq!((idx, *val), (4 + i, 1 + i));
+                assert_eq!((idx, val), (4 + i, 1 + i));
             });
-        assert_eq!(contents[6], (10, &0));
-        assert_eq!(contents[7], (11, &0));
+        assert_eq!(contents[6], (10, 0));
+        assert_eq!(contents[7], (11, 0));
     }
 }

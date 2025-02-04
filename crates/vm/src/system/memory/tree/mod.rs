@@ -151,7 +151,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
                 memory_partition.push((index, [F::ZERO; CHUNK]));
             }
             let chunk = memory_partition.last_mut().unwrap();
-            chunk.1[(pointer % CHUNK as u32) as usize] = *value;
+            chunk.1[(pointer % CHUNK as u32) as usize] = value;
         }
         debug_assert!(memory_partition.is_sorted_by_key(|(addr, _)| addr));
         debug_assert!(
