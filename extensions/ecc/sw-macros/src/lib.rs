@@ -164,8 +164,9 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         use openvm_algebra_guest::DivUnsafe;
+                        let curve_a: #intmod_type = #const_a;
                         let two = #intmod_type::from_u8(2);
-                        let lambda = &p.x * &p.x * #intmod_type::from_u8(3).div_unsafe(&p.y * &two);
+                        let lambda = (&p.x * &p.x * #intmod_type::from_u8(3) + &curve_a).div_unsafe(&p.y * &two);
                         let x3 = &lambda * &lambda - &p.x * &two;
                         let y3 = &lambda * &(&p.x - &x3) - &p.y;
                         #struct_name { x: x3, y: y3 }
