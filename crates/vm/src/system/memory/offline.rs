@@ -224,10 +224,19 @@ impl<F: PrimeField32> OfflineMemory<F> {
     ) -> TimestampedEquipartition<F, N> {
         // First make sure the partition we maintain in self.block_data is an equipartition.
         // Grab all aligned pointers that need to be re-accessed.
-        let to_access: FxHashSet<_> = self
+        let to_access: Vec<_> = self
             .block_data
             .items()
-            .map(|((address_space, pointer), _)| (address_space, (pointer / N as u32) * N as u32))
+            .map(|((address_space, pointer), _)| (address_space, pointer / N as u32 * N as u32))
+            .scan(None, |last, item| {
+                if last.as_ref() != Some(&item) {
+                    *last = Some(item);
+                    Some(*last)
+                } else {
+                    Some(None)
+                }
+            })
+            .flatten()
             .collect();
 
         for &(address_space, pointer) in to_access.iter() {

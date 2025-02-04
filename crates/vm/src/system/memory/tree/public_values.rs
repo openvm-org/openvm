@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, rc::Rc, sync::Arc};
 
 use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use serde::{Deserialize, Serialize};
@@ -79,7 +79,7 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
     let pv_height = log2_strict_usize(num_pv_chunks);
     let address_leading_zeros = memory_dimensions.address_height - pv_height;
 
-    let mut curr_node = Arc::new(root);
+    let mut curr_node = Rc::new(root);
     let mut proof = Vec::with_capacity(memory_dimensions.as_height + address_leading_zeros);
     for i in 0..memory_dimensions.as_height {
         let bit = 1 << (memory_dimensions.as_height - i - 1);

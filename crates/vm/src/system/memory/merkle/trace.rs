@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, cmp::Reverse, sync::Arc};
+use std::{borrow::BorrowMut, cmp::Reverse, rc::Rc, sync::Arc};
 
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -166,7 +166,7 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
             let final_left_node = if left_is_final {
                 initial_left_node
             } else {
-                Arc::new(self.recur(
+                Rc::new(self.recur(
                     height - 1,
                     &initial_left_node,
                     left_as_label,
@@ -183,7 +183,7 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
             let final_right_node = if right_is_final {
                 initial_right_node
             } else {
-                Arc::new(self.recur(
+                Rc::new(self.recur(
                     height - 1,
                     &initial_right_node,
                     right_as_label,

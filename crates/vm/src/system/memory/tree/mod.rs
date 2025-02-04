@@ -1,6 +1,6 @@
 pub mod public_values;
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, rc::Rc, sync::Arc};
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use MemoryNode::*;
@@ -18,8 +18,8 @@ pub enum MemoryNode<const CHUNK: usize, F: PrimeField32> {
     },
     NonLeaf {
         hash: [F; CHUNK],
-        left: Arc<MemoryNode<CHUNK, F>>,
-        right: Arc<MemoryNode<CHUNK, F>>,
+        left: Rc<MemoryNode<CHUNK, F>>,
+        right: Rc<MemoryNode<CHUNK, F>>,
     },
 }
 
@@ -36,8 +36,8 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     }
 
     pub fn new_nonleaf(
-        left: Arc<MemoryNode<CHUNK, F>>,
-        right: Arc<MemoryNode<CHUNK, F>>,
+        left: Rc<MemoryNode<CHUNK, F>>,
+        right: Rc<MemoryNode<CHUNK, F>>,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> Self {
         NonLeaf {
@@ -56,7 +56,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         if height == 0 {
             Self::new_leaf(leaf_value)
         } else {
-            let child = Arc::new(Self::construct_uniform(height - 1, leaf_value, hasher));
+            let child = Rc::new(Self::construct_uniform(height - 1, leaf_value, hasher));
             NonLeaf {
                 hash: hasher.compress(&child.hash(), &child.hash()),
                 left: child.clone(),
@@ -84,8 +84,8 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             let right = Self::from_memory(memory, height - 1, midpoint, hasher);
             NonLeaf {
                 hash: hasher.compress(&left.hash(), &right.hash()),
-                left: Arc::new(left),
-                right: Arc::new(right),
+                left: Rc::new(left),
+                right: Rc::new(right),
             }
         }
     }
