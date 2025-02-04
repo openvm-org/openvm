@@ -44,36 +44,109 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
             None
         }
     }
-
     #[inline(always)]
     pub fn range_vec(&self, range: Range<usize>) -> Vec<T> {
-        let mut result = Vec::with_capacity(range.len());
-        for page_idx in (range.start / PAGE_SIZE)..range.end.div_ceil(PAGE_SIZE) {
-            let in_page_start = range.start.saturating_sub(page_idx * PAGE_SIZE);
-            let in_page_end = (range.end - page_idx * PAGE_SIZE).min(PAGE_SIZE);
-            if let Some(page) = self.pages[page_idx].as_ref() {
-                result.extend(page[in_page_start..in_page_end].iter().cloned());
+        let len = range.end - range.start;
+        // Create a vector for uninitialized values.
+        let mut result: Vec<MaybeUninit<T>> = Vec::with_capacity(len);
+        // SAFETY: We set the length and then initialize every element.
+        unsafe {
+            result.set_len(len);
+            let dst = result.as_mut_ptr() as *mut T;
+            let start_page = range.start / PAGE_SIZE;
+            let end_page = (range.start + len - 1) / PAGE_SIZE;
+            if start_page == end_page {
+                let offset = range.start % PAGE_SIZE;
+                if let Some(page) = self.pages[start_page].as_ref() {
+                    let src = page.as_ptr().add(offset);
+                    std::ptr::copy_nonoverlapping(src, dst, len);
+                } else {
+                    for i in 0..len {
+                        std::ptr::write(dst.add(i), T::default());
+                    }
+                }
             } else {
-                result.extend(vec![T::default(); in_page_end - in_page_start]);
+                debug_assert_eq!(start_page + 1, end_page);
+                let offset = range.start % PAGE_SIZE;
+                let first_part = PAGE_SIZE - offset;
+                if let Some(page) = self.pages[start_page].as_ref() {
+                    let src = page.as_ptr().add(offset);
+                    std::ptr::copy_nonoverlapping(src, dst, first_part);
+                } else {
+                    for i in 0..first_part {
+                        std::ptr::write(dst.add(i), T::default());
+                    }
+                }
+                let second_part = len - first_part;
+                if let Some(page) = self.pages[end_page].as_ref() {
+                    let src = page.as_ptr();
+                    std::ptr::copy_nonoverlapping(src, dst.add(first_part), second_part);
+                } else {
+                    for i in 0..second_part {
+                        std::ptr::write(dst.add(first_part + i), T::default());
+                    }
+                }
             }
+            // SAFETY: All elements have been initialized.
+            std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(result)
         }
-        result
     }
 
     pub fn set_range(&mut self, range: Range<usize>, values: &[T]) -> Vec<T> {
-        let mut result = Vec::with_capacity(range.len());
-        let mut values = values.iter();
-        for page_idx in (range.start / PAGE_SIZE)..range.end.div_ceil(PAGE_SIZE) {
-            let in_page_start = range.start.saturating_sub(page_idx * PAGE_SIZE);
-            let in_page_end = (range.end - page_idx * PAGE_SIZE).min(PAGE_SIZE);
-            let page = self.pages[page_idx].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
-            result.extend(
-                page[in_page_start..in_page_end]
-                    .iter_mut()
-                    .map(|x| std::mem::replace(x, values.next().unwrap().clone())),
-            );
+        let len = range.end - range.start;
+        assert_eq!(values.len(), len);
+        let mut result: Vec<MaybeUninit<T>> = Vec::with_capacity(len);
+        // SAFETY: We will write to all elements of result below.
+        unsafe {
+            result.set_len(len);
         }
-        result
+        let start_page = range.start / PAGE_SIZE;
+        let end_page = (range.start + len - 1) / PAGE_SIZE;
+        if start_page == end_page {
+            let offset = range.start % PAGE_SIZE;
+            let page = self.pages[start_page].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
+            unsafe {
+                let dst_old = result.as_mut_ptr() as *mut T;
+                let src_old = page.as_ptr().add(offset);
+                std::ptr::copy_nonoverlapping(src_old, dst_old, len);
+
+                let dst_page = page.as_mut_ptr().add(offset);
+                let src_new = values.as_ptr();
+                std::ptr::copy_nonoverlapping(src_new, dst_page, len);
+            }
+        } else {
+            debug_assert_eq!(start_page + 1, end_page);
+            let offset = range.start % PAGE_SIZE;
+            let first_part = PAGE_SIZE - offset;
+            {
+                let page =
+                    self.pages[start_page].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
+                unsafe {
+                    let dst_old = result.as_mut_ptr() as *mut T;
+                    let src_old = page.as_ptr().add(offset);
+                    std::ptr::copy_nonoverlapping(src_old, dst_old, first_part);
+
+                    let dst_page = page.as_mut_ptr().add(offset);
+                    let src_new = values.as_ptr();
+                    std::ptr::copy_nonoverlapping(src_new, dst_page, first_part);
+                }
+            }
+            let second_part = len - first_part;
+            {
+                let page =
+                    self.pages[end_page].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
+                unsafe {
+                    let dst_old = result.as_mut_ptr().add(first_part) as *mut T;
+                    let src_old = page.as_ptr();
+                    std::ptr::copy_nonoverlapping(src_old, dst_old, second_part);
+
+                    let dst_page = page.as_mut_ptr();
+                    let src_new = values.as_ptr().add(first_part);
+                    std::ptr::copy_nonoverlapping(src_new, dst_page, second_part);
+                }
+            }
+        }
+        unsafe { std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(result) }
     }
 
     pub fn memory_size(&self) -> usize {
