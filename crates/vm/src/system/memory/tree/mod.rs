@@ -118,7 +118,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         memory: &MemoryImage<F>,
         hasher: &impl Hasher<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
-        // Construct a BTreeMap that includes the address space in the label calculation,
+        // Construct a Vec that includes the address space in the label calculation,
         // representing the entire memory tree.
         let mut memory_partition: Vec<(u64, [F; CHUNK])> = Vec::new();
         for ((address_space, pointer), value) in memory.items() {
