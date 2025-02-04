@@ -38,7 +38,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
     pub fn compute(
         memory_dimensions: MemoryDimensions,
         num_public_values: usize,
-        hasher: &impl Hasher<CHUNK, F>,
+        hasher: &(impl Hasher<CHUNK, F> + Sync),
         final_memory: &MemoryImage<F>,
     ) -> Self {
         let proof = compute_merkle_proof_to_user_public_values_root(
@@ -61,7 +61,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
 fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeField32>(
     memory_dimensions: MemoryDimensions,
     num_public_values: usize,
-    hasher: &impl Hasher<CHUNK, F>,
+    hasher: &(impl Hasher<CHUNK, F> + Sync),
     final_memory: &MemoryImage<F>,
 ) -> Vec<(bool, [F; CHUNK])> {
     assert_eq!(
