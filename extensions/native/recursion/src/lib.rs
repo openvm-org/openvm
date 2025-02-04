@@ -1,3 +1,5 @@
+#![feature(associated_type_defaults)]
+
 pub mod challenger;
 mod commit;
 pub mod config;

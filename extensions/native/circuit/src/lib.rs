@@ -21,5 +21,7 @@ pub use poseidon2::*;
 mod extension;
 pub use extension::*;
 
+pub mod bus;
 mod utils;
+
 pub use utils::*;

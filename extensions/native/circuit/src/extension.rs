@@ -31,6 +31,7 @@ use strum::IntoEnumIterator;
 
 use crate::{
     adapters::{convert_adapter::ConvertAdapterChip, *},
+    bus::OpenedValueBus,
     chip::NativePoseidon2Chip,
     phantom::*,
     *,
@@ -110,6 +111,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             memory_bridge,
         } = builder.system_port();
         let offline_memory = builder.system_base().offline_memory();
+        let opened_values_bus = OpenedValueBus::new(builder.new_bus_idx());
 
         let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
             NativeLoadStoreAdapterChip::new(
@@ -188,7 +190,9 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             execution_bus,
             program_bus,
             memory_bridge,
+            opened_values_bus,
             offline_memory.clone(),
+            builder.streams().clone(),
         );
         inventory.add_executor(
             fri_reduced_opening_chip,

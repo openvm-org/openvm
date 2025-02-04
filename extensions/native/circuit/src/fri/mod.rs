@@ -7,7 +7,9 @@ use std::{
 
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
+    arch::{
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor, Streams,
+    },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -34,7 +36,10 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use static_assertions::const_assert_eq;
 
-use crate::field_extension::{FieldExtension, EXT_DEG};
+use crate::{
+    bus::OpenedValueBus,
+    field_extension::{FieldExtension, EXT_DEG},
+};
 
 #[cfg(test)]
 mod tests;
@@ -44,12 +49,12 @@ mod tests;
 struct WorkloadCols<T> {
     prefix: PrefixCols<T>,
 
-    a_aux: MemoryReadAuxCols<T>,
+    // a_aux: MemoryReadAuxCols<T>,
     b: [T; EXT_DEG],
     b_aux: MemoryReadAuxCols<T>,
 }
 const WL_WIDTH: usize = WorkloadCols::<u8>::width();
-const_assert_eq!(WL_WIDTH, 25);
+const_assert_eq!(WL_WIDTH, 22);
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -58,14 +63,13 @@ struct Instruction1Cols<T> {
 
     pc: T,
 
-    a_ptr_ptr: T,
-    a_ptr_aux: MemoryReadAuxCols<T>,
-
+    a_id_ptr: T,
+    // a_id_aux: MemoryReadAuxCols<T>,
     b_ptr_ptr: T,
     b_ptr_aux: MemoryReadAuxCols<T>,
 }
 const INS_1_WIDTH: usize = Instruction1Cols::<u8>::width();
-const_assert_eq!(INS_1_WIDTH, 24);
+const_assert_eq!(INS_1_WIDTH, 21);
 const_assert_eq!(
     offset_of!(WorkloadCols<u8>, prefix),
     offset_of!(Instruction1Cols<u8>, prefix)
@@ -102,7 +106,7 @@ const fn const_max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]
 }
 pub const OVERALL_WIDTH: usize = const_max(const_max(WL_WIDTH, INS_1_WIDTH), INS_2_WIDTH);
-const_assert_eq!(OVERALL_WIDTH, 25);
+const_assert_eq!(OVERALL_WIDTH, 22);
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -119,7 +123,7 @@ const_assert_eq!(GENERAL_WIDTH, 3);
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
 struct DataCols<T> {
-    a_ptr: T,
+    a_id: T,
     b_ptr: T,
     idx: T,
     result: [T; EXT_DEG],
@@ -146,6 +150,7 @@ const_assert_eq!(PREFIX_WIDTH, 15);
 struct FriReducedOpeningAir {
     execution_bridge: ExecutionBridge,
     memory_bridge: MemoryBridge,
+    opened_values_bus: OpenedValueBus,
 }
 
 impl<F: Field> BaseAir<F> for FriReducedOpeningAir {
@@ -203,24 +208,33 @@ impl FriReducedOpeningAir {
         let local_data = &local.prefix.data;
         let start_timestamp = next.general.timestamp;
         let multiplicity = local.prefix.general.is_workload_row;
-        // a_ptr/b_ptr/length/result
-        let ptr_reads = AB::F::from_canonical_usize(4);
+        // a_id/b_ptr/length/result
+        let ptr_reads = AB::F::from_canonical_usize(3);
         let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
-        // read a
-        self.memory_bridge
-            .read(
-                MemoryAddress::new(native_as.clone(), next.data.a_ptr),
-                [local.prefix.a_or_is_first],
-                start_timestamp + ptr_reads,
-                &local.a_aux,
-            )
-            .eval(builder, multiplicity);
+        self.opened_values_bus.interact(
+            builder,
+            false,
+            multiplicity,
+            local.prefix.data.a_id,
+            // NOTE: this is actually length - idx - 1.
+            local.prefix.data.idx,
+            local.prefix.a_or_is_first,
+        );
+        // // read a
+        // self.memory_bridge
+        //     .read(
+        //         MemoryAddress::new(native_as.clone(), next.data.a_ptr),
+        //         [local.prefix.a_or_is_first],
+        //         start_timestamp + ptr_reads,
+        //         &local.a_aux,
+        //     )
+        //     .eval(builder, multiplicity);
         // read b
         self.memory_bridge
             .read(
                 MemoryAddress::new(native_as.clone(), next.data.b_ptr),
                 local.b,
-                start_timestamp + ptr_reads + AB::Expr::ONE,
+                start_timestamp + ptr_reads,
                 &local.b_aux,
             )
             .eval(builder, multiplicity);
@@ -228,26 +242,26 @@ impl FriReducedOpeningAir {
             let mut when_transition = builder.when_transition();
             let mut builder = when_transition.when(local.prefix.general.is_workload_row);
             // ATTENTION: degree of builder is 2
-            // local.timestamp = next.timestamp + 2
+            // local.timestamp = next.timestamp + 1
             builder.assert_eq(
                 local.prefix.general.timestamp,
-                start_timestamp + AB::Expr::TWO,
+                start_timestamp + AB::Expr::ONE,
             );
             // local.idx = next.idx + 1
             builder.assert_eq(local_data.idx + AB::Expr::ONE, next.data.idx);
             // local.alpha = next.alpha
             assert_array_eq(&mut builder, local_data.alpha, next.data.alpha);
-            // local.a_ptr = next.a_ptr + 1
-            builder.assert_eq(local_data.a_ptr, next.data.a_ptr + AB::F::ONE);
+            // local.a_id = next.a_id
+            builder.assert_eq(local_data.a_id, next.data.a_id);
             // local.b_ptr = next.b_ptr + EXT_DEG
             builder.assert_eq(
                 local_data.b_ptr,
                 next.data.b_ptr + AB::F::from_canonical_usize(EXT_DEG),
             );
-            // local.timestamp = next.timestamp + 2
+            // local.timestamp = next.timestamp + 1
             builder.assert_eq(
                 local.prefix.general.timestamp,
-                next.general.timestamp + AB::Expr::TWO,
+                next.general.timestamp + AB::Expr::ONE,
             );
             // local.result * local.alpha + local.b - local.a = next.result
             let mut expected_result = FieldExtension::multiply(local_data.result, local_data.alpha);
@@ -303,16 +317,15 @@ impl FriReducedOpeningAir {
         let length = local.prefix.data.idx;
         let multiplicity = local.prefix.general.is_ins_row * local.prefix.a_or_is_first;
         let start_timestamp = local.prefix.general.timestamp;
-        // 4 reads
-        let write_timestamp =
-            start_timestamp + AB::Expr::TWO * length + AB::Expr::from_canonical_usize(4);
+        // 3 reads
+        let write_timestamp = start_timestamp + length + AB::Expr::from_canonical_usize(3);
         let end_timestamp = write_timestamp.clone() + AB::Expr::ONE;
         let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
         self.execution_bridge
             .execute(
                 AB::F::from_canonical_usize(FRI_REDUCED_OPENING.global_opcode().as_usize()),
                 [
-                    local.a_ptr_ptr.into(),
+                    local.a_id_ptr.into(),
                     local.b_ptr_ptr.into(),
                     next.result_ptr.into(),
                     native_as.clone(),
@@ -344,21 +357,21 @@ impl FriReducedOpeningAir {
                 &next.length_aux,
             )
             .eval(builder, multiplicity.clone());
-        // Read a_ptr
-        self.memory_bridge
-            .read(
-                MemoryAddress::new(native_as.clone(), local.a_ptr_ptr),
-                [local_data.a_ptr],
-                start_timestamp + AB::Expr::TWO,
-                &local.a_ptr_aux,
-            )
-            .eval(builder, multiplicity.clone());
+        // // Read a_id
+        // self.memory_bridge
+        //     .read(
+        //         MemoryAddress::new(native_as.clone(), next.a_id_ptr),
+        //         [local_data.a_id],
+        //         start_timestamp + AB::Expr::TWO,
+        //         &local.a_id_aux,
+        //     )
+        //     .eval(builder, multiplicity.clone());
         // Read b_ptr
         self.memory_bridge
             .read(
                 MemoryAddress::new(native_as.clone(), local.b_ptr_ptr),
                 [local_data.b_ptr],
-                start_timestamp + AB::Expr::from_canonical_u32(3),
+                start_timestamp + AB::Expr::TWO,
                 &local.b_ptr_aux,
             )
             .eval(builder, multiplicity.clone());
@@ -433,9 +446,9 @@ pub struct FriReducedOpeningRecord<F: Field> {
     pub instruction: Instruction<F>,
     pub alpha_read: RecordId,
     pub length_read: RecordId,
-    pub a_ptr_read: RecordId,
+    pub a_id: F,
     pub b_ptr_read: RecordId,
-    pub a_reads: Vec<RecordId>,
+    pub a_vals: Vec<F>,
     pub b_reads: Vec<RecordId>,
     pub result_write: RecordId,
 }
@@ -443,7 +456,7 @@ pub struct FriReducedOpeningRecord<F: Field> {
 impl<F: Field> FriReducedOpeningRecord<F> {
     fn get_height(&self) -> usize {
         // 2 for instruction rows
-        self.a_reads.len() + 2
+        self.a_vals.len() + 2
     }
 }
 
@@ -452,23 +465,28 @@ pub struct FriReducedOpeningChip<F: Field> {
     records: Vec<FriReducedOpeningRecord<F>>,
     height: usize,
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+    streams: Arc<Mutex<Streams<F>>>,
 }
 impl<F: PrimeField32> FriReducedOpeningChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
+        opened_values_bus: OpenedValueBus,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+        streams: Arc<Mutex<Streams<F>>>,
     ) -> Self {
         let air = FriReducedOpeningAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
+            opened_values_bus,
         };
         Self {
             records: vec![],
             air,
             height: 0,
             offline_memory,
+            streams,
         }
     }
 }
@@ -480,7 +498,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
         let &Instruction {
-            a: a_ptr_ptr,
+            a: a_id_ptr,
             b: b_ptr_ptr,
             c: result_ptr,
             d: addr_space,
@@ -491,28 +509,30 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
 
         let alpha_read = memory.read(addr_space, alpha_ptr);
         let length_read = memory.read_cell(addr_space, length_ptr);
-        let a_ptr_read = memory.read_cell(addr_space, a_ptr_ptr);
+        let a_id = memory.unsafe_read_cell(addr_space, a_id_ptr);
         let b_ptr_read = memory.read_cell(addr_space, b_ptr_ptr);
 
         let alpha = alpha_read.1;
         let length = length_read.1.as_canonical_u32() as usize;
-        let a_ptr = a_ptr_read.1;
         let b_ptr = b_ptr_read.1;
 
-        let mut a_reads = Vec::with_capacity(length);
+        let a_vals = {
+            let streams = self.streams.lock().unwrap();
+            streams.hint_space[a_id.as_canonical_u32() as usize].clone()
+        };
+        // let mut a_reads = Vec::with_capacity(length);
         let mut b_reads = Vec::with_capacity(length);
         let mut result = [F::ZERO; EXT_DEG];
 
         for i in 0..length {
-            let a_read = memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i));
+            // let a_read = memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i));
             let b_read =
                 memory.read::<EXT_DEG>(addr_space, b_ptr + F::from_canonical_usize(EXT_DEG * i));
-            a_reads.push(a_read);
+            // a_reads.push(a_read);
             b_reads.push(b_read);
         }
 
-        for (a_read, b_read) in a_reads.iter().rev().zip_eq(b_reads.iter().rev()) {
-            let a = a_read.1;
+        for (&a, b_read) in a_vals.iter().rev().zip_eq(b_reads.iter().rev()) {
             let b = b_read.1;
             // result = result * alpha + (b - a)
             result = FieldExtension::add(
@@ -529,9 +549,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             instruction: instruction.clone(),
             alpha_read: alpha_read.0,
             length_read: length_read.0,
-            a_ptr_read: a_ptr_read.0,
+            a_id,
             b_ptr_read: b_ptr_read.0,
-            a_reads: a_reads.into_iter().map(|r| r.0).collect(),
+            a_vals,
             b_reads: b_reads.into_iter().map(|r| r.0).collect(),
             result_write,
         };
@@ -557,7 +577,7 @@ fn record_to_rows<F: PrimeField32>(
     memory: &OfflineMemory<F>,
 ) {
     let Instruction {
-        a: a_ptr_ptr,
+        a: a_id_ptr,
         b: b_ptr_ptr,
         c: result_ptr,
         e: length_ptr,
@@ -567,34 +587,31 @@ fn record_to_rows<F: PrimeField32>(
 
     let length_read = memory.record_by_id(record.length_read);
     let alpha_read = memory.record_by_id(record.alpha_read);
-    let a_ptr_read = memory.record_by_id(record.a_ptr_read);
     let b_ptr_read = memory.record_by_id(record.b_ptr_read);
 
     let length = length_read.data_at(0).as_canonical_u32() as usize;
     let alpha: [F; EXT_DEG] = alpha_read.data_slice().try_into().unwrap();
-    let a_ptr = a_ptr_read.data_at(0);
     let b_ptr = b_ptr_read.data_at(0);
 
     let mut result = [F::ZERO; EXT_DEG];
 
     let alpha_aux = aux_cols_factory.make_read_aux_cols(alpha_read);
     let length_aux = aux_cols_factory.make_read_aux_cols(length_read);
-    let a_ptr_aux = aux_cols_factory.make_read_aux_cols(a_ptr_read);
     let b_ptr_aux = aux_cols_factory.make_read_aux_cols(b_ptr_read);
 
     let result_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(record.result_write));
 
     // WorkloadCols
-    for (i, (&a_record_id, &b_record_id)) in record
-        .a_reads
+    for (i, (&a, &b_record_id)) in record
+        .a_vals
         .iter()
         .rev()
         .zip_eq(record.b_reads.iter().rev())
         .enumerate()
     {
-        let a_read = memory.record_by_id(a_record_id);
+        // let a_read = memory.record_by_id(a_record_id);
         let b_read = memory.record_by_id(b_record_id);
-        let a = a_read.data_at(0);
+        // let a = a_read.data_at(0);
         let b: [F; EXT_DEG] = b_read.data_slice().try_into().unwrap();
 
         let start = i * OVERALL_WIDTH;
@@ -604,18 +621,17 @@ fn record_to_rows<F: PrimeField32>(
                 general: GeneralCols {
                     is_workload_row: F::ONE,
                     is_ins_row: F::ZERO,
-                    timestamp: record.start_timestamp + F::from_canonical_usize((length - i) * 2),
+                    timestamp: record.start_timestamp + F::from_canonical_usize(length - i),
                 },
                 a_or_is_first: a,
                 data: DataCols {
-                    a_ptr: a_ptr + F::from_canonical_usize(length - i),
+                    a_id: record.a_id,
                     b_ptr: b_ptr + F::from_canonical_usize((length - i) * EXT_DEG),
                     idx: F::from_canonical_usize(i),
                     result,
                     alpha,
                 },
             },
-            a_aux: aux_cols_factory.make_read_aux_cols(a_read),
             b,
             b_aux: aux_cols_factory.make_read_aux_cols(b_read),
         };
@@ -638,7 +654,7 @@ fn record_to_rows<F: PrimeField32>(
                 },
                 a_or_is_first: F::ONE,
                 data: DataCols {
-                    a_ptr,
+                    a_id: record.a_id,
                     b_ptr,
                     idx: F::from_canonical_usize(length),
                     result,
@@ -646,8 +662,7 @@ fn record_to_rows<F: PrimeField32>(
                 },
             },
             pc: record.pc,
-            a_ptr_ptr,
-            a_ptr_aux,
+            a_id_ptr,
             b_ptr_ptr,
             b_ptr_aux,
         };
