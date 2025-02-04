@@ -57,7 +57,7 @@ pub struct TopLevelSpecificCols<T> {
     pub dim_register: T,
     pub opened_register: T,
     pub opened_length_register: T,
-    pub sibling_id: T,
+    pub proof_id: T,
     pub index_register: T,
     pub commit_register: T,
 

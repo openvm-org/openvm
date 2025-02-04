@@ -133,7 +133,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         specific.dim_register = instruction.a;
         specific.opened_register = instruction.b;
         specific.opened_length_register = instruction.c;
-        specific.sibling_id = instruction.d;
+        specific.proof_id = instruction.d;
         specific.index_register = instruction.e;
         specific.commit_register = instruction.f;
         specific.commit_pointer = commit_pointer;

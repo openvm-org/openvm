@@ -192,7 +192,7 @@ fn test<const N: usize>(cases: [Case; N]) {
         let dim_register = gen_pointer(&mut rng, 1);
         let opened_register = gen_pointer(&mut rng, 1);
         let opened_length_register = gen_pointer(&mut rng, 1);
-        let sibling_id = gen_pointer(&mut rng, 1);
+        let proof_id = gen_pointer(&mut rng, 1);
         let index_register = gen_pointer(&mut rng, 1);
         let commit_register = gen_pointer(&mut rng, 1);
 
@@ -204,7 +204,7 @@ fn test<const N: usize>(cases: [Case; N]) {
         tester.write_usize(address_space, dim_register, [dim_base_pointer]);
         tester.write_usize(address_space, opened_register, [opened_base_pointer]);
         tester.write_usize(address_space, opened_length_register, [opened.len()]);
-        tester.write_usize(address_space, sibling_id, [streams.hint_space.len()]);
+        tester.write_usize(address_space, proof_id, [streams.hint_space.len()]);
         tester.write_usize(address_space, index_register, [index_base_pointer]);
         tester.write_usize(address_space, commit_register, [commit_pointer]);
 
@@ -242,7 +242,7 @@ fn test<const N: usize>(cases: [Case; N]) {
                     dim_register,
                     opened_register,
                     opened_length_register,
-                    sibling_id,
+                    proof_id,
                     index_register,
                     commit_register,
                     opened_element_size_inv,

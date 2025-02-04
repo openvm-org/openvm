@@ -285,7 +285,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 a: dim_register,
                 b: opened_register,
                 c: opened_length_register,
-                d: sibling_id_ptr,
+                d: proof_id_ptr,
                 e: index_register,
                 f: commit_register,
                 g: opened_element_size_inv,
@@ -298,7 +298,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 opened_element_size += F::ONE;
             }
 
-            let sibling_id = memory.unsafe_read_cell(address_space, sibling_id_ptr);
+            let proof_id = memory.unsafe_read_cell(address_space, proof_id_ptr);
             let (dim_base_pointer_read, dim_base_pointer) =
                 memory.read_cell(address_space, dim_register);
             let (opened_base_pointer_read, opened_base_pointer) =
@@ -324,8 +324,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
             let mut root = [F::ZERO; CHUNK];
             let sibling_proof: Vec<[F; CHUNK]> = {
                 let streams = self.streams.lock().unwrap();
-                let sibling_id_val = sibling_id.as_canonical_u32() as usize;
-                streams.hint_space[sibling_id_val]
+                let proof_idx = proof_id.as_canonical_u32() as usize;
+                streams.hint_space[proof_idx]
                     .par_chunks(CHUNK)
                     .map(|c| c.try_into().unwrap())
                     .collect()
