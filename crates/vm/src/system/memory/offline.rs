@@ -106,7 +106,7 @@ impl BlockMap {
     pub fn items(&self) -> impl Iterator<Item = ((u32, u32), &BlockData)> + '_ {
         self.id
             .items()
-            .filter(|(_, idx)| *idx > 0)
+            .filter(|(_, idx)| *idx > &0)
             .map(|(address, idx)| (address, &self.storage[idx - 1]))
     }
 }
@@ -190,7 +190,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
                 1 << config.as_height
             ];
         for ((addr_space, pointer), value) in memory_image.items() {
-            paged_vec[(addr_space - config.as_offset) as usize].set(pointer as usize, value);
+            paged_vec[(addr_space - config.as_offset) as usize].set(pointer as usize, *value);
         }
         paged_vec
     }

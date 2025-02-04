@@ -118,7 +118,10 @@ pub fn extract_public_values<F: PrimeField32>(
 
     // This clones the entire memory. Ideally this should run in time proportional to
     // the size of the PV address space, not entire memory.
-    let final_memory: BTreeMap<Address, F> = final_memory.items().collect();
+    let final_memory: BTreeMap<Address, F> = final_memory
+        .items()
+        .map(|(addr, value)| (addr, *value))
+        .collect();
 
     let used_pvs: Vec<_> = final_memory
         .range((f_as_start, 0)..(f_as_end, 0))
