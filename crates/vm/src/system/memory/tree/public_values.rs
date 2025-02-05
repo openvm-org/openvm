@@ -1,6 +1,8 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
-use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
+use openvm_stark_backend::{
+    p3_field::PrimeField32, p3_maybe_rayon::prelude::ParallelIterator, p3_util::log2_strict_usize,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -118,11 +120,12 @@ pub fn extract_public_values<F: PrimeField32>(
 
     // This clones the entire memory. Ideally this should run in time proportional to
     // the size of the PV address space, not entire memory.
-    let final_memory: BTreeMap<Address, F> = final_memory.items().collect();
+    let final_memory: Vec<(Address, F)> = final_memory.items().collect();
 
     let used_pvs: Vec<_> = final_memory
-        .range((f_as_start, 0)..(f_as_end, 0))
-        .map(|(&(_, pointer), &value)| (pointer as usize, value))
+        .into_iter()
+        .filter(|(addr, _)| addr.0 >= f_as_start && addr.0 < f_as_end)
+        .map(|((_, pointer), value)| (pointer as usize, value))
         .collect();
     if let Some(&last_pv) = used_pvs.last() {
         assert!(

@@ -1,5 +1,6 @@
 use std::{mem::MaybeUninit, ops::Range, ptr};
 
+use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::arch::MemoryConfig;
@@ -233,13 +234,13 @@ pub struct AddressMap<T, const PAGE_SIZE: usize> {
     as_offset: u32,
 }
 
-impl<T: Clone + Default, const PAGE_SIZE: usize> Default for AddressMap<T, PAGE_SIZE> {
+impl<T: Clone + Default + Sync, const PAGE_SIZE: usize> Default for AddressMap<T, PAGE_SIZE> {
     fn default() -> Self {
         Self::from_mem_config(&MemoryConfig::default())
     }
 }
 
-impl<T: Clone + Default, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
+impl<T: Clone + Default + Sync, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
     pub fn new(as_offset: u32, as_cnt: usize, mem_size: usize) -> Self {
         Self {
             paged_vecs: vec![PagedVec::new(mem_size.div_ceil(PAGE_SIZE)); as_cnt],
@@ -253,11 +254,14 @@ impl<T: Clone + Default, const PAGE_SIZE: usize> AddressMap<T, PAGE_SIZE> {
             1 << mem_config.pointer_max_bits,
         )
     }
-    pub fn items(&self) -> impl Iterator<Item = (Address, T)> + '_ {
+    pub fn items(&self) -> impl ParallelIterator<Item = (Address, T)> + '_
+    where
+        T: Send + Sync,
+    {
         self.paged_vecs
-            .iter()
+            .par_iter()
             .enumerate()
-            .flat_map(move |(as_idx, page)| {
+            .flat_map_iter(move |(as_idx, page)| {
                 page.iter()
                     .map(move |(ptr_idx, x)| ((as_idx as u32 + self.as_offset, ptr_idx as u32), x))
             })

@@ -7,7 +7,7 @@ use std::{
 
 use openvm_stark_backend::{
     interaction::InteractionType, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput, Chip, ChipUsageGetter,
+    p3_maybe_rayon::prelude::ParallelIterator, prover::types::AirProofInput, Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -49,7 +49,7 @@ fn test<const CHUNK: usize>(
     let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
 
     // checking validity of test data
-    for ((address_space, pointer), value) in final_memory.items() {
+    for ((address_space, pointer), value) in final_memory.items().collect::<Vec<_>>() {
         let label = pointer / CHUNK as u32;
         assert!(address_space - as_offset < (1 << as_height));
         assert!(pointer < ((CHUNK << address_height).div_ceil(PAGE_SIZE) * PAGE_SIZE) as u32);
@@ -57,7 +57,11 @@ fn test<const CHUNK: usize>(
             assert!(touched_labels.contains(&(address_space, label)));
         }
     }
-    for key in initial_memory.items().map(|(key, _)| key) {
+    for key in initial_memory
+        .items()
+        .map(|(key, _)| key)
+        .collect::<Vec<_>>()
+    {
         assert!(final_memory.get(&key).is_some());
     }
     for &(address_space, label) in touched_labels.iter() {
@@ -178,11 +182,11 @@ fn test<const CHUNK: usize>(
     .expect("Verification failed");
 }
 
-fn memory_to_partition<F: Default + Copy, const N: usize>(
+fn memory_to_partition<F: Default + Copy + Send + Sync, const N: usize>(
     memory: &MemoryImage<F>,
 ) -> Equipartition<F, N> {
     let mut memory_partition = Equipartition::new();
-    for ((address_space, pointer), value) in memory.items() {
+    for ((address_space, pointer), value) in memory.items().collect::<Vec<_>>() {
         let label = (address_space, pointer / N as u32);
         let chunk = memory_partition
             .entry(label)

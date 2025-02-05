@@ -3,7 +3,7 @@ use std::{array, cmp::max};
 use openvm_circuit_primitives::{
     assert_less_than::AssertLtSubAir, var_range::SharedVariableRangeCheckerChip,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
 use rustc_hash::FxHashSet;
 
 use super::{AddressMap, PagedVec, PAGE_SIZE};
@@ -103,7 +103,7 @@ impl BlockMap {
         }
     }
 
-    pub fn items(&self) -> impl Iterator<Item = ((u32, u32), &BlockData)> + '_ {
+    pub fn items(&self) -> impl ParallelIterator<Item = ((u32, u32), &BlockData)> + '_ {
         self.id
             .items()
             .filter(|(_, idx)| *idx > 0)
@@ -189,7 +189,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
                 PagedVec::new((1usize << config.pointer_max_bits).div_ceil(PAGE_SIZE));
                 1 << config.as_height
             ];
-        for ((addr_space, pointer), value) in memory_image.items() {
+        for ((addr_space, pointer), value) in memory_image.items().collect::<Vec<_>>() {
             paged_vec[(addr_space - config.as_offset) as usize].set(pointer as usize, value);
         }
         paged_vec
