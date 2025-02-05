@@ -71,11 +71,10 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         length: u64,
         from: u64,
         hasher: &(impl Hasher<CHUNK, F> + Sync),
-        zero_leaf: &MemoryNode<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if length == CHUNK as u64 {
             if lookup_range.is_empty() {
-                zero_leaf.clone()
+                MemoryNode::new_leaf(hasher.hash(&[F::ZERO; CHUNK]))
             } else {
                 debug_assert_eq!(memory[lookup_range.start].0, from);
                 let mut values = [F::ZERO; CHUNK];
@@ -111,26 +110,8 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
                 }
             };
             let (left, right) = join(
-                || {
-                    Self::from_memory(
-                        memory,
-                        lookup_range.start..mid,
-                        length >> 1,
-                        from,
-                        hasher,
-                        zero_leaf,
-                    )
-                },
-                || {
-                    Self::from_memory(
-                        memory,
-                        mid..lookup_range.end,
-                        length >> 1,
-                        midpoint,
-                        hasher,
-                        zero_leaf,
-                    )
-                },
+                || Self::from_memory(memory, lookup_range.start..mid, length >> 1, from, hasher),
+                || Self::from_memory(memory, mid..lookup_range.end, length >> 1, midpoint, hasher),
             );
             NonLeaf {
                 hash: hasher.compress(&left.hash(), &right.hash()),
@@ -164,14 +145,12 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             memory_items.last().map_or(0, |(addr, _)| *addr)
                 < ((CHUNK as u64) << memory_dimensions.overall_height())
         );
-        let zero_leaf = MemoryNode::new_leaf(hasher.hash(&[F::ZERO; CHUNK]));
         Self::from_memory(
             &memory_items,
             0..memory_items.len(),
             (CHUNK as u64) << memory_dimensions.overall_height(),
             0,
             hasher,
-            &zero_leaf,
         )
     }
 }
