@@ -2,7 +2,7 @@ pub mod public_values;
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
 use MemoryNode::*;
 
 use super::controller::dimensions::MemoryDimensions;
@@ -69,7 +69,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         memory: &BTreeMap<u64, [F; CHUNK]>,
         height: usize,
         from: u64,
-        hasher: &impl Hasher<CHUNK, F>,
+        hasher: &(impl Hasher<CHUNK, F> + Sync),
     ) -> MemoryNode<CHUNK, F> {
         let mut range = memory.range(from..from + (1 << height));
         if height == 0 {
@@ -80,8 +80,10 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             MemoryNode::construct_uniform(height, leaf_value, hasher)
         } else {
             let midpoint = from + (1 << (height - 1));
-            let left = Self::from_memory(memory, height - 1, from, hasher);
-            let right = Self::from_memory(memory, height - 1, midpoint, hasher);
+            let (left, right) = join(
+                || Self::from_memory(memory, height - 1, from, hasher),
+                || Self::from_memory(memory, height - 1, midpoint, hasher),
+            );
             NonLeaf {
                 hash: hasher.compress(&left.hash(), &right.hash()),
                 left: Arc::new(left),
@@ -93,7 +95,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     pub fn tree_from_memory(
         memory_dimensions: MemoryDimensions,
         memory: &MemoryImage<F>,
-        hasher: &impl Hasher<CHUNK, F>,
+        hasher: &(impl Hasher<CHUNK, F> + Sync),
     ) -> MemoryNode<CHUNK, F> {
         // Construct a BTreeMap that includes the address space in the label calculation,
         // representing the entire memory tree.
