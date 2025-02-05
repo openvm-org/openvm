@@ -66,26 +66,33 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     }
 
     fn from_memory(
-        memory: &Vec<(u64, [F; CHUNK])>,
+        memory: &[(u64, F)],
         lookup_range: Range<usize>,
-        height: usize,
+        length: u64,
         from: u64,
         hasher: &(impl Hasher<CHUNK, F> + Sync),
         zero_leaf: &MemoryNode<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
-        if height == 0 {
+        if length == CHUNK as u64 {
             if lookup_range.is_empty() {
                 zero_leaf.clone()
             } else {
                 debug_assert_eq!(memory[lookup_range.start].0, from);
-                debug_assert_eq!(lookup_range.end - lookup_range.start, 1);
-                MemoryNode::new_leaf(hasher.hash(&memory[lookup_range.start].1))
+                let mut values = [F::ZERO; CHUNK];
+                for (index, value) in memory[lookup_range].iter() {
+                    values[(index % CHUNK as u64) as usize] = *value;
+                }
+                MemoryNode::new_leaf(hasher.hash(&values))
             }
         } else if lookup_range.is_empty() {
             let leaf_value = hasher.hash(&[F::ZERO; CHUNK]);
-            MemoryNode::construct_uniform(height, leaf_value, hasher)
+            MemoryNode::construct_uniform(
+                (length / CHUNK as u64).trailing_zeros() as usize,
+                leaf_value,
+                hasher,
+            )
         } else {
-            let midpoint = from + (1 << (height - 1));
+            let midpoint = from + length / 2;
             let mid = {
                 let mut left = lookup_range.start;
                 let mut right = lookup_range.end;
@@ -108,7 +115,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
                     Self::from_memory(
                         memory,
                         lookup_range.start..mid,
-                        height - 1,
+                        length >> 1,
                         from,
                         hasher,
                         zero_leaf,
@@ -118,7 +125,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
                     Self::from_memory(
                         memory,
                         mid..lookup_range.end,
-                        height - 1,
+                        length >> 1,
                         midpoint,
                         hasher,
                         zero_leaf,
@@ -140,34 +147,28 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     ) -> MemoryNode<CHUNK, F> {
         // Construct a Vec that includes the address space in the label calculation,
         // representing the entire memory tree.
-        let mut memory_partition: Vec<(u64, [F; CHUNK])> = Vec::new();
-        for ((address_space, pointer), value) in memory.items() {
-            if pointer as usize / CHUNK >= (1 << memory_dimensions.address_height) {
-                continue;
-            }
-            debug_assert!(pointer as usize / CHUNK < (1 << memory_dimensions.address_height));
-            debug_assert!(address_space >= memory_dimensions.as_offset);
-            debug_assert!(
-                address_space - memory_dimensions.as_offset < (1 << memory_dimensions.as_height)
-            );
-            let label = (address_space, pointer / CHUNK as u32);
-            let index = memory_dimensions.label_to_index(label);
-            if memory_partition.is_empty() || memory_partition.last().unwrap().0 != index {
-                memory_partition.push((index, [F::ZERO; CHUNK]));
-            }
-            let chunk = memory_partition.last_mut().unwrap();
-            chunk.1[(pointer % CHUNK as u32) as usize] = value;
-        }
-        debug_assert!(memory_partition.is_sorted_by_key(|(addr, _)| addr));
+        let memory_items = memory
+            .items()
+            .filter(|((_, ptr), _)| *ptr as usize / CHUNK < (1 << memory_dimensions.address_height))
+            .map(|((address_space, pointer), value)| {
+                (
+                    memory_dimensions.label_to_index((address_space, pointer / CHUNK as u32))
+                        * CHUNK as u64
+                        + (pointer % CHUNK as u32) as u64,
+                    value,
+                )
+            })
+            .collect::<Vec<_>>();
+        debug_assert!(memory_items.is_sorted_by_key(|(addr, _)| addr));
         debug_assert!(
-            memory_partition.last().map_or(0, |(addr, _)| *addr)
-                < (1 << memory_dimensions.overall_height())
+            memory_items.last().map_or(0, |(addr, _)| *addr)
+                < ((CHUNK as u64) << memory_dimensions.overall_height())
         );
         let zero_leaf = MemoryNode::new_leaf(hasher.hash(&[F::ZERO; CHUNK]));
         Self::from_memory(
-            &memory_partition,
-            0..memory_partition.len(),
-            memory_dimensions.overall_height(),
+            &memory_items,
+            0..memory_items.len(),
+            (CHUNK as u64) << memory_dimensions.overall_height(),
             0,
             hasher,
             &zero_leaf,
