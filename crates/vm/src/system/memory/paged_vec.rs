@@ -52,44 +52,45 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         // SAFETY: We set the length and then initialize every element.
         unsafe {
             result.set_len(len);
-            let dst = result.as_mut_ptr() as *mut T;
-            let start_page = range.start / PAGE_SIZE;
-            let end_page = (range.start + len - 1) / PAGE_SIZE;
-            if start_page == end_page {
-                let offset = range.start % PAGE_SIZE;
+        }
+        let dst = result.as_mut_ptr() as *mut T;
+        let start_page = range.start / PAGE_SIZE;
+        let end_page = (range.start + len - 1) / PAGE_SIZE;
+        if start_page == end_page {
+            let offset = range.start % PAGE_SIZE;
+            unsafe {
                 if let Some(page) = self.pages[start_page].as_ref() {
                     let src = page.as_ptr().add(offset);
                     std::ptr::copy_nonoverlapping(src, dst, len);
                 } else {
-                    for i in 0..len {
-                        std::ptr::write(dst.add(i), T::default());
-                    }
+                    std::slice::from_raw_parts_mut(dst, len).fill(T::default());
                 }
-            } else {
-                debug_assert_eq!(start_page + 1, end_page);
-                let offset = range.start % PAGE_SIZE;
-                let first_part = PAGE_SIZE - offset;
+            }
+        } else {
+            debug_assert_eq!(start_page + 1, end_page);
+            let offset = range.start % PAGE_SIZE;
+            let first_part = PAGE_SIZE - offset;
+            unsafe {
                 if let Some(page) = self.pages[start_page].as_ref() {
                     let src = page.as_ptr().add(offset);
                     std::ptr::copy_nonoverlapping(src, dst, first_part);
                 } else {
-                    for i in 0..first_part {
-                        std::ptr::write(dst.add(i), T::default());
-                    }
+                    std::slice::from_raw_parts_mut(dst, first_part).fill(T::default());
                 }
-                let second_part = len - first_part;
+            }
+            let second_part = len - first_part;
+            unsafe {
                 if let Some(page) = self.pages[end_page].as_ref() {
                     let src = page.as_ptr();
                     std::ptr::copy_nonoverlapping(src, dst.add(first_part), second_part);
                 } else {
-                    for i in 0..second_part {
-                        std::ptr::write(dst.add(first_part + i), T::default());
-                    }
+                    std::slice::from_raw_parts_mut(dst.add(first_part), second_part)
+                        .fill(T::default());
                 }
             }
-            // SAFETY: All elements have been initialized.
-            std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(result)
         }
+        // SAFETY: All elements have been initialized.
+        unsafe { std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(result) }
     }
 
     pub fn set_range(&mut self, range: Range<usize>, values: &[T]) -> Vec<T> {
