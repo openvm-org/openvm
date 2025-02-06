@@ -38,7 +38,7 @@ impl Hintable<C> for InnerCommitPhaseStep {
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         let sibling_value = builder.hint_ext();
-        let opening_proof = read_opening_proof(builder);
+        let opening_proof = read_hint_slice(builder);
         Self::HintVariable {
             sibling_value,
             opening_proof,
@@ -122,10 +122,10 @@ impl Hintable<C> for InnerBatchOpening {
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         builder.cycle_tracker_start("HintOpenedValues");
-        let opened_values = Vec::<Vec<InnerVal>>::read(builder);
+        let opened_values = read_hint_slice(builder);
         builder.cycle_tracker_end("HintOpenedValues");
         builder.cycle_tracker_start("HintOpeningProof");
-        let opening_proof = read_opening_proof(builder);
+        let opening_proof = read_hint_slice(builder);
         builder.cycle_tracker_end("HintOpeningProof");
         Self::HintVariable {
             opened_values,
@@ -135,7 +135,11 @@ impl Hintable<C> for InnerBatchOpening {
 
     fn write(&self) -> Vec<Vec<<C as Config>::F>> {
         let mut stream = Vec::new();
-        stream.extend(Vec::<Vec<InnerVal>>::write(&self.opened_values));
+        let flat_opened_values: Vec<_> = self.opened_values.iter().flatten().copied().collect();
+        stream.extend(vec![
+            vec![InnerVal::from_canonical_usize(flat_opened_values.len())],
+            flat_opened_values,
+        ]);
         stream.extend(write_opening_proof(&self.opening_proof));
         stream
     }
@@ -144,7 +148,7 @@ impl Hintable<C> for InnerBatchOpening {
 impl VecAutoHintable for InnerBatchOpening {}
 impl VecAutoHintable for Vec<InnerBatchOpening> {}
 
-fn read_opening_proof(builder: &mut Builder<C>) -> HintSlice<C> {
+fn read_hint_slice(builder: &mut Builder<C>) -> HintSlice<C> {
     let length = Usize::from(builder.hint_var());
     let id = Usize::from(builder.hint_load());
     HintSlice { length, id }
