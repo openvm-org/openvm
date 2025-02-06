@@ -83,3 +83,12 @@ pub struct MemoryReadOrImmediateAuxCols<T> {
     pub(crate) is_immediate: T,
     pub(crate) is_zero_aux: T,
 }
+
+impl<T, const N: usize> AsRef<MemoryReadAuxCols<T>> for MemoryWriteAuxCols<T, N> {
+    fn as_ref(&self) -> &MemoryReadAuxCols<T> {
+        // Safety:
+        //  - `MemoryReadAuxCols<T>` is repr(C) and its only field is the first field of `MemoryWriteAuxCols<T, N>`.
+        //  - Thus, the memory layout of `MemoryWriteAuxCols<T, N>` begins with a valid `MemoryReadAuxCols<T>`.
+        unsafe { &*(self as *const MemoryWriteAuxCols<T, N> as *const MemoryReadAuxCols<T>) }
+    }
+}

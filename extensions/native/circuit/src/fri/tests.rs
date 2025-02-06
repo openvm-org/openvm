@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use itertools::Itertools;
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
@@ -9,7 +10,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
-
+use openvm_circuit::arch::Streams;
 use super::{super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningChip, EXT_DEG};
 use crate::OVERALL_WIDTH;
 
@@ -37,11 +38,15 @@ fn fri_mat_opening_air_test() {
     let length_range = || 1..=49;
 
     let mut tester = VmChipTestBuilder::default();
+
+    // FIXME: prepare streams
+    let streams = Arc::new(Mutex::new(Streams::default()));
     let mut chip = FriReducedOpeningChip::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
         tester.offline_memory_mutex_arc(),
+        streams.clone(),
     );
 
     let mut rng = create_seeded_rng();
