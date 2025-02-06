@@ -41,6 +41,7 @@ pub struct FriProofVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct FriQueryProofVariable<C: Config> {
+    /// Per query
     pub input_proof: Array<C, BatchOpeningVariable<C>>,
     pub commit_phase_openings: Array<C, FriCommitPhaseProofStepVariable<C>>,
 }
@@ -64,8 +65,9 @@ pub struct DimensionsVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct BatchOpeningVariable<C: Config> {
-    #[allow(clippy::type_complexity)]
-    pub opened_values: Array<C, Array<C, Felt<C::F>>>,
+    /// This is `opened_values[i][j]` flattened, where `i` is the matrix index and `j` is the column index in the matrix.
+    /// The matrices are ordered by decreasing height.
+    pub opened_values: HintSlice<C>,
     pub opening_proof: HintSlice<C>,
 }
 

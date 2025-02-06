@@ -2288,20 +2288,21 @@ dependencies = [
 
 [[package]]
 name = "halo2-axiom"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d698920cd4cb189e6b90db50cb9393f1671f732f39665b907f745b5d45b51c8c"
+checksum = "9f81aee7974478f9e3ea0cfd349d2a59a3482f7844386486a98e4af9ed8bada6"
 dependencies = [
  "blake2b_simd",
  "crossbeam",
  "ff 0.13.0",
  "group 0.13.0",
- "halo2curves-axiom",
+ "halo2curves-axiom 0.7.0",
  "itertools 0.11.0",
  "maybe-rayon",
  "pairing 0.23.0",
  "rand",
  "rand_core",
+ "rayon",
  "rustc-hash 1.1.0",
  "sha3",
  "tracing",
@@ -2414,6 +2415,34 @@ dependencies = [
  "sha2",
  "static_assertions",
  "subtle",
+]
+
+[[package]]
+name = "halo2curves-axiom"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd8309e4638b4f1bcf6613d72265a84074d26034c35edc5d605b5688e580b8b8"
+dependencies = [
+ "blake2b_simd",
+ "digest 0.10.7",
+ "ff 0.13.0",
+ "group 0.13.0",
+ "hex",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "pairing 0.23.0",
+ "pasta_curves 0.5.1",
+ "paste",
+ "rand",
+ "rand_core",
+ "rayon",
+ "serde",
+ "serde_arrays",
+ "sha2",
+ "static_assertions",
+ "subtle",
+ "unroll",
 ]
 
 [[package]]
@@ -3435,7 +3464,7 @@ version = "1.0.0-rc.0"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
- "halo2curves-axiom",
+ "halo2curves-axiom 0.5.3",
  "itertools 0.13.0",
  "num-bigint 0.4.6",
  "num-traits",
@@ -3472,7 +3501,7 @@ dependencies = [
 name = "openvm-algebra-guest"
 version = "1.0.0-rc.0"
 dependencies = [
- "halo2curves-axiom",
+ "halo2curves-axiom 0.5.3",
  "num-bigint 0.4.6",
  "openvm",
  "openvm-algebra-complex-macros",
@@ -3801,7 +3830,7 @@ dependencies = [
  "ecdsa 0.16.9",
  "elliptic-curve 0.13.8",
  "group 0.13.0",
- "halo2curves-axiom",
+ "halo2curves-axiom 0.5.3",
  "hex-literal",
  "itertools 0.13.0",
  "k256",
@@ -3975,7 +4004,7 @@ dependencies = [
 name = "openvm-mod-circuit-builder"
 version = "1.0.0-rc.0"
 dependencies = [
- "halo2curves-axiom",
+ "halo2curves-axiom 0.5.3",
  "hex-literal",
  "itertools 0.13.0",
  "lazy_static",
@@ -4114,7 +4143,7 @@ dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
- "halo2curves-axiom",
+ "halo2curves-axiom 0.5.3",
  "itertools 0.13.0",
  "num-bigint 0.4.6",
  "num-traits",
@@ -4144,7 +4173,7 @@ name = "openvm-pairing-guest"
 version = "1.0.0-rc.0"
 dependencies = [
  "group 0.13.0",
- "halo2curves-axiom",
+ "halo2curves-axiom 0.5.3",
  "hex-literal",
  "itertools 0.13.0",
  "lazy_static",
