@@ -2,8 +2,11 @@
 //! sbox degree 5
 
 use snark_verifier_sdk::snark_verifier::halo2_base::{
-    gates::GateInstructions, safe_types::SafeBool, utils::ScalarField, AssignedValue, Context,
-    QuantumCell::Constant,
+    gates::GateInstructions,
+    safe_types::SafeBool,
+    utils::ScalarField,
+    AssignedValue, Context,
+    QuantumCell::{self, Constant},
 };
 
 #[derive(Clone, Debug)]
@@ -110,8 +113,30 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
 
         // Matrix is circ(2, 1, 1)
         let sum = gate.sum(ctx, self.s.iter().copied());
-        for x in self.s.iter_mut() {
-            *x = gate.add(ctx, *x, sum);
+        for (i, x) in self.s.iter_mut().enumerate() {
+            // This is the same as `*x = gate.add(ctx, *x, sum)` but we save a cell by reusing `sum`:
+            if i % 2 == 0 {
+                ctx.assign_region(
+                    [
+                        QuantumCell::Witness(*x.value() + sum.value()),
+                        QuantumCell::Existing(*x),
+                        QuantumCell::Constant(-F::ONE),
+                        QuantumCell::Existing(sum),
+                    ],
+                    [0],
+                );
+                *x = ctx.get(-4);
+            } else {
+                ctx.assign_region(
+                    [
+                        QuantumCell::Existing(*x),
+                        QuantumCell::Constant(F::ONE),
+                        QuantumCell::Witness(*x.value() + sum.value()),
+                    ],
+                    [-1],
+                );
+                *x = ctx.get(-1);
+            }
         }
     }
 
@@ -135,7 +160,33 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
         assert_eq!(T, 3);
         let sum = gate.sum(ctx, self.s.iter().copied());
         for i in 0..T {
-            self.s[i] = gate.mul_add(ctx, self.s[i], Constant(mat_internal_diag_m_1[i]), sum);
+            // This is the same as `self.s[i] = gate.mul_add(ctx, self.s[i], Constant(mat_internal_diag_m_1[i]), sum)` but we save a cell by reusing `sum`.
+            if i % 2 == 0 {
+                ctx.assign_region(
+                    [
+                        QuantumCell::Witness(
+                            *self.s[i].value() * mat_internal_diag_m_1[i] + sum.value(),
+                        ),
+                        QuantumCell::Existing(self.s[i]),
+                        QuantumCell::Constant(-mat_internal_diag_m_1[i]),
+                        QuantumCell::Existing(sum),
+                    ],
+                    [0],
+                );
+                self.s[i] = ctx.get(-4);
+            } else {
+                ctx.assign_region(
+                    [
+                        QuantumCell::Existing(self.s[i]),
+                        QuantumCell::Constant(mat_internal_diag_m_1[i]),
+                        QuantumCell::Witness(
+                            *self.s[i].value() * mat_internal_diag_m_1[i] + sum.value(),
+                        ),
+                    ],
+                    [-1],
+                );
+                self.s[i] = ctx.get(-1);
+            }
         }
     }
 }
