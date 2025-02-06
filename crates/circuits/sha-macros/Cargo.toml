@@ -1,0 +1,21 @@
+[package]
+name = "openvm-sha-macros"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+quote = "1.0"
+openvm-macros-common = { workspace = true, default-features = false }
+itertools = "0.14"
+proc-macro2 = "1.0"
+
+[dev-dependencies]
+openvm-sha256-air = { workspace = true }
+ndarray = "0.16"
+
+[lib]
+proc-macro = true
