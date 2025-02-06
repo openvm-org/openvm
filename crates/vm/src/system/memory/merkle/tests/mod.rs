@@ -84,9 +84,7 @@ fn test<const CHUNK: usize>(
     let mut chip =
         MemoryMerkleChip::<CHUNK, _>::new(memory_dimensions, merkle_bus, COMPRESSION_BUS);
     for &(address_space, label) in touched_labels.iter() {
-        for i in 0..CHUNK as u32 {
-            chip.touch_address(address_space, label * CHUNK as u32 + i);
-        }
+        chip.touch_range(address_space, label * CHUNK as u32, CHUNK as u32);
     }
 
     let final_partition = memory_to_partition(final_memory);

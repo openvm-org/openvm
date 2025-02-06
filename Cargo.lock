@@ -3738,6 +3738,7 @@ dependencies = [
  "p3-poseidon2",
  "p3-symmetric",
  "rand",
+ "serde",
  "test-case",
  "tracing",
 ]

@@ -149,6 +149,8 @@ pub enum NativePhantom {
     HintBits,
     /// Move data from input stream into hint space
     HintLoad,
+    /// Prepare the next felt for hinting.
+    HintFelt,
 }
 
 #[derive(

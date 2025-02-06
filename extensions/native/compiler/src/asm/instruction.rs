@@ -138,11 +138,15 @@ pub enum AsmInstruction<F, EF> {
 
     /// Add next input vector to hint stream.
     HintInputVec(),
+    /// Add next felt to hint stream,
+    HintFelt(),
 
     /// HintBits(src, len).
     ///
     /// Bit decompose the field element at pointer `src` to the first `len` little endian bits and add to hint stream.
     HintBits(i32, u32),
+
+    HintLoad(),
 
     /// Stores the next hint stream word into value stored at addr + value.
     StoreHintWordI(i32, F),
@@ -343,12 +347,14 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(f, "print_e ({})fp", dst)
             }
             AsmInstruction::HintInputVec() => write!(f, "hint_vec"),
+            AsmInstruction::HintFelt() => write!(f, "hint_felt"),
             AsmInstruction::StoreHintWordI(dst, offset) => {
                 write!(f, "shintw ({})fp {}", dst, offset)
             }
             AsmInstruction::StoreHintExtI(dst, offset) => {
                 write!(f, "shinte ({})fp {}", dst, offset)
             }
+            AsmInstruction::HintLoad() => write!(f, "hint_load"),
             AsmInstruction::Publish(val, index) => {
                 write!(f, "commit ({})fp ({})fp", val, index)
             }

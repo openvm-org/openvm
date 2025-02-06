@@ -21,7 +21,25 @@ pub struct Labels(pub Vec<(String, String)>);
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct MdTableCell {
     pub val: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub diff: Option<f64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BencherValue {
+    pub value: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lower_value: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upper_value: Option<f64>,
+}
+
+/// Benchmark output in [Bencher Metric Format](https://bencher.dev/docs/reference/bencher-metric-format/).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct BenchmarkOutput {
+    // BMF max depth is 2
+    #[serde(flatten)]
+    pub by_name: HashMap<String, HashMap<String, BencherValue>>,
 }
 
 impl Labels {
@@ -117,10 +135,28 @@ fn format_cell(div: &str, span: Option<&str>, span_color: Option<&str>) -> Strin
     ret
 }
 
+impl BencherValue {
+    pub fn new(value: f64) -> Self {
+        Self {
+            value,
+            lower_value: None,
+            upper_value: None,
+        }
+    }
+}
+
+impl From<MdTableCell> for BencherValue {
+    fn from(cell: MdTableCell) -> Self {
+        Self::new(cell.val)
+    }
+}
+
 // For serialization purposes
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MetricsFile {
+    #[serde(default)]
     pub counter: Vec<MetricEntry>,
+    #[serde(default)]
     pub gauge: Vec<MetricEntry>,
 }
 

@@ -334,8 +334,12 @@ impl Hintable<InnerConfig> for OpeningProof<PcsProof<BabyBearPoseidon2Config>, I
     type HintVariable = OpeningProofVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+        builder.cycle_tracker_start("HintOpeningProof");
         let proof = InnerFriProof::read(builder);
+        builder.cycle_tracker_end("HintOpeningProof");
+        builder.cycle_tracker_start("HintOpeningValues");
         let values = OpenedValues::read(builder);
+        builder.cycle_tracker_end("HintOpeningValues");
 
         OpeningProofVariable { proof, values }
     }

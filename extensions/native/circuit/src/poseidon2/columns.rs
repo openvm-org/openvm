@@ -57,7 +57,7 @@ pub struct TopLevelSpecificCols<T> {
     pub dim_register: T,
     pub opened_register: T,
     pub opened_length_register: T,
-    pub sibling_register: T,
+    pub proof_id: T,
     pub index_register: T,
     pub commit_register: T,
 
@@ -67,26 +67,21 @@ pub struct TopLevelSpecificCols<T> {
     pub opened_length: T,
 
     pub dim_base_pointer: T,
-    pub sibling_base_pointer: T,
     pub index_base_pointer: T,
 
     pub dim_base_pointer_read: MemoryReadAuxCols<T>,
     pub opened_base_pointer_read: MemoryReadAuxCols<T>,
     pub opened_length_read: MemoryReadAuxCols<T>,
-    pub sibling_base_pointer_read: MemoryReadAuxCols<T>,
     pub index_base_pointer_read: MemoryReadAuxCols<T>,
     pub commit_pointer_read: MemoryReadAuxCols<T>,
 
     pub proof_index: T,
 
     pub read_initial_height_or_root_is_on_right: MemoryReadAuxCols<T>,
-    pub read_final_height_or_sibling_array_start: MemoryReadAuxCols<T>,
+    pub read_final_height: MemoryReadAuxCols<T>,
 
     // incorporate sibling only
     pub root_is_on_right: T,
-    pub sibling_array_start: T,
-    pub reads: [MemoryReadAuxCols<T>; CHUNK],
-
     pub commit_pointer: T,
     pub commit_read: MemoryReadAuxCols<T>,
 }

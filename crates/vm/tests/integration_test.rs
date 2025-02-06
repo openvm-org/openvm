@@ -729,6 +729,7 @@ fn test_hint_load_2() {
             F::ZERO,
             0,
         ),
+        Instruction::from_isize(HINT_STOREW.global_opcode(), 32, 0, 0, 4, 4),
         Instruction::phantom(
             PhantomDiscriminant(NativePhantom::HintLoad as u16),
             F::ZERO,
@@ -748,6 +749,13 @@ fn test_hint_load_2() {
         Default::default(),
     );
     segment.execute_from_pc(0).unwrap();
+    assert_eq!(
+        segment
+            .chip_complex
+            .memory_controller()
+            .unsafe_read_cell(F::from_canonical_usize(4), F::from_canonical_usize(32)),
+        F::ZERO
+    );
     let streams = segment.chip_complex.take_streams();
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ONE]));

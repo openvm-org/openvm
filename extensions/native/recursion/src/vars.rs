@@ -8,6 +8,12 @@ use crate::{digest::DigestVariable, fri::types::FriProofVariable, OUTER_DIGEST_S
 pub type OuterDigestVariable<C> = [Var<<C as Config>::N>; OUTER_DIGEST_SIZE];
 
 #[derive(DslVariable, Clone)]
+pub struct HintSlice<C: Config> {
+    pub length: Usize<C::N>,
+    pub id: Usize<C::N>,
+}
+
+#[derive(DslVariable, Clone)]
 pub struct StarkProofVariable<C: Config> {
     pub commitments: CommitmentsVariable<C>,
     pub opening: OpeningProofVariable<C>,

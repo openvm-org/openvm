@@ -209,10 +209,14 @@ pub enum DslIr<C: Config> {
 
     /// Prepare next input vector (preceded by its length) for hinting.
     HintInputVec(),
+    /// Prepare next felt for hinting
+    HintFelt(),
     /// Prepare bit decomposition for hinting.
     HintBitsF(Felt<C::F>, u32),
 
     StoreHintWord(Ptr<C::N>, MemIndex<C::N>),
+    /// Move data from input stream into hint space
+    HintLoad(),
 
     /// Witness a variable. Should only be used when target is a circuit.
     WitnessVar(Var<C::N>, u32),
@@ -259,21 +263,21 @@ pub enum DslIr<C: Config> {
         Array<C, Ext<C::F, C::EF>>,
         Ext<C::F, C::EF>,
     ),
-    /// VerifyBatch(dim, opened, sibling, index, commit)
+    /// VerifyBatch(dim, opened, proof_id, index, commit)
     /// opened values are Felts
     VerifyBatchFelt(
         Array<C, Usize<C::F>>,
         Array<C, Array<C, Felt<C::F>>>,
-        Array<C, Array<C, Felt<C::F>>>,
+        Var<C::N>,
         Array<C, Var<C::N>>,
         Array<C, Felt<C::F>>,
     ),
-    /// VerifyBatch(dim, opened, sibling, index, commit)
+    /// VerifyBatch(dim, opened, proof_id, index, commit)
     /// opened values are Exts
     VerifyBatchExt(
         Array<C, Usize<C::F>>,
         Array<C, Array<C, Ext<C::F, C::EF>>>,
-        Array<C, Array<C, Felt<C::F>>>,
+        Var<C::N>,
         Array<C, Var<C::N>>,
         Array<C, Felt<C::F>>,
     ),

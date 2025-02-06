@@ -15,7 +15,7 @@ use crate::{
     digest::{CanPoseidon2Digest, DigestVariable},
     outer_poseidon2::Poseidon2CircuitBuilder,
     utils::cond_eval,
-    vars::OuterDigestVariable,
+    vars::{HintSlice, OuterDigestVariable},
 };
 
 pub mod domain;
@@ -150,10 +150,8 @@ pub fn verify_batch<C: Config>(
     dimensions: Array<C, DimensionsVariable<C>>,
     index_bits: Array<C, Var<C::N>>,
     opened_values: &NestedOpenedValues<C>,
-    proof: &Array<C, DigestVariable<C>>,
+    proof: &HintSlice<C>,
 ) {
-    //println!("poseidon2");
-    //panic!();
     if builder.flags.static_only {
         verify_batch_static(
             builder,
@@ -170,21 +168,25 @@ pub fn verify_batch<C: Config>(
         Array::Dyn(ptr, len) => Array::Dyn(ptr, len.clone()),
         _ => panic!("Expected a dynamic array of felts"),
     };
-    let proof = match proof {
-        Array::Dyn(ptr, len) => Array::Dyn(*ptr, len.clone()),
-        _ => panic!("Expected a dynamic array of felts"),
-    };
     let commit = match commit {
         DigestVariable::Felt(arr) => arr,
         _ => panic!("Expected a dynamic array of felts"),
     };
     match opened_values {
-        NestedOpenedValues::Felt(opened_values) => {
-            builder.verify_batch_felt(&dimensions, opened_values, &proof, &index_bits, commit)
-        }
-        NestedOpenedValues::Ext(opened_values) => {
-            builder.verify_batch_ext(&dimensions, opened_values, &proof, &index_bits, commit)
-        }
+        NestedOpenedValues::Felt(opened_values) => builder.verify_batch_felt(
+            &dimensions,
+            opened_values,
+            proof.id.get_var(),
+            &index_bits,
+            commit,
+        ),
+        NestedOpenedValues::Ext(opened_values) => builder.verify_batch_ext(
+            &dimensions,
+            opened_values,
+            proof.id.get_var(),
+            &index_bits,
+            commit,
+        ),
     };
 }
 
@@ -201,7 +203,7 @@ pub fn verify_batch_static<C: Config>(
     dimensions: Array<C, DimensionsVariable<C>>,
     index_bits: Array<C, Var<C::N>>,
     opened_values: &NestedOpenedValues<C>,
-    proof: &Array<C, DigestVariable<C>>,
+    proof: &HintSlice<C>,
 ) {
     let commit: OuterDigestVariable<C> = if let DigestVariable::Var(commit) = commit {
         commit.vec().try_into().unwrap()
@@ -225,14 +227,9 @@ pub fn verify_batch_static<C: Config>(
         .into_outer_digest();
 
     // For each sibling in the proof, reconstruct the root.
-    builder.range(0, proof.len()).for_each(|i_vec, builder| {
-        let i = i_vec[0];
-        let sibling: OuterDigestVariable<C> = if let DigestVariable::Var(d) = builder.get(proof, i)
-        {
-            d.vec().try_into().unwrap()
-        } else {
-            panic!("Expected a Var commitment");
-        };
+    let witness_refs = builder.get_witness_refs(proof.id.clone()).to_vec();
+    for (i, &witness_ref) in witness_refs.iter().enumerate() {
+        let sibling: OuterDigestVariable<C> = [witness_ref.into()];
         let bit = builder.get(&index_bits, i);
 
         let [left, right]: [Var<_>; 2] = cond_eval(builder, bit, root[0], sibling[0]);
@@ -261,7 +258,7 @@ pub fn verify_batch_static<C: Config>(
                         root = builder.p2_compress([root, next_height_openings_digest]);
                     });
             })
-    });
+    }
 
     builder.assert_var_eq(root[0], commit[0]);
 }

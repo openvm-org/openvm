@@ -513,6 +513,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::HintInputVec() => {
                     self.push(AsmInstruction::HintInputVec(), debug_info);
                 }
+                DslIr::HintFelt() => {
+                    self.push(AsmInstruction::HintFelt(), debug_info);
+                }
                 DslIr::StoreHintWord(ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
                         AsmInstruction::StoreHintWordI(ptr.fp(), size * index + offset),
@@ -523,6 +526,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         self.push(AsmInstruction::StoreHintWordI(A0, offset), debug_info)
                     }
                 },
+                DslIr::HintLoad() => {
+                    self.push(AsmInstruction::HintLoad(), debug_info);
+                }
                 DslIr::Publish(val, index) => {
                     self.push(AsmInstruction::Publish(val.fp(), index.fp()), debug_info);
                 }
@@ -564,26 +570,26 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         debug_info,
                     );
                 }
-                DslIr::VerifyBatchFelt(dim, opened, sibling, index, commit) => {
+                DslIr::VerifyBatchFelt(dim, opened, proof_id, index, commit) => {
                     self.push(
                         AsmInstruction::VerifyBatchFelt(
                             dim.ptr().fp(),
                             opened.ptr().fp(),
                             opened.len().get_var().fp(),
-                            sibling.ptr().fp(),
+                            proof_id.fp(),
                             index.ptr().fp(),
                             commit.ptr().fp(),
                         ),
                         debug_info,
                     );
                 }
-                DslIr::VerifyBatchExt(dim, opened, sibling, index, commit) => {
+                DslIr::VerifyBatchExt(dim, opened, proof_id, index, commit) => {
                     self.push(
                         AsmInstruction::VerifyBatchExt(
                             dim.ptr().fp(),
                             opened.ptr().fp(),
                             opened.len().get_var().fp(),
-                            sibling.ptr().fp(),
+                            proof_id.fp(),
                             index.ptr().fp(),
                             commit.ptr().fp(),
                         ),

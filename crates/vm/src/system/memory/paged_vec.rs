@@ -13,6 +13,81 @@ pub(crate) struct PagedVec<T, const PAGE_SIZE: usize> {
     pages: Vec<Option<Vec<T>>>,
 }
 
+// ------------------------------------------------------------------
+// Common Helper Functions
+// These functions encapsulate the common logic for copying ranges
+// across pages, both for read-only and read-write (set) cases.
+impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
+    // Copies a range of length `len` starting at index `start`
+    // into the memory pointed to by `dst`. If the relevant page is not
+    // initialized, fills that portion with T::default().
+    fn read_range_generic(&self, start: usize, len: usize, dst: *mut T) {
+        let start_page = start / PAGE_SIZE;
+        let end_page = (start + len - 1) / PAGE_SIZE;
+        unsafe {
+            if start_page == end_page {
+                let offset = start % PAGE_SIZE;
+                if let Some(page) = self.pages[start_page].as_ref() {
+                    ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, len);
+                } else {
+                    std::slice::from_raw_parts_mut(dst, len).fill(T::default());
+                }
+            } else {
+                let offset = start % PAGE_SIZE;
+                let first_part = PAGE_SIZE - offset;
+                if let Some(page) = self.pages[start_page].as_ref() {
+                    ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, first_part);
+                } else {
+                    std::slice::from_raw_parts_mut(dst, first_part).fill(T::default());
+                }
+                let second_part = len - first_part;
+                if let Some(page) = self.pages[end_page].as_ref() {
+                    ptr::copy_nonoverlapping(page.as_ptr(), dst.add(first_part), second_part);
+                } else {
+                    std::slice::from_raw_parts_mut(dst.add(first_part), second_part)
+                        .fill(T::default());
+                }
+            }
+        }
+    }
+
+    // Updates a range of length `len` starting at index `start` with new values.
+    // It copies the current values into the memory pointed to by `dst`
+    // and then writes the new values into the underlying pages,
+    // allocating pages (with defaults) if necessary.
+    fn set_range_generic(&mut self, start: usize, len: usize, new: *const T, dst: *mut T) {
+        let start_page = start / PAGE_SIZE;
+        let end_page = (start + len - 1) / PAGE_SIZE;
+        unsafe {
+            if start_page == end_page {
+                let offset = start % PAGE_SIZE;
+                let page =
+                    self.pages[start_page].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
+                ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, len);
+                ptr::copy_nonoverlapping(new, page.as_mut_ptr().add(offset), len);
+            } else {
+                let offset = start % PAGE_SIZE;
+                let first_part = PAGE_SIZE - offset;
+                {
+                    let page =
+                        self.pages[start_page].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
+                    ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, first_part);
+                    ptr::copy_nonoverlapping(new, page.as_mut_ptr().add(offset), first_part);
+                }
+                let second_part = len - first_part;
+                {
+                    let page =
+                        self.pages[end_page].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
+                    ptr::copy_nonoverlapping(page.as_ptr(), dst.add(first_part), second_part);
+                    ptr::copy_nonoverlapping(new.add(first_part), page.as_mut_ptr(), second_part);
+                }
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------------
+// Implementation for types requiring Default + Clone
 impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
     pub fn new(num_pages: usize) -> Self {
         Self {
@@ -47,33 +122,32 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
 
     #[inline(always)]
     pub fn range_vec(&self, range: Range<usize>) -> Vec<T> {
-        let mut result = Vec::with_capacity(range.len());
-        for page_idx in (range.start / PAGE_SIZE)..range.end.div_ceil(PAGE_SIZE) {
-            let in_page_start = range.start.saturating_sub(page_idx * PAGE_SIZE);
-            let in_page_end = (range.end - page_idx * PAGE_SIZE).min(PAGE_SIZE);
-            if let Some(page) = self.pages[page_idx].as_ref() {
-                result.extend(page[in_page_start..in_page_end].iter().cloned());
-            } else {
-                result.extend(vec![T::default(); in_page_end - in_page_start]);
-            }
+        let len = range.end - range.start;
+        // Create a vector for uninitialized values.
+        let mut result: Vec<MaybeUninit<T>> = Vec::with_capacity(len);
+        // SAFETY: We set the length and then initialize every element via read_range_generic.
+        unsafe {
+            result.set_len(len);
+            self.read_range_generic(range.start, len, result.as_mut_ptr() as *mut T);
+            std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(result)
         }
-        result
     }
 
     pub fn set_range(&mut self, range: Range<usize>, values: &[T]) -> Vec<T> {
-        let mut result = Vec::with_capacity(range.len());
-        let mut values = values.iter();
-        for page_idx in (range.start / PAGE_SIZE)..range.end.div_ceil(PAGE_SIZE) {
-            let in_page_start = range.start.saturating_sub(page_idx * PAGE_SIZE);
-            let in_page_end = (range.end - page_idx * PAGE_SIZE).min(PAGE_SIZE);
-            let page = self.pages[page_idx].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
-            result.extend(
-                page[in_page_start..in_page_end]
-                    .iter_mut()
-                    .map(|x| std::mem::replace(x, values.next().unwrap().clone())),
+        let len = range.end - range.start;
+        assert_eq!(values.len(), len);
+        let mut result: Vec<MaybeUninit<T>> = Vec::with_capacity(len);
+        // SAFETY: We will write to every element in result via set_range_generic.
+        unsafe {
+            result.set_len(len);
+            self.set_range_generic(
+                range.start,
+                len,
+                values.as_ptr(),
+                result.as_mut_ptr() as *mut T,
             );
+            std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(result)
         }
-        result
     }
 
     pub fn memory_size(&self) -> usize {
@@ -85,112 +159,26 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
     }
 }
 
+// ------------------------------------------------------------------
+// Implementation for types requiring Default + Copy
 impl<T: Default + Copy, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
     #[inline(always)]
     pub fn range_array<const N: usize>(&self, from: usize) -> [T; N] {
-        // Step 1: Create an uninitialized array of MaybeUninit<T>
+        // Create an uninitialized array of MaybeUninit<T>
         let mut result: [MaybeUninit<T>; N] = unsafe {
             // SAFETY: An uninitialized `[MaybeUninit<T>; N]` is valid.
             MaybeUninit::uninit().assume_init()
         };
-
-        // Step 2: Get a mutable slice of T references from the MaybeUninit array.
-        let result_slice = unsafe {
-            // SAFETY: We are converting a pointer from MaybeUninit<T> to T.
-            // This is safe because we will fully initialize every element before reading.
-            std::slice::from_raw_parts_mut(result.as_mut_ptr() as *mut T, N)
-        };
-
-        let start_page = from / PAGE_SIZE;
-        let end_page = (from + N - 1) / PAGE_SIZE;
-
-        if start_page == end_page {
-            if let Some(page) = self.pages[start_page].as_ref() {
-                // Copy data from the page into result_slice.
-                let page_offset = from - start_page * PAGE_SIZE;
-                let src = &page[page_offset..page_offset + N];
-                result_slice.copy_from_slice(src);
-            } else {
-                // If no page available, fill with default values.
-                result_slice.fill(T::default());
-            }
-        } else {
-            debug_assert!(start_page + 1 == end_page);
-            let first_part = PAGE_SIZE - (from - start_page * PAGE_SIZE);
-            if let Some(page) = self.pages[start_page].as_ref() {
-                let page_offset = from - start_page * PAGE_SIZE;
-                let src = &page[page_offset..];
-                result_slice[..first_part].copy_from_slice(src);
-            } else {
-                result_slice[..first_part].fill(T::default());
-            }
-            if let Some(page) = self.pages[end_page].as_ref() {
-                let second_part = N - first_part;
-                let src = &page[0..second_part];
-                result_slice[first_part..].copy_from_slice(src);
-            } else {
-                result_slice[first_part..].fill(T::default());
-            }
-        }
-
-        // Step 4: Convert the fully initialized array of MaybeUninit<T> to [T; N].
-        // SAFETY: We have initialized every element of `result`.
-        unsafe {
-            // Transmute the array; at this point each element is initialized.
-            ptr::read(&result as *const _ as *const [T; N])
-        }
+        self.read_range_generic(from, N, result.as_mut_ptr() as *mut T);
+        // SAFETY: All elements have been initialized.
+        unsafe { ptr::read(&result as *const _ as *const [T; N]) }
     }
 
     #[inline(always)]
     pub fn set_range_array<const N: usize>(&mut self, from: usize, values: &[T; N]) -> [T; N] {
-        // Step 1: Create an uninitialized array for old values.
+        // Create an uninitialized array for old values.
         let mut result: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
-        let result_slice = unsafe {
-            // SAFETY: We will fully initialize `result_slice` before reading.
-            std::slice::from_raw_parts_mut(result.as_mut_ptr() as *mut T, N)
-        };
-
-        let start_page = from / PAGE_SIZE;
-        let end_page = (from + N - 1) / PAGE_SIZE;
-
-        if start_page == end_page {
-            // Ensure the page exists; if not, allocate and fill with defaults.
-            if self.pages[start_page].is_none() {
-                self.pages[start_page] = Some(vec![T::default(); PAGE_SIZE]);
-            }
-            let page = self.pages[start_page].as_mut().unwrap();
-            let page_offset = from - start_page * PAGE_SIZE;
-
-            // Copy old values from the page into result_slice.
-            result_slice.copy_from_slice(&page[page_offset..page_offset + N]);
-            // Write the new values from input into the page.
-            page[page_offset..page_offset + N].copy_from_slice(&values[..]);
-        } else {
-            debug_assert!(start_page + 1 == end_page);
-            let first_part = PAGE_SIZE - (from - start_page * PAGE_SIZE);
-
-            // Handle the first page.
-            if self.pages[start_page].is_none() {
-                self.pages[start_page] = Some(vec![T::default(); PAGE_SIZE]);
-            }
-            let page0 = self.pages[start_page].as_mut().unwrap();
-            let page_offset = from - start_page * PAGE_SIZE;
-
-            result_slice[..first_part].copy_from_slice(&page0[page_offset..]);
-            page0[page_offset..].copy_from_slice(&values[..first_part]);
-
-            // Handle the second page.
-            let second_part = N - first_part;
-            if self.pages[end_page].is_none() {
-                self.pages[end_page] = Some(vec![T::default(); PAGE_SIZE]);
-            }
-            let page1 = self.pages[end_page].as_mut().unwrap();
-
-            result_slice[first_part..].copy_from_slice(&page1[0..second_part]);
-            page1[0..second_part].copy_from_slice(&values[first_part..]);
-        }
-
-        // Step 4: Convert the fully initialized result array to [T; N].
+        self.set_range_generic(from, N, values.as_ptr(), result.as_mut_ptr() as *mut T);
         unsafe { ptr::read(&result as *const _ as *const [T; N]) }
     }
 }

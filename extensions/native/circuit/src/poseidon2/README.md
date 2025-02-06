@@ -23,13 +23,13 @@ We are also given the siblings encountered in the path to the root with whom we 
 
 More precisely, we are given the following inputs. Assume that the original matrices `M_1, ..., M_n` are specified in decreasing order of height.
 
-| Name         | Abstract type                   | Type in eDSL                                                        | Meaning                                                                                         |
-|--------------|---------------------------------|---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
-| `dimensions` | `Vec<F>`                        | `Array<C, Usize<C::F>>`                                             | `dimensions[i]` is the height of `M_i`                                                          |
-| `opened_values` | `Vec<Vec<F>>` or `Vec<Vec<EF>>` | `Array<C, Array<C, Felt<C::F>>>` or `Array<C, Array<C, Ext<C::F>>>` | `opened_values[i]` is row `floor(index * dimensions[i]/h_max)` of `M_i`                         |
-| `siblings` | `Vec<[F; CHUNK]`                | `Array<C, Array<C, Felt<C::F>>>` | The siblings with which we must apply Poseidon2 compression, in the order in which this is done |
-| `index_bits` | `Vec<bit>`                      | `Array<C, Var<C::N>>` | The bits of `index` described above |
-| `commit` | `[F; CHUNK]`                    | `Array<C, Felt<C::F>>` | The commitment we are verifying |
+| Name            | Abstract type                   | Type in eDSL                                                        | Meaning                                                                                                                                                                  |
+|-----------------|---------------------------------|---------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `dimensions`    | `Vec<F>`                        | `Array<C, Usize<C::F>>`                                             | `dimensions[i]` is the height of `M_i`                                                                                                                                   |
+| `opened_values` | `Vec<Vec<F>>` or `Vec<Vec<EF>>` | `Array<C, Array<C, Felt<C::F>>>` or `Array<C, Array<C, Ext<C::F>>>` | `opened_values[i]` is row `floor(index * dimensions[i]/h_max)` of `M_i`                                                                                                  |
+| `proof_id`      | `Vec<[F; CHUNK]`                | `Var<C::N>`                                                         | The siblings with which we must apply Poseidon2 compression, in the order in which this is done. It's only read once so we hint it directly instead of read from memory. |
+| `index_bits`    | `Vec<bit>`                      | `Array<C, Var<C::N>>`                                               | The bits of `index` described above                                                                                                                                      |
+| `commit`        | `[F; CHUNK]`                    | `Array<C, Felt<C::F>>`                                              | The commitment we are verifying                                                                                                                                          |
 
 A `VERIFY_BATCH` instruction does the following:
 - It maintains a node `node : [F; CHUNK]` in the Merkle tree.

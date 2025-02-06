@@ -1,8 +1,11 @@
-use std::cmp::min;
+use std::{
+    cmp::min,
+    sync::{Arc, Mutex},
+};
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
-    VirtualMachine,
+    Streams, VirtualMachine,
 };
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
 use openvm_native_compiler::{
@@ -152,11 +155,13 @@ fn test<const N: usize>(cases: [Case; N]) {
     let address_space = AS::Native as usize;
 
     let mut tester = VmChipTestBuilder::default();
+    let streams = Arc::new(Mutex::new(Streams::default()));
     let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
         tester.system_port(),
         tester.offline_memory_mutex_arc(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
+        streams.clone(),
     );
 
     let mut rng = create_seeded_rng();
@@ -165,6 +170,7 @@ fn test<const N: usize>(cases: [Case; N]) {
         opened_element_size,
     } in cases
     {
+        let mut streams = streams.lock().unwrap();
         let instance =
             random_instance(&mut rng, row_lengths, opened_element_size, |left, right| {
                 let concatenated =
@@ -186,20 +192,19 @@ fn test<const N: usize>(cases: [Case; N]) {
         let dim_register = gen_pointer(&mut rng, 1);
         let opened_register = gen_pointer(&mut rng, 1);
         let opened_length_register = gen_pointer(&mut rng, 1);
-        let sibling_register = gen_pointer(&mut rng, 1);
+        let proof_id = gen_pointer(&mut rng, 1);
         let index_register = gen_pointer(&mut rng, 1);
         let commit_register = gen_pointer(&mut rng, 1);
 
         let dim_base_pointer = gen_pointer(&mut rng, 1);
         let opened_base_pointer = gen_pointer(&mut rng, 2);
-        let sibling_base_pointer = gen_pointer(&mut rng, 1);
         let index_base_pointer = gen_pointer(&mut rng, 1);
         let commit_pointer = gen_pointer(&mut rng, 1);
 
         tester.write_usize(address_space, dim_register, [dim_base_pointer]);
         tester.write_usize(address_space, opened_register, [opened_base_pointer]);
         tester.write_usize(address_space, opened_length_register, [opened.len()]);
-        tester.write_usize(address_space, sibling_register, [sibling_base_pointer]);
+        tester.write_usize(address_space, proof_id, [streams.hint_space.len()]);
         tester.write_usize(address_space, index_register, [index_base_pointer]);
         tester.write_usize(address_space, commit_register, [commit_pointer]);
 
@@ -217,15 +222,10 @@ fn test<const N: usize>(cases: [Case; N]) {
                 tester.write_cell(address_space, row_pointer + j, opened_value);
             }
         }
-        for (i, &sibling) in proof.iter().enumerate() {
-            let row_pointer = gen_pointer(&mut rng, 1);
-            tester.write_usize(
-                address_space,
-                sibling_base_pointer + (2 * i),
-                [row_pointer, CHUNK],
-            );
-            tester.write(address_space, row_pointer, sibling);
-        }
+        streams
+            .hint_space
+            .push(proof.iter().flatten().copied().collect());
+        drop(streams);
         for (i, &bit) in root_is_on_right.iter().enumerate() {
             tester.write_cell(address_space, index_base_pointer + i, F::from_bool(bit));
         }
@@ -242,7 +242,7 @@ fn test<const N: usize>(cases: [Case; N]) {
                     dim_register,
                     opened_register,
                     opened_length_register,
-                    sibling_register,
+                    proof_id,
                     index_register,
                     commit_register,
                     opened_element_size_inv,
@@ -385,11 +385,13 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
     let elem_range = || 1..=100;
 
     let mut tester = VmChipTestBuilder::default();
+    let streams = Arc::new(Mutex::new(Streams::default()));
     let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
         tester.system_port(),
         tester.offline_memory_mutex_arc(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
+        streams.clone(),
     );
 
     let mut rng = create_seeded_rng();

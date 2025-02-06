@@ -1,28 +1,27 @@
-use openvm_native_compiler::ir::{Builder, Witness};
-use openvm_stark_sdk::p3_bn254_fr::Bn254Fr;
+use openvm_native_compiler::{
+    ir::{Builder, Witness, WitnessRef},
+    prelude::*,
+};
 
 use super::types::BatchOpeningVariable;
 use crate::{
     config::outer::{
-        OuterBatchOpening, OuterCommitPhaseStep, OuterConfig, OuterFriProof, OuterQueryProof,
+        OuterBatchOpening, OuterCommitPhaseStep, OuterConfig, OuterDigest, OuterFriProof,
+        OuterQueryProof,
     },
-    digest::DigestVal,
     fri::types::{FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable},
+    vars::HintSlice,
     witness::{VectorWitnessable, Witnessable},
 };
 
 type C = OuterConfig;
-
-fn to_digest_val_vec(v: &[[Bn254Fr; 1]]) -> Vec<DigestVal<C>> {
-    v.iter().map(|x| DigestVal::N(x.to_vec())).collect()
-}
 
 impl Witnessable<C> for OuterCommitPhaseStep {
     type WitnessVariable = FriCommitPhaseProofStepVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
         let sibling_value = self.sibling_value.read(builder);
-        let opening_proof = to_digest_val_vec(&self.opening_proof).read(builder);
+        let opening_proof = read_opening_proof(builder, &self.opening_proof);
         Self::WitnessVariable {
             sibling_value,
             opening_proof,
@@ -31,7 +30,7 @@ impl Witnessable<C> for OuterCommitPhaseStep {
 
     fn write(&self, witness: &mut Witness<OuterConfig>) {
         self.sibling_value.write(witness);
-        to_digest_val_vec(&self.opening_proof).write(witness);
+        write_opening_proof(witness, &self.opening_proof);
     }
 }
 
@@ -86,7 +85,7 @@ impl Witnessable<C> for OuterBatchOpening {
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
         let opened_values = self.opened_values.read(builder);
-        let opening_proof = to_digest_val_vec(&self.opening_proof).read(builder);
+        let opening_proof = read_opening_proof(builder, &self.opening_proof);
         Self::WitnessVariable {
             opened_values,
             opening_proof,
@@ -95,9 +94,24 @@ impl Witnessable<C> for OuterBatchOpening {
 
     fn write(&self, witness: &mut Witness<OuterConfig>) {
         self.opened_values.write(witness);
-        to_digest_val_vec(&self.opening_proof).write(witness);
+        write_opening_proof(witness, &self.opening_proof);
     }
 }
 
 impl VectorWitnessable<C> for OuterBatchOpening {}
 impl VectorWitnessable<C> for Vec<OuterBatchOpening> {}
+
+fn read_opening_proof(builder: &mut Builder<C>, opening_proof: &[OuterDigest]) -> HintSlice<C> {
+    let opening_proof: Vec<WitnessRef> = opening_proof
+        .iter()
+        .flatten()
+        .map(|x| x.read(builder).into())
+        .collect();
+    let length = Usize::from(opening_proof.len());
+    let id = builder.witness_load(opening_proof);
+    HintSlice { length, id }
+}
+fn write_opening_proof(witness: &mut Witness<OuterConfig>, opening_proof: &[OuterDigest]) {
+    let opening_proof: Vec<_> = opening_proof.iter().flat_map(|op| op.to_vec()).collect();
+    opening_proof.write(witness);
+}
