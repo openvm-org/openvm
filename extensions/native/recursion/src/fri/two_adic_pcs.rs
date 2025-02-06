@@ -128,8 +128,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let batch_commit = round.batch_commit;
                 let mats = round.mats;
                 let RoundContext {
-                    ov_buff,
-                    perm_ov_buff,
+                    ov_ptrs: ov_buff,
+                    perm_ov_ptrs: perm_ov_buff,
                     batch_dims,
                     mat_alpha_pows,
                     log_batch_max_height,
@@ -384,9 +384,9 @@ fn get_max_matrix_width<C: Config>(
 #[derive(DslVariable, Clone)]
 struct RoundContext<C: Config> {
     /// Opened values buffer.
-    ov_buff: Array<C, Array<C, Felt<C::F>>>,
+    ov_ptrs: Array<C, Array<C, Felt<C::F>>>,
     /// Permuted opened values buffer.
-    perm_ov_buff: Array<C, Array<C, Felt<C::F>>>,
+    perm_ov_ptrs: Array<C, Array<C, Felt<C::F>>>,
     /// Permuted matrix dimensions.
     batch_dims: Array<C, DimensionsVariable<C>>,
     /// Alpha pows for each matrix.
@@ -437,8 +437,8 @@ fn compute_rounds_context<C: Config>(
             }
         };
 
-        let ov_buff: Array<C, Array<C, Felt<C::F>>> = builder.array(round.mats.len());
-        let perm_ov_buff: Array<C, Array<C, Felt<C::F>>> = builder.array(round.mats.len());
+        let ov_ptrs: Array<C, Array<C, Felt<C::F>>> = builder.array(round.mats.len());
+        let perm_ov_ptrs: Array<C, Array<C, Felt<C::F>>> = builder.array(round.mats.len());
         let batch_dims: Array<C, DimensionsVariable<C>> = builder.array(round.mats.len());
         let mat_alpha_pows: Array<C, Ext<_, _>> = builder.array(round.mats.len());
         let log_batch_max_height: Usize<_> = {
@@ -448,32 +448,29 @@ fn compute_rounds_context<C: Config>(
             builder.eval(domain.log_n + RVar::from(log_blowup))
         };
 
-        builder
-            .range(0, round.mats.len())
-            .for_each(|i_vec, builder| {
-                let i = i_vec[0];
-                let mat = builder.get(&round.mats, i);
-                let local = builder.get(&mat.values, 0);
-                let buff = builder.array(local.len());
-                let width = buff.len();
-                builder.set_value(&ov_buff, i, buff);
+        iter_zip!(builder, round.mats, ov_ptrs, mat_alpha_pows).for_each(|ptr_vec, builder| {
+            let mat = builder.iter_ptr_get(&round.mats, ptr_vec[0]);
+            let local = builder.get(&mat.values, 0);
+            let buff = builder.array(local.len());
+            let width = buff.len();
+            builder.iter_ptr_set(&ov_ptrs, ptr_vec[1], buff);
 
-                if !builder.flags.static_only {
-                    let width = width.get_var();
-                    // This is dynamic only so safe to cast.
-                    let width_f = builder.unsafe_cast_var_to_felt(width);
-                    let bits = builder.num2bits_f(width_f, MAX_LOG_WIDTH as u32);
-                    let mat_alpha_pow: Ext<_, _> = builder.eval(C::EF::ONE.cons());
-                    for i in 0..MAX_LOG_WIDTH {
-                        let bit = builder.get(&bits, i);
-                        builder.if_eq(bit, RVar::one()).then(|builder| {
-                            let to_mul = builder.get(&pow_of_alpha, i);
-                            builder.assign(&mat_alpha_pow, mat_alpha_pow * to_mul);
-                        });
-                    }
-                    builder.set_value(&mat_alpha_pows, i, mat_alpha_pow);
+            if !builder.flags.static_only {
+                let width = width.get_var();
+                // This is dynamic only so safe to cast.
+                let width_f = builder.unsafe_cast_var_to_felt(width);
+                let bits = builder.num2bits_f(width_f, MAX_LOG_WIDTH as u32);
+                let mat_alpha_pow: Ext<_, _> = builder.eval(C::EF::ONE.cons());
+                for i in 0..MAX_LOG_WIDTH {
+                    let bit = builder.get(&bits, i);
+                    builder.if_eq(bit, RVar::one()).then(|builder| {
+                        let to_mul = builder.get(&pow_of_alpha, i);
+                        builder.assign(&mat_alpha_pow, mat_alpha_pow * to_mul);
+                    });
                 }
-            });
+                builder.set_value(&mat_alpha_pows, ptr_vec[2], mat_alpha_pow);
+            }
+        });
         builder
             .range(0, round.mats.len())
             .for_each(|i_vec, builder| {
@@ -486,16 +483,16 @@ fn compute_rounds_context<C: Config>(
                     height: builder.eval(domain.size() * RVar::from(1 << log_blowup)),
                 };
                 builder.set_value(&batch_dims, i, dim);
-                let buff = builder.get(&ov_buff, perm_i);
+                let buff = builder.get(&ov_ptrs, perm_i);
                 // Note both `ov_buff` and `perm_ov_buff` point to the same memory.
-                builder.set_value(&perm_ov_buff, i, buff);
+                builder.set_value(&perm_ov_ptrs, i, buff);
             });
         builder.iter_ptr_set(
             &ret,
             ptr_vec[1],
             RoundContext {
-                ov_buff,
-                perm_ov_buff,
+                ov_ptrs,
+                perm_ov_ptrs,
                 batch_dims,
                 mat_alpha_pows,
                 log_batch_max_height,
