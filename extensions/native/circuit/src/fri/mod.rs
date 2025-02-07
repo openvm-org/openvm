@@ -1,6 +1,7 @@
 use core::ops::Deref;
 use std::{
     borrow::{Borrow, BorrowMut},
+    collections::HashMap,
     mem::offset_of,
     sync::{Arc, Mutex},
 };
@@ -80,6 +81,9 @@ struct Instruction2Cols<T> {
     // is_first = 0 means the second instruction row.
     is_first: T,
 
+    length_ptr: T,
+    length_aux: MemoryReadAuxCols<T>,
+
     alpha_ptr: T,
     alpha_aux: MemoryReadAuxCols<T>,
 
@@ -88,12 +92,8 @@ struct Instruction2Cols<T> {
 
     hint_id_ptr: T,
 
-    hint_offset_ptr: T,
-
     ood_point_idx_ptr: T,
     ood_point_idx_aux: MemoryReadAuxCols<T>,
-
-    length_aux: MemoryReadAuxCols<T>,
 }
 const INS_2_WIDTH: usize = Instruction2Cols::<u8>::width();
 const_assert_eq!(INS_2_WIDTH, 25);
@@ -337,10 +337,10 @@ impl FriReducedOpeningAir {
                 [
                     local.a_ptr_ptr.into(),
                     local.b_ptr_ptr.into(),
+                    next.length_ptr.into(),
                     next.alpha_ptr.into(),
                     next.result_ptr.into(),
                     next.hint_id_ptr.into(),
-                    next.hint_offset_ptr.into(),
                     next.ood_point_idx_ptr.into(),
                 ],
                 ExecutionState::new(local.pc, local.prefix.general.timestamp),
@@ -359,10 +359,10 @@ impl FriReducedOpeningAir {
                 &next.alpha_aux,
             )
             .eval(builder, multiplicity.clone());
-        // Read length. Assuming `b_ptr_ptr + 1` is the length of `b`.
+        // Read length.
         self.memory_bridge
             .read(
-                MemoryAddress::new(native_as.clone(), local.b_ptr_ptr + AB::F::ONE),
+                MemoryAddress::new(native_as.clone(), next.length_ptr),
                 [length],
                 start_timestamp + AB::Expr::ONE,
                 &next.length_aux,
@@ -487,6 +487,7 @@ pub struct FriReducedOpeningChip<F: Field> {
     height: usize,
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     streams: Arc<Mutex<Streams<F>>>,
+    hint_offsets: HashMap<usize, usize>,
 }
 impl<F: PrimeField32> FriReducedOpeningChip<F> {
     pub fn new(
@@ -506,6 +507,7 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
             height: 0,
             offline_memory,
             streams,
+            hint_offsets: HashMap::default(),
         }
     }
 }
@@ -519,22 +521,17 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         let &Instruction {
             a: a_ptr_ptr,
             b: b_ptr_ptr,
-            c: result_ptr,
+            c: length_ptr,
             d: alpha_ptr,
-            e: hint_id_ptr,
-            f: hint_offset_ptr,
+            e: result_ptr,
+            f: hint_id_ptr,
             g: ood_point_idx_ptr,
             ..
         } = instruction;
 
         let addr_space = F::from_canonical_u32(AS::Native as u32);
         let alpha_read = memory.read(addr_space, alpha_ptr);
-        // Assumption: b_ptr_ptr + 1 is the length of b.
-        let b_ptr_ptr_u32 = b_ptr_ptr.as_canonical_u32();
-        // A bit hacky; assumes len was pushed onto stack after pointer, and leverages stack organization
-        // of eDSL `Var`s.
-        let len_ptr = b_ptr_ptr_u32 - 7 + 6 * (b_ptr_ptr_u32 % 2);
-        let length_read = memory.read_cell(addr_space, F::from_canonical_u32(len_ptr));
+        let length_read = memory.read_cell(addr_space, length_ptr);
         let a_ptr_read = memory.read_cell(addr_space, a_ptr_ptr);
         let b_ptr_read = memory.read_cell(addr_space, b_ptr_ptr);
         let ood_point_idx_read = memory.read_cell(addr_space, ood_point_idx_ptr);
@@ -542,8 +539,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
 
         let hint_id_f = memory.unsafe_read_cell(addr_space, hint_id_ptr);
         let hint_id = hint_id_f.as_canonical_u32() as usize;
-        let hint_offset_f = memory.unsafe_read_cell(addr_space, hint_offset_ptr);
-        let hint_offset = hint_offset_f.as_canonical_u32() as usize;
+        let hint_offset = self.hint_offsets.get(&hint_id).copied().unwrap_or(0);
 
         let alpha = alpha_read.1;
         let length = length_read.1.as_canonical_u32() as usize;
@@ -574,6 +570,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             b_reads.push(b_read);
         }
         drop(streams);
+        if ood_point_idx == 0 {
+            self.hint_offsets.insert(hint_id, hint_offset + length);
+        }
 
         for (a_rw, b_read) in a_rws.iter().rev().zip_eq(b_reads.iter().rev()) {
             let a = a_rw.1;
@@ -624,10 +623,10 @@ fn record_to_rows<F: PrimeField32>(
     let Instruction {
         a: a_ptr_ptr,
         b: b_ptr_ptr,
-        c: result_ptr,
+        c: length_ptr,
         d: alpha_ptr,
-        e: hint_id_ptr,
-        f: hint_offset_ptr,
+        e: result_ptr,
+        f: hint_id_ptr,
         g: ood_point_idx_ptr,
         ..
     } = record.instruction;
@@ -689,7 +688,12 @@ fn record_to_rows<F: PrimeField32>(
             },
             // Generate write aux columns no matter `a` is read or written. When `a` is written,
             // `prev_data` is not constrained.
-            a_aux: aux_cols_factory.make_write_aux_cols(a_rw),
+            a_aux: if a_rw.prev_data_slice().is_some() {
+                aux_cols_factory.make_write_aux_cols(a_rw)
+            } else {
+                let read_aux = aux_cols_factory.make_read_aux_cols(a_rw);
+                MemoryWriteAuxCols::from_base(read_aux.get_base(), [F::ZERO])
+            },
             b,
             b_aux: aux_cols_factory.make_read_aux_cols(b_read),
         };
@@ -738,15 +742,15 @@ fn record_to_rows<F: PrimeField32>(
                 timestamp: record.start_timestamp,
             },
             is_first: F::ZERO,
+            length_ptr,
+            length_aux,
             alpha_ptr,
             alpha_aux,
             result_ptr,
             result_aux,
             hint_id_ptr,
-            hint_offset_ptr,
             ood_point_idx_ptr,
             ood_point_idx_aux,
-            length_aux,
         };
     }
 }

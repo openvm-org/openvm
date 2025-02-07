@@ -74,6 +74,10 @@ impl<F: PrimeField32> MemoryReadAuxCols<F> {
             },
         }
     }
+
+    pub fn get_base(self) -> MemoryBaseAuxCols<F> {
+        self.base
+    }
 }
 
 #[repr(C)]

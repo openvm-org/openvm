@@ -75,10 +75,12 @@ pub fn verify_two_adic_pcs<C: Config>(
 
     let log_max_height =
         builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(log_blowup));
+    // tag_exp is a shared buffer.
+    let tag_exp: Array<C, Felt<C::F>> = builder.array(log_max_height);
+    let w = config.get_two_adic_generator(builder, log_max_height);
+    let max_gen_pow = config.get_two_adic_generator(builder, 1);
 
-    builder.cycle_tracker_start("pre-compute-alpha-pows");
-    // Only used in dynamic mode.
-    // let round_alpha_pows = compute_round_alpha_pows(builder, rounds.clone(), alpha);
+    builder.cycle_tracker_start("pre-compute-rounds-context");
     let rounds_context = compute_rounds_context(builder, &rounds, log_blowup, alpha);
     // Only used in static mode.
     let alpha_pows = if builder.flags.static_only {
@@ -94,7 +96,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     } else {
         vec![]
     };
-    builder.cycle_tracker_end("pre-compute-alpha-pows");
+    builder.cycle_tracker_end("pre-compute-rounds-context");
 
     iter_zip!(builder, proof.query_proofs).for_each(|ptr_vec, builder| {
         let query_proof = builder.iter_ptr_get(&proof.query_proofs, ptr_vec[0]);
@@ -140,35 +142,38 @@ pub fn verify_two_adic_pcs<C: Config>(
                 // **ATTENTION**: always check shape of user inputs.
                 builder.assert_eq::<Usize<_>>(ov_ptrs.len(), mats.len());
 
+                // Pre-compute tag_exp
                 builder.cycle_tracker_start("cache-generator-powers");
-                // truncate index_bits to log_max_height
-                let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
+                {
+                    // truncate index_bits to log_max_height
+                    let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
 
-                // b = index_bits
-                // w = generator of order 2^log_max_height
-                // we first compute `w ** (b[0] * 2^(log_max_height - 1) + ... + b[log_max_height - 1])` using a square-and-multiply algorithm.
-                let w = config.get_two_adic_generator(builder, log_max_height);
-                let res = builder.exp_bits_big_endian(w, &index_bits_truncated);
+                    // b = index_bits
+                    // w = generator of order 2^log_max_height
+                    // we first compute `w ** (b[0] * 2^(log_max_height - 1) + ... + b[log_max_height - 1])` using a square-and-multiply algorithm.
+                    let res = builder.exp_bits_big_endian(w, &index_bits_truncated);
 
-                // we now compute:
-                // tag_exp[log_max_height - i] = g * w ** (b[log_max_height - i] * 2^(log_max_height - 1) + ... + b[log_max_height - 1] * 2^(log_max_height - i))
-                // using a square-and-divide algorithm.
-                // g * res is tag_exp[0]
-                // `tag_exp` is used below as a rotated evaluation point in a coset of the trace domain.
-                let tag_exp: Array<C, Felt<C::F>> = builder.array(log_max_height);
-                let one_var: Felt<C::F> = builder.eval(C::F::ONE);
-                let max_gen_pow = config.get_two_adic_generator(builder, 1);
-                iter_zip!(builder, index_bits_truncated, tag_exp).for_each(|ptr_vec, builder| {
-                    builder.iter_ptr_set(&tag_exp, ptr_vec[1], g * res);
+                    // we now compute:
+                    // tag_exp[log_max_height - i] = g * w ** (b[log_max_height - i] * 2^(log_max_height - 1) + ... + b[log_max_height - 1] * 2^(log_max_height - i))
+                    // using a square-and-divide algorithm.
+                    // g * res is tag_exp[0]
+                    // `tag_exp` is used below as a rotated evaluation point in a coset of the trace domain.
+                    let one_var: Felt<C::F> = builder.eval(C::F::ONE);
+                    iter_zip!(builder, index_bits_truncated, tag_exp).for_each(
+                        |ptr_vec, builder| {
+                            builder.iter_ptr_set(&tag_exp, ptr_vec[1], g * res);
 
-                    let bit = builder.iter_ptr_get(&index_bits_truncated, ptr_vec[0]);
-                    let div = builder.select_f(bit, max_gen_pow, one_var);
-                    builder.assign(&res, res / div);
-                    builder.assign(&res, res * res);
-                });
+                            let bit = builder.iter_ptr_get(&index_bits_truncated, ptr_vec[0]);
+                            let div = builder.select_f(bit, max_gen_pow, one_var);
+                            builder.assign(&res, res / div);
+                            builder.assign(&res, res * res);
+                        },
+                    );
+                };
                 builder.cycle_tracker_end("cache-generator-powers");
 
-                let hint_offset: Usize<_> = builder.eval(C::N::ZERO);
+                // For static to track the offset in the hint space.
+                let mut hint_offset = 0;
                 builder.cycle_tracker_start("compute-reduced-opening");
                 iter_zip!(builder, ov_ptrs, mats, mat_alpha_pows).for_each(|ptr_vec, builder| {
                     let mat_opening = builder.iter_ptr_get(&ov_ptrs, ptr_vec[0]);
@@ -205,7 +210,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let width = ps_at_z.len().value();
                             let mat_opening_vals = {
                                 let witness_refs = builder.get_witness_refs(hint_id.clone());
-                                let start = hint_offset.value();
+                                let start = hint_offset;
                                 witness_refs[start..start + width].to_vec()
                             };
                             for (i, v) in mat_opening_vals.into_iter().enumerate() {
@@ -223,7 +228,6 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let mat_ro = builder.fri_single_reduced_opening_eval(
                                 alpha,
                                 hint_id.get_var(),
-                                hint_offset.get_var(),
                                 ood_point_idx.get_var(),
                                 &mat_opening,
                                 &ps_at_z,
@@ -234,7 +238,9 @@ pub fn verify_two_adic_pcs<C: Config>(
                         builder.assign(&ood_point_idx, ood_point_idx.clone() + RVar::one());
                         builder.cycle_tracker_end("single-reduced-opening-eval");
                     });
-                    builder.assign(&hint_offset, hint_offset.clone() + mat_opening.len());
+                    if builder.flags.static_only {
+                        hint_offset += mat_opening.len().value();
+                    }
                     builder.set_value(&ro, log_height, cur_ro);
                     builder.set_value(&alpha_pow, log_height, cur_alpha_pow);
                 });
@@ -470,7 +476,7 @@ fn compute_rounds_context<C: Config>(
                         builder.assign(&mat_alpha_pow, mat_alpha_pow * to_mul);
                     });
                 }
-                builder.set_value(&mat_alpha_pows, ptr_vec[2], mat_alpha_pow);
+                builder.iter_ptr_set(&mat_alpha_pows, ptr_vec[2], mat_alpha_pow);
             }
         });
         builder

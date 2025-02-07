@@ -367,16 +367,16 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::FriReducedOpening(
                 a,
                 b,
-                res,
+                length,
                 alpha,
+                res,
                 hint_id,
-                hint_offset,
                 ood_point_idx,
             ) => {
                 write!(
                     f,
                     "fri_mat_opening ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
-                    a, b, res, alpha, hint_id, hint_offset, ood_point_idx
+                    a, b, length, alpha, res, hint_id, ood_point_idx
                 )
             }
             AsmInstruction::VerifyBatchFelt(dim, opened, opened_length, sibling, index, commit) => {
