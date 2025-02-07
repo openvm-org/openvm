@@ -79,6 +79,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     let tag_exp: Array<C, Felt<C::F>> = builder.array(log_max_height);
     let w = config.get_two_adic_generator(builder, log_max_height);
     let max_gen_pow = config.get_two_adic_generator(builder, 1);
+    let one_var: Felt<C::F> = builder.eval(C::F::ONE);
 
     builder.cycle_tracker_start("pre-compute-rounds-context");
     let rounds_context = compute_rounds_context(builder, &rounds, log_blowup, alpha);
@@ -121,6 +122,34 @@ pub fn verify_two_adic_pcs<C: Config>(
         }
         // **ATTENTION**: always check shape of user inputs.
         builder.assert_eq::<Usize<_>>(query_proof.input_proof.len(), rounds.len());
+
+        // Pre-compute tag_exp
+        builder.cycle_tracker_start("cache-generator-powers");
+        {
+            // truncate index_bits to log_max_height
+            let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
+
+            // b = index_bits
+            // w = generator of order 2^log_max_height
+            // we first compute `w ** (b[0] * 2^(log_max_height - 1) + ... + b[log_max_height - 1])` using a square-and-multiply algorithm.
+            let res = builder.exp_bits_big_endian(w, &index_bits_truncated);
+
+            // we now compute:
+            // tag_exp[log_max_height - i] = g * w ** (b[log_max_height - i] * 2^(log_max_height - 1) + ... + b[log_max_height - 1] * 2^(log_max_height - i))
+            // using a square-and-divide algorithm.
+            // g * res is tag_exp[0]
+            // `tag_exp` is used below as a rotated evaluation point in a coset of the trace domain.
+            iter_zip!(builder, index_bits_truncated, tag_exp).for_each(|ptr_vec, builder| {
+                builder.iter_ptr_set(&tag_exp, ptr_vec[1], g * res);
+
+                let bit = builder.iter_ptr_get(&index_bits_truncated, ptr_vec[0]);
+                let div = builder.select_f(bit, max_gen_pow, one_var);
+                builder.assign(&res, res / div);
+                builder.assign(&res, res * res);
+            });
+        };
+        builder.cycle_tracker_end("cache-generator-powers");
+
         iter_zip!(builder, query_proof.input_proof, rounds, rounds_context).for_each(
             |ptr_vec, builder| {
                 let batch_opening = builder.iter_ptr_get(&query_proof.input_proof, ptr_vec[0]);
@@ -137,41 +166,10 @@ pub fn verify_two_adic_pcs<C: Config>(
                     log_batch_max_height,
                 } = round_context;
 
-                // `verify_challenges` requires `opened_values` to be in the original order.
-                let opened_values = batch_opening.opened_values;
                 // **ATTENTION**: always check shape of user inputs.
                 builder.assert_eq::<Usize<_>>(ov_ptrs.len(), mats.len());
 
-                // Pre-compute tag_exp
-                builder.cycle_tracker_start("cache-generator-powers");
-                {
-                    // truncate index_bits to log_max_height
-                    let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
-
-                    // b = index_bits
-                    // w = generator of order 2^log_max_height
-                    // we first compute `w ** (b[0] * 2^(log_max_height - 1) + ... + b[log_max_height - 1])` using a square-and-multiply algorithm.
-                    let res = builder.exp_bits_big_endian(w, &index_bits_truncated);
-
-                    // we now compute:
-                    // tag_exp[log_max_height - i] = g * w ** (b[log_max_height - i] * 2^(log_max_height - 1) + ... + b[log_max_height - 1] * 2^(log_max_height - i))
-                    // using a square-and-divide algorithm.
-                    // g * res is tag_exp[0]
-                    // `tag_exp` is used below as a rotated evaluation point in a coset of the trace domain.
-                    let one_var: Felt<C::F> = builder.eval(C::F::ONE);
-                    iter_zip!(builder, index_bits_truncated, tag_exp).for_each(
-                        |ptr_vec, builder| {
-                            builder.iter_ptr_set(&tag_exp, ptr_vec[1], g * res);
-
-                            let bit = builder.iter_ptr_get(&index_bits_truncated, ptr_vec[0]);
-                            let div = builder.select_f(bit, max_gen_pow, one_var);
-                            builder.assign(&res, res / div);
-                            builder.assign(&res, res * res);
-                        },
-                    );
-                };
-                builder.cycle_tracker_end("cache-generator-powers");
-
+                let hint_id = batch_opening.opened_values.id.clone();
                 // For static to track the offset in the hint space.
                 let mut hint_offset = 0;
                 builder.cycle_tracker_start("compute-reduced-opening");
@@ -185,8 +183,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     };
                     let mat_points = mat.points;
                     let mat_values = mat.values;
-                    let domain = mat.domain;
-                    let log2_domain_size = domain.log_n;
+                    let log2_domain_size = mat.domain.log_n;
                     let log_height = builder.eval_expr(log2_domain_size + RVar::from(log_blowup));
 
                     let cur_ro = builder.get(&ro, log_height);
@@ -197,7 +194,6 @@ pub fn verify_two_adic_pcs<C: Config>(
                     let x = builder.get(&tag_exp, height_idx);
                     builder.cycle_tracker_end("exp-reverse-bits-len");
 
-                    let hint_id = opened_values.id.clone();
                     let ood_point_idx: Usize<C::N> = builder.eval(C::N::ZERO);
                     iter_zip!(builder, mat_points, mat_values).for_each(|ptr_vec, builder| {
                         let z: Ext<C::F, C::EF> = builder.iter_ptr_get(&mat_points, ptr_vec[0]);
@@ -208,13 +204,15 @@ pub fn verify_two_adic_pcs<C: Config>(
                         if builder.flags.static_only {
                             let n: Ext<C::F, C::EF> = builder.constant(C::EF::ZERO);
                             let width = ps_at_z.len().value();
-                            let mat_opening_vals = {
-                                let witness_refs = builder.get_witness_refs(hint_id.clone());
-                                let start = hint_offset;
-                                witness_refs[start..start + width].to_vec()
-                            };
-                            for (i, v) in mat_opening_vals.into_iter().enumerate() {
-                                builder.set_value(&mat_opening, i, v.into());
+                            if ood_point_idx.value() == 0 {
+                                let mat_opening_vals = {
+                                    let witness_refs = builder.get_witness_refs(hint_id.clone());
+                                    let start = hint_offset;
+                                    witness_refs[start..start + width].to_vec()
+                                };
+                                for (i, v) in mat_opening_vals.into_iter().enumerate() {
+                                    builder.set_value(&mat_opening, i, v.into());
+                                }
                             }
                             for (t, alpha_pow) in alpha_pows.iter().take(width).enumerate() {
                                 let p_at_x = builder.get(&mat_opening, t);
