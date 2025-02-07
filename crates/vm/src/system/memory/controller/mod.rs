@@ -4,7 +4,8 @@ use std::{
     iter,
     marker::PhantomData,
     mem,
-    sync::{Arc, Mutex},
+    sync::{mpsc::channel, Arc, Mutex},
+    thread,
 };
 
 use getset::Getters;
@@ -454,50 +455,80 @@ impl<F: PrimeField32> MemoryController<F> {
     fn replay_access_log(&mut self) {
         let log = mem::take(&mut self.memory.log);
 
-        let mut offline_memory = self.offline_memory.lock().unwrap();
+        let Self {
+            offline_memory,
+            access_adapters,
+            interface_chip,
+            ..
+        } = self;
+
+        let mut offline_memory = offline_memory.lock().unwrap();
         offline_memory.set_log_capacity(log.len());
 
-        for entry in log {
-            Self::replay_access(
-                entry,
-                &mut offline_memory,
-                &mut self.interface_chip,
-                &mut self.access_adapters,
-            );
+        struct TouchRangeMsg {
+            address_space: u32,
+            pointer: u32,
+            len: u32,
         }
-    }
 
-    fn replay_access(
-        entry: MemoryLogEntry<F>,
-        offline_memory: &mut OfflineMemory<F>,
-        interface_chip: &mut MemoryInterface<F>,
-        adapter_records: &mut AccessAdapterInventory<F>,
-    ) {
-        match entry {
-            MemoryLogEntry::Read {
-                address_space,
-                pointer,
-                len,
-            } => {
-                if address_space != 0 {
-                    interface_chip.touch_range(address_space, pointer, len as u32);
+        let (tx, rx) = channel::<TouchRangeMsg>();
+
+        thread::scope(|scope| {
+            // Spawn the background worker thread.
+            scope.spawn(|| {
+                // Process messages until the channel is closed.
+                for msg in rx {
+                    match msg {
+                        TouchRangeMsg {
+                            address_space,
+                            pointer,
+                            len,
+                        } => {
+                            interface_chip.touch_range(address_space, pointer, len);
+                        }
+                    }
                 }
-                offline_memory.read(address_space, pointer, len, adapter_records);
+            });
+
+            for entry in log {
+                match entry {
+                    MemoryLogEntry::Read {
+                        address_space,
+                        pointer,
+                        len,
+                    } => {
+                        if address_space != 0 {
+                            tx.send(TouchRangeMsg {
+                                address_space,
+                                pointer,
+                                len: len as u32,
+                            })
+                            .unwrap();
+                        }
+                        offline_memory.read(address_space, pointer, len, access_adapters);
+                    }
+                    MemoryLogEntry::Write {
+                        address_space,
+                        pointer,
+                        data,
+                    } => {
+                        if address_space != 0 {
+                            tx.send(TouchRangeMsg {
+                                address_space,
+                                pointer,
+                                len: data.len() as u32,
+                            })
+                            .unwrap();
+                        }
+                        offline_memory.write(address_space, pointer, data, access_adapters);
+                    }
+                    MemoryLogEntry::IncrementTimestampBy(amount) => {
+                        offline_memory.increment_timestamp_by(amount);
+                    }
+                };
             }
-            MemoryLogEntry::Write {
-                address_space,
-                pointer,
-                data,
-            } => {
-                if address_space != 0 {
-                    interface_chip.touch_range(address_space, pointer, data.len() as u32);
-                }
-                offline_memory.write(address_space, pointer, data, adapter_records);
-            }
-            MemoryLogEntry::IncrementTimestampBy(amount) => {
-                offline_memory.increment_timestamp_by(amount);
-            }
-        };
+            drop(tx);
+        });
     }
 
     /// Returns the final memory state if persistent.
