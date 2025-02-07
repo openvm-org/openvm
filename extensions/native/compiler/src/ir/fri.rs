@@ -5,7 +5,7 @@ impl<C: Config> Builder<C> {
         &mut self,
         alpha: Ext<C::F, C::EF>,
         hint_id: Var<C::N>,
-        ood_point_idx: Var<C::N>,
+        is_init: Var<C::N>,
         at_x_array: &Array<C, Felt<C::F>>,
         at_z_array: &Array<C, Ext<C::F, C::EF>>,
     ) -> Ext<C::F, C::EF> {
@@ -13,7 +13,7 @@ impl<C: Config> Builder<C> {
         self.operations.push(crate::ir::DslIr::FriReducedOpening(
             alpha,
             hint_id,
-            ood_point_idx,
+            is_init,
             at_x_array.clone(),
             at_z_array.clone(),
             result,

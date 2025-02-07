@@ -96,8 +96,8 @@ struct Instruction2Cols<T> {
 
     hint_id_ptr: T,
 
-    ood_point_idx_ptr: T,
-    ood_point_idx_aux: MemoryReadAuxCols<T>,
+    is_init_ptr: T,
+    is_init_aux: MemoryReadAuxCols<T>,
 
     /// A trick to reduce 1 degree. When `is_ins_row = 1`, `write_a_x_is_first = write_a * is_first`.
     /// This field must align in both Instruction1Cols and Instruction2Cols.
@@ -229,6 +229,7 @@ impl FriReducedOpeningAir {
         // a_ptr/b_ptr/length/result
         let ptr_reads = AB::F::from_canonical_usize(INSTRUCTION_READS);
         let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
+        builder.assert_bool(local_data.write_a);
         // read a when write_a is 0
         self.memory_bridge
             .read(
@@ -359,7 +360,7 @@ impl FriReducedOpeningAir {
                     next.alpha_ptr.into(),
                     next.result_ptr.into(),
                     next.hint_id_ptr.into(),
-                    next.ood_point_idx_ptr.into(),
+                    next.is_init_ptr.into(),
                 ],
                 ExecutionState::new(local.pc, local.prefix.general.timestamp),
                 ExecutionState::<AB::Expr>::new(
@@ -404,13 +405,13 @@ impl FriReducedOpeningAir {
                 &local.b_ptr_aux,
             )
             .eval(builder, multiplicity.clone());
-        // Read odd_point_idx, it should be a boolean.
+        // Read write_a = 1 - is_init, it should be a boolean.
         self.memory_bridge
             .read(
-                MemoryAddress::new(native_as.clone(), next.ood_point_idx_ptr),
+                MemoryAddress::new(native_as.clone(), next.is_init_ptr),
                 [AB::Expr::ONE - local_data.write_a],
                 start_timestamp + AB::Expr::from_canonical_u32(4),
-                &next.ood_point_idx_aux,
+                &next.is_init_aux,
             )
             .eval(builder, multiplicity.clone());
         self.memory_bridge
@@ -485,7 +486,7 @@ pub struct FriReducedOpeningRecord<F: Field> {
     pub alpha_read: RecordId,
     pub length_read: RecordId,
     pub a_ptr_read: RecordId,
-    pub ood_point_idx_read: RecordId,
+    pub is_init_read: RecordId,
     pub b_ptr_read: RecordId,
     pub a_rws: Vec<RecordId>,
     pub b_reads: Vec<RecordId>,
@@ -543,7 +544,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             d: alpha_ptr,
             e: result_ptr,
             f: hint_id_ptr,
-            g: ood_point_idx_ptr,
+            g: is_init_ptr,
             ..
         } = instruction;
 
@@ -552,8 +553,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         let length_read = memory.read_cell(addr_space, length_ptr);
         let a_ptr_read = memory.read_cell(addr_space, a_ptr_ptr);
         let b_ptr_read = memory.read_cell(addr_space, b_ptr_ptr);
-        let ood_point_idx_read = memory.read_cell(addr_space, ood_point_idx_ptr);
-        let ood_point_idx = ood_point_idx_read.1.as_canonical_u32();
+        let is_init_read = memory.read_cell(addr_space, is_init_ptr);
+        let is_init = is_init_read.1.as_canonical_u32();
 
         let hint_id_f = memory.unsafe_read_cell(addr_space, hint_id_ptr);
         let hint_id = hint_id_f.as_canonical_u32() as usize;
@@ -568,7 +569,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         let mut b_reads = Vec::with_capacity(length);
         let mut result = [F::ZERO; EXT_DEG];
 
-        let data = if ood_point_idx == 0 {
+        let data = if is_init == 0 {
             self.hint_offsets.insert(hint_id, hint_offset + length);
             let streams = self.streams.lock().unwrap();
             streams.hint_space[hint_id][hint_offset..hint_offset + length].to_vec()
@@ -578,7 +579,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         // Rust lint is stupid :(
         #[allow(clippy::needless_range_loop)]
         for i in 0..length {
-            let a_rw = if ood_point_idx == 0 {
+            let a_rw = if is_init == 0 {
                 let (record_id, _) = memory.write_cell(
                     addr_space,
                     a_ptr + F::from_canonical_usize(i),
@@ -614,7 +615,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             alpha_read: alpha_read.0,
             length_read: length_read.0,
             a_ptr_read: a_ptr_read.0,
-            ood_point_idx_read: ood_point_idx_read.0,
+            is_init_read: is_init_read.0,
             b_ptr_read: b_ptr_read.0,
             a_rws: a_rws.into_iter().map(|r| r.0).collect(),
             b_reads: b_reads.into_iter().map(|r| r.0).collect(),
@@ -648,7 +649,7 @@ fn record_to_rows<F: PrimeField32>(
         d: alpha_ptr,
         e: result_ptr,
         f: hint_id_ptr,
-        g: ood_point_idx_ptr,
+        g: is_init_ptr,
         ..
     } = record.instruction;
 
@@ -656,9 +657,9 @@ fn record_to_rows<F: PrimeField32>(
     let alpha_read = memory.record_by_id(record.alpha_read);
     let a_ptr_read = memory.record_by_id(record.a_ptr_read);
     let b_ptr_read = memory.record_by_id(record.b_ptr_read);
-    let ood_point_idx_read = memory.record_by_id(record.ood_point_idx_read);
-    let ood_point_idx = ood_point_idx_read.data_at(0);
-    let write_a = F::ONE - ood_point_idx;
+    let is_init_read = memory.record_by_id(record.is_init_read);
+    let is_init = is_init_read.data_at(0);
+    let write_a = F::ONE - is_init;
 
     let length = length_read.data_at(0).as_canonical_u32() as usize;
     let alpha: [F; EXT_DEG] = alpha_read.data_slice().try_into().unwrap();
@@ -671,7 +672,7 @@ fn record_to_rows<F: PrimeField32>(
     let length_aux = aux_cols_factory.make_read_aux_cols(length_read);
     let a_ptr_aux = aux_cols_factory.make_read_aux_cols(a_ptr_read);
     let b_ptr_aux = aux_cols_factory.make_read_aux_cols(b_ptr_read);
-    let ood_point_idx_aux = aux_cols_factory.make_read_aux_cols(ood_point_idx_read);
+    let is_init_aux = aux_cols_factory.make_read_aux_cols(is_init_read);
 
     let result_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(record.result_write));
 
@@ -771,8 +772,8 @@ fn record_to_rows<F: PrimeField32>(
             result_ptr,
             result_aux,
             hint_id_ptr,
-            ood_point_idx_ptr,
-            ood_point_idx_aux,
+            is_init_ptr,
+            is_init_aux,
             write_a_x_is_first: F::ZERO,
         };
     }

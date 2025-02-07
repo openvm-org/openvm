@@ -194,7 +194,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     let x = builder.get(&tag_exp, height_idx);
                     builder.cycle_tracker_end("exp-reverse-bits-len");
 
-                    let ood_point_idx: Usize<C::N> = builder.eval(C::N::ZERO);
+                    let is_init: Usize<C::N> = builder.eval(C::N::ZERO);
                     iter_zip!(builder, mat_points, mat_values).for_each(|ptr_vec, builder| {
                         let z: Ext<C::F, C::EF> = builder.iter_ptr_get(&mat_points, ptr_vec[0]);
                         let ps_at_z = builder.iter_ptr_get(&mat_values, ptr_vec[1]);
@@ -204,7 +204,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                         if builder.flags.static_only {
                             let n: Ext<C::F, C::EF> = builder.constant(C::EF::ZERO);
                             let width = ps_at_z.len().value();
-                            if ood_point_idx.value() == 0 {
+                            if is_init.value() == 0 {
                                 let mat_opening_vals = {
                                     let witness_refs = builder.get_witness_refs(hint_id.clone());
                                     let start = hint_offset;
@@ -226,14 +226,15 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let mat_ro = builder.fri_single_reduced_opening_eval(
                                 alpha,
                                 hint_id.get_var(),
-                                ood_point_idx.get_var(),
+                                is_init.get_var(),
                                 &mat_opening,
                                 &ps_at_z,
                             );
                             builder.assign(&cur_ro, cur_ro + (mat_ro * cur_alpha_pow / (z - x)));
                             builder.assign(&cur_alpha_pow, cur_alpha_pow * mat_alpha_pow);
                         }
-                        builder.assign(&ood_point_idx, ood_point_idx.clone() + RVar::one());
+                        // The buffer `mat_opening` has now been written to, so we set `is_init` to 1.
+                        builder.assign(&is_init, C::N::ONE);
                         builder.cycle_tracker_end("single-reduced-opening-eval");
                     });
                     if builder.flags.static_only {

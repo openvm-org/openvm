@@ -81,7 +81,7 @@ fn fri_mat_opening_air_test() {
         let result_pointer = gen_pointer(&mut rng, 4);
         let a_pointer = gen_pointer(&mut rng, 1);
         let b_pointer = gen_pointer(&mut rng, 4);
-        let ood_point_idx_ptr = gen_pointer(&mut rng, 1);
+        let is_init_ptr = gen_pointer(&mut rng, 1);
 
         let address_space = 4usize;
 
@@ -106,14 +106,14 @@ fn fri_mat_opening_air_test() {
             b_pointer_pointer,
             BabyBear::from_canonical_usize(b_pointer),
         );
-        let ood_point_idx = rng.gen_range(0..2);
+        let is_init = rng.gen_range(0..2);
         tester.write_cell(
             address_space,
-            ood_point_idx_ptr,
-            BabyBear::from_canonical_u32(ood_point_idx),
+            is_init_ptr,
+            BabyBear::from_canonical_u32(is_init),
         );
 
-        if ood_point_idx == 0 {
+        if is_init == 0 {
             streams.lock().unwrap().hint_space[0].extend_from_slice(&a);
         } else {
             for (i, ai) in a.iter().enumerate() {
@@ -135,7 +135,7 @@ fn fri_mat_opening_air_test() {
                     alpha_pointer,
                     result_pointer,
                     0, // hint id
-                    ood_point_idx_ptr,
+                    is_init_ptr,
                 ],
             ),
         );

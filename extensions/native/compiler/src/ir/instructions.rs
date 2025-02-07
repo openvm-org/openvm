@@ -256,7 +256,7 @@ pub enum DslIr<C: Config> {
     CircuitFeltReduce(Felt<C::F>),
     /// Halo2 only. Reduce an Ext so later computation becomes cheaper.
     CircuitExtReduce(Ext<C::F, C::EF>),
-    /// FriReducedOpening(alpha, hint_id, ood_point_idx, at_x_array, at_z_array, result)
+    /// FriReducedOpening(alpha, hint_id, is_init, at_x_array, at_z_array, result)
     FriReducedOpening(
         Ext<C::F, C::EF>,
         Var<C::N>,

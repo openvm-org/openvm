@@ -556,7 +556,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::FriReducedOpening(
                     alpha,
                     hint_id,
-                    ood_point_idx,
+                    is_init,
                     at_x_array,
                     at_z_array,
                     result,
@@ -569,7 +569,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                             alpha.fp(),
                             result.fp(),
                             hint_id.fp(),
-                            ood_point_idx.fp(),
+                            is_init.fp(),
                         ),
                         debug_info,
                     );

@@ -470,7 +470,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Native,
             AS::Native,
         )],
-        AsmInstruction::FriReducedOpening(a, b, length, alpha, res, hint_id, ood_point_idx) => vec![Instruction {
+        AsmInstruction::FriReducedOpening(a, b, length, alpha, res, hint_id, is_init) => vec![Instruction {
             opcode: options.opcode_with_offset(FriOpcode::FRI_REDUCED_OPENING),
             a: i32_f(a),
             b: i32_f(b),
@@ -478,7 +478,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             d: i32_f(alpha),
             e: i32_f(res),
             f: i32_f(hint_id),
-            g: i32_f(ood_point_idx),
+            g: i32_f(is_init),
         }],
         AsmInstruction::VerifyBatchFelt(dim, opened, opened_length, sibling, index, commit) => vec![Instruction {
             opcode: options.opcode_with_offset(VerifyBatchOpcode::VERIFY_BATCH),
