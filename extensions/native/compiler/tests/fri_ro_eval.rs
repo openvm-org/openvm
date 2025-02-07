@@ -55,7 +55,14 @@ fn test_single_reduced_opening_eval() {
     let expected_result = cur_ro;
 
     builder.assign(&cur_alpha_pow, initial_alpha_pow);
-    let single_ro_eval_res = builder.fri_single_reduced_opening_eval(alpha, &mat_opening, &ps_at_z);
+    let single_ro_eval_res = builder.fri_single_reduced_opening_eval(
+        alpha,
+        // hint id
+        // hint offset
+        // ood_point_idx
+        // at_x_array
+        &ps_at_z,
+    );
     let actual_result: Ext<_, _> = builder.uninit();
     builder.assign(&actual_result, single_ro_eval_res * cur_alpha_pow / (z - x));
 

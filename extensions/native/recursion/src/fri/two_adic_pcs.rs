@@ -128,8 +128,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let batch_commit = round.batch_commit;
                 let mats = round.mats;
                 let RoundContext {
-                    ov_ptrs: ov_buff,
-                    perm_ov_ptrs: perm_ov_buff,
+                    ov_ptrs,
+                    perm_ov_ptrs,
                     batch_dims,
                     mat_alpha_pows,
                     log_batch_max_height,
@@ -138,7 +138,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 // `verify_challenges` requires `opened_values` to be in the original order.
                 let opened_values = batch_opening.opened_values;
                 // **ATTENTION**: always check shape of user inputs.
-                builder.assert_eq::<Usize<_>>(ov_buff.len(), mats.len());
+                builder.assert_eq::<Usize<_>>(ov_ptrs.len(), mats.len());
 
                 builder.cycle_tracker_start("cache-generator-powers");
                 // truncate index_bits to log_max_height
@@ -170,8 +170,8 @@ pub fn verify_two_adic_pcs<C: Config>(
 
                 let hint_offset: Usize<_> = builder.eval(C::N::ZERO);
                 builder.cycle_tracker_start("compute-reduced-opening");
-                iter_zip!(builder, ov_buff, mats, mat_alpha_pows).for_each(|ptr_vec, builder| {
-                    let mat_opening = builder.iter_ptr_get(&ov_buff, ptr_vec[0]);
+                iter_zip!(builder, ov_ptrs, mats, mat_alpha_pows).for_each(|ptr_vec, builder| {
+                    let mat_opening = builder.iter_ptr_get(&ov_ptrs, ptr_vec[0]);
                     let mat = builder.iter_ptr_get(&mats, ptr_vec[1]);
                     let mat_alpha_pow = if builder.flags.static_only {
                         builder.uninit()
@@ -249,7 +249,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     &batch_commit,
                     batch_dims,
                     index_bits_shifted_v1,
-                    &NestedOpenedValues::Felt(perm_ov_buff),
+                    &NestedOpenedValues::Felt(perm_ov_ptrs),
                     &batch_opening.opening_proof,
                 );
                 builder.cycle_tracker_end("verify-batch");
@@ -451,9 +451,11 @@ fn compute_rounds_context<C: Config>(
         iter_zip!(builder, round.mats, ov_ptrs, mat_alpha_pows).for_each(|ptr_vec, builder| {
             let mat = builder.iter_ptr_get(&round.mats, ptr_vec[0]);
             let local = builder.get(&mat.values, 0);
-            let buff = builder.array(local.len());
-            let width = buff.len();
-            builder.iter_ptr_set(&ov_ptrs, ptr_vec[1], buff);
+            // We allocate the underlying buffer for the current `ov_ptr` here. On allocation, it is uninit, and
+            // will be written to on the first call of `fri_single_reduced_opening_eval` for this `ov_ptr`.
+            let buf = builder.array(local.len());
+            let width = buf.len();
+            builder.iter_ptr_set(&ov_ptrs, ptr_vec[1], buf);
 
             if !builder.flags.static_only {
                 let width = width.get_var();
@@ -483,9 +485,9 @@ fn compute_rounds_context<C: Config>(
                     height: builder.eval(domain.size() * RVar::from(1 << log_blowup)),
                 };
                 builder.set_value(&batch_dims, i, dim);
-                let buff = builder.get(&ov_ptrs, perm_i);
-                // Note both `ov_buff` and `perm_ov_buff` point to the same memory.
-                builder.set_value(&perm_ov_ptrs, i, buff);
+                let perm_ov_ptr = builder.get(&ov_ptrs, perm_i);
+                // Note both `ov_ptrs` and `perm_ov_ptrs` point to the same memory.
+                builder.set_value(&perm_ov_ptrs, i, perm_ov_ptr);
             });
         builder.iter_ptr_set(
             &ret,
