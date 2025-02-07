@@ -473,7 +473,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::FriReducedOpening(a, b, length, alpha, res, hint_id, ood_point_idx) => vec![Instruction {
             opcode: options.opcode_with_offset(FriOpcode::FRI_REDUCED_OPENING),
             a: i32_f(a),
-            b: i32_f(b),    
+            b: i32_f(b),
             c: i32_f(length),
             d: i32_f(alpha),
             e: i32_f(res),

@@ -330,7 +330,10 @@ impl FriReducedOpeningAir {
         let mut is_ins_row = builder.when(local.prefix.general.is_ins_row);
         // These constraints of `is_ins_row` apply to both Instruction1Cols and Instruction2Cols. It's a trick to reduce 1 degree.
         // `write_a` refers to a random field in Instruction2Cols but `write_a_x_is_first` must be 0 because `is_first` is 0.
-        is_ins_row.assert_eq(local.write_a_x_is_first, local.prefix.data.write_a * local.prefix.a_or_is_first);
+        is_ins_row.assert_eq(
+            local.write_a_x_is_first,
+            local.prefix.data.write_a * local.prefix.a_or_is_first,
+        );
         is_ins_row.assert_bool(local.write_a_x_is_first);
         let mut is_first_ins = is_ins_row.when(local.prefix.a_or_is_first);
         // ATTENTION: degree of is_first_ins is 2

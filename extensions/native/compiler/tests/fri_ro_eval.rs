@@ -64,13 +64,8 @@ fn test_single_reduced_opening_eval() {
 
     let ps_at_x = builder.dyn_array(n);
     let ood_point_idx = builder.constant(F::ZERO);
-    let single_ro_eval_res = builder.fri_single_reduced_opening_eval(
-        alpha,
-        hint_id,
-        ood_point_idx,
-        &ps_at_x,
-        &ps_at_z,
-    );
+    let single_ro_eval_res =
+        builder.fri_single_reduced_opening_eval(alpha, hint_id, ood_point_idx, &ps_at_x, &ps_at_z);
 
     let actual_result: Ext<_, _> = builder.uninit();
     builder.assign(&actual_result, single_ro_eval_res * cur_alpha_pow / (z - x));

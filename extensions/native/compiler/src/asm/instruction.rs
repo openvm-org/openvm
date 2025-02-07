@@ -364,15 +364,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::CycleTrackerEnd() => {
                 write!(f, "cycle_tracker_end")
             }
-            AsmInstruction::FriReducedOpening(
-                a,
-                b,
-                length,
-                alpha,
-                res,
-                hint_id,
-                ood_point_idx,
-            ) => {
+            AsmInstruction::FriReducedOpening(a, b, length, alpha, res, hint_id, ood_point_idx) => {
                 write!(
                     f,
                     "fri_mat_opening ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
