@@ -3,7 +3,6 @@ use std::{
     collections::BTreeMap,
     iter,
     marker::PhantomData,
-    mem,
     sync::{Arc, Mutex},
 };
 
@@ -452,52 +451,152 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     fn replay_access_log(&mut self) {
-        let log = mem::take(&mut self.memory.log);
-
-        let mut offline_memory = self.offline_memory.lock().unwrap();
-        offline_memory.set_log_capacity(log.len());
-
-        for entry in log {
-            Self::replay_access(
-                entry,
-                &mut offline_memory,
-                &mut self.interface_chip,
-                &mut self.access_adapters,
-            );
+        // Define the messages for the offline memory update thread.
+        // This side needs full ownership (including expensive data).
+        enum OfflineMemoryMsg<F> {
+            Read {
+                address_space: u32,
+                pointer: u32,
+                len: usize,
+            },
+            Write {
+                address_space: u32,
+                pointer: u32,
+                data: Vec<F>,
+            },
+            IncrementTimestampBy(u32),
         }
-    }
 
-    fn replay_access(
-        entry: MemoryLogEntry<F>,
-        offline_memory: &mut OfflineMemory<F>,
-        interface_chip: &mut MemoryInterface<F>,
-        adapter_records: &mut AccessAdapterInventory<F>,
-    ) {
-        match entry {
-            MemoryLogEntry::Read {
-                address_space,
-                pointer,
-                len,
-            } => {
-                if address_space != 0 {
-                    interface_chip.touch_range(address_space, pointer, len as u32);
+        // Define the messages for the interface chip update thread.
+        // Note that for writes, we only need the length.
+        struct InterfaceChipMsg {
+            address_space: u32,
+            pointer: u32,
+            len: u32,
+        }
+
+        // Take the log out of self.
+        let log = std::mem::take(&mut self.memory.log);
+        self.offline_memory
+            .lock()
+            .unwrap()
+            .set_log_capacity(log.len());
+
+        let (offline_tx, offline_rx) = std::sync::mpsc::channel::<OfflineMemoryMsg<F>>();
+        let (chip_tx, chip_rx) = std::sync::mpsc::channel::<InterfaceChipMsg>();
+
+        std::thread::scope(|s| {
+            // Dispatcher thread: splits the log into two message streams.
+            s.spawn(move || {
+                for entry in log {
+                    match entry {
+                        MemoryLogEntry::Read {
+                            address_space,
+                            pointer,
+                            len,
+                        } => {
+                            if address_space != 0 {
+                                chip_tx
+                                    .send(InterfaceChipMsg {
+                                        address_space,
+                                        pointer,
+                                        len: len as u32,
+                                    })
+                                    .unwrap();
+                            }
+                            offline_tx
+                                .send(OfflineMemoryMsg::Read {
+                                    address_space,
+                                    pointer,
+                                    len,
+                                })
+                                .unwrap();
+                        }
+                        MemoryLogEntry::Write {
+                            address_space,
+                            pointer,
+                            data,
+                        } => {
+                            if address_space != 0 {
+                                chip_tx
+                                    .send(InterfaceChipMsg {
+                                        address_space,
+                                        pointer,
+                                        len: data.len() as u32,
+                                    })
+                                    .unwrap();
+                            }
+                            offline_tx
+                                .send(OfflineMemoryMsg::Write {
+                                    address_space,
+                                    pointer,
+                                    data,
+                                })
+                                .unwrap();
+                        }
+                        MemoryLogEntry::IncrementTimestampBy(amount) => {
+                            offline_tx
+                                .send(OfflineMemoryMsg::IncrementTimestampBy(amount))
+                                .unwrap();
+                            // Assume interface chip doesn't need this update.
+                        }
+                    }
                 }
-                offline_memory.read(address_space, pointer, len, adapter_records);
-            }
-            MemoryLogEntry::Write {
-                address_space,
-                pointer,
-                data,
-            } => {
-                if address_space != 0 {
-                    interface_chip.touch_range(address_space, pointer, data.len() as u32);
+                // Dropping the senders will close the channels.
+                drop(offline_tx);
+                drop(chip_tx);
+            });
+
+            // Borrow the fields from self that we need in the threads.
+            let Self {
+                offline_memory,
+                access_adapters,
+                interface_chip,
+                ..
+            } = self;
+
+            // Offline memory update thread.
+            s.spawn(move || {
+                let mut offline_memory = offline_memory.lock().unwrap();
+
+                while let Ok(msg) = offline_rx.recv() {
+                    match msg {
+                        OfflineMemoryMsg::Read {
+                            address_space,
+                            pointer,
+                            len,
+                        } => {
+                            offline_memory.read(address_space, pointer, len, access_adapters);
+                        }
+                        OfflineMemoryMsg::Write {
+                            address_space,
+                            pointer,
+                            data,
+                        } => {
+                            offline_memory.write(address_space, pointer, data, access_adapters);
+                        }
+                        OfflineMemoryMsg::IncrementTimestampBy(amount) => {
+                            offline_memory.increment_timestamp_by(amount);
+                        }
+                    }
                 }
-                offline_memory.write(address_space, pointer, data, adapter_records);
-            }
-            MemoryLogEntry::IncrementTimestampBy(amount) => {
-                offline_memory.increment_timestamp_by(amount);
-            }
-        };
+            });
+
+            // Interface chip update thread.
+            s.spawn(move || {
+                while let Ok(msg) = chip_rx.recv() {
+                    match msg {
+                        InterfaceChipMsg {
+                            address_space,
+                            pointer,
+                            len,
+                        } => {
+                            interface_chip.touch_range(address_space, pointer, len);
+                        }
+                    }
+                }
+            });
+        });
     }
 
     /// Returns the final memory state if persistent.
