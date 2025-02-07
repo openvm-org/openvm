@@ -37,7 +37,7 @@ fn compute_fri_mat_opening<F: Field>(
 
 #[test]
 fn fri_mat_opening_air_test() {
-    let num_ops = 3; // non-power-of-2 to also test padding
+    let num_ops = 14; // non-power-of-2 to also test padding
     let elem_range = || 1..=100;
     let length_range = || 1..=49;
 
@@ -81,6 +81,7 @@ fn fri_mat_opening_air_test() {
         let result_pointer = gen_pointer(&mut rng, 4);
         let a_pointer = gen_pointer(&mut rng, 1);
         let b_pointer = gen_pointer(&mut rng, 4);
+        let ood_point_idx_ptr = gen_pointer(&mut rng, 1);
 
         let address_space = 4usize;
 
@@ -105,12 +106,23 @@ fn fri_mat_opening_air_test() {
             b_pointer_pointer,
             BabyBear::from_canonical_usize(b_pointer),
         );
-        for i in 0..length {
-            tester.write_cell(address_space, a_pointer + i, a[i]);
-            tester.write(address_space, b_pointer + (4 * i), b[i]);
-        }
+        let ood_point_idx = rng.gen_range(0..2);
+        tester.write_cell(
+            address_space,
+            ood_point_idx_ptr,
+            BabyBear::from_canonical_u32(ood_point_idx),
+        );
 
-        streams.lock().unwrap().hint_space[0].extend_from_slice(&a);
+        if ood_point_idx == 0 {
+            streams.lock().unwrap().hint_space[0].extend_from_slice(&a);
+        } else {
+            for (i, ai) in a.iter().enumerate() {
+                tester.write_cell(address_space, a_pointer + i, *ai);
+            }
+        }
+        for (i, bi) in b.iter().enumerate() {
+            tester.write(address_space, b_pointer + (4 * i), *bi);
+        }
 
         tester.execute(
             &mut chip,
@@ -123,11 +135,16 @@ fn fri_mat_opening_air_test() {
                     alpha_pointer,
                     result_pointer,
                     0, // hint id
-                    0, // ood_point_idx
+                    ood_point_idx_ptr,
                 ],
             ),
         );
         assert_eq!(result, tester.read(address_space, result_pointer));
+        // Check that `a` was populated.
+        for (i, ai) in a.iter().enumerate() {
+            let found = tester.read_cell(address_space, a_pointer + i);
+            assert_eq!(*ai, found);
+        }
     }
 
     let mut tester = tester.build().load(chip).finalize();

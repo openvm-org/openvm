@@ -72,6 +72,16 @@ fn test_single_reduced_opening_eval() {
 
     builder.assert_ext_eq(expected_result, actual_result);
 
+    // Check that `ps_at_x` were filled by chip.
+    builder.assert_var_eq(expected_mat_opening.len(), ps_at_x.len());
+    builder
+        .range(0, ps_at_x.len())
+        .for_each(|idx_vec, builder| {
+            let l = builder.get(&expected_mat_opening, idx_vec[0]);
+            let r = builder.get(&ps_at_x, idx_vec[0]);
+            builder.assert_felt_eq(l, r);
+        });
+
     builder.halt();
 
     let mut compiler = AsmCompiler::new(1);
