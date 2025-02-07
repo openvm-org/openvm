@@ -530,7 +530,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         let addr_space = F::from_canonical_u32(AS::Native as u32);
         let alpha_read = memory.read(addr_space, alpha_ptr);
         // Assumption: b_ptr_ptr + 1 is the length of b.
-        let length_read = memory.read_cell(addr_space, b_ptr_ptr + F::ONE);
+        let b_ptr_ptr_u32 = b_ptr_ptr.as_canonical_u32();
+        // A bit hacky; assumes len was pushed onto stack after pointer, and leverages stack organization
+        // of eDSL `Var`s.
+        let len_ptr = b_ptr_ptr_u32 - 7 + 6 * (b_ptr_ptr_u32 % 2);
+        let length_read = memory.read_cell(addr_space, F::from_canonical_u32(len_ptr));
         let a_ptr_read = memory.read_cell(addr_space, a_ptr_ptr);
         let b_ptr_read = memory.read_cell(addr_space, b_ptr_ptr);
         let ood_point_idx_read = memory.read_cell(addr_space, ood_point_idx_ptr);
@@ -553,12 +557,14 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         let streams = self.streams.lock().unwrap();
         for i in 0..length {
             let a_rw = if ood_point_idx == 0 {
-                memory.write_cell(
+                let data = streams.hint_space[hint_id][hint_offset + i];
+                let (record_id, _) = memory.write_cell(
                     addr_space,
                     a_ptr + F::from_canonical_usize(i),
                     // Values in the hint space are flattened. We use hint_offset to find the corresponding value.
-                    streams.hint_space[hint_id][hint_offset + i],
-                )
+                    data,
+                );
+                (record_id, data)
             } else {
                 memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i))
             };
@@ -569,8 +575,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         }
         drop(streams);
 
-        for (a_read, b_read) in a_rws.iter().rev().zip_eq(b_reads.iter().rev()) {
-            let a = a_read.1;
+        for (a_rw, b_read) in a_rws.iter().rev().zip_eq(b_reads.iter().rev()) {
+            let a = a_rw.1;
             let b = b_read.1;
             // result = result * alpha + (b - a)
             result = FieldExtension::add(

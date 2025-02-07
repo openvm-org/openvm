@@ -1,6 +1,10 @@
 use std::sync::{Arc, Mutex};
+
 use itertools::Itertools;
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, VmChipTestBuilder},
+    Streams,
+};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FriOpcode::FRI_REDUCED_OPENING;
 use openvm_stark_backend::{
@@ -10,7 +14,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
-use openvm_circuit::arch::Streams;
+
 use super::{super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningChip, EXT_DEG};
 use crate::OVERALL_WIDTH;
 
