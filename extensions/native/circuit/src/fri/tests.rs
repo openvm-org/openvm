@@ -43,7 +43,6 @@ fn fri_mat_opening_air_test() {
 
     let mut tester = VmChipTestBuilder::default();
 
-    // FIXME: prepare streams
     let streams = Arc::new(Mutex::new(Streams::default()));
     let mut chip = FriReducedOpeningChip::new(
         tester.execution_bus(),
@@ -62,6 +61,8 @@ fn fri_mat_opening_air_test() {
             })
         };
     }
+
+    streams.lock().unwrap().hint_space = vec![vec![]];
 
     for _ in 0..num_ops {
         let alpha = gen_ext!();
@@ -109,6 +110,8 @@ fn fri_mat_opening_air_test() {
             tester.write(address_space, b_pointer + (4 * i), b[i]);
         }
 
+        streams.lock().unwrap().hint_space[0].extend_from_slice(&a);
+
         tester.execute(
             &mut chip,
             &Instruction::from_usize(
@@ -116,10 +119,11 @@ fn fri_mat_opening_air_test() {
                 [
                     a_pointer_pointer,
                     b_pointer_pointer,
-                    result_pointer,
-                    address_space,
                     length_pointer,
                     alpha_pointer,
+                    result_pointer,
+                    0, // hint id
+                    0, // ood_point_idx
                 ],
             ),
         );
