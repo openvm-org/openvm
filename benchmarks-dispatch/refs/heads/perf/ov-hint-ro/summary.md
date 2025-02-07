@@ -1,0 +1,11 @@
+| group | app.proof_time_ms | app.cycles | app.cells_used | leaf.proof_time_ms | leaf.cycles | leaf.cells_used |
+| -- | -- | -- | -- | -- | -- | -- |
+| [verify_fibair](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/perf/ov-hint-ro/verify_fibair-9bcc52b10186e1c670dbcb07dd104f9d4b96ce60.md) |<span style='color: red'>(+484 [+32.4%])</span> 1,980 | <span style='color: green'>(-9299 [-5.0%])</span> 178,086 | <span style='color: green'>(-269615 [-2.8%])</span> 9,495,390 |- | - | - |
+| [fibonacci_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/perf/ov-hint-ro/fibonacci-9bcc52b10186e1c670dbcb07dd104f9d4b96ce60.md) |<span style='color: red'>(+4507 [+91.7%])</span> 9,421 |  1,500,095 |  51,484,646 |<span style='color: red'>(+882 [+14.8%])</span> 6,849 | <span style='color: green'>(-402866 [-33.2%])</span> 810,297 | <span style='color: green'>(-11575014 [-23.2%])</span> 38,340,233 |
+| [regex_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/perf/ov-hint-ro/regex-9bcc52b10186e1c670dbcb07dd104f9d4b96ce60.md) |<span style='color: red'>(+12838 [+90.0%])</span> 27,100 | <span style='color: red'>(+9688 [+0.5%])</span> 1,923,791 | <span style='color: red'>(+172388 [+0.1%])</span> 165,627,761 |<span style='color: green'>(-591 [-2.3%])</span> 25,361 | <span style='color: green'>(-1983641 [-44.6%])</span> 2,459,483 | <span style='color: green'>(-55118870 [-25.1%])</span> 164,301,290 |
+| [ecrecover_program](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/perf/ov-hint-ro/ecrecover-9bcc52b10186e1c670dbcb07dd104f9d4b96ce60.md) |<span style='color: red'>(+940 [+38.0%])</span> 3,416 | <span style='color: red'>(+4847 [+1.7%])</span> 289,414 | <span style='color: red'>(+154384 [+1.0%])</span> 15,210,107 |<span style='color: red'>(+1218 [+7.5%])</span> 17,443 | <span style='color: green'>(-1646223 [-47.2%])</span> 1,838,113 | <span style='color: green'>(-44884373 [-26.7%])</span> 123,397,428 |
+
+
+Commit: https://github.com/openvm-org/openvm/commit/9bcc52b10186e1c670dbcb07dd104f9d4b96ce60
+
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/13200174488)
