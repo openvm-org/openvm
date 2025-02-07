@@ -3,7 +3,6 @@ use std::{
     collections::BTreeMap,
     iter,
     marker::PhantomData,
-    mem,
     sync::{Arc, Mutex},
 };
 
@@ -19,7 +18,7 @@ use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
-    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
+    p3_maybe_rayon::prelude::*,
     p3_util::log2_strict_usize,
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
@@ -451,53 +450,64 @@ impl<F: PrimeField32> MemoryController<F> {
         self.memory.timestamp()
     }
 
-    fn replay_access_log(&mut self) {
-        let log = mem::take(&mut self.memory.log);
-
-        let mut offline_memory = self.offline_memory.lock().unwrap();
+    fn replay_access_log_for_offline_memory(
+        log: &[MemoryLogEntry<F>],
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+        adapter_records: &mut AccessAdapterInventory<F>,
+    ) {
+        let mut offline_memory = offline_memory.lock().unwrap();
         offline_memory.set_log_capacity(log.len());
 
         for entry in log {
-            Self::replay_access(
-                entry,
-                &mut offline_memory,
-                &mut self.interface_chip,
-                &mut self.access_adapters,
-            );
+            match entry {
+                MemoryLogEntry::Read {
+                    address_space,
+                    pointer,
+                    len,
+                } => {
+                    offline_memory.read(*address_space, *pointer, *len, adapter_records);
+                }
+                MemoryLogEntry::Write {
+                    address_space,
+                    pointer,
+                    data,
+                } => {
+                    offline_memory.write(*address_space, *pointer, data.to_vec(), adapter_records);
+                }
+                MemoryLogEntry::IncrementTimestampBy(amount) => {
+                    offline_memory.increment_timestamp_by(*amount);
+                }
+            }
         }
     }
 
-    fn replay_access(
-        entry: MemoryLogEntry<F>,
-        offline_memory: &mut OfflineMemory<F>,
+    fn replay_access_log_for_interface_chip(
+        log: &[MemoryLogEntry<F>],
         interface_chip: &mut MemoryInterface<F>,
-        adapter_records: &mut AccessAdapterInventory<F>,
     ) {
-        match entry {
-            MemoryLogEntry::Read {
-                address_space,
-                pointer,
-                len,
-            } => {
-                if address_space != 0 {
-                    interface_chip.touch_range(address_space, pointer, len as u32);
+        for entry in log {
+            match entry {
+                MemoryLogEntry::Read {
+                    address_space,
+                    pointer,
+                    len,
+                } => {
+                    if *address_space != 0 {
+                        interface_chip.touch_range(*address_space, *pointer, *len as u32);
+                    }
                 }
-                offline_memory.read(address_space, pointer, len, adapter_records);
-            }
-            MemoryLogEntry::Write {
-                address_space,
-                pointer,
-                data,
-            } => {
-                if address_space != 0 {
-                    interface_chip.touch_range(address_space, pointer, data.len() as u32);
+                MemoryLogEntry::Write {
+                    address_space,
+                    pointer,
+                    data,
+                } => {
+                    if *address_space != 0 {
+                        interface_chip.touch_range(*address_space, *pointer, data.len() as u32);
+                    }
                 }
-                offline_memory.write(address_space, pointer, data, adapter_records);
+                MemoryLogEntry::IncrementTimestampBy(_) => {}
             }
-            MemoryLogEntry::IncrementTimestampBy(amount) => {
-                offline_memory.increment_timestamp_by(amount);
-            }
-        };
+        }
     }
 
     /// Returns the final memory state if persistent.
@@ -505,13 +515,31 @@ impl<F: PrimeField32> MemoryController<F> {
         if self.final_state.is_some() {
             return;
         }
+        let Self {
+            memory,
+            offline_memory,
+            access_adapters,
+            interface_chip,
+            final_state,
+            ..
+        } = self;
 
-        self.replay_access_log();
-        let mut offline_memory = self.offline_memory.lock().unwrap();
+        join(
+            || {
+                Self::replay_access_log_for_offline_memory(
+                    &memory.log,
+                    offline_memory.clone(),
+                    access_adapters,
+                )
+            },
+            || Self::replay_access_log_for_interface_chip(&memory.log, interface_chip),
+        );
 
-        match &mut self.interface_chip {
+        let mut offline_memory = offline_memory.lock().unwrap();
+
+        match interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                let final_memory = offline_memory.finalize::<1>(&mut self.access_adapters);
+                let final_memory = offline_memory.finalize::<1>(access_adapters);
                 boundary_chip.finalize(final_memory);
                 self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
             }
@@ -521,7 +549,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 initial_memory,
             } => {
                 let hasher = hasher.unwrap();
-                let final_partition = offline_memory.finalize::<CHUNK>(&mut self.access_adapters);
+                let final_partition = offline_memory.finalize::<CHUNK>(access_adapters);
 
                 boundary_chip.finalize(initial_memory, &final_partition, hasher);
                 let final_memory_values = final_partition
@@ -534,7 +562,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     hasher,
                 );
                 merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
-                self.final_state = Some(FinalState::Persistent(PersistentFinalState {
+                *final_state = Some(FinalState::Persistent(PersistentFinalState {
                     final_memory: final_memory_values.clone(),
                 }));
             }
