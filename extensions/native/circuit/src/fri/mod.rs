@@ -568,17 +568,24 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         let mut b_reads = Vec::with_capacity(length);
         let mut result = [F::ZERO; EXT_DEG];
 
-        let streams = self.streams.lock().unwrap();
+        let data = if ood_point_idx == 0 {
+            self.hint_offsets.insert(hint_id, hint_offset + length);
+            let streams = self.streams.lock().unwrap();
+            streams.hint_space[hint_id][hint_offset..hint_offset + length].to_vec()
+        } else {
+            vec![]
+        };
+        // Rust lint is stupid :(
+        #[allow(clippy::needless_range_loop)]
         for i in 0..length {
             let a_rw = if ood_point_idx == 0 {
-                let data = streams.hint_space[hint_id][hint_offset + i];
                 let (record_id, _) = memory.write_cell(
                     addr_space,
                     a_ptr + F::from_canonical_usize(i),
                     // Values in the hint space are flattened. We use hint_offset to find the corresponding value.
-                    data,
+                    data[i],
                 );
-                (record_id, data)
+                (record_id, data[i])
             } else {
                 memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i))
             };
@@ -586,10 +593,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
                 memory.read::<EXT_DEG>(addr_space, b_ptr + F::from_canonical_usize(EXT_DEG * i));
             a_rws.push(a_rw);
             b_reads.push(b_read);
-        }
-        drop(streams);
-        if ood_point_idx == 0 {
-            self.hint_offsets.insert(hint_id, hint_offset + length);
         }
 
         for (a_rw, b_read) in a_rws.iter().rev().zip_eq(b_reads.iter().rev()) {
