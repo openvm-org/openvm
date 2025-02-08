@@ -114,10 +114,13 @@ pub fn verify_two_adic_pcs<C: Config>(
                 builder.set(&alpha_pow, j, C::EF::ONE.cons());
             }
         } else {
-            iter_zip!(builder, ro, alpha_pow).for_each(|ptr_vec, builder| {
-                builder.iter_ptr_set(&ro, ptr_vec[0], C::EF::ZERO.cons());
-                builder.iter_ptr_set(&alpha_pow, ptr_vec[1], C::EF::ONE.cons());
-            });
+            let zero_ef = builder.eval(C::EF::ZERO.cons());
+            let one_ef = builder.eval(C::EF::ONE.cons());
+            for j in 0..32 {
+                // Use set_value here to save a copy.
+                builder.set_value(&ro, j, zero_ef);
+                builder.set_value(&alpha_pow, j, one_ef);
+            }
         }
         // **ATTENTION**: always check shape of user inputs.
         builder.assert_eq::<Usize<_>>(query_proof.input_proof.len(), rounds.len());
