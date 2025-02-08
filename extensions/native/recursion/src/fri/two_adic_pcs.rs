@@ -99,12 +99,14 @@ pub fn verify_two_adic_pcs<C: Config>(
     };
     builder.cycle_tracker_end("pre-compute-rounds-context");
 
+    // Working variables for reduced opening, reset per query. Both arrays indexed by log_height.
+    let ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
+    let alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(32);
+
     iter_zip!(builder, proof.query_proofs).for_each(|ptr_vec, builder| {
         let query_proof = builder.iter_ptr_get(&proof.query_proofs, ptr_vec[0]);
         let index_bits = challenger.sample_bits(builder, log_max_height);
 
-        let ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
-        let alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(32);
         if builder.flags.static_only {
             for j in 0..32 {
                 // ATTENTION: don't use set_value here, Fixed will share the same variable.
@@ -112,13 +114,10 @@ pub fn verify_two_adic_pcs<C: Config>(
                 builder.set(&alpha_pow, j, C::EF::ONE.cons());
             }
         } else {
-            let zero_ef = builder.eval(C::EF::ZERO.cons());
-            let one_ef = builder.eval(C::EF::ONE.cons());
-            for j in 0..32 {
-                // Use set_value here to save a copy.
-                builder.set_value(&ro, j, zero_ef);
-                builder.set_value(&alpha_pow, j, one_ef);
-            }
+            iter_zip!(builder, ro, alpha_pow).for_each(|ptr_vec, builder| {
+                builder.iter_ptr_set(&ro, ptr_vec[0], C::EF::ZERO.cons());
+                builder.iter_ptr_set(&alpha_pow, ptr_vec[1], C::EF::ONE.cons());
+            });
         }
         // **ATTENTION**: always check shape of user inputs.
         builder.assert_eq::<Usize<_>>(query_proof.input_proof.len(), rounds.len());
