@@ -229,7 +229,9 @@ impl FriReducedOpeningAir {
         // a_ptr/b_ptr/length/result
         let ptr_reads = AB::F::from_canonical_usize(INSTRUCTION_READS);
         let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
-        builder.assert_bool(local_data.write_a);
+        // write_a itself could be anything on non-workload row, but on workload row, it must be boolean.
+        // write_a on last workflow row will be constrained to equal write_a on instruction1 row, implying the latter is boolean.
+        builder.when(multiplicity).assert_bool(local_data.write_a);
         // read a when write_a is 0
         self.memory_bridge
             .read(
