@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 use rustc_hash::FxHashSet;
 
 use crate::{
-    arch::hasher::HasherChip,
+    arch::hasher::Hasher,
     system::memory::{
         controller::dimensions::MemoryDimensions,
         merkle::{FinalState, MemoryMerkleChip, MemoryMerkleCols},
@@ -25,7 +25,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         &mut self,
         initial_tree: &MemoryNode<CHUNK, F>,
         final_memory: &Equipartition<F, CHUNK>,
-        hasher: &mut (impl HasherChip<CHUNK, F> + Send + Sync),
+        hasher: &mut (impl Hasher<CHUNK, F> + Send + Sync),
     ) {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
         // there needs to be a touched node with `height_section` = 0
@@ -131,7 +131,7 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
         initial_node: &MemoryNode<CHUNK, F>,
         as_label: u32,
         address_label: u32,
-        hasher: &(impl HasherChip<CHUNK, F> + Send + Sync),
+        hasher: &(impl Hasher<CHUNK, F> + Send + Sync),
     ) -> (MemoryNode<CHUNK, F>, Vec<MemoryMerkleCols<F, CHUNK>>) {
         if height == 0 {
             let address_space = as_label + self.memory_dimensions.as_offset;
