@@ -1,13 +1,16 @@
 use core::ops::Deref;
 use std::{
     borrow::{Borrow, BorrowMut},
+    collections::HashMap,
     mem::offset_of,
     sync::{Arc, Mutex},
 };
 
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
+    arch::{
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor, Streams,
+    },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -44,12 +47,12 @@ mod tests;
 struct WorkloadCols<T> {
     prefix: PrefixCols<T>,
 
-    a_aux: MemoryReadAuxCols<T>,
+    a_aux: MemoryWriteAuxCols<T, 1>,
     b: [T; EXT_DEG],
     b_aux: MemoryReadAuxCols<T>,
 }
 const WL_WIDTH: usize = WorkloadCols::<u8>::width();
-const_assert_eq!(WL_WIDTH, 25);
+const_assert_eq!(WL_WIDTH, 27);
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -63,9 +66,13 @@ struct Instruction1Cols<T> {
 
     b_ptr_ptr: T,
     b_ptr_aux: MemoryReadAuxCols<T>,
+
+    /// A trick to reduce 1 degree. When `is_ins_row = 1`, `write_a_x_is_first = write_a * is_first`.
+    /// This field must align in both Instruction1Cols and Instruction2Cols.
+    write_a_x_is_first: T,
 }
 const INS_1_WIDTH: usize = Instruction1Cols::<u8>::width();
-const_assert_eq!(INS_1_WIDTH, 24);
+const_assert_eq!(INS_1_WIDTH, 26);
 const_assert_eq!(
     offset_of!(WorkloadCols<u8>, prefix),
     offset_of!(Instruction1Cols<u8>, prefix)
@@ -78,17 +85,26 @@ struct Instruction2Cols<T> {
     // is_first = 0 means the second instruction row.
     is_first: T,
 
-    result_ptr: T,
-    result_aux: MemoryWriteAuxCols<T, EXT_DEG>,
-
     length_ptr: T,
     length_aux: MemoryReadAuxCols<T>,
 
     alpha_ptr: T,
     alpha_aux: MemoryReadAuxCols<T>,
+
+    result_ptr: T,
+    result_aux: MemoryWriteAuxCols<T, EXT_DEG>,
+
+    hint_id_ptr: T,
+
+    is_init_ptr: T,
+    is_init_aux: MemoryReadAuxCols<T>,
+
+    /// A trick to reduce 1 degree. When `is_ins_row = 1`, `write_a_x_is_first = write_a * is_first`.
+    /// This field must align in both Instruction1Cols and Instruction2Cols.
+    write_a_x_is_first: T,
 }
 const INS_2_WIDTH: usize = Instruction2Cols::<u8>::width();
-const_assert_eq!(INS_2_WIDTH, 20);
+const_assert_eq!(INS_2_WIDTH, 26);
 const_assert_eq!(
     offset_of!(WorkloadCols<u8>, prefix) + offset_of!(PrefixCols<u8>, general),
     offset_of!(Instruction2Cols<u8>, general)
@@ -97,12 +113,16 @@ const_assert_eq!(
     offset_of!(Instruction1Cols<u8>, prefix) + offset_of!(PrefixCols<u8>, a_or_is_first),
     offset_of!(Instruction2Cols<u8>, is_first)
 );
+const_assert_eq!(
+    offset_of!(Instruction1Cols<u8>, write_a_x_is_first),
+    offset_of!(Instruction2Cols<u8>, write_a_x_is_first)
+);
 
 const fn const_max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]
 }
 pub const OVERALL_WIDTH: usize = const_max(const_max(WL_WIDTH, INS_1_WIDTH), INS_2_WIDTH);
-const_assert_eq!(OVERALL_WIDTH, 25);
+const_assert_eq!(OVERALL_WIDTH, 27);
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -120,6 +140,7 @@ const_assert_eq!(GENERAL_WIDTH, 3);
 #[derive(Debug, AlignedBorrow)]
 struct DataCols<T> {
     a_ptr: T,
+    write_a: T,
     b_ptr: T,
     idx: T,
     result: [T; EXT_DEG],
@@ -127,7 +148,7 @@ struct DataCols<T> {
 }
 #[allow(dead_code)]
 const DATA_WIDTH: usize = DataCols::<u8>::width();
-const_assert_eq!(DATA_WIDTH, 11);
+const_assert_eq!(DATA_WIDTH, 12);
 
 /// Prefix of `WorkloadCols` and `Instruction1Cols`
 #[repr(C)]
@@ -140,7 +161,9 @@ struct PrefixCols<T> {
     data: DataCols<T>,
 }
 const PREFIX_WIDTH: usize = PrefixCols::<u8>::width();
-const_assert_eq!(PREFIX_WIDTH, 15);
+const_assert_eq!(PREFIX_WIDTH, 16);
+
+const INSTRUCTION_READS: usize = 5;
 
 #[derive(Copy, Clone, Debug)]
 struct FriReducedOpeningAir {
@@ -204,17 +227,29 @@ impl FriReducedOpeningAir {
         let start_timestamp = next.general.timestamp;
         let multiplicity = local.prefix.general.is_workload_row;
         // a_ptr/b_ptr/length/result
-        let ptr_reads = AB::F::from_canonical_usize(4);
+        let ptr_reads = AB::F::from_canonical_usize(INSTRUCTION_READS);
         let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
-        // read a
+        // write_a itself could be anything on non-workload row, but on workload row, it must be boolean.
+        // write_a on last workflow row will be constrained to equal write_a on instruction1 row, implying the latter is boolean.
+        builder.when(multiplicity).assert_bool(local_data.write_a);
+        // read a when write_a is 0
         self.memory_bridge
             .read(
                 MemoryAddress::new(native_as.clone(), next.data.a_ptr),
                 [local.prefix.a_or_is_first],
                 start_timestamp + ptr_reads,
+                local.a_aux.as_ref(),
+            )
+            .eval(builder, (AB::Expr::ONE - local_data.write_a) * multiplicity);
+        // write a when write_a is 1
+        self.memory_bridge
+            .write(
+                MemoryAddress::new(native_as.clone(), next.data.a_ptr),
+                [local.prefix.a_or_is_first],
+                start_timestamp + ptr_reads,
                 &local.a_aux,
             )
-            .eval(builder, multiplicity);
+            .eval(builder, local_data.write_a * multiplicity);
         // read b
         self.memory_bridge
             .read(
@@ -239,6 +274,8 @@ impl FriReducedOpeningAir {
             assert_array_eq(&mut builder, local_data.alpha, next.data.alpha);
             // local.a_ptr = next.a_ptr + 1
             builder.assert_eq(local_data.a_ptr, next.data.a_ptr + AB::F::ONE);
+            // local.write_a = next.write_a
+            builder.assert_eq(local_data.write_a, next.data.write_a);
             // local.b_ptr = next.b_ptr + EXT_DEG
             builder.assert_eq(
                 local_data.b_ptr,
@@ -294,6 +331,13 @@ impl FriReducedOpeningAir {
         let next: &Instruction2Cols<AB::Var> = next_slice[..INS_2_WIDTH].borrow();
         // `is_ins_row` already indicates enabled.
         let mut is_ins_row = builder.when(local.prefix.general.is_ins_row);
+        // These constraints of `is_ins_row` apply to both Instruction1Cols and Instruction2Cols. It's a trick to reduce 1 degree.
+        // `write_a` refers to a random field in Instruction2Cols but `write_a_x_is_first` must be 0 because `is_first` is 0.
+        is_ins_row.assert_eq(
+            local.write_a_x_is_first,
+            local.prefix.data.write_a * local.prefix.a_or_is_first,
+        );
+        is_ins_row.assert_bool(local.write_a_x_is_first);
         let mut is_first_ins = is_ins_row.when(local.prefix.a_or_is_first);
         // ATTENTION: degree of is_first_ins is 2
         is_first_ins.assert_one(next.general.is_ins_row);
@@ -303,9 +347,9 @@ impl FriReducedOpeningAir {
         let length = local.prefix.data.idx;
         let multiplicity = local.prefix.general.is_ins_row * local.prefix.a_or_is_first;
         let start_timestamp = local.prefix.general.timestamp;
-        // 4 reads
-        let write_timestamp =
-            start_timestamp + AB::Expr::TWO * length + AB::Expr::from_canonical_usize(4);
+        let write_timestamp = start_timestamp
+            + AB::Expr::TWO * length
+            + AB::Expr::from_canonical_usize(INSTRUCTION_READS);
         let end_timestamp = write_timestamp.clone() + AB::Expr::ONE;
         let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
         self.execution_bridge
@@ -314,10 +358,11 @@ impl FriReducedOpeningAir {
                 [
                     local.a_ptr_ptr.into(),
                     local.b_ptr_ptr.into(),
-                    next.result_ptr.into(),
-                    native_as.clone(),
                     next.length_ptr.into(),
                     next.alpha_ptr.into(),
+                    next.result_ptr.into(),
+                    next.hint_id_ptr.into(),
+                    next.is_init_ptr.into(),
                 ],
                 ExecutionState::new(local.pc, local.prefix.general.timestamp),
                 ExecutionState::<AB::Expr>::new(
@@ -335,7 +380,7 @@ impl FriReducedOpeningAir {
                 &next.alpha_aux,
             )
             .eval(builder, multiplicity.clone());
-        // Read length
+        // Read length.
         self.memory_bridge
             .read(
                 MemoryAddress::new(native_as.clone(), next.length_ptr),
@@ -360,6 +405,15 @@ impl FriReducedOpeningAir {
                 [local_data.b_ptr],
                 start_timestamp + AB::Expr::from_canonical_u32(3),
                 &local.b_ptr_aux,
+            )
+            .eval(builder, multiplicity.clone());
+        // Read write_a = 1 - is_init, it should be a boolean.
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(native_as.clone(), next.is_init_ptr),
+                [AB::Expr::ONE - local_data.write_a],
+                start_timestamp + AB::Expr::from_canonical_u32(4),
+                &next.is_init_aux,
             )
             .eval(builder, multiplicity.clone());
         self.memory_bridge
@@ -434,8 +488,9 @@ pub struct FriReducedOpeningRecord<F: Field> {
     pub alpha_read: RecordId,
     pub length_read: RecordId,
     pub a_ptr_read: RecordId,
+    pub is_init_read: RecordId,
     pub b_ptr_read: RecordId,
-    pub a_reads: Vec<RecordId>,
+    pub a_rws: Vec<RecordId>,
     pub b_reads: Vec<RecordId>,
     pub result_write: RecordId,
 }
@@ -443,7 +498,7 @@ pub struct FriReducedOpeningRecord<F: Field> {
 impl<F: Field> FriReducedOpeningRecord<F> {
     fn get_height(&self) -> usize {
         // 2 for instruction rows
-        self.a_reads.len() + 2
+        self.a_rws.len() + 2
     }
 }
 
@@ -452,6 +507,8 @@ pub struct FriReducedOpeningChip<F: Field> {
     records: Vec<FriReducedOpeningRecord<F>>,
     height: usize,
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+    streams: Arc<Mutex<Streams<F>>>,
+    hint_offsets: HashMap<usize, usize>,
 }
 impl<F: PrimeField32> FriReducedOpeningChip<F> {
     pub fn new(
@@ -459,6 +516,7 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+        streams: Arc<Mutex<Streams<F>>>,
     ) -> Self {
         let air = FriReducedOpeningAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -469,6 +527,8 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
             air,
             height: 0,
             offline_memory,
+            streams,
+            hint_offsets: HashMap::default(),
         }
     }
 }
@@ -482,37 +542,63 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         let &Instruction {
             a: a_ptr_ptr,
             b: b_ptr_ptr,
-            c: result_ptr,
-            d: addr_space,
-            e: length_ptr,
-            f: alpha_ptr,
+            c: length_ptr,
+            d: alpha_ptr,
+            e: result_ptr,
+            f: hint_id_ptr,
+            g: is_init_ptr,
             ..
         } = instruction;
 
+        let addr_space = F::from_canonical_u32(AS::Native as u32);
         let alpha_read = memory.read(addr_space, alpha_ptr);
         let length_read = memory.read_cell(addr_space, length_ptr);
         let a_ptr_read = memory.read_cell(addr_space, a_ptr_ptr);
         let b_ptr_read = memory.read_cell(addr_space, b_ptr_ptr);
+        let is_init_read = memory.read_cell(addr_space, is_init_ptr);
+        let is_init = is_init_read.1.as_canonical_u32();
+
+        let hint_id_f = memory.unsafe_read_cell(addr_space, hint_id_ptr);
+        let hint_id = hint_id_f.as_canonical_u32() as usize;
+        let hint_offset = self.hint_offsets.get(&hint_id).copied().unwrap_or(0);
 
         let alpha = alpha_read.1;
         let length = length_read.1.as_canonical_u32() as usize;
         let a_ptr = a_ptr_read.1;
         let b_ptr = b_ptr_read.1;
 
-        let mut a_reads = Vec::with_capacity(length);
+        let mut a_rws = Vec::with_capacity(length);
         let mut b_reads = Vec::with_capacity(length);
         let mut result = [F::ZERO; EXT_DEG];
 
+        let data = if is_init == 0 {
+            self.hint_offsets.insert(hint_id, hint_offset + length);
+            let streams = self.streams.lock().unwrap();
+            streams.hint_space[hint_id][hint_offset..hint_offset + length].to_vec()
+        } else {
+            vec![]
+        };
+        #[allow(clippy::needless_range_loop)]
         for i in 0..length {
-            let a_read = memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i));
+            let a_rw = if is_init == 0 {
+                let (record_id, _) = memory.write_cell(
+                    addr_space,
+                    a_ptr + F::from_canonical_usize(i),
+                    // Values in the hint space are flattened. We use hint_offset to find the corresponding value.
+                    data[i],
+                );
+                (record_id, data[i])
+            } else {
+                memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i))
+            };
             let b_read =
                 memory.read::<EXT_DEG>(addr_space, b_ptr + F::from_canonical_usize(EXT_DEG * i));
-            a_reads.push(a_read);
+            a_rws.push(a_rw);
             b_reads.push(b_read);
         }
 
-        for (a_read, b_read) in a_reads.iter().rev().zip_eq(b_reads.iter().rev()) {
-            let a = a_read.1;
+        for (a_rw, b_read) in a_rws.iter().rev().zip_eq(b_reads.iter().rev()) {
+            let a = a_rw.1;
             let b = b_read.1;
             // result = result * alpha + (b - a)
             result = FieldExtension::add(
@@ -530,8 +616,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             alpha_read: alpha_read.0,
             length_read: length_read.0,
             a_ptr_read: a_ptr_read.0,
+            is_init_read: is_init_read.0,
             b_ptr_read: b_ptr_read.0,
-            a_reads: a_reads.into_iter().map(|r| r.0).collect(),
+            a_rws: a_rws.into_iter().map(|r| r.0).collect(),
             b_reads: b_reads.into_iter().map(|r| r.0).collect(),
             result_write,
         };
@@ -559,9 +646,11 @@ fn record_to_rows<F: PrimeField32>(
     let Instruction {
         a: a_ptr_ptr,
         b: b_ptr_ptr,
-        c: result_ptr,
-        e: length_ptr,
-        f: alpha_ptr,
+        c: length_ptr,
+        d: alpha_ptr,
+        e: result_ptr,
+        f: hint_id_ptr,
+        g: is_init_ptr,
         ..
     } = record.instruction;
 
@@ -569,6 +658,9 @@ fn record_to_rows<F: PrimeField32>(
     let alpha_read = memory.record_by_id(record.alpha_read);
     let a_ptr_read = memory.record_by_id(record.a_ptr_read);
     let b_ptr_read = memory.record_by_id(record.b_ptr_read);
+    let is_init_read = memory.record_by_id(record.is_init_read);
+    let is_init = is_init_read.data_at(0);
+    let write_a = F::ONE - is_init;
 
     let length = length_read.data_at(0).as_canonical_u32() as usize;
     let alpha: [F; EXT_DEG] = alpha_read.data_slice().try_into().unwrap();
@@ -581,20 +673,21 @@ fn record_to_rows<F: PrimeField32>(
     let length_aux = aux_cols_factory.make_read_aux_cols(length_read);
     let a_ptr_aux = aux_cols_factory.make_read_aux_cols(a_ptr_read);
     let b_ptr_aux = aux_cols_factory.make_read_aux_cols(b_ptr_read);
+    let is_init_aux = aux_cols_factory.make_read_aux_cols(is_init_read);
 
     let result_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(record.result_write));
 
     // WorkloadCols
     for (i, (&a_record_id, &b_record_id)) in record
-        .a_reads
+        .a_rws
         .iter()
         .rev()
         .zip_eq(record.b_reads.iter().rev())
         .enumerate()
     {
-        let a_read = memory.record_by_id(a_record_id);
+        let a_rw = memory.record_by_id(a_record_id);
         let b_read = memory.record_by_id(b_record_id);
-        let a = a_read.data_at(0);
+        let a = a_rw.data_at(0);
         let b: [F; EXT_DEG] = b_read.data_slice().try_into().unwrap();
 
         let start = i * OVERALL_WIDTH;
@@ -609,13 +702,21 @@ fn record_to_rows<F: PrimeField32>(
                 a_or_is_first: a,
                 data: DataCols {
                     a_ptr: a_ptr + F::from_canonical_usize(length - i),
+                    write_a,
                     b_ptr: b_ptr + F::from_canonical_usize((length - i) * EXT_DEG),
                     idx: F::from_canonical_usize(i),
                     result,
                     alpha,
                 },
             },
-            a_aux: aux_cols_factory.make_read_aux_cols(a_read),
+            // Generate write aux columns no matter `a` is read or written. When `a` is written,
+            // `prev_data` is not constrained.
+            a_aux: if a_rw.prev_data_slice().is_some() {
+                aux_cols_factory.make_write_aux_cols(a_rw)
+            } else {
+                let read_aux = aux_cols_factory.make_read_aux_cols(a_rw);
+                MemoryWriteAuxCols::from_base(read_aux.get_base(), [F::ZERO])
+            },
             b,
             b_aux: aux_cols_factory.make_read_aux_cols(b_read),
         };
@@ -639,6 +740,7 @@ fn record_to_rows<F: PrimeField32>(
                 a_or_is_first: F::ONE,
                 data: DataCols {
                     a_ptr,
+                    write_a,
                     b_ptr,
                     idx: F::from_canonical_usize(length),
                     result,
@@ -650,6 +752,7 @@ fn record_to_rows<F: PrimeField32>(
             a_ptr_aux,
             b_ptr_ptr,
             b_ptr_aux,
+            write_a_x_is_first: write_a,
         };
     }
     // Instruction2Cols
@@ -663,12 +766,16 @@ fn record_to_rows<F: PrimeField32>(
                 timestamp: record.start_timestamp,
             },
             is_first: F::ZERO,
-            result_ptr,
-            result_aux,
             length_ptr,
             length_aux,
             alpha_ptr,
             alpha_aux,
+            result_ptr,
+            result_aux,
+            hint_id_ptr,
+            is_init_ptr,
+            is_init_aux,
+            write_a_x_is_first: F::ZERO,
         };
     }
 }

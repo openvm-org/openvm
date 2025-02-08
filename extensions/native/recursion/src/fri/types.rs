@@ -64,8 +64,7 @@ pub struct DimensionsVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct BatchOpeningVariable<C: Config> {
-    #[allow(clippy::type_complexity)]
-    pub opened_values: Array<C, Array<C, Felt<C::F>>>,
+    pub opened_values: HintSlice<C>,
     pub opening_proof: HintSlice<C>,
 }
 

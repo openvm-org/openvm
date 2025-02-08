@@ -7,7 +7,7 @@ use openvm_native_compiler::{
     prelude::MemVariable,
 };
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::{Field, FieldAlgebra, TwoAdicField};
+use openvm_stark_backend::p3_field::{FieldAlgebra, TwoAdicField};
 pub use two_adic_pcs::*;
 
 use self::types::{DimensionsVariable, FriConfigVariable, FriQueryProofVariable};
@@ -213,7 +213,7 @@ pub fn verify_batch_static<C: Config>(
     // The index of which table to process next.
     let index: Usize<C::N> = builder.eval(C::N::ZERO);
     // The height of the current layer (padded).
-    let current_height = builder.get(&dimensions, index.clone()).height;
+    let mut current_height = builder.get(&dimensions, index.clone()).height.value();
     // Reduce all the tables that have the same height to a single root.
     let reducer = opened_values.create_reducer(builder);
     let mut root = reducer
@@ -221,7 +221,7 @@ pub fn verify_batch_static<C: Config>(
             builder,
             index.clone(),
             &dimensions,
-            current_height.clone(),
+            current_height,
             opened_values,
         )
         .into_outer_digest();
@@ -234,24 +234,21 @@ pub fn verify_batch_static<C: Config>(
 
         let [left, right]: [Var<_>; 2] = cond_eval(builder, bit, root[0], sibling[0]);
         root = builder.p2_compress([[left], [right]]);
-        builder.assign(
-            &current_height,
-            current_height.clone() * (C::N::TWO.inverse()),
-        );
+        current_height >>= 1;
 
         builder
             .if_ne(index.clone(), dimensions.len())
             .then(|builder| {
                 let next_height = builder.get(&dimensions, index.clone()).height;
                 builder
-                    .if_eq(next_height, current_height.clone())
+                    .if_eq(next_height, Usize::from(current_height))
                     .then(|builder| {
                         let next_height_openings_digest = reducer
                             .reduce_fast(
                                 builder,
                                 index.clone(),
                                 &dimensions,
-                                current_height.clone(),
+                                current_height,
                                 opened_values,
                             )
                             .into_outer_digest();
@@ -268,7 +265,7 @@ fn reduce_fast<C: Config, V: MemVariable<C>>(
     builder: &mut Builder<C>,
     dim_idx: Usize<C::N>,
     dims: &Array<C, DimensionsVariable<C>>,
-    curr_height_padded: Usize<C::N>,
+    curr_height_padded: usize,
     opened_values: &Array<C, Array<C, V>>,
     nested_opened_values_buffer: &Array<C, Array<C, V>>,
 ) -> DigestVariable<C>
@@ -296,7 +293,7 @@ where
     iter_zip!(builder, dims_shifted, opened_values_shifted).for_each(|ptr_vec, builder| {
         let height = builder.iter_ptr_get(&dims_shifted, ptr_vec[0]).height;
         builder
-            .if_eq(height, curr_height_padded.clone())
+            .if_eq(height, Usize::from(curr_height_padded))
             .then(|builder| {
                 let opened_values = builder.iter_ptr_get(&opened_values_shifted, ptr_vec[1]);
                 builder.set_value(
@@ -325,7 +322,7 @@ impl<C: Config> NestedOpenedValuesReducerVar<C> {
         builder: &mut Builder<C>,
         dim_idx: Usize<C::N>,
         dims: &Array<C, DimensionsVariable<C>>,
-        curr_height: Usize<C::N>,
+        curr_height: usize,
         nested_opened_values: &NestedOpenedValues<C>,
     ) -> DigestVariable<C> {
         match nested_opened_values {

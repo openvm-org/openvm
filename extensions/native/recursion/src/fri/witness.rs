@@ -84,7 +84,16 @@ impl Witnessable<C> for OuterBatchOpening {
     type WitnessVariable = BatchOpeningVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
-        let opened_values = self.opened_values.read(builder);
+        let opened_values_refs: Vec<WitnessRef> = self
+            .opened_values
+            .iter()
+            .flatten()
+            .map(|x| x.read(builder).into())
+            .collect();
+        let length = Usize::from(opened_values_refs.len());
+        let id = builder.witness_load(opened_values_refs);
+        let opened_values = HintSlice { length, id };
+
         let opening_proof = read_opening_proof(builder, &self.opening_proof);
         Self::WitnessVariable {
             opened_values,
@@ -93,7 +102,12 @@ impl Witnessable<C> for OuterBatchOpening {
     }
 
     fn write(&self, witness: &mut Witness<OuterConfig>) {
-        self.opened_values.write(witness);
+        let opened_values: Vec<_> = self
+            .opened_values
+            .iter()
+            .flat_map(|op| op.to_vec())
+            .collect();
+        opened_values.write(witness);
         write_opening_proof(witness, &self.opening_proof);
     }
 }

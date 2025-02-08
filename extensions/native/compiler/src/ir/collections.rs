@@ -330,6 +330,9 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
                 builder.assign(lhs_ptr, rhs_ptr);
                 builder.assign(lhs_len, rhs_len);
             }
+            (Array::Fixed(lhs_rc), Array::Fixed(rhs_rc)) => {
+                *lhs_rc.borrow_mut() = rhs_rc.borrow().clone();
+            }
             _ => unreachable!(),
         }
     }

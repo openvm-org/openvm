@@ -211,7 +211,11 @@ impl<C: Config> Variable<C> for Usize<C::N> {
     type Expression = SymbolicVar<C::N>;
 
     fn uninit(builder: &mut Builder<C>) -> Self {
-        builder.uninit::<Var<C::N>>().into()
+        if builder.flags.static_only {
+            Usize::Const(Rc::new(RefCell::new(C::N::ZERO)))
+        } else {
+            builder.uninit::<Var<C::N>>().into()
+        }
     }
 
     fn assign(&self, src: Self::Expression, builder: &mut Builder<C>) {
