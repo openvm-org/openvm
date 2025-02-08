@@ -576,7 +576,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         } else {
             vec![]
         };
-        // Rust lint is stupid :(
         #[allow(clippy::needless_range_loop)]
         for i in 0..length {
             let a_rw = if is_init == 0 {
