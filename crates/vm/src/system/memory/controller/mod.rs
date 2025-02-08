@@ -501,7 +501,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     /// Returns the final memory state if persistent.
-    pub fn finalize(&mut self, hasher: Option<&mut (impl HasherChip<CHUNK, F> + Sync)>) {
+    pub fn finalize(&mut self, hasher: Option<&mut (impl HasherChip<CHUNK, F> + Sync + Send)>) {
         if self.final_state.is_some() {
             return;
         }

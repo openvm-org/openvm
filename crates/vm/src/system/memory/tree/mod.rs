@@ -38,10 +38,10 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     pub fn new_nonleaf(
         left: Arc<MemoryNode<CHUNK, F>>,
         right: Arc<MemoryNode<CHUNK, F>>,
-        hasher: &mut impl HasherChip<CHUNK, F>,
+        hasher: &impl HasherChip<CHUNK, F>,
     ) -> Self {
         NonLeaf {
-            hash: hasher.compress_and_record(&left.hash(), &right.hash()),
+            hash: hasher.compress(&left.hash(), &right.hash()),
             left,
             right,
         }

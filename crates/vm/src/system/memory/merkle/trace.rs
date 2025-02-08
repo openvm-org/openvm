@@ -4,6 +4,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
 };
@@ -24,7 +25,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         &mut self,
         initial_tree: &MemoryNode<CHUNK, F>,
         final_memory: &Equipartition<F, CHUNK>,
-        hasher: &mut impl HasherChip<CHUNK, F>,
+        hasher: &mut (impl HasherChip<CHUNK, F> + Send + Sync),
     ) {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
         // there needs to be a touched node with `height_section` = 0
@@ -34,22 +35,26 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             self.touch_node(1, 0, 0);
         }
 
-        let mut rows = vec![];
-        let mut tree_helper = TreeHelper {
+        let tree_helper = TreeHelper {
             memory_dimensions: self.air.memory_dimensions,
             final_memory,
             touched_nodes: &self.touched_nodes,
-            trace_rows: &mut rows,
         };
-        let final_tree = tree_helper.recur(
+        let (final_tree, final_trace_rows) = tree_helper.recur(
             self.air.memory_dimensions.overall_height(),
             initial_tree,
             0,
             0,
             hasher,
         );
+        for i in (0..final_trace_rows.len()).step_by(2) {
+            hasher.record(
+                &final_trace_rows[i].left_child_hash,
+                &final_trace_rows[i].right_child_hash,
+            );
+        }
         self.final_state = Some(FinalState {
-            rows,
+            rows: final_trace_rows,
             init_root: initial_tree.hash(),
             final_root: final_tree.hash(),
         });
@@ -117,25 +122,24 @@ struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
     memory_dimensions: MemoryDimensions,
     final_memory: &'a Equipartition<F, CHUNK>,
     touched_nodes: &'a FxHashSet<(usize, u32, u32)>,
-    trace_rows: &'a mut Vec<MemoryMerkleCols<F, CHUNK>>,
 }
 
 impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
     fn recur(
-        &mut self,
+        &self,
         height: usize,
         initial_node: &MemoryNode<CHUNK, F>,
         as_label: u32,
         address_label: u32,
-        hasher: &mut impl HasherChip<CHUNK, F>,
-    ) -> MemoryNode<CHUNK, F> {
+        hasher: &(impl HasherChip<CHUNK, F> + Send + Sync),
+    ) -> (MemoryNode<CHUNK, F>, Vec<MemoryMerkleCols<F, CHUNK>>) {
         if height == 0 {
             let address_space = as_label + self.memory_dimensions.as_offset;
             let leaf_values = *self
                 .final_memory
                 .get(&(address_space, address_label))
                 .unwrap_or(&[F::ZERO; CHUNK]);
-            MemoryNode::new_leaf(hasher.hash(&leaf_values))
+            (MemoryNode::new_leaf(hasher.hash(&leaf_values)), vec![])
         } else if let NonLeaf {
             left: initial_left_node,
             right: initial_right_node,
@@ -143,7 +147,7 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
         } = initial_node.clone()
         {
             // Tell the hasher about this hash.
-            hasher.compress_and_record(&initial_left_node.hash(), &initial_right_node.hash());
+            // hasher.compress_and_record(&initial_left_node.hash(), &initial_right_node.hash());
 
             let is_as_section = height > self.memory_dimensions.address_height;
 
@@ -162,63 +166,74 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
                 !self
                     .touched_nodes
                     .contains(&(height - 1, left_as_label, left_address_label));
-
-            let final_left_node = if left_is_final {
-                initial_left_node
-            } else {
-                Arc::new(self.recur(
-                    height - 1,
-                    &initial_left_node,
-                    left_as_label,
-                    left_address_label,
-                    hasher,
-                ))
-            };
-
             let right_is_final =
                 !self
                     .touched_nodes
                     .contains(&(height - 1, right_as_label, right_address_label));
 
-            let final_right_node = if right_is_final {
-                initial_right_node
-            } else {
-                Arc::new(self.recur(
-                    height - 1,
-                    &initial_right_node,
-                    right_as_label,
-                    right_address_label,
-                    hasher,
-                ))
-            };
+            let ((final_left_node, left_trace_rows), (final_right_node, right_trace_rows)) = join(
+                || {
+                    if left_is_final {
+                        (initial_left_node, vec![])
+                    } else {
+                        let (final_left_node, left_trace_rows) = self.recur(
+                            height - 1,
+                            &initial_left_node,
+                            left_as_label,
+                            left_address_label,
+                            hasher,
+                        );
+                        (Arc::new(final_left_node), left_trace_rows)
+                    }
+                },
+                || {
+                    if right_is_final {
+                        (initial_right_node, vec![])
+                    } else {
+                        let (final_right_node, right_trace_rows) = self.recur(
+                            height - 1,
+                            &initial_right_node,
+                            right_as_label,
+                            right_address_label,
+                            hasher,
+                        );
+                        (Arc::new(final_right_node), right_trace_rows)
+                    }
+                },
+            );
 
             let final_node = MemoryNode::new_nonleaf(final_left_node, final_right_node, hasher);
-            self.add_trace_row(height, as_label, address_label, initial_node, None);
-            self.add_trace_row(
+            let mut trace_rows: Vec<_> = left_trace_rows
+                .into_iter()
+                .chain(right_trace_rows)
+                .collect();
+            trace_rows.push(self.trace_row(height, as_label, address_label, initial_node, None));
+            trace_rows.push(self.trace_row(
                 height,
                 as_label,
                 address_label,
                 &final_node,
                 Some([left_is_final, right_is_final]),
-            );
-            final_node
+            ));
+            (final_node, trace_rows)
         } else {
             panic!("Leaf {:?} found at nonzero height {}", initial_node, height);
         }
     }
 
     /// Expects `node` to be NonLeaf
-    fn add_trace_row(
-        &mut self,
+    fn trace_row(
+        &self,
         parent_height: usize,
         as_label: u32,
         address_label: u32,
         node: &MemoryNode<CHUNK, F>,
         direction_changes: Option<[bool; 2]>,
-    ) {
+    ) -> MemoryMerkleCols<F, CHUNK> {
         let [left_direction_change, right_direction_change] =
             direction_changes.unwrap_or([false; 2]);
-        let cols = if let NonLeaf { hash, left, right } = node {
+
+        if let NonLeaf { hash, left, right } = node {
             MemoryMerkleCols {
                 expand_direction: if direction_changes.is_none() {
                     F::ONE
@@ -238,7 +253,6 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
             }
         } else {
             panic!("trace_rows expects node = {:?} to be NonLeaf", node);
-        };
-        self.trace_rows.push(cols);
+        }
     }
 }
