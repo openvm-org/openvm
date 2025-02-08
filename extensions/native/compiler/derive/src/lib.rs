@@ -44,7 +44,11 @@ pub fn derive_variable(input: TokenStream) -> TokenStream {
                     let ftype_str = quote! { #ftype }.to_string();
                     if ftype_str.contains("Array") {
                         quote! {
-                            #fname: Array::Dyn(builder.uninit(), builder.uninit()),
+                            #fname: if builder.flags.static_only {
+                                builder.uninit_fixed_array(0)
+                            } else {
+                                Array::Dyn(builder.uninit(), builder.uninit())
+                            },
                         }
                     } else {
                         quote! {

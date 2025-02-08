@@ -189,6 +189,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             program_bus,
             memory_bridge,
             offline_memory.clone(),
+            builder.streams().clone(),
         );
         inventory.add_executor(
             fri_reduced_opening_chip,
