@@ -3664,6 +3664,7 @@ dependencies = [
  "backtrace",
  "bitcode",
  "cfg-if",
+ "crossbeam",
  "derivative",
  "derive-new 0.6.0",
  "derive_more 1.0.0",

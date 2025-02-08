@@ -6,10 +6,7 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
 use MemoryNode::*;
 
 use super::controller::dimensions::MemoryDimensions;
-use crate::{
-    arch::hasher::{Hasher, HasherChip},
-    system::memory::MemoryImage,
-};
+use crate::{arch::hasher::Hasher, system::memory::MemoryImage};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemoryNode<const CHUNK: usize, F: PrimeField32> {
@@ -35,13 +32,15 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         Leaf { values }
     }
 
+    /// Hashes the left and right node values and creates a new non-leaf node with `left` and `right`
+    /// as children. Does **not** record the hash.
     pub fn new_nonleaf(
         left: Arc<MemoryNode<CHUNK, F>>,
         right: Arc<MemoryNode<CHUNK, F>>,
-        hasher: &mut impl HasherChip<CHUNK, F>,
+        hasher: &impl Hasher<CHUNK, F>,
     ) -> Self {
         NonLeaf {
-            hash: hasher.compress_and_record(&left.hash(), &right.hash()),
+            hash: hasher.compress(&left.hash(), &right.hash()),
             left,
             right,
         }

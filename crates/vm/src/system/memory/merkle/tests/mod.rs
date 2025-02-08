@@ -35,12 +35,13 @@ mod util;
 const DEFAULT_CHUNK: usize = 8;
 const COMPRESSION_BUS: DirectCompressionBus = DirectCompressionBus(POSEIDON2_DIRECT_BUS);
 
-fn test<const CHUNK: usize>(
+fn test(
     memory_dimensions: MemoryDimensions,
     initial_memory: &MemoryImage<BabyBear>,
     touched_labels: BTreeSet<(u32, u32)>,
     final_memory: &MemoryImage<BabyBear>,
 ) {
+    const CHUNK: usize = DEFAULT_CHUNK;
     let MemoryDimensions {
         as_height,
         address_height,
@@ -233,7 +234,7 @@ fn random_test<const CHUNK: usize>(
         }
     }
 
-    test::<CHUNK>(
+    test(
         MemoryDimensions {
             as_height: 1,
             address_height: height,

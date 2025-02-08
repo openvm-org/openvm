@@ -1,5 +1,13 @@
-use std::{borrow::BorrowMut, cmp::Reverse, sync::Arc};
+use std::{
+    borrow::BorrowMut,
+    cmp::Reverse,
+    sync::{atomic::AtomicU32, Arc},
+};
 
+use crossbeam::{
+    channel::{self, Sender},
+    thread::scope,
+};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{FieldAlgebra, PrimeField32},
@@ -12,21 +20,33 @@ use rustc_hash::FxHashSet;
 
 use crate::{
     arch::hasher::Hasher,
-    system::memory::{
-        controller::dimensions::MemoryDimensions,
-        merkle::{FinalState, MemoryMerkleChip, MemoryMerkleCols},
-        tree::MemoryNode::{self, NonLeaf},
-        Equipartition,
+    system::{
+        memory::{
+            controller::dimensions::MemoryDimensions,
+            merkle::{FinalState, MemoryMerkleChip, MemoryMerkleCols},
+            tree::MemoryNode::{self, NonLeaf},
+            Equipartition, CHUNK,
+        },
+        poseidon2::{
+            Poseidon2PeripheryBaseChip, Poseidon2PeripheryChip, PERIPHERY_POSEIDON2_WIDTH,
+        },
     },
 };
 
-impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
-    pub fn finalize(
+// We use constant CHUNK throughout because Rust const generics cannot handle `CHUNK * 2` array lengths.
+
+impl<F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
+    /// SAFETY: the `hash` implementation of `H: Hasher` must be pure, i.e., it does not depend on
+    /// any mutable state in `hasher`. In particular the state mutations from `SerialReceiver` must not
+    /// affect the functionality of the hash function.
+    pub fn finalize<H>(
         &mut self,
         initial_tree: &MemoryNode<CHUNK, F>,
         final_memory: &Equipartition<F, CHUNK>,
-        hasher: &mut (impl Hasher<CHUNK, F> + Send + Sync),
-    ) {
+        hasher: &mut H,
+    ) where
+        H: Hasher<CHUNK, F> + SerialReceiver<[F; 2 * CHUNK]> + Send + Sync,
+    {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
         // there needs to be a touched node with `height_section` = 0
         // shouldn't be a leaf because
@@ -35,24 +55,44 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             self.touch_node(1, 0, 0);
         }
 
-        let tree_helper = TreeHelper {
-            memory_dimensions: self.air.memory_dimensions,
-            final_memory,
-            touched_nodes: &self.touched_nodes,
-        };
-        let (final_tree, final_trace_rows) = tree_helper.recur(
-            self.air.memory_dimensions.overall_height(),
-            initial_tree,
-            0,
-            0,
-            hasher,
-        );
-        for i in (0..final_trace_rows.len()).step_by(2) {
-            hasher.record(
-                &final_trace_rows[i].left_child_hash,
-                &final_trace_rows[i].right_child_hash,
-            );
-        }
+        let mut final_trace_rows = Vec::new();
+        let final_tree = scope(|s| {
+            let (record_send, record_recv) = channel::unbounded::<[F; PERIPHERY_POSEIDON2_WIDTH]>();
+            let (trace_send, trace_recv) = channel::unbounded::<MemoryMerkleCols<F, CHUNK>>();
+            // SAFETY: the only state changes to `hasher` are in records, which do no affect
+            // the pure hash function
+            let immutable_hasher = unsafe { &*(hasher as *const H) };
+            let final_tree_handler = s.spawn(|_| {
+                let memory_dimensions = self.air.memory_dimensions;
+                let tree_helper = TreeHelper {
+                    memory_dimensions,
+                    final_memory,
+                    touched_nodes: &self.touched_nodes,
+                };
+                tree_helper.recur(
+                    memory_dimensions.overall_height(),
+                    initial_tree,
+                    0,
+                    0,
+                    immutable_hasher,
+                    record_send,
+                    trace_send,
+                )
+            });
+
+            s.spawn(move |_| {
+                while let Ok(preimage) = record_recv.recv() {
+                    hasher.receive(preimage);
+                }
+            });
+            // The loop breaks when last sender has been dropped,
+            // so `recur` should be done
+            while let Ok(row) = trace_recv.recv() {
+                final_trace_rows.push(row);
+            }
+            final_tree_handler.join().unwrap()
+        })
+        .unwrap();
         self.final_state = Some(FinalState {
             rows: final_trace_rows,
             init_root: initial_tree.hash(),
@@ -61,7 +101,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     }
 }
 
-impl<const CHUNK: usize, SC: StarkGenericConfig> Chip<SC> for MemoryMerkleChip<CHUNK, Val<SC>>
+impl<SC: StarkGenericConfig> Chip<SC> for MemoryMerkleChip<CHUNK, Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
@@ -104,7 +144,7 @@ where
         AirProofInput::simple(trace, pvs)
     }
 }
-impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {
+impl<F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {
     fn air_name(&self) -> String {
         "Merkle".to_string()
     }
@@ -118,13 +158,15 @@ impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<C
     }
 }
 
-struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
+struct TreeHelper<'a, F: PrimeField32> {
     memory_dimensions: MemoryDimensions,
     final_memory: &'a Equipartition<F, CHUNK>,
     touched_nodes: &'a FxHashSet<(usize, u32, u32)>,
 }
 
-impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
+impl<F: PrimeField32> TreeHelper<'_, F> {
+    // A divide-and-conquer recursion that spins up new threads for each recursive call.
+    #[allow(clippy::too_many_arguments)]
     fn recur(
         &self,
         height: usize,
@@ -132,14 +174,16 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
         as_label: u32,
         address_label: u32,
         hasher: &(impl Hasher<CHUNK, F> + Send + Sync),
-    ) -> (MemoryNode<CHUNK, F>, Vec<MemoryMerkleCols<F, CHUNK>>) {
+        record_send: Sender<[F; PERIPHERY_POSEIDON2_WIDTH]>,
+        trace_send: Sender<MemoryMerkleCols<F, CHUNK>>,
+    ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
             let address_space = as_label + self.memory_dimensions.as_offset;
             let leaf_values = *self
                 .final_memory
                 .get(&(address_space, address_label))
                 .unwrap_or(&[F::ZERO; CHUNK]);
-            (MemoryNode::new_leaf(hasher.hash(&leaf_values)), vec![])
+            MemoryNode::new_leaf(hasher.hash(&leaf_values))
         } else if let NonLeaf {
             left: initial_left_node,
             right: initial_right_node,
@@ -147,7 +191,10 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
         } = initial_node.clone()
         {
             // Tell the hasher about this hash.
-            // hasher.compress_and_record(&initial_left_node.hash(), &initial_right_node.hash());
+            let mut preimage = [F::ZERO; CHUNK * 2];
+            preimage[..CHUNK].copy_from_slice(&initial_left_node.hash());
+            preimage[CHUNK..].copy_from_slice(&initial_right_node.hash());
+            record_send.send(preimage).unwrap();
 
             let is_as_section = height > self.memory_dimensions.address_height;
 
@@ -171,51 +218,57 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
                     .touched_nodes
                     .contains(&(height - 1, right_as_label, right_address_label));
 
-            let ((final_left_node, left_trace_rows), (final_right_node, right_trace_rows)) = join(
+            let (final_left_node, final_right_node) = join(
                 || {
                     if left_is_final {
-                        (initial_left_node, vec![])
+                        initial_left_node
                     } else {
-                        let (final_left_node, left_trace_rows) = self.recur(
+                        let final_left_node = self.recur(
                             height - 1,
                             &initial_left_node,
                             left_as_label,
                             left_address_label,
                             hasher,
+                            record_send.clone(),
+                            trace_send.clone(),
                         );
-                        (Arc::new(final_left_node), left_trace_rows)
+                        Arc::new(final_left_node)
                     }
                 },
                 || {
                     if right_is_final {
-                        (initial_right_node, vec![])
+                        initial_right_node
                     } else {
-                        let (final_right_node, right_trace_rows) = self.recur(
+                        let final_right_node = self.recur(
                             height - 1,
                             &initial_right_node,
                             right_as_label,
                             right_address_label,
                             hasher,
+                            record_send.clone(),
+                            trace_send.clone(),
                         );
-                        (Arc::new(final_right_node), right_trace_rows)
+                        Arc::new(final_right_node)
                     }
                 },
             );
 
             let final_node = MemoryNode::new_nonleaf(final_left_node, final_right_node, hasher);
-            let mut trace_rows: Vec<_> = left_trace_rows
-                .into_iter()
-                .chain(right_trace_rows)
-                .collect();
-            trace_rows.push(self.trace_row(height, as_label, address_label, initial_node, None));
-            trace_rows.push(self.trace_row(
+            trace_send
+                .send(self.trace_row(height, as_label, address_label, initial_node, None))
+                .unwrap();
+            let trace_row2 = self.trace_row(
                 height,
                 as_label,
                 address_label,
                 &final_node,
                 Some([left_is_final, right_is_final]),
-            ));
-            (final_node, trace_rows)
+            );
+            record_send.send(*trace_row2.hash_preimage()).unwrap();
+            trace_send.send(trace_row2).unwrap();
+            drop(record_send);
+            drop(trace_send);
+            final_node
         } else {
             panic!("Leaf {:?} found at nonzero height {}", initial_node, height);
         }
@@ -253,6 +306,41 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
             }
         } else {
             panic!("trace_rows expects node = {:?} to be NonLeaf", node);
+        }
+    }
+}
+
+impl<T> MemoryMerkleCols<T, CHUNK> {
+    /// Returns concatenation of `left_child_hash` and `right_child_hash` as a slice.
+    fn hash_preimage(&self) -> &[T; CHUNK * 2] {
+        let ptr = &self.left_child_hash as *const T;
+        // SAFETY: `MemoryMerkleCols` is repr(C) and `left_child_hash` and `right_child_hash` are
+        // adjacent in memory. Therefore they can be concatenated into a slice.
+        unsafe { &*(ptr as *const [T; CHUNK * 2]) }
+    }
+}
+
+pub trait SerialReceiver<T> {
+    fn receive(&mut self, msg: T);
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<[F; PERIPHERY_POSEIDON2_WIDTH]>
+    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+{
+    fn receive(&mut self, hash_preimage: [F; PERIPHERY_POSEIDON2_WIDTH]) {
+        let count = self
+            .records
+            .entry(hash_preimage)
+            .or_insert(AtomicU32::new(0));
+        count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl<F: PrimeField32> SerialReceiver<[F; PERIPHERY_POSEIDON2_WIDTH]> for Poseidon2PeripheryChip<F> {
+    fn receive(&mut self, hash_preimage: [F; PERIPHERY_POSEIDON2_WIDTH]) {
+        match self {
+            Poseidon2PeripheryChip::Register0(chip) => chip.receive(hash_preimage),
+            Poseidon2PeripheryChip::Register1(chip) => chip.receive(hash_preimage),
         }
     }
 }

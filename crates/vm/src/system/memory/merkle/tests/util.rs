@@ -10,9 +10,12 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 
-use crate::arch::{
-    hasher::{Hasher, HasherChip},
-    testing::POSEIDON2_DIRECT_BUS,
+use crate::{
+    arch::{
+        hasher::{Hasher, HasherChip},
+        testing::POSEIDON2_DIRECT_BUS,
+    },
+    system::memory::merkle::trace::SerialReceiver,
 };
 
 pub fn test_hash_sum<const CHUNK: usize, F: Field>(
@@ -65,5 +68,16 @@ impl<const CHUNK: usize, F: Field> HasherChip<CHUNK, F> for HashTestChip<CHUNK, 
         let result = test_hash_sum(*left, *right);
         self.requests.push([*left, *right, result]);
         result
+    }
+}
+
+impl<F: Field, const CHUNK: usize, const WIDTH: usize> SerialReceiver<[F; WIDTH]>
+    for HashTestChip<CHUNK, F>
+{
+    fn receive(&mut self, data: [F; WIDTH]) {
+        assert_eq!(CHUNK * 2, WIDTH);
+        let left = from_fn(|i| data[i]);
+        let right = from_fn(|i| data[i + CHUNK]);
+        self.compress_and_record(&left, &right);
     }
 }

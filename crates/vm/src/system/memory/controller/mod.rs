@@ -33,26 +33,29 @@ use super::{
     volatile::VolatileBoundaryChip,
 };
 use crate::{
-    arch::{hasher::HasherChip, MemoryConfig},
-    system::memory::{
-        adapter::AccessAdapterInventory,
-        dimensions::MemoryDimensions,
-        merkle::{MemoryMerkleBus, MemoryMerkleChip},
-        offline::{MemoryRecord, OfflineMemory, INITIAL_TIMESTAMP},
-        offline_checker::{
-            MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
-            MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols, AUX_LEN,
+    arch::MemoryConfig,
+    system::{
+        memory::{
+            adapter::AccessAdapterInventory,
+            dimensions::MemoryDimensions,
+            merkle::{MemoryMerkleBus, MemoryMerkleChip},
+            offline::{MemoryRecord, OfflineMemory, INITIAL_TIMESTAMP},
+            offline_checker::{
+                MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
+                MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols, AUX_LEN,
+            },
+            online::{Memory, MemoryLogEntry},
+            persistent::PersistentBoundaryChip,
+            tree::MemoryNode,
         },
-        online::{Memory, MemoryLogEntry},
-        persistent::PersistentBoundaryChip,
-        tree::MemoryNode,
+        poseidon2::{Poseidon2PeripheryChip, PERIPHERY_POSEIDON2_CHUNK_SIZE},
     },
 };
 
 pub mod dimensions;
 pub mod interface;
 
-pub const CHUNK: usize = 8;
+pub const CHUNK: usize = PERIPHERY_POSEIDON2_CHUNK_SIZE;
 /// The offset of the Merkle AIR in AIRs of MemoryController.
 pub const MERKLE_AIR_OFFSET: usize = 1;
 /// The offset of the boundary AIR in AIRs of MemoryController.
@@ -501,7 +504,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     /// Returns the final memory state if persistent.
-    pub fn finalize(&mut self, hasher: Option<&mut (impl HasherChip<CHUNK, F> + Sync + Send)>) {
+    pub fn finalize(&mut self, hasher: Option<&mut Poseidon2PeripheryChip<F>>) {
         if self.final_state.is_some() {
             return;
         }

@@ -41,6 +41,7 @@ derivative.workspace = true
 static_assertions.workspace = true
 async-trait.workspace = true
 getset.workspace = true
+crossbeam.workspace = true
 rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
