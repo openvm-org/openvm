@@ -47,13 +47,13 @@ fn compute_commit<F: Field>(
     root_is_on_right: &[bool],
     hash_function: impl Fn([F; CHUNK], [F; CHUNK]) -> ([F; CHUNK], [F; CHUNK]),
 ) -> [F; CHUNK] {
-    let mut height = dim[0];
+    let mut log_height = dim[0] as isize;
     let mut proof_index = 0;
     let mut opened_index = 0;
     let mut root = [F::ZERO; CHUNK];
-    while height >= 1 {
+    while log_height >= 0 {
         let mut concat = vec![];
-        while opened_index < opened.len() && dim[opened_index] == height {
+        while opened_index < opened.len() && dim[opened_index] == log_height as usize {
             concat.extend(opened[opened_index].clone());
             opened_index += 1;
         }
@@ -65,13 +65,13 @@ fn compute_commit<F: Field>(
                     .copy_from_slice(&concat[i..min(i + CHUNK, concat.len())]);
                 (left, right) = hash_function(left, right);
             }
-            root = if height == dim[0] {
+            root = if log_height as usize == dim[0] {
                 left
             } else {
                 hash_function(root, left).0
             }
         }
-        if height > 1 {
+        if log_height > 0 {
             let sibling = proof[proof_index];
             let (left, right) = if root_is_on_right[proof_index] {
                 (sibling, root)
@@ -80,7 +80,7 @@ fn compute_commit<F: Field>(
             };
             root = hash_function(left, right).0;
         }
-        height /= 2;
+        log_height -= 1;
         proof_index += 1;
     }
     root
@@ -107,17 +107,16 @@ fn random_instance(
     let mut opened = vec![];
     let mut proof = vec![];
     let mut root_is_on_right = vec![];
-    for (lg_height, row_lengths) in row_lengths.iter().enumerate() {
-        let height = 1 << lg_height;
+    for (log_height, row_lengths) in row_lengths.iter().enumerate() {
         for &row_length in row_lengths {
-            dims.push(height);
+            dims.push(log_height);
             let mut opened_row = vec![];
             for _ in 0..opened_element_size * row_length {
                 opened_row.push(rng.gen());
             }
             opened.push(opened_row);
         }
-        if height > 1 {
+        if log_height > 0 {
             proof.push(std::array::from_fn(|_| rng.gen()));
             root_is_on_right.push(rng.gen());
         }

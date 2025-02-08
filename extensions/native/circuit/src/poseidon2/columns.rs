@@ -63,7 +63,7 @@ pub struct TopLevelSpecificCols<T> {
 
     pub final_opened_index: T,
 
-    pub height: T,
+    pub log_height: T,
     pub opened_length: T,
 
     pub dim_base_pointer: T,

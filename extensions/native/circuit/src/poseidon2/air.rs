@@ -306,7 +306,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             index_register,
             commit_register,
             final_opened_index,
-            height,
+            log_height,
             opened_length,
             dim_base_pointer,
             index_base_pointer,
@@ -424,11 +424,11 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         builder
             .when(incorporate_sibling)
             .when(AB::Expr::ONE - end_top_level)
-            .assert_eq(next_top_level_specific.height * AB::F::TWO, height);
+            .assert_eq(next_top_level_specific.log_height + AB::F::ONE, log_height);
         builder
             .when(incorporate_row)
             .when(AB::Expr::ONE - end_top_level)
-            .assert_eq(next_top_level_specific.height, height);
+            .assert_eq(next_top_level_specific.log_height, log_height);
         builder
             .when(incorporate_sibling)
             .when(AB::Expr::ONE - end_top_level)
@@ -444,11 +444,11 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         builder
             .when(end_top_level)
             .when(incorporate_row)
-            .assert_eq(height, AB::F::ONE);
+            .assert_eq(log_height, AB::F::ZERO);
         builder
             .when(end_top_level)
             .when(incorporate_sibling)
-            .assert_eq(height, AB::F::TWO);
+            .assert_eq(log_height, AB::F::ONE);
 
         // incorporate row
 
@@ -490,7 +490,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         self.memory_bridge
             .read(
                 MemoryAddress::new(self.address_space, dim_base_pointer + initial_opened_index),
-                [height],
+                [log_height],
                 end_timestamp - AB::F::TWO,
                 &read_initial_height_or_root_is_on_right,
             )
@@ -498,7 +498,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         self.memory_bridge
             .read(
                 MemoryAddress::new(self.address_space, dim_base_pointer + final_opened_index),
-                [height],
+                [log_height],
                 end_timestamp - AB::F::ONE,
                 &read_final_height,
             )

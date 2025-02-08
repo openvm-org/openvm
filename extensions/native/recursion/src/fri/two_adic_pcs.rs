@@ -487,7 +487,7 @@ fn compute_rounds_context<C: Config>(
 
                 let domain = mat.domain;
                 let dim = DimensionsVariable::<C> {
-                    height: builder.eval(domain.size() * RVar::from(1 << log_blowup)),
+                    log_height: builder.eval(domain.log_n + RVar::from(log_blowup)),
                 };
                 builder.set_value(&batch_dims, i, dim);
                 let perm_ov_ptr = builder.get(&ov_ptrs, perm_i);
