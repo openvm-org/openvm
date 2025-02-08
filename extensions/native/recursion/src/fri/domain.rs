@@ -11,16 +11,11 @@ use crate::commit::PolynomialSpaceVariable;
 #[derive(DslVariable, Clone)]
 pub struct TwoAdicMultiplicativeCosetVariable<C: Config> {
     pub log_n: Usize<C::N>,
-    pub size: Usize<C::N>,
     pub shift: Felt<C::F>,
     pub g: Felt<C::F>,
 }
 
 impl<C: Config> TwoAdicMultiplicativeCosetVariable<C> {
-    pub fn size(&self) -> RVar<C::N> {
-        self.size.clone().into()
-    }
-
     pub fn first_point(&self) -> Felt<C::F> {
         self.shift
     }
@@ -41,7 +36,6 @@ where
         TwoAdicMultiplicativeCosetVariable::<C> {
             // builder.eval is necessary to assign a variable in the dynamic mode.
             log_n: builder.eval(RVar::from(value.log_n)),
-            size: builder.eval(RVar::from(1 << value.log_n)),
             shift: builder.eval(value.shift),
             g: builder.eval(g_val),
         }
@@ -99,7 +93,6 @@ where
         let log_num_chunks = log_num_chunks.into();
         let num_chunks = num_chunks.into();
         let log_n = builder.eval_expr(self.log_n.clone() - log_num_chunks);
-        let size: Usize<_> = builder.sll(RVar::one(), log_n);
 
         let g_dom = self.gen();
         let g = builder.exp_power_of_2_v::<Felt<C::F>>(g_dom, log_num_chunks);
@@ -112,7 +105,6 @@ where
             let log_n = builder.eval(log_n);
             let domain = TwoAdicMultiplicativeCosetVariable {
                 log_n,
-                size: size.clone(),
                 shift: builder.eval(self.shift * domain_power),
                 g,
             };
@@ -129,7 +121,6 @@ where
         let num_chunks = 1 << log_num_chunks;
         let log_n: Usize<_> =
             builder.eval(self.log_n.clone() - C::N::from_canonical_usize(log_num_chunks));
-        let size: Usize<_> = builder.sll(RVar::one(), RVar::from(log_n.clone()));
 
         let g_dom = self.gen();
         let g = builder.exp_power_of_2_v::<Felt<C::F>>(g_dom, log_num_chunks);
@@ -140,7 +131,6 @@ where
         for _ in 0..num_chunks {
             domains.push(TwoAdicMultiplicativeCosetVariable {
                 log_n: log_n.clone(),
-                size: size.clone(),
                 shift: builder.eval(self.shift * domain_power),
                 g,
             });
@@ -158,7 +148,6 @@ where
         let domain = config.unwrap().get_subgroup(builder, log_degree);
         TwoAdicMultiplicativeCosetVariable {
             log_n: domain.log_n,
-            size: domain.size,
             shift: builder.eval(self.shift * C::F::GENERATOR),
             g: domain.g,
         }
@@ -193,10 +182,6 @@ pub(crate) mod tests {
         builder.assert_var_eq(
             domain.log_n.clone(),
             F::from_canonical_usize(domain_val.log_n),
-        );
-        builder.assert_var_eq(
-            domain.size.clone(),
-            F::from_canonical_usize(1 << domain_val.log_n),
         );
         builder.assert_felt_eq(domain.shift, domain_val.shift);
 
