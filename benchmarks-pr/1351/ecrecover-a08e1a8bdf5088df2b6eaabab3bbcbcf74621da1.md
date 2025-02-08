@@ -1,24 +1,41 @@
 | Summary | Proof Time (s) | Parallel Proof Time (s) |
 |:---|---:|---:|
-| Total | <span style='color: green'>(-0 [-0.3%])</span> 2.48 | <span style='color: green'>(-0 [-0.3%])</span> 2.48 |
-| ecrecover_program | <span style='color: green'>(-0 [-0.3%])</span> 2.48 | <span style='color: green'>(-0 [-0.3%])</span> 2.48 |
+| Total | <span style='color: red'>(+0 [+0.4%])</span> 13.41 | <span style='color: red'>(+0 [+0.4%])</span> 13.41 |
+| ecrecover_program | <span style='color: green'>(-0 [-0.8%])</span> 2.47 | <span style='color: green'>(-0 [-0.8%])</span> 2.47 |
+| leaf | <span style='color: red'>(+0 [+0.7%])</span> 10.94 | <span style='color: red'>(+0 [+0.7%])</span> 10.94 |
 
 
 | ecrecover_program |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` | <span style='color: green'>(-7 [-0.3%])</span> 2,479 | <span style='color: green'>(-7 [-0.3%])</span> 2,479 | <span style='color: green'>(-7 [-0.3%])</span> 2,479 | <span style='color: green'>(-7 [-0.3%])</span> 2,479 |
+| `total_proof_time_ms ` | <span style='color: green'>(-19 [-0.8%])</span> 2,467 | <span style='color: green'>(-19 [-0.8%])</span> 2,467 | <span style='color: green'>(-19 [-0.8%])</span> 2,467 | <span style='color: green'>(-19 [-0.8%])</span> 2,467 |
 | `main_cells_used     ` |  15,055,723 |  15,055,723 |  15,055,723 |  15,055,723 |
 | `total_cycles        ` |  284,567 |  284,567 |  284,567 |  284,567 |
 | `execute_time_ms     ` | <span style='color: green'>(-3 [-2.0%])</span> 147 | <span style='color: green'>(-3 [-2.0%])</span> 147 | <span style='color: green'>(-3 [-2.0%])</span> 147 | <span style='color: green'>(-3 [-2.0%])</span> 147 |
-| `trace_gen_time_ms   ` | <span style='color: red'>(+2 [+1.1%])</span> 187 | <span style='color: red'>(+2 [+1.1%])</span> 187 | <span style='color: red'>(+2 [+1.1%])</span> 187 | <span style='color: red'>(+2 [+1.1%])</span> 187 |
-| `stark_prove_excluding_trace_time_ms` | <span style='color: green'>(-6 [-0.3%])</span> 2,145 | <span style='color: green'>(-6 [-0.3%])</span> 2,145 | <span style='color: green'>(-6 [-0.3%])</span> 2,145 | <span style='color: green'>(-6 [-0.3%])</span> 2,145 |
-| `main_trace_commit_time_ms` | <span style='color: green'>(-9 [-2.3%])</span> 376 | <span style='color: green'>(-9 [-2.3%])</span> 376 | <span style='color: green'>(-9 [-2.3%])</span> 376 | <span style='color: green'>(-9 [-2.3%])</span> 376 |
-| `generate_perm_trace_time_ms` | <span style='color: green'>(-1 [-3.0%])</span> 32 | <span style='color: green'>(-1 [-3.0%])</span> 32 | <span style='color: green'>(-1 [-3.0%])</span> 32 | <span style='color: green'>(-1 [-3.0%])</span> 32 |
-| `perm_trace_commit_time_ms` | <span style='color: green'>(-7 [-1.9%])</span> 352 | <span style='color: green'>(-7 [-1.9%])</span> 352 | <span style='color: green'>(-7 [-1.9%])</span> 352 | <span style='color: green'>(-7 [-1.9%])</span> 352 |
-| `quotient_poly_compute_time_ms` | <span style='color: green'>(-3 [-1.3%])</span> 224 | <span style='color: green'>(-3 [-1.3%])</span> 224 | <span style='color: green'>(-3 [-1.3%])</span> 224 | <span style='color: green'>(-3 [-1.3%])</span> 224 |
-| `quotient_poly_commit_time_ms` | <span style='color: red'>(+21 [+4.5%])</span> 492 | <span style='color: red'>(+21 [+4.5%])</span> 492 | <span style='color: red'>(+21 [+4.5%])</span> 492 | <span style='color: red'>(+21 [+4.5%])</span> 492 |
-| `pcs_opening_time_ms ` | <span style='color: green'>(-6 [-0.9%])</span> 658 | <span style='color: green'>(-6 [-0.9%])</span> 658 | <span style='color: green'>(-6 [-0.9%])</span> 658 | <span style='color: green'>(-6 [-0.9%])</span> 658 |
+| `trace_gen_time_ms   ` | <span style='color: red'>(+3 [+1.6%])</span> 188 | <span style='color: red'>(+3 [+1.6%])</span> 188 | <span style='color: red'>(+3 [+1.6%])</span> 188 | <span style='color: red'>(+3 [+1.6%])</span> 188 |
+| `stark_prove_excluding_trace_time_ms` | <span style='color: green'>(-19 [-0.9%])</span> 2,132 | <span style='color: green'>(-19 [-0.9%])</span> 2,132 | <span style='color: green'>(-19 [-0.9%])</span> 2,132 | <span style='color: green'>(-19 [-0.9%])</span> 2,132 |
+| `main_trace_commit_time_ms` | <span style='color: red'>(+1 [+0.3%])</span> 386 | <span style='color: red'>(+1 [+0.3%])</span> 386 | <span style='color: red'>(+1 [+0.3%])</span> 386 | <span style='color: red'>(+1 [+0.3%])</span> 386 |
+| `generate_perm_trace_time_ms` | <span style='color: red'>(+4 [+12.1%])</span> 37 | <span style='color: red'>(+4 [+12.1%])</span> 37 | <span style='color: red'>(+4 [+12.1%])</span> 37 | <span style='color: red'>(+4 [+12.1%])</span> 37 |
+| `perm_trace_commit_time_ms` | <span style='color: green'>(-6 [-1.7%])</span> 353 | <span style='color: green'>(-6 [-1.7%])</span> 353 | <span style='color: green'>(-6 [-1.7%])</span> 353 | <span style='color: green'>(-6 [-1.7%])</span> 353 |
+| `quotient_poly_compute_time_ms` | <span style='color: red'>(+2 [+0.9%])</span> 229 | <span style='color: red'>(+2 [+0.9%])</span> 229 | <span style='color: red'>(+2 [+0.9%])</span> 229 | <span style='color: red'>(+2 [+0.9%])</span> 229 |
+| `quotient_poly_commit_time_ms` | <span style='color: green'>(-6 [-1.3%])</span> 465 | <span style='color: green'>(-6 [-1.3%])</span> 465 | <span style='color: green'>(-6 [-1.3%])</span> 465 | <span style='color: green'>(-6 [-1.3%])</span> 465 |
+| `pcs_opening_time_ms ` | <span style='color: green'>(-15 [-2.3%])</span> 649 | <span style='color: green'>(-15 [-2.3%])</span> 649 | <span style='color: green'>(-15 [-2.3%])</span> 649 | <span style='color: green'>(-15 [-2.3%])</span> 649 |
+
+| leaf |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` | <span style='color: red'>(+77 [+0.7%])</span> 10,944 | <span style='color: red'>(+77 [+0.7%])</span> 10,944 | <span style='color: red'>(+77 [+0.7%])</span> 10,944 | <span style='color: red'>(+77 [+0.7%])</span> 10,944 |
+| `main_cells_used     ` | <span style='color: green'>(-759215 [-0.6%])</span> 117,657,059 | <span style='color: green'>(-759215 [-0.6%])</span> 117,657,059 | <span style='color: green'>(-759215 [-0.6%])</span> 117,657,059 | <span style='color: green'>(-759215 [-0.6%])</span> 117,657,059 |
+| `total_cycles        ` | <span style='color: green'>(-28674 [-1.8%])</span> 1,606,773 | <span style='color: green'>(-28674 [-1.8%])</span> 1,606,773 | <span style='color: green'>(-28674 [-1.8%])</span> 1,606,773 | <span style='color: green'>(-28674 [-1.8%])</span> 1,606,773 |
+| `execute_time_ms     ` | <span style='color: green'>(-11 [-1.9%])</span> 561 | <span style='color: green'>(-11 [-1.9%])</span> 561 | <span style='color: green'>(-11 [-1.9%])</span> 561 | <span style='color: green'>(-11 [-1.9%])</span> 561 |
+| `trace_gen_time_ms   ` | <span style='color: red'>(+78 [+5.2%])</span> 1,571 | <span style='color: red'>(+78 [+5.2%])</span> 1,571 | <span style='color: red'>(+78 [+5.2%])</span> 1,571 | <span style='color: red'>(+78 [+5.2%])</span> 1,571 |
+| `stark_prove_excluding_trace_time_ms` | <span style='color: red'>(+10 [+0.1%])</span> 8,812 | <span style='color: red'>(+10 [+0.1%])</span> 8,812 | <span style='color: red'>(+10 [+0.1%])</span> 8,812 | <span style='color: red'>(+10 [+0.1%])</span> 8,812 |
+| `main_trace_commit_time_ms` | <span style='color: red'>(+32 [+1.8%])</span> 1,782 | <span style='color: red'>(+32 [+1.8%])</span> 1,782 | <span style='color: red'>(+32 [+1.8%])</span> 1,782 | <span style='color: red'>(+32 [+1.8%])</span> 1,782 |
+| `generate_perm_trace_time_ms` | <span style='color: green'>(-3 [-1.1%])</span> 263 | <span style='color: green'>(-3 [-1.1%])</span> 263 | <span style='color: green'>(-3 [-1.1%])</span> 263 | <span style='color: green'>(-3 [-1.1%])</span> 263 |
+| `perm_trace_commit_time_ms` | <span style='color: green'>(-23 [-1.2%])</span> 1,880 | <span style='color: green'>(-23 [-1.2%])</span> 1,880 | <span style='color: green'>(-23 [-1.2%])</span> 1,880 | <span style='color: green'>(-23 [-1.2%])</span> 1,880 |
+| `quotient_poly_compute_time_ms` | <span style='color: green'>(-13 [-0.9%])</span> 1,449 | <span style='color: green'>(-13 [-0.9%])</span> 1,449 | <span style='color: green'>(-13 [-0.9%])</span> 1,449 | <span style='color: green'>(-13 [-0.9%])</span> 1,449 |
+| `quotient_poly_commit_time_ms` | <span style='color: green'>(-13 [-0.8%])</span> 1,589 | <span style='color: green'>(-13 [-0.8%])</span> 1,589 | <span style='color: green'>(-13 [-0.8%])</span> 1,589 | <span style='color: green'>(-13 [-0.8%])</span> 1,589 |
+| `pcs_opening_time_ms ` | <span style='color: red'>(+29 [+1.6%])</span> 1,843 | <span style='color: red'>(+29 [+1.6%])</span> 1,843 | <span style='color: red'>(+29 [+1.6%])</span> 1,843 | <span style='color: red'>(+29 [+1.6%])</span> 1,843 |
 
 
 
@@ -27,7 +44,7 @@
 
 | group | num_segments | keygen_time_ms | commit_exe_time_ms |
 | --- | --- | --- | --- |
-| ecrecover_program | 1 | 1,150 | 12 | 
+| ecrecover_program | 1 | 1,159 | 11 | 
 
 | group | air_name | quotient_deg | interactions | constraints |
 | --- | --- | --- | --- | --- |
@@ -65,6 +82,43 @@
 | ecrecover_program | VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, FieldExpressionCoreAir> | 4 | 156 | 150 | 
 | ecrecover_program | VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir> | 4 | 422 | 351 | 
 | ecrecover_program | VmConnectorAir | 4 | 3 | 8 | 
+| leaf | AccessAdapterAir<2> | 4 | 5 | 11 | 
+| leaf | AccessAdapterAir<4> | 4 | 5 | 11 | 
+| leaf | AccessAdapterAir<8> | 4 | 5 | 11 | 
+| leaf | FriReducedOpeningAir | 4 | 39 | 60 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 1> | 4 | 136 | 530 | 
+| leaf | PhantomAir | 4 | 3 | 4 | 
+| leaf | ProgramAir | 1 | 1 | 4 | 
+| leaf | VariableRangeCheckerAir | 1 | 1 | 4 | 
+| leaf | VmAirWrapper<AluNativeAdapterAir, FieldArithmeticCoreAir> | 4 | 15 | 23 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 4 | 11 | 22 | 
+| leaf | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 4 | 7 | 6 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 4 | 11 | 23 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 4 | 15 | 16 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 4 | 15 | 16 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 4 | 15 | 23 | 
+| leaf | VmConnectorAir | 4 | 3 | 8 | 
+| leaf | VolatileBoundaryAir | 4 | 4 | 16 | 
+
+| group | air_name | idx | rows | prep_cols | perm_cols | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| leaf | AccessAdapterAir<2> | 0 | 1,048,576 |  | 12 | 11 | 24,117,248 | 
+| leaf | AccessAdapterAir<4> | 0 | 524,288 |  | 12 | 13 | 13,107,200 | 
+| leaf | AccessAdapterAir<8> | 0 | 512 |  | 12 | 17 | 14,848 | 
+| leaf | FriReducedOpeningAir | 0 | 1,048,576 |  | 44 | 27 | 74,448,896 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 1> | 0 | 131,072 |  | 160 | 399 | 73,269,248 | 
+| leaf | PhantomAir | 0 | 8,192 |  | 8 | 6 | 114,688 | 
+| leaf | ProgramAir | 0 | 1,048,576 |  | 8 | 10 | 18,874,368 | 
+| leaf | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| leaf | VmAirWrapper<AluNativeAdapterAir, FieldArithmeticCoreAir> | 0 | 1,048,576 |  | 20 | 29 | 51,380,224 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 0 | 262,144 |  | 16 | 23 | 10,223,616 | 
+| leaf | VmAirWrapper<JalNativeAdapterAir, JalCoreAir> | 0 | 16,384 |  | 12 | 9 | 344,064 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 0 | 64 |  | 16 | 23 | 2,496 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 0 | 524,288 |  | 24 | 22 | 24,117,248 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 0 | 131,072 |  | 24 | 31 | 7,208,960 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 0 | 262,144 |  | 20 | 38 | 15,204,352 | 
+| leaf | VmConnectorAir | 0 | 2 | 1 | 8 | 4 | 24 | 
+| leaf | VolatileBoundaryAir | 0 | 1,048,576 |  | 8 | 11 | 19,922,944 | 
 
 | group | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -101,9 +155,13 @@
 | ecrecover_program | VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir> | 0 | 1,024 |  | 428 | 619 | 1,072,128 | 
 | ecrecover_program | VmConnectorAir | 0 | 2 | 1 | 8 | 4 | 24 | 
 
+| group | idx | trace_gen_time_ms | total_proof_time_ms | total_cycles | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| leaf | 0 | 1,571 | 10,944 | 1,606,773 | 334,709,720 | 8,812 | 1,449 | 1,589 | 1,880 | 1,843 | 1,782 | 117,657,059 | 263 | 561 | 
+
 | group | segment | trace_gen_time_ms | total_proof_time_ms | total_cycles | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ecrecover_program | 0 | 187 | 2,479 | 284,567 | 38,417,467 | 2,145 | 224 | 492 | 352 | 658 | 376 | 15,055,723 | 32 | 147 | 
+| ecrecover_program | 0 | 188 | 2,467 | 284,567 | 38,417,467 | 2,132 | 229 | 465 | 353 | 649 | 386 | 15,055,723 | 37 | 147 | 
 
 </details>
 
@@ -116,4 +174,4 @@ Instance Type: 64cpu-linux-arm64
 
 Memory Allocator: mimalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/13212682280)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/13212961996)
