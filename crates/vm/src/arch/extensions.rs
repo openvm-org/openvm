@@ -282,16 +282,16 @@ impl<E, P> VmInventory<E, P> {
     }
 
     /// Append `other` to current inventory. This means `self` comes earlier in the dependency chain.
-    pub fn append(&mut self, mut other: VmInventory<E, P>) -> Result<(), VmInventoryError> {
+    pub fn append(&mut self, mut other: Self) -> Result<(), VmInventoryError> {
         let num_executors = self.executors.len();
         let num_periphery = self.periphery.len();
-        for (opcode, mut id) in other.instruction_lookup.into_iter() {
+        for (opcode, mut id) in other.instruction_lookup {
             id += num_executors;
             if let Some(old_id) = self.instruction_lookup.insert(opcode, id) {
                 return Err(VmInventoryError::ExecutorExists { opcode, id: old_id });
             }
         }
-        for chip_id in other.insertion_order.iter_mut() {
+        for chip_id in &mut other.insertion_order {
             match chip_id {
                 ChipId::Executor(id) => *id += num_executors,
                 ChipId::Periphery(id) => *id += num_periphery,
@@ -524,7 +524,7 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 
     pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory_controller.offline_memory().clone()
+        self.memory_controller.offline_memory()
     }
 
     pub fn execution_bus(&self) -> ExecutionBus {
@@ -826,7 +826,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     /// Warning: this sets the stream in all chips which have a shared mutable reference to the streams.
-    pub(crate) fn set_streams(&mut self, streams: Streams<F>) {
+    pub(crate) fn set_streams(&self, streams: Streams<F>) {
         *self.streams.lock().unwrap() = streams;
     }
 
@@ -861,7 +861,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .insertion_order
             .iter()
             .rev()
-            .flat_map(move |chip_idx| match *chip_idx {
+            .filter_map(move |chip_idx| match *chip_idx {
                 // Skip public values chip if it exists.
                 ChipId::Executor(id) => (Some(id) != public_values_chip_idx)
                     .then(|| Either::Executor(&self.inventory.executors[id])),
@@ -1153,15 +1153,15 @@ impl<SC: StarkGenericConfig> VmProofInputBuilder<SC> {
     /// Adds air proof input if one of the main trace matrices is non-empty.
     /// Always increments the internal `curr_air_id` regardless of whether a new air proof input was added or not.
     fn add_air_proof_input(&mut self, air_proof_input: AirProofInput<SC>) {
-        let h = if !air_proof_input.raw.cached_mains.is_empty() {
-            air_proof_input.raw.cached_mains[0].height()
-        } else {
+        let h = if air_proof_input.raw.cached_mains.is_empty() {
             air_proof_input
                 .raw
                 .common_main
                 .as_ref()
                 .map(|trace| trace.height())
                 .unwrap()
+        } else {
+            air_proof_input.raw.cached_mains[0].height()
         };
         if h > 0 {
             self.proof_input_per_air
@@ -1286,15 +1286,15 @@ mod tests {
     impl AnyEnum for EnumA {
         fn as_any_kind(&self) -> &dyn Any {
             match self {
-                EnumA::A(a) => a,
-                EnumA::B(b) => b,
+                Self::A(a) => a,
+                Self::B(b) => b,
             }
         }
 
         fn as_any_kind_mut(&mut self) -> &mut dyn Any {
             match self {
-                EnumA::A(a) => a,
-                EnumA::B(b) => b,
+                Self::A(a) => a,
+                Self::B(b) => b,
             }
         }
     }
@@ -1302,15 +1302,15 @@ mod tests {
     impl AnyEnum for EnumB {
         fn as_any_kind(&self) -> &dyn Any {
             match self {
-                EnumB::C(c) => c,
-                EnumB::D(d) => d.as_any_kind(),
+                Self::C(c) => c,
+                Self::D(d) => d.as_any_kind(),
             }
         }
 
         fn as_any_kind_mut(&mut self) -> &mut dyn Any {
             match self {
-                EnumB::C(c) => c,
-                EnumB::D(d) => d.as_any_kind_mut(),
+                Self::C(c) => c,
+                Self::D(d) => d.as_any_kind_mut(),
             }
         }
     }

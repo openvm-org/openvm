@@ -110,7 +110,7 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, AlignedBorrow, Serialize, Deserialize)]
 #[repr(C)]
 pub struct ExecutionState<T> {
     pub pc: T,
@@ -285,8 +285,8 @@ impl<AB: InteractionBuilder> ExecutionBridgeInteractor<AB> {
 impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
     fn from((pc_inc, to_pc): (u32, Option<T>)) -> Self {
         match to_pc {
-            None => PcIncOrSet::Inc(T::from_canonical_u32(pc_inc)),
-            Some(to_pc) => PcIncOrSet::Set(to_pc),
+            None => Self::Inc(T::from_canonical_u32(pc_inc)),
+            Some(to_pc) => Self::Set(to_pc),
         }
     }
 }

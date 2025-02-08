@@ -135,24 +135,24 @@ pub enum MemoryTraceHeights {
 impl MemoryTraceHeights {
     fn flatten(&self) -> Vec<usize> {
         match self {
-            MemoryTraceHeights::Volatile(oh) => oh.flatten(),
-            MemoryTraceHeights::Persistent(oh) => oh.flatten(),
+            Self::Volatile(oh) => oh.flatten(),
+            Self::Persistent(oh) => oh.flatten(),
         }
     }
 
     /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
     pub fn round_to_next_power_of_two(&mut self) {
         match self {
-            MemoryTraceHeights::Volatile(oh) => oh.round_to_next_power_of_two(),
-            MemoryTraceHeights::Persistent(oh) => oh.round_to_next_power_of_two(),
+            Self::Volatile(oh) => oh.round_to_next_power_of_two(),
+            Self::Persistent(oh) => oh.round_to_next_power_of_two(),
         }
     }
 
     /// Round all trace heights to the next power of two, except 0 stays 0.
     pub fn round_to_next_power_of_two_or_zero(&mut self) {
         match self {
-            MemoryTraceHeights::Volatile(oh) => oh.round_to_next_power_of_two_or_zero(),
-            MemoryTraceHeights::Persistent(oh) => oh.round_to_next_power_of_two_or_zero(),
+            Self::Volatile(oh) => oh.round_to_next_power_of_two_or_zero(),
+            Self::Persistent(oh) => oh.round_to_next_power_of_two_or_zero(),
         }
     }
 }
@@ -342,9 +342,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn set_initial_memory(&mut self, memory: MemoryImage<F>) {
-        if self.timestamp() > INITIAL_TIMESTAMP + 1 {
-            panic!("Cannot set initial memory after first timestamp");
-        }
+        assert!(self.timestamp() <= INITIAL_TIMESTAMP + 1, "Cannot set initial memory after first timestamp");
         let mut offline_memory = self.offline_memory.lock().unwrap();
         offline_memory.set_initial_memory(memory.clone(), self.mem_config);
 
@@ -827,7 +825,7 @@ mod tests {
         let mut memory_controller = MemoryController::with_volatile_memory(
             memory_bus,
             memory_config,
-            range_checker.clone(),
+            range_checker,
         );
 
         let mut rng = thread_rng();

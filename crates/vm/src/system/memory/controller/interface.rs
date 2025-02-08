@@ -22,8 +22,8 @@ pub enum MemoryInterface<F> {
 impl<F: PrimeField32> MemoryInterface<F> {
     pub fn touch_range(&mut self, addr_space: u32, pointer: u32, len: u32) {
         match self {
-            MemoryInterface::Volatile { .. } => {}
-            MemoryInterface::Persistent {
+            Self::Volatile { .. } => {}
+            Self::Persistent {
                 boundary_chip,
                 merkle_chip,
                 ..
@@ -36,8 +36,8 @@ impl<F: PrimeField32> MemoryInterface<F> {
 
     pub fn compression_bus(&self) -> Option<DirectCompressionBus> {
         match self {
-            MemoryInterface::Volatile { .. } => None,
-            MemoryInterface::Persistent { merkle_chip, .. } => {
+            Self::Volatile { .. } => None,
+            Self::Persistent { merkle_chip, .. } => {
                 Some(merkle_chip.air.compression_bus)
             }
         }

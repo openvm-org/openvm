@@ -107,9 +107,7 @@ impl<F> PhantomChip<F> {
     }
 
     pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        if self.streams.set(streams).is_err() {
-            panic!("Streams should only be set once");
-        }
+        assert!(self.streams.set(streams).is_ok(), "Streams should only be set once");
     }
 
     pub(crate) fn add_sub_executor<P: PhantomSubExecutor<F> + 'static>(

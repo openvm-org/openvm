@@ -60,7 +60,7 @@ fn test<const CHUNK: usize>(
     for key in initial_memory.items().map(|(key, _)| key) {
         assert!(final_memory.get(&key).is_some());
     }
-    for &(address_space, label) in touched_labels.iter() {
+    for &(address_space, label) in &touched_labels {
         let mut contains_some_key = false;
         for i in 0..CHUNK {
             if final_memory
@@ -83,7 +83,7 @@ fn test<const CHUNK: usize>(
 
     let mut chip =
         MemoryMerkleChip::<CHUNK, _>::new(memory_dimensions, merkle_bus, COMPRESSION_BUS);
-    for &(address_space, label) in touched_labels.iter() {
+    for &(address_space, label) in &touched_labels {
         chip.touch_range(address_space, label * CHUNK as u32, CHUNK as u32);
     }
 

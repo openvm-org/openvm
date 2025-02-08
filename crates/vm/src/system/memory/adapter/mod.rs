@@ -49,7 +49,7 @@ impl<F> AccessAdapterInventory<F> {
             Self::create_access_adapter_chip::<8>(rc.clone(), mb, cmb, maan),
             Self::create_access_adapter_chip::<16>(rc.clone(), mb, cmb, maan),
             Self::create_access_adapter_chip::<32>(rc.clone(), mb, cmb, maan),
-            Self::create_access_adapter_chip::<64>(rc.clone(), mb, cmb, maan),
+            Self::create_access_adapter_chip::<64>(rc, mb, cmb, maan),
         ]
         .into_iter()
         .flatten()
@@ -135,15 +135,8 @@ impl<F> AccessAdapterInventory<F> {
         clk_max_bits: usize,
         max_access_adapter_n: usize,
     ) -> Option<GenericAccessAdapterChip<F>> {
-        if N <= max_access_adapter_n {
-            Some(GenericAccessAdapterChip::new::<N>(
-                range_checker,
-                memory_bus,
-                clk_max_bits,
-            ))
-        } else {
-            None
-        }
+        (N <= max_access_adapter_n)
+            .then(|| GenericAccessAdapterChip::new::<N>(range_checker, memory_bus, clk_max_bits))
     }
 }
 
@@ -197,12 +190,12 @@ impl<F> GenericAccessAdapterChip<F> {
         let mb = memory_bus;
         let cmb = clk_max_bits;
         match N {
-            2 => GenericAccessAdapterChip::N2(AccessAdapterChip::new(rc, mb, cmb)),
-            4 => GenericAccessAdapterChip::N4(AccessAdapterChip::new(rc, mb, cmb)),
-            8 => GenericAccessAdapterChip::N8(AccessAdapterChip::new(rc, mb, cmb)),
-            16 => GenericAccessAdapterChip::N16(AccessAdapterChip::new(rc, mb, cmb)),
-            32 => GenericAccessAdapterChip::N32(AccessAdapterChip::new(rc, mb, cmb)),
-            64 => GenericAccessAdapterChip::N64(AccessAdapterChip::new(rc, mb, cmb)),
+            2 => Self::N2(AccessAdapterChip::new(rc, mb, cmb)),
+            4 => Self::N4(AccessAdapterChip::new(rc, mb, cmb)),
+            8 => Self::N8(AccessAdapterChip::new(rc, mb, cmb)),
+            16 => Self::N16(AccessAdapterChip::new(rc, mb, cmb)),
+            32 => Self::N32(AccessAdapterChip::new(rc, mb, cmb)),
+            64 => Self::N64(AccessAdapterChip::new(rc, mb, cmb)),
             _ => panic!("Only supports N in (2, 4, 8, 16, 32, 64)"),
         }
     }
@@ -210,12 +203,12 @@ impl<F> GenericAccessAdapterChip<F> {
     #[cfg(test)]
     fn records(&self) -> &[AccessAdapterRecord<F>] {
         match &self {
-            GenericAccessAdapterChip::N2(chip) => &chip.records,
-            GenericAccessAdapterChip::N4(chip) => &chip.records,
-            GenericAccessAdapterChip::N8(chip) => &chip.records,
-            GenericAccessAdapterChip::N16(chip) => &chip.records,
-            GenericAccessAdapterChip::N32(chip) => &chip.records,
-            GenericAccessAdapterChip::N64(chip) => &chip.records,
+            Self::N2(chip) => &chip.records,
+            Self::N4(chip) => &chip.records,
+            Self::N8(chip) => &chip.records,
+            Self::N16(chip) => &chip.records,
+            Self::N32(chip) => &chip.records,
+            Self::N64(chip) => &chip.records,
         }
     }
 }

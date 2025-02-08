@@ -204,7 +204,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 
     pub fn offline_memory_mutex_arc(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory_controller().borrow().offline_memory().clone()
+        self.memory_controller().borrow().offline_memory()
     }
 
     pub fn get_default_register(&mut self, increment: usize) -> usize {

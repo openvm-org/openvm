@@ -171,10 +171,8 @@ fn test_vm_override_executor_height() {
         .into_iter()
         .collect(),
     };
-    let overridden_heights = VmComplexTraceHeights::new(
-        system_overridden_heights.clone(),
-        inventory_overridden_heights.clone(),
-    );
+    let overridden_heights =
+        VmComplexTraceHeights::new(system_overridden_heights, inventory_overridden_heights);
     let executor = SingleSegmentVmExecutor::new_with_overridden_trace_heights(
         vm_config,
         Some(overridden_heights),
@@ -303,9 +301,8 @@ fn test_vm_initial_memory() {
         Instruction::<BabyBear>::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ]);
 
-    let init_memory: BTreeMap<_, _> = [((4, 7), BabyBear::from_canonical_u32(101))]
-        .into_iter()
-        .collect();
+    let init_memory: BTreeMap<_, _> =
+        std::iter::once(((4, 7), BabyBear::from_canonical_u32(101))).collect();
 
     let config = NativeConfig::aggregation(0, 3).with_continuations();
     let exe = VmExe {

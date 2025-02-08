@@ -50,7 +50,7 @@ fn boundary_air_test() {
 
     let mut final_memory = TimestampedEquipartition::new();
 
-    for (addr_space, pointer) in distinct_addresses.iter().cloned() {
+    for (addr_space, pointer) in distinct_addresses.iter().copied() {
         let final_data = Val::from_canonical_u32(rng.gen_range(0..MAX_VAL));
         let final_clk = rng.gen_range(1..MAX_VAL) as u32;
 
@@ -115,7 +115,7 @@ fn boundary_air_test() {
         let overridden_height = boundary_api.main_trace_height() * 2;
         let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
         let mut boundary_chip =
-            VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
+            VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker);
         boundary_chip.set_overridden_height(overridden_height);
         boundary_chip.finalize(final_memory.clone());
         let boundary_api: AirProofInput<BabyBearPoseidon2Config> =

@@ -145,10 +145,10 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     ) -> Self {
         let mut chip_complex = config.create_chip_complex().unwrap();
         chip_complex.set_streams(init_streams);
-        let program = if !config.system().profiling {
-            program.strip_debug_infos()
-        } else {
+        let program = if config.system().profiling {
             program
+        } else {
+            program.strip_debug_infos()
         };
         chip_complex.set_program(program);
 
@@ -177,10 +177,10 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         vm_chip_complex_state: VmChipComplexState<F>,
     ) -> Self {
         let mut chip_complex = config.create_chip_complex().unwrap();
-        let program = if !config.system().profiling {
-            program.strip_debug_infos()
-        } else {
+        let program = if config.system().profiling {
             program
+        } else {
+            program.strip_debug_infos()
         };
         chip_complex.set_program(program);
         chip_complex.load_state(vm_chip_complex_state);
@@ -278,14 +278,14 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                             #[cfg(feature = "bench-metrics")]
                             metrics
                                 .cycle_tracker
-                                .start(dsl_instr.cloned().unwrap_or("Default".to_string()))
+                                .start(dsl_instr.cloned().unwrap_or_else(|| "Default".to_string()))
                         }
                         Some(SysPhantom::CtEnd) =>
                         {
                             #[cfg(feature = "bench-metrics")]
                             metrics
                                 .cycle_tracker
-                                .end(dsl_instr.cloned().unwrap_or("Default".to_string()))
+                                .end(dsl_instr.cloned().unwrap_or_else(|| "Default".to_string()))
                         }
                         _ => {}
                     }

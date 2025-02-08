@@ -280,7 +280,7 @@ impl MemoryOfflineChecker {
         base: &MemoryBaseAuxCols<AB::Var>,
         enabled: AB::Expr,
     ) {
-        let lt_io = AssertLessThanIo::new(base.prev_timestamp, timestamp.clone(), enabled);
+        let lt_io = AssertLessThanIo::new(base.prev_timestamp, timestamp, enabled);
         self.timestamp_lt_air
             .eval(builder, (lt_io, &base.timestamp_lt_aux.lower_decomp));
     }

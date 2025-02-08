@@ -50,13 +50,13 @@ impl<F> Streams<F> {
 
 impl<F> From<VecDeque<Vec<F>>> for Streams<F> {
     fn from(value: VecDeque<Vec<F>>) -> Self {
-        Streams::new(value)
+        Self::new(value)
     }
 }
 
 impl<F> From<Vec<Vec<F>>> for Streams<F> {
     fn from(value: Vec<Vec<F>>) -> Self {
-        Streams::new(value)
+        Self::new(value)
     }
 }
 
@@ -182,7 +182,7 @@ where
             exe.program.clone(),
             from_state.input,
             Some(from_state.memory),
-            exe.fn_bounds.clone(),
+            exe.fn_bounds,
         );
         #[cfg(feature = "bench-metrics")]
         {
@@ -595,7 +595,7 @@ where
             };
 
             // Check public values.
-            for air_proof_data in proof.per_air.iter() {
+            for air_proof_data in &proof.per_air {
                 let pvs = &air_proof_data.public_values;
                 let air_vk = &vk.per_air[air_proof_data.air_id];
 

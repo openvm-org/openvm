@@ -71,7 +71,6 @@ impl<F: Field, const R: usize> NativeReadRecord<F, R> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
 pub struct NativeWriteRecord<F: Field, const W: usize> {
     pub from_state: ExecutionState<u32>,
     #[serde(with = "BigArray")]

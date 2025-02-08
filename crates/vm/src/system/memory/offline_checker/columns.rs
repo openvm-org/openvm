@@ -93,6 +93,6 @@ impl<T, const N: usize> AsRef<MemoryReadAuxCols<T>> for MemoryWriteAuxCols<T, N>
         // Safety:
         //  - `MemoryReadAuxCols<T>` is repr(C) and its only field is the first field of `MemoryWriteAuxCols<T, N>`.
         //  - Thus, the memory layout of `MemoryWriteAuxCols<T, N>` begins with a valid `MemoryReadAuxCols<T>`.
-        unsafe { &*(self as *const MemoryWriteAuxCols<T, N> as *const MemoryReadAuxCols<T>) }
+        unsafe { &*(self as *const Self as *const MemoryReadAuxCols<T>) }
     }
 }

@@ -19,9 +19,10 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
             // Check if the struct has only one unnamed field
             let inner_ty = match &inner.fields {
                 Fields::Unnamed(fields) => {
-                    if fields.unnamed.len() != 1 {
-                        panic!("Only one unnamed field is supported");
-                    }
+                    assert!(
+                        fields.unnamed.len() == 1,
+                        "Only one unnamed field is supported"
+                    );
                     fields.unnamed.first().unwrap().ty.clone()
                 }
                 _ => panic!("Only unnamed fields are supported"),
@@ -244,13 +245,13 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
             let extensions = fields
                 .iter()
                 .filter(|f| f.attrs.iter().any(|attr| attr.path().is_ident("extension")))
-                .cloned()
+                .copied()
                 .collect::<Vec<_>>();
 
             let mut executor_enum_fields = Vec::new();
             let mut periphery_enum_fields = Vec::new();
             let mut create_chip_complex = Vec::new();
-            for &e in extensions.iter() {
+            for e in extensions {
                 let (field_name, field_name_upper) =
                     gen_name_with_uppercase_idents(&e.ident.clone().unwrap());
                 // TRACKING ISSUE:

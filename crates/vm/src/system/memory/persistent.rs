@@ -150,7 +150,7 @@ impl<F: PrimeField32, const CHUNK: usize> Default for TouchedLabels<F, CHUNK> {
 impl<F: PrimeField32, const CHUNK: usize> TouchedLabels<F, CHUNK> {
     fn touch(&mut self, address_space: u32, label: u32) {
         match self {
-            TouchedLabels::Running(touched_labels) => {
+            Self::Running(touched_labels) => {
                 touched_labels.insert((address_space, label));
             }
             _ => panic!("Cannot touch after finalization"),
@@ -158,8 +158,8 @@ impl<F: PrimeField32, const CHUNK: usize> TouchedLabels<F, CHUNK> {
     }
     fn len(&self) -> usize {
         match self {
-            TouchedLabels::Running(touched_labels) => touched_labels.len(),
-            TouchedLabels::Final(touched_labels) => touched_labels.len(),
+            Self::Running(touched_labels) => touched_labels.len(),
+            Self::Final(touched_labels) => touched_labels.len(),
         }
     }
 }

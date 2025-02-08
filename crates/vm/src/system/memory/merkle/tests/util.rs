@@ -37,7 +37,7 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
 
     pub fn trace(&self) -> RowMajorMatrix<F> {
         let mut rows = vec![];
-        for request in self.requests.iter() {
+        for request in &self.requests {
             rows.push(F::ONE);
             rows.extend(request.iter().flatten());
         }
