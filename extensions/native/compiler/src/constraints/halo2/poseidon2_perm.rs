@@ -4,10 +4,12 @@
 use snark_verifier_sdk::snark_verifier::halo2_base::{
     gates::GateInstructions,
     safe_types::SafeBool,
-    utils::ScalarField,
+    utils::{BigPrimeField, ScalarField},
     AssignedValue, Context,
     QuantumCell::{self, Constant},
 };
+
+use super::baby_bear::better_select;
 
 #[derive(Clone, Debug)]
 pub struct Poseidon2State<F: ScalarField, const T: usize> {
@@ -79,15 +81,12 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
     }
 
     /// Constrains and set self to a specific state if `selector` is true.
-    pub fn select(
-        &mut self,
-        ctx: &mut Context<F>,
-        gate: &impl GateInstructions<F>,
-        selector: SafeBool<F>,
-        set_to: &Self,
-    ) {
+    pub fn select(&mut self, ctx: &mut Context<F>, selector: SafeBool<F>, set_to: &Self)
+    where
+        F: BigPrimeField,
+    {
         for i in 0..T {
-            self.s[i] = gate.select(ctx, set_to.s[i], self.s[i], *selector.as_ref());
+            self.s[i] = better_select(ctx, set_to.s[i], self.s[i], *selector.as_ref());
         }
     }
 

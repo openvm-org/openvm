@@ -302,7 +302,7 @@ impl BabyBearChip {
         a: AssignedBabyBear,
         b: AssignedBabyBear,
     ) -> AssignedBabyBear {
-        let value = self.gate().select(ctx, a.value, b.value, cond);
+        let value = better_select(ctx, a.value, b.value, cond);
         let max_bits = a.max_bits.max(b.max_bits);
         AssignedBabyBear { value, max_bits }
     }
@@ -406,6 +406,34 @@ where
     debug_assert!(*rem.value() < biguint_to_fe(&b));
     range.check_big_less_than_safe(ctx, rem, b);
     (div, rem)
+}
+
+pub fn better_select<F>(
+    ctx: &mut Context<F>,
+    a: impl Into<QuantumCell<F>>,
+    b: impl Into<QuantumCell<F>>,
+    sel: impl Into<QuantumCell<F>>,
+) -> AssignedValue<F>
+where
+    F: BigPrimeField,
+{
+    let a = a.into();
+    let b = b.into();
+    let sel = sel.into();
+    let diff_val = *a.value() - b.value();
+    let out_val = diff_val * sel.value() + b.value();
+    // | a - b | 1 | b | a |
+    // | b | sel | a - b | out |
+    let cells = [
+        a,
+        QuantumCell::Constant(-F::ONE),
+        b,
+        QuantumCell::Witness(diff_val),
+        sel,
+        QuantumCell::Witness(out_val),
+    ];
+    ctx.assign_region_smart(cells, [0, 2], [], []);
+    ctx.last().unwrap()
 }
 
 // irred poly is x^4 - 11
