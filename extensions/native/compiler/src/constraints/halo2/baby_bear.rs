@@ -408,6 +408,9 @@ where
     (div, rem)
 }
 
+/// Constrains and returns `sel ? a : b` assuming `sel` is boolean.
+///
+/// Defines a vertical gate of form `| a | -1 | b | a - b | sel | out |`, where out = sel * a + (1 - sel) * b = sel * (a - b) + b.
 pub fn better_select<F>(
     ctx: &mut Context<F>,
     a: impl Into<QuantumCell<F>>,
@@ -422,8 +425,8 @@ where
     let sel = sel.into();
     let diff_val = *a.value() - b.value();
     let out_val = diff_val * sel.value() + b.value();
-    // | a - b | 1 | b | a |
-    // | b | sel | a - b | out |
+    // | a | -1 | b | a - b | sel | b + sel * (a - b) |
+    // We use overlapping gates
     let cells = [
         a,
         QuantumCell::Constant(-F::ONE),
@@ -432,6 +435,9 @@ where
         sel,
         QuantumCell::Witness(out_val),
     ];
+    // Gates at offsets 0, 2:
+    // - 0: a + (-1) * b == diff_val
+    // - 2: b + diff_val * sel = b + (a - b) * sel == out_val
     ctx.assign_region_smart(cells, [0, 2], [], []);
     ctx.last().unwrap()
 }
