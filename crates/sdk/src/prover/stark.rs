@@ -49,7 +49,12 @@ impl<VC> StarkProver<VC> {
         VC::Periphery: Chip<SC>,
     {
         let app_proof = self.app_prover.generate_app_proof(input);
-        self.agg_prover.generate_agg_proof(app_proof)
+        let root_proof = self.agg_prover.generate_agg_proof(app_proof);
+        println!(
+            "root_proof bytes: {}",
+            bitcode::serialize(&root_proof).unwrap().len()
+        );
+        root_proof
     }
 
     pub fn generate_root_verifier_input(&self, input: StdIn) -> RootVmVerifierInput<SC>

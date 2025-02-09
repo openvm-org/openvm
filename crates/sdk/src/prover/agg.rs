@@ -95,6 +95,12 @@ impl AggStarkProver {
         let leaf_proofs = self
             .leaf_controller
             .generate_proof(&self.leaf_prover, &app_proofs);
+        for (i, leaf_proof) in leaf_proofs.iter().enumerate() {
+            println!(
+                "leaf_proof{i} bytes: {}",
+                bitcode::serialize(leaf_proof).unwrap().len()
+            );
+        }
         let public_values = app_proofs.user_public_values.public_values;
         let internal_proof = self.generate_internal_proof_impl(leaf_proofs, &public_values);
         RootVmVerifierInput {
@@ -163,7 +169,12 @@ impl AggStarkProver {
             });
             internal_node_height += 1;
         }
-        proofs.pop().unwrap()
+        let internal_proof = proofs.pop().unwrap();
+        println!(
+            "internal_proof bytes: {}",
+            bitcode::serialize(&internal_proof).unwrap().len()
+        );
+        internal_proof
     }
 
     fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<RootSC> {
