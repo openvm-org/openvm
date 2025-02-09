@@ -87,27 +87,16 @@ pub fn verify_two_adic_pcs<C: Config>(
     let max_gen_pow = config.get_two_adic_generator(builder, 1);
     let one_var: Felt<C::F> = builder.eval(C::F::ONE);
 
+    // Used in static mode only. The memoized powers of alpha, computed up
+    // to the maximum matrix width necessary.
+    let mut static_alpha_pows: Vec<SymbolicExt<C::F, C::EF>> = vec![C::EF::ONE.cons()];
     builder.cycle_tracker_start("pre-compute-rounds-context");
-    let rounds_context = compute_rounds_context(builder, &rounds, log_blowup, alpha);
-    // Only used in static mode.
-    let alpha_pows = if builder.flags.static_only {
-        let max_width = get_max_matrix_width(builder, &rounds);
-        let mut ret = Vec::with_capacity(max_width + 1);
-        ret.push(C::EF::ONE.cons());
-        for i in 1..=max_width {
-            let curr = builder.eval(ret[i - 1].clone() * alpha);
-            builder.ext_reduce_circuit(curr);
-            ret.push(curr.into());
-        }
-        ret
-    } else {
-        vec![]
-    };
+    let rounds_context =
+        compute_rounds_context(builder, &rounds, log_blowup, alpha, &mut static_alpha_pows);
     builder.cycle_tracker_end("pre-compute-rounds-context");
 
     // Working variables for reduced opening, reset per query. Both arrays indexed by log_height.
     let ro: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
-    let alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
 
     iter_zip!(builder, proof.query_proofs).for_each(|ptr_vec, builder| {
         let query_proof = builder.iter_ptr_get(&proof.query_proofs, ptr_vec[0]);
@@ -117,15 +106,12 @@ pub fn verify_two_adic_pcs<C: Config>(
             for j in 0..=MAX_TWO_ADICITY {
                 // ATTENTION: don't use set_value here, Fixed will share the same variable.
                 builder.set(&ro, j, C::EF::ZERO.cons());
-                builder.set(&alpha_pow, j, C::EF::ONE.cons());
             }
         } else {
             let zero_ef = builder.eval(C::EF::ZERO.cons());
-            let one_ef = builder.eval(C::EF::ONE.cons());
             for j in 0..=MAX_TWO_ADICITY {
                 // Use set_value here to save a copy.
                 builder.set_value(&ro, j, zero_ef);
-                builder.set_value(&alpha_pow, j, one_ef);
             }
         }
         // **ATTENTION**: always check shape of user inputs.
@@ -170,7 +156,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     ov_ptrs,
                     perm_ov_ptrs,
                     batch_dims,
-                    mat_alpha_pows,
+                    alpha_pow_acc_per_mat,
                     log_batch_max_height,
                 } = round_context;
 
@@ -181,76 +167,80 @@ pub fn verify_two_adic_pcs<C: Config>(
                 // For static to track the offset in the hint space.
                 let mut hint_offset = 0;
                 builder.cycle_tracker_start("compute-reduced-opening");
-                iter_zip!(builder, ov_ptrs, mats, mat_alpha_pows).for_each(|ptr_vec, builder| {
-                    let mat_opening = builder.iter_ptr_get(&ov_ptrs, ptr_vec[0]);
-                    let mat = builder.iter_ptr_get(&mats, ptr_vec[1]);
-                    let mat_alpha_pow = if builder.flags.static_only {
-                        builder.uninit()
-                    } else {
-                        builder.iter_ptr_get(&mat_alpha_pows, ptr_vec[2])
-                    };
-                    let mat_points = mat.points;
-                    let mat_values = mat.values;
-                    let log2_domain_size = mat.domain.log_n;
-                    let log_height = builder.eval_expr(log2_domain_size + RVar::from(log_blowup));
+                iter_zip!(builder, ov_ptrs, mats, alpha_pow_acc_per_mat).for_each(
+                    |ptr_vec, builder| {
+                        let mat_opening = builder.iter_ptr_get(&ov_ptrs, ptr_vec[0]);
+                        let mat = builder.iter_ptr_get(&mats, ptr_vec[1]);
+                        let alpha_pow_acc =
+                            builder.iter_ptr_get(&alpha_pow_acc_per_mat, ptr_vec[2]);
 
-                    let cur_ro = builder.get(&ro, log_height);
-                    let cur_alpha_pow = builder.get(&alpha_pow, log_height);
+                        let mat_points = mat.points;
+                        let mat_values = mat.values;
+                        let log2_domain_size = mat.domain.log_n;
+                        let log_height =
+                            builder.eval_expr(log2_domain_size + RVar::from(log_blowup));
 
-                    builder.cycle_tracker_start("exp-reverse-bits-len");
-                    let height_idx = builder.eval_expr(log_max_height - log_height);
-                    let x = builder.get(&tag_exp, height_idx);
-                    builder.cycle_tracker_end("exp-reverse-bits-len");
+                        let cur_ro = builder.get(&ro, log_height);
 
-                    let is_init: Usize<C::N> = builder.eval(C::N::ZERO);
-                    iter_zip!(builder, mat_points, mat_values).for_each(|ptr_vec, builder| {
-                        let z: Ext<C::F, C::EF> = builder.iter_ptr_get(&mat_points, ptr_vec[0]);
-                        let ps_at_z = builder.iter_ptr_get(&mat_values, ptr_vec[1]);
+                        builder.cycle_tracker_start("exp-reverse-bits-len");
+                        let height_idx = builder.eval_expr(log_max_height - log_height);
+                        let x = builder.get(&tag_exp, height_idx);
+                        builder.cycle_tracker_end("exp-reverse-bits-len");
 
-                        builder.cycle_tracker_start("single-reduced-opening-eval");
+                        let is_init: Usize<C::N> = builder.eval(C::N::ZERO);
+                        iter_zip!(builder, mat_points, mat_values).for_each(|ptr_vec, builder| {
+                            let z: Ext<C::F, C::EF> = builder.iter_ptr_get(&mat_points, ptr_vec[0]);
+                            let ps_at_z = builder.iter_ptr_get(&mat_values, ptr_vec[1]);
 
-                        if builder.flags.static_only {
-                            let n: Ext<C::F, C::EF> = builder.constant(C::EF::ZERO);
-                            let width = ps_at_z.len().value();
-                            if is_init.value() == 0 {
-                                let mat_opening_vals = {
-                                    let witness_refs = builder.get_witness_refs(hint_id.clone());
-                                    let start = hint_offset;
-                                    witness_refs[start..start + width].to_vec()
-                                };
-                                for (i, v) in mat_opening_vals.into_iter().enumerate() {
-                                    builder.set_value(&mat_opening, i, v.into());
+                            builder.cycle_tracker_start("single-reduced-opening-eval");
+
+                            if builder.flags.static_only {
+                                let n: Ext<C::F, C::EF> = builder.constant(C::EF::ZERO);
+                                let width = ps_at_z.len().value();
+                                if is_init.value() == 0 {
+                                    let mat_opening_vals = {
+                                        let witness_refs =
+                                            builder.get_witness_refs(hint_id.clone());
+                                        let start = hint_offset;
+                                        witness_refs[start..start + width].to_vec()
+                                    };
+                                    for (i, v) in mat_opening_vals.into_iter().enumerate() {
+                                        builder.set_value(&mat_opening, i, v.into());
+                                    }
                                 }
+                                for t in 0..width {
+                                    let alpha_pow = get_or_compute_static_alpha_pow(
+                                        builder,
+                                        &mut static_alpha_pows,
+                                        alpha,
+                                        t,
+                                    );
+                                    let p_at_x = builder.get(&mat_opening, t);
+                                    let p_at_z = builder.get(&ps_at_z, t);
+                                    builder.assign(&n, n + (p_at_z - p_at_x) * alpha_pow);
+                                }
+                                builder.assign(&cur_ro, cur_ro + n / (z - x) * alpha_pow_acc);
+                            } else {
+                                let mat_ro = builder.fri_single_reduced_opening_eval(
+                                    alpha,
+                                    hint_id.get_var(),
+                                    is_init.get_var(),
+                                    &mat_opening,
+                                    &ps_at_z,
+                                );
+                                builder
+                                    .assign(&cur_ro, cur_ro + (mat_ro * alpha_pow_acc / (z - x)));
                             }
-                            for (t, alpha_pow) in alpha_pows.iter().take(width).enumerate() {
-                                let p_at_x = builder.get(&mat_opening, t);
-                                let p_at_z = builder.get(&ps_at_z, t);
-                                builder.assign(&n, n + (p_at_z - p_at_x) * alpha_pow.clone());
-                            }
-                            builder.assign(&cur_ro, cur_ro + n / (z - x) * cur_alpha_pow);
-                            builder
-                                .assign(&cur_alpha_pow, cur_alpha_pow * alpha_pows[width].clone());
-                        } else {
-                            let mat_ro = builder.fri_single_reduced_opening_eval(
-                                alpha,
-                                hint_id.get_var(),
-                                is_init.get_var(),
-                                &mat_opening,
-                                &ps_at_z,
-                            );
-                            builder.assign(&cur_ro, cur_ro + (mat_ro * cur_alpha_pow / (z - x)));
-                            builder.assign(&cur_alpha_pow, cur_alpha_pow * mat_alpha_pow);
+                            // The buffer `mat_opening` has now been written to, so we set `is_init` to 1.
+                            builder.assign(&is_init, C::N::ONE);
+                            builder.cycle_tracker_end("single-reduced-opening-eval");
+                        });
+                        if builder.flags.static_only {
+                            hint_offset += mat_opening.len().value();
                         }
-                        // The buffer `mat_opening` has now been written to, so we set `is_init` to 1.
-                        builder.assign(&is_init, C::N::ONE);
-                        builder.cycle_tracker_end("single-reduced-opening-eval");
-                    });
-                    if builder.flags.static_only {
-                        hint_offset += mat_opening.len().value();
-                    }
-                    builder.set_value(&ro, log_height, cur_ro);
-                    builder.set_value(&alpha_pow, log_height, cur_alpha_pow);
-                });
+                        builder.set_value(&ro, log_height, cur_ro);
+                    },
+                );
                 builder.cycle_tracker_end("compute-reduced-opening");
 
                 let bits_reduced: Usize<_> = builder.eval(log_max_height - log_batch_max_height);
@@ -378,22 +368,6 @@ where
     }
 }
 
-fn get_max_matrix_width<C: Config>(
-    builder: &mut Builder<C>,
-    rounds: &Array<C, TwoAdicPcsRoundVariable<C>>,
-) -> usize {
-    let mut ret = 0;
-    for i in 0..rounds.len().value() {
-        let round = builder.get(rounds, i);
-        for j in 0..round.mats.len().value() {
-            let mat = builder.get(&round.mats, j);
-            let local = builder.get(&mat.values, 0);
-            ret = ret.max(local.len().value());
-        }
-    }
-    ret
-}
-
 #[derive(DslVariable, Clone)]
 struct RoundContext<C: Config> {
     /// Opened values buffer.
@@ -402,8 +376,9 @@ struct RoundContext<C: Config> {
     perm_ov_ptrs: Array<C, Array<C, Felt<C::F>>>,
     /// Permuted matrix dimensions.
     batch_dims: Array<C, DimensionsVariable<C>>,
-    /// Alpha pows for each matrix.
-    mat_alpha_pows: Array<C, Ext<C::F, C::EF>>,
+    /// The current accumulated alpha power for each matrix, where
+    /// matrices are ordered by AIR ID.
+    alpha_pow_acc_per_mat: Array<C, Ext<C::F, C::EF>>,
     /// Max height in the matrices.
     log_batch_max_height: Usize<C::N>,
 }
@@ -413,6 +388,7 @@ fn compute_rounds_context<C: Config>(
     rounds: &Array<C, TwoAdicPcsRoundVariable<C>>,
     log_blowup: usize,
     alpha: Ext<C::F, C::EF>,
+    static_alpha_pows: &mut Vec<SymbolicExt<C::F, C::EF>>,
 ) -> Array<C, RoundContext<C>> {
     let ret: Array<C, RoundContext<C>> = builder.array(rounds.len());
 
@@ -453,7 +429,7 @@ fn compute_rounds_context<C: Config>(
         let ov_ptrs: Array<C, Array<C, Felt<C::F>>> = builder.array(round.mats.len());
         let perm_ov_ptrs: Array<C, Array<C, Felt<C::F>>> = builder.array(round.mats.len());
         let batch_dims: Array<C, DimensionsVariable<C>> = builder.array(round.mats.len());
-        let mat_alpha_pows: Array<C, Ext<_, _>> = builder.array(round.mats.len());
+        let alpha_pow_acc_per_mat: Array<C, Ext<_, _>> = builder.array(round.mats.len());
         let log_batch_max_height: Usize<_> = {
             let log_batch_max_index = to_perm_index(builder, RVar::zero());
             let mat = builder.get(&round.mats, log_batch_max_index);
@@ -461,31 +437,41 @@ fn compute_rounds_context<C: Config>(
             builder.eval(domain.log_n + RVar::from(log_blowup))
         };
 
-        iter_zip!(builder, round.mats, ov_ptrs, mat_alpha_pows).for_each(|ptr_vec, builder| {
-            let mat = builder.iter_ptr_get(&round.mats, ptr_vec[0]);
-            let local = builder.get(&mat.values, 0);
-            // We allocate the underlying buffer for the current `ov_ptr` here. On allocation, it is uninit, and
-            // will be written to on the first call of `fri_single_reduced_opening_eval` for this `ov_ptr`.
-            let buf = builder.array(local.len());
-            let width = buf.len();
-            builder.iter_ptr_set(&ov_ptrs, ptr_vec[1], buf);
+        let alpha_pow_acc: Ext<_, _> = builder.eval(C::EF::ONE.cons());
+        iter_zip!(builder, round.mats, ov_ptrs, alpha_pow_acc_per_mat).for_each(
+            |ptr_vec, builder| {
+                let mat = builder.iter_ptr_get(&round.mats, ptr_vec[0]);
+                let local = builder.get(&mat.values, 0);
+                builder.iter_ptr_set(&alpha_pow_acc_per_mat, ptr_vec[2], alpha_pow_acc);
+                // We allocate the underlying buffer for the current `ov_ptr` here. On allocation, it is uninit, and
+                // will be written to on the first call of `fri_single_reduced_opening_eval` for this `ov_ptr`.
+                let buf = builder.array(local.len());
+                let width = buf.len();
+                builder.iter_ptr_set(&ov_ptrs, ptr_vec[1], buf);
 
-            if !builder.flags.static_only {
-                let width = width.get_var();
-                // This is dynamic only so safe to cast.
-                let width_f = builder.unsafe_cast_var_to_felt(width);
-                let bits = builder.num2bits_f(width_f, MAX_LOG_WIDTH as u32);
-                let mat_alpha_pow: Ext<_, _> = builder.eval(C::EF::ONE.cons());
-                for i in 0..MAX_LOG_WIDTH {
-                    let bit = builder.get(&bits, i);
-                    builder.if_eq(bit, RVar::one()).then(|builder| {
-                        let to_mul = builder.get(&pow_of_alpha, i);
-                        builder.assign(&mat_alpha_pow, mat_alpha_pow * to_mul);
-                    });
+                if !builder.flags.static_only {
+                    let width = width.get_var();
+                    // This is dynamic only so safe to cast.
+                    let width_f = builder.unsafe_cast_var_to_felt(width);
+                    let bits = builder.num2bits_f(width_f, MAX_LOG_WIDTH as u32);
+                    for i in 0..MAX_LOG_WIDTH {
+                        let bit = builder.get(&bits, i);
+                        builder.if_eq(bit, RVar::one()).then(|builder| {
+                            let to_mul = builder.get(&pow_of_alpha, i);
+                            builder.assign(&alpha_pow_acc, alpha_pow_acc * to_mul);
+                        });
+                    }
+                } else {
+                    let alpha_pow = get_or_compute_static_alpha_pow(
+                        builder,
+                        static_alpha_pows,
+                        alpha,
+                        width.value(),
+                    );
+                    builder.assign(&alpha_pow_acc, alpha_pow_acc * alpha_pow);
                 }
-                builder.iter_ptr_set(&mat_alpha_pows, ptr_vec[2], mat_alpha_pow);
-            }
-        });
+            },
+        );
         builder
             .range(0, round.mats.len())
             .for_each(|i_vec, builder| {
@@ -509,12 +495,27 @@ fn compute_rounds_context<C: Config>(
                 ov_ptrs,
                 perm_ov_ptrs,
                 batch_dims,
-                mat_alpha_pows,
+                alpha_pow_acc_per_mat,
                 log_batch_max_height,
             },
         );
     });
     ret
+}
+
+fn get_or_compute_static_alpha_pow<C: Config>(
+    builder: &mut Builder<C>,
+    static_alpha_pows: &mut Vec<SymbolicExt<C::F, C::EF>>,
+    alpha: Ext<C::F, C::EF>,
+    i: usize,
+) -> SymbolicExt<C::F, C::EF> {
+    assert!(builder.flags.static_only);
+    while static_alpha_pows.len() <= i {
+        let curr = builder.eval(static_alpha_pows.last().unwrap().clone() * alpha);
+        builder.ext_reduce_circuit(curr);
+        static_alpha_pows.push(curr.into());
+    }
+    static_alpha_pows[i].clone()
 }
 
 pub mod tests {
