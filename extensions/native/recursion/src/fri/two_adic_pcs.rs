@@ -156,7 +156,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     ov_ptrs,
                     perm_ov_ptrs,
                     batch_dims,
-                    alpha_pow_acc_per_mat,
+                    alpha_pow_acc,
                     log_batch_max_height,
                 } = round_context;
 
@@ -167,30 +167,30 @@ pub fn verify_two_adic_pcs<C: Config>(
                 // For static to track the offset in the hint space.
                 let mut hint_offset = 0;
                 builder.cycle_tracker_start("compute-reduced-opening");
-                iter_zip!(builder, ov_ptrs, mats, alpha_pow_acc_per_mat).for_each(
-                    |ptr_vec, builder| {
-                        let mat_opening = builder.iter_ptr_get(&ov_ptrs, ptr_vec[0]);
-                        let mat = builder.iter_ptr_get(&mats, ptr_vec[1]);
-                        let alpha_pow_acc =
-                            builder.iter_ptr_get(&alpha_pow_acc_per_mat, ptr_vec[2]);
+                iter_zip!(builder, ov_ptrs, mats, alpha_pow_acc).for_each(|ptr_vec, builder| {
+                    let mat_opening = builder.iter_ptr_get(&ov_ptrs, ptr_vec[0]);
+                    let mat = builder.iter_ptr_get(&mats, ptr_vec[1]);
+                    let alpha_pow_acc_per_point = builder.iter_ptr_get(&alpha_pow_acc, ptr_vec[2]);
 
-                        let mat_points = mat.points;
-                        let mat_values = mat.values;
-                        let log2_domain_size = mat.domain.log_n;
-                        let log_height =
-                            builder.eval_expr(log2_domain_size + RVar::from(log_blowup));
+                    let mat_points = mat.points;
+                    let mat_values = mat.values;
+                    let log2_domain_size = mat.domain.log_n;
+                    let log_height = builder.eval_expr(log2_domain_size + RVar::from(log_blowup));
 
-                        let cur_ro = builder.get(&ro, log_height);
+                    let cur_ro = builder.get(&ro, log_height);
 
-                        builder.cycle_tracker_start("exp-reverse-bits-len");
-                        let height_idx = builder.eval_expr(log_max_height - log_height);
-                        let x = builder.get(&tag_exp, height_idx);
-                        builder.cycle_tracker_end("exp-reverse-bits-len");
+                    builder.cycle_tracker_start("exp-reverse-bits-len");
+                    let height_idx = builder.eval_expr(log_max_height - log_height);
+                    let x = builder.get(&tag_exp, height_idx);
+                    builder.cycle_tracker_end("exp-reverse-bits-len");
 
-                        let is_init: Usize<C::N> = builder.eval(C::N::ZERO);
-                        iter_zip!(builder, mat_points, mat_values).for_each(|ptr_vec, builder| {
+                    let is_init: Usize<C::N> = builder.eval(C::N::ZERO);
+                    iter_zip!(builder, mat_points, mat_values, alpha_pow_acc_per_point).for_each(
+                        |ptr_vec, builder| {
                             let z: Ext<C::F, C::EF> = builder.iter_ptr_get(&mat_points, ptr_vec[0]);
                             let ps_at_z = builder.iter_ptr_get(&mat_values, ptr_vec[1]);
+                            let cur_alpha_pow =
+                                builder.iter_ptr_get(&alpha_pow_acc_per_point, ptr_vec[2]);
 
                             builder.cycle_tracker_start("single-reduced-opening-eval");
 
@@ -219,7 +219,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                                     let p_at_z = builder.get(&ps_at_z, t);
                                     builder.assign(&n, n + (p_at_z - p_at_x) * alpha_pow);
                                 }
-                                builder.assign(&cur_ro, cur_ro + n / (z - x) * alpha_pow_acc);
+                                builder.assign(&cur_ro, cur_ro + n / (z - x) * cur_alpha_pow);
                             } else {
                                 let mat_ro = builder.fri_single_reduced_opening_eval(
                                     alpha,
@@ -229,18 +229,18 @@ pub fn verify_two_adic_pcs<C: Config>(
                                     &ps_at_z,
                                 );
                                 builder
-                                    .assign(&cur_ro, cur_ro + (mat_ro * alpha_pow_acc / (z - x)));
+                                    .assign(&cur_ro, cur_ro + (mat_ro * cur_alpha_pow / (z - x)));
                             }
                             // The buffer `mat_opening` has now been written to, so we set `is_init` to 1.
                             builder.assign(&is_init, C::N::ONE);
                             builder.cycle_tracker_end("single-reduced-opening-eval");
-                        });
-                        if builder.flags.static_only {
-                            hint_offset += mat_opening.len().value();
-                        }
-                        builder.set_value(&ro, log_height, cur_ro);
-                    },
-                );
+                        },
+                    );
+                    if builder.flags.static_only {
+                        hint_offset += mat_opening.len().value();
+                    }
+                    builder.set_value(&ro, log_height, cur_ro);
+                });
                 builder.cycle_tracker_end("compute-reduced-opening");
 
                 let bits_reduced: Usize<_> = builder.eval(log_max_height - log_batch_max_height);
@@ -376,9 +376,13 @@ struct RoundContext<C: Config> {
     perm_ov_ptrs: Array<C, Array<C, Felt<C::F>>>,
     /// Permuted matrix dimensions.
     batch_dims: Array<C, DimensionsVariable<C>>,
-    /// The current accumulated alpha power for each matrix, where
-    /// matrices are ordered by AIR ID.
-    alpha_pow_acc_per_mat: Array<C, Ext<C::F, C::EF>>,
+    /// The current accumulated alpha power, per matrix, per out-of-domain
+    /// opening point, where matrices are ordered by filtered AIR ID.
+    /// E.g., `alpha_pow_acc[mat_idx][ood_point_idx]` is the already accumulated
+    /// alpha power to multiply the reduced opening computation by for matrix
+    /// `mat_idx` for the opening at point with index `ood_point_idx`.
+    #[allow(clippy::type_complexity)]
+    alpha_pow_acc: Array<C, Array<C, Ext<C::F, C::EF>>>,
     /// Max height in the matrices.
     log_batch_max_height: Usize<C::N>,
 }
@@ -401,6 +405,19 @@ fn compute_rounds_context<C: Config>(
         for i in 0..MAX_LOG_WIDTH {
             builder.set(&pow_of_alpha, i, current);
             builder.assign(&current, current * current);
+        }
+    }
+    // The running accumulator for alpha power, accumulated per distinct
+    // log height. This is accumulated **across** rounds.
+    let alpha_acc_at_lg_ht: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
+    if builder.flags.static_only {
+        for j in 0..=MAX_TWO_ADICITY {
+            builder.set(&alpha_acc_at_lg_ht, j, C::EF::ONE.cons());
+        }
+    } else {
+        let one_ef = builder.eval(C::EF::ONE.cons());
+        for j in 0..=MAX_TWO_ADICITY {
+            builder.set_value(&alpha_acc_at_lg_ht, j, one_ef);
         }
     }
 
@@ -429,7 +446,7 @@ fn compute_rounds_context<C: Config>(
         let ov_ptrs: Array<C, Array<C, Felt<C::F>>> = builder.array(round.mats.len());
         let perm_ov_ptrs: Array<C, Array<C, Felt<C::F>>> = builder.array(round.mats.len());
         let batch_dims: Array<C, DimensionsVariable<C>> = builder.array(round.mats.len());
-        let alpha_pow_acc_per_mat: Array<C, Ext<_, _>> = builder.array(round.mats.len());
+        let alpha_pow_acc: Array<C, Array<C, Ext<_, _>>> = builder.array(round.mats.len());
         let log_batch_max_height: Usize<_> = {
             let log_batch_max_index = to_perm_index(builder, RVar::zero());
             let mat = builder.get(&round.mats, log_batch_max_index);
@@ -437,41 +454,51 @@ fn compute_rounds_context<C: Config>(
             builder.eval(domain.log_n + RVar::from(log_blowup))
         };
 
-        let alpha_pow_acc: Ext<_, _> = builder.eval(C::EF::ONE.cons());
-        iter_zip!(builder, round.mats, ov_ptrs, alpha_pow_acc_per_mat).for_each(
-            |ptr_vec, builder| {
-                let mat = builder.iter_ptr_get(&round.mats, ptr_vec[0]);
-                let local = builder.get(&mat.values, 0);
-                builder.iter_ptr_set(&alpha_pow_acc_per_mat, ptr_vec[2], alpha_pow_acc);
-                // We allocate the underlying buffer for the current `ov_ptr` here. On allocation, it is uninit, and
-                // will be written to on the first call of `fri_single_reduced_opening_eval` for this `ov_ptr`.
-                let buf = builder.array(local.len());
-                let width = buf.len();
-                builder.iter_ptr_set(&ov_ptrs, ptr_vec[1], buf);
+        iter_zip!(builder, round.mats, ov_ptrs, alpha_pow_acc).for_each(|ptr_vec, builder| {
+            let mat = builder.iter_ptr_get(&round.mats, ptr_vec[0]);
+            let local = builder.get(&mat.values, 0);
+            let log_height = builder.eval_expr(mat.domain.log_n + RVar::from(log_blowup));
+            let cur_alpha_pow = builder.get(&alpha_acc_at_lg_ht, log_height);
+            let alpha_pow_acc_per_point = builder.array(mat.points.len());
+            // We allocate the underlying buffer for the current `ov_ptr` here. On allocation, it is uninit, and
+            // will be written to on the first call of `fri_single_reduced_opening_eval` for this `ov_ptr`.
+            let buf = builder.array(local.len());
+            let width = buf.len();
+            builder.iter_ptr_set(&ov_ptrs, ptr_vec[1], buf);
 
-                if !builder.flags.static_only {
-                    let width = width.get_var();
-                    // This is dynamic only so safe to cast.
-                    let width_f = builder.unsafe_cast_var_to_felt(width);
-                    let bits = builder.num2bits_f(width_f, MAX_LOG_WIDTH as u32);
-                    for i in 0..MAX_LOG_WIDTH {
-                        let bit = builder.get(&bits, i);
-                        builder.if_eq(bit, RVar::one()).then(|builder| {
-                            let to_mul = builder.get(&pow_of_alpha, i);
-                            builder.assign(&alpha_pow_acc, alpha_pow_acc * to_mul);
-                        });
-                    }
-                } else {
-                    let alpha_pow = get_or_compute_static_alpha_pow(
-                        builder,
-                        static_alpha_pows,
-                        alpha,
-                        width.value(),
-                    );
-                    builder.assign(&alpha_pow_acc, alpha_pow_acc * alpha_pow);
+            if !builder.flags.static_only {
+                let alpha_pow_width: Ext<_, _> = builder.eval(C::EF::ONE.cons());
+                let width = width.get_var();
+                // This is dynamic only so safe to cast.
+                let width_f = builder.unsafe_cast_var_to_felt(width);
+                let bits = builder.num2bits_f(width_f, MAX_LOG_WIDTH as u32);
+                for i in 0..MAX_LOG_WIDTH {
+                    let bit = builder.get(&bits, i);
+                    builder.if_eq(bit, RVar::one()).then(|builder| {
+                        let to_mul = builder.get(&pow_of_alpha, i);
+                        builder.assign(&alpha_pow_width, alpha_pow_width * to_mul);
+                    });
                 }
-            },
-        );
+                iter_zip!(builder, alpha_pow_acc_per_point).for_each(|ptr_vec, builder| {
+                    builder.iter_ptr_set(&alpha_pow_acc_per_point, ptr_vec[0], cur_alpha_pow);
+                    builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha_pow_width);
+                });
+            } else {
+                // We keep this as SymbolicExt:
+                let alpha_pow_width = get_or_compute_static_alpha_pow(
+                    builder,
+                    static_alpha_pows,
+                    alpha,
+                    width.value(),
+                );
+                iter_zip!(builder, alpha_pow_acc_per_point).for_each(|ptr_vec, builder| {
+                    builder.iter_ptr_set(&alpha_pow_acc_per_point, ptr_vec[0], cur_alpha_pow);
+                    builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha_pow_width.clone());
+                });
+            }
+            builder.set_value(&alpha_acc_at_lg_ht, log_height, cur_alpha_pow);
+            builder.iter_ptr_set(&alpha_pow_acc, ptr_vec[2], alpha_pow_acc_per_point);
+        });
         builder
             .range(0, round.mats.len())
             .for_each(|i_vec, builder| {
@@ -495,7 +522,7 @@ fn compute_rounds_context<C: Config>(
                 ov_ptrs,
                 perm_ov_ptrs,
                 batch_dims,
-                alpha_pow_acc_per_mat,
+                alpha_pow_acc,
                 log_batch_max_height,
             },
         );
