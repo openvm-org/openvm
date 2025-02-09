@@ -27,7 +27,7 @@ use crate::{
     folder::RecursiveVerifierConstraintFolder,
     fri::{
         types::{TwoAdicPcsMatsVariable, TwoAdicPcsRoundVariable},
-        TwoAdicFriPcsVariable, TwoAdicMultiplicativeCosetVariable,
+        TwoAdicFriPcsVariable, TwoAdicMultiplicativeCosetVariable, MAX_TWO_ADICITY,
     },
     hints::Hintable,
     types::{InnerConfig, MultiStarkVerificationAdvice, StarkVerificationAdvice},
@@ -225,6 +225,9 @@ where
                 builder.unsafe_cast_var_to_felt(air_proof.log_degree.get_var())
             };
             challenger.observe(builder, log_degree);
+
+            // Constrain that degree_bits is in [0, MAX_TWO_ADICITY].
+            builder.assert_less_than_slow(air_proof.log_degree.clone(), MAX_TWO_ADICITY + 1);
         });
 
         let challenges_per_phase = builder.array(num_phases);
