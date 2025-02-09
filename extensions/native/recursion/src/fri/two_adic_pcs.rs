@@ -95,7 +95,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         compute_rounds_context(builder, &rounds, log_blowup, alpha, &mut static_alpha_pows);
     builder.cycle_tracker_end("pre-compute-rounds-context");
 
-    // Working variables for reduced opening, reset per query. Both arrays indexed by log_height.
+    // Accumulators of the reduced opening sums, reset per query. The array `ro` is indexed by log_height.
     let ro: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
 
     iter_zip!(builder, proof.query_proofs).for_each(|ptr_vec, builder| {
