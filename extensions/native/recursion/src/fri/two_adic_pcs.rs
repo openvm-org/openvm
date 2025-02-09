@@ -47,7 +47,8 @@ pub fn verify_two_adic_pcs<C: Config>(
     C::EF: TwoAdicField,
 {
     // Currently do not support other final poly len
-    builder.assert_var_eq(RVar::from(config.log_final_poly_len), RVar::from(0));
+    builder.assert_var_eq(RVar::from(config.log_final_poly_len), RVar::zero());
+    builder.assert_usize_eq(proof.final_poly.len(), RVar::from(config.blowup));
 
     let g = builder.generator();
 
@@ -75,7 +76,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     });
 
     // **ATTENTION**: always check shape of user inputs.
-    builder.assert_eq::<Usize<_>>(proof.query_proofs.len(), RVar::from(config.num_queries));
+    builder.assert_usize_eq(proof.query_proofs.len(), RVar::from(config.num_queries));
 
     challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
 
@@ -129,7 +130,7 @@ pub fn verify_two_adic_pcs<C: Config>(
             }
         }
         // **ATTENTION**: always check shape of user inputs.
-        builder.assert_eq::<Usize<_>>(query_proof.input_proof.len(), rounds.len());
+        builder.assert_usize_eq(query_proof.input_proof.len(), rounds.len());
 
         // Pre-compute tag_exp
         builder.cycle_tracker_start("cache-generator-powers");
@@ -175,7 +176,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 } = round_context;
 
                 // **ATTENTION**: always check shape of user inputs.
-                builder.assert_eq::<Usize<_>>(ov_ptrs.len(), mats.len());
+                builder.assert_usize_eq(ov_ptrs.len(), mats.len());
 
                 let hint_id = batch_opening.opened_values.id.clone();
                 // For static to track the offset in the hint space.

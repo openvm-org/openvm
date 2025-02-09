@@ -172,11 +172,11 @@ pub fn assert_required_air_for_agg_vm_present<C: Config>(
     proof: &StarkProofVariable<C>,
 ) {
     let program_air = builder.get(&proof.per_air, PROGRAM_AIR_ID);
-    builder.assert_eq::<Usize<_>>(program_air.air_id, RVar::from(PROGRAM_AIR_ID));
+    builder.assert_usize_eq(program_air.air_id, RVar::from(PROGRAM_AIR_ID));
     let connector_air = builder.get(&proof.per_air, CONNECTOR_AIR_ID);
-    builder.assert_eq::<Usize<_>>(connector_air.air_id, RVar::from(CONNECTOR_AIR_ID));
+    builder.assert_usize_eq(connector_air.air_id, RVar::from(CONNECTOR_AIR_ID));
     let public_values_air = builder.get(&proof.per_air, PUBLIC_VALUES_AIR_ID);
-    builder.assert_eq::<Usize<_>>(public_values_air.air_id, RVar::from(PUBLIC_VALUES_AIR_ID));
+    builder.assert_usize_eq(public_values_air.air_id, RVar::from(PUBLIC_VALUES_AIR_ID));
 }
 
 // TODO: This is a temporary solution. VK should be able to specify which AIRs are required. Once
@@ -186,9 +186,9 @@ pub fn assert_required_air_for_app_vm_present<C: Config>(
     proof: &StarkProofVariable<C>,
 ) {
     let program_air = builder.get(&proof.per_air, PROGRAM_AIR_ID);
-    builder.assert_eq::<Usize<_>>(program_air.air_id, RVar::from(PROGRAM_AIR_ID));
+    builder.assert_usize_eq(program_air.air_id, RVar::from(PROGRAM_AIR_ID));
     let connector_air = builder.get(&proof.per_air, CONNECTOR_AIR_ID);
-    builder.assert_eq::<Usize<_>>(connector_air.air_id, RVar::from(CONNECTOR_AIR_ID));
+    builder.assert_usize_eq(connector_air.air_id, RVar::from(CONNECTOR_AIR_ID));
     let public_values_air = builder.get(&proof.per_air, MERKLE_AIR_ID);
-    builder.assert_eq::<Usize<_>>(public_values_air.air_id, RVar::from(MERKLE_AIR_ID));
+    builder.assert_usize_eq(public_values_air.air_id, RVar::from(MERKLE_AIR_ID));
 }

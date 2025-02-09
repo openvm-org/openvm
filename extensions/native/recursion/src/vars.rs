@@ -84,9 +84,14 @@ pub struct OpeningProofVariable<C: Config> {
 #[allow(clippy::type_complexity)]
 #[derive(DslVariable, Clone)]
 pub struct OpenedValuesVariable<C: Config> {
+    // For each preprocessed commitment, the opened values
     pub preprocessed: Array<C, AdjacentOpenedValuesVariable<C>>,
+    /// For each main trace commitment, for each matrix in commitment, the
+    /// opened values
     pub main: Array<C, Array<C, AdjacentOpenedValuesVariable<C>>>,
+    /// For each phase, for each RAP, the opened values,
     pub after_challenge: Array<C, Array<C, AdjacentOpenedValuesVariable<C>>>,
+    /// For each RAP, for each quotient chunk in quotient poly, the opened values
     pub quotient: Array<C, Array<C, Array<C, Ext<C::F, C::EF>>>>,
 }
 
