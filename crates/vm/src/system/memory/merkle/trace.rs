@@ -121,7 +121,7 @@ where
         } = self.final_state.unwrap();
         // important that this sort be stable,
         // because we need the initial root to be first and the final root to be second
-        rows.par_sort_by_key(|row| Reverse(row.parent_height));
+        rows.sort_by_key(|row| Reverse(row.parent_height));
 
         let width = MemoryMerkleCols::<Val<SC>, CHUNK>::width();
         let mut height = rows.len().next_power_of_two();
