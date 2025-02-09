@@ -1,4 +1,8 @@
-use std::{borrow::BorrowMut, cmp::Reverse, sync::Arc};
+use std::{
+    borrow::BorrowMut,
+    cmp::Reverse,
+    sync::{atomic::AtomicU32, Arc},
+};
 
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -11,11 +15,16 @@ use rustc_hash::FxHashSet;
 
 use crate::{
     arch::hasher::HasherChip,
-    system::memory::{
-        controller::dimensions::MemoryDimensions,
-        merkle::{FinalState, MemoryMerkleChip, MemoryMerkleCols},
-        tree::MemoryNode::{self, NonLeaf},
-        Equipartition,
+    system::{
+        memory::{
+            controller::dimensions::MemoryDimensions,
+            merkle::{FinalState, MemoryMerkleChip, MemoryMerkleCols},
+            tree::MemoryNode::{self, NonLeaf},
+            Equipartition,
+        },
+        poseidon2::{
+            Poseidon2PeripheryBaseChip, Poseidon2PeripheryChip, PERIPHERY_POSEIDON2_WIDTH,
+        },
     },
 };
 
@@ -240,5 +249,32 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
             panic!("trace_rows expects node = {:?} to be NonLeaf", node);
         };
         self.trace_rows.push(cols);
+    }
+}
+
+pub trait SerialReceiver<T> {
+    fn receive(&mut self, msg: T);
+}
+
+impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
+    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+{
+    /// Receives a permutation preimage, pads with zeros to the permutation width, and records.
+    /// The permutation preimage must have length at most the permutation width (panics otherwise).
+    fn receive(&mut self, perm_preimage: &'a [F]) {
+        assert!(perm_preimage.len() <= PERIPHERY_POSEIDON2_WIDTH);
+        let mut state = [F::ZERO; PERIPHERY_POSEIDON2_WIDTH];
+        state[..perm_preimage.len()].copy_from_slice(perm_preimage);
+        let count = self.records.entry(state).or_insert(AtomicU32::new(0));
+        count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl<'a, F: PrimeField32> SerialReceiver<&'a [F]> for Poseidon2PeripheryChip<F> {
+    fn receive(&mut self, perm_preimage: &'a [F]) {
+        match self {
+            Poseidon2PeripheryChip::Register0(chip) => chip.receive(perm_preimage),
+            Poseidon2PeripheryChip::Register1(chip) => chip.receive(perm_preimage),
+        }
     }
 }

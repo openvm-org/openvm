@@ -10,6 +10,7 @@ mod trace;
 pub use air::*;
 pub use bus::*;
 pub use columns::*;
+pub(super) use trace::SerialReceiver;
 
 #[cfg(test)]
 mod tests;
