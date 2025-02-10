@@ -15,7 +15,7 @@ The following modules contain `SubAir`'s:
 - [bigint](./bigint/README.md)
 - [encoder](./encoder/mod.rs)
 - [is_equal](./is_equal/mod.rs)
-- [is_equal_array](./is_equal_array/moxd.rs)
+- [is_equal_array](./is_equal_array/mod.rs)
 - [is_less_than](./is_less_than/mod.rs)
 - [is_less_than_array](./is_less_than_array/mod.rs)
 - [is_zero](./is_zero/mod.rs)
