@@ -1,6 +1,5 @@
-use std::{array, borrow::BorrowMut, ops::Range};
+use std::ops::Range;
 
-use ndarray::{concatenate, ArrayViewMut1};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip, utils::next_power_of_two_or_zero,
 };
@@ -15,9 +14,9 @@ use super::{
     small_sig0_field, small_sig1_field, ShaRoundColsRefMut,
 };
 use crate::{
-    big_sig0, big_sig1, ch, limbs_into_u32, limbs_into_word, maj, small_sig0, small_sig1,
-    u32_into_bits, word_into_bits, word_into_u16_limbs, word_into_u8_limbs, ShaConfig,
-    ShaDigestColsRefMut, ShaPrecomputedValues, ShaRoundColsRef, WrappingAdd,
+    big_sig0, big_sig1, ch, limbs_into_word, maj, small_sig0, small_sig1, word_into_bits,
+    word_into_u16_limbs, word_into_u8_limbs, ShaConfig, ShaDigestColsRefMut, ShaPrecomputedValues,
+    ShaRoundColsRef, WrappingAdd,
 };
 
 /// The trace generation of SHA256 should be done in two passes.
@@ -46,11 +45,11 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
         new_hash.to_vec()
     }
 
-    /// This function takes a 512-bit chunk of the input message (padding not handled), the previous hash,
+    /// This function takes a (C::WORD_BITS * C::BLOCK_WORDS)-bit chunk of the input message (padding not handled), the previous hash,
     /// a flag indicating if it's the last block, the global block index, the local block index,
     /// and the buffer values that will be put in rows 0..4.
     /// Will populate the given `trace` with the trace of the block, where the width of the trace is `trace_width`
-    /// and the starting column for the `Sha256Air` is `trace_start_col`.
+    /// and the starting column for the `ShaAir` is `trace_start_col`.
     /// **Note**: this function only generates some of the required trace. Another pass is required, refer to [`Self::generate_missing_cells`] for details.
     #[allow(clippy::too_many_arguments)]
     pub fn generate_block_trace<F: PrimeField32>(
@@ -64,13 +63,14 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
         is_last_block: bool,
         global_block_idx: u32,
         local_block_idx: u32,
-        buffer_vals: &[&[F]; 4],
+        buffer_vals: Vec<&[F]>,
     ) {
-        debug_assert!(input.len() == C::BLOCK_WORDS);
-        debug_assert!(prev_hash.len() == C::HASH_WORDS);
-        debug_assert!(buffer_vals.iter().all(|x| x.len() == C::BUFFER_SIZE));
         #[cfg(debug_assertions)]
         {
+            assert!(input.len() == C::BLOCK_WORDS);
+            assert!(prev_hash.len() == C::HASH_WORDS);
+            assert!(buffer_vals.len() == C::MESSAGE_ROWS);
+            assert!(buffer_vals.iter().all(|x| x.len() == C::BUFFER_SIZE));
             assert!(trace.len() == trace_width * C::ROWS_PER_BLOCK);
             assert!(trace_start_col + C::WIDTH <= trace_width);
             assert!(self.bitwise_lookup_bus == bitwise_lookup_chip.bus());
@@ -83,9 +83,8 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
         message_schedule[..input.len()].copy_from_slice(input);
         let mut work_vars = prev_hash.to_vec();
         for (i, row) in trace.chunks_exact_mut(trace_width).enumerate() {
-            // TODO: sha512
-            // doing the 64 rounds in 16 rows
-            if i < 16 {
+            // do the rounds
+            if i < C::ROUND_ROWS {
                 let mut cols: ShaRoundColsRefMut<F> = ShaRoundColsRefMut::from::<C>(
                     &mut row[get_range(trace_start_col, C::ROUND_WIDTH)],
                 );
@@ -107,7 +106,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                 *cols.flags.local_block_idx = F::from_canonical_u32(local_block_idx);
 
                 // W_idx = M_idx
-                if i < C::BLOCK_WORDS / C::ROUNDS_PER_ROW {
+                if i < C::MESSAGE_ROWS {
                     for j in 0..C::ROUNDS_PER_ROW {
                         cols.message_schedule
                             .w
@@ -186,15 +185,14 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                         big_sig1::<C>(work_vars[4]),
                         ch::<C>(work_vars[4], work_vars[5], work_vars[6]),
                         C::get_k()[i * C::ROUNDS_PER_ROW + j],
-                        limbs_into_u32(
+                        limbs_into_word::<C>(
                             cols.message_schedule
                                 .w
                                 .row(j)
                                 .map(|f| f.as_canonical_u32())
                                 .as_slice()
                                 .unwrap(),
-                        )
-                        .into(),
+                        ),
                     ];
                     let t1_sum: C::Word = t1
                         .iter()
@@ -329,7 +327,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                     .row_idx
                     .iter_mut()
                     .zip(
-                        get_flag_pt_array(&self.row_idx_encoder, 16)
+                        get_flag_pt_array(&self.row_idx_encoder, C::ROUND_ROWS)
                             .into_iter()
                             .map(F::from_canonical_u32),
                     )
@@ -358,14 +356,16 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                         word_into_u8_limbs::<C>(final_hash[i])
                             .into_iter()
                             .map(F::from_canonical_u32)
+                            .collect::<Vec<_>>()
                     }))
                     .for_each(|(x, y)| *x = y);
                 cols.prev_hash
                     .iter_mut()
-                    .zip(prev_hash.into_iter().flat_map(|f| {
+                    .zip(prev_hash.iter().flat_map(|f| {
                         word_into_u16_limbs::<C>(*f)
                             .into_iter()
                             .map(F::from_canonical_u32)
+                            .collect::<Vec<_>>()
                     }))
                     .for_each(|(x, y)| *x = y);
  
@@ -379,9 +379,11 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                         .rows_mut()
                         .into_iter()
                         .map(|f| {
-                            limbs_into_u32(f.map(|x| x.as_canonical_u32()).as_slice().unwrap())
+                            limbs_into_word::<C>(
+                                f.map(|x| x.as_canonical_u32()).as_slice().unwrap(),
+                            )
                         })
-                        .map(u32_into_bits::<C>)
+                        .map(word_into_bits::<C>)
                         .collect()
                 }
                 .into_iter()
@@ -494,7 +496,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
             .row_idx
             .iter_mut()
             .zip(
-                get_flag_pt_array(&self.row_idx_encoder, 17)
+                get_flag_pt_array(&self.row_idx_encoder, C::ROWS_PER_BLOCK)
                     .into_iter()
                     .map(F::from_canonical_u32),
             )
@@ -554,9 +556,9 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
     /// The following functions do the calculations in native field since they will be called on padding rows
     /// which can overflow and we need to make sure it matches the AIR constraints
     /// Puts the correct carrys in the `next_row`, the resulting carrys can be out of bound
-    fn generate_carry_ae<'a, 'b, F: PrimeField32>(
-        local_cols: ShaRoundColsRef<'a, F>,
-        next_cols: &mut ShaRoundColsRefMut<'b, F>,
+    pub fn generate_carry_ae<F: PrimeField32>(
+        local_cols: ShaRoundColsRef<F>,
+        next_cols: &mut ShaRoundColsRefMut<F>,
     ) {
         let a = [
             local_cols
@@ -580,7 +582,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
         .concat();
         for i in 0..C::ROUNDS_PER_ROW {
             let cur_a = a[i + 4];
-            let sig_a = big_sig0_field::<F>(a[i + 3].as_slice().unwrap());
+            let sig_a = big_sig0_field::<F, C>(a[i + 3].as_slice().unwrap());
             let maj_abc = maj_field::<F>(
                 a[i + 3].as_slice().unwrap(),
                 a[i + 2].as_slice().unwrap(),
@@ -588,7 +590,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
             );
             let d = a[i];
             let cur_e = e[i + 4];
-            let sig_e = big_sig1_field::<F>(e[i + 3].as_slice().unwrap());
+            let sig_e = big_sig1_field::<F, C>(e[i + 3].as_slice().unwrap());
             let ch_efg = ch_field::<F>(
                 e[i + 3].as_slice().unwrap(),
                 e[i + 2].as_slice().unwrap(),
@@ -634,9 +636,9 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
     }
 
     /// Puts the correct intermed_4 in the `next_row`
-    fn generate_intermed_4<'a, 'b, F: PrimeField32>(
-        local_cols: ShaRoundColsRef<'a, F>,
-        next_cols: &mut ShaRoundColsRefMut<'b, F>,
+    fn generate_intermed_4<F: PrimeField32>(
+        local_cols: ShaRoundColsRef<F>,
+        next_cols: &mut ShaRoundColsRefMut<F>,
     ) {
         let w = [
             local_cols
@@ -662,7 +664,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
             })
             .collect();
         for i in 0..C::ROUNDS_PER_ROW {
-            let sig_w = small_sig0_field::<F>(w[i + 1].as_slice().unwrap());
+            let sig_w = small_sig0_field::<F, C>(w[i + 1].as_slice().unwrap());
             let sig_w_limbs: Vec<F> = (0..C::WORD_U16S)
                 .map(|j| compose::<F>(&sig_w[j * 16..(j + 1) * 16], 1))
                 .collect();
@@ -673,9 +675,9 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
     }
 
     /// Puts the needed intermed_12 in the `local_row`
-    fn generate_intermed_12<'a, 'b, F: PrimeField32>(
-        local_cols: &mut ShaRoundColsRefMut<'a, F>,
-        next_cols: ShaRoundColsRef<'b, F>,
+    fn generate_intermed_12<F: PrimeField32>(
+        local_cols: &mut ShaRoundColsRefMut<F>,
+        next_cols: ShaRoundColsRef<F>,
     ) {
         let w = [
             local_cols
@@ -705,7 +707,8 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
             let sig_w_2: Vec<F> = (0..C::WORD_U16S)
                 .map(|j| {
                     compose::<F>(
-                        &small_sig1_field::<F>(w[i + 2].as_slice().unwrap())[j * 16..(j + 1) * 16],
+                        &small_sig1_field::<F, C>(w[i + 2].as_slice().unwrap())
+                            [j * 16..(j + 1) * 16],
                         1,
                     )
                 })
@@ -745,16 +748,19 @@ pub fn generate_trace<F: PrimeField32, C: ShaConfig + ShaPrecomputedValues<C::Wo
         debug_assert!(input.len() == C::BLOCK_U8S);
     }
 
+    println!("records.len(): {}", records.len());
     let non_padded_height = records.len() * C::ROWS_PER_BLOCK;
+    println!("non_padded_height: {}", non_padded_height);
     let height = next_power_of_two_or_zero(non_padded_height);
+    println!("height: {}", height);
     let width = <ShaAir<C> as BaseAir<F>>::width(sub_air);
     let mut values = F::zero_vec(height * width);
 
     struct BlockContext<C: ShaConfig> {
-        prev_hash: Vec<C::Word>, // HASH_WORDS
+        prev_hash: Vec<C::Word>, // len is C::HASH_WORDS
         local_block_idx: u32,
         global_block_idx: u32,
-        input: Vec<u8>, // BLOCK_U8S
+        input: Vec<u8>, // len is C::BLOCK_U8S
         is_last_block: bool,
     }
     let mut block_ctx: Vec<BlockContext<C>> = Vec::with_capacity(records.len());
@@ -801,7 +807,7 @@ pub fn generate_trace<F: PrimeField32, C: ShaConfig + ShaPrecomputedValues<C::Wo
                 })
                 .collect::<Vec<_>>();
             let empty_buffer = vec![F::ZERO; C::BUFFER_SIZE];
-            let buffer_vals = [empty_buffer.as_slice(); 4];
+            let buffer_vals = vec![empty_buffer.as_slice(); C::MESSAGE_ROWS];
             sub_air.generate_block_trace(
                 block,
                 width,
@@ -812,7 +818,7 @@ pub fn generate_trace<F: PrimeField32, C: ShaConfig + ShaPrecomputedValues<C::Wo
                 is_last_block,
                 global_block_idx,
                 local_block_idx,
-                &buffer_vals,
+                buffer_vals,
             );
         });
     // second pass: padding rows
@@ -822,6 +828,7 @@ pub fn generate_trace<F: PrimeField32, C: ShaConfig + ShaPrecomputedValues<C::Wo
             let cols: ShaRoundColsRefMut<F> = ShaRoundColsRefMut::from::<C>(row);
             sub_air.generate_default_row(cols);
         });
+
     // second pass: non-padding rows
     values[width..]
         .par_chunks_mut(width * C::ROWS_PER_BLOCK)

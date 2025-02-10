@@ -4114,7 +4114,7 @@ dependencies = [
  "openvm-sha256-air",
  "proc-macro2",
  "quote",
- "syn 2.0.96",
+ "syn 2.0.98",
 ]
 
 [[package]]

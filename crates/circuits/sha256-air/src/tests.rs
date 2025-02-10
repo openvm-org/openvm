@@ -18,9 +18,8 @@ use openvm_stark_backend::{
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
-use sha2::Sha256;
 
 use crate::{
     compose, small_sig0_field, Sha256Config, Sha512Config, ShaAir, ShaConfig, ShaFlagsColsRef,
@@ -126,6 +125,11 @@ fn rand_sha_test<C: ShaConfig + ShaPrecomputedValues<C::Word> + 'static>() {
 #[test]
 fn rand_sha256_test() {
     rand_sha_test::<Sha256Config>();
+}
+
+#[test]
+fn rand_sha512_test() {
+    rand_sha_test::<Sha512Config>();
 }
 
 // A wrapper Chip to test that the final_hash is properly constrained.
