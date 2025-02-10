@@ -115,7 +115,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     };
     builder.cycle_tracker_end("pre-compute-rounds-context");
 
-    // Working variables for reduced opening, reset per query. Both arrays indexed by log_height.
+    // Accumulators of the reduced opening sums, reset per query. The array `ro` is indexed by log_height.
     let ro: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
     let alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
 
@@ -123,6 +123,23 @@ pub fn verify_two_adic_pcs<C: Config>(
         let query_proof = builder.iter_ptr_get(&proof.query_proofs, ptr_vec[0]);
         let index_bits = challenger.sample_bits(builder, log_max_height);
 
+        // We reset the reduced opening accumulators at the start of each query.
+        // We describe what `ro[log_height]` computes per query in pseduo-code:
+        // ro[log_height] = 0
+        // alpha_pow[log_height] = 1
+        // for round in rounds:
+        //   for mat in round.mats where (mat.domain.log_n + log_blowup == log_height): // preserving order of round.mats
+        //      // g is generator of F
+        //      // w_{log_height} is generator of subgroup of F of order 2^log_height
+        //      x = g * w_{log_height}^{reverse_bits(index >> (log_max_height - log_height), log_height)}
+        //      // x is a rotated evaluation point in a coset of the LDE domain.
+        //      ps_at_x = [claimed evaluation of p at x for each polynomial p corresponding to column of mat]
+        //      for (z, ps_at_z) in zip(mat.points, mat.values):
+        //        for (p_at_x, p_at_z) in zip(ps_at_x, ps_at_z):
+        //          ro[log_height] += alpha_pow[log_height] * (p_at_x - p_at_z) / (x - z)
+        //          alpha_pow[log_height] *= alpha
+        //
+        // The final value of ro[log_height] is the reduced opening value for log_height.
         if builder.flags.static_only {
             for j in 0..=MAX_TWO_ADICITY {
                 // ATTENTION: don't use set_value here, Fixed will share the same variable.
@@ -156,7 +173,7 @@ pub fn verify_two_adic_pcs<C: Config>(
             // tag_exp[log_max_height - i] = g * w ** (b[log_max_height - i] * 2^(log_max_height - 1) + ... + b[log_max_height - 1] * 2^(log_max_height - i))
             // using a square-and-divide algorithm.
             // g * res is tag_exp[0]
-            // `tag_exp` is used below as a rotated evaluation point in a coset of the trace domain.
+            // `tag_exp` is used below as a rotated evaluation point in a coset of the LDE domain.
             iter_zip!(builder, index_bits_truncated, tag_exp).for_each(|ptr_vec, builder| {
                 builder.iter_ptr_set(&tag_exp, ptr_vec[1], g * res);
 
