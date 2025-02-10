@@ -32,6 +32,10 @@ pub trait ShaConfig: Send + Sync + Clone {
     const ROWS_PER_BLOCK: usize;
     /// Number of rounds per row. Must divide Self::ROUNDS_PER_BLOCK
     const ROUNDS_PER_ROW: usize;
+    /// Number of rows used for the sha rounds
+    const ROUND_ROWS: usize = Self::ROUNDS_PER_BLOCK / Self::ROUNDS_PER_ROW;
+    /// Number of rows used for the message
+    const MESSAGE_ROWS: usize = Self::BLOCK_WORDS / Self::ROUNDS_PER_ROW;
     /// Number of rounds per row minus one (needed for one of the column structs)
     const ROUNDS_PER_ROW_MINUS_ONE: usize = Self::ROUNDS_PER_ROW - 1;
     /// Number of rounds per block. Must be a multiple of Self::ROUNDS_PER_ROW
@@ -121,6 +125,7 @@ pub const SHA256_INVALID_CARRY_E: [[u32; Sha256Config::WORD_U16S]; Sha256Config:
     [719953922, 1888246508],
     [194580482, 1075725211],
 ];
+
 /// SHA256 constant K's
 pub const SHA256_K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -163,7 +168,7 @@ impl ShaConfig for Sha512Config {
     /// Number of words in a SHA512 block
     const BLOCK_WORDS: usize = 16;
     /// Number of rows per block
-    const ROWS_PER_BLOCK: usize = 21; // SHA-512 has 80 rounds, so needs more rows
+    const ROWS_PER_BLOCK: usize = 21;
     /// Number of rounds per row
     const ROUNDS_PER_ROW: usize = 4;
     /// Number of rounds per block
@@ -171,17 +176,26 @@ impl ShaConfig for Sha512Config {
     /// Number of words in a SHA512 hash
     const HASH_WORDS: usize = 8;
     /// Number of vars needed to encode the row index with [Encoder]
-    const ROW_VAR_CNT: usize = 5;
+    const ROW_VAR_CNT: usize = 6;
 }
-
-// TODO: fill in these constants
 
 /// We can notice that `carry_a`'s and `carry_e`'s are always the same on invalid rows
 /// To optimize the trace generation of invalid rows, we have those values precomputed here
 pub(crate) const SHA512_INVALID_CARRY_A: [[u32; Sha512Config::WORD_U16S];
-    Sha512Config::ROUNDS_PER_ROW] = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    Sha512Config::ROUNDS_PER_ROW] = [
+    [55971842, 827997017, 993005918, 512731953],
+    [227512322, 1697529235, 1936430385, 940122990],
+    [1939875843, 1173318562, 826201586, 1513494849],
+    [891955202, 1732283693, 1736658755, 223514501],
+];
+
 pub(crate) const SHA512_INVALID_CARRY_E: [[u32; Sha512Config::WORD_U16S];
-    Sha512Config::ROUNDS_PER_ROW] = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    Sha512Config::ROUNDS_PER_ROW] = [
+    [1384427522, 1509509767, 153131516, 102514978],
+    [1527552003, 1041677071, 837289497, 843522538],
+    [775188482, 1620184630, 744892564, 892058728],
+    [1801267202, 1393118048, 1846108940, 830635531],
+];
 
 /// SHA512 constant K's
 pub const SHA512_K: [u64; 80] = [

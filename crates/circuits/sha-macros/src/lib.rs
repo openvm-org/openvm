@@ -172,12 +172,12 @@ fn make_struct(struct_info: StructInfo) -> proc_macro2::TokenStream {
 fn make_from_mut(struct_info: StructInfo) -> Result<proc_macro2::TokenStream, String> {
     let StructInfo {
         name,
-        vis,
+        vis: _,
         generic_type,
-        field_infos,
+        field_infos: _,
         fields,
-        from_args,
-        derive_clone,
+        from_args: _,
+        derive_clone: _,
     } = struct_info;
 
     let fields = match fields {
