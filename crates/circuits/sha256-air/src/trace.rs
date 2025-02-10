@@ -107,8 +107,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                 *cols.flags.local_block_idx = F::from_canonical_u32(local_block_idx);
 
                 // W_idx = M_idx
-                // TODO: fix this. should be smtg like `if i < C::BLOCK_WORDS`
-                if i < C::ROWS_PER_BLOCK / C::ROUNDS_PER_ROW {
+                if i < C::BLOCK_WORDS / C::ROUNDS_PER_ROW {
                     for j in 0..C::ROUNDS_PER_ROW {
                         cols.message_schedule
                             .w
