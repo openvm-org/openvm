@@ -235,6 +235,14 @@ impl<C: Config> Builder<C> {
         self.assert_eq::<Ext<C::F, C::EF>>(lhs, rhs);
     }
 
+    pub fn assert_usize_eq<LhsExpr: Into<SymbolicVar<C::N>>, RhsExpr: Into<SymbolicVar<C::N>>>(
+        &mut self,
+        lhs: LhsExpr,
+        rhs: RhsExpr,
+    ) {
+        self.assert_eq::<Usize<C::N>>(lhs, rhs);
+    }
+
     /// Assert that two arrays are equal.
     pub fn assert_var_array_eq(&mut self, lhs: &Array<C, Var<C::N>>, rhs: &Array<C, Var<C::N>>) {
         self.assert_var_eq(lhs.len(), rhs.len());
@@ -271,6 +279,26 @@ impl<C: Config> Builder<C> {
             is_eq: false,
             builder: self,
         }
+    }
+
+    /// Asserts that lhs is less than rhs in time O(rhs).
+    pub fn assert_less_than_slow<
+        LhsExpr: Into<SymbolicVar<C::N>>,
+        RhsExpr: Into<SymbolicVar<C::N>>,
+    >(
+        &mut self,
+        lhs: LhsExpr,
+        rhs: RhsExpr,
+    ) {
+        let lhs: Usize<_> = self.eval(lhs.into());
+        let rhs: Usize<_> = self.eval(rhs.into());
+        let product: Usize<_> = self.eval(lhs.clone());
+        self.range(1, rhs).for_each(|i_vec, builder| {
+            let i = i_vec[0];
+            let diff: Usize<_> = builder.eval(lhs.clone() - i);
+            builder.assign(&product, product.clone() * diff);
+        });
+        self.assert_usize_eq(product, RVar::from(0));
     }
 
     /// Evaluate a block of operations over a range from start to end.
@@ -455,7 +483,7 @@ impl<C: Config> Builder<C> {
         let flattened = self.hint_felts();
 
         let size = <Ext<C::F, C::EF> as MemVariable<C>>::size_of();
-        self.assert_eq::<Usize<_>>(flattened.len(), len * C::N::from_canonical_usize(size));
+        self.assert_usize_eq(flattened.len(), len * C::N::from_canonical_usize(size));
 
         // Simply recast memory as Array<Ext>.
         match flattened {

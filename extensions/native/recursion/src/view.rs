@@ -26,13 +26,18 @@ pub fn get_advice_per_air<C: Config>(
 
     let idx: Usize<_> = builder.eval(RVar::zero());
     for (air_id, advice) in m_advice.per_air.iter().enumerate() {
-        let curr_air_id = builder.get(air_ids, idx.clone());
-        let air_id = Usize::from(air_id);
-        builder.if_eq(air_id, curr_air_id).then(|builder| {
-            let advice_var =
-                constant_advice_and_update_mask(builder, advice, &num_challenges_to_sample_mask);
-            builder.set_value(&advice_per_air, idx.clone(), advice_var);
-            builder.inc(&idx);
+        builder.if_ne(idx.clone(), air_ids.len()).then(|builder| {
+            let curr_air_id = builder.get(air_ids, idx.clone());
+            let air_id = Usize::from(air_id);
+            builder.if_eq(air_id, curr_air_id).then(|builder| {
+                let advice_var = constant_advice_and_update_mask(
+                    builder,
+                    advice,
+                    &num_challenges_to_sample_mask,
+                );
+                builder.set_value(&advice_per_air, idx.clone(), advice_var);
+                builder.inc(&idx);
+            });
         });
     }
 

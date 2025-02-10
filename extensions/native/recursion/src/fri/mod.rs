@@ -55,6 +55,10 @@ where
     let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
     let x = builder.exp_bits_big_endian(two_adic_generator_ef, &index_bits_truncated);
 
+    builder.assert_usize_eq(
+        proof.commit_phase_openings.len(),
+        commit_phase_commits.len(),
+    );
     builder
         .range(0, commit_phase_commits.len())
         .for_each(|i_vec, builder| {
