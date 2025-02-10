@@ -134,7 +134,10 @@ pub fn verify_two_adic_pcs<C: Config>(
         //      x = g * w_{log_height}^{reverse_bits(index >> (log_max_height - log_height), log_height)}
         //      // x is a rotated evaluation point in a coset of the LDE domain.
         //      ps_at_x = [claimed evaluation of p at x for each polynomial p corresponding to column of mat]
+        //      // ps_at_x is array of Felt
         //      for (z, ps_at_z) in zip(mat.points, mat.values):
+        //        // z is an out of domain point in Ext. There may be multiple per round to account for rotations in AIR constraints.
+        //        // ps_at_z is array of Ext
         //        for (p_at_x, p_at_z) in zip(ps_at_x, ps_at_z):
         //          ro[log_height] += alpha_pow[log_height] * (p_at_x - p_at_z) / (x - z)
         //          alpha_pow[log_height] *= alpha
