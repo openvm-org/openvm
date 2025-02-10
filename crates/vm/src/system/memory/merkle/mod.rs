@@ -1,7 +1,6 @@
 use openvm_stark_backend::p3_field::PrimeField32;
-use rustc_hash::FxHashSet;
 
-use super::controller::dimensions::MemoryDimensions;
+use super::{controller::dimensions::MemoryDimensions, PagedVec, PAGE_SIZE};
 mod air;
 mod bus;
 mod columns;
@@ -17,7 +16,7 @@ mod tests;
 
 pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,
-    touched_nodes: FxHashSet<(usize, u32, u32)>,
+    touched_nodes: PagedVec<i32, PAGE_SIZE>,
     num_touched_nonleaves: usize,
     final_state: Option<FinalState<CHUNK, F>>,
     overridden_height: Option<usize>,
@@ -38,15 +37,13 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     ) -> Self {
         assert!(memory_dimensions.as_height > 0);
         assert!(memory_dimensions.address_height > 0);
-        let mut touched_nodes = FxHashSet::default();
-        touched_nodes.insert((memory_dimensions.overall_height(), 0, 0));
         Self {
             air: MemoryMerkleAir {
                 memory_dimensions,
                 merkle_bus,
                 compression_bus,
             },
-            touched_nodes,
+            touched_nodes: PagedVec::new(2 << memory_dimensions.overall_height()),
             num_touched_nonleaves: 1,
             final_state: None,
             overridden_height: None,
@@ -56,17 +53,21 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         self.overridden_height = Some(override_height);
     }
 
-    fn touch_node(&mut self, height: usize, as_label: u32, address_label: u32) {
-        if self.touched_nodes.insert((height, as_label, address_label)) {
-            assert_ne!(height, self.air.memory_dimensions.overall_height());
-            if height != 0 {
-                self.num_touched_nonleaves += 1;
-            }
-            if height >= self.air.memory_dimensions.address_height {
-                self.touch_node(height + 1, as_label / 2, address_label);
-            } else {
-                self.touch_node(height + 1, as_label, address_label / 2);
-            }
+    fn encode(&self, height: usize, as_label: u32, address_label: u32) -> usize {
+        let label = ((as_label as usize) << self.air.memory_dimensions.address_height)
+            + address_label as usize;
+        debug_assert!(label & ((1 << height) - 1) == 0);
+        (1 << (self.air.memory_dimensions.overall_height() - height)) + (label >> height)
+    }
+
+    fn add_point(&mut self, idx: usize, delta: i32) {
+        if idx >= self.touched_nodes.memory_size() {
+            return;
+        }
+        if let Some(value) = self.touched_nodes.get_mut(idx) {
+            *value += delta;
+        } else {
+            self.touched_nodes.set(idx, delta);
         }
     }
 
@@ -74,8 +75,13 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         let as_label = address_space - self.air.memory_dimensions.as_offset;
         let first_address_label = address / CHUNK as u32;
         let last_address_label = (address + len - 1) / CHUNK as u32;
-        for address_label in first_address_label..=last_address_label {
-            self.touch_node(0, as_label, address_label);
+        let mut left = self.encode(0, as_label, first_address_label);
+        let mut right = self.encode(0, as_label, last_address_label);
+        while left > 0 {
+            self.add_point(left, 1);
+            self.add_point(right + 1, -1);
+            left /= 2;
+            right /= 2;
         }
     }
 }

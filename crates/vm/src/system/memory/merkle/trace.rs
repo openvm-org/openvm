@@ -39,15 +39,56 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         // there needs to be a touched node with `height_section` = 0
         // shouldn't be a leaf because
         // trace generation will expect an interaction from MemoryInterfaceChip in that case
-        if self.touched_nodes.len() == 1 {
-            self.touch_node(1, 0, 0);
+
+        let mut touched_ids = {
+            let mut last = 0;
+            let mut balance = 0;
+            let mut result = vec![];
+            for (idx, delta) in self.touched_nodes.iter() {
+                if balance > 0 {
+                    result.extend(last..idx);
+                }
+                balance += delta;
+                last = idx;
+            }
+            if balance > 0 {
+                result.extend(last..self.touched_nodes.memory_size());
+            }
+            result
+        };
+        if touched_ids.is_empty() {
+            for i in 0..self.air.memory_dimensions.overall_height() {
+                touched_ids.push(1 << i);
+            }
         }
+
+        let decoded_touched_ids = touched_ids
+            .iter()
+            .map(|&idx| {
+                let depth = idx.ilog2() as usize;
+                let height = self.air.memory_dimensions.overall_height() - depth;
+                if height > 0 {
+                    self.num_touched_nonleaves += 1;
+                }
+                let total_label = (idx - (1 << depth)) << height;
+                let mut as_label = total_label >> self.air.memory_dimensions.address_height;
+                let mut address_label =
+                    total_label - (as_label << self.air.memory_dimensions.address_height);
+                if height < self.air.memory_dimensions.address_height {
+                    address_label >>= height;
+                } else {
+                    address_label = 0;
+                    as_label >>= height - self.air.memory_dimensions.address_height;
+                }
+                (height, as_label as u32, address_label as u32)
+            })
+            .collect();
 
         let mut rows = vec![];
         let mut tree_helper = TreeHelper {
             memory_dimensions: self.air.memory_dimensions,
             final_memory,
-            touched_nodes: &self.touched_nodes,
+            touched_nodes: &decoded_touched_ids,
             trace_rows: &mut rows,
         };
         let final_tree = tree_helper.recur(
