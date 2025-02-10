@@ -28,12 +28,12 @@ use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{
-    merkle::DirectCompressionBus,
+    merkle::{DirectCompressionBus, SerialReceiver},
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
 };
 use crate::{
-    arch::MemoryConfig,
+    arch::{hasher::Hasher, MemoryConfig},
     system::{
         memory::{
             adapter::AccessAdapterInventory,
@@ -48,7 +48,7 @@ use crate::{
             persistent::PersistentBoundaryChip,
             tree::MemoryNode,
         },
-        poseidon2::{Poseidon2PeripheryChip, PERIPHERY_POSEIDON2_CHUNK_SIZE},
+        poseidon2::PERIPHERY_POSEIDON2_CHUNK_SIZE,
     },
 };
 
@@ -504,7 +504,10 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     /// Returns the final memory state if persistent.
-    pub fn finalize(&mut self, hasher: Option<&mut Poseidon2PeripheryChip<F>>) {
+    pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
+    where
+        H: Hasher<CHUNK, F> + for<'a> SerialReceiver<&'a [F]> + Send + Sync,
+    {
         if self.final_state.is_some() {
             return;
         }

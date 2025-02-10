@@ -71,11 +71,11 @@ impl<const CHUNK: usize, F: Field> HasherChip<CHUNK, F> for HashTestChip<CHUNK, 
     }
 }
 
-impl<F: Field, const CHUNK: usize, const WIDTH: usize> SerialReceiver<[F; WIDTH]>
-    for HashTestChip<CHUNK, F>
-{
-    fn receive(&mut self, data: [F; WIDTH]) {
-        assert_eq!(CHUNK * 2, WIDTH);
+impl<'a, F: Field, const CHUNK: usize> SerialReceiver<&'a [F]> for HashTestChip<CHUNK, F> {
+    fn receive(&mut self, data: &'a [F]) {
+        assert!(data.len() <= CHUNK * 2);
+        let mut data = data.to_vec();
+        data.resize(CHUNK * 2, F::ZERO);
         let left = from_fn(|i| data[i]);
         let right = from_fn(|i| data[i + CHUNK]);
         self.compress_and_record(&left, &right);

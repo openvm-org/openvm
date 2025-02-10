@@ -25,7 +25,7 @@ use crate::{
             controller::dimensions::MemoryDimensions,
             merkle::{FinalState, MemoryMerkleChip, MemoryMerkleCols},
             tree::MemoryNode::{self, NonLeaf},
-            Equipartition, CHUNK,
+            Equipartition,
         },
         poseidon2::{
             Poseidon2PeripheryBaseChip, Poseidon2PeripheryChip, PERIPHERY_POSEIDON2_WIDTH,
@@ -33,9 +33,7 @@ use crate::{
     },
 };
 
-// We use constant CHUNK throughout because Rust const generics cannot handle `CHUNK * 2` array lengths.
-
-impl<F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
+impl<F: PrimeField32, const CHUNK: usize> MemoryMerkleChip<CHUNK, F> {
     /// SAFETY: the `hash` implementation of `H: Hasher` must be pure, i.e., it does not depend on
     /// any mutable state in `hasher`. In particular the state mutations from `SerialReceiver` must not
     /// affect the functionality of the hash function.
@@ -45,7 +43,7 @@ impl<F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         final_memory: &Equipartition<F, CHUNK>,
         hasher: &mut H,
     ) where
-        H: Hasher<CHUNK, F> + SerialReceiver<[F; 2 * CHUNK]> + Send + Sync,
+        H: Hasher<CHUNK, F> + for<'a> SerialReceiver<&'a [F]> + Send + Sync,
     {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
         // there needs to be a touched node with `height_section` = 0
@@ -57,7 +55,6 @@ impl<F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
 
         let mut final_trace_rows = Vec::new();
         let final_tree = scope(|s| {
-            let (record_send, record_recv) = channel::unbounded::<[F; PERIPHERY_POSEIDON2_WIDTH]>();
             let (trace_send, trace_recv) = channel::unbounded::<MemoryMerkleCols<F, CHUNK>>();
             // SAFETY: the only state changes to `hasher` are in records, which do no affect
             // the pure hash function
@@ -75,19 +72,14 @@ impl<F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
                     0,
                     0,
                     immutable_hasher,
-                    record_send,
                     trace_send,
                 )
             });
 
-            s.spawn(move |_| {
-                while let Ok(preimage) = record_recv.recv() {
-                    hasher.receive(preimage);
-                }
-            });
             // The loop breaks when last sender has been dropped,
             // so `recur` should be done
             while let Ok(row) = trace_recv.recv() {
+                hasher.receive(row.hash_preimage());
                 final_trace_rows.push(row);
             }
             final_tree_handler.join().unwrap()
@@ -101,7 +93,7 @@ impl<F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for MemoryMerkleChip<CHUNK, Val<SC>>
+impl<SC: StarkGenericConfig, const CHUNK: usize> Chip<SC> for MemoryMerkleChip<CHUNK, Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
@@ -144,7 +136,7 @@ where
         AirProofInput::simple(trace, pvs)
     }
 }
-impl<F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {
+impl<F: PrimeField32, const CHUNK: usize> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {
     fn air_name(&self) -> String {
         "Merkle".to_string()
     }
@@ -158,13 +150,16 @@ impl<F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {
     }
 }
 
-struct TreeHelper<'a, F: PrimeField32> {
+struct TreeHelper<'a, F: PrimeField32, const CHUNK: usize> {
     memory_dimensions: MemoryDimensions,
     final_memory: &'a Equipartition<F, CHUNK>,
     touched_nodes: &'a FxHashSet<(usize, u32, u32)>,
 }
 
-impl<F: PrimeField32> TreeHelper<'_, F> {
+// Heuristic: after the tree is less than this height, don't use rayon to multithread recursion.
+const RAYON_JOIN_HEIGHT_THRESHOLD: usize = 12;
+
+impl<F: PrimeField32, const CHUNK: usize> TreeHelper<'_, F, CHUNK> {
     // A divide-and-conquer recursion that spins up new threads for each recursive call.
     #[allow(clippy::too_many_arguments)]
     fn recur(
@@ -174,7 +169,6 @@ impl<F: PrimeField32> TreeHelper<'_, F> {
         as_label: u32,
         address_label: u32,
         hasher: &(impl Hasher<CHUNK, F> + Send + Sync),
-        record_send: Sender<[F; PERIPHERY_POSEIDON2_WIDTH]>,
         trace_send: Sender<MemoryMerkleCols<F, CHUNK>>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
@@ -190,12 +184,6 @@ impl<F: PrimeField32> TreeHelper<'_, F> {
             ..
         } = initial_node.clone()
         {
-            // Tell the hasher about this hash.
-            let mut preimage = [F::ZERO; CHUNK * 2];
-            preimage[..CHUNK].copy_from_slice(&initial_left_node.hash());
-            preimage[CHUNK..].copy_from_slice(&initial_right_node.hash());
-            record_send.send(preimage).unwrap();
-
             let is_as_section = height > self.memory_dimensions.address_height;
 
             let (left_as_label, right_as_label) = if is_as_section {
@@ -217,41 +205,40 @@ impl<F: PrimeField32> TreeHelper<'_, F> {
                 !self
                     .touched_nodes
                     .contains(&(height - 1, right_as_label, right_address_label));
+            let recur_left = || {
+                Arc::new(self.recur(
+                    height - 1,
+                    &initial_left_node,
+                    left_as_label,
+                    left_address_label,
+                    hasher,
+                    trace_send.clone(),
+                ))
+            };
+            let recur_right = || {
+                Arc::new(self.recur(
+                    height - 1,
+                    &initial_right_node,
+                    right_as_label,
+                    right_address_label,
+                    hasher,
+                    trace_send.clone(),
+                ))
+            };
 
-            let (final_left_node, final_right_node) = join(
-                || {
-                    if left_is_final {
-                        initial_left_node
+            let (final_left_node, final_right_node) = match (left_is_final, right_is_final) {
+                (true, true) => (initial_left_node, initial_right_node),
+                (true, false) => (initial_left_node, recur_right()),
+                (false, true) => (recur_left(), initial_right_node),
+                (false, false) => {
+                    if height > RAYON_JOIN_HEIGHT_THRESHOLD {
+                        // Use rayon to run the child recursions potentially in different threads in the pool
+                        join(recur_left, recur_right)
                     } else {
-                        let final_left_node = self.recur(
-                            height - 1,
-                            &initial_left_node,
-                            left_as_label,
-                            left_address_label,
-                            hasher,
-                            record_send.clone(),
-                            trace_send.clone(),
-                        );
-                        Arc::new(final_left_node)
+                        (recur_left(), recur_right())
                     }
-                },
-                || {
-                    if right_is_final {
-                        initial_right_node
-                    } else {
-                        let final_right_node = self.recur(
-                            height - 1,
-                            &initial_right_node,
-                            right_as_label,
-                            right_address_label,
-                            hasher,
-                            record_send.clone(),
-                            trace_send.clone(),
-                        );
-                        Arc::new(final_right_node)
-                    }
-                },
-            );
+                }
+            };
 
             let final_node = MemoryNode::new_nonleaf(final_left_node, final_right_node, hasher);
             trace_send
@@ -264,9 +251,7 @@ impl<F: PrimeField32> TreeHelper<'_, F> {
                 &final_node,
                 Some([left_is_final, right_is_final]),
             );
-            record_send.send(*trace_row2.hash_preimage()).unwrap();
             trace_send.send(trace_row2).unwrap();
-            drop(record_send);
             drop(trace_send);
             final_node
         } else {
@@ -310,39 +295,18 @@ impl<F: PrimeField32> TreeHelper<'_, F> {
     }
 }
 
-impl<T> MemoryMerkleCols<T, CHUNK> {
+impl<T, const CHUNK: usize> MemoryMerkleCols<T, CHUNK> {
     /// Returns concatenation of `left_child_hash` and `right_child_hash` as a slice.
-    fn hash_preimage(&self) -> &[T; CHUNK * 2] {
+    fn hash_preimage(&self) -> &[T] {
         let ptr = &self.left_child_hash as *const T;
         // SAFETY: `MemoryMerkleCols` is repr(C) and `left_child_hash` and `right_child_hash` are
         // adjacent in memory. Therefore they can be concatenated into a slice.
-        unsafe { &*(ptr as *const [T; CHUNK * 2]) }
+        unsafe { &*std::ptr::slice_from_raw_parts(ptr, CHUNK * 2) }
     }
 }
 
 pub trait SerialReceiver<T> {
     fn receive(&mut self, msg: T);
-}
-
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<[F; PERIPHERY_POSEIDON2_WIDTH]>
-    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
-{
-    fn receive(&mut self, hash_preimage: [F; PERIPHERY_POSEIDON2_WIDTH]) {
-        let count = self
-            .records
-            .entry(hash_preimage)
-            .or_insert(AtomicU32::new(0));
-        count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
-impl<F: PrimeField32> SerialReceiver<[F; PERIPHERY_POSEIDON2_WIDTH]> for Poseidon2PeripheryChip<F> {
-    fn receive(&mut self, hash_preimage: [F; PERIPHERY_POSEIDON2_WIDTH]) {
-        match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.receive(hash_preimage),
-            Poseidon2PeripheryChip::Register1(chip) => chip.receive(hash_preimage),
-        }
-    }
 }
 
 impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
