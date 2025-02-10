@@ -30,12 +30,14 @@ pub trait ShaConfig: Send + Sync + Clone {
     const BLOCK_BITS: usize = Self::BLOCK_WORDS * Self::WORD_BITS;
     /// Number of rows per block
     const ROWS_PER_BLOCK: usize;
-    /// Number of rounds per row
+    /// Number of rounds per row. Must divide Self::ROUNDS_PER_BLOCK
     const ROUNDS_PER_ROW: usize;
     /// Number of rounds per row minus one (needed for one of the column structs)
     const ROUNDS_PER_ROW_MINUS_ONE: usize = Self::ROUNDS_PER_ROW - 1;
-    /// Number of rounds per block
+    /// Number of rounds per block. Must be a multiple of Self::ROUNDS_PER_ROW
     const ROUNDS_PER_BLOCK: usize;
+    /// Number of rows used to constrain rounds
+    const ROUND_ROWS: usize = Self::ROUNDS_PER_BLOCK / Self::ROUNDS_PER_ROW;
     /// Number of words in a SHA hash
     const HASH_WORDS: usize;
     /// Number of vars needed to encode the row index with [Encoder]
