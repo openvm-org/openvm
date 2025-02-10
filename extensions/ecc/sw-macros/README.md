@@ -2,7 +2,7 @@
 
 Procedural macros for use in guest program to generate short Weierstrass elliptic curve struct with custom intrinsics for compile-time modulus.
 
-The workflow of this macro is very similar to the [`openvm-algebra-moduli-macros`](../moduli-macros/README.md) crate. We recommend reading it first.
+The workflow of this macro is very similar to the [`openvm-algebra-moduli-macros`](../../algebra/moduli-macros/README.md) crate. We recommend reading it first.
 
 ## Example
 
@@ -38,7 +38,7 @@ pub fn main() {
 
 ## Full story
 
-Again, the principle is the same as in the [`openvm-algebra-moduli-macros`](../moduli-macros/README.md) crate. Here we emphasize the core differences.
+Again, the principle is the same as in the [`openvm-algebra-moduli-macros`](../../algebra/moduli-macros/README.md) crate. Here we emphasize the core differences.
 
 The crate provides two macros: `sw_declare!` and `sw_init!`. The signatures are:
 
