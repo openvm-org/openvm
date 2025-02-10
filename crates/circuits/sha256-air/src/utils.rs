@@ -2,7 +2,10 @@ use openvm_circuit_primitives::{
     encoder::Encoder,
     utils::{not, select},
 };
-use openvm_stark_backend::{p3_air::AirBuilder, p3_field::FieldAlgebra};
+use openvm_stark_backend::{
+    p3_air::AirBuilder,
+    p3_field::{FieldAlgebra, PrimeField32},
+};
 use rand::{rngs::StdRng, Rng};
 
 use crate::{RotateRight, ShaConfig};
@@ -42,15 +45,6 @@ pub fn u32_into_bits<C: ShaConfig>(num: u32) -> Vec<u32> {
         .map(|i| (num >> (limb_bits * i)) & ((1 << limb_bits) - 1))
         .collect()
 }
-
-// TODO: delete
-/*
-/// Convert a u32 into a list of limbs in little endian
-pub fn u32_into_limbs<const NUM_LIMBS: usize>(num: u32) -> [u32; NUM_LIMBS] {
-    let limb_bits = 32 / NUM_LIMBS;
-    array::from_fn(|i| (num >> (limb_bits * i)) & ((1 << limb_bits) - 1))
-}
-*/
 
 /// Convert a list of limbs in little endian into a Word
 pub fn limbs_into_word<C: ShaConfig>(limbs: &[u32]) -> C::Word {
@@ -162,46 +156,86 @@ pub(crate) fn maj_field<F: FieldAlgebra + Clone>(
 
 /// Big sigma_0 function from SHA256
 pub fn big_sig0<C: ShaConfig>(x: C::Word) -> C::Word {
-    x.rotate_right(2) ^ x.rotate_right(13) ^ x.rotate_right(22)
+    if C::WORD_BITS == 32 {
+        x.rotate_right(2) ^ x.rotate_right(13) ^ x.rotate_right(22)
+    } else {
+        x.rotate_right(28) ^ x.rotate_right(34) ^ x.rotate_right(39)
+    }
 }
 
-/// Computes BigSigma0(x), where x is a [SHA256_WORD_BITS] bit number in little-endian
+/// Computes BigSigma0(x), where x is a [C::WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn big_sig0_field<F: FieldAlgebra + Clone>(x: &[impl Into<F> + Clone]) -> Vec<F> {
-    xor(&rotr::<F>(x, 2), &rotr::<F>(x, 13), &rotr::<F>(x, 22))
+pub(crate) fn big_sig0_field<F: FieldAlgebra + Clone, C: ShaConfig>(
+    x: &[impl Into<F> + Clone],
+) -> Vec<F> {
+    if C::WORD_BITS == 32 {
+        xor(&rotr::<F>(x, 2), &rotr::<F>(x, 13), &rotr::<F>(x, 22))
+    } else {
+        xor(&rotr::<F>(x, 28), &rotr::<F>(x, 34), &rotr::<F>(x, 39))
+    }
 }
 
 /// Big sigma_1 function from SHA256
 pub fn big_sig1<C: ShaConfig>(x: C::Word) -> C::Word {
-    x.rotate_right(6) ^ x.rotate_right(11) ^ x.rotate_right(25)
+    if C::WORD_BITS == 32 {
+        x.rotate_right(6) ^ x.rotate_right(11) ^ x.rotate_right(25)
+    } else {
+        x.rotate_right(14) ^ x.rotate_right(18) ^ x.rotate_right(41)
+    }
 }
 
 /// Computes BigSigma1(x), where x is a [SHA256_WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn big_sig1_field<F: FieldAlgebra + Clone>(x: &[impl Into<F> + Clone]) -> Vec<F> {
-    xor(&rotr::<F>(x, 6), &rotr::<F>(x, 11), &rotr::<F>(x, 25))
+pub(crate) fn big_sig1_field<F: FieldAlgebra + Clone, C: ShaConfig>(
+    x: &[impl Into<F> + Clone],
+) -> Vec<F> {
+    if C::WORD_BITS == 32 {
+        xor(&rotr::<F>(x, 6), &rotr::<F>(x, 11), &rotr::<F>(x, 25))
+    } else {
+        xor(&rotr::<F>(x, 14), &rotr::<F>(x, 18), &rotr::<F>(x, 41))
+    }
 }
 
 /// Small sigma_0 function from SHA256
 pub fn small_sig0<C: ShaConfig>(x: C::Word) -> C::Word {
-    x.rotate_right(7) ^ x.rotate_right(18) ^ (x >> 3)
+    if C::WORD_BITS == 32 {
+        x.rotate_right(7) ^ x.rotate_right(18) ^ (x >> 3)
+    } else {
+        x.rotate_right(1) ^ x.rotate_right(8) ^ (x >> 7)
+    }
 }
 
 /// Computes SmallSigma0(x), where x is a [SHA256_WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn small_sig0_field<F: FieldAlgebra + Clone>(x: &[impl Into<F> + Clone]) -> Vec<F> {
-    xor(&rotr::<F>(x, 7), &rotr::<F>(x, 18), &shr::<F>(x, 3))
+pub(crate) fn small_sig0_field<F: FieldAlgebra + Clone, C: ShaConfig>(
+    x: &[impl Into<F> + Clone],
+) -> Vec<F> {
+    if C::WORD_BITS == 32 {
+        xor(&rotr::<F>(x, 7), &rotr::<F>(x, 18), &shr::<F>(x, 3))
+    } else {
+        xor(&rotr::<F>(x, 1), &rotr::<F>(x, 8), &shr::<F>(x, 7))
+    }
 }
 
 /// Small sigma_1 function from SHA256
 pub fn small_sig1<C: ShaConfig>(x: C::Word) -> C::Word {
-    x.rotate_right(17) ^ x.rotate_right(19) ^ (x >> 10)
+    if C::WORD_BITS == 32 {
+        x.rotate_right(17) ^ x.rotate_right(19) ^ (x >> 10)
+    } else {
+        x.rotate_right(19) ^ x.rotate_right(61) ^ (x >> 6)
+    }
 }
 
 /// Computes SmallSigma1(x), where x is a [SHA256_WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn small_sig1_field<F: FieldAlgebra + Clone>(x: &[impl Into<F> + Clone]) -> Vec<F> {
-    xor(&rotr::<F>(x, 17), &rotr::<F>(x, 19), &shr::<F>(x, 10))
+pub(crate) fn small_sig1_field<F: FieldAlgebra + Clone, C: ShaConfig>(
+    x: &[impl Into<F> + Clone],
+) -> Vec<F> {
+    if C::WORD_BITS == 32 {
+        xor(&rotr::<F>(x, 17), &rotr::<F>(x, 19), &shr::<F>(x, 10))
+    } else {
+        xor(&rotr::<F>(x, 19), &rotr::<F>(x, 61), &shr::<F>(x, 6))
+    }
 }
 
 /// Generate a random message of a given length

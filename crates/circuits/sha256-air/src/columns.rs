@@ -71,7 +71,7 @@ pub struct ShaMessageScheduleCols<
 > {
     /// The message schedule words as 32-bit intergers
     pub w: [[T; WORD_BITS]; ROUNDS_PER_ROW],
-    /// Will be message schedule carries for rows 4..16 and a buffer for rows 0..4 to be used freely by wrapper chips
+    /// Will be message schedule carries for rows 4..C::ROUND_ROWS and a buffer for rows 0..4 to be used freely by wrapper chips
     /// Note: carries are represented as 2 bit numbers
     pub carry_or_buffer: [[T; WORD_U8S]; ROUNDS_PER_ROW],
 }

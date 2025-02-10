@@ -1,4 +1,4 @@
-use std::{array, cmp::max, sync::Arc};
+use std::{cmp::max, sync::Arc};
 
 use openvm_circuit::arch::{
     instructions::riscv::RV32_CELL_BITS,
@@ -12,19 +12,15 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeField32},
     prover::types::AirProofInput,
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
-use sha2::Sha256;
 
-use crate::{
-    Sha256Config, Sha512Config, ShaAir, ShaConfig, ShaFlagsColsRef, ShaFlagsColsRefMut,
-    ShaPrecomputedValues,
-};
+use crate::{Sha256Config, Sha512Config, ShaAir, ShaConfig, ShaPrecomputedValues};
 
 // A wrapper AIR purely for testing purposes
 #[derive(Clone, Debug)]
@@ -125,4 +121,9 @@ fn rand_sha_test<C: ShaConfig + ShaPrecomputedValues<C::Word> + 'static>() {
 #[test]
 fn rand_sha256_test() {
     rand_sha_test::<Sha256Config>();
+}
+
+#[test]
+fn rand_sha512_test() {
+    rand_sha_test::<Sha512Config>();
 }

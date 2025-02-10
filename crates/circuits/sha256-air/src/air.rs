@@ -36,7 +36,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
     pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, self_bus_idx: usize) -> Self {
         Self {
             bitwise_lookup_bus,
-            row_idx_encoder: Encoder::new(17, 2, false),
+            row_idx_encoder: Encoder::new(C::ROWS_PER_BLOCK, 2, false),
             bus_idx: self_bus_idx,
             _phantom: PhantomData,
         }
@@ -91,29 +91,35 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
 
         self.row_idx_encoder
             .eval(builder, local_cols.flags.row_idx.to_slice().unwrap());
-        builder.assert_one(
-            self.row_idx_encoder
-                .contains_flag_range::<AB>(local_cols.flags.row_idx.to_slice().unwrap(), 0..=17),
-        );
+        builder.assert_one(self.row_idx_encoder.contains_flag_range::<AB>(
+            local_cols.flags.row_idx.to_slice().unwrap(),
+            0..=C::ROWS_PER_BLOCK,
+        ));
         builder.assert_eq(
             self.row_idx_encoder
                 .contains_flag_range::<AB>(local_cols.flags.row_idx.to_slice().unwrap(), 0..=3),
             *flags.is_first_4_rows,
         );
         builder.assert_eq(
-            self.row_idx_encoder
-                .contains_flag_range::<AB>(local_cols.flags.row_idx.to_slice().unwrap(), 0..=15),
+            self.row_idx_encoder.contains_flag_range::<AB>(
+                local_cols.flags.row_idx.to_slice().unwrap(),
+                0..=C::ROUND_ROWS - 1,
+            ),
             *flags.is_round_row,
         );
         builder.assert_eq(
-            self.row_idx_encoder
-                .contains_flag::<AB>(local_cols.flags.row_idx.to_slice().unwrap(), &[16]),
+            self.row_idx_encoder.contains_flag::<AB>(
+                local_cols.flags.row_idx.to_slice().unwrap(),
+                &[C::ROUND_ROWS],
+            ),
             *flags.is_digest_row,
         );
-        // If padding row we want the row_idx to be 17
+        // If padding row we want the row_idx to be C::ROWS_PER_BLOCK
         builder.assert_eq(
-            self.row_idx_encoder
-                .contains_flag::<AB>(local_cols.flags.row_idx.to_slice().unwrap(), &[17]),
+            self.row_idx_encoder.contains_flag::<AB>(
+                local_cols.flags.row_idx.to_slice().unwrap(),
+                &[C::ROWS_PER_BLOCK],
+            ),
             flags.is_padding_row(),
         );
 
@@ -131,13 +137,13 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
     /// Implements constraints for a digest row that ensure proper state transitions between blocks
     /// This validates that:
     /// The work variables are correctly initialized for the next message block
-    /// For the last message block, the initial state matches SHA256_H constants
+    /// For the last message block, the initial state matches SHA_H constants
     fn eval_digest_row<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         local: ShaDigestColsRef<AB::Var>,
     ) {
-        // Check that if this is the last row of a message or an inpadding row, the hash should be the [SHA256_H]
+        // Check that if this is the last row of a message or an inpadding row, the hash should be the [SHA_H]
         for i in 0..C::ROUNDS_PER_ROW {
             let a = local.hash.a.row(i).mapv(|x| x.into()).to_vec();
             let e = local.hash.e.row(i).mapv(|x| x.into()).to_vec();
@@ -146,7 +152,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                 let a_limb = compose::<AB::Expr>(&a[j * 16..(j + 1) * 16], 1);
                 let e_limb = compose::<AB::Expr>(&e[j * 16..(j + 1) * 16], 1);
 
-                // If it is a padding row or the last row of a message, the `hash` should be the [SHA256_H]
+                // If it is a padding row or the last row of a message, the `hash` should be the [SHA_H]
                 builder
                     .when(
                         local.flags.is_padding_row()
@@ -244,24 +250,24 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
         // Constrin how much the row index changes by
         // round->round: 1
         // round->digest: 1
-        // digest->round: -16 // TODO: sha512
+        // digest->round: -C::ROUND_ROWS
         // digest->padding: 1
         // padding->padding: 0
         // Other transitions are not allowed by the above
         let delta = *local_cols.flags.is_round_row * AB::Expr::ONE
             + *local_cols.flags.is_digest_row
                 * *next_cols.flags.is_round_row
-                * AB::Expr::from_canonical_u32(16)
+                * AB::Expr::from_canonical_usize(C::ROUND_ROWS)
                 * AB::Expr::NEG_ONE
             + *local_cols.flags.is_digest_row * next_is_padding_row.clone() * AB::Expr::ONE;
 
         let local_row_idx = self.row_idx_encoder.flag_with_val::<AB>(
             local_cols.flags.row_idx.to_slice().unwrap(),
-            &(0..18).map(|i| (i, i)).collect::<Vec<_>>(),
+            &(0..=C::ROWS_PER_BLOCK).map(|i| (i, i)).collect::<Vec<_>>(),
         );
         let next_row_idx = self.row_idx_encoder.flag_with_val::<AB>(
             next_cols.flags.row_idx.to_slice().unwrap(),
-            &(0..18).map(|i| (i, i)).collect::<Vec<_>>(),
+            &(0..=C::ROWS_PER_BLOCK).map(|i| (i, i)).collect::<Vec<_>>(),
         );
 
         builder
@@ -411,20 +417,22 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
         }
 
         // Constrain intermed for `next` row
-        // We will only constrain intermed_12 for rows [3, 14], and let it unconstrained for other rows
+        // We will only constrain intermed_12 for rows [3, C::ROUND_ROWS - 1], and let it unconstrained for other rows
         // Other rows should put the needed value in intermed_12 to make the below summation constraint hold
-        let is_row_3_14 = self
-            .row_idx_encoder
-            .contains_flag_range::<AB>(next.flags.row_idx.to_slice().unwrap(), 3..=14);
-        // We will only constrain intermed_8 for rows [2, 13], and let it unconstrained for other rows
-        let is_row_2_13 = self
-            .row_idx_encoder
-            .contains_flag_range::<AB>(next.flags.row_idx.to_slice().unwrap(), 2..=13);
+        let is_row_intermed_12 = self.row_idx_encoder.contains_flag_range::<AB>(
+            next.flags.row_idx.to_slice().unwrap(),
+            3..=C::ROUND_ROWS - 2,
+        );
+        // We will only constrain intermed_8 for rows [2, C::ROUND_ROWS - 2], and let it unconstrained for other rows
+        let is_row_intermed_8 = self.row_idx_encoder.contains_flag_range::<AB>(
+            next.flags.row_idx.to_slice().unwrap(),
+            2..=C::ROUND_ROWS - 3,
+        );
         for i in 0..C::ROUNDS_PER_ROW {
             // w_idx
             let w_idx = w.row(i).mapv(|x| x.into()).to_vec();
             // sig_0(w_{idx+1})
-            let sig_w = small_sig0_field::<AB::Expr>(w.row(i + 1).as_slice().unwrap());
+            let sig_w = small_sig0_field::<AB::Expr, C>(w.row(i + 1).as_slice().unwrap());
             for j in 0..C::WORD_U16S {
                 let w_idx_limb = compose::<AB::Expr>(&w_idx[j * 16..(j + 1) * 16], 1);
                 let sig_w_limb = compose::<AB::Expr>(&sig_w[j * 16..(j + 1) * 16], 1);
@@ -434,12 +442,12 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                     w_idx_limb + sig_w_limb,
                 );
 
-                builder.when(is_row_2_13.clone()).assert_eq(
+                builder.when(is_row_intermed_8.clone()).assert_eq(
                     next.schedule_helper.intermed_8[[i, j]],
                     local.schedule_helper.intermed_4[[i, j]],
                 );
 
-                builder.when(is_row_3_14.clone()).assert_eq(
+                builder.when(is_row_intermed_12.clone()).assert_eq(
                     next.schedule_helper.intermed_12[[i, j]],
                     local.schedule_helper.intermed_8[[i, j]],
                 );
@@ -472,7 +480,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
             constraint_word_addition::<_, C>(
                 // Note: here we can't do a conditional check because the degree of sum is already 3
                 &mut builder.when_transition(),
-                &[&small_sig1_field::<AB::Expr>(
+                &[&small_sig1_field::<AB::Expr, C>(
                     w.row(i + 2).as_slice().unwrap(),
                 )],
                 &[&w_7, intermed_16.as_slice().unwrap()],
@@ -481,13 +489,13 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
             );
 
             for j in 0..C::WORD_U16S {
-                // When on rows 4..16 message schedule carries should be 0 or 1
-                let is_row_4_15 = *next.flags.is_round_row - *next.flags.is_first_4_rows;
+                // When on rows 4..C::ROUND_ROWS message schedule carries should be 0 or 1
+                let is_row_4_or_more = *next.flags.is_round_row - *next.flags.is_first_4_rows;
                 builder
-                    .when(is_row_4_15.clone())
+                    .when(is_row_4_or_more.clone())
                     .assert_bool(next.message_schedule.carry_or_buffer[[i, j * 2]]);
                 builder
-                    .when(is_row_4_15)
+                    .when(is_row_4_or_more)
                     .assert_bool(next.message_schedule.carry_or_buffer[[i, j * 2 + 1]]);
                 // Constrain w being composed of bits
                 for j in 0..C::WORD_BITS {
@@ -499,7 +507,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
         }
     }
 
-    /// Constrain the work vars on `next` row according to the sha256 documentation
+    /// Constrain the work vars on `next` row according to the sha documentation
     /// Refer to [https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf]
     fn eval_work_vars<'a, AB: InteractionBuilder>(
         &self,
@@ -536,11 +544,12 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                     ) * *next.flags.is_round_row
                 })
                 .collect::<Vec<_>>();
+
             let k_limbs = (0..C::WORD_U16S)
                 .map(|j| {
                     self.row_idx_encoder.flag_with_val::<AB>(
                         next.flags.row_idx.to_slice().unwrap(),
-                        &(0..16)
+                        &(0..C::ROUND_ROWS)
                             .map(|rw_idx| {
                                 (
                                     rw_idx,
@@ -559,13 +568,13 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                 builder,
                 &[
                     e.row(i).mapv(|x| x.into()).as_slice().unwrap(), // previous `h`
-                    &big_sig1_field::<AB::Expr>(e.row(i + 3).as_slice().unwrap()), // sig_1 of previous `e`
+                    &big_sig1_field::<AB::Expr, C>(e.row(i + 3).as_slice().unwrap()), // sig_1 of previous `e`
                     &ch_field::<AB::Expr>(
                         e.row(i + 3).as_slice().unwrap(),
                         e.row(i + 2).as_slice().unwrap(),
                         e.row(i + 1).as_slice().unwrap(),
                     ), // Ch of previous `e`, `f`, `g`
-                    &big_sig0_field::<AB::Expr>(a.row(i + 3).as_slice().unwrap()), // sig_0 of previous `a`
+                    &big_sig0_field::<AB::Expr, C>(a.row(i + 3).as_slice().unwrap()), // sig_0 of previous `a`
                     &maj_field::<AB::Expr>(
                         a.row(i + 3).as_slice().unwrap(),
                         a.row(i + 2).as_slice().unwrap(),
@@ -581,9 +590,9 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
             constraint_word_addition::<_, C>(
                 builder,
                 &[
-                    &a.row(i).mapv(|x| x.into()).as_slice().unwrap(), // previous `d`
-                    &e.row(i).mapv(|x| x.into()).as_slice().unwrap(), // previous `h`
-                    &big_sig1_field::<AB::Expr>(e.row(i + 3).as_slice().unwrap()), // sig_1 of previous `e`
+                    a.row(i).mapv(|x| x.into()).as_slice().unwrap(), // previous `d`
+                    e.row(i).mapv(|x| x.into()).as_slice().unwrap(), // previous `h`
+                    &big_sig1_field::<AB::Expr, C>(e.row(i + 3).as_slice().unwrap()), // sig_1 of previous `e`
                     &ch_field::<AB::Expr>(
                         e.row(i + 3).as_slice().unwrap(),
                         e.row(i + 2).as_slice().unwrap(),
