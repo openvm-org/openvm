@@ -19,7 +19,7 @@ use openvm_stark_backend::{
 };
 use rustc_hash::FxHashSet;
 
-use super::merkle::DirectCompressionBus;
+use super::merkle::{DirectCompressionBus, SerialReceiver};
 use crate::{
     arch::hasher::Hasher,
     system::memory::{
@@ -199,7 +199,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         final_memory: &TimestampedEquipartition<F, CHUNK>,
         hasher: &mut H,
     ) where
-        H: Hasher<CHUNK, F> + Sync + for<'a> super::merkle::SerialReceiver<&'a [F]>,
+        H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
         match &mut self.touched_labels {
             TouchedLabels::Running(touched_labels) => {

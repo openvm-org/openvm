@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{
-    merkle::DirectCompressionBus,
+    merkle::{DirectCompressionBus, SerialReceiver},
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
 };
@@ -503,7 +503,7 @@ impl<F: PrimeField32> MemoryController<F> {
     /// Returns the final memory state if persistent.
     pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
     where
-        H: HasherChip<CHUNK, F> + Sync + for<'a> super::merkle::SerialReceiver<&'a [F]>,
+        H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
         if self.final_state.is_some() {
             return;
