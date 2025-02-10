@@ -17,8 +17,14 @@ use crate::{
     fri::types::FriProofVariable,
 };
 
+// The maximum two-adicity of Felt `C::F`. This means `C::F` does not have a multiplicative subgroup
+// of order 2^{MAX_TWO_ADICITY + 1}. Currently set to 27 for BabyBear.
+pub const MAX_TWO_ADICITY: usize = 27;
+
 /// Notes:
 /// 1. FieldMerkleTreeMMCS sorts traces by height in descending order when committing data.
+/// 2. **Required** that `C::F` has two-adicity <= [MAX_TWO_ADICITY]. In particular this implies that all LDE matrices have
+///    `log2(lde_height) <= MAX_TWO_ADICITY`.
 ///
 /// Reference:
 /// <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53>
@@ -99,14 +105,16 @@ pub fn verify_two_adic_pcs<C: Config>(
     };
     builder.cycle_tracker_end("pre-compute-rounds-context");
 
+    // Working variables for reduced opening, reset per query. Both arrays indexed by log_height.
+    let ro: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
+    let alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
+
     iter_zip!(builder, proof.query_proofs).for_each(|ptr_vec, builder| {
         let query_proof = builder.iter_ptr_get(&proof.query_proofs, ptr_vec[0]);
         let index_bits = challenger.sample_bits(builder, log_max_height);
 
-        let ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
-        let alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(32);
         if builder.flags.static_only {
-            for j in 0..32 {
+            for j in 0..=MAX_TWO_ADICITY {
                 // ATTENTION: don't use set_value here, Fixed will share the same variable.
                 builder.set(&ro, j, C::EF::ZERO.cons());
                 builder.set(&alpha_pow, j, C::EF::ONE.cons());
@@ -114,7 +122,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         } else {
             let zero_ef = builder.eval(C::EF::ZERO.cons());
             let one_ef = builder.eval(C::EF::ONE.cons());
-            for j in 0..32 {
+            for j in 0..=MAX_TWO_ADICITY {
                 // Use set_value here to save a copy.
                 builder.set_value(&ro, j, zero_ef);
                 builder.set_value(&alpha_pow, j, one_ef);
@@ -487,7 +495,7 @@ fn compute_rounds_context<C: Config>(
 
                 let domain = mat.domain;
                 let dim = DimensionsVariable::<C> {
-                    height: builder.eval(domain.size() * RVar::from(1 << log_blowup)),
+                    log_height: builder.eval(domain.log_n + RVar::from(log_blowup)),
                 };
                 builder.set_value(&batch_dims, i, dim);
                 let perm_ov_ptr = builder.get(&ov_ptrs, perm_i);

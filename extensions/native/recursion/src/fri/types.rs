@@ -59,7 +59,7 @@ pub struct FriChallengesVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct DimensionsVariable<C: Config> {
-    pub height: Usize<C::N>,
+    pub log_height: Usize<C::N>,
 }
 
 #[derive(DslVariable, Clone)]

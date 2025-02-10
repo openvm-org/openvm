@@ -344,3 +344,26 @@ impl<F: PrimeField32> SerialReceiver<[F; PERIPHERY_POSEIDON2_WIDTH]> for Poseido
         }
     }
 }
+
+impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
+    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+{
+    /// Receives a permutation preimage, pads with zeros to the permutation width, and records.
+    /// The permutation preimage must have length at most the permutation width (panics otherwise).
+    fn receive(&mut self, perm_preimage: &'a [F]) {
+        assert!(perm_preimage.len() <= PERIPHERY_POSEIDON2_WIDTH);
+        let mut state = [F::ZERO; PERIPHERY_POSEIDON2_WIDTH];
+        state[..perm_preimage.len()].copy_from_slice(perm_preimage);
+        let count = self.records.entry(state).or_insert(AtomicU32::new(0));
+        count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl<'a, F: PrimeField32> SerialReceiver<&'a [F]> for Poseidon2PeripheryChip<F> {
+    fn receive(&mut self, perm_preimage: &'a [F]) {
+        match self {
+            Poseidon2PeripheryChip::Register0(chip) => chip.receive(perm_preimage),
+            Poseidon2PeripheryChip::Register1(chip) => chip.receive(perm_preimage),
+        }
+    }
+}

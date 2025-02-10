@@ -96,7 +96,7 @@ where
             }
 
             let dims = DimensionsVariable::<C> {
-                height: builder.sll(C::N::ONE, log_folded_height),
+                log_height: builder.eval(log_folded_height),
             };
             let dims_slice: Array<C, DimensionsVariable<C>> = builder.array(1);
             builder.set_value(&dims_slice, 0, dims);
@@ -213,7 +213,7 @@ pub fn verify_batch_static<C: Config>(
     // The index of which table to process next.
     let index: Usize<C::N> = builder.eval(C::N::ZERO);
     // The height of the current layer (padded).
-    let mut current_height = builder.get(&dimensions, index.clone()).height.value();
+    let mut current_log_height = builder.get(&dimensions, index.clone()).log_height.value();
     // Reduce all the tables that have the same height to a single root.
     let reducer = opened_values.create_reducer(builder);
     let mut root = reducer
@@ -221,7 +221,7 @@ pub fn verify_batch_static<C: Config>(
             builder,
             index.clone(),
             &dimensions,
-            current_height,
+            current_log_height,
             opened_values,
         )
         .into_outer_digest();
@@ -234,21 +234,21 @@ pub fn verify_batch_static<C: Config>(
 
         let [left, right]: [Var<_>; 2] = cond_eval(builder, bit, root[0], sibling[0]);
         root = builder.p2_compress([[left], [right]]);
-        current_height >>= 1;
+        current_log_height -= 1;
 
         builder
             .if_ne(index.clone(), dimensions.len())
             .then(|builder| {
-                let next_height = builder.get(&dimensions, index.clone()).height;
+                let next_log_height = builder.get(&dimensions, index.clone()).log_height;
                 builder
-                    .if_eq(next_height, Usize::from(current_height))
+                    .if_eq(next_log_height, Usize::from(current_log_height))
                     .then(|builder| {
                         let next_height_openings_digest = reducer
                             .reduce_fast(
                                 builder,
                                 index.clone(),
                                 &dimensions,
-                                current_height,
+                                current_log_height,
                                 opened_values,
                             )
                             .into_outer_digest();
@@ -265,7 +265,7 @@ fn reduce_fast<C: Config, V: MemVariable<C>>(
     builder: &mut Builder<C>,
     dim_idx: Usize<C::N>,
     dims: &Array<C, DimensionsVariable<C>>,
-    curr_height_padded: usize,
+    cur_log_height: usize,
     opened_values: &Array<C, Array<C, V>>,
     nested_opened_values_buffer: &Array<C, Array<C, V>>,
 ) -> DigestVariable<C>
@@ -291,9 +291,9 @@ where
     let dims_shifted = dims.shift(builder, start_dim_idx.clone());
     let opened_values_shifted = opened_values.shift(builder, start_dim_idx);
     iter_zip!(builder, dims_shifted, opened_values_shifted).for_each(|ptr_vec, builder| {
-        let height = builder.iter_ptr_get(&dims_shifted, ptr_vec[0]).height;
+        let log_height = builder.iter_ptr_get(&dims_shifted, ptr_vec[0]).log_height;
         builder
-            .if_eq(height, Usize::from(curr_height_padded))
+            .if_eq(log_height, Usize::from(cur_log_height))
             .then(|builder| {
                 let opened_values = builder.iter_ptr_get(&opened_values_shifted, ptr_vec[1]);
                 builder.set_value(
@@ -322,7 +322,7 @@ impl<C: Config> NestedOpenedValuesReducerVar<C> {
         builder: &mut Builder<C>,
         dim_idx: Usize<C::N>,
         dims: &Array<C, DimensionsVariable<C>>,
-        curr_height: usize,
+        cur_log_height: usize,
         nested_opened_values: &NestedOpenedValues<C>,
     ) -> DigestVariable<C> {
         match nested_opened_values {
@@ -331,14 +331,28 @@ impl<C: Config> NestedOpenedValuesReducerVar<C> {
                     NestedOpenedValues::Felt(buffer) => buffer,
                     NestedOpenedValues::Ext(_) => unreachable!(),
                 };
-                reduce_fast(builder, dim_idx, dims, curr_height, opened_values, buffer)
+                reduce_fast(
+                    builder,
+                    dim_idx,
+                    dims,
+                    cur_log_height,
+                    opened_values,
+                    buffer,
+                )
             }
             NestedOpenedValues::Ext(opened_values) => {
                 let buffer = match &self.buffer {
                     NestedOpenedValues::Felt(_) => unreachable!(),
                     NestedOpenedValues::Ext(buffer) => buffer,
                 };
-                reduce_fast(builder, dim_idx, dims, curr_height, opened_values, buffer)
+                reduce_fast(
+                    builder,
+                    dim_idx,
+                    dims,
+                    cur_log_height,
+                    opened_values,
+                    buffer,
+                )
             }
         }
     }

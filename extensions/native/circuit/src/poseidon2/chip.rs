@@ -44,7 +44,7 @@ pub struct VerifyBatchRecord<F: Field> {
     pub commit_pointer_read: RecordId,
 
     pub commit_read: RecordId,
-    pub initial_height: usize,
+    pub initial_log_height: usize,
     pub top_level: Vec<TopLevelRecord<F>>,
 }
 
@@ -313,10 +313,10 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 
             let opened_length = opened_length.as_canonical_u32() as usize;
 
-            let initial_height = memory
+            let initial_log_height = memory
                 .unsafe_read_cell(address_space, dim_base_pointer)
                 .as_canonical_u32();
-            let mut height = initial_height;
+            let mut log_height = initial_log_height as i32;
             let mut sibling_index = 0;
             let mut opened_index = 0;
             let mut top_level = vec![];
@@ -331,12 +331,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                     .collect()
             };
 
-            while height >= 1 {
+            while log_height >= 0 {
                 let incorporate_row = if opened_index < opened_length
                     && memory.unsafe_read_cell(
                         address_space,
                         dim_base_pointer + F::from_canonical_usize(opened_index),
-                    ) == F::from_canonical_u32(height)
+                    ) == F::from_canonical_u32(log_height as u32)
                 {
                     let initial_opened_index = opened_index;
                     for _ in 0..NUM_INITIAL_READS {
@@ -367,7 +367,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                                             address_space,
                                             dim_base_pointer
                                                 + F::from_canonical_usize(opened_index),
-                                        ) != F::from_canonical_u32(height)
+                                        ) != F::from_canonical_u32(log_height as u32)
                                     {
                                         break;
                                     }
@@ -420,16 +420,16 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                         address_space,
                         dim_base_pointer + F::from_canonical_usize(initial_opened_index),
                     );
-                    assert_eq!(height_check, F::from_canonical_u32(height));
+                    assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
                     let (final_height_read, height_check) = memory.read_cell(
                         address_space,
                         dim_base_pointer + F::from_canonical_usize(final_opened_index),
                     );
-                    assert_eq!(height_check, F::from_canonical_u32(height));
+                    assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
 
                     let hash: [F; CHUNK] = std::array::from_fn(|i| rolling_hash[i]);
 
-                    let (p2_input, new_root) = if height == initial_height {
+                    let (p2_input, new_root) = if log_height as u32 == initial_log_height {
                         (prev_rolling_hash.unwrap(), hash)
                     } else {
                         self.compress(root, hash)
@@ -449,7 +449,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                     None
                 };
 
-                let incorporate_sibling = if height == 1 {
+                let incorporate_sibling = if log_height == 0 {
                     None
                 } else {
                     for _ in 0..NUM_INITIAL_READS {
@@ -482,7 +482,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                     incorporate_sibling,
                 });
 
-                height /= 2;
+                log_height -= 1;
                 sibling_index += 1;
             }
 
@@ -503,7 +503,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                     index_base_pointer_read,
                     commit_pointer_read,
                     commit_read,
-                    initial_height: initial_height as usize,
+                    initial_log_height: initial_log_height as usize,
                     top_level,
                 });
         } else {
