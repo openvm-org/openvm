@@ -35,6 +35,8 @@ pub fn get_advice_per_air<C: Config>(
             builder.inc(&idx);
         });
     }
+    // Make sure we didn't index out of bounds; final idx should be <= air_ids.len().
+    builder.assert_less_than_slow(idx.clone(), air_ids.len() + RVar::one());
 
     MultiStarkVerificationAdviceVariable {
         per_air: advice_per_air,

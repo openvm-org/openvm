@@ -282,17 +282,22 @@ impl<C: Config> Builder<C> {
     }
 
     /// Asserts that lhs is less than rhs in time O(rhs).
-    pub fn assert_less_than_slow<LhsExpr: Into<SymbolicVar<C::N>>>(
+    pub fn assert_less_than_slow<
+        LhsExpr: Into<SymbolicVar<C::N>>,
+        RhsExpr: Into<SymbolicVar<C::N>>,
+    >(
         &mut self,
         lhs: LhsExpr,
-        rhs: usize,
+        rhs: RhsExpr,
     ) {
         let lhs: Usize<_> = self.eval(lhs.into());
+        let rhs: Usize<_> = self.eval(rhs.into());
         let product: Usize<_> = self.eval(lhs.clone());
-        for i in 1..rhs {
-            let diff: Usize<_> = self.eval(lhs.clone() - RVar::from(i));
-            self.assign(&product, product.clone() * diff);
-        }
+        self.range(1, rhs).for_each(|i_vec, builder| {
+            let i = i_vec[0];
+            let diff: Usize<_> = builder.eval(lhs.clone() - i);
+            builder.assign(&product, product.clone() * diff);
+        });
         self.assert_usize_eq(product, RVar::from(0));
     }
 

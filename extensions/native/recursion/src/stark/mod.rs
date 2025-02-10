@@ -162,6 +162,31 @@ where
             &builder.vec(perm)
         } else {
             builder.assert_usize_eq(air_perm_by_height.len(), num_airs);
+            // Assert that each index in `air_perm_by_height` is unique and in range [0, num_airs).
+            let mask: Array<_, Usize<_>> = builder.dyn_array(num_airs);
+            let one: Usize<_> = builder.eval(C::N::ONE);
+            iter_zip!(builder, air_perm_by_height).for_each(|ptr_vec, builder| {
+                let perm_i = builder.iter_ptr_get(air_perm_by_height, ptr_vec[0]);
+                builder.set_value(&mask, perm_i.clone(), one.clone());
+            });
+            // Check that each index of mask was set, i.e., that `air_perm_by_height` is a permutation.
+            // Also check that permutation is decreasing by height.
+            let prev_log_height_plus_one: Usize<_> = builder.eval(RVar::from(MAX_TWO_ADICITY + 1));
+            iter_zip!(builder, air_perm_by_height).for_each(|ptr_vec, builder| {
+                let perm_i = builder.iter_ptr_get(air_perm_by_height, ptr_vec[0]);
+                let mask_i = builder.get(&mask, perm_i.clone());
+                builder.assert_usize_eq(mask_i, one.clone());
+
+                let air_proof = builder.get(air_proofs, perm_i.clone());
+                builder.assert_less_than_slow(
+                    air_proof.log_degree.clone(),
+                    prev_log_height_plus_one.clone(),
+                );
+                builder.assign(
+                    &prev_log_height_plus_one,
+                    air_proof.log_degree.clone() + RVar::one(),
+                );
+            });
             air_perm_by_height
         };
 
@@ -227,7 +252,10 @@ where
             challenger.observe(builder, log_degree);
 
             // Constrain that degree_bits is in [0, MAX_TWO_ADICITY].
-            builder.assert_less_than_slow(air_proof.log_degree.clone(), MAX_TWO_ADICITY + 1);
+            builder.assert_less_than_slow(
+                air_proof.log_degree.clone(),
+                RVar::from(MAX_TWO_ADICITY + 1),
+            );
         });
 
         let challenges_per_phase = builder.array(num_phases);
