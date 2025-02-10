@@ -137,7 +137,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         //      // ps_at_x is array of Felt
         //      for (z, ps_at_z) in zip(mat.points, mat.values):
         //        // z is an out of domain point in Ext. There may be multiple per round to account for rotations in AIR constraints.
-        //        // ps_at_z is array of Ext
+        //        // ps_at_z is array of Ext for [claimed evaluation of p at z for each polyomial p corresponding to column of mat]
         //        for (p_at_x, p_at_z) in zip(ps_at_x, ps_at_z):
         //          ro[log_height] += alpha_pow[log_height] * (p_at_x - p_at_z) / (x - z)
         //          alpha_pow[log_height] *= alpha
