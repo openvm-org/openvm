@@ -132,6 +132,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         //      // g is generator of F
         //      // w_{log_height} is generator of subgroup of F of order 2^log_height
         //      x = g * w_{log_height}^{reverse_bits(index >> (log_max_height - log_height), log_height)}
+        //      // reverse_bits(x, bits) takes an unsigned integer x with `bits` bits and returns the unsigned integer with the bits of x reversed.
         //      // x is a rotated evaluation point in a coset of the LDE domain.
         //      ps_at_x = [claimed evaluation of p at x for each polynomial p corresponding to column of mat]
         //      // ps_at_x is array of Felt
