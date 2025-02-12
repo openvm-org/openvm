@@ -81,8 +81,9 @@ where
         }
 
         let (x, y) = self.point.clone().into_coords();
-        let mut bytes = Vec::<u8>::new();
+
         if compress {
+            let mut bytes = Vec::<u8>::with_capacity(1 + Coordinate::<C>::NUM_LIMBS);
             let tag = if y.as_le_bytes()[0] & 1 == 1 {
                 Tag::CompressedOddY
             } else {
@@ -90,12 +91,14 @@ where
             };
             bytes.push(tag.into());
             bytes.extend_from_slice(x.to_be_bytes().as_ref());
+            bytes
         } else {
+            let mut bytes = Vec::<u8>::with_capacity(1 + Coordinate::<C>::NUM_LIMBS * 2);
             bytes.push(Tag::Uncompressed.into());
             bytes.extend_from_slice(x.to_be_bytes().as_ref());
             bytes.extend_from_slice(y.to_be_bytes().as_ref());
+            bytes
         }
-        bytes
     }
 
     pub fn as_affine(&self) -> &<C as IntrinsicCurve>::Point {
