@@ -7,12 +7,14 @@ edition = "2021"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git" }
+openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
+openvm-platform = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
+openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
 serde = { version = "1.0.216", default-features = false }
-num-bigint = { version = "0.4.6", default-features = false, features = ["serde"] }
+num-bigint = { version = "0.4.6", default-features = false, features = [
+    "serde",
+] }
 
 [features]
 default = []

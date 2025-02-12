@@ -7,13 +7,15 @@ edition = "2021"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-algebra-moduli-macros = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-pairing-guest = { git = "https://github.com/openvm-org/openvm.git", features = ["bls12_381"] }
+openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
+openvm-platform = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
+openvm-algebra-moduli-macros = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
+openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
+openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
+openvm-pairing-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "develop", features = [
+    "bls12_381",
+] }
 hex-literal = { version = "0.4.1", default-features = false }
 
 [features]
@@ -24,4 +26,3 @@ std = [
     "openvm-ecc-guest/std",
     "openvm-pairing-guest/std",
 ]
-
