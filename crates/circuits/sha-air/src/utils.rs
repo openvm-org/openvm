@@ -5,10 +5,7 @@ use openvm_circuit_primitives::{
     encoder::Encoder,
     utils::{not, select},
 };
-use openvm_stark_backend::{
-    p3_air::AirBuilder,
-    p3_field::{FieldAlgebra, PrimeField32},
-};
+use openvm_stark_backend::{p3_air::AirBuilder, p3_field::FieldAlgebra};
 use rand::{rngs::StdRng, Rng};
 
 use crate::{RotateRight, ShaConfig};
