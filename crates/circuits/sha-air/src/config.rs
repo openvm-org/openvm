@@ -81,6 +81,9 @@ pub trait ShaConfig: Send + Sync + Clone {
     };
 }
 
+/// We can notice that `carry_a`'s and `carry_e`'s are always the same on invalid rows
+/// To optimize the trace generation of invalid rows, we precompute those values.
+/// This trait also stores the constants K and H for the given SHA config.
 pub trait ShaPrecomputedValues<T> {
     // these should be appropirately sized for the config
     fn get_invalid_carry_a(round_num: usize) -> &'static [u32];
@@ -111,8 +114,6 @@ impl ShaConfig for Sha256Config {
     const ROW_VAR_CNT: usize = 5;
 }
 
-/// We can notice that `carry_a`'s and `carry_e`'s are always the same on invalid rows
-/// To optimize the trace generation of invalid rows, we have those values precomputed here
 pub const SHA256_INVALID_CARRY_A: [[u32; Sha256Config::WORD_U16S]; Sha256Config::ROUNDS_PER_ROW] = [
     [1230919683, 1162494304],
     [266373122, 1282901987],
@@ -179,8 +180,6 @@ impl ShaConfig for Sha512Config {
     const ROW_VAR_CNT: usize = 6;
 }
 
-/// We can notice that `carry_a`'s and `carry_e`'s are always the same on invalid rows
-/// To optimize the trace generation of invalid rows, we have those values precomputed here
 pub(crate) const SHA512_INVALID_CARRY_A: [[u32; Sha512Config::WORD_U16S];
     Sha512Config::ROUNDS_PER_ROW] = [
     [55971842, 827997017, 993005918, 512731953],
@@ -308,7 +307,7 @@ impl ShaPrecomputedValues<u64> for Sha512Config {
 }
 
 // Needed to avoid compile errors in utils.rs
-// don't ask me why this doesn't inf loop
+// not sure why this doesn't inf loop
 pub trait RotateRight {
     fn rotate_right(self, n: u32) -> Self;
 }
