@@ -25,6 +25,11 @@ jobs:
         with:
           cache-on-failure: true
 
+      - uses: codespell-project/actions-codespell@v2
+        with:
+          skip: Cargo.lock,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s
+          ignore_words_file: .codespellignore
+
       - name: Generate docs
         run: |
           cargo doc --workspace  --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
