@@ -175,15 +175,15 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         }
     }
 
-    pub fn execution_bus(&self) -> ExecutionBus {
+    pub const fn execution_bus(&self) -> ExecutionBus {
         self.execution.bus
     }
 
-    pub fn program_bus(&self) -> ProgramBus {
+    pub const fn program_bus(&self) -> ProgramBus {
         self.program.bus
     }
 
-    pub fn memory_bus(&self) -> MemoryBus {
+    pub const fn memory_bus(&self) -> MemoryBus {
         self.memory.bus
     }
 
@@ -204,7 +204,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 
     pub fn offline_memory_mutex_arc(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory_controller().borrow().offline_memory().clone()
+        self.memory_controller().borrow().offline_memory()
     }
 
     pub fn get_default_register(&mut self, increment: usize) -> usize {

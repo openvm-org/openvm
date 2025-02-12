@@ -50,7 +50,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
         let public_values =
             extract_public_values(&memory_dimensions, num_public_values, final_memory);
         let public_values_commit = hasher.merkle_root(&public_values);
-        UserPublicValuesProof {
+        Self {
             proof,
             public_values,
             public_values_commit,

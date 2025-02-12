@@ -3,7 +3,7 @@ pub mod public_values;
 use std::{ops::Range, sync::Arc};
 
 use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
-use MemoryNode::*;
+use MemoryNode::{Leaf, NonLeaf};
 
 use super::controller::dimensions::MemoryDimensions;
 use crate::{
@@ -24,20 +24,19 @@ pub enum MemoryNode<const CHUNK: usize, F: PrimeField32> {
 }
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
-    pub fn hash(&self) -> [F; CHUNK] {
+    pub const fn hash(&self) -> [F; CHUNK] {
         match self {
-            Leaf { values: hash } => *hash,
-            NonLeaf { hash, .. } => *hash,
+            Leaf { values: hash } | NonLeaf { hash, .. } => *hash,
         }
     }
 
-    pub fn new_leaf(values: [F; CHUNK]) -> Self {
+    pub const fn new_leaf(values: [F; CHUNK]) -> Self {
         Leaf { values }
     }
 
     pub fn new_nonleaf(
-        left: Arc<MemoryNode<CHUNK, F>>,
-        right: Arc<MemoryNode<CHUNK, F>>,
+        left: Arc<Self>,
+        right: Arc<Self>,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> Self {
         NonLeaf {
@@ -52,7 +51,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         height: usize,
         leaf_value: [F; CHUNK],
         hasher: &impl Hasher<CHUNK, F>,
-    ) -> MemoryNode<CHUNK, F> {
+    ) -> Self {
         if height == 0 {
             Self::new_leaf(leaf_value)
         } else {
@@ -71,22 +70,22 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         length: u64,
         from: u64,
         hasher: &(impl Hasher<CHUNK, F> + Sync),
-        zero_leaf: &MemoryNode<CHUNK, F>,
-    ) -> MemoryNode<CHUNK, F> {
+        zero_leaf: &Self,
+    ) -> Self {
         if length == CHUNK as u64 {
             if lookup_range.is_empty() {
                 zero_leaf.clone()
             } else {
                 debug_assert_eq!(memory[lookup_range.start].0, from);
                 let mut values = [F::ZERO; CHUNK];
-                for (index, value) in memory[lookup_range].iter() {
+                for (index, value) in &memory[lookup_range] {
                     values[(index % CHUNK as u64) as usize] = *value;
                 }
-                MemoryNode::new_leaf(hasher.hash(&values))
+                Self::new_leaf(hasher.hash(&values))
             }
         } else if lookup_range.is_empty() {
             let leaf_value = hasher.hash(&[F::ZERO; CHUNK]);
-            MemoryNode::construct_uniform(
+            Self::construct_uniform(
                 (length / CHUNK as u64).trailing_zeros() as usize,
                 leaf_value,
                 hasher,
@@ -144,7 +143,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         memory_dimensions: MemoryDimensions,
         memory: &MemoryImage<F>,
         hasher: &(impl Hasher<CHUNK, F> + Sync),
-    ) -> MemoryNode<CHUNK, F> {
+    ) -> Self {
         // Construct a Vec that includes the address space in the label calculation,
         // representing the entire memory tree.
         let memory_items = memory
@@ -164,7 +163,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             memory_items.last().map_or(0, |(addr, _)| *addr)
                 < ((CHUNK as u64) << memory_dimensions.overall_height())
         );
-        let zero_leaf = MemoryNode::new_leaf(hasher.hash(&[F::ZERO; CHUNK]));
+        let zero_leaf = Self::new_leaf(hasher.hash(&[F::ZERO; CHUNK]));
         Self::from_memory(
             &memory_items,
             0..memory_items.len(),

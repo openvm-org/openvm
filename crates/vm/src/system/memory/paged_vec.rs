@@ -25,15 +25,14 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         let start_page = start / PAGE_SIZE;
         let end_page = (start + len - 1) / PAGE_SIZE;
         unsafe {
+            let offset = start % PAGE_SIZE;
             if start_page == end_page {
-                let offset = start % PAGE_SIZE;
                 if let Some(page) = self.pages[start_page].as_ref() {
                     ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, len);
                 } else {
                     std::slice::from_raw_parts_mut(dst, len).fill(T::default());
                 }
             } else {
-                let offset = start % PAGE_SIZE;
                 let first_part = PAGE_SIZE - offset;
                 if let Some(page) = self.pages[start_page].as_ref() {
                     ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, first_part);
@@ -59,14 +58,13 @@ impl<T: Default + Clone, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         let start_page = start / PAGE_SIZE;
         let end_page = (start + len - 1) / PAGE_SIZE;
         unsafe {
+            let offset = start % PAGE_SIZE;
             if start_page == end_page {
-                let offset = start % PAGE_SIZE;
                 let page =
                     self.pages[start_page].get_or_insert_with(|| vec![T::default(); PAGE_SIZE]);
                 ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, len);
                 ptr::copy_nonoverlapping(new, page.as_mut_ptr().add(offset), len);
             } else {
-                let offset = start % PAGE_SIZE;
                 let first_part = PAGE_SIZE - offset;
                 {
                     let page =
@@ -184,7 +182,7 @@ impl<T: Default + Copy, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
 }
 
 impl<T, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
-    pub fn iter(&self) -> PagedVecIter<'_, T, PAGE_SIZE> {
+    pub const fn iter(&self) -> PagedVecIter<'_, T, PAGE_SIZE> {
         PagedVecIter {
             vec: self,
             current_page: 0,

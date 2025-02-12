@@ -23,7 +23,7 @@ impl<T, R> PublicValuesCoreColsView<'_, T, R> {
     }
 }
 impl<'a, T> PublicValuesCoreColsView<'a, T, &'a T> {
-    pub(crate) fn borrow(arr: &'a [T]) -> PublicValuesCoreColsView<'a, T, &'a T> {
+    pub(crate) fn borrow(arr: &'a [T]) -> Self {
         PublicValuesCoreColsView::<T, &'a T> {
             is_valid: &arr[0],
             value: &arr[1],
@@ -34,7 +34,7 @@ impl<'a, T> PublicValuesCoreColsView<'a, T, &'a T> {
     }
 }
 impl<'a, T> PublicValuesCoreColsView<'a, T, &'a mut T> {
-    pub(crate) fn borrow_mut(arr: &'a mut [T]) -> PublicValuesCoreColsView<'a, T, &'a mut T> {
+    pub(crate) fn borrow_mut(arr: &'a mut [T]) -> Self {
         let (first_three, rest) = arr.split_at_mut(3);
         let [is_valid, value, index] = first_three else {
             unreachable!("first_three should have exactly 3 elements");

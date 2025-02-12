@@ -39,7 +39,7 @@ pub struct NativeAdapterChip<F, const R: usize, const W: usize> {
 }
 
 impl<F: PrimeField32, const R: usize, const W: usize> NativeAdapterChip<F, R, W> {
-    pub fn new(
+    pub const fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
@@ -61,17 +61,16 @@ pub struct NativeReadRecord<F: Field, const R: usize> {
 }
 
 impl<F: Field, const R: usize> NativeReadRecord<F, R> {
-    pub fn b(&self) -> &[F; 1] {
+    pub const fn b(&self) -> &[F; 1] {
         &self.reads[0].1
     }
 
-    pub fn c(&self) -> &[F; 1] {
+    pub const fn c(&self) -> &[F; 1] {
         &self.reads[1].1
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
 pub struct NativeWriteRecord<F: Field, const W: usize> {
     pub from_state: ExecutionState<u32>,
     #[serde(with = "BigArray")]
@@ -79,7 +78,7 @@ pub struct NativeWriteRecord<F: Field, const W: usize> {
 }
 
 impl<F: Field, const W: usize> NativeWriteRecord<F, W> {
-    pub fn a(&self) -> &[F; 1] {
+    pub const fn a(&self) -> &[F; 1] {
         &self.writes[0].1
     }
 }

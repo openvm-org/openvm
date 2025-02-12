@@ -97,8 +97,11 @@ where
                 address_space: record.address_space,
                 pointer: record.pointer,
             };
-            row.data
-                .copy_from_slice(record.prev_data_slice().unwrap_or(record.data_slice()));
+            row.data.copy_from_slice(
+                record
+                    .prev_data_slice()
+                    .unwrap_or_else(|| record.data_slice()),
+            );
             row.timestamp = Val::<SC>::from_canonical_u32(record.prev_timestamp);
             row.count = -Val::<SC>::ONE;
 

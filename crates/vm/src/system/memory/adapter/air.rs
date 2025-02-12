@@ -91,6 +91,6 @@ impl<const N: usize, AB: InteractionBuilder> Air<AB> for AccessAdapterAir<N> {
                 local.values[N / 2..].to_vec(),
                 local.right_timestamp,
             )
-            .eval(builder, direction.clone());
+            .eval(builder, direction);
     }
 }

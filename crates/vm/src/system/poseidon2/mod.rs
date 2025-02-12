@@ -56,15 +56,15 @@ where
 {
     fn air(&self) -> AirRef<SC> {
         match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.air(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.air(),
+            Self::Register0(chip) => chip.air(),
+            Self::Register1(chip) => chip.air(),
         }
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.generate_air_proof_input(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.generate_air_proof_input(),
+            Self::Register0(chip) => chip.generate_air_proof_input(),
+            Self::Register1(chip) => chip.generate_air_proof_input(),
         }
     }
 }
@@ -72,22 +72,22 @@ where
 impl<F: PrimeField32> ChipUsageGetter for Poseidon2PeripheryChip<F> {
     fn air_name(&self) -> String {
         match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.air_name(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.air_name(),
+            Self::Register0(chip) => chip.air_name(),
+            Self::Register1(chip) => chip.air_name(),
         }
     }
 
     fn current_trace_height(&self) -> usize {
         match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.current_trace_height(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.current_trace_height(),
+            Self::Register0(chip) => chip.current_trace_height(),
+            Self::Register1(chip) => chip.current_trace_height(),
         }
     }
 
     fn trace_width(&self) -> usize {
         match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.trace_width(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.trace_width(),
+            Self::Register0(chip) => chip.trace_width(),
+            Self::Register1(chip) => chip.trace_width(),
         }
     }
 }
@@ -99,8 +99,8 @@ impl<F: PrimeField32> Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2Per
         rhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
     ) -> [F; PERIPHERY_POSEIDON2_CHUNK_SIZE] {
         match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.compress(lhs, rhs),
-            Poseidon2PeripheryChip::Register1(chip) => chip.compress(lhs, rhs),
+            Self::Register0(chip) => chip.compress(lhs, rhs),
+            Self::Register1(chip) => chip.compress(lhs, rhs),
         }
     }
 }
@@ -112,8 +112,8 @@ impl<F: PrimeField32> HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon
         rhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
     ) -> [F; PERIPHERY_POSEIDON2_CHUNK_SIZE] {
         match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.compress_and_record(lhs, rhs),
-            Poseidon2PeripheryChip::Register1(chip) => chip.compress_and_record(lhs, rhs),
+            Self::Register0(chip) => chip.compress_and_record(lhs, rhs),
+            Self::Register1(chip) => chip.compress_and_record(lhs, rhs),
         }
     }
 }

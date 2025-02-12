@@ -86,7 +86,7 @@ impl<T: Copy> ConnectorCols<T> {
         }
     }
 
-    fn flatten(&self) -> [T; 4] {
+    const fn flatten(&self) -> [T; 4] {
         [self.pc, self.timestamp, self.is_terminate, self.exit_code]
     }
 }
@@ -142,7 +142,7 @@ pub struct VmConnectorChip<F> {
 }
 
 impl<F: PrimeField32> VmConnectorChip<F> {
-    pub fn new(execution_bus: ExecutionBus, program_bus: ProgramBus) -> Self {
+    pub const fn new(execution_bus: ExecutionBus, program_bus: ProgramBus) -> Self {
         Self {
             air: VmConnectorAir {
                 execution_bus,

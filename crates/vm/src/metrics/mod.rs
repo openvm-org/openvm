@@ -115,12 +115,12 @@ impl VmMetrics {
         };
     }
     pub fn emit(&self) {
-        for (name, value) in self.chip_heights.iter() {
+        for (name, value) in &self.chip_heights {
             let labels = [("chip_name", name.clone())];
             counter!("rows_used", &labels).absolute(*value as u64);
         }
 
-        for ((dsl_ir, opcode), value) in self.counts.iter() {
+        for ((dsl_ir, opcode), value) in &self.counts {
             let labels = [
                 ("dsl_ir", dsl_ir.clone().unwrap_or_else(String::new)),
                 ("opcode", opcode.clone()),
@@ -128,7 +128,7 @@ impl VmMetrics {
             counter!("frequency", &labels).absolute(*value as u64);
         }
 
-        for ((dsl_ir, opcode, air_name), value) in self.trace_cells.iter() {
+        for ((dsl_ir, opcode, air_name), value) in &self.trace_cells {
             let labels = [
                 ("dsl_ir", dsl_ir.clone().unwrap_or_else(String::new)),
                 ("opcode", opcode.clone()),

@@ -118,22 +118,22 @@ impl SystemConfig {
         }
     }
 
-    pub fn with_max_constraint_degree(mut self, max_constraint_degree: usize) -> Self {
+    pub const fn with_max_constraint_degree(mut self, max_constraint_degree: usize) -> Self {
         self.max_constraint_degree = max_constraint_degree;
         self
     }
 
-    pub fn with_continuations(mut self) -> Self {
+    pub const fn with_continuations(mut self) -> Self {
         self.continuation_enabled = true;
         self
     }
 
-    pub fn without_continuations(mut self) -> Self {
+    pub const fn without_continuations(mut self) -> Self {
         self.continuation_enabled = false;
         self
     }
 
-    pub fn with_public_values(mut self, num_public_values: usize) -> Self {
+    pub const fn with_public_values(mut self, num_public_values: usize) -> Self {
         self.num_public_values = num_public_values;
         self
     }
@@ -149,22 +149,22 @@ impl SystemConfig {
         self.segmentation_strategy = Arc::new(strategy);
     }
 
-    pub fn with_profiling(mut self) -> Self {
+    pub const fn with_profiling(mut self) -> Self {
         self.profiling = true;
         self
     }
 
-    pub fn without_profiling(mut self) -> Self {
+    pub const fn without_profiling(mut self) -> Self {
         self.profiling = false;
         self
     }
 
-    pub fn has_public_values_chip(&self) -> bool {
+    pub const fn has_public_values_chip(&self) -> bool {
         !self.continuation_enabled && self.num_public_values > 0
     }
 
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
-    pub fn memory_boundary_air_id(&self) -> usize {
+    pub const fn memory_boundary_air_id(&self) -> usize {
         let mut ret = PUBLIC_VALUES_AIR_ID;
         if self.has_public_values_chip() {
             ret += 1;

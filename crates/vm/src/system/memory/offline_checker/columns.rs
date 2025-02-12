@@ -27,7 +27,7 @@ pub struct MemoryWriteAuxCols<T, const N: usize> {
 }
 
 impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
-    pub(in crate::system::memory) fn new(
+    pub(in crate::system::memory) const fn new(
         prev_data: [T; N],
         prev_timestamp: T,
         lt_aux: LessThanAuxCols<T, AUX_LEN>,
@@ -43,7 +43,7 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
 }
 
 impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
-    pub fn from_base(base: MemoryBaseAuxCols<T>, prev_data: [T; N]) -> Self {
+    pub const fn from_base(base: MemoryBaseAuxCols<T>, prev_data: [T; N]) -> Self {
         Self { base, prev_data }
     }
 

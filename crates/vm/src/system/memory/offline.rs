@@ -43,7 +43,7 @@ impl BlockMap {
         }
     }
 
-    fn initial_block_data(pointer: u32, initial_block_size: usize) -> BlockData {
+    const fn initial_block_data(pointer: u32, initial_block_size: usize) -> BlockData {
         let aligned_pointer = (pointer / initial_block_size as u32) * initial_block_size as u32;
         BlockData {
             pointer: aligned_pointer,
@@ -111,7 +111,7 @@ impl BlockMap {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemoryRecord<T> {
     pub address_space: T,
     pub pointer: T,
@@ -208,7 +208,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         )
     }
 
-    pub fn timestamp(&self) -> u32 {
+    pub const fn timestamp(&self) -> u32 {
         self.timestamp
     }
 
@@ -312,7 +312,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
             .map(|((address_space, pointer), _)| (address_space, (pointer / N as u32) * N as u32))
             .collect();
 
-        for &(address_space, pointer) in to_access.iter() {
+        for &(address_space, pointer) in &to_access {
             let block = self.block_data.get(&(address_space, pointer));
             if block.pointer != pointer || block.size != N {
                 self.access(address_space, pointer, N, adapter_records);
@@ -500,7 +500,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         });
     }
 
-    fn block_containing(&mut self, address_space: u32, pointer: u32) -> BlockData {
+    fn block_containing(&self, address_space: u32, pointer: u32) -> BlockData {
         self.block_data
             .get_without_adding(&(address_space, pointer))
     }
@@ -508,7 +508,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
     pub fn get(&self, address_space: u32, pointer: u32) -> F {
         self.data[(address_space - self.as_offset) as usize]
             .get(pointer as usize)
-            .cloned()
+            .copied()
             .unwrap_or_default()
     }
 
@@ -604,7 +604,7 @@ mod tests {
     #[test]
     fn test_partition() {
         let initial_memory = AddressMap::new(0, 1, 16);
-        let (mut memory, _) = setup_test(initial_memory, 8);
+        let (memory, _) = setup_test(initial_memory, 8);
         assert_eq!(
             memory.block_containing(1, 13),
             BlockData {

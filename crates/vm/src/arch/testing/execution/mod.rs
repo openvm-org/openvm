@@ -20,7 +20,7 @@ pub struct ExecutionTester<F: Field> {
 }
 
 impl<F: PrimeField32> ExecutionTester<F> {
-    pub fn new(bus: ExecutionBus) -> Self {
+    pub const fn new(bus: ExecutionBus) -> Self {
         Self {
             bus,
             records: vec![],

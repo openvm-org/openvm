@@ -104,7 +104,7 @@ impl<F: PrimeField32> Memory<F> {
         self.log.push(MemoryLogEntry::IncrementTimestampBy(amount))
     }
 
-    pub fn timestamp(&self) -> u32 {
+    pub const fn timestamp(&self) -> u32 {
         self.timestamp
     }
 

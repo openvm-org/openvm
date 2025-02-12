@@ -16,11 +16,11 @@ pub struct MemoryDimensions {
 }
 
 impl MemoryDimensions {
-    pub fn overall_height(&self) -> usize {
+    pub const fn overall_height(&self) -> usize {
         self.as_height + self.address_height
     }
     /// Convert an address label (address space, block id) to its index in the memory merkle tree.
-    pub fn label_to_index(&self, label: (u32, u32)) -> u64 {
+    pub const fn label_to_index(&self, label: (u32, u32)) -> u64 {
         let (addr_space, block_id) = label;
         (((addr_space - self.as_offset) as u64) << self.address_height) + block_id as u64
     }

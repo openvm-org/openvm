@@ -24,7 +24,7 @@ pub struct ProgramTester<F: Field> {
 }
 
 impl<F: PrimeField32> ProgramTester<F> {
-    pub fn new(bus: ProgramBus) -> Self {
+    pub const fn new(bus: ProgramBus) -> Self {
         Self {
             bus,
             records: vec![],
@@ -47,7 +47,7 @@ impl<F: PrimeField32> ProgramTester<F> {
 }
 
 impl<F: Field> ProgramTester<F> {
-    fn width() -> usize {
+    const fn width() -> usize {
         size_of::<ProgramExecutionCols<u8>>() + 1
     }
 }
