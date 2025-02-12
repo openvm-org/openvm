@@ -286,7 +286,7 @@ impl MemoryOfflineChecker {
     }
 
     /// At the core, eval_bulk_access is a bunch of push_sends and push_receives.
-    /// The max constraint degree of expressions in sends/recieves is:
+    /// The max constraint degree of expressions in sends/receives is:
     /// max(max_deg(data), max_deg(prev_data), max_deg(timestamp), max_deg(prev_timestamps))
     /// Also, each one of them has count with degree: deg(enabled)
     #[allow(clippy::too_many_arguments)]

@@ -47,7 +47,7 @@ pub struct Sha256DigestCols<T> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct Sha256MessageScheduleCols<T> {
-    /// The message schedule words as 32-bit intergers
+    /// The message schedule words as 32-bit integers
     pub w: [[T; SHA256_WORD_BITS]; SHA256_ROUNDS_PER_ROW],
     /// Will be message schedule carries for rows 4..16 and a buffer for rows 0..4 to be used freely by wrapper chips
     /// Note: carries are represented as 2 bit numbers

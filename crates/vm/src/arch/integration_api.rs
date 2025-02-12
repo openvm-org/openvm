@@ -52,7 +52,7 @@ pub trait VmAdapterChip<F> {
     /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
     /// This is called at the start of instruction execution.
     ///
-    /// The implementor may choose to store data in the `Self::ReadRecord` struct, for example in
+    /// The implementer may choose to store data in the `Self::ReadRecord` struct, for example in
     /// an [Option], which will later be sent to the `postprocess` method.
     #[allow(clippy::type_complexity)]
     fn preprocess(

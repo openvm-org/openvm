@@ -134,7 +134,7 @@ impl ExprBuilder {
         // We don't support multi-op chip that doesn't need setup right now.
         assert!(needs_setup || self.num_flags == 0);
 
-        // setup the defalut flag if needed
+        // setup the default flag if needed
         if needs_setup && self.num_flags == 0 {
             self.new_flag();
         }

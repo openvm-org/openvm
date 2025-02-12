@@ -41,7 +41,7 @@ pub struct XorLookupPreprocessedCols<T> {
 pub const NUM_XOR_LOOKUP_COLS: usize = size_of::<XorLookupCols<u8>>();
 pub const NUM_XOR_LOOKUP_PREPROCESSED_COLS: usize = size_of::<XorLookupPreprocessedCols<u8>>();
 
-/// Xor via preprocessed lookup table. Can only be used if inputs have less than appoximately 10-bits.
+/// Xor via preprocessed lookup table. Can only be used if inputs have less than approximately 10-bits.
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct XorLookupAir<const M: usize> {
     pub bus: XorBus,

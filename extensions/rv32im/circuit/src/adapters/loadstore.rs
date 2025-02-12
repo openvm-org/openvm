@@ -54,17 +54,17 @@ pub struct LoadStoreInstruction<T> {
     pub opcode: T,
     pub is_load: T,
 
-    /// Keeping two seperate shift amounts is needed for getting the read_ptr/write_ptr with degree 2
+    /// Keeping two separate shift amounts is needed for getting the read_ptr/write_ptr with degree 2
     /// load_shift_amount will be the shift amount if load and 0 if store
     pub load_shift_amount: T,
     /// store_shift_amount will be 0 if load and the shift amount if store
     pub store_shift_amount: T,
 }
 
-/// The LoadStoreAdapter seperates Runtime and Air AdapterInterfaces.
+/// The LoadStoreAdapter separates Runtime and Air AdapterInterfaces.
 /// This is necessary because `prev_data` should be owned by the core chip and sent to the adapter,
 /// and it must have an AB::Var type in AIR as to satisfy the memory_bridge interface.
-/// This is achived by having different types for reads and writes in Air AdapterInterface.
+/// This is achieved by having different types for reads and writes in Air AdapterInterface.
 /// This method ensures that there are no modifications to the global interfaces.
 ///
 /// Here 2 reads represent read_data and prev_data,

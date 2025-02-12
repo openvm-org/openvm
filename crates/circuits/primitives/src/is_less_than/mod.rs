@@ -31,7 +31,7 @@ pub struct IsLessThanIo<T> {
     /// by the subair.
     ///
     /// N.B.: in fact range checks could always be done, if the aux
-    /// subrow values are set to 0 when `count == 0`. This woud slightly
+    /// subrow values are set to 0 when `count == 0`. This would slightly
     /// simplify the range check interactions, although usually doesn't change
     /// the overall constraint degree. It however leads to the annoyance that
     /// you must update the RangeChecker's multiplicities even on dummy padding
@@ -58,7 +58,7 @@ impl<T> IsLessThanIo<T> {
 /// into limbs of size `bus.range_max_bits`, and interacts with a
 /// `VariableRangeCheckerBus` to range check the decompositions.
 ///
-/// The SubAir will own auxilliary columns to store the decomposed limbs.
+/// The SubAir will own auxiliary columns to store the decomposed limbs.
 /// The number of limbs is `max_bits.div_ceil(bus.range_max_bits)`.
 ///
 /// The expected max constraint degree of `eval` is

@@ -448,7 +448,7 @@ impl FriReducedOpeningAir {
             let mut is_ins_row = when_transition.when(local.general.is_ins_row);
             let mut not_first_ins_row = is_ins_row.when_ne(local.is_first, AB::Expr::ONE);
             // ATTENTION: degree of not_first_ins_row is 2
-            // Because all the followings assert 0, we don't need to check next.enabled.
+            // Because all the following assert 0, we don't need to check next.enabled.
             // The next row must be a workload row.
             not_first_ins_row.assert_zero(next.prefix.general.is_ins_row);
             // The next row must have idx = 0.

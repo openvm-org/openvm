@@ -97,7 +97,7 @@ impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
 
 #[test]
 fn test_borrow_mut_roundtrip() {
-    const AUX_LEN: usize = 2; // number of auxilliary columns is two
+    const AUX_LEN: usize = 2; // number of auxiliary columns is two
 
     let num_cols = AssertLessThanCols::<usize, AUX_LEN>::width();
     let mut all_cols = (0..num_cols).collect::<Vec<usize>>();

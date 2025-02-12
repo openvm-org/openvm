@@ -36,7 +36,7 @@ pub struct FieldExpressionCoreAir {
     pub local_opcode_idx: Vec<usize>,
     /// Opcode flag idx (indices from builder.new_flag()) for all except setup opcode. Empty if single op chip.
     pub opcode_flag_idx: Vec<usize>,
-    // Example 1: 1-op chip EcAdd that nees setup
+    // Example 1: 1-op chip EcAdd that needs setup
     //   local_opcode_idx = [0, 2], where 0 is EcAdd, 2 is setup
     //   opcode_flag_idx = [], not needed for single op chip.
     // Example 2: 1-op chip EvaluateLine that doesn't need setup

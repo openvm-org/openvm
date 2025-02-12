@@ -21,7 +21,7 @@ use snark_verifier_sdk::snark_verifier::{
 pub(crate) const BABYBEAR_MAX_BITS: usize = 31;
 // bits reserved so that if we do lazy range checking, we still have a valid result
 // the first reserved bit is so that we can represent negative numbers
-// the second is to accomodate lazy range checking
+// the second is to accommodate lazy range checking
 const RESERVED_HIGH_BITS: usize = 2;
 
 #[derive(Copy, Clone, Debug)]

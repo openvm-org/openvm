@@ -40,7 +40,7 @@ use InstructionOpcode::*;
 /// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
 /// This chip uses read_data and prev_data to constrain the write_data
 /// It also handles the shifting in case of not 4 byte aligned instructions
-/// This chips treats each (opcode, shift) pair as a seperate instruction
+/// This chips treats each (opcode, shift) pair as a separate instruction
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {

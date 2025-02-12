@@ -23,7 +23,7 @@ fn test_compiler_poseidon2_permute() {
     let perm = default_perm();
     let expected_result = perm.permute(random_state_vals);
 
-    // Execture the permutation in the VM
+    // Execute the permutation in the VM
     // Initialize an array and populate it with the entries.
     let var_width: Var<F> = builder.eval(F::from_canonical_usize(PERMUTATION_WIDTH));
     let random_state = builder.array(var_width);

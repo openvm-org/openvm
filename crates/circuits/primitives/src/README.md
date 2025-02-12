@@ -22,10 +22,10 @@ The following modules contain `SubAir`'s:
 
 ## SubAir
 
-Trait with associated types intended to allow re-use of constraint logic inside other AIRs.
+Trait with associated types intended to allow reuse of constraint logic inside other AIRs.
 
 A `SubAir` is **not** an `Air` itself.
-It is a struct that holds the means to generate a particular set of constraints, meant to be re-usable within other AIRs.
+It is a struct that holds the means to generate a particular set of constraints, meant to be reusable within other AIRs.
 
 The trait is designed to be maximally flexible, but typical implementations will separate the `AirContext` into two parts: `Io` and `AuxCols`. 
 The `Io` part will consist of expressions (built using `AB::Expr`) that the `SubAir` does not own, while the `AuxCols` are any internal columns that the `SubAir` requires to generate its constraints. 
