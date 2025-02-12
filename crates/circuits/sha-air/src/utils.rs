@@ -102,7 +102,7 @@ pub(crate) fn xor_bit<F: FieldAlgebra + Clone>(
         + (not::<F>(x) * not::<F>(y) * z)
 }
 
-/// Computes x ^ y ^ z, where x, y, z are [SHA256_WORD_BITS] bit numbers
+/// Computes x ^ y ^ z, where x, y, z are [C::WORD_BITS] bit numbers
 #[inline]
 pub(crate) fn xor<F: FieldAlgebra + Clone>(
     x: &[impl Into<F> + Clone],
@@ -114,13 +114,13 @@ pub(crate) fn xor<F: FieldAlgebra + Clone>(
         .collect()
 }
 
-/// Choose function from SHA256
+/// Choose function from the SHA spec
 #[inline]
 pub fn ch<C: ShaConfig>(x: C::Word, y: C::Word, z: C::Word) -> C::Word {
     (x & y) ^ ((!x) & z)
 }
 
-/// Computes Ch(x,y,z), where x, y, z are [SHA256_WORD_BITS] bit numbers
+/// Computes Ch(x,y,z), where x, y, z are [C::WORD_BITS] bit numbers
 #[inline]
 pub(crate) fn ch_field<F: FieldAlgebra>(
     x: &[impl Into<F> + Clone],
@@ -132,12 +132,12 @@ pub(crate) fn ch_field<F: FieldAlgebra>(
         .collect()
 }
 
-/// Majority function from SHA256
+/// Majority function from the SHA spec
 pub fn maj<C: ShaConfig>(x: C::Word, y: C::Word, z: C::Word) -> C::Word {
     (x & y) ^ (x & z) ^ (y & z)
 }
 
-/// Computes Maj(x,y,z), where x, y, z are [SHA256_WORD_BITS] bit numbers
+/// Computes Maj(x,y,z), where x, y, z are [C::WORD_BITS] bit numbers
 #[inline]
 pub(crate) fn maj_field<F: FieldAlgebra + Clone>(
     x: &[impl Into<F> + Clone],
@@ -157,7 +157,7 @@ pub(crate) fn maj_field<F: FieldAlgebra + Clone>(
         .collect()
 }
 
-/// Big sigma_0 function from SHA256
+/// Big sigma_0 function from the SHA spec
 pub fn big_sig0<C: ShaConfig>(x: C::Word) -> C::Word {
     if C::WORD_BITS == 32 {
         x.rotate_right(2) ^ x.rotate_right(13) ^ x.rotate_right(22)
@@ -178,7 +178,7 @@ pub(crate) fn big_sig0_field<F: FieldAlgebra + Clone, C: ShaConfig>(
     }
 }
 
-/// Big sigma_1 function from SHA256
+/// Big sigma_1 function from the SHA spec
 pub fn big_sig1<C: ShaConfig>(x: C::Word) -> C::Word {
     if C::WORD_BITS == 32 {
         x.rotate_right(6) ^ x.rotate_right(11) ^ x.rotate_right(25)
@@ -187,7 +187,7 @@ pub fn big_sig1<C: ShaConfig>(x: C::Word) -> C::Word {
     }
 }
 
-/// Computes BigSigma1(x), where x is a [SHA256_WORD_BITS] bit number in little-endian
+/// Computes BigSigma1(x), where x is a [C::WORD_BITS] bit number in little-endian
 #[inline]
 pub(crate) fn big_sig1_field<F: FieldAlgebra + Clone, C: ShaConfig>(
     x: &[impl Into<F> + Clone],
@@ -199,7 +199,7 @@ pub(crate) fn big_sig1_field<F: FieldAlgebra + Clone, C: ShaConfig>(
     }
 }
 
-/// Small sigma_0 function from SHA256
+/// Small sigma_0 function from the SHA spec
 pub fn small_sig0<C: ShaConfig>(x: C::Word) -> C::Word {
     if C::WORD_BITS == 32 {
         x.rotate_right(7) ^ x.rotate_right(18) ^ (x >> 3)
@@ -208,7 +208,7 @@ pub fn small_sig0<C: ShaConfig>(x: C::Word) -> C::Word {
     }
 }
 
-/// Computes SmallSigma0(x), where x is a [SHA256_WORD_BITS] bit number in little-endian
+/// Computes SmallSigma0(x), where x is a [C::WORD_BITS] bit number in little-endian
 #[inline]
 pub(crate) fn small_sig0_field<F: FieldAlgebra + Clone, C: ShaConfig>(
     x: &[impl Into<F> + Clone],
@@ -220,7 +220,7 @@ pub(crate) fn small_sig0_field<F: FieldAlgebra + Clone, C: ShaConfig>(
     }
 }
 
-/// Small sigma_1 function from SHA256
+/// Small sigma_1 function from the SHA spec
 pub fn small_sig1<C: ShaConfig>(x: C::Word) -> C::Word {
     if C::WORD_BITS == 32 {
         x.rotate_right(17) ^ x.rotate_right(19) ^ (x >> 10)
@@ -229,7 +229,7 @@ pub fn small_sig1<C: ShaConfig>(x: C::Word) -> C::Word {
     }
 }
 
-/// Computes SmallSigma1(x), where x is a [SHA256_WORD_BITS] bit number in little-endian
+/// Computes SmallSigma1(x), where x is a [C::WORD_BITS] bit number in little-endian
 #[inline]
 pub(crate) fn small_sig1_field<F: FieldAlgebra + Clone, C: ShaConfig>(
     x: &[impl Into<F> + Clone],
@@ -253,7 +253,7 @@ pub fn get_flag_pt_array(encoder: &Encoder, flag_idx: usize) -> Vec<u32> {
     encoder.get_flag_pt(flag_idx)
 }
 
-/// Constrain the addition of [SHA256_WORD_BITS] bit words in 16-bit limbs
+/// Constrain the addition of [C::WORD_BITS] bit words in 16-bit limbs
 /// It takes in the terms some in bits some in 16-bit limbs,
 /// the expected sum in bits and the carries
 pub fn constraint_word_addition<AB: AirBuilder, C: ShaConfig>(

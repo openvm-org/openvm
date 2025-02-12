@@ -4142,7 +4142,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-rv32im-circuit",
- "openvm-sha256-air",
+ "openvm-sha-air",
  "openvm-sha256-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",

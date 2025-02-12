@@ -1,4 +1,4 @@
-use openvm_sha256_air::{Sha256Config, ShaConfig};
+use openvm_sha_air::{Sha256Config, ShaConfig};
 use openvm_sha_macros::ColsRef;
 
 #[derive(ColsRef)]
@@ -34,5 +34,8 @@ fn nested_from_mut() {
     let mut mut_input = [0; 1 + 1 + 32];
     let mut mut_test: Test1ColsRefMut<u32> = Test1ColsRefMut::from::<Sha256Config>(&mut mut_input);
     let const_test: Test1ColsRef<u32> = Test1ColsRef::from_mut::<Sha256Config>(&mut mut_test);
-    println!("{}, {}, {}", const_test.a, const_test.nested.b, const_test.nested.c);
+    println!(
+        "{}, {}, {}",
+        const_test.a, const_test.nested.b, const_test.nested.c
+    );
 }

@@ -6,7 +6,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::AlignedBorrow;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
-use openvm_sha256_air::{Sha256DigestCols, Sha256RoundCols};
+use openvm_sha_air::{Sha256DigestCols, Sha256RoundCols};
 
 use super::{SHA256_REGISTER_READS, SHA256_WRITE_SIZE};
 

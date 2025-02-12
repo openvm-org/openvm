@@ -1,4 +1,4 @@
-use openvm_sha256_air::{Sha256Config, ShaConfig};
+use openvm_sha_air::{Sha256Config, ShaConfig};
 use openvm_sha_macros::ColsRef;
 
 #[derive(ColsRef)]

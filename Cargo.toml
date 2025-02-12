@@ -112,7 +112,7 @@ openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", re
 openvm-sdk = { path = "crates/sdk", default-features = false }
 openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
 openvm-poseidon2-air = { path = "crates/circuits/poseidon2-air", default-features = false }
-openvm-sha256-air = { path = "crates/circuits/sha256-air", default-features = false }
+openvm-sha-air = { path = "crates/circuits/sha-air", default-features = false }
 openvm-sha-macros = { path = "crates/circuits/sha-macros", default-features = false }
 openvm-circuit-primitives = { path = "crates/circuits/primitives", default-features = false }
 openvm-circuit-primitives-derive = { path = "crates/circuits/primitives/derive", default-features = false }
