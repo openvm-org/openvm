@@ -68,6 +68,7 @@ exclude = ["crates/sdk/example"]
 resolver = "2"
 
 [workspace.lints.clippy]
+# Taken from https://github.com/paradigmxyz/reth/blob/faa6b9c125ccc0c2f4727b4f37830ed35a239730/Cargo.toml#L172
 # These are some of clippy's nursery (i.e., experimental) lints that we like.
 # By default, nursery lints are allowed. Some of the lints below have made good
 # suggestions which we fixed. The others didn't have any findings, so we can
