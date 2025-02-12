@@ -4497,20 +4497,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-sha-macros"
-version = "1.0.0-rc.0"
-dependencies = [
- "itertools 0.14.0",
- "ndarray",
- "openvm-macros-common",
- "openvm-sha256-air",
- "proc-macro2",
- "quote",
- "syn 2.0.98",
-]
-
-[[package]]
-name = "openvm-sha256-air"
+name = "openvm-sha-air"
 version = "1.0.0-rc.0"
 dependencies = [
  "hex",
@@ -4528,6 +4515,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-sha-macros"
+version = "1.0.0-rc.0"
+dependencies = [
+ "itertools 0.14.0",
+ "ndarray",
+ "openvm-macros-common",
+ "openvm-sha-air",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.98",
+]
+
+[[package]]
 name = "openvm-sha256-circuit"
 version = "1.0.0-rc.0"
 dependencies = [
@@ -4542,7 +4542,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-rv32im-circuit",
- "openvm-sha256-air",
+ "openvm-sha-air",
  "openvm-sha256-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",

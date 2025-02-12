@@ -6,11 +6,11 @@ use openvm_stark_backend::p3_field::FieldAlgebra;
 
 use crate::ShaConfig;
 
-/// In each SHA256 block:
-/// - First 16 rows use Sha256RoundCols
-/// - Final row uses Sha256DigestCols
+/// In each SHA block:
+/// - First C::ROUND_ROWS rows use ShaRoundCols
+/// - Final row uses ShaDigestCols
 ///
-/// Sha256RoundCols and Sha256DigestCols share the same first 3 fields:
+/// ShaRoundCols and ShaDigestCols share the same first 3 fields:
 /// - flags
 /// - work_vars/hash (same type, different name)
 /// - schedule_helper

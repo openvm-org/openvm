@@ -19,7 +19,7 @@ use crate::{
     ShaRoundColsRef, WrappingAdd,
 };
 
-/// The trace generation of SHA256 should be done in two passes.
+/// The trace generation of SHA should be done in two passes.
 /// The first pass should do `get_block_trace` for every block and generate the invalid rows through `get_default_row`
 /// The second pass should go through all the blocks and call `generate_missing_values`
 impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
@@ -438,7 +438,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
     /// This function should be called only after `generate_block_trace` was called for all blocks
     /// And [`Self::generate_default_row`] is called for all invalid rows
     /// Will populate the missing values of `trace`, where the width of the trace is `trace_width`
-    /// and the starting column for the `Sha256Air` is `trace_start_col`.
+    /// and the starting column for the `ShaAir` is `trace_start_col`.
     /// Note: `trace` needs to be the rows 1..C::ROWS_PER_BLOCK of a block and the first row of the next block
     pub fn generate_missing_cells<F: PrimeField32>(
         &self,
@@ -737,11 +737,8 @@ pub fn generate_trace<F: PrimeField32, C: ShaConfig + ShaPrecomputedValues<C::Wo
         debug_assert!(input.len() == C::BLOCK_U8S);
     }
 
-    println!("records.len(): {}", records.len());
     let non_padded_height = records.len() * C::ROWS_PER_BLOCK;
-    println!("non_padded_height: {}", non_padded_height);
     let height = next_power_of_two_or_zero(non_padded_height);
-    println!("height: {}", height);
     let width = <ShaAir<C> as BaseAir<F>>::width(sub_air);
     let mut values = F::zero_vec(height * width);
 
