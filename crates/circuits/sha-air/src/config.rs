@@ -77,17 +77,15 @@ pub trait ShaConfig: Send + Sync + Clone {
     } else {
         Self::DIGEST_WIDTH
     };
-}
 
-/// We can notice that `carry_a`'s and `carry_e`'s are always the same on invalid rows
-/// To optimize the trace generation of invalid rows, we precompute those values.
-/// This trait also stores the constants K and H for the given SHA config.
-pub trait ShaPrecomputedValues<T> {
+    // We can notice that `carry_a`'s and `carry_e`'s are always the same on invalid rows
+    // To optimize the trace generation of invalid rows, we precompute those values.
+    // This trait also stores the constants K and H for the given SHA config.
     // these should be appropirately sized for the config
     fn get_invalid_carry_a(round_num: usize) -> &'static [u32];
     fn get_invalid_carry_e(round_num: usize) -> &'static [u32];
-    fn get_k() -> &'static [T];
-    fn get_h() -> &'static [T];
+    fn get_k() -> &'static [Self::Word];
+    fn get_h() -> &'static [Self::Word];
 }
 
 #[derive(Clone)]
@@ -110,6 +108,19 @@ impl ShaConfig for Sha256Config {
     const HASH_WORDS: usize = 8;
     /// Number of vars needed to encode the row index with [Encoder]
     const ROW_VAR_CNT: usize = 5;
+
+    fn get_invalid_carry_a(round_num: usize) -> &'static [u32] {
+        &SHA256_INVALID_CARRY_A[round_num]
+    }
+    fn get_invalid_carry_e(round_num: usize) -> &'static [u32] {
+        &SHA256_INVALID_CARRY_E[round_num]
+    }
+    fn get_k() -> &'static [u32] {
+        &SHA256_K
+    }
+    fn get_h() -> &'static [u32] {
+        &SHA256_H
+    }
 }
 
 pub const SHA256_INVALID_CARRY_A: [[u32; Sha256Config::WORD_U16S]; Sha256Config::ROUNDS_PER_ROW] = [
@@ -141,21 +152,6 @@ pub const SHA256_H: [u32; 8] = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
-impl ShaPrecomputedValues<u32> for Sha256Config {
-    fn get_invalid_carry_a(round_num: usize) -> &'static [u32] {
-        &SHA256_INVALID_CARRY_A[round_num]
-    }
-    fn get_invalid_carry_e(round_num: usize) -> &'static [u32] {
-        &SHA256_INVALID_CARRY_E[round_num]
-    }
-    fn get_k() -> &'static [u32] {
-        &SHA256_K
-    }
-    fn get_h() -> &'static [u32] {
-        &SHA256_H
-    }
-}
-
 #[derive(Clone)]
 pub struct Sha512Config;
 
@@ -176,6 +172,19 @@ impl ShaConfig for Sha512Config {
     const HASH_WORDS: usize = 8;
     /// Number of vars needed to encode the row index with [Encoder]
     const ROW_VAR_CNT: usize = 6;
+
+    fn get_invalid_carry_a(round_num: usize) -> &'static [u32] {
+        &SHA512_INVALID_CARRY_A[round_num]
+    }
+    fn get_invalid_carry_e(round_num: usize) -> &'static [u32] {
+        &SHA512_INVALID_CARRY_E[round_num]
+    }
+    fn get_k() -> &'static [u64] {
+        &SHA512_K
+    }
+    fn get_h() -> &'static [u64] {
+        &SHA512_H
+    }
 }
 
 pub(crate) const SHA512_INVALID_CARRY_A: [[u32; Sha512Config::WORD_U16S];
@@ -288,21 +297,6 @@ pub const SHA512_H: [u64; 8] = [
     0x1f83d9abfb41bd6b,
     0x5be0cd19137e2179,
 ];
-
-impl ShaPrecomputedValues<u64> for Sha512Config {
-    fn get_invalid_carry_a(round_num: usize) -> &'static [u32] {
-        &SHA512_INVALID_CARRY_A[round_num]
-    }
-    fn get_invalid_carry_e(round_num: usize) -> &'static [u32] {
-        &SHA512_INVALID_CARRY_E[round_num]
-    }
-    fn get_k() -> &'static [u64] {
-        &SHA512_K
-    }
-    fn get_h() -> &'static [u64] {
-        &SHA512_H
-    }
-}
 
 // Needed to avoid compile errors in utils.rs
 // not sure why this doesn't inf loop

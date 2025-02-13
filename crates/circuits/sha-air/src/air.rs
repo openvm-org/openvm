@@ -19,12 +19,11 @@ use super::{
     small_sig1_field,
 };
 use crate::{
-    constraint_word_addition, word_into_u16_limbs, ShaConfig, ShaDigestColsRef,
-    ShaPrecomputedValues, ShaRoundColsRef,
+    constraint_word_addition, word_into_u16_limbs, ShaConfig, ShaDigestColsRef, ShaRoundColsRef,
 };
 
 #[derive(Clone, Debug)]
-pub struct ShaAir<C: ShaConfig + ShaPrecomputedValues<C::Word>> {
+pub struct ShaAir<C: ShaConfig> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub row_idx_encoder: Encoder,
     /// Internal bus for self-interactions in this AIR.
@@ -32,7 +31,7 @@ pub struct ShaAir<C: ShaConfig + ShaPrecomputedValues<C::Word>> {
     _phantom: PhantomData<C>,
 }
 
-impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
+impl<C: ShaConfig> ShaAir<C> {
     pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, self_bus_idx: usize) -> Self {
         Self {
             bitwise_lookup_bus,
@@ -43,15 +42,13 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
     }
 }
 
-impl<F, C: ShaConfig + ShaPrecomputedValues<C::Word>> BaseAir<F> for ShaAir<C> {
+impl<F, C: ShaConfig> BaseAir<F> for ShaAir<C> {
     fn width(&self) -> usize {
         max(C::ROUND_WIDTH, C::DIGEST_WIDTH)
     }
 }
 
-impl<AB: InteractionBuilder, C: ShaConfig + ShaPrecomputedValues<C::Word>> SubAir<AB>
-    for ShaAir<C>
-{
+impl<AB: InteractionBuilder, C: ShaConfig> SubAir<AB> for ShaAir<C> {
     /// The start column for the sub-air to use
     type AirContext<'a>
         = usize
@@ -71,7 +68,7 @@ impl<AB: InteractionBuilder, C: ShaConfig + ShaPrecomputedValues<C::Word>> SubAi
     }
 }
 
-impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
+impl<C: ShaConfig> ShaAir<C> {
     /// Implements the single row constraints (i.e. imposes constraints only on local)
     /// Implements some sanity constraints on the row index, flags, and work variables
     /// Calls `eval_round_row` and `eval_digest_row`
