@@ -23,46 +23,37 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
 
 use crate::{
-    compose, small_sig0_field, Sha256Config, Sha512Config, ShaAir, ShaConfig, ShaPrecomputedValues,
+    compose, small_sig0_field, Sha256Config, Sha512Config, ShaAir, ShaConfig,
 };
 
 // A wrapper AIR purely for testing purposes
 #[derive(Clone, Debug)]
-pub struct ShaTestAir<C: ShaConfig + ShaPrecomputedValues<C::Word>> {
+pub struct ShaTestAir<C: ShaConfig> {
     pub sub_air: ShaAir<C>,
 }
 
-impl<F: Field, C: ShaConfig + ShaPrecomputedValues<C::Word>> BaseAirWithPublicValues<F>
-    for ShaTestAir<C>
-{
-}
-impl<F: Field, C: ShaConfig + ShaPrecomputedValues<C::Word>> PartitionedBaseAir<F>
-    for ShaTestAir<C>
-{
-}
-impl<F: Field, C: ShaConfig + ShaPrecomputedValues<C::Word>> BaseAir<F> for ShaTestAir<C> {
+impl<F: Field, C: ShaConfig> BaseAirWithPublicValues<F> for ShaTestAir<C> {}
+impl<F: Field, C: ShaConfig> PartitionedBaseAir<F> for ShaTestAir<C> {}
+impl<F: Field, C: ShaConfig> BaseAir<F> for ShaTestAir<C> {
     fn width(&self) -> usize {
         <ShaAir<C> as BaseAir<F>>::width(&self.sub_air)
     }
 }
 
-impl<AB: InteractionBuilder, C: ShaConfig + ShaPrecomputedValues<C::Word>> Air<AB>
-    for ShaTestAir<C>
-{
+impl<AB: InteractionBuilder, C: ShaConfig> Air<AB> for ShaTestAir<C> {
     fn eval(&self, builder: &mut AB) {
         self.sub_air.eval(builder, 0);
     }
 }
 
 // A wrapper Chip purely for testing purposes
-pub struct ShaTestChip<C: ShaConfig + ShaPrecomputedValues<C::Word>> {
+pub struct ShaTestChip<C: ShaConfig> {
     pub air: ShaTestAir<C>,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     pub records: Vec<(Vec<u8>, bool)>, // length of inner vec is BLOCK_U8S
 }
 
-impl<SC: StarkGenericConfig, C: ShaConfig + ShaPrecomputedValues<C::Word> + 'static> Chip<SC>
-    for ShaTestChip<C>
+impl<SC: StarkGenericConfig, C: ShaConfig + 'static> Chip<SC> for ShaTestChip<C>
 where
     Val<SC>: PrimeField32,
 {
@@ -80,7 +71,7 @@ where
     }
 }
 
-impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ChipUsageGetter for ShaTestChip<C> {
+impl<C: ShaConfig> ChipUsageGetter for ShaTestChip<C> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -94,7 +85,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ChipUsageGetter for ShaTestCh
 }
 
 const SELF_BUS_IDX: BusIndex = 28;
-fn rand_sha_test<C: ShaConfig + ShaPrecomputedValues<C::Word> + 'static>() {
+fn rand_sha_test<C: ShaConfig + 'static>() {
     let mut rng = create_seeded_rng();
     let tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);

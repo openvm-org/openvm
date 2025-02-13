@@ -15,14 +15,14 @@ use super::{
 };
 use crate::{
     big_sig0, big_sig1, ch, limbs_into_word, maj, small_sig0, small_sig1, word_into_bits,
-    word_into_u16_limbs, word_into_u8_limbs, ShaConfig, ShaDigestColsRefMut, ShaPrecomputedValues,
-    ShaRoundColsRef, WrappingAdd,
+    word_into_u16_limbs, word_into_u8_limbs, ShaConfig, ShaDigestColsRefMut, ShaRoundColsRef,
+    WrappingAdd,
 };
 
 /// The trace generation of SHA should be done in two passes.
 /// The first pass should do `get_block_trace` for every block and generate the invalid rows through `get_default_row`
 /// The second pass should go through all the blocks and call `generate_missing_cells`
-impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
+impl<C: ShaConfig> ShaAir<C> {
     /// This function takes the input_message (padding not handled), the previous hash,
     /// and returns the new hash after processing the block input
     pub fn get_block_hash(prev_hash: &[C::Word], input: Vec<u8>) -> Vec<C::Word> {
@@ -749,7 +749,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
 }
 
 /// `records` consists of pairs of `(input_block, is_last_block)`.
-pub fn generate_trace<F: PrimeField32, C: ShaConfig + ShaPrecomputedValues<C::Word>>(
+pub fn generate_trace<F: PrimeField32, C: ShaConfig>(
     sub_air: &ShaAir<C>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     records: Vec<(Vec<u8>, bool)>,
