@@ -3,6 +3,7 @@ use openvm_sha_macros::ColsRef;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
+#[config(ShaConfig)]
 pub struct ShaWorkVarsCols<
     T,
     const WORD_BITS: usize,

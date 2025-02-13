@@ -2,6 +2,7 @@ use openvm_sha_air::{Sha256Config, ShaConfig};
 use openvm_sha_macros::ColsRef;
 
 #[derive(ColsRef)]
+#[config(ShaConfig)]
 struct Test<T, const WORD_BITS: usize, const ROUNDS_PER_ROW: usize, const WORD_U16S: usize> {
     a: T,
     b: [T; WORD_BITS],
