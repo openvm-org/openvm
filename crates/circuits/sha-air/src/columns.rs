@@ -20,6 +20,7 @@ use crate::ShaConfig;
 /// 2. Specific constraints to use the appropriate struct, with flags helping to do conditional constraints
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
+#[config(ShaConfig)]
 pub struct ShaRoundCols<
     T,
     const WORD_BITS: usize,
@@ -38,6 +39,7 @@ pub struct ShaRoundCols<
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
+#[config(ShaConfig)]
 pub struct ShaDigestCols<
     T,
     const WORD_BITS: usize,
@@ -63,6 +65,7 @@ pub struct ShaDigestCols<
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
+#[config(ShaConfig)]
 pub struct ShaMessageScheduleCols<
     T,
     const WORD_BITS: usize,
@@ -78,6 +81,7 @@ pub struct ShaMessageScheduleCols<
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
+#[config(ShaConfig)]
 pub struct ShaWorkVarsCols<
     T,
     const WORD_BITS: usize,
@@ -96,6 +100,7 @@ pub struct ShaWorkVarsCols<
 /// Note: these need to be correctly assigned for every row even on padding rows
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
+#[config(ShaConfig)]
 pub struct ShaMessageHelperCols<
     T,
     const WORD_U16S: usize,
@@ -114,6 +119,7 @@ pub struct ShaMessageHelperCols<
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
+#[config(ShaConfig)]
 pub struct ShaFlagsCols<T, const ROW_VAR_CNT: usize> {
     pub is_round_row: T,
     /// A flag that indicates if the current row is among the first 4 rows of a block
