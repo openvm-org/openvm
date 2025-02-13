@@ -126,7 +126,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     Self(bytes)
                 }
 
-                const fn from_const_bytes(bytes: [u8; #limbs]) -> Self {
+                pub const fn from_const_bytes(bytes: [u8; #limbs]) -> Self {
                     Self(bytes)
                 }
 

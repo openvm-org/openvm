@@ -243,6 +243,12 @@ macro_rules! impl_sw_affine {
         #[repr(transparent)]
         pub struct $struct_name(AffinePoint<$field>);
 
+        impl $struct_name {
+            pub const fn new(x: $field, y: $field) -> Self {
+                Self(AffinePoint::new(x, y))
+            }
+        }
+
         impl WeierstrassPoint for $struct_name {
             const CURVE_A: $field = <$field>::ZERO;
             const CURVE_B: $field = $b;
