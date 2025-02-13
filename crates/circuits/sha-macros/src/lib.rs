@@ -180,7 +180,8 @@ fn make_struct(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_mac
                 }
             }
 
-            pub fn len<C: #config>() -> usize {
+            // returns number of cells in the struct (where each cell has type T)
+            pub const fn width<C: #config>() -> usize {
                 0 #( + #length_exprs )*
             }
         }
@@ -321,10 +322,10 @@ fn get_const_cols_ref_fields(
                 #const_cols_ref_type
             },
             length_expr: quote! {
-                <#const_cols_ref_type>::len::<C>()
+                <#const_cols_ref_type>::width::<C>()
             },
             prepare_subslice: quote! {
-                let #length_var = <#const_cols_ref_type>::len::<C>();
+                let #length_var = <#const_cols_ref_type>::width::<C>();
                 let (#slice_var, slice) = slice.split_at(#length_var);
                 let #slice_var = <#const_cols_ref_type>::from::<C>(#slice_var);
             },
@@ -433,10 +434,10 @@ fn get_mut_cols_ref_fields(
                 #mut_cols_ref_type
             },
             length_expr: quote! {
-                <#mut_cols_ref_type>::len::<C>()
+                <#mut_cols_ref_type>::width::<C>()
             },
             prepare_subslice: quote! {
-                let #length_var = <#mut_cols_ref_type>::len::<C>();
+                let #length_var = <#mut_cols_ref_type>::width::<C>();
                 let (mut #slice_var, mut slice) = slice.split_at_mut(#length_var);
                 let #slice_var = <#mut_cols_ref_type>::from::<C>(#slice_var);
             },
