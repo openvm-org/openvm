@@ -2,12 +2,14 @@ use openvm_sha_air::{Sha256Config, ShaConfig};
 use openvm_sha_macros::ColsRef;
 
 #[derive(ColsRef)]
+#[config(ShaConfig)]
 struct Test1Cols<T, const WORD_BITS: usize> {
     pub a: T,
     pub nested: Test2Cols<T, WORD_BITS>,
 }
 
 #[derive(ColsRef)]
+#[config(ShaConfig)]
 struct Test2Cols<T, const WORD_BITS: usize> {
     pub b: T,
     pub c: [T; WORD_BITS],
