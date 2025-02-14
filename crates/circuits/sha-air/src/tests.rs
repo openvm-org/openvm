@@ -1,5 +1,5 @@
+use crate::{ShaDigestColsRefMut, ShaRoundColsRef, ShaRoundColsRefMut};
 use std::{borrow::BorrowMut, cmp::max, sync::Arc};
-use crate::{ShaDigestColsRefMut, ShaRoundColsRefMut, ShaRoundColsRef};
 
 use openvm_circuit::arch::{
     instructions::riscv::RV32_CELL_BITS,
@@ -22,9 +22,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
 
-use crate::{
-    compose, small_sig0_field, Sha256Config, Sha512Config, ShaAir, ShaConfig,
-};
+use crate::{compose, small_sig0_field, Sha256Config, Sha512Config, ShaAir, ShaConfig};
 
 // A wrapper AIR purely for testing purposes
 #[derive(Clone, Debug)]
@@ -125,14 +123,13 @@ fn rand_sha512_test() {
 
 // A wrapper Chip to test that the final_hash is properly constrained.
 // This chip implements a malicious trace gen that violates the final_hash constraints.
-pub struct ShaTestBadFinalHashChip<C: ShaConfig + ShaPrecomputedValues<C::Word>> {
+pub struct ShaTestBadFinalHashChip<C: ShaConfig> {
     pub air: ShaTestAir<C>,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     pub records: Vec<(Vec<u8>, bool)>, // length of inner vec should be C::BLOCK_U8S
 }
 
-impl<SC: StarkGenericConfig, C: ShaConfig + ShaPrecomputedValues<C::Word> + 'static> Chip<SC>
-    for ShaTestBadFinalHashChip<C>
+impl<SC: StarkGenericConfig, C: ShaConfig + 'static> Chip<SC> for ShaTestBadFinalHashChip<C>
 where
     Val<SC>: PrimeField32,
 {
@@ -170,7 +167,10 @@ where
                 let mut last_digest_row: crate::ShaRoundColsRefMut<Val<SC>> =
                     ShaRoundColsRefMut::from::<C>(last_digest_row.borrow_mut());
                 // fix the intermed_4 for the digest row
-                generate_intermed_4::<Val<SC>, C>(&ShaRoundColsRef::from_mut::<C>(&last_round_row), &mut last_digest_row);
+                generate_intermed_4::<Val<SC>, C>(
+                    &ShaRoundColsRef::from_mut::<C>(&last_round_row),
+                    &mut last_digest_row,
+                );
             }
         }
 
@@ -190,7 +190,7 @@ where
 
 // Copy of private method in Sha256Air used for testing
 /// Puts the correct intermed_4 in the `next_row`
-fn generate_intermed_4<F: PrimeField32, C: ShaConfig + ShaPrecomputedValues<C::Word>>(
+fn generate_intermed_4<F: PrimeField32, C: ShaConfig>(
     local_cols: &ShaRoundColsRef<F>,
     next_cols: &mut ShaRoundColsRefMut<F>,
 ) {
@@ -209,10 +209,9 @@ fn generate_intermed_4<F: PrimeField32, C: ShaConfig + ShaPrecomputedValues<C::W
             .collect::<Vec<_>>(),
     ]
     .concat();
- 
-    
+
     // length of inner vec is C::WORD_U16S
-    let w_limbs: Vec<Vec<F>> = w 
+    let w_limbs: Vec<Vec<F>> = w
         .iter()
         .map(|x| {
             (0..C::WORD_U16S)
@@ -231,7 +230,7 @@ fn generate_intermed_4<F: PrimeField32, C: ShaConfig + ShaPrecomputedValues<C::W
     }
 }
 
-impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ChipUsageGetter for ShaTestBadFinalHashChip<C> {
+impl<C: ShaConfig> ChipUsageGetter for ShaTestBadFinalHashChip<C> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -244,14 +243,21 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ChipUsageGetter for ShaTestBa
     }
 }
 
-fn test_sha_final_hash_constraints<C: ShaConfig + ShaPrecomputedValues<C::Word> + 'static>() {
+fn test_sha_final_hash_constraints<C: ShaConfig + 'static>() {
     let mut rng = create_seeded_rng();
     let tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let len = rng.gen_range(1..100);
     let random_records: Vec<_> = (0..len)
-        .map(|_| ((0..C::BLOCK_U8S).map(|_| rng.gen::<u8>()).collect::<Vec<_>>(), true))
+        .map(|_| {
+            (
+                (0..C::BLOCK_U8S)
+                    .map(|_| rng.gen::<u8>())
+                    .collect::<Vec<_>>(),
+                true,
+            )
+        })
         .collect();
     let chip = ShaTestBadFinalHashChip {
         air: ShaTestAir {

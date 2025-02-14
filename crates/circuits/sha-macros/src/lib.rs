@@ -292,7 +292,7 @@ fn get_const_cols_ref_fields(
     let slice_var = format_ident!("{}_slice", f.ident.clone().unwrap());
 
     if f.attrs.iter().any(|attr| attr.path().is_ident("plain")) {
-        // treat the field as a struct that derives AlignedBorrow
+        // treat the field as a struct that derives AlignedBorrow (and doesn't depend on the config)
         let f_ty = &f.ty;
         return Ok(FieldInfo {
             ty: parse_quote! {

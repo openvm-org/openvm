@@ -19,7 +19,7 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    Sha256VmChip, Sha256VmDigestCols, Sha256VmRoundCols, SHA256VM_CONTROL_WIDTH,
+    Sha256VmDigestCols, Sha256VmRoundCols, ShaVmChip, SHA256VM_CONTROL_WIDTH,
     SHA256VM_DIGEST_WIDTH, SHA256VM_ROUND_WIDTH,
 };
 use crate::{
@@ -27,7 +27,7 @@ use crate::{
     SHA256_BLOCK_CELLS,
 };
 
-impl<SC: StarkGenericConfig> Chip<SC> for Sha256VmChip<Val<SC>>
+impl<SC: StarkGenericConfig> Chip<SC> for ShaVmChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
@@ -262,7 +262,7 @@ where
     }
 }
 
-impl<F: PrimeField32> ChipUsageGetter for Sha256VmChip<F> {
+impl<F: PrimeField32> ChipUsageGetter for ShaVmChip<F> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -289,7 +289,7 @@ struct Sha256State {
     is_last_block: bool,
 }
 
-impl<F: PrimeField32> Sha256VmChip<F> {
+impl<F: PrimeField32> ShaVmChip<F> {
     fn generate_state(
         prev_state: &Option<Sha256State>,
         block_input_message: [u8; SHA256_BLOCK_CELLS],

@@ -77,15 +77,14 @@ pub trait ShaConfig: Send + Sync + Clone {
     } else {
         Self::DIGEST_WIDTH
     };
-}
 
-/// We can notice that `carry_a`'s and `carry_e`'s are always the same on invalid rows
-/// To optimize the trace generation of invalid rows, we precompute those values.
-/// This trait also stores the constants K and H for the given SHA config.
-pub trait ShaPrecomputedValues<T> {
+    /// We can notice that `carry_a`'s and `carry_e`'s are always the same on invalid rows
+    /// To optimize the trace generation of invalid rows, we precompute those values.
     // these should be appropriately sized for the config
     fn get_invalid_carry_a(round_num: usize) -> &'static [u32];
     fn get_invalid_carry_e(round_num: usize) -> &'static [u32];
+
+    /// We also store the SHA constants K and H
     fn get_k() -> &'static [Self::Word];
     fn get_h() -> &'static [Self::Word];
 }

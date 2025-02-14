@@ -17,6 +17,7 @@ use openvm_rv32im_circuit::{
     Rv32MExecutor, Rv32MPeriphery,
 };
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
+use openvm_sha_air::Sha256Config;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
@@ -24,7 +25,7 @@ use strum::IntoEnumIterator;
 use crate::*;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Sha256Rv32Config {
+pub struct Sha2Rv32Config {
     #[system]
     pub system: SystemConfig,
     #[extension]
@@ -34,38 +35,39 @@ pub struct Sha256Rv32Config {
     #[extension]
     pub io: Rv32Io,
     #[extension]
-    pub sha256: Sha256,
+    pub sha2: Sha2,
 }
 
-impl Default for Sha256Rv32Config {
+impl Default for Sha2Rv32Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default().with_continuations(),
             rv32i: Rv32I,
             rv32m: Rv32M::default(),
             io: Rv32Io,
-            sha256: Sha256,
+            sha2: Sha2,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-pub struct Sha256;
+pub struct Sha2;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
-pub enum Sha256Executor<F: PrimeField32> {
-    Sha256(Sha256VmChip<F>),
+pub enum Sha2Executor<F: PrimeField32> {
+    Sha256(ShaVmChip<F, Sha256Config>),
+    Sha512(ShaVmChip<F, Sha512Config>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
-pub enum Sha256Periphery<F: PrimeField32> {
+pub enum ShaPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),
 }
 
-impl<F: PrimeField32> VmExtension<F> for Sha256 {
-    type Executor = Sha256Executor<F>;
-    type Periphery = Sha256Periphery<F>;
+impl<F: PrimeField32> VmExtension<F> for Sha2 {
+    type Executor = ShaExecutor<F>;
+    type Periphery = ShaPeriphery<F>;
 
     fn build(
         &self,
@@ -84,7 +86,7 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
             chip
         };
 
-        let sha256_chip = Sha256VmChip::new(
+        let sha256_chip = ShaVmChip::new(
             builder.system_port(),
             builder.system_config().memory_config.pointer_max_bits,
             bitwise_lu_chip,
