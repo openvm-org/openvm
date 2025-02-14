@@ -4520,6 +4520,7 @@ version = "1.0.0-rc.0"
 dependencies = [
  "itertools 0.14.0",
  "ndarray",
+ "openvm-circuit-primitives-derive",
  "openvm-sha-air",
  "proc-macro2",
  "quote",
@@ -4535,6 +4536,7 @@ dependencies = [
  "derive_more 1.0.0",
  "hex",
  "lazy_static",
+ "ndarray",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
@@ -4542,6 +4544,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-rv32im-circuit",
  "openvm-sha-air",
+ "openvm-sha-macros",
  "openvm-sha256-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
