@@ -1,7 +1,6 @@
 //! Sha256 hasher. Handles full sha256 hashing with padding.
 //! variable length inputs read from VM memory.
 use std::{
-    array,
     cmp::{max, min},
     sync::{Arc, Mutex},
 };
@@ -15,42 +14,33 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
 use openvm_rv32im_circuit::adapters::read_rv32_register;
-use openvm_sha256_air::{Sha256Air, SHA256_BLOCK_BITS};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
+use openvm_sha_air::ShaAir;
 use openvm_stark_backend::{p3_field::PrimeField32, Stateful};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 mod air;
 mod columns;
+mod config;
 mod trace;
 
 pub use air::*;
 pub use columns::*;
+pub use config::*;
 use openvm_circuit::system::memory::{MemoryController, OfflineMemory, RecordId};
 
 #[cfg(test)]
 mod tests;
 
-// ==== Constants for register/memory adapter ====
-/// Register reads to get dst, src, len
-const SHA256_REGISTER_READS: usize = 3;
-/// Number of cells to read in a single memory access
-const SHA256_READ_SIZE: usize = 16;
-/// Number of cells to write in a single memory access
-const SHA256_WRITE_SIZE: usize = 32;
-/// Number of rv32 cells read in a SHA256 block
-pub const SHA256_BLOCK_CELLS: usize = SHA256_BLOCK_BITS / RV32_CELL_BITS;
-/// Number of rows we will do a read on for each SHA256 block
-pub const SHA256_NUM_READ_ROWS: usize = SHA256_BLOCK_CELLS / SHA256_READ_SIZE;
-pub struct Sha256VmChip<F: PrimeField32> {
-    pub air: Sha256VmAir,
+pub struct ShaVmChip<F: PrimeField32, C: ShaChipConfig> {
+    pub air: ShaVmAir<C>,
     /// IO and memory data necessary for each opcode call
-    pub records: Vec<Sha256Record<F>>,
+    pub records: Vec<ShaRecord<F>>,
     pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
 
@@ -58,17 +48,17 @@ pub struct Sha256VmChip<F: PrimeField32> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Sha256Record<F> {
+pub struct ShaRecord<F> {
     pub from_state: ExecutionState<F>,
     pub dst_read: RecordId,
     pub src_read: RecordId,
     pub len_read: RecordId,
-    pub input_records: Vec<[RecordId; SHA256_NUM_READ_ROWS]>,
-    pub input_message: Vec<[[u8; SHA256_READ_SIZE]; SHA256_NUM_READ_ROWS]>,
+    pub input_records: Vec<Vec<RecordId>>, // type is like Vec<[RecordId; C::NUM_READ_ROWS]>
+    pub input_message: Vec<Vec<Vec<u8>>>, // type is like Vec<[[u8; C::SHA256_READ_SIZE]; C::SHA256_NUM_READ_ROWS]>
     pub digest_write: RecordId,
 }
 
-impl<F: PrimeField32> Sha256VmChip<F> {
+impl<F: PrimeField32, C: ShaChipConfig> ShaVmChip<F, C> {
     pub fn new(
         SystemPort {
             execution_bus,
@@ -82,12 +72,12 @@ impl<F: PrimeField32> Sha256VmChip<F> {
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         Self {
-            air: Sha256VmAir::new(
+            air: ShaVmAir::new(
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bitwise_lookup_chip.bus(),
                 address_bits,
-                Sha256Air::new(bitwise_lookup_chip.bus(), self_bus_idx),
+                ShaAir::<C>::new(bitwise_lookup_chip.bus(), self_bus_idx),
                 Encoder::new(PaddingFlags::COUNT, 2, false),
             ),
             bitwise_lookup_chip,
@@ -98,7 +88,7 @@ impl<F: PrimeField32> Sha256VmChip<F> {
     }
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
+impl<F: PrimeField32, C: ShaChipConfig> InstructionExecutor<F> for ShaVmChip<F, C> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
@@ -133,41 +123,41 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
         }
 
         // need to pad with one 1 bit, 64 bits for the message length and then pad until the length is divisible by [SHA256_BLOCK_BITS]
-        let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
+        let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(C::BLOCK_BITS);
 
         // we will read [num_blocks] * [SHA256_BLOCK_CELLS] cells but only [len] cells will be used
-        debug_assert!(
-            src as usize + num_blocks * SHA256_BLOCK_CELLS <= (1 << self.air.ptr_max_bits)
-        );
+        debug_assert!(src as usize + num_blocks * C::BLOCK_CELLS <= (1 << self.air.ptr_max_bits));
         let mut hasher = Sha256::new();
-        let mut input_records = Vec::with_capacity(num_blocks * SHA256_NUM_READ_ROWS);
-        let mut input_message = Vec::with_capacity(num_blocks * SHA256_NUM_READ_ROWS);
+        let mut input_records = Vec::with_capacity(num_blocks * C::NUM_READ_ROWS);
+        let mut input_message = Vec::with_capacity(num_blocks * C::NUM_READ_ROWS);
         let mut read_ptr = src;
         for _ in 0..num_blocks {
-            let block_reads_records = array::from_fn(|i| {
-                memory.read(
-                    e,
-                    F::from_canonical_u32(read_ptr + (i * SHA256_READ_SIZE) as u32),
-                )
-            });
-            let block_reads_bytes = array::from_fn(|i| {
-                // we add to the hasher only the bytes that are part of the message
-                let num_reads = min(
-                    SHA256_READ_SIZE,
-                    (max(read_ptr, src + len) - read_ptr) as usize,
-                );
-                let row_input = block_reads_records[i]
-                    .1
-                    .map(|x| x.as_canonical_u32().try_into().unwrap());
-                hasher.update(&row_input[..num_reads]);
-                read_ptr += SHA256_READ_SIZE as u32;
-                row_input
-            });
-            input_records.push(block_reads_records.map(|x| x.0));
+            let block_reads_records = (0..C::NUM_READ_ROWS)
+                .map(|i| {
+                    memory.read::<C::READ_SIZE>(
+                        e,
+                        F::from_canonical_u32(read_ptr + (i * C::READ_SIZE) as u32),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let block_reads_bytes = (0..C::NUM_READ_ROWS)
+                .map(|i| {
+                    // we add to the hasher only the bytes that are part of the message
+                    let num_reads =
+                        min(C::READ_SIZE, (max(read_ptr, src + len) - read_ptr) as usize);
+                    let row_input: &[u8] = &block_reads_records[i]
+                        .1
+                        .map(|x| x.as_canonical_u32().try_into().unwrap());
+                    hasher.update(&row_input[..num_reads]);
+                    read_ptr += C::READ_SIZE as u32;
+                    row_input.to_vec()
+                })
+                .collect::<Vec<_>>();
+            input_records.push(block_reads_records.into_iter().map(|x| x.0).collect());
             input_message.push(block_reads_bytes);
         }
 
-        let mut digest = [0u8; SHA256_WRITE_SIZE];
+        let mut digest = [0u8; SHA_WRITE_SIZE];
         digest.copy_from_slice(hasher.finalize().as_ref());
         let (digest_write, _) = memory.write(
             e,
@@ -175,7 +165,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
             digest.map(|b| F::from_canonical_u8(b)),
         );
 
-        self.records.push(Sha256Record {
+        self.records.push(ShaRecord {
             from_state: from_state.map(F::from_canonical_u32),
             dst_read,
             src_read,
@@ -192,11 +182,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
     }
 
     fn get_opcode_name(&self, _: usize) -> String {
-        "SHA256".to_string()
+        C::OPCODE_NAME.to_string()
     }
 }
 
-impl<F: PrimeField32> Stateful<Vec<u8>> for Sha256VmChip<F> {
+impl<F: PrimeField32, C: ShaChipConfig> Stateful<Vec<u8>> for ShaVmChip<F, C> {
     fn load_state(&mut self, state: Vec<u8>) {
         self.records = bitcode::deserialize(&state).unwrap();
     }
@@ -206,10 +196,10 @@ impl<F: PrimeField32> Stateful<Vec<u8>> for Sha256VmChip<F> {
     }
 }
 
-pub fn sha256_solve(input_message: &[u8]) -> [u8; SHA256_WRITE_SIZE] {
+pub fn sha256_solve(input_message: &[u8]) -> [u8; SHA_WRITE_SIZE] {
     let mut hasher = Sha256::new();
     hasher.update(input_message);
-    let mut output = [0u8; SHA256_WRITE_SIZE];
+    let mut output = [0u8; SHA_WRITE_SIZE];
     output.copy_from_slice(hasher.finalize().as_ref());
     output
 }

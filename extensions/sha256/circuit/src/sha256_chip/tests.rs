@@ -6,20 +6,20 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
-use openvm_sha256_air::get_random_message;
 use openvm_sha256_transpiler::Rv32Sha256Opcode::{self, *};
+use openvm_sha_air::get_random_message;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::Sha256VmChip;
+use super::ShaVmChip;
 use crate::{sha256_solve, Sha256VmDigestCols, Sha256VmRoundCols};
 
 type F = BabyBear;
 const BUS_IDX: usize = 28;
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut Sha256VmChip<F>,
+    chip: &mut ShaVmChip<F>,
     rng: &mut StdRng,
     opcode: Rv32Sha256Opcode,
     message: Option<&[u8]>,
@@ -40,6 +40,8 @@ fn set_and_execute(
             .borrow()
             .mem_config()
             .pointer_max_bits;
+    // Q: why not 0..(max_mem_ptr - len as u32)?
+    // Also, why not use gen_pointer?
     let dst_ptr = rng.gen_range(0..max_mem_ptr);
     let dst_ptr = dst_ptr ^ (dst_ptr & 3);
     tester.write(1, rd, dst_ptr.to_le_bytes().map(F::from_canonical_u8));
@@ -77,7 +79,7 @@ fn rand_sha256_test() {
     let mut tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let mut chip = Sha256VmChip::new(
+    let mut chip = ShaVmChip::new(
         SystemPort {
             execution_bus: tester.execution_bus(),
             program_bus: tester.program_bus(),
@@ -110,7 +112,7 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let mut chip = Sha256VmChip::new(
+    let mut chip = ShaVmChip::new(
         SystemPort {
             execution_bus: tester.execution_bus(),
             program_bus: tester.program_bus(),
