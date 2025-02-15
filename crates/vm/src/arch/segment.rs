@@ -222,7 +222,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
 
         loop {
             #[allow(unused_variables)]
-            let (opcode, dsl_instr) = {
+            let (opcode, dsl_instr, old_timestamp) = {
                 let Self {
                     chip_complex,
                     #[cfg(feature = "bench-metrics")]
@@ -292,6 +292,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 }
                 prev_backtrace = trace.cloned();
 
+                let old_timestamp = timestamp;
                 if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
                     let next_state = InstructionExecutor::execute(
                         executor,
@@ -305,11 +306,11 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 } else {
                     return Err(ExecutionError::DisabledOperation { pc, opcode });
                 };
-                (opcode, dsl_instr.cloned())
+                (opcode, dsl_instr.cloned(), old_timestamp)
             };
 
             #[cfg(feature = "bench-metrics")]
-            self.update_instruction_metrics(pc, opcode, dsl_instr);
+            self.update_instruction_metrics(pc, old_timestamp, opcode, dsl_instr);
 
             if self.should_segment() {
                 self.chip_complex

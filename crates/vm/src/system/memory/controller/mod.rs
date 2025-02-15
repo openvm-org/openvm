@@ -478,6 +478,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 address_space,
                 pointer,
                 len,
+                ..
             } => {
                 if address_space != 0 {
                     interface_chip.touch_range(address_space, pointer, len as u32);
@@ -488,6 +489,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 address_space,
                 pointer,
                 data,
+                ..
             } => {
                 if address_space != 0 {
                     interface_chip.touch_range(address_space, pointer, data.len() as u32);

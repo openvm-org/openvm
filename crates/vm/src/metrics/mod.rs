@@ -8,7 +8,10 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::arch::{ExecutionSegment, InstructionExecutor, VmConfig};
+use crate::{
+    arch::{ExecutionSegment, InstructionExecutor, VmConfig},
+    system::memory::online::MemoryLogEntry,
+};
 
 pub mod cycle_tracker;
 
@@ -28,6 +31,8 @@ pub struct VmMetrics {
     #[allow(dead_code)]
     pub(crate) current_fn: FnBound,
     pub(crate) current_trace_cells: Vec<usize>,
+    // Maps opcode to number of (instances, reads, writes)
+    pub opcode_mem_accesses: BTreeMap<String, (usize, usize, usize)>,
 }
 
 impl<F, VC> ExecutionSegment<F, VC>
@@ -40,6 +45,7 @@ where
     pub fn update_instruction_metrics(
         &mut self,
         pc: u32,
+        old_timestamp: u32,
         opcode: VmOpcode,
         dsl_instr: Option<String>,
     ) {
@@ -51,13 +57,48 @@ where
             self.metrics.update_trace_cells(
                 &self.air_names,
                 self.current_trace_cells(),
-                opcode_name,
+                opcode_name.clone(),
                 dsl_instr,
             );
+            self.update_memory_accesses(old_timestamp, opcode_name);
 
             #[cfg(feature = "function-span")]
             self.metrics.update_current_fn(pc);
         }
+    }
+
+    fn update_memory_accesses(&mut self, old_timestamp: u32, opcode_name: String) {
+        let memory = &self.chip_complex.base.memory_controller;
+        let mut new_reads = 0;
+        let mut new_writes = 0;
+
+        for entry in memory.get_memory_logs().iter().rev() {
+            match entry {
+                MemoryLogEntry::Read { timestamp, .. } => {
+                    if old_timestamp < *timestamp {
+                        break;
+                    }
+                    new_reads += 1;
+                }
+                MemoryLogEntry::Write { timestamp, .. } => {
+                    if old_timestamp < *timestamp {
+                        break;
+                    }
+                    new_writes += 1;
+                }
+                _ => {}
+            }
+        }
+
+        self.metrics
+            .opcode_mem_accesses
+            .entry(opcode_name)
+            .and_modify(|(instances, reads, writes)| {
+                *instances += 1;
+                *reads += new_reads;
+                *writes += new_writes;
+            })
+            .or_insert((1, new_reads, new_writes));
     }
 }
 
@@ -114,6 +155,7 @@ impl VmMetrics {
             }
         };
     }
+
     pub fn emit(&self) {
         for (name, value) in self.chip_heights.iter() {
             let labels = [("chip_name", name.clone())];
@@ -135,6 +177,13 @@ impl VmMetrics {
                 ("air_name", air_name.clone()),
             ];
             counter!("cells_used", &labels).absolute(*value as u64);
+        }
+
+        for (opcode, (instances, reads, writes)) in self.opcode_mem_accesses.iter() {
+            let labels = [("opcode", opcode.clone())];
+            counter!("instances", &labels).absolute(*instances as u64);
+            counter!("reads", &labels).absolute(*reads as u64);
+            counter!("writes", &labels).absolute(*writes as u64);
         }
     }
 }

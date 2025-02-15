@@ -12,11 +12,13 @@ use crate::{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MemoryLogEntry<T> {
     Read {
+        timestamp: u32,
         address_space: u32,
         pointer: u32,
         len: usize,
     },
     Write {
+        timestamp: u32,
         address_space: u32,
         pointer: u32,
         data: Vec<T>,
@@ -70,6 +72,7 @@ impl<F: PrimeField32> Memory<F> {
         let prev_data = self.data.set_range(&(address_space, pointer), &values);
 
         self.log.push(MemoryLogEntry::Write {
+            timestamp: self.timestamp,
             address_space,
             pointer,
             data: values.to_vec(),
@@ -84,6 +87,7 @@ impl<F: PrimeField32> Memory<F> {
         assert!(N.is_power_of_two());
 
         self.log.push(MemoryLogEntry::Read {
+            timestamp: self.timestamp,
             address_space,
             pointer,
             len: N,
