@@ -478,7 +478,6 @@ impl<F: PrimeField32> MemoryController<F> {
                 address_space,
                 pointer,
                 len,
-                ..
             } => {
                 if address_space != 0 {
                     interface_chip.touch_range(address_space, pointer, len as u32);
@@ -489,7 +488,6 @@ impl<F: PrimeField32> MemoryController<F> {
                 address_space,
                 pointer,
                 data,
-                ..
             } => {
                 if address_space != 0 {
                     interface_chip.touch_range(address_space, pointer, data.len() as u32);
@@ -698,6 +696,10 @@ impl<F: PrimeField32> MemoryController<F> {
     }
     pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {
         self.memory.log = logs;
+    }
+
+    pub fn prev_reads_writes(&mut self) -> (usize, usize) {
+        self.memory.prev_reads_writes()
     }
 }
 

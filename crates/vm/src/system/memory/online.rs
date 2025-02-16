@@ -12,13 +12,11 @@ use crate::{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MemoryLogEntry<T> {
     Read {
-        timestamp: u32,
         address_space: u32,
         pointer: u32,
         len: usize,
     },
     Write {
-        timestamp: u32,
         address_space: u32,
         pointer: u32,
         data: Vec<T>,
@@ -34,6 +32,7 @@ pub struct Memory<F> {
     pub(super) data: AddressMap<F, PAGE_SIZE>,
     pub(super) log: Vec<MemoryLogEntry<F>>,
     timestamp: u32,
+    reads_writes: (usize, usize),
 }
 
 impl<F: PrimeField32> Memory<F> {
@@ -42,6 +41,7 @@ impl<F: PrimeField32> Memory<F> {
             data: AddressMap::from_mem_config(mem_config),
             timestamp: INITIAL_TIMESTAMP + 1,
             log: Vec::with_capacity(mem_config.access_capacity),
+            reads_writes: (0, 0),
         }
     }
 
@@ -51,6 +51,7 @@ impl<F: PrimeField32> Memory<F> {
             data: image,
             timestamp: INITIAL_TIMESTAMP + 1,
             log: Vec::with_capacity(access_capacity),
+            reads_writes: (0, 0),
         }
     }
 
@@ -72,12 +73,16 @@ impl<F: PrimeField32> Memory<F> {
         let prev_data = self.data.set_range(&(address_space, pointer), &values);
 
         self.log.push(MemoryLogEntry::Write {
-            timestamp: self.timestamp,
             address_space,
             pointer,
             data: values.to_vec(),
         });
         self.timestamp += 1;
+
+        #[cfg(feature = "bench-metrics")]
+        {
+            self.reads_writes.1 += 1;
+        }
 
         (self.last_record_id(), prev_data)
     }
@@ -87,7 +92,6 @@ impl<F: PrimeField32> Memory<F> {
         assert!(N.is_power_of_two());
 
         self.log.push(MemoryLogEntry::Read {
-            timestamp: self.timestamp,
             address_space,
             pointer,
             len: N,
@@ -100,6 +104,12 @@ impl<F: PrimeField32> Memory<F> {
             self.range_array::<N>(address_space, pointer)
         };
         self.timestamp += 1;
+
+        #[cfg(feature = "bench-metrics")]
+        {
+            self.reads_writes.0 += 1;
+        }
+
         (self.last_record_id(), values)
     }
 
@@ -120,6 +130,12 @@ impl<F: PrimeField32> Memory<F> {
     #[inline(always)]
     fn range_array<const N: usize>(&self, address_space: u32, pointer: u32) -> [F; N] {
         self.data.get_range(&(address_space, pointer))
+    }
+
+    pub fn prev_reads_writes(&mut self) -> (usize, usize) {
+        let ret = self.reads_writes;
+        self.reads_writes = (0, 0);
+        ret
     }
 }
 

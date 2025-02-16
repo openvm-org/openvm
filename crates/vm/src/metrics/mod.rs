@@ -8,10 +8,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{
-    arch::{ExecutionSegment, InstructionExecutor, VmConfig},
-    system::memory::online::MemoryLogEntry,
-};
+use crate::arch::{ExecutionSegment, InstructionExecutor, VmConfig};
 
 pub mod cycle_tracker;
 
@@ -45,7 +42,6 @@ where
     pub fn update_instruction_metrics(
         &mut self,
         pc: u32,
-        old_timestamp: u32,
         opcode: VmOpcode,
         dsl_instr: Option<String>,
     ) {
@@ -60,40 +56,20 @@ where
                 opcode_name.clone(),
                 dsl_instr,
             );
-            self.update_memory_accesses(old_timestamp, opcode_name);
+            self.update_memory_accesses(opcode_name);
 
             #[cfg(feature = "function-span")]
             self.metrics.update_current_fn(pc);
         } else {
             let executor = self.chip_complex.inventory.get_executor(opcode).unwrap();
             let opcode_name = executor.get_opcode_name(opcode.as_usize());
-            self.update_memory_accesses(old_timestamp, opcode_name);
+            self.update_memory_accesses(opcode_name);
         }
     }
 
-    fn update_memory_accesses(&mut self, old_timestamp: u32, opcode_name: String) {
-        let memory = &self.chip_complex.base.memory_controller;
-        let mut new_reads = 0;
-        let mut new_writes = 0;
-
-        for entry in memory.get_memory_logs().iter().rev() {
-            match entry {
-                MemoryLogEntry::Read { timestamp, .. } => {
-                    if old_timestamp < *timestamp {
-                        break;
-                    }
-                    new_reads += 1;
-                }
-                MemoryLogEntry::Write { timestamp, .. } => {
-                    if old_timestamp < *timestamp {
-                        break;
-                    }
-                    new_writes += 1;
-                }
-                _ => {}
-            }
-        }
-
+    fn update_memory_accesses(&mut self, opcode_name: String) {
+        let memory = &mut self.chip_complex.base.memory_controller;
+        let (new_reads, new_writes) = memory.prev_reads_writes();
         self.metrics
             .opcode_mem_accesses
             .entry(opcode_name)
