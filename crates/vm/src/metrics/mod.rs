@@ -64,6 +64,10 @@ where
 
             #[cfg(feature = "function-span")]
             self.metrics.update_current_fn(pc);
+        } else {
+            let executor = self.chip_complex.inventory.get_executor(opcode).unwrap();
+            let opcode_name = executor.get_opcode_name(opcode.as_usize());
+            self.update_memory_accesses(old_timestamp, opcode_name);
         }
     }
 
