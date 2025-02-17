@@ -45,9 +45,9 @@ env:
   CURRENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-  S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
-  S3_MD_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results
-  S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
+  S3_METRICS_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/metrics
+  S3_MD_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/results
+  S3_FLAMEGRAPHS_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
   FEATURE_FLAGS: ""
 
 permissions:
@@ -62,6 +62,9 @@ jobs:
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
     steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.CURRENT_SHA }}
@@ -165,6 +168,9 @@ jobs:
       ##########################################################################
       # Download individual result .md files from S3 and combine them          #
       ##########################################################################
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.CURRENT_SHA }}
@@ -262,6 +268,9 @@ jobs:
       ##########################################################################
       # Update benchmark-results branch with summary                           #
       ##########################################################################
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v4
         with:
           ref: benchmark-results
