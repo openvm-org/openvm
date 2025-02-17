@@ -3,6 +3,7 @@
 #![allow(clippy::needless_range_loop)]
 
 use core::array;
+
 use openvm_bigint_guest::U256;
 
 openvm::entry!(main);
