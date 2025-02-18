@@ -218,9 +218,9 @@ pub struct VmInventory<E, P> {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct VmInventoryState {
     /// Executor states in order
-    executors: Vec<Vec<u8>>,
+    pub executors: Vec<Vec<u8>>,
     /// Periphery states in order
-    periphery: Vec<Vec<u8>>,
+    pub periphery: Vec<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
