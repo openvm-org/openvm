@@ -16,3 +16,5 @@ pub mod metrics;
 pub mod system;
 /// Utility functions and test utils
 pub mod utils;
+
+pub mod serde;

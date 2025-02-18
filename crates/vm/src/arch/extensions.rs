@@ -479,8 +479,8 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct VmChipComplexState<F> {
-    base: SystemBaseState<F>,
-    inventory: VmInventoryState,
+    pub base: SystemBaseState<F>,
+    pub inventory: VmInventoryState,
 }
 
 /// The base [VmChipComplex] with only system chips.
