@@ -355,6 +355,8 @@ impl<F: PrimeField32> SystemBaseState<F> {
         current_pos += 8;
         data[current_pos..current_pos + self.program_chip.len()]
             .copy_from_slice(&self.program_chip);
+        current_pos += self.program_chip.len();
+
         current_pos
     }
 
