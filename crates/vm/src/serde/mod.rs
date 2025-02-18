@@ -42,38 +42,51 @@ impl<F: PrimeField32> MemoryLogEntry<F> {
         }
     }
 
-    pub fn dump(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(self.size());
+    pub fn dump(&self, data: &mut [u8]) -> usize {
+        let mut current_pos = 0;
         match self {
             Self::Read {
                 address_space,
                 pointer,
                 len,
             } => {
-                result.push(0); // enum variant 0 for Read
-                result.extend_from_slice(&address_space.to_le_bytes());
-                result.extend_from_slice(&pointer.to_le_bytes());
-                result.extend_from_slice(&(*len as u64).to_le_bytes());
+                data[current_pos] = 0; // enum variant 0 for Read
+                current_pos += 1;
+                data[current_pos..current_pos + 4].copy_from_slice(&address_space.to_le_bytes());
+                current_pos += 4;
+                data[current_pos..current_pos + 4].copy_from_slice(&pointer.to_le_bytes());
+                current_pos += 4;
+                data[current_pos..current_pos + 8].copy_from_slice(&(*len as u64).to_le_bytes());
+                current_pos += 8;
             }
             Self::Write {
                 address_space,
                 pointer,
-                data,
+                data: write_data,
             } => {
-                result.push(1); // enum variant 1 for Write
-                result.extend_from_slice(&address_space.to_le_bytes());
-                result.extend_from_slice(&pointer.to_le_bytes());
-                result.extend_from_slice(&(data.len() as u64).to_le_bytes());
-                for value in data {
-                    result.extend_from_slice(&value.as_canonical_u32().to_le_bytes());
+                data[current_pos] = 1; // enum variant 1 for Write
+                current_pos += 1;
+                data[current_pos..current_pos + 4].copy_from_slice(&address_space.to_le_bytes());
+                current_pos += 4;
+                data[current_pos..current_pos + 4].copy_from_slice(&pointer.to_le_bytes());
+                current_pos += 4;
+                data[current_pos..current_pos + 8]
+                    .copy_from_slice(&(write_data.len() as u64).to_le_bytes());
+                current_pos += 8;
+                for value in write_data {
+                    data[current_pos..current_pos + 4]
+                        .copy_from_slice(&value.as_canonical_u32().to_le_bytes());
+                    current_pos += 4;
                 }
             }
             Self::IncrementTimestampBy(increment) => {
-                result.push(2); // enum variant 2 for IncrementTimestampBy
-                result.extend_from_slice(&increment.to_le_bytes());
+                data[current_pos] = 2; // enum variant 2 for IncrementTimestampBy
+                current_pos += 1;
+                data[current_pos..current_pos + 4].copy_from_slice(&increment.to_le_bytes());
+                current_pos += 4;
             }
         }
-        result
+        current_pos
     }
 
     pub fn load(data: &[u8]) -> Result<Self, SerdeError> {
@@ -155,18 +168,27 @@ impl<F: PrimeField32> PagedVec<F, PAGE_SIZE> {
         size
     }
 
-    pub fn dump(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(self.size());
-        result.extend_from_slice(&(self.pages.len() as u64).to_le_bytes());
+    pub fn dump(&self, data: &mut [u8]) -> usize {
+        let mut current_pos = 0;
+        data[current_pos..current_pos + 8]
+            .copy_from_slice(&(self.pages.len() as u64).to_le_bytes());
+        current_pos += 8;
         for page in self.pages.iter() {
-            if let Some(data) = page {
-                result.push(1);
-                result.extend(data.iter().flat_map(|x| x.as_canonical_u32().to_le_bytes()));
+            if let Some(page_data) = page {
+                assert_eq!(page_data.len(), PAGE_SIZE);
+                data[current_pos] = 1;
+                current_pos += 1;
+                for (i, value) in page_data.iter().enumerate() {
+                    data[current_pos + i * 4..current_pos + (i + 1) * 4]
+                        .copy_from_slice(&value.as_canonical_u32().to_le_bytes());
+                }
+                current_pos += PAGE_SIZE * 4;
             } else {
-                result.push(0);
+                data[current_pos] = 0;
+                current_pos += 1;
             }
         }
-        result
+        current_pos
     }
 
     pub fn load(data: &[u8]) -> Result<Self, SerdeError> {
@@ -228,14 +250,17 @@ impl<F: PrimeField32> MemoryImage<F> {
         self.paged_vecs.iter().map(|p| p.size()).sum::<usize>() + 8 + 4
     }
 
-    pub fn dump(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(self.size());
-        result.extend_from_slice(&(self.paged_vecs.len() as u64).to_le_bytes());
+    pub fn dump(&self, data: &mut [u8]) -> usize {
+        let mut current_pos = 0;
+        data[current_pos..current_pos + 8]
+            .copy_from_slice(&(self.paged_vecs.len() as u64).to_le_bytes());
+        current_pos += 8;
         for paged_vec in self.paged_vecs.iter() {
-            result.extend(paged_vec.dump());
+            current_pos += paged_vec.dump(&mut data[current_pos..]);
         }
-        result.extend_from_slice(&self.as_offset.to_le_bytes());
-        result
+        data[current_pos..current_pos + 4].copy_from_slice(&self.as_offset.to_le_bytes());
+        current_pos += 4;
+        current_pos
     }
 
     pub fn load(data: &[u8]) -> Result<Self, SerdeError> {
@@ -288,25 +313,49 @@ impl<F: PrimeField32> SystemBaseState<F> {
         + 8 + self.program_chip.len() // program size + data
     }
 
-    pub fn dump(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(self.size());
-        result.extend_from_slice(&(self.range_checker_chip.len() as u64).to_le_bytes());
-        result.extend_from_slice(&self.range_checker_chip);
+    pub fn dump(&self, data: &mut [u8]) -> usize {
+        let mut current_pos = 0;
+        // range_checker_chip
+        data[current_pos..current_pos + 8]
+            .copy_from_slice(&(self.range_checker_chip.len() as u64).to_le_bytes());
+        current_pos += 8;
+        data[current_pos..current_pos + self.range_checker_chip.len()]
+            .copy_from_slice(&self.range_checker_chip);
+        current_pos += self.range_checker_chip.len();
+
+        // initial_memory
         if let Some(initial_memory) = &self.initial_memory {
-            result.push(1);
-            result.extend(initial_memory.dump());
+            data[current_pos] = 1;
+            current_pos += 1;
+            current_pos += initial_memory.dump(&mut data[current_pos..]);
         } else {
-            result.push(0);
+            data[current_pos] = 0;
+            current_pos += 1;
         }
-        result.extend_from_slice(&(self.memory_logs.len() as u64).to_le_bytes());
+
+        // memory_logs
+        data[current_pos..current_pos + 8]
+            .copy_from_slice(&(self.memory_logs.len() as u64).to_le_bytes());
+        current_pos += 8;
         for log in self.memory_logs.iter() {
-            result.extend(log.dump());
+            current_pos += log.dump(&mut data[current_pos..]);
         }
-        result.extend_from_slice(&(self.connector_chip.len() as u64).to_le_bytes());
-        result.extend_from_slice(&self.connector_chip);
-        result.extend_from_slice(&(self.program_chip.len() as u64).to_le_bytes());
-        result.extend_from_slice(&self.program_chip);
-        result
+
+        // connector_chip
+        data[current_pos..current_pos + 8]
+            .copy_from_slice(&(self.connector_chip.len() as u64).to_le_bytes());
+        current_pos += 8;
+        data[current_pos..current_pos + self.connector_chip.len()]
+            .copy_from_slice(&self.connector_chip);
+        current_pos += self.connector_chip.len();
+
+        // program_chip
+        data[current_pos..current_pos + 8]
+            .copy_from_slice(&(self.program_chip.len() as u64).to_le_bytes());
+        current_pos += 8;
+        data[current_pos..current_pos + self.program_chip.len()]
+            .copy_from_slice(&self.program_chip);
+        current_pos
     }
 
     pub fn load(data: &[u8]) -> Result<Self, SerdeError> {
@@ -369,11 +418,11 @@ impl VmInventoryState {
         vecvec::size(&self.executors) + vecvec::size(&self.periphery)
     }
 
-    pub fn dump(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(self.size());
-        result.extend(vecvec::dump(&self.executors));
-        result.extend(vecvec::dump(&self.periphery));
-        result
+    pub fn dump(&self, data: &mut [u8]) -> usize {
+        let mut current_pos = 0;
+        current_pos += vecvec::dump(&self.executors, &mut data[current_pos..]);
+        current_pos += vecvec::dump(&self.periphery, &mut data[current_pos..]);
+        current_pos
     }
 
     pub fn load(data: &[u8]) -> Result<Self, SerdeError> {
@@ -393,11 +442,11 @@ impl<F: PrimeField32> VmChipComplexState<F> {
         self.base.size() + self.inventory.size()
     }
 
-    pub fn dump(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(self.size());
-        result.extend(self.base.dump());
-        result.extend(self.inventory.dump());
-        result
+    pub fn dump(&self, data: &mut [u8]) -> usize {
+        let mut current_pos = 0;
+        current_pos += self.base.dump(&mut data[current_pos..]);
+        current_pos += self.inventory.dump(&mut data[current_pos..]);
+        current_pos
     }
 
     pub fn load(data: &[u8]) -> Result<Self, SerdeError> {

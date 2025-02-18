@@ -11,15 +11,17 @@ pub fn size(v: &Vec<Vec<u8>>) -> usize {
     total_len
 }
 
-pub fn dump(v: &Vec<Vec<u8>>) -> Vec<u8> {
-    let total_len = size(v);
-    let mut result = Vec::with_capacity(total_len);
-    result.extend_from_slice(&(v.len() as u64).to_le_bytes());
+pub fn dump(v: &Vec<Vec<u8>>, data: &mut [u8]) -> usize {
+    let mut current_pos = 0;
+    data[current_pos..current_pos + 8].copy_from_slice(&(v.len() as u64).to_le_bytes());
+    current_pos += 8;
     for inner_vec in v {
-        result.extend_from_slice(&(inner_vec.len() as u64).to_le_bytes());
-        result.extend_from_slice(inner_vec);
+        data[current_pos..current_pos + 8].copy_from_slice(&(inner_vec.len() as u64).to_le_bytes());
+        current_pos += 8;
+        data[current_pos..current_pos + inner_vec.len()].copy_from_slice(inner_vec);
+        current_pos += inner_vec.len();
     }
-    result
+    current_pos
 }
 
 pub fn load(data: &[u8]) -> Result<Vec<Vec<u8>>, SerdeError> {
