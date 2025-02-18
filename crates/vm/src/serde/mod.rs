@@ -30,10 +30,14 @@ pub enum SerdeError {
 // }
 
 impl<F: PrimeField32> MemoryLogEntry<F> {
+    // 1 byte for enum variant
+    // Read: 4 + 4 + 8
+    // Write: 4 + 4 + 8 bytes for the len + len * 4
+    // IncrementTimestampBy: 4
     pub fn size(&self) -> usize {
         match self {
             Self::Read { .. } => 1 + 4 + 4 + 8,
-            Self::Write { data, .. } => 1 + 8 + data.len() * 4,
+            Self::Write { data, .. } => 1 + 4 + 4 + 8 + data.len() * 4,
             Self::IncrementTimestampBy(_) => 1 + 4,
         }
     }
@@ -59,6 +63,7 @@ impl<F: PrimeField32> MemoryLogEntry<F> {
                 result.push(1); // enum variant 1 for Write
                 result.extend_from_slice(&address_space.to_le_bytes());
                 result.extend_from_slice(&pointer.to_le_bytes());
+                result.extend_from_slice(&(data.len() as u64).to_le_bytes());
                 for value in data {
                     result.extend_from_slice(&value.as_canonical_u32().to_le_bytes());
                 }
@@ -80,7 +85,7 @@ impl<F: PrimeField32> MemoryLogEntry<F> {
         match variant {
             0 => {
                 // Read
-                if data.len() != 1 + 4 + 4 + 8 {
+                if data.len() < 1 + 4 + 4 + 8 {
                     return Err(SerdeError::InvalidData(
                         "Insufficient data for Read variant".to_string(),
                     ));
@@ -96,7 +101,7 @@ impl<F: PrimeField32> MemoryLogEntry<F> {
             }
             1 => {
                 // Write
-                if data.len() <= 1 + 4 + 4 {
+                if data.len() < 1 + 4 + 4 + 8 {
                     return Err(SerdeError::InvalidData(
                         "Insufficient data for Write variant".to_string(),
                     ));
@@ -104,13 +109,14 @@ impl<F: PrimeField32> MemoryLogEntry<F> {
                 let address_space = u32::from_le_bytes(data[1..5].try_into()?);
                 let pointer = u32::from_le_bytes(data[5..9].try_into()?);
                 let remaining_bytes = &data[9..];
-                if remaining_bytes.len() % 4 != 0 {
+                let len = u64::from_le_bytes(remaining_bytes[0..8].try_into()?) as usize;
+                let mut data_vec = Vec::with_capacity(len);
+                if remaining_bytes.len() < 8 + len * 4 {
                     return Err(SerdeError::InvalidData(
                         "Invalid data length for Write variant".to_string(),
                     ));
                 }
-                let mut data_vec = Vec::with_capacity(remaining_bytes.len() / 4);
-                for chunk in remaining_bytes.chunks_exact(4) {
+                for chunk in remaining_bytes[8..8 + len * 4].chunks_exact(4) {
                     let value = u32::from_le_bytes(chunk.try_into()?);
                     data_vec.push(F::from_canonical_u32(value));
                 }
@@ -122,7 +128,7 @@ impl<F: PrimeField32> MemoryLogEntry<F> {
             }
             2 => {
                 // IncrementTimestampBy
-                if data.len() != 1 + 4 {
+                if data.len() < 1 + 4 {
                     return Err(SerdeError::InvalidData(
                         "Invalid data length for IncrementTimestampBy variant".to_string(),
                     ));
