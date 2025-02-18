@@ -225,18 +225,6 @@ where
     }
 }
 
-impl<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> Stateful<Vec<u8>>
-    for VmChipWrapper<F, A, C>
-{
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
-    }
-}
-
 impl<F, A, M> InstructionExecutor<F> for VmChipWrapper<F, A, M>
 where
     F: PrimeField32,

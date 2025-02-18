@@ -103,13 +103,3 @@ impl<F: PrimeField64> ChipUsageGetter for ProgramChip<F> {
         1
     }
 }
-
-impl<F: PrimeField64> Stateful<Vec<u8>> for ProgramChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.execution_frequencies = bitcode::deserialize(&state).unwrap();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.execution_frequencies).unwrap()
-    }
-}

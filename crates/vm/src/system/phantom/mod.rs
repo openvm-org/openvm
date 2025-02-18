@@ -220,13 +220,3 @@ where
         AirProofInput::simple(trace, vec![])
     }
 }
-
-impl<F: PrimeField32> Stateful<Vec<u8>> for PhantomChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.rows = bitcode::deserialize(&state).unwrap();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.rows).unwrap()
-    }
-}

@@ -239,16 +239,3 @@ impl<const N: usize> ChipUsageGetter for SharedRangeTupleCheckerChip<N> {
         self.0.trace_width()
     }
 }
-
-impl<const N: usize> Stateful<Vec<u8>> for SharedRangeTupleCheckerChip<N> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        let vals: Vec<u32> = bitcode::deserialize(&state).unwrap();
-        for (x, v) in self.0.count.iter().zip_eq(vals) {
-            x.store(v, Ordering::Relaxed);
-        }
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.0.count).unwrap()
-    }
-}

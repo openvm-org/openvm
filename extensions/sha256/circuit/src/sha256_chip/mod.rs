@@ -196,16 +196,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
     }
 }
 
-impl<F: PrimeField32> Stateful<Vec<u8>> for Sha256VmChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
-    }
-}
-
 pub fn sha256_solve(input_message: &[u8]) -> [u8; SHA256_WRITE_SIZE] {
     let mut hasher = Sha256::new();
     hasher.update(input_message);

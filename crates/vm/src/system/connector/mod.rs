@@ -219,13 +219,3 @@ impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {
         4
     }
 }
-
-impl<F: PrimeField32> Stateful<Vec<u8>> for VmConnectorChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.boundary_states = bitcode::deserialize(&state).unwrap();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.boundary_states).unwrap()
-    }
-}

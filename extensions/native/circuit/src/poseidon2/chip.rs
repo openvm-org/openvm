@@ -134,29 +134,6 @@ pub struct NativePoseidon2Chip<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) streams: Arc<Mutex<Streams<F>>>,
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> Stateful<Vec<u8>>
-    for NativePoseidon2Chip<F, SBOX_REGISTERS>
-{
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.record_set = bitcode::deserialize(&state).unwrap();
-        self.height = self.record_set.simple_permute_records.len();
-        for record in self.record_set.verify_batch_records.iter() {
-            for top_level in record.top_level.iter() {
-                if let Some(incorporate_row) = &top_level.incorporate_row {
-                    self.height += 1 + incorporate_row.chunks.len();
-                }
-                if top_level.incorporate_sibling.is_some() {
-                    self.height += 1;
-                }
-            }
-        }
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.record_set).unwrap()
-    }
-}
-
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_REGISTERS> {
     pub fn new(
         port: SystemPort,

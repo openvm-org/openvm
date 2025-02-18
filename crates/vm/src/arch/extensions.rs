@@ -406,26 +406,6 @@ impl<E, P> VmInventory<E, P> {
     }
 }
 
-impl<E: Stateful<Vec<u8>>, P: Stateful<Vec<u8>>> Stateful<VmInventoryState> for VmInventory<E, P> {
-    fn load_state(&mut self, state: VmInventoryState) {
-        for (e, s) in self.executors.iter_mut().zip_eq(state.executors) {
-            e.load_state(s)
-        }
-        for (p, s) in self.periphery.iter_mut().zip_eq(state.periphery) {
-            p.load_state(s)
-        }
-    }
-
-    fn store_state(&self) -> VmInventoryState {
-        let executors = self.executors.iter().map(|e| e.store_state()).collect();
-        let periphery = self.periphery.iter().map(|p| p.store_state()).collect();
-        VmInventoryState {
-            executors,
-            periphery,
-        }
-    }
-}
-
 impl VmInventoryTraceHeights {
     /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
     pub fn round_to_next_power_of_two(&mut self) {
@@ -544,30 +524,6 @@ impl<F: PrimeField32> SystemBase<F> {
     pub fn get_dummy_system_trace_heights(&self) -> SystemTraceHeights {
         SystemTraceHeights {
             memory: self.memory_controller.get_dummy_memory_trace_heights(),
-        }
-    }
-}
-
-impl<F: PrimeField32> Stateful<SystemBaseState<F>> for SystemBase<F> {
-    fn load_state(&mut self, state: SystemBaseState<F>) {
-        self.range_checker_chip.load_state(state.range_checker_chip);
-        if let Some(initial_memory) = state.initial_memory {
-            self.memory_controller.set_initial_memory(initial_memory);
-        }
-        self.memory_controller.set_memory_logs(state.memory_logs);
-        self.connector_chip.load_state(state.connector_chip);
-        self.program_chip.load_state(state.program_chip);
-    }
-    fn store_state(&self) -> SystemBaseState<F> {
-        SystemBaseState {
-            range_checker_chip: self.range_checker_chip.store_state(),
-            initial_memory: match &self.memory_controller.interface_chip {
-                MemoryInterface::Volatile { .. } => None,
-                MemoryInterface::Persistent { initial_memory, .. } => Some(initial_memory.clone()),
-            },
-            memory_logs: self.memory_controller.get_memory_logs(),
-            connector_chip: self.connector_chip.store_state(),
-            program_chip: self.program_chip.store_state(),
         }
     }
 }
@@ -1118,22 +1074,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             metrics.chip_heights =
                 itertools::izip!(self.air_names(), self.current_trace_heights()).collect();
             metrics.emit();
-        }
-    }
-}
-
-impl<F: PrimeField32, E: Stateful<Vec<u8>>, P: Stateful<Vec<u8>>> Stateful<VmChipComplexState<F>>
-    for VmChipComplex<F, E, P>
-{
-    fn load_state(&mut self, state: VmChipComplexState<F>) {
-        self.base.load_state(state.base);
-        self.inventory.load_state(state.inventory);
-    }
-
-    fn store_state(&self) -> VmChipComplexState<F> {
-        VmChipComplexState {
-            base: self.base.store_state(),
-            inventory: self.inventory.store_state(),
         }
     }
 }

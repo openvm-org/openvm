@@ -828,17 +828,6 @@ where
     }
 }
 
-impl<F: PrimeField32> Stateful<Vec<u8>> for FriReducedOpeningChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap();
-        self.height = self.records.iter().map(|record| record.get_height()).sum();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
-    }
-}
-
 fn variable_chunks_mut<'a, T>(mut slice: &'a mut [T], sizes: &[usize]) -> Vec<&'a mut [T]> {
     let mut result = Vec::with_capacity(sizes.len());
     for &size in sizes {

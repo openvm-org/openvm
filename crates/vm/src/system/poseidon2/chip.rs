@@ -71,15 +71,3 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> HasherChip<PERIPHERY_POSEIDON
         array::from_fn(|i| output[i])
     }
 }
-
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> Stateful<Vec<u8>>
-    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
-{
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
-    }
-}

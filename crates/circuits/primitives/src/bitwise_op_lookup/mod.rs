@@ -260,20 +260,3 @@ impl<const NUM_BITS: usize> ChipUsageGetter for SharedBitwiseOperationLookupChip
         self.0.trace_width()
     }
 }
-
-impl<const NUM_BITS: usize> Stateful<Vec<u8>> for SharedBitwiseOperationLookupChip<NUM_BITS> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        // AtomicU32 can be deserialized as u32
-        let (count_range, count_xor): (Vec<u32>, Vec<u32>) = bitcode::deserialize(&state).unwrap();
-        for (x, v) in self.0.count_range.iter().zip_eq(count_range) {
-            x.store(v, Ordering::Relaxed);
-        }
-        for (x, v) in self.0.count_xor.iter().zip_eq(count_xor) {
-            x.store(v, Ordering::Relaxed);
-        }
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&(&self.0.count_range, &self.0.count_xor)).unwrap()
-    }
-}

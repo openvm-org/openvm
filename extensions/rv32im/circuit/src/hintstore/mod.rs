@@ -478,14 +478,3 @@ where
         AirProofInput::simple_no_pis(self.generate_trace())
     }
 }
-
-impl<F: PrimeField32> Stateful<Vec<u8>> for Rv32HintStoreChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap();
-        self.height = self.records.iter().map(|record| record.hints.len()).sum();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
-    }
-}

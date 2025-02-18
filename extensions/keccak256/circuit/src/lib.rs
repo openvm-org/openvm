@@ -283,13 +283,3 @@ impl Default for KeccakInputBlock {
         }
     }
 }
-
-impl<F: PrimeField32> Stateful<Vec<u8>> for KeccakVmChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
-    }
-}

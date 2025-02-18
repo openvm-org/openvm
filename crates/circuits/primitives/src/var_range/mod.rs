@@ -271,19 +271,6 @@ impl ChipUsageGetter for SharedVariableRangeCheckerChip {
     }
 }
 
-impl Stateful<Vec<u8>> for SharedVariableRangeCheckerChip {
-    fn load_state(&mut self, state: Vec<u8>) {
-        let count_vals: Vec<u32> = bitcode::deserialize(&state).unwrap();
-        for (x, val) in self.0.count.iter().zip(count_vals) {
-            x.store(val, Ordering::Relaxed);
-        }
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.0.count).unwrap()
-    }
-}
-
 impl AsRef<VariableRangeCheckerChip> for SharedVariableRangeCheckerChip {
     fn as_ref(&self) -> &VariableRangeCheckerChip {
         &self.0
