@@ -64,7 +64,7 @@ pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, BytesStateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]
 pub enum PairingExtensionExecutor<F: PrimeField32> {
     // bn254 (32 limbs)
     MillerDoubleStepRv32_32(MillerDoubleStepChip<F, 4, 8, 32>),
@@ -82,7 +82,7 @@ pub enum PairingExtensionExecutor<F: PrimeField32> {
     EcLineMulBy02345(EcLineMulBy02345Chip<F, 36, 30, 36, 16>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum PairingExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),

@@ -20,7 +20,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: AffinePoint<Fp2>: 4 field elements
 // Output: (AffinePoint<Fp2>, Fp2, Fp2) -> 8 field elements
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, BytesStateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct MillerDoubleStepChip<
     F: PrimeField32,
     const INPUT_BLOCKS: usize,

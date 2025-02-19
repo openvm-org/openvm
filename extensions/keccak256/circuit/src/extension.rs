@@ -49,12 +49,12 @@ impl Default for Keccak256Rv32Config {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum Keccak256Executor<F: PrimeField32> {
     Keccak256(KeccakVmChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum Keccak256Periphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),

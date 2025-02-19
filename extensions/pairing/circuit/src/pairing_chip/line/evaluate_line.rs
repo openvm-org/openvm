@@ -20,7 +20,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: UnevaluatedLine<Fp2>, (Fp, Fp)
 // Output: EvaluatedLine<Fp2>
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, BytesStateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct EvaluateLineChip<
     F: PrimeField32,
     const INPUT_BLOCKS1: usize,

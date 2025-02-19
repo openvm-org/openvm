@@ -57,7 +57,7 @@ pub fn muldiv_expr(
     )
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, BytesStateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct ModularMulDivChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub  VmChipWrapper<
         F,

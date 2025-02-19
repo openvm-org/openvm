@@ -63,7 +63,7 @@ pub struct WeierstrassExtension {
     pub supported_curves: Vec<CurveConfig>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, BytesStateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]
 pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     EcAddNeRv32_32(EcAddNeChip<F, 2, 32>),
@@ -73,7 +73,7 @@ pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
     EcDoubleRv32_48(EcDoubleChip<F, 6, 16>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum WeierstrassExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),

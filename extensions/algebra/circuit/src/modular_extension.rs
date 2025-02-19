@@ -30,7 +30,7 @@ pub struct ModularExtension {
     pub supported_modulus: Vec<BigUint>,
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From)]
 pub enum ModularExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     ModularAddSubRv32_32(ModularAddSubChip<F, 1, 32>),
@@ -42,7 +42,7 @@ pub enum ModularExtensionExecutor<F: PrimeField32> {
     ModularIsEqualRv32_48(ModularIsEqualChip<F, 3, 16, 48>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum ModularExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     // We put this only to get the <F> generic to work

@@ -21,7 +21,7 @@ use crate::Fp2;
 
 // Input: Fp2 * 2
 // Output: Fp2
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, BytesStateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct Fp2AddSubChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub  VmChipWrapper<
         F,

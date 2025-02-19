@@ -25,8 +25,8 @@ pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<F> {
 }
 
 pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {
-    type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter + Stateful<Vec<u8>>;
-    type Periphery: AnyEnum + ChipUsageGetter + Stateful<Vec<u8>>;
+    type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
+    type Periphery: AnyEnum + ChipUsageGetter;
 
     /// Must contain system config
     fn system(&self) -> &SystemConfig;

@@ -27,7 +27,7 @@ pub struct Fp2Extension {
     pub supported_modulus: Vec<BigUint>,
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From)]
 pub enum Fp2ExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     Fp2AddSubRv32_32(Fp2AddSubChip<F, 2, 32>),
@@ -37,7 +37,7 @@ pub enum Fp2ExtensionExecutor<F: PrimeField32> {
     Fp2MulDivRv32_48(Fp2MulDivChip<F, 6, 16>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum Fp2ExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     // We put this only to get the <F> generic to work

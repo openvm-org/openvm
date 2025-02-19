@@ -78,7 +78,7 @@ impl NativeConfig {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum NativeExecutor<F: PrimeField32> {
     LoadStore(NativeLoadStoreChip<F, 1>),
     BlockLoadStore(NativeLoadStoreChip<F, 4>),
@@ -90,7 +90,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     VerifyBatch(NativePoseidon2Chip<F, 1>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum NativePeriphery<F: PrimeField32> {
     Phantom(PhantomChip<F>),
 }
@@ -376,12 +376,12 @@ pub(crate) mod phantom {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct CastFExtension;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum CastFExtensionExecutor<F: PrimeField32> {
     CastF(CastFChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum CastFExtensionPeriphery<F: PrimeField32> {
     Placeholder(CastFChip<F>),
 }

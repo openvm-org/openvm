@@ -20,7 +20,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use crate::Fp12;
 // Input: Fp12 * 2
 // Output: Fp12
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, BytesStateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct Fp12MulChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub  VmChipWrapper<
         F,

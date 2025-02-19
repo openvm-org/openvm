@@ -70,7 +70,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
     [1 << 8, 32 * (1 << 8)]
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum Int256Executor<F: PrimeField32> {
     BaseAlu256(Rv32BaseAlu256Chip<F>),
     LessThan256(Rv32LessThan256Chip<F>),
@@ -80,7 +80,7 @@ pub enum Int256Executor<F: PrimeField32> {
     Shift256(Rv32Shift256Chip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum Int256Periphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     /// Only needed for multiplication extension

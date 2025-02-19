@@ -528,13 +528,13 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
     Phantom(RefCell<PhantomChip<F>>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum SystemPeriphery<F: PrimeField32> {
     /// Poseidon2 chip with direct compression interactions
     Poseidon2(Poseidon2PeripheryChip<F>),

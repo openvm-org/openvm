@@ -344,14 +344,14 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
             let periphery_type = Ident::new(&format!("{}Periphery", name), name.span());
 
             TokenStream::from(quote! {
-                #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, ::openvm_circuit_primitives_derive::BytesStateful)]
+                #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
                 pub enum #executor_type<F: PrimeField32> {
                     #[any_enum]
                     #source_name_upper(#source_executor_type<F>),
                     #(#executor_enum_fields)*
                 }
 
-                #[derive(ChipUsageGetter, Chip, From, AnyEnum, ::openvm_circuit_primitives_derive::BytesStateful)]
+                #[derive(ChipUsageGetter, Chip, From, AnyEnum)]
                 pub enum #periphery_type<F: PrimeField32> {
                     #[any_enum]
                     #source_name_upper(#source_periphery_type<F>),

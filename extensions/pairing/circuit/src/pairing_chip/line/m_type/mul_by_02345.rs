@@ -22,7 +22,7 @@ use crate::Fp12;
 
 // Input: 2 Fp12: 2 x 12 field elements
 // Output: Fp12 -> 12 field elements
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, BytesStateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct EcLineMulBy02345Chip<
     F: PrimeField32,
     const INPUT_BLOCKS1: usize,
