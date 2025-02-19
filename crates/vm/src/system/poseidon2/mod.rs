@@ -22,7 +22,6 @@ pub mod tests;
 pub mod air;
 mod chip;
 pub use chip::*;
-use openvm_circuit_primitives_derive::BytesStateful;
 
 use crate::arch::hasher::{Hasher, HasherChip};
 pub mod columns;

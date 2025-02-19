@@ -11,7 +11,7 @@ use openvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
     },
-    circuit_derive::{BytesStateful, Chip, ChipUsageGetter},
+    circuit_derive::{Chip, ChipUsageGetter},
     derive::{AnyEnum, InstructionExecutor},
 };
 use openvm_ecc_circuit::{

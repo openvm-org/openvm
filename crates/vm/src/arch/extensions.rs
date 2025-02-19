@@ -15,7 +15,7 @@ use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
     program::Program, LocalOpcode, PhantomDiscriminant, PublishOpcode, SystemOpcode, VmOpcode,
 };
@@ -25,7 +25,7 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::Matrix,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
-    AirRef, Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -39,7 +39,6 @@ use crate::metrics::VmMetrics;
 use crate::system::{
     connector::VmConnectorChip,
     memory::{
-        interface::MemoryInterface,
         merkle::{DirectCompressionBus, MemoryMerkleBus},
         offline_checker::{MemoryBridge, MemoryBus},
         online::MemoryLogEntry,

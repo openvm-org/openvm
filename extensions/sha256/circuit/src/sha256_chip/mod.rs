@@ -21,7 +21,7 @@ use openvm_instructions::{
 use openvm_rv32im_circuit::adapters::read_rv32_register;
 use openvm_sha256_air::{Sha256Air, SHA256_BLOCK_BITS};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
-use openvm_stark_backend::{p3_field::PrimeField32, Stateful};
+use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 

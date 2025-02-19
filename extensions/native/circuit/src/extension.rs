@@ -13,7 +13,7 @@ use openvm_circuit::{
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,

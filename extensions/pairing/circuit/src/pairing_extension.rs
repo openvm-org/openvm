@@ -9,7 +9,7 @@ use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;

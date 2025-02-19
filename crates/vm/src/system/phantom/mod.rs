@@ -17,7 +17,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};

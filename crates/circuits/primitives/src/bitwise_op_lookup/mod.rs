@@ -1,13 +1,9 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     mem::size_of,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc,
-    },
+    sync::{atomic::AtomicU32, Arc},
 };
 
-use itertools::Itertools;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -17,7 +13,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 mod bus;

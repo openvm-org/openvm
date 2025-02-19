@@ -10,12 +10,12 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
-    Chip, Stateful,
+    Chip,
 };
 
 use super::{
-    ExecutionError, Streams, SystemBase, SystemConfig, VmChipComplex, VmChipComplexState,
-    VmComplexTraceHeights, VmConfig,
+    ExecutionError, Streams, SystemBase, SystemConfig, VmChipComplex, VmComplexTraceHeights,
+    VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;

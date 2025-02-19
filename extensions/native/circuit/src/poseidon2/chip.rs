@@ -16,7 +16,6 @@ use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip};
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::{ParallelIterator, ParallelSlice},
-    Stateful,
 };
 use serde::{Deserialize, Serialize};
 

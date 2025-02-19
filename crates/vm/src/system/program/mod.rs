@@ -2,7 +2,7 @@ use openvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::Program,
 };
-use openvm_stark_backend::{p3_field::PrimeField64, ChipUsageGetter, Stateful};
+use openvm_stark_backend::{p3_field::PrimeField64, ChipUsageGetter};
 
 use crate::{arch::ExecutionError, system::program::trace::padding_instruction};
 

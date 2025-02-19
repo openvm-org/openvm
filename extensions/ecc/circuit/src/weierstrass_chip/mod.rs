@@ -15,7 +15,7 @@ use num_bigint::BigUint;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;

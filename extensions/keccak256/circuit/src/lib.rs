@@ -7,7 +7,7 @@ use std::{
 };
 
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
-use openvm_stark_backend::{p3_field::PrimeField32, Stateful};
+use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use tiny_keccak::{Hasher, Keccak};
