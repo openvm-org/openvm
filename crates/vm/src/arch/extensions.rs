@@ -7,7 +7,6 @@ use std::{
 
 use derive_more::derive::From;
 use getset::Getters;
-use itertools::Itertools;
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
