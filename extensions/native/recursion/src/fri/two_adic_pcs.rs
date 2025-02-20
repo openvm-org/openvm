@@ -62,6 +62,20 @@ pub fn verify_two_adic_pcs<C: Config>(
     let g = builder.generator();
 
     let log_blowup = config.log_blowup;
+    iter_zip!(builder, rounds).for_each(|ptr_vec, builder| {
+        let round = builder.iter_ptr_get(&rounds, ptr_vec[0]);
+        iter_zip!(builder, round.mats).for_each(|ptr_vec, builder| {
+            let mat = builder.iter_ptr_get(&round.mats, ptr_vec[0]);
+            iter_zip!(builder, mat.values).for_each(|ptr_vec, builder| {
+                let value = builder.iter_ptr_get(&mat.values, ptr_vec[0]);
+                iter_zip!(builder, value).for_each(|ptr_vec, builder| {
+                    let ext = builder.iter_ptr_get(&value, ptr_vec[0]);
+                    let arr = builder.ext2felt(ext);
+                    challenger.observe_slice(builder, arr);
+                });
+            });
+        });
+    });
     let alpha = challenger.sample_ext(builder);
     if builder.flags.static_only {
         builder.ext_reduce_circuit(alpha);

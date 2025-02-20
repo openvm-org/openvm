@@ -140,7 +140,21 @@ where
             }
         }
 
-        let p3_keccak_trace: RowMajorMatrix<Val<SC>> = generate_trace_rows(states);
+        // We need to transpose state matrices due to a plonky3 issue: https://github.com/Plonky3/Plonky3/issues/672
+        // Note: the fix for this issue will be a commit after the major Field crate refactor PR https://github.com/Plonky3/Plonky3/pull/640
+        //       which will require a significant refactor to switch to.
+        let p3_states = states
+            .into_iter()
+            .map(|state| {
+                // transpose of 5x5 matrix
+                from_fn(|i| {
+                    let x = i / 5;
+                    let y = i % 5;
+                    state[x + 5 * y]
+                })
+            })
+            .collect();
+        let p3_keccak_trace: RowMajorMatrix<Val<SC>> = generate_trace_rows(p3_states, 0);
         let num_rows = p3_keccak_trace.height();
         // Every `NUM_ROUNDS` rows corresponds to one input block
         let num_blocks = num_rows.div_ceil(NUM_ROUNDS);
