@@ -5,7 +5,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bytes::Bytes;
 use derive_more::derive::From;
 use getset::Getters;
 use itertools::Itertools;
@@ -219,11 +218,9 @@ pub struct VmInventory<E, P> {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct VmInventoryState {
     /// Executor states in order
-    #[serde(with = "serde_bytes")]
-    pub executors: Vec<Bytes>,
+    pub executors: Vec<Vec<u8>>,
     /// Periphery states in order
-    #[serde(with = "serde_bytes")]
-    pub periphery: Vec<Bytes>,
+    pub periphery: Vec<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -412,24 +409,16 @@ impl<E, P> VmInventory<E, P> {
 impl<E: Stateful<Vec<u8>>, P: Stateful<Vec<u8>>> Stateful<VmInventoryState> for VmInventory<E, P> {
     fn load_state(&mut self, state: VmInventoryState) {
         for (e, s) in self.executors.iter_mut().zip_eq(state.executors) {
-            e.load_state(s.as_ref().to_vec());
+            e.load_state(s)
         }
         for (p, s) in self.periphery.iter_mut().zip_eq(state.periphery) {
-            p.load_state(s.as_ref().to_vec());
+            p.load_state(s)
         }
     }
 
     fn store_state(&self) -> VmInventoryState {
-        let executors = self
-            .executors
-            .iter()
-            .map(|e| Bytes::from(e.store_state()))
-            .collect();
-        let periphery = self
-            .periphery
-            .iter()
-            .map(|p| Bytes::from(p.store_state()))
-            .collect();
+        let executors = self.executors.iter().map(|e| e.store_state()).collect();
+        let periphery = self.periphery.iter().map(|p| p.store_state()).collect();
         VmInventoryState {
             executors,
             periphery,
