@@ -494,12 +494,22 @@ impl<F: PrimeField32> MemoryController<F> {
                     ) as usize;
                     offset += 16;
                     let mut data = Vec::with_capacity(data_len);
-                    for _ in 0..data_len {
-                        data.push(F::from_canonical_u32(u32::from_le_bytes(
-                            serialized_log[offset..offset + 4].try_into().unwrap(),
-                        )));
-                        offset += 4;
-                    }
+
+                    let data_slice: &[F] = unsafe {
+                        std::slice::from_raw_parts(
+                            serialized_log.as_ptr().add(offset) as *const F,
+                            data_len,
+                        )
+                    };
+                    data.extend_from_slice(data_slice);
+                    offset += data_len * 4;
+
+                    // for _ in 0..data_len {
+                    //     data.push(F::from_canonical_u32(u32::from_le_bytes(
+                    //         serialized_log[offset..offset + 4].try_into().unwrap(),
+                    //     )));
+                    //     offset += 4;
+                    // }
                     MemoryLogEntry::Write {
                         address_space,
                         pointer,
@@ -807,11 +817,19 @@ impl<F: PrimeField32> MemoryController<F> {
                     offset += 9;
                     ret[offset..offset + 8].copy_from_slice(&(data.len() as u64).to_le_bytes());
                     offset += 8;
-                    for value in data {
-                        ret[offset..offset + 4]
-                            .copy_from_slice(&value.as_canonical_u32().to_le_bytes());
-                        offset += 4;
-                    }
+
+                    // data[0~4, ... 4*len]:
+                    let data_slice: &[u8] = unsafe {
+                        std::slice::from_raw_parts(data.as_ptr() as *const u8, data.len() * 4)
+                    };
+                    ret[offset..offset + data_slice.len()].copy_from_slice(data_slice);
+                    offset += data_slice.len();
+
+                    // for value in data {
+                    //     ret[offset..offset + 4]
+                    //         .copy_from_slice(&value.as_canonical_u32().to_le_bytes());
+                    //     offset += 4;
+                    // }
                 }
                 MemoryLogEntry::IncrementTimestampBy(amount) => {
                     ret[offset] = 2;
