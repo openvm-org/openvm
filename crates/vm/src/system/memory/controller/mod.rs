@@ -5,6 +5,7 @@ use std::{
     marker::PhantomData,
     mem,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 use getset::Getters;
@@ -451,6 +452,79 @@ impl<F: PrimeField32> MemoryController<F> {
         self.memory.timestamp()
     }
 
+    pub fn replay_serialized_log(&mut self, serialized_log: &[u8]) {
+        let mut offset = 0;
+
+        let mut offline_memory = self.offline_memory.lock().unwrap();
+
+        let num_entries = u64::from_le_bytes(serialized_log[0..8].try_into().unwrap());
+        offline_memory.set_log_capacity(num_entries as usize);
+        offset += 8;
+
+        println!("num_entries: {num_entries}");
+
+        while offset < serialized_log.len() {
+            let variant = serialized_log[offset];
+            offset += 1;
+            let entry = match variant {
+                0 => {
+                    let address_space =
+                        u32::from_le_bytes(serialized_log[offset..offset + 4].try_into().unwrap());
+                    let pointer = u32::from_le_bytes(
+                        serialized_log[offset + 4..offset + 8].try_into().unwrap(),
+                    );
+                    let len = u64::from_le_bytes(
+                        serialized_log[offset + 8..offset + 16].try_into().unwrap(),
+                    ) as usize;
+                    offset += 16;
+                    MemoryLogEntry::Read {
+                        address_space,
+                        pointer,
+                        len,
+                    }
+                }
+                1 => {
+                    let address_space =
+                        u32::from_le_bytes(serialized_log[offset..offset + 4].try_into().unwrap());
+                    let pointer = u32::from_le_bytes(
+                        serialized_log[offset + 4..offset + 8].try_into().unwrap(),
+                    );
+                    let data_len = u64::from_le_bytes(
+                        serialized_log[offset + 8..offset + 16].try_into().unwrap(),
+                    ) as usize;
+                    offset += 16;
+                    let mut data = Vec::with_capacity(data_len);
+                    for _ in 0..data_len {
+                        data.push(F::from_canonical_u32(u32::from_le_bytes(
+                            serialized_log[offset..offset + 4].try_into().unwrap(),
+                        )));
+                        offset += 4;
+                    }
+                    MemoryLogEntry::Write {
+                        address_space,
+                        pointer,
+                        data,
+                    }
+                }
+                2 => {
+                    let amount =
+                        u32::from_le_bytes(serialized_log[offset..offset + 4].try_into().unwrap());
+                    offset += 4;
+                    MemoryLogEntry::IncrementTimestampBy(amount)
+                }
+                x => {
+                    panic!("Invalid variant: {x}");
+                }
+            };
+            Self::replay_access(
+                entry,
+                &mut offline_memory,
+                &mut self.interface_chip,
+                &mut self.access_adapters,
+            );
+        }
+    }
+
     fn replay_access_log(&mut self) {
         let log = mem::take(&mut self.memory.log);
 
@@ -509,7 +583,10 @@ impl<F: PrimeField32> MemoryController<F> {
             return;
         }
 
+        let start = Instant::now();
         self.replay_access_log();
+        println!("original replay_access_log: {:?}", start.elapsed());
+
         let mut offline_memory = self.offline_memory.lock().unwrap();
 
         match &mut self.interface_chip {
@@ -696,6 +773,77 @@ impl<F: PrimeField32> MemoryController<F> {
     }
     pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {
         self.memory.log = logs;
+    }
+
+    pub fn serialize_log(&self) -> Vec<u8> {
+        let start = Instant::now();
+        let size = self.serialize_log_size();
+        println!("memory_logs get log_size: {:?}", start.elapsed());
+        let mut ret = vec![0u8; size as usize];
+        ret[0..8].copy_from_slice(&(self.memory.log.len() as u64).to_le_bytes());
+
+        let mut offset = 8;
+        for entry in &self.memory.log {
+            match entry {
+                MemoryLogEntry::Read {
+                    address_space,
+                    pointer,
+                    len,
+                } => {
+                    ret[offset] = 0;
+                    ret[offset + 1..offset + 5].copy_from_slice(&address_space.to_le_bytes());
+                    ret[offset + 5..offset + 9].copy_from_slice(&pointer.to_le_bytes());
+                    ret[offset + 9..offset + 17].copy_from_slice(&len.to_le_bytes());
+                    offset += 17;
+                }
+                MemoryLogEntry::Write {
+                    address_space,
+                    pointer,
+                    data,
+                } => {
+                    ret[offset] = 1;
+                    ret[offset + 1..offset + 5].copy_from_slice(&address_space.to_le_bytes());
+                    ret[offset + 5..offset + 9].copy_from_slice(&pointer.to_le_bytes());
+                    offset += 9;
+                    ret[offset..offset + 8].copy_from_slice(&(data.len() as u64).to_le_bytes());
+                    offset += 8;
+                    for value in data {
+                        ret[offset..offset + 4]
+                            .copy_from_slice(&value.as_canonical_u32().to_le_bytes());
+                        offset += 4;
+                    }
+                }
+                MemoryLogEntry::IncrementTimestampBy(amount) => {
+                    ret[offset] = 2;
+                    ret[offset + 1..offset + 5].copy_from_slice(&amount.to_le_bytes());
+                    offset += 5;
+                }
+            }
+        }
+        assert_eq!(offset, size as usize);
+
+        ret
+    }
+
+    pub fn serialize_log_size(&self) -> u64 {
+        // first 8 bytes: number of entries
+        // for each entry:
+        // first byte: variant: 0, 1, 2
+        // Read: 4 + 4 + 8 = 16 bytes
+        // Write:
+        //   4 and 4 for address space and pointer
+        //   then: 8 (len) +  4 * N
+        // IncrementTimestampBy: 4 bytes
+        let mut size = 8u64;
+        for entry in &self.memory.log {
+            size += 1;
+            match entry {
+                MemoryLogEntry::Read { .. } => size += 16,
+                MemoryLogEntry::Write { data, .. } => size += 4 + 4 + 8 + 4 * data.len() as u64,
+                MemoryLogEntry::IncrementTimestampBy { .. } => size += 4,
+            }
+        }
+        size
     }
 }
 

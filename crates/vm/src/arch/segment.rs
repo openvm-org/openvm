@@ -15,7 +15,7 @@ use openvm_stark_backend::{
 
 use super::{
     ExecutionError, Streams, SystemBase, SystemConfig, VmChipComplex, VmChipComplexState,
-    VmComplexTraceHeights, VmConfig,
+    VmChipComplexState2, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -184,6 +184,31 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         };
         chip_complex.set_program(program);
         chip_complex.load_state(vm_chip_complex_state);
+        let air_names = chip_complex.air_names();
+        Self {
+            chip_complex,
+            final_memory: None,
+            air_names,
+            #[cfg(feature = "bench-metrics")]
+            metrics: Default::default(),
+            since_last_segment_check: 0,
+        }
+    }
+
+    /// Creates a new execution segment just for proving.
+    pub fn new_for_proving2(
+        config: &VC,
+        program: Program<F>,
+        vm_chip_complex_state: VmChipComplexState2<F>,
+    ) -> Self {
+        let mut chip_complex = config.create_chip_complex().unwrap();
+        let program = if !config.system().profiling {
+            program.strip_debug_infos()
+        } else {
+            program
+        };
+        chip_complex.set_program(program);
+        chip_complex.load_state2(vm_chip_complex_state);
         let air_names = chip_complex.air_names();
         Self {
             chip_complex,
@@ -382,5 +407,9 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     }
     pub fn store_chip_complex_state(&self) -> VmChipComplexState<F> {
         self.chip_complex.store_state()
+    }
+
+    pub fn store_chip_complex_state2(&self) -> VmChipComplexState2<F> {
+        self.chip_complex.store_state2()
     }
 }

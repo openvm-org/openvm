@@ -3,6 +3,7 @@ use std::{
     cell::RefCell,
     iter::once,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 use derive_more::derive::From;
@@ -483,6 +484,12 @@ pub struct VmChipComplexState<F> {
     pub inventory: VmInventoryState,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct VmChipComplexState2<F> {
+    pub base: SystemBaseState2<F>,
+    pub inventory: VmInventoryState,
+}
+
 /// The base [VmChipComplex] with only system chips.
 pub type SystemComplex<F> = VmChipComplex<F, SystemExecutor<F>, SystemPeriphery<F>>;
 
@@ -502,6 +509,15 @@ pub struct SystemBaseState<F> {
     pub range_checker_chip: Vec<u8>,
     pub initial_memory: Option<MemoryImage<F>>,
     pub memory_logs: Vec<MemoryLogEntry<F>>,
+    pub connector_chip: Vec<u8>,
+    pub program_chip: Vec<u8>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SystemBaseState2<F> {
+    pub range_checker_chip: Vec<u8>,
+    pub initial_memory: Option<MemoryImage<F>>,
+    pub memory_logs: Vec<u8>,
     pub connector_chip: Vec<u8>,
     pub program_chip: Vec<u8>,
 }
@@ -559,15 +575,84 @@ impl<F: PrimeField32> Stateful<SystemBaseState<F>> for SystemBase<F> {
         self.program_chip.load_state(state.program_chip);
     }
     fn store_state(&self) -> SystemBaseState<F> {
+        let start = Instant::now();
+        let range_checker_chip = self.range_checker_chip.store_state();
+        println!("range_checker_chip store: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let initial_memory = match &self.memory_controller.interface_chip {
+            MemoryInterface::Volatile { .. } => None,
+            MemoryInterface::Persistent { initial_memory, .. } => Some(initial_memory.clone()),
+        };
+        println!("initial_memory store: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let memory_logs = self.memory_controller.get_memory_logs();
+        println!("memory_logs store: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let connector_chip = self.connector_chip.store_state();
+        println!("connector_chip store: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let program_chip = self.program_chip.store_state();
+        println!("program_chip store: {:?}", start.elapsed());
+
         SystemBaseState {
-            range_checker_chip: self.range_checker_chip.store_state(),
-            initial_memory: match &self.memory_controller.interface_chip {
-                MemoryInterface::Volatile { .. } => None,
-                MemoryInterface::Persistent { initial_memory, .. } => Some(initial_memory.clone()),
-            },
-            memory_logs: self.memory_controller.get_memory_logs(),
-            connector_chip: self.connector_chip.store_state(),
-            program_chip: self.program_chip.store_state(),
+            range_checker_chip,
+            initial_memory,
+            memory_logs,
+            connector_chip,
+            program_chip,
+        }
+    }
+}
+
+impl<F: PrimeField32> SystemBase<F> {
+    pub fn load_state2(&mut self, state: SystemBaseState2<F>) {
+        self.range_checker_chip.load_state(state.range_checker_chip);
+        if let Some(initial_memory) = state.initial_memory {
+            self.memory_controller.set_initial_memory(initial_memory);
+        }
+        // self.memory_controller.set_memory_logs(state.memory_logs);
+        self.connector_chip.load_state(state.connector_chip);
+        self.program_chip.load_state(state.program_chip);
+
+        // restore memory controller offline memory
+        self.memory_controller
+            .replay_serialized_log(&state.memory_logs);
+    }
+
+    pub fn store_state2(&self) -> SystemBaseState2<F> {
+        let start = Instant::now();
+        let range_checker_chip = self.range_checker_chip.store_state();
+        println!("range_checker_chip store: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let initial_memory = match &self.memory_controller.interface_chip {
+            MemoryInterface::Volatile { .. } => None,
+            MemoryInterface::Persistent { initial_memory, .. } => Some(initial_memory.clone()),
+        };
+        println!("initial_memory store: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let memory_logs = self.memory_controller.serialize_log();
+        println!("memory_logs new serialize: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let connector_chip = self.connector_chip.store_state();
+        println!("connector_chip store: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let program_chip = self.program_chip.store_state();
+        println!("program_chip store: {:?}", start.elapsed());
+
+        SystemBaseState2 {
+            range_checker_chip,
+            initial_memory,
+            memory_logs,
+            connector_chip,
+            program_chip,
         }
     }
 }
@@ -1126,15 +1211,53 @@ impl<F: PrimeField32, E: Stateful<Vec<u8>>, P: Stateful<Vec<u8>>> Stateful<VmChi
     for VmChipComplex<F, E, P>
 {
     fn load_state(&mut self, state: VmChipComplexState<F>) {
+        println!("load the Chip itself");
+
+        let start = Instant::now();
         self.base.load_state(state.base);
+        println!("base: {:?}", start.elapsed());
+
+        let start = Instant::now();
         self.inventory.load_state(state.inventory);
+        println!("inventory: {:?}", start.elapsed());
     }
 
     fn store_state(&self) -> VmChipComplexState<F> {
-        VmChipComplexState {
-            base: self.base.store_state(),
-            inventory: self.inventory.store_state(),
-        }
+        let start = Instant::now();
+        let base = self.base.store_state();
+        println!("base store state: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let inventory = self.inventory.store_state();
+        println!("inventory: {:?}", start.elapsed());
+
+        VmChipComplexState { base, inventory }
+    }
+}
+
+impl<F: PrimeField32, E: Stateful<Vec<u8>>, P: Stateful<Vec<u8>>> VmChipComplex<F, E, P> {
+    pub fn load_state2(&mut self, state: VmChipComplexState2<F>) {
+        println!("load the Chip itself");
+
+        let start = Instant::now();
+        self.base.load_state2(state.base);
+        println!("base: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        self.inventory.load_state(state.inventory);
+        println!("inventory: {:?}", start.elapsed());
+    }
+
+    pub fn store_state2(&self) -> VmChipComplexState2<F> {
+        let start = Instant::now();
+        let base = self.base.store_state2();
+        println!("base store state2: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let inventory = self.inventory.store_state();
+        println!("inventory2: {:?}", start.elapsed());
+
+        VmChipComplexState2 { base, inventory }
     }
 }
 
