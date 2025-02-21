@@ -15,15 +15,19 @@ pub const DEFAULT_APP_PROOF_PATH: &str = "./openvm/app.proof";
 pub const DEFAULT_EVM_PROOF_PATH: &str = "./openvm/evm.proof";
 
 pub fn default_app_config() -> AppConfig<SdkVmConfig> {
+    let mut app_fri_params = FriParameters::standard_with_100_bits_conjectured_security(2);
+    app_fri_params.proof_of_work_bits += 10;
+    let mut leaf_fri_params = FriParameters::standard_with_100_bits_conjectured_security(2);
+    leaf_fri_params.proof_of_work_bits += 10;
     AppConfig {
-        app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(2).into(),
+        app_fri_params: app_fri_params.into(),
         app_vm_config: SdkVmConfig::builder()
             .system(Default::default())
             .rv32i(Default::default())
             .rv32m(Default::default())
             .io(Default::default())
             .build(),
-        leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(2).into(),
+        leaf_fri_params: leaf_fri_params.into(),
         compiler_options: Default::default(),
     }
 }

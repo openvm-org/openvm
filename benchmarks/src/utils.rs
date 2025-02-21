@@ -85,16 +85,17 @@ impl BenchmarkCli {
                 DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_length),
             );
         }
+        let mut app_fri_params =
+            FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup);
+        app_fri_params.proof_of_work_bits += 10;
+
+        let mut leaf_fri_params =
+            FriParameters::standard_with_100_bits_conjectured_security(leaf_log_blowup);
+        leaf_fri_params.proof_of_work_bits += 10;
         AppConfig {
-            app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                app_log_blowup,
-            )
-            .into(),
+            app_fri_params: app_fri_params.into(),
             app_vm_config,
-            leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                leaf_log_blowup,
-            )
-            .into(),
+            leaf_fri_params: leaf_fri_params.into(),
             compiler_options: CompilerOptions {
                 enable_cycle_tracker: self.profiling,
                 ..Default::default()
@@ -110,8 +111,11 @@ impl BenchmarkCli {
         let root_log_blowup = self.root_log_blowup.unwrap_or(DEFAULT_ROOT_LOG_BLOWUP);
 
         let [leaf_fri_params, internal_fri_params, root_fri_params] =
-            [leaf_log_blowup, internal_log_blowup, root_log_blowup]
-                .map(FriParameters::standard_with_100_bits_conjectured_security);
+            [leaf_log_blowup, internal_log_blowup, root_log_blowup].map(|blowup| {
+                let mut params = FriParameters::standard_with_100_bits_conjectured_security(blowup);
+                params.proof_of_work_bits += 10;
+                params
+            });
 
         AggConfig {
             agg_stark_config: AggStarkConfig {

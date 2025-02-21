@@ -87,11 +87,9 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
         program.max_num_public_values = NUM_PUB_VALUES;
         program
     };
-    Sdk.commit_app_exe(
-        standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
-        program.into(),
-    )
-    .unwrap()
+    let mut fri_params = standard_fri_params_with_100_bits_conjectured_security(app_log_blowup);
+    fri_params.proof_of_work_bits += 10;
+    Sdk.commit_app_exe(fri_params, program.into()).unwrap()
 }
 
 fn agg_config_for_test() -> AggConfig {

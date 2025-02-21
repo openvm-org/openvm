@@ -75,7 +75,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ANCHOR: keygen
     // 5. Set app configuration
     let app_log_blowup = 2;
-    let app_fri_params = FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup);
+    let mut app_fri_params =
+        FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup);
+    app_fri_params.proof_of_work_bits += 10;
     let app_config = AppConfig::new(app_fri_params, vm_config);
 
     // 6. Commit the exe

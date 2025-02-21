@@ -48,9 +48,9 @@ impl BenchCmd {
         let exe = read_exe_from_file(&exe_path)?;
 
         let app_log_blowup = 2;
-        let engine = BabyBearPoseidon2Engine::new(
-            FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
-        );
+        let mut params = FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup);
+        params.proof_of_work_bits += 10;
+        let engine = BabyBearPoseidon2Engine::new(params);
         let config = Keccak256Rv32Config::default();
 
         let total_proving_time_ms = bench_from_exe(engine, config, exe, vec![])?;
