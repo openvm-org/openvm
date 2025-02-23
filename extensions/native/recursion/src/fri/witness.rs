@@ -20,16 +20,16 @@ impl Witnessable<C> for OuterCommitPhaseStep {
     type WitnessVariable = FriCommitPhaseProofStepVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
-        let sibling_value = self.sibling_value.read(builder);
+        let opened_rows = self.opened_rows.read(builder);
         let opening_proof = read_opening_proof(builder, &self.opening_proof);
         Self::WitnessVariable {
-            sibling_value,
+            opened_rows,
             opening_proof,
         }
     }
 
     fn write(&self, witness: &mut Witness<OuterConfig>) {
-        self.sibling_value.write(witness);
+        self.opened_rows.write(witness);
         write_opening_proof(witness, &self.opening_proof);
     }
 }
@@ -63,11 +63,13 @@ impl Witnessable<C> for OuterFriProof {
         let commit_phase_commits = self.commit_phase_commits.read(builder);
         let query_proofs = self.query_proofs.read(builder);
         let final_poly = self.final_poly.read(builder);
+        let log_max_height = self.log_max_height.read(builder);
         let pow_witness = self.pow_witness.read(builder);
         Self::WitnessVariable {
             commit_phase_commits,
             query_proofs,
             final_poly,
+            log_max_height,
             pow_witness,
         }
     }
@@ -76,6 +78,7 @@ impl Witnessable<C> for OuterFriProof {
         self.commit_phase_commits.write(witness);
         <Vec<_> as Witnessable<C>>::write(&self.query_proofs, witness);
         self.final_poly.write(witness);
+        self.log_max_height.write(witness);
         self.pow_witness.write(witness);
     }
 }

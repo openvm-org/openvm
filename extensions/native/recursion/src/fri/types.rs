@@ -9,6 +9,7 @@ pub struct FriConfigVariable<C: Config> {
     pub log_final_poly_len: usize,
     pub num_queries: usize,
     pub proof_of_work_bits: usize,
+    pub arity_bits: usize,
     pub generators: Array<C, Felt<C::F>>,
     pub subgroups: Array<C, TwoAdicMultiplicativeCosetVariable<C>>,
 }
@@ -36,6 +37,7 @@ pub struct FriProofVariable<C: Config> {
     pub commit_phase_commits: Array<C, DigestVariable<C>>,
     pub query_proofs: Array<C, FriQueryProofVariable<C>>,
     pub final_poly: Array<C, Ext<C::F, C::EF>>,
+    pub log_max_height: Usize<C::N>,
     pub pow_witness: Felt<C::F>,
 }
 
@@ -47,7 +49,7 @@ pub struct FriQueryProofVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct FriCommitPhaseProofStepVariable<C: Config> {
-    pub sibling_value: Ext<C::F, C::EF>,
+    pub opened_rows: Array<C, Array<C, Ext<C::F, C::EF>>>,
     pub opening_proof: HintSlice<C>,
 }
 

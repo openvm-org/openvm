@@ -33,6 +33,7 @@ pub fn const_fri_config<C: Config>(
         log_final_poly_len: params.log_final_poly_len,
         num_queries: params.num_queries,
         proof_of_work_bits: params.proof_of_work_bits,
+        arity_bits: params.arity_bits,
         subgroups,
         generators,
     }

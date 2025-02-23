@@ -111,6 +111,7 @@ fn test_fibonacci() {
             log_final_poly_len: 0,
             num_queries: 2,
             proof_of_work_bits: 0,
+            arity_bits: 1,
         },
     )
 }

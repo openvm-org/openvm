@@ -79,8 +79,7 @@ pub fn verify_two_adic_pcs<C: Config>(
 
     challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
 
-    let log_max_height =
-        builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(log_blowup));
+    let log_max_height = builder.eval_expr(proof.log_max_height);
     // tag_exp is a shared buffer.
     let tag_exp: Array<C, Felt<C::F>> = builder.array(log_max_height);
     let w = config.get_two_adic_generator(builder, log_max_height);
