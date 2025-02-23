@@ -110,7 +110,7 @@ impl<
 #[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
-pub struct Rv32VecHeapTwoReadsReadRecord<
+pub struct Rv32VecHeapTwoReadsRecord<
     F: Field,
     const BLOCKS_PER_READ1: usize,
     const BLOCKS_PER_READ2: usize,
@@ -387,7 +387,7 @@ impl<
     >
 {
     type ReadRecord =
-        Rv32VecHeapTwoReadsReadRecord<F, BLOCKS_PER_READ1, BLOCKS_PER_READ2, READ_SIZE>;
+        Rv32VecHeapTwoReadsRecord<F, BLOCKS_PER_READ1, BLOCKS_PER_READ2, READ_SIZE>;
     type WriteRecord = Rv32VecHeapTwoReadsWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>;
     type Air = Rv32VecHeapTwoReadsAdapterAir<
         BLOCKS_PER_READ1,
@@ -434,7 +434,7 @@ impl<
         let read2_data = read2_records.map(|r| r.1);
         assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.air.address_bits));
 
-        let record = Rv32VecHeapTwoReadsReadRecord {
+        let record = Rv32VecHeapTwoReadsRecord {
             rs1: rs1_record,
             rs2: rs2_record,
             rd: rd_record,
@@ -506,7 +506,7 @@ pub(super) fn vec_heap_two_reads_generate_trace_row_impl<
     const WRITE_SIZE: usize,
 >(
     row_slice: &mut [F],
-    read_record: &Rv32VecHeapTwoReadsReadRecord<F, BLOCKS_PER_READ1, BLOCKS_PER_READ2, READ_SIZE>,
+    read_record: &Rv32VecHeapTwoReadsRecord<F, BLOCKS_PER_READ1, BLOCKS_PER_READ2, READ_SIZE>,
     write_record: &Rv32VecHeapTwoReadsWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     address_bits: usize,
