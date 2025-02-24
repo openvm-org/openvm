@@ -1,4 +1,4 @@
-use std::{array, cmp::max, sync::Arc};
+use std::{cmp::max, sync::Arc};
 
 use openvm_circuit::arch::{
     instructions::riscv::RV32_CELL_BITS,
@@ -20,38 +20,45 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
 
-use crate::{
-    Sha256Air, SHA256_BLOCK_U8S, SHA256_DIGEST_WIDTH, SHA256_ROUND_WIDTH, SHA256_ROWS_PER_BLOCK,
-};
+use crate::{Sha256Config, Sha512Config, ShaAir, ShaConfig, ShaPrecomputedValues};
 
 // A wrapper AIR purely for testing purposes
 #[derive(Clone, Debug)]
-pub struct Sha256TestAir {
-    pub sub_air: Sha256Air,
+pub struct ShaTestAir<C: ShaConfig + ShaPrecomputedValues<C::Word>> {
+    pub sub_air: ShaAir<C>,
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Sha256TestAir {}
-impl<F: Field> PartitionedBaseAir<F> for Sha256TestAir {}
-impl<F: Field> BaseAir<F> for Sha256TestAir {
+impl<F: Field, C: ShaConfig + ShaPrecomputedValues<C::Word>> BaseAirWithPublicValues<F>
+    for ShaTestAir<C>
+{
+}
+impl<F: Field, C: ShaConfig + ShaPrecomputedValues<C::Word>> PartitionedBaseAir<F>
+    for ShaTestAir<C>
+{
+}
+impl<F: Field, C: ShaConfig + ShaPrecomputedValues<C::Word>> BaseAir<F> for ShaTestAir<C> {
     fn width(&self) -> usize {
-        <Sha256Air as BaseAir<F>>::width(&self.sub_air)
+        <ShaAir<C> as BaseAir<F>>::width(&self.sub_air)
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for Sha256TestAir {
+impl<AB: InteractionBuilder, C: ShaConfig + ShaPrecomputedValues<C::Word>> Air<AB>
+    for ShaTestAir<C>
+{
     fn eval(&self, builder: &mut AB) {
         self.sub_air.eval(builder, 0);
     }
 }
 
 // A wrapper Chip purely for testing purposes
-pub struct Sha256TestChip {
-    pub air: Sha256TestAir,
+pub struct ShaTestChip<C: ShaConfig + ShaPrecomputedValues<C::Word>> {
+    pub air: ShaTestAir<C>,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
-    pub records: Vec<([u8; SHA256_BLOCK_U8S], bool)>,
+    pub records: Vec<(Vec<u8>, bool)>, // length of inner vec is BLOCK_U8S
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for Sha256TestChip
+impl<SC: StarkGenericConfig, C: ShaConfig + ShaPrecomputedValues<C::Word> + 'static> Chip<SC>
+    for ShaTestChip<C>
 where
     Val<SC>: PrimeField32,
 {
@@ -60,7 +67,7 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let trace = crate::generate_trace::<Val<SC>>(
+        let trace = crate::generate_trace::<Val<SC>, C>(
             &self.air.sub_air,
             self.bitwise_lookup_chip.clone(),
             self.records,
@@ -69,33 +76,39 @@ where
     }
 }
 
-impl ChipUsageGetter for Sha256TestChip {
+impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ChipUsageGetter for ShaTestChip<C> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
     fn current_trace_height(&self) -> usize {
-        self.records.len() * SHA256_ROWS_PER_BLOCK
+        self.records.len() * C::ROWS_PER_BLOCK
     }
 
     fn trace_width(&self) -> usize {
-        max(SHA256_ROUND_WIDTH, SHA256_DIGEST_WIDTH)
+        max(C::ROUND_WIDTH, C::DIGEST_WIDTH)
     }
 }
 
 const SELF_BUS_IDX: usize = 28;
-#[test]
-fn rand_sha256_test() {
+fn rand_sha_test<C: ShaConfig + ShaPrecomputedValues<C::Word> + 'static>() {
     let mut rng = create_seeded_rng();
     let tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let len = rng.gen_range(1..100);
     let random_records: Vec<_> = (0..len)
-        .map(|_| (array::from_fn(|_| rng.gen::<u8>()), true))
+        .map(|_| {
+            (
+                (0..C::BLOCK_U8S)
+                    .map(|_| rng.gen::<u8>())
+                    .collect::<Vec<_>>(),
+                true,
+            )
+        })
         .collect();
-    let chip = Sha256TestChip {
-        air: Sha256TestAir {
-            sub_air: Sha256Air::new(bitwise_bus, SELF_BUS_IDX),
+    let chip = ShaTestChip {
+        air: ShaTestAir {
+            sub_air: ShaAir::<C>::new(bitwise_bus, SELF_BUS_IDX),
         },
         bitwise_lookup_chip: bitwise_chip.clone(),
         records: random_records,
@@ -103,4 +116,14 @@ fn rand_sha256_test() {
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn rand_sha256_test() {
+    rand_sha_test::<Sha256Config>();
+}
+
+#[test]
+fn rand_sha512_test() {
+    rand_sha_test::<Sha512Config>();
 }

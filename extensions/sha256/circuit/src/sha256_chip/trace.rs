@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_rv32im_circuit::adapters::compose;
-use openvm_sha256_air::{
+use openvm_sha_air::{
     get_flag_pt_array, limbs_into_u32, Sha256Air, SHA256_BLOCK_WORDS, SHA256_BUFFER_SIZE, SHA256_H,
     SHA256_HASH_WORDS, SHA256_ROWS_PER_BLOCK, SHA256_WORD_U8S,
 };

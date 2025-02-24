@@ -11,11 +11,11 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_sha256_air::{
+use openvm_sha256_transpiler::Rv32Sha256Opcode;
+use openvm_sha_air::{
     compose, Sha256Air, SHA256_BLOCK_U8S, SHA256_HASH_WORDS, SHA256_ROUNDS_PER_ROW,
     SHA256_WORD_U16S, SHA256_WORD_U8S,
 };
-use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
