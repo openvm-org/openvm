@@ -314,7 +314,7 @@ impl Sha256Air {
         &self,
         builder: &mut AB,
         local: &Sha256DigestCols<AB::Var>,
-        is_lastest_block: AB::Expr,
+        is_latest_block: AB::Expr,
     ) {
         // Constrain that next block's `prev_hash` is equal to the current block's `hash`
         let composed_hash: [[<AB as AirBuilder>::Expr; SHA256_WORD_U16S]; SHA256_HASH_WORDS] =
@@ -328,7 +328,7 @@ impl Sha256Air {
             });
         // Need to handle the case if this is the very last block of the trace matrix
         let next_global_block_idx = select(
-            is_lastest_block,
+            is_latest_block,
             AB::Expr::ONE,
             local.flags.global_block_idx + AB::Expr::ONE,
         );
