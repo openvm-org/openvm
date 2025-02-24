@@ -104,6 +104,9 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         builder.assert_bool(end_inside_row);
         builder.when(end_inside_row).assert_one(inside_row);
         builder.assert_bool(end_top_level);
+        builder
+            .when(end_top_level)
+            .assert_one(incorporate_row + incorporate_sibling);
 
         let end = end_inside_row + end_top_level + simple + (AB::Expr::ONE - enabled.clone());
         builder
