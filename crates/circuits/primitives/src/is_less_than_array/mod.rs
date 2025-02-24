@@ -32,24 +32,24 @@ pub struct IsLtArrayIo<T, const NUM: usize> {
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug)]
 pub struct IsLtArrayAuxCols<T, const NUM: usize, const AUX_LEN: usize> {
-    // `diff_inv_marker` is filled with 0 except at the lowest index i such that
-    // `x[i] != y[i]`. If such an `i` exists then it is constrained that `diff_val = y[i] - x[i]`.
+    // `diff_marker` is filled with 0 except at the lowest index i such that
+    // `x[i] != y[i]`. If such an `i` exists then it is constrained that `diff_inv = inv(y[i] - x[i])`.
     pub diff_marker: [T; NUM],
-    pub diff_val: T,
+    pub diff_inv: T,
     pub lt_aux: LessThanAuxCols<T, AUX_LEN>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct IsLtArrayAuxColsRef<'a, T> {
     pub diff_marker: &'a [T],
-    pub diff_val: &'a T,
+    pub diff_inv: &'a T,
     pub lt_decomp: &'a [T],
 }
 
 #[derive(Debug)]
 pub struct IsLtArrayAuxColsMut<'a, T> {
     pub diff_marker: &'a mut [T],
-    pub diff_val: &'a mut T,
+    pub diff_inv: &'a mut T,
     pub lt_decomp: &'a mut [T],
 }
 
@@ -59,7 +59,7 @@ impl<'a, T, const NUM: usize, const AUX_LEN: usize> From<&'a IsLtArrayAuxCols<T,
     fn from(value: &'a IsLtArrayAuxCols<T, NUM, AUX_LEN>) -> Self {
         Self {
             diff_marker: &value.diff_marker,
-            diff_val: &value.diff_val,
+            diff_inv: &value.diff_inv,
             lt_decomp: &value.lt_aux.lower_decomp,
         }
     }
@@ -71,7 +71,7 @@ impl<'a, T, const NUM: usize, const AUX_LEN: usize> From<&'a mut IsLtArrayAuxCol
     fn from(value: &'a mut IsLtArrayAuxCols<T, NUM, AUX_LEN>) -> Self {
         Self {
             diff_marker: &mut value.diff_marker,
-            diff_val: &mut value.diff_val,
+            diff_inv: &mut value.diff_inv,
             lt_decomp: &mut value.lt_aux.lower_decomp,
         }
     }
@@ -116,28 +116,29 @@ impl<const NUM: usize> IsLtArraySubAir<NUM> {
         builder: &mut AB,
         io: IsLtArrayIo<AB::Expr, NUM>,
         diff_marker: &[AB::Var],
-        diff_val: AB::Var,
+        diff_inv: AB::Var,
         lt_decomp: &[AB::Var],
     ) {
         assert_eq!(diff_marker.len(), NUM);
         let mut prefix_sum = AB::Expr::ZERO;
+        let mut diff_val = AB::Expr::ZERO;
         for (x, y, &marker) in izip!(io.x, io.y, diff_marker) {
             let diff = y - x;
+            diff_val += diff.clone() * marker.into();
             prefix_sum += marker.into();
             builder.assert_bool(marker);
             builder
                 .when(io.count.clone())
                 .assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
-            builder.when(marker).assert_eq(diff, diff_val);
+            builder.when(marker).assert_one(diff * diff_inv);
         }
         builder.assert_bool(prefix_sum.clone());
         // When condition != 0,
         // - If `x != y`, then `prefix_sum = 1` so marker[i] must be nonzero iff
-        //   i is the first index where `x[i] != y[i]`. Constrains that `diff_val = y[i] - x[i]`.
-        // - If `x == y`, then either
-        //     - `prefix_sum = 0` and `out == 0` (below) or
-        //     - `prefix_sum = 1` and `diff_val = 0` (since all diff are zero). The IsLtSubAir
-        //       will enforce that `out = 0`.
+        //   i is the first index where `x[i] != y[i]`. Constrains that
+        //   `diff_inv * (y[i] - x[i]) = 1` (`diff_val` is non-zero).
+        // - If `x == y`, then `prefix_sum = 0` and `out == 0` (below)
+        //     - `prefix_sum` cannot be 1 because all diff are zero and it would be impossible to find an inverse.
 
         builder
             .when(io.count.clone())
@@ -167,7 +168,7 @@ impl<AB: InteractionBuilder, const NUM: usize> SubAir<AB> for IsLtArraySubAir<NU
     {
         self.lt
             .eval_range_checks(builder, aux.lt_decomp, io.count.clone());
-        self.eval_without_range_checks(builder, io, aux.diff_marker, *aux.diff_val, aux.lt_decomp);
+        self.eval_without_range_checks(builder, io, aux.diff_marker, *aux.diff_inv, aux.lt_decomp);
     }
 }
 
@@ -200,7 +201,7 @@ impl<AB: InteractionBuilder, const NUM: usize> SubAir<AB> for IsLtArrayWhenTrans
             &mut builder.when_transition(),
             io,
             aux.diff_marker,
-            *aux.diff_val,
+            *aux.diff_inv,
             aux.lt_decomp,
         );
     }
@@ -221,19 +222,21 @@ impl<F: PrimeField32, const NUM: usize> TraceSubRowGenerator<F> for IsLtArraySub
     ) {
         tracing::trace!("IsLtArraySubAir::generate_subrow x={:?}, y={:?}", x, y);
         let mut is_eq = true;
-        *aux.diff_val = F::ZERO;
+        let mut diff_val = F::ZERO;
+        *aux.diff_inv = F::ZERO;
         for (x_i, y_i, diff_marker) in izip!(x, y, aux.diff_marker.iter_mut()) {
             if x_i != y_i && is_eq {
                 is_eq = false;
                 *diff_marker = F::ONE;
-                *aux.diff_val = *y_i - *x_i;
+                diff_val = *y_i - *x_i;
+                *aux.diff_inv = diff_val.inverse();
             } else {
                 *diff_marker = F::ZERO;
             }
         }
         // diff_val can be "negative" but shifted_diff is in [0, 2^{max_bits+1})
         let shifted_diff =
-            (*aux.diff_val + F::from_canonical_u32((1 << self.max_bits()) - 1)).as_canonical_u32();
+            (diff_val + F::from_canonical_u32((1 << self.max_bits()) - 1)).as_canonical_u32();
         let lower_u32 = shifted_diff & ((1 << self.max_bits()) - 1);
         *out = F::from_bool(shifted_diff != lower_u32);
 
