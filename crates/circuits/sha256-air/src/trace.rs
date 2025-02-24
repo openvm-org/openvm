@@ -235,8 +235,18 @@ impl Sha256Air {
                 cols.flags.local_block_idx = F::from_canonical_u32(local_block_idx);
                 let final_hash: [u32; SHA256_HASH_WORDS] =
                     array::from_fn(|i| work_vars[i].wrapping_add(prev_hash[i]));
+                let final_hash_limbs: [[u32; SHA256_WORD_U8S]; SHA256_HASH_WORDS] =
+                    array::from_fn(|i| u32_into_limbs::<SHA256_WORD_U8S>(final_hash[i]));
+                // need to ensure final hash limbs are bytes, in order for
+                //   prev_hash[i] + work_vars[i] == final_hash[i]
+                // to be constrained correctly
+                for word in final_hash_limbs.iter() {
+                    for chunk in word.chunks(2) {
+                        bitwise_lookup_chip.request_range(chunk[0], chunk[1]);
+                    }
+                }
                 cols.final_hash = array::from_fn(|i| {
-                    u32_into_limbs::<SHA256_WORD_U8S>(final_hash[i]).map(F::from_canonical_u32)
+                    array::from_fn(|j| F::from_canonical_u32(final_hash_limbs[i][j]))
                 });
                 cols.prev_hash = prev_hash
                     .map(|f| u32_into_limbs::<SHA256_WORD_U16S>(f).map(F::from_canonical_u32));

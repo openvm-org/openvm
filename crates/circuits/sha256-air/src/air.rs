@@ -9,7 +9,7 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::FieldAlgebra,
+    p3_field::{Field, FieldAlgebra},
     p3_matrix::Matrix,
 };
 
@@ -71,7 +71,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for Sha256Air {
 impl Sha256Air {
     /// Implements the single row constraints (i.e. imposes constraints only on local)
     /// Implements some sanity constraints on the row index, flags, and work variables
-    /// Calls `eval_round_row` and `eval_digest_row`
     fn eval_row<AB: InteractionBuilder>(&self, builder: &mut AB, start_col: usize) {
         let main = builder.main();
         let local = main.row_slice(0);
@@ -122,7 +121,6 @@ impl Sha256Air {
                 builder.assert_bool(local_cols.hash.e[i][j]);
             }
         }
-        self.eval_digest_row(builder, local_cols);
     }
 
     /// Implements constraints for a digest row that ensure proper state transitions between blocks
@@ -132,12 +130,13 @@ impl Sha256Air {
     fn eval_digest_row<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: &Sha256DigestCols<AB::Var>,
+        local: &Sha256RoundCols<AB::Var>,
+        next: &Sha256DigestCols<AB::Var>,
     ) {
         // Check that if this is the last row of a message or an inpadding row, the hash should be the [SHA256_H]
         for i in 0..SHA256_ROUNDS_PER_ROW {
-            let a = local.hash.a[i].map(|x| x.into());
-            let e = local.hash.e[i].map(|x| x.into());
+            let a = next.hash.a[i].map(|x| x.into());
+            let e = next.hash.e[i].map(|x| x.into());
             for j in 0..SHA256_WORD_U16S {
                 let a_limb = compose::<AB::Expr>(&a[j * 16..(j + 1) * 16], 1);
                 let e_limb = compose::<AB::Expr>(&e[j * 16..(j + 1) * 16], 1);
@@ -145,8 +144,8 @@ impl Sha256Air {
                 // If it is a padding row or the last row of a message, the `hash` should be the [SHA256_H]
                 builder
                     .when(
-                        local.flags.is_padding_row()
-                            + local.flags.is_last_block * local.flags.is_digest_row,
+                        next.flags.is_padding_row()
+                            + next.flags.is_last_block * next.flags.is_digest_row,
                     )
                     .assert_eq(
                         a_limb,
@@ -157,8 +156,8 @@ impl Sha256Air {
 
                 builder
                     .when(
-                        local.flags.is_padding_row()
-                            + local.flags.is_last_block * local.flags.is_digest_row,
+                        next.flags.is_padding_row()
+                            + next.flags.is_last_block * next.flags.is_digest_row,
                     )
                     .assert_eq(
                         e_limb,
@@ -171,21 +170,56 @@ impl Sha256Air {
 
         // Check if last row of a non-last block, the `hash` should be equal to the final hash of the current block
         for i in 0..SHA256_ROUNDS_PER_ROW {
-            let prev_a = local.hash.a[i].map(|x| x.into());
-            let prev_e = local.hash.e[i].map(|x| x.into());
-            let cur_a = local.final_hash[SHA256_ROUNDS_PER_ROW - i - 1].map(|x| x.into());
-            let cur_e = local.final_hash[SHA256_ROUNDS_PER_ROW - i + 3].map(|x| x.into());
+            let prev_a = next.hash.a[i].map(|x| x.into());
+            let prev_e = next.hash.e[i].map(|x| x.into());
+            let cur_a = next.final_hash[SHA256_ROUNDS_PER_ROW - i - 1].map(|x| x.into());
+
+            let cur_e = next.final_hash[SHA256_ROUNDS_PER_ROW - i + 3].map(|x| x.into());
             for j in 0..SHA256_WORD_U8S {
                 let prev_a_limb = compose::<AB::Expr>(&prev_a[j * 8..(j + 1) * 8], 1);
                 let prev_e_limb = compose::<AB::Expr>(&prev_e[j * 8..(j + 1) * 8], 1);
 
                 builder
-                    .when(not(local.flags.is_last_block) * local.flags.is_digest_row)
+                    .when(not(next.flags.is_last_block) * next.flags.is_digest_row)
                     .assert_eq(prev_a_limb, cur_a[j].clone());
 
                 builder
-                    .when(not(local.flags.is_last_block) * local.flags.is_digest_row)
+                    .when(not(next.flags.is_last_block) * next.flags.is_digest_row)
                     .assert_eq(prev_e_limb, cur_e[j].clone());
+            }
+        }
+
+        // Assert that the previous hash + work vars == final hash.
+        // That is, `next.prev_hash[i] + local.work_vars[i] == next.final_hash[i]`
+        // where addition is done modulo 2^32
+        for i in 0..SHA256_HASH_WORDS {
+            let mut carry = AB::Expr::ZERO;
+            for j in 0..SHA256_WORD_U16S {
+                let work_var_limb = if i < SHA256_ROUNDS_PER_ROW {
+                    compose::<AB::Expr>(
+                        &local.work_vars.a[SHA256_ROUNDS_PER_ROW - 1 - i][j * 16..(j + 1) * 16],
+                        1,
+                    )
+                } else {
+                    compose::<AB::Expr>(
+                        &local.work_vars.e[SHA256_ROUNDS_PER_ROW + 3 - i][j * 16..(j + 1) * 16],
+                        1,
+                    )
+                };
+                let final_hash_limb =
+                    compose::<AB::Expr>(&next.final_hash[i][j * 2..(j + 1) * 2], 8);
+
+                carry = AB::Expr::from(AB::F::from_canonical_u32(1 << 16).inverse())
+                    * (next.prev_hash[i][j] + work_var_limb + carry - final_hash_limb);
+                builder
+                    .when(next.flags.is_digest_row)
+                    .assert_bool(carry.clone());
+            }
+            // constrain the final hash limbs two at a time since we can do two checks per interaction
+            for chunk in next.final_hash[i].chunks(2) {
+                self.bitwise_lookup_bus
+                    .send_range(chunk[0], chunk[1])
+                    .eval(builder, next.flags.is_digest_row);
             }
         }
     }
@@ -303,6 +337,9 @@ impl Sha256Air {
 
         self.eval_message_schedule::<AB>(builder, local_cols, next_cols);
         self.eval_work_vars::<AB>(builder, local_cols, next_cols);
+        let next_cols: &Sha256DigestCols<AB::Var> =
+            next[start_col..start_col + SHA256_DIGEST_WIDTH].borrow();
+        self.eval_digest_row(builder, local_cols, next_cols);
         let local_cols: &Sha256DigestCols<AB::Var> =
             local[start_col..start_col + SHA256_DIGEST_WIDTH].borrow();
         self.eval_prev_hash::<AB>(builder, local_cols, next_is_padding_row);
