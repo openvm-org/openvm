@@ -5,7 +5,7 @@ The functional part is provided by the `openvm-keccak-guest` crate, which is a g
 
 ## Functions for guest code
 
-The OpenVM Keccak256 Guest extension provides two functions for using in your guest code:
+The OpenVM Keccak256 Guest extension provides two functions for use in your guest code:
 
 - `keccak256(input: &[u8]) -> [u8; 32]`: Computes the Keccak-256 hash of the input data and returns it as an array of 32 bytes.
 - `set_keccak256(input: &[u8], output: &mut [u8; 32])`: Sets the output to the Keccak-256 hash of the input data into the provided output buffer.
