@@ -2,7 +2,7 @@
 mod tests {
     use eyre::Result;
     use openvm_circuit::{
-        arch::{hasher::poseidon2::vm_poseidon2_hasher, VmExecutor},
+        arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VmExecutor},
         system::memory::tree::public_values::UserPublicValuesProof,
         utils::{air_test, air_test_with_min_segments},
     };
@@ -164,6 +164,26 @@ mod tests {
         let config = Rv32IConfig::default();
         air_test(config, exe);
         Ok(())
+    }
+
+    #[test]
+    fn test_heap_overflow() -> Result<()> {
+        let elf = build_example_program_at_path(get_programs_dir!(), "heap_overflow")?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )?;
+        let config = Rv32ImConfig::default();
+
+        let executor = VmExecutor::<F, _>::new(config.clone());
+        match executor.execute(exe, vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()]) {
+            Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
+            Err(_) => panic!("should fail with `FailedWithExitCode`"),
+            Ok(_) => panic!("should fail"),
+        }
     }
 
     #[test]

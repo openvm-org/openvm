@@ -93,14 +93,14 @@ pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u
         heap_pos += align - offset;
     }
 
-    let ptr = heap_pos as *mut u8;
-    heap_pos += bytes;
-
-    // Check to make sure heap doesn't collide with SYSTEM memory.
-    if crate::memory::SYSTEM.start() < heap_pos {
-        super::rust_rt::terminate::<1>();
+    match heap_pos.checked_add(bytes) {
+        Some(new_heap_pos) if new_heap_pos <= GUEST_MAX_MEM => {
+            // SAFETY: Single threaded, and non-preemptive so modification is safe.
+            unsafe { HEAP_POS = new_heap_pos };
+        }
+        _ => {
+            super::rust_rt::terminate::<1>();
+        }
     }
-
-    unsafe { HEAP_POS = heap_pos };
-    ptr
+    heap_pos as *mut u8
 }
