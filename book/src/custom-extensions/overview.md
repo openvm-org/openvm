@@ -25,7 +25,7 @@ Our design for the configuration procedure above was inspired by the [EVMMAX pro
 
 ## Configuration
 
-To use these extensions, you must populate a `openvm.toml` in your package root directory (where the `Cargo.toml` file is located).
+To use these extensions, you must populate an `openvm.toml` in your package root directory (where the `Cargo.toml` file is located).
 We will explain in each extension how to configure the `openvm.toml` file.
 
 The template `openvm.toml` file is as follows:
