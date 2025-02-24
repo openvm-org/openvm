@@ -154,6 +154,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
+        // This constraint ensures that the following memory read only occurs when `is_valid == 1`.
+        builder
+            .when(local.rs2_as)
+            .assert_one(ctx.instruction.is_valid.clone());
         self.memory_bridge
             .read(
                 MemoryAddress::new(local.rs2_as, local.rs2),
