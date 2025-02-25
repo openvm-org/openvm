@@ -5,7 +5,7 @@ use openvm_circuit::{
         testing::{memory::gen_pointer, VmChipTestBuilder},
         VmAdapterChip,
     },
-    utils::{u32_into_limbs, u32_sign_extend},
+    utils::u32_into_limbs,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
@@ -39,9 +39,11 @@ fn set_and_execute(
     opcode: Rv32LoadStoreOpcode,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
+    imm_sign: Option<u32>,
 ) {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
-    let imm_ext = u32_sign_extend::<IMM_BITS>(imm);
+    let imm_sign = imm_sign.unwrap_or(rng.gen_range(0..2));
+    let imm_ext = imm + imm_sign * (0xffffffff ^ ((1 << IMM_BITS) - 1));
 
     let alignment = match opcode {
         LOADW | STOREW => 2,
@@ -89,7 +91,10 @@ fn set_and_execute(
 
     tester.execute(
         chip,
-        &Instruction::from_usize(opcode.global_opcode(), [a, b, imm as usize, 1, mem_as]),
+        &Instruction::from_usize(
+            opcode.global_opcode(),
+            [a, b, imm as usize, 1, mem_as, 0, imm_sign as usize],
+        ),
     );
 
     let write_data = run_write_data(opcode, read_data, some_prev_data, shift_amount);
@@ -128,12 +133,12 @@ fn rand_loadstore_test() {
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADW, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADBU, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADHU, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADW, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADBU, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADHU, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, None, None, None);
     }
 
     drop(range_checker_chip);
@@ -159,6 +164,7 @@ fn run_negative_loadstore_test(
     is_load: Option<bool>,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
+    imm_sign: Option<u32>,
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
@@ -176,7 +182,7 @@ fn run_negative_loadstore_test(
     let adapter_width = BaseAir::<F>::width(adapter.air());
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, rs1, imm);
+    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, rs1, imm, imm_sign);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
@@ -220,6 +226,7 @@ fn negative_wrong_opcode_tests() {
         Some(false),
         None,
         None,
+        None,
         VerificationError::OodEvaluationMismatch,
     );
 
@@ -232,6 +239,7 @@ fn negative_wrong_opcode_tests() {
         None,
         Some([0, 0, 0, 0]),
         Some(1),
+        None,
         VerificationError::OodEvaluationMismatch,
     );
 
@@ -244,6 +252,7 @@ fn negative_wrong_opcode_tests() {
         Some(true),
         Some([11, 169, 76, 28]),
         Some(37121),
+        None,
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -259,6 +268,7 @@ fn negative_write_data_tests() {
         Some(true),
         Some([13, 11, 156, 23]),
         Some(43641),
+        None,
         VerificationError::ChallengePhaseError,
     );
 
@@ -271,6 +281,7 @@ fn negative_write_data_tests() {
         None,
         Some([45, 123, 87, 24]),
         Some(28122),
+        Some(0),
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -297,12 +308,12 @@ fn execute_roundtrip_sanity_test() {
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADW, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADBU, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADHU, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADW, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADBU, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADHU, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREW, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREB, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, STOREH, None, None, None);
     }
 }
 

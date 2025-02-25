@@ -33,14 +33,8 @@ type F = BabyBear;
 fn into_limbs<const NUM_LIMBS: usize, const LIMB_BITS: usize>(num: u32) -> [u32; NUM_LIMBS] {
     array::from_fn(|i| (num >> (LIMB_BITS * i)) & ((1 << LIMB_BITS) - 1))
 }
-fn sign_extend<const IMM_BITS: usize>(num: u32) -> u32 {
-    if num & (1 << (IMM_BITS - 1)) != 0 {
-        num | (u32::MAX - (1 << IMM_BITS) + 1)
-    } else {
-        num
-    }
-}
 
+#[allow(clippy::too_many_arguments)]
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32LoadSignExtendChip<F>,
@@ -49,9 +43,11 @@ fn set_and_execute(
     read_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
+    imm_sign: Option<u32>,
 ) {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
-    let imm_ext = sign_extend::<IMM_BITS>(imm);
+    let imm_sign = imm_sign.unwrap_or(rng.gen_range(0..2));
+    let imm_ext = imm + imm_sign * (0xffffffff ^ ((1 << IMM_BITS) - 1));
 
     let alignment = match opcode {
         LOADB => 0,
@@ -91,7 +87,10 @@ fn set_and_execute(
 
     tester.execute(
         chip,
-        &Instruction::from_usize(opcode.global_opcode(), [a, b, imm as usize, 1, 2]),
+        &Instruction::from_usize(
+            opcode.global_opcode(),
+            [a, b, imm as usize, 1, 2, 0, imm_sign as usize],
+        ),
     );
 
     let write_data = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
@@ -128,8 +127,26 @@ fn rand_load_sign_extend_test() {
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, None, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut rng,
+            LOADB,
+            None,
+            None,
+            None,
+            None,
+        );
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut rng,
+            LOADH,
+            None,
+            None,
+            None,
+            None,
+        );
     }
 
     let tester = tester.build().load(chip).finalize();
@@ -153,6 +170,7 @@ fn run_negative_loadstore_test(
     opcode_flags: Option<[bool; 3]>,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
+    imm_sign: Option<u32>,
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
@@ -178,6 +196,7 @@ fn run_negative_loadstore_test(
         read_data,
         rs1,
         imm,
+        imm_sign,
     );
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
@@ -226,6 +245,7 @@ fn loadstore_negative_tests() {
         None,
         None,
         None,
+        None,
         VerificationError::ChallengePhaseError,
     );
 
@@ -237,6 +257,7 @@ fn loadstore_negative_tests() {
         None,
         Some([202, 109, 183, 26]),
         Some(31212),
+        None,
         VerificationError::ChallengePhaseError,
     );
 
@@ -248,6 +269,7 @@ fn loadstore_negative_tests() {
         Some([true, false, false]),
         Some([250, 132, 77, 5]),
         Some(47741),
+        None,
         VerificationError::ChallengePhaseError,
     );
 }
@@ -275,8 +297,26 @@ fn execute_roundtrip_sanity_test() {
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, None, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut rng,
+            LOADB,
+            None,
+            None,
+            None,
+            None,
+        );
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut rng,
+            LOADH,
+            None,
+            None,
+            None,
+            None,
+        );
     }
 }
 

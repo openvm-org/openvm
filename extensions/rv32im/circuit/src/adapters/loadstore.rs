@@ -128,7 +128,7 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
     pub read: RecordId,
 
     pub imm: F,
-    pub imm_sign: bool,
+    pub imm_sign: F,
     pub mem_ptr_limbs: [u32; 2],
     pub mem_as: F,
     pub shift_amount: u32,
@@ -309,6 +309,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
                     local_cols.imm.into(),
                     AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     local_cols.mem_as.into(),
+                    AB::Expr::ZERO,
+                    local_cols.imm_sign.into(),
                 ],
                 local_cols.from_state,
                 ExecutionState {
@@ -347,6 +349,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             c,
             d,
             e,
+            g,
             ..
         } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -359,7 +362,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
 
         let rs1_val = compose(rs1_record.1);
         let imm = c.as_canonical_u32();
-        let imm_sign = (imm & 0x8000) >> 15;
+        let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
@@ -400,7 +403,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                 rs1_ptr: b,
                 read: read_record.0,
                 imm: c,
-                imm_sign: imm_sign == 1,
+                imm_sign: g,
                 shift_amount,
                 mem_ptr_limbs,
                 mem_as: e,
@@ -473,7 +476,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let read = memory.record_by_id(read_record.read);
         aux_cols_factory.generate_read_aux(read, &mut adapter_cols.read_data_aux);
         adapter_cols.imm = read_record.imm;
-        adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
+        adapter_cols.imm_sign = read_record.imm_sign;
         adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
         let write = memory.record_by_id(write_record.write_id);
         aux_cols_factory.generate_base_aux(write, &mut adapter_cols.write_base_aux);

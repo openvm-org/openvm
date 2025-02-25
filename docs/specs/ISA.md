@@ -118,6 +118,7 @@ instructions will set `to_pc = from_pc + DEFAULT_PC_STEP`. We will use the follo
 - `i32(c)` where `c` is a field element will mean `c.as_canonical_u32()` if `c.as_canonical_u32() < F::modulus() / 2` or
   `c.as_canonical_u32() - F::modulus() as i32` otherwise.
 - `decompose(c)` where `c` is a field element means `c.as_canonical_u32().to_le_bytes()`.
+- `r32{0}(a) := i32([a:4]_1)` means casting the value at `[a:4]_1` to `i32`.
 
 In the specification, operands marked with `_` are not used and should be set to zero. Trailing unused operands should also be set to zero.
 
@@ -176,24 +177,27 @@ unsigned integer, and convert to field element. In the instructions below, `[c:4
 
 For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
 The address space `e` can be any [valid address space](#addressing).
-We will use shorthand `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as `i32`. This means we interpret `c`
-as the 2's complement encoding of a 16-bit integer, sign extend it to 32-bits, and then perform signed 32-bit addition
-with the value of the register `[b:4]_1`.
-Memory access to `ptr: i32` is only valid if `0 <= ptr < 2^addr_max_bits`, in which case it is an access to
-`F::from_canonical_u32(ptr as u32)`.
+The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking 
+the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering 
+the 32 bits as the 2's complement of an `i32`.
+We will use shorthand `r32{c,g}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2], g)` as `i32`. This means performing 
+signed 32-bit addition with the value of the register `[b:4]_1`. For consistency with other notation, 
+we define the shorthand `r32{c}(b)` to mean `r32{c,g}(b)` where `g` is set to the most significant bit of `c`.
+Memory access to `ptr: i32` is only valid if `0 <= ptr < 2^addr_max_bits` and the access is aligned to the data size, in 
+which case it is an access to `F::from_canonical_u32(ptr as u32)`.
 
 All load/store instructions always do block accesses of block size `4`, even for LOADB_RV32 and STOREB_RV32.
 
-| Name        | Operands    | Description                                                                                                                    |
-| ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| LOADB_RV32  | `a,b,c,1,e` | `[a:4]_1 = sign_extend([r32{c}(b):1]_e)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
-| LOADH_RV32  | `a,b,c,1,e` | `[a:4]_1 = sign_extend([r32{c}(b):2]_e)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
-| LOADW_RV32  | `a,b,c,1,e` | `[a:4]_1 = [r32{c}(b):4]_e`                                                                                                    |
-| LOADBU_RV32 | `a,b,c,1,e` | `[a:4]_1 = zero_extend([r32{c}(b):1]_e)` Must zero-extend the number read from memory.                                         |
-| LOADHU_RV32 | `a,b,c,1,e` | `[a:4]_1 = zero_extend([r32{c}(b):2]_e)` Must zero-extend the number read from memory.                                         |
-| STOREB_RV32 | `a,b,c,1,e` | `[r32{c}(b):1]_e <- [a:1]_1`                                                                                                   |
-| STOREH_RV32 | `a,b,c,1,e` | `[r32{c}(b):2]_e <- [a:2]_1`                                                                                                   |
-| STOREW_RV32 | `a,b,c,1,e` | `[r32{c}(b):4]_e <- [a:4]_1`                                                                                                   |
+| Name        | Operands        | Description                                                                                                                    |
+| ----------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| LOADB_RV32  | `a,b,c,1,e,0,g` | `[a:4]_1 = sign_extend([r32{c,g}(b):1]_e)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
+| LOADH_RV32  | `a,b,c,1,e,0,g` | `[a:4]_1 = sign_extend([r32{c,g}(b):2]_e)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
+| LOADW_RV32  | `a,b,c,1,e,0,g` | `[a:4]_1 = [r32{c,g}(b):4]_e`                                                                                                    |
+| LOADBU_RV32 | `a,b,c,1,e,0,g` | `[a:4]_1 = zero_extend([r32{c,g}(b):1]_e)` Must zero-extend the number read from memory.                                         |
+| LOADHU_RV32 | `a,b,c,1,e,0,g` | `[a:4]_1 = zero_extend([r32{c,g}(b):2]_e)` Must zero-extend the number read from memory.                                         |
+| STOREB_RV32 | `a,b,c,1,e,0,g` | `[r32{c,g}(b):1]_e <- [a:1]_1`                                                                                                   |
+| STOREH_RV32 | `a,b,c,1,e,0,g` | `[r32{c,g}(b):2]_e <- [a:2]_1`                                                                                                   |
+| STOREW_RV32 | `a,b,c,1,e,0,g` | `[r32{c,g}(b):4]_e <- [a:4]_1`                                                                                                   |
 
 #### Branch/Jump/Upper Immediate
 
@@ -259,14 +263,13 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 
 In addition to opcodes which match 1-1 with the RV32IM opcodes, the following additional
 opcodes interact with address spaces outside of 1 and 2 to enable verification of programs
-with user input-output. We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2])` as in [`LOADW_RV32` and
-`STOREW_RV32`](#loadstore).
+with user input-output.
 
-| Name             | Operands    | Description                                                                                                                                                                       |
-| ---------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HINT_STOREW_RV32 | `_,b,_,1,2` | `[r32{0}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                                                                          |
-| HINT_BUFFER_RV32 | `a,b,_,1,2` | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. Very important: `l` should not be 0. |
-| REVEAL_RV32      | `a,b,c,1,3` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3` writing to the user IO address space `3`. Only valid when continuations are enabled.                                               |
+| Name             | Operands        | Description                                                                                                                                                                       |
+| ---------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HINT_STOREW_RV32 | `_,b,_,1,2`     | `[r32{0}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                                                                          |
+| HINT_BUFFER_RV32 | `a,b,_,1,2`     | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. Very important: `l` should not be 0. |
+| REVEAL_RV32      | `a,b,c,1,3,_,g` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3,_,g` writing to the user IO address space `3`. Only valid when continuations are enabled.                                           |
 
 #### Phantom Sub-Instructions
 

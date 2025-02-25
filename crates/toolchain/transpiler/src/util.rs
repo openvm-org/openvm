@@ -69,7 +69,7 @@ pub fn from_load<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instructio
         F::ONE, // rd is a register
         F::TWO, // we load from memory
         F::ZERO,
-        F::ZERO,
+        if dec_insn.imm < 0 { F::ONE } else { F::ZERO },
     )
 }
 
@@ -101,7 +101,7 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
         F::ONE,
         F::TWO,
         F::ZERO,
-        F::ZERO,
+        if dec_insn.imm < 0 { F::ONE } else { F::ZERO },
     )
 }
 
