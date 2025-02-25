@@ -47,7 +47,7 @@ pub struct Sha256VmControlCols<T> {
     /// Need to keep timestamp and read_ptr since block reads don't have the necessary information
     pub cur_timestamp: T,
     pub read_ptr: T,
-    /// Padding flags which will be used to encode the the number of non-padding cells in the current row
+    /// Padding flags which will be used to encode the number of non-padding cells in the current row
     pub pad_flags: [T; 6],
     /// A boolean flag that indicates whether a padding already occurred
     pub padding_occurred: T,
