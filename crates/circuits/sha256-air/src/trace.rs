@@ -523,7 +523,7 @@ pub fn generate_trace<F: PrimeField32>(
             } = ctx;
             let input_words = array::from_fn(|i| {
                 limbs_into_u32::<SHA256_WORD_U8S>(array::from_fn(|j| {
-                    input[i * SHA256_WORD_U8S + j] as u32
+                    input[(i + 1) * SHA256_WORD_U8S - j - 1] as u32
                 }))
             });
             sub_air.generate_block_trace(

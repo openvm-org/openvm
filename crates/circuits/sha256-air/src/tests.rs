@@ -94,7 +94,12 @@ fn rand_sha256_test() {
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let len = rng.gen_range(1..100);
     let random_records: Vec<_> = (0..len)
-        .map(|_| (array::from_fn(|_| rng.gen::<u8>()), true))
+        .map(|i| {
+            (
+                array::from_fn(|_| rng.gen::<u8>()),
+                rng.gen::<bool>() || i == len - 1,
+            )
+        })
         .collect();
     let chip = Sha256TestChip {
         air: Sha256TestAir {
