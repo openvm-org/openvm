@@ -17,7 +17,10 @@ use openvm_circuit::{
         program::ProgramBus,
     },
 };
-use openvm_circuit_primitives::utils::not;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    utils::not,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -36,9 +39,9 @@ use super::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 /// Reads instructions of the form OP a, b, c, d, e where \[a:4\]_d = \[b:4\]_d op \[c:4\]_e.
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
 /// is an immediate).
-#[derive(Debug)]
 pub struct Rv32BaseAluAdapterChip<F: Field> {
     pub air: Rv32BaseAluAdapterAir,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     _marker: PhantomData<F>,
 }
 
@@ -47,12 +50,15 @@ impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     ) -> Self {
         Self {
             air: Rv32BaseAluAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
+                bitwise_lookup_bus: bitwise_lookup_chip.bus(),
             },
+            bitwise_lookup_chip,
             _marker: PhantomData,
         }
     }
@@ -98,6 +104,7 @@ pub struct Rv32BaseAluAdapterCols<T> {
 pub struct Rv32BaseAluAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
+    bitwise_lookup_bus: BitwiseOperationLookupBus,
 }
 
 impl<F: Field> BaseAir<F> for Rv32BaseAluAdapterAir {
@@ -144,6 +151,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
             rs2_sign.clone()
                 * (AB::Expr::from_canonical_usize((1 << RV32_CELL_BITS) - 1) - rs2_sign),
         );
+        self.bitwise_lookup_bus
+            .send_range(rs2_limbs[0].clone(), rs2_limbs[1].clone())
+            .eval(
+                builder,
+                not(local.rs2_as) * ctx.instruction.is_valid.clone(),
+            );
 
         self.memory_bridge
             .read(
@@ -311,6 +324,10 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         } else {
             row_slice.rs2 = read_record.rs2_imm;
             row_slice.rs2_as = F::ZERO;
+            let rs2_imm = row_slice.rs2.as_canonical_u32();
+            let mask = (1 << RV32_CELL_BITS) - 1;
+            self.bitwise_lookup_chip
+                .request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
             aux_cols_factory.generate_read_aux(rs1, &mut row_slice.reads_aux[0]);
             // row_slice.reads_aux[1] is disabled
         }

@@ -53,6 +53,7 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
+            bitwise_chip.clone(),
         ),
         ShiftCoreChip::new(
             bitwise_chip.clone(),
