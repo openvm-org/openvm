@@ -40,7 +40,6 @@ use crate::system::{
     memory::{
         merkle::{DirectCompressionBus, MemoryMerkleBus},
         offline_checker::{MemoryBridge, MemoryBus},
-        online::MemoryLogEntry,
         MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
     },
     native_adapter::NativeAdapterChip,
@@ -211,14 +210,6 @@ pub struct VmInventory<E, P> {
     /// Order of insertion. The reverse of this will be the order the chips are destroyed
     /// to generate trace.
     insertion_order: Vec<ChipId>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct VmInventoryState {
-    /// Executor states in order
-    pub executors: Vec<Vec<u8>>,
-    /// Periphery states in order
-    pub periphery: Vec<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -455,12 +446,6 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     bus_idx_max: usize,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct VmChipComplexState<F> {
-    pub base: SystemBaseState<F>,
-    pub inventory: VmInventoryState,
-}
-
 /// The base [VmChipComplex] with only system chips.
 pub type SystemComplex<F> = VmChipComplex<F, SystemExecutor<F>, SystemPeriphery<F>>;
 
@@ -473,15 +458,6 @@ pub struct SystemBase<F> {
     pub memory_controller: MemoryController<F>,
     pub connector_chip: VmConnectorChip<F>,
     pub program_chip: ProgramChip<F>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct SystemBaseState<F> {
-    pub range_checker_chip: Vec<u8>,
-    pub initial_memory: Option<MemoryImage<F>>,
-    pub memory_logs: Vec<MemoryLogEntry<F>>,
-    pub connector_chip: Vec<u8>,
-    pub program_chip: Vec<u8>,
 }
 
 impl<F: PrimeField32> SystemBase<F> {
