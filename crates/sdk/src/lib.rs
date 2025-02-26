@@ -39,6 +39,7 @@ use openvm_transpiler::{
     FromElf,
 };
 use prover::vm::ContinuationVmProof;
+use tracing::{span, Level};
 use verifier::root::types::RootVmVerifierInput;
 
 pub mod commit;
@@ -74,6 +75,9 @@ impl Sdk {
         pkg_dir: P,
         target_filter: &Option<TargetFilter>,
     ) -> Result<Elf> {
+        let span = span!(Level::TRACE, "sdk_methods", method = "build");
+        let _guard = span.enter();
+
         let pkg = get_package(pkg_dir.as_ref());
         let target_dir = match build_guest_package(&pkg, &guest_opts, None, target_filter) {
             Ok(target_dir) => target_dir,
@@ -97,6 +101,9 @@ impl Sdk {
         elf: Elf,
         transpiler: Transpiler<F>,
     ) -> Result<VmExe<F>, TranspilerError> {
+        let span = span!(Level::TRACE, "sdk_methods", method = "transpile");
+        let _guard = span.enter();
+
         VmExe::from_elf(elf, transpiler)
     }
 
@@ -110,6 +117,9 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
+        let span = span!(Level::TRACE, "sdk_methods", method = "execute");
+        let _guard = span.enter();
+
         let vm = VmExecutor::new(vm_config);
         let final_memory = vm.execute(exe, inputs)?;
         let public_values = extract_public_values(
@@ -125,6 +135,9 @@ impl Sdk {
         app_fri_params: FriParameters,
         exe: VmExe<F>,
     ) -> Result<Arc<NonRootCommittedExe>> {
+        let span = span!(Level::TRACE, "sdk_methods", method = "commit_app_exe");
+        let _guard = span.enter();
+
         let committed_exe = commit_app_exe(app_fri_params, exe);
         Ok(committed_exe)
     }
@@ -134,6 +147,9 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
+        let span = span!(Level::TRACE, "sdk_methods", method = "app_keygen");
+        let _guard = span.enter();
+
         let app_pk = AppProvingKey::keygen(config);
         Ok(app_pk)
     }
@@ -148,6 +164,9 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
+        let span = span!(Level::TRACE, "sdk_methods", method = "generate_app_proof");
+        let _guard = span.enter();
+
         let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe);
         let proof = app_prover.generate_app_proof(inputs);
         Ok(proof)
@@ -163,6 +182,9 @@ impl Sdk {
         app_vk: &AppVerifyingKey,
         proof: &ContinuationVmProof<SC>,
     ) -> Result<(), VerificationError> {
+        let span = span!(Level::TRACE, "sdk_methods", method = "verify_app_proof");
+        let _guard = span.enter();
+
         let e = BabyBearPoseidon2Engine::new(app_vk.fri_params);
         for seg_proof in &proof.per_segment {
             e.verify(&app_vk.app_vm_vk, seg_proof)?
@@ -175,6 +197,13 @@ impl Sdk {
         app_vk: &AppVerifyingKey,
         proof: &Proof<SC>,
     ) -> Result<(), VerificationError> {
+        let span = span!(
+            Level::TRACE,
+            "sdk_methods",
+            method = "verify_app_proof_without_continuations"
+        );
+        let _guard = span.enter();
+
         let e = BabyBearPoseidon2Engine::new(app_vk.fri_params);
         e.verify(&app_vk.app_vm_vk, proof)
     }
@@ -185,6 +214,9 @@ impl Sdk {
         reader: &impl Halo2ParamsReader,
         pv_handler: Option<&impl StaticVerifierPvHandler>,
     ) -> Result<AggProvingKey> {
+        let span = span!(Level::TRACE, "sdk_methods", method = "agg_keygen");
+        let _guard = span.enter();
+
         let agg_pk = AggProvingKey::keygen(config, reader, pv_handler);
         Ok(agg_pk)
     }
@@ -200,6 +232,13 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
+        let span = span!(
+            Level::TRACE,
+            "sdk_methods",
+            method = "generate_root_verifier_input"
+        );
+        let _guard = span.enter();
+
         let stark_prover = StarkProver::new(app_pk, app_exe, agg_stark_pk);
         let proof = stark_prover.generate_root_verifier_input(inputs);
         Ok(proof)
@@ -217,6 +256,9 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
+        let span = span!(Level::TRACE, "sdk_methods", method = "generate_evm_proof");
+        let _guard = span.enter();
+
         let e2e_prover = ContinuationProver::new(reader, app_pk, app_exe, agg_pk);
         let proof = e2e_prover.generate_proof_for_evm(inputs);
         Ok(proof)
@@ -227,6 +269,13 @@ impl Sdk {
         reader: &impl Halo2ParamsReader,
         agg_pk: &AggProvingKey,
     ) -> Result<EvmVerifier> {
+        let span = span!(
+            Level::TRACE,
+            "sdk_methods",
+            method = "generate_snark_verifier_contract"
+        );
+        let _guard = span.enter();
+
         let params = reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
         let evm_verifier = agg_pk.halo2_pk.wrapper.generate_evm_verifier(&params);
         Ok(evm_verifier)
@@ -237,6 +286,9 @@ impl Sdk {
         evm_verifier: &EvmVerifier,
         evm_proof: &EvmProof,
     ) -> Result<u64> {
+        let span = span!(Level::TRACE, "sdk_methods", method = "verify_evm_proof");
+        let _guard = span.enter();
+
         let gas_cost = Halo2WrapperProvingKey::evm_verify(evm_verifier, evm_proof)
             .map_err(|reason| eyre::eyre!("Sdk::verify_evm_proof: {reason:?}"))?;
         Ok(gas_cost)
