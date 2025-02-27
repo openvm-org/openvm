@@ -578,7 +578,7 @@ dependencies = [
  "http 0.2.12",
  "http 1.2.0",
  "once_cell",
- "p256",
+ "p256 0.11.1",
  "percent-encoding",
  "ring",
  "sha2",
@@ -3814,6 +3814,7 @@ dependencies = [
  "openvm-ecc-sw-macros",
  "openvm-platform",
  "openvm-rv32im-guest",
+ "p256 0.13.2",
  "rand",
  "serde",
  "strum_macros",
@@ -4637,6 +4638,15 @@ dependencies = [
  "ecdsa 0.14.8",
  "elliptic-curve 0.12.3",
  "sha2",
+]
+
+[[package]]
+name = "p256"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9863ad85fa8f4460f9c48cb909d38a0d689dba1f6f6988a5e3e0d31071bcd4b"
+dependencies = [
+ "elliptic-curve 0.13.8",
 ]
 
 [[package]]
