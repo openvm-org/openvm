@@ -88,7 +88,7 @@ impl VmMetrics {
 
     /// Take the cycle tracker and fn bounds information for use in
     /// next segment. Leave the rest of the metrics for recording purposes.
-    pub(super) fn partial_take(&mut self) -> Self {
+    pub fn partial_take(&mut self) -> Self {
         Self {
             cycle_tracker: mem::take(&mut self.cycle_tracker),
             fn_bounds: mem::take(&mut self.fn_bounds),
@@ -100,7 +100,7 @@ impl VmMetrics {
     /// Clear statistics that are local to a segment
     // Important: chip and cycle count metrics should start over for SegmentationStrategy,
     // but we need to carry over the cycle tracker so spans can cross segments
-    pub(super) fn clear(&mut self) {
+    pub fn clear(&mut self) {
         *self = self.partial_take();
     }
 
