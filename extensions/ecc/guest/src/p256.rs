@@ -36,8 +36,6 @@ pub const CURVE_B: P256Coord = P256Coord::from_const_bytes(hex!(
     "4b60d2273e3cce3bf6b053ccb0061d65bc86987655bdebb3e7933aaad835c65a"
 ));
 
-pub struct P256;
-
 openvm_ecc_sw_macros::sw_declare! {
     P256Point { mod_type = P256Coord, a = CURVE_A, b = CURVE_B },
 }
@@ -76,7 +74,7 @@ impl CyclicGroup for P256Point {
     };
 }
 
-impl IntrinsicCurve for P256 {
+impl IntrinsicCurve for p256::NistP256 {
     type Scalar = P256Scalar;
     type Point = P256Point;
 
