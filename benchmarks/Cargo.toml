@@ -41,7 +41,7 @@ rand_chacha = { version = "0.3", default-features = false }
 k256 = { workspace = true, features = ["ecdsa"] }
 tiny-keccak.workspace = true
 derive-new.workspace = true
-derive_more = { workspace = true, features = ["from"] }
+derive_more = { workspace = true, features = ["from", "display"] }
 num-bigint = { workspace = true, features = ["std", "serde"] }
 serde.workspace = true
 bincode = { version = "2.0.0-rc.3" }
