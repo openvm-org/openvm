@@ -32,6 +32,7 @@ pub struct Memory<F> {
     pub(super) data: AddressMap<F, PAGE_SIZE>,
     pub(super) log: Vec<MemoryLogEntry<F>>,
     timestamp: u32,
+    reads_writes: (usize, usize),
 }
 
 impl<F: PrimeField32> Memory<F> {
@@ -40,6 +41,7 @@ impl<F: PrimeField32> Memory<F> {
             data: AddressMap::from_mem_config(mem_config),
             timestamp: INITIAL_TIMESTAMP + 1,
             log: Vec::with_capacity(mem_config.access_capacity),
+            reads_writes: (0, 0),
         }
     }
 
@@ -49,6 +51,7 @@ impl<F: PrimeField32> Memory<F> {
             data: image,
             timestamp: INITIAL_TIMESTAMP + 1,
             log: Vec::with_capacity(access_capacity),
+            reads_writes: (0, 0),
         }
     }
 
@@ -76,6 +79,11 @@ impl<F: PrimeField32> Memory<F> {
         });
         self.timestamp += 1;
 
+        #[cfg(feature = "bench-metrics")]
+        {
+            self.reads_writes.1 += 1;
+        }
+
         (self.last_record_id(), prev_data)
     }
 
@@ -96,6 +104,12 @@ impl<F: PrimeField32> Memory<F> {
             self.range_array::<N>(address_space, pointer)
         };
         self.timestamp += 1;
+
+        #[cfg(feature = "bench-metrics")]
+        {
+            self.reads_writes.0 += 1;
+        }
+
         (self.last_record_id(), values)
     }
 
@@ -116,6 +130,12 @@ impl<F: PrimeField32> Memory<F> {
     #[inline(always)]
     fn range_array<const N: usize>(&self, address_space: u32, pointer: u32) -> [F; N] {
         self.data.get_range(&(address_space, pointer))
+    }
+
+    pub fn prev_reads_writes(&mut self) -> (usize, usize) {
+        let ret = self.reads_writes;
+        self.reads_writes = (0, 0);
+        ret
     }
 }
 
