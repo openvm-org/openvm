@@ -215,7 +215,7 @@ where
             .expect("final memory should be set in continuations segment");
         let streams = segment.chip_complex.take_streams();
         #[cfg(feature = "bench-metrics")]
-        let metrics = mem::take(&mut segment.metrics);
+        let metrics = segment.metrics.partial_take();
         Ok(VmExecutorOneSegmentResult {
             segment,
             next_state: Some(VmExecutorNextSegmentState {
