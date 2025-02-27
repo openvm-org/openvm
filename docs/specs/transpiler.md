@@ -21,9 +21,9 @@ We now specify the transpilation for system instructions and the default set of 
 
 ## System Instructions
 
-| RISC-V Inst    | OpenVM Instruction                                               |
-| -------------- | ---------------------------------------------------------------- |
-| terminate      | TERMINATE `_, _, utof(imm)`                                      |
+| RISC-V Inst | OpenVM Instruction          |
+| ----------- | --------------------------- |
+| terminate   | TERMINATE `_, _, utof(imm)` |
 
 ## RV32IM Extension
 
@@ -39,14 +39,14 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 
 ### System Level Extensions to RV32IM
 
-| RISC-V Inst | OpenVM Instruction                                        |
-| ----------- | --------------------------------------------------------- |
-| hintstorew  | HINT_STOREW_RV32 `0, ind(rd), _, 1, 2`                    |
-| hintbuffer  | HINT_BUFFER_RV32 `ind(rs1), ind(rd), _, 1, 2`             |
+| RISC-V Inst | OpenVM Instruction                                                         |
+| ----------- | -------------------------------------------------------------------------- |
+| hintstorew  | HINT_STOREW_RV32 `0, ind(rd), _, 1, 2`                                     |
+| hintbuffer  | HINT_BUFFER_RV32 `ind(rs1), ind(rd), _, 1, 2`                              |
 | reveal      | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3, 0, sign_of(imm)` |
-| hintinput   | PHANTOM `_, _, disc(Rv32HintInput)`                       |
-| printstr    | PHANTOM `ind(rd), ind(rs1), disc(Rv32PrintStr)`           |
-| hintrandom  | PHANTOM `ind(rd), _, disc(Rv32HintRandom)`                |
+| hintinput   | PHANTOM `_, _, disc(Rv32HintInput)`                                        |
+| printstr    | PHANTOM `ind(rd), ind(rs1), disc(Rv32PrintStr)`                            |
+| hintrandom  | PHANTOM `ind(rd), _, disc(Rv32HintRandom)`                                 |
 
 ### Standard RV32IM Instructions
 
@@ -86,7 +86,7 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 | bltu        | BLTU_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                                      |
 | bgeu        | BGEU_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                                      |
 | jal         | JAL_RV32 `ind(rd), 0, itof(imm), 1, 0, (rd != x0)`                                                                                   |
-| jalr        | JALR_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 0, (rd != x0)`                                                           |
+| jalr        | JALR_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 0, (rd != x0), sign_of(imm)`                                             |
 | lui         | LUI_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31])), 1, 0, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                  |
 | auipc       | AUIPC_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31]) << 4), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                 |
 | mul         | MUL_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                         |

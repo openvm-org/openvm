@@ -254,7 +254,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
             F::ONE,
             F::ZERO,
             F::from_bool(dec_insn.rd != 0),
-            F::ZERO,
+            if dec_insn.imm < 0 { F::ONE } else { F::ZERO },
         )
     }
 

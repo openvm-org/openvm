@@ -528,7 +528,7 @@ pub struct MinimalInstruction<T> {
     pub opcode: T,
 }
 
-// This ProcessedInstruction is used by rv32_jalr and rv32_rdwrite
+// This ProcessedInstruction is used by rv32_rdwrite
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct ImmInstruction<T> {
@@ -536,6 +536,18 @@ pub struct ImmInstruction<T> {
     /// Absolute opcode number
     pub opcode: T,
     pub immediate: T,
+}
+
+// This ProcessedInstruction is used by rv32_jalr
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct SignedImmInstruction<T> {
+    pub is_valid: T,
+    /// Absolute opcode number
+    pub opcode: T,
+    pub immediate: T,
+    /// Sign of the immediate (1 if negative, 0 if positive)
+    pub imm_sign: T,
 }
 
 // =================================================================================================
