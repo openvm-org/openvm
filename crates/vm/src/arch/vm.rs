@@ -187,7 +187,6 @@ where
         #[cfg(feature = "bench-metrics")]
         {
             segment.metrics = from_state.metrics;
-            segment.metrics.clear();
         }
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
@@ -215,7 +214,7 @@ where
             .expect("final memory should be set in continuations segment");
         let streams = segment.chip_complex.take_streams();
         #[cfg(feature = "bench-metrics")]
-        let metrics = mem::take(&mut segment.metrics);
+        let metrics = VmMetrics::new_from(&mut segment.metrics);
         Ok(VmExecutorOneSegmentResult {
             segment,
             next_state: Some(VmExecutorNextSegmentState {

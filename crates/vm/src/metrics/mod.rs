@@ -86,14 +86,14 @@ impl VmMetrics {
         self.current_trace_cells = now_trace_cells;
     }
 
-    /// Clear statistics that are local to a segment
+    /// Build a new metrics object from an existing one.
     // Important: chip and cycle count metrics should start over for SegmentationStrategy,
     // but we need to carry over the cycle tracker so spans can cross segments
-    pub(super) fn clear(&mut self) {
-        *self = Self {
-            cycle_tracker: mem::take(&mut self.cycle_tracker),
-            fn_bounds: mem::take(&mut self.fn_bounds),
-            current_fn: mem::take(&mut self.current_fn),
+    pub fn new_from(other: &mut Self) -> Self {
+        Self {
+            cycle_tracker: mem::take(&mut other.cycle_tracker),
+            fn_bounds: mem::take(&mut other.fn_bounds),
+            current_fn: mem::take(&mut other.current_fn),
             ..Default::default()
         }
     }
