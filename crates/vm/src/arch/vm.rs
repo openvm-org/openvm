@@ -187,7 +187,6 @@ where
         #[cfg(feature = "bench-metrics")]
         {
             segment.metrics = from_state.metrics;
-            segment.metrics.clear();
         }
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
