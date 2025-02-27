@@ -126,7 +126,7 @@ where
     pub(crate) air_names: Vec<String>,
     /// Metrics collected for this execution segment alone.
     #[cfg(feature = "bench-metrics")]
-    pub(crate) metrics: VmMetrics,
+    pub metrics: VmMetrics,
 }
 
 pub struct ExecutionSegmentState {
