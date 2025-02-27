@@ -76,8 +76,11 @@ fn set_and_execute(
     let shift_amount = ptr_val % 4;
     tester.write(1, b, rs1);
 
-    let some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
+    let some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] = if a != 0 {
+        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))))
+    } else {
+        [F::ZERO; RV32_REGISTER_NUM_LIMBS]
+    };
     let read_data: [F; RV32_REGISTER_NUM_LIMBS] = read_data
         .unwrap_or(array::from_fn(|_| rng.gen_range(0..(1 << RV32_CELL_BITS))))
         .map(F::from_canonical_u32);
@@ -89,7 +92,15 @@ fn set_and_execute(
         chip,
         &Instruction::from_usize(
             opcode.global_opcode(),
-            [a, b, imm as usize, 1, 2, 0, imm_sign as usize],
+            [
+                a,
+                b,
+                imm as usize,
+                1,
+                2,
+                (a != 0) as usize,
+                imm_sign as usize,
+            ],
         ),
     );
 
@@ -99,7 +110,11 @@ fn set_and_execute(
         some_prev_data,
         shift_amount,
     );
-    assert_eq!(write_data, tester.read::<4>(1, a));
+    if a != 0 {
+        assert_eq!(write_data, tester.read::<4>(1, a));
+    } else {
+        assert_eq!([F::ZERO; RV32_REGISTER_NUM_LIMBS], tester.read::<4>(1, a));
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

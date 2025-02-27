@@ -58,18 +58,15 @@ pub fn from_i_type<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruct
 
 /// Create a new [`Instruction`] from a load operation
 pub fn from_load<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruction<F> {
-    if dec_insn.rd == 0 {
-        return nop();
-    }
     Instruction::new(
         VmOpcode::from_usize(opcode),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
         F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
-        F::ONE, // rd is a register
-        F::TWO, // we load from memory
-        F::ZERO,
-        if dec_insn.imm < 0 { F::ONE } else { F::ZERO },
+        F::ONE,                         // rd is a register
+        F::TWO,                         // we load from memory
+        F::from_bool(dec_insn.rd != 0), // we may need to use this flag in the operation
+        F::from_bool(dec_insn.imm < 0), // flag for sign extension
     )
 }
 
@@ -100,8 +97,8 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
         F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
         F::ONE,
         F::TWO,
-        F::ZERO,
-        if dec_insn.imm < 0 { F::ONE } else { F::ZERO },
+        F::ONE,
+        F::from_bool(dec_insn.imm < 0),
     )
 }
 

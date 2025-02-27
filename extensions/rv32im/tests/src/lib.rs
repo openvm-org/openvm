@@ -220,4 +220,21 @@ mod tests {
         air_test(config, exe);
         Ok(())
     }
+
+    #[test]
+    #[should_panic]
+    fn test_load_x0() {
+        let elf = build_example_program_at_path(get_programs_dir!(), "load_x0").unwrap();
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )
+        .unwrap();
+        let config = Rv32ImConfig::default();
+        let executor = VmExecutor::<F, _>::new(config.clone());
+        executor.execute(exe, vec![]).unwrap();
+    }
 }

@@ -188,16 +188,16 @@ which case it is an access to `F::from_canonical_u32(ptr as u32)`.
 
 All load/store instructions always do block accesses of block size `4`, even for LOADB_RV32 and STOREB_RV32.
 
-| Name        | Operands        | Description                                                                                                                      |
-| ----------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| LOADB_RV32  | `a,b,c,1,e,0,g` | `[a:4]_1 = sign_extend([r32{c,g}(b):1]_e)` Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
-| LOADH_RV32  | `a,b,c,1,e,0,g` | `[a:4]_1 = sign_extend([r32{c,g}(b):2]_e)` Must sign-extend the number read from memory, which is represented in 2’s complement. |
-| LOADW_RV32  | `a,b,c,1,e,0,g` | `[a:4]_1 = [r32{c,g}(b):4]_e`                                                                                                    |
-| LOADBU_RV32 | `a,b,c,1,e,0,g` | `[a:4]_1 = zero_extend([r32{c,g}(b):1]_e)` Must zero-extend the number read from memory.                                         |
-| LOADHU_RV32 | `a,b,c,1,e,0,g` | `[a:4]_1 = zero_extend([r32{c,g}(b):2]_e)` Must zero-extend the number read from memory.                                         |
-| STOREB_RV32 | `a,b,c,1,e,0,g` | `[r32{c,g}(b):1]_e <- [a:1]_1`                                                                                                   |
-| STOREH_RV32 | `a,b,c,1,e,0,g` | `[r32{c,g}(b):2]_e <- [a:2]_1`                                                                                                   |
-| STOREW_RV32 | `a,b,c,1,e,0,g` | `[r32{c,g}(b):4]_e <- [a:4]_1`                                                                                                   |
+| Name        | Operands        | Description                                                                                                                                                                         |
+| ----------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LOADB_RV32  | `a,b,c,1,e,f,g` | `if(f!=0) [a:4]_1 = sign_extend([r32{c,g}(b):1]_e)` The operand `f` is assumed to be boolean. Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
+| LOADH_RV32  | `a,b,c,1,e,f,g` | `if(f!=0) [a:4]_1 = sign_extend([r32{c,g}(b):2]_e)` The operand `f` is assumed to be boolean. Must sign-extend the number read from memory, which is represented in 2’s complement. |
+| LOADW_RV32  | `a,b,c,1,e,f,g` | `if(f!=0) [a:4]_1 = [r32{c,g}(b):4]_e` The operand `f` is assumed to be boolean.                                                                                                    |
+| LOADBU_RV32 | `a,b,c,1,e,f,g` | `if(f!=0) [a:4]_1 = zero_extend([r32{c,g}(b):1]_e)` The operand `f` is assumed to be boolean. Must zero-extend the number read from memory.                                         |
+| LOADHU_RV32 | `a,b,c,1,e,f,g` | `if(f!=0) [a:4]_1 = zero_extend([r32{c,g}(b):2]_e)` The operand `f` is assumed to be boolean. Must zero-extend the number read from memory.                                         |
+| STOREB_RV32 | `a,b,c,1,e,1,g` | `[r32{c,g}(b):1]_e <- [a:1]_1`                                                                                                                                                      |
+| STOREH_RV32 | `a,b,c,1,e,1,g` | `[r32{c,g}(b):2]_e <- [a:2]_1`                                                                                                                                                      |
+| STOREW_RV32 | `a,b,c,1,e,1,g` | `[r32{c,g}(b):4]_e <- [a:4]_1`                                                                                                                                                      |
 
 #### Branch/Jump/Upper Immediate
 

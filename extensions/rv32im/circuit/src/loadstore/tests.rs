@@ -76,30 +76,50 @@ fn set_and_execute(
     tester.write(1, b, rs1);
 
     let is_load = [LOADW, LOADHU, LOADBU].contains(&opcode);
-    let some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
+    let mut some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
-    let read_data: [F; RV32_REGISTER_NUM_LIMBS] =
+    let mut read_data: [F; RV32_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
 
     if is_load {
+        if a == 0 {
+            some_prev_data = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
+        }
         tester.write(1, a, some_prev_data);
         tester.write(mem_as, (ptr_val - shift_amount) as usize, read_data);
     } else {
+        if a == 0 {
+            read_data = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
+        }
         tester.write(mem_as, (ptr_val - shift_amount) as usize, some_prev_data);
         tester.write(1, a, read_data);
     }
+
+    let enabled_write = !(is_load & (a == 0));
 
     tester.execute(
         chip,
         &Instruction::from_usize(
             opcode.global_opcode(),
-            [a, b, imm as usize, 1, mem_as, 0, imm_sign as usize],
+            [
+                a,
+                b,
+                imm as usize,
+                1,
+                mem_as,
+                enabled_write as usize,
+                imm_sign as usize,
+            ],
         ),
     );
 
     let write_data = run_write_data(opcode, read_data, some_prev_data, shift_amount);
     if is_load {
-        assert_eq!(write_data, tester.read::<4>(1, a));
+        if enabled_write {
+            assert_eq!(write_data, tester.read::<4>(1, a));
+        } else {
+            assert_eq!([F::ZERO; RV32_REGISTER_NUM_LIMBS], tester.read::<4>(1, a));
+        }
     } else {
         assert_eq!(
             write_data,

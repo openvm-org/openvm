@@ -43,60 +43,60 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 | ----------- | -------------------------------------------------------------------------- |
 | hintstorew  | HINT_STOREW_RV32 `0, ind(rd), _, 1, 2`                                     |
 | hintbuffer  | HINT_BUFFER_RV32 `ind(rs1), ind(rd), _, 1, 2`                              |
-| reveal      | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3, 0, sign_of(imm)` |
+| reveal      | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3, 1, sign_of(imm)` |
 | hintinput   | PHANTOM `_, _, disc(Rv32HintInput)`                                        |
 | printstr    | PHANTOM `ind(rd), ind(rs1), disc(Rv32PrintStr)`                            |
 | hintrandom  | PHANTOM `ind(rd), _, disc(Rv32HintRandom)`                                 |
 
 ### Standard RV32IM Instructions
 
-| RISC-V Inst | OpenVM Instruction                                                                                                                   |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| add         | ADD_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                      |
-| sub         | SUB_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                      |
-| xor         | XOR_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                      |
-| or          | OR_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                       |
-| and         | AND_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                      |
-| sll         | SLL_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                      |
-| srl         | SRL_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                      |
-| sra         | SRA_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                      |
-| slt         | SLT_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                      |
-| sltu        | SLTU_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                     |
-| addi        | ADD_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                     |
-| xori        | XOR_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                     |
-| ori         | OR_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                      |
-| andi        | AND_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                     |
-| slli        | SLL_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                |
-| srli        | SRL_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                |
-| srai        | SRA_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                |
-| slti        | SLT_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                     |
-| sltiu       | SLTU_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                    |
-| lb          | LOADB_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 0, sign_of(imm)` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`  |
-| lh          | LOADH_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 0, sign_of(imm)` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`  |
-| lw          | LOADW_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 0, sign_of(imm)` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`  |
-| lbu         | LOADBU_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 0, sign_of(imm)` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)` |
-| lhu         | LOADHU_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 0, sign_of(imm)` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)` |
-| sb          | STOREB_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 0, sign_of(imm)`                                                   |
-| sh          | STOREH_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 0, sign_of(imm)`                                                   |
-| sw          | STOREW_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 0, sign_of(imm)`                                                   |
-| beq         | BEQ_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                                       |
-| bne         | BNE_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                                       |
-| blt         | BLT_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                                       |
-| bge         | BGE_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                                       |
-| bltu        | BLTU_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                                      |
-| bgeu        | BGEU_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                                      |
-| jal         | JAL_RV32 `ind(rd), 0, itof(imm), 1, 0, (rd != x0)`                                                                                   |
-| jalr        | JALR_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 0, (rd != x0), sign_of(imm)`                                             |
-| lui         | LUI_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31])), 1, 0, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                  |
-| auipc       | AUIPC_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31]) << 4), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                 |
-| mul         | MUL_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                         |
-| mulh        | MULH_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                        |
-| mulhsu      | MULHSU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                      |
-| mulhu       | MULHU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                       |
-| div         | DIV_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                         |
-| divu        | DIVU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                        |
-| rem         | REM_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                         |
-| remu        | REMU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                        |
+| RISC-V Inst | OpenVM Instruction                                                                                                          |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
+| add         | ADD_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| sub         | SUB_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| xor         | XOR_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| or          | OR_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                              |
+| and         | AND_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| sll         | SLL_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| srl         | SRL_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| sra         | SRA_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| slt         | SLT_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| sltu        | SLTU_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                            |
+| addi        | ADD_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
+| xori        | XOR_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
+| ori         | OR_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`             |
+| andi        | AND_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
+| slli        | SLL_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| srli        | SRL_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| srai        | SRA_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| slti        | SLT_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
+| sltiu       | SLTU_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`           |
+| lb          | LOADB_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                   |
+| lh          | LOADH_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                   |
+| lw          | LOADW_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                   |
+| lbu         | LOADBU_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                  |
+| lhu         | LOADHU_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                  |
+| sb          | STOREB_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                                          |
+| sh          | STOREH_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                                          |
+| sw          | STOREW_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                                          |
+| beq         | BEQ_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                              |
+| bne         | BNE_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                              |
+| blt         | BLT_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                              |
+| bge         | BGE_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                              |
+| bltu        | BLTU_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                             |
+| bgeu        | BGEU_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                             |
+| jal         | JAL_RV32 `ind(rd), 0, itof(imm), 1, 0, (rd != x0)`                                                                          |
+| jalr        | JALR_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 0, (rd != x0), sign_of(imm)`                                    |
+| lui         | LUI_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31])), 1, 0, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`         |
+| auipc       | AUIPC_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31]) << 4), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`        |
+| mul         | MUL_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                |
+| mulh        | MULH_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                               |
+| mulhsu      | MULHSU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| mulhu       | MULHU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                              |
+| div         | DIV_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                |
+| divu        | DIVU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                               |
+| rem         | REM_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                |
+| remu        | REMU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                               |
 
 ## OpenVM Intrinsic VM Extensions
 
