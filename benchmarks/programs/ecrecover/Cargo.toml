@@ -18,6 +18,10 @@ revm-precompile = { version = "14.0.0", default-features = false }
 alloy-primitives = { version = "0.8.10", default-features = false, features = [
     "native-keccak",
 ] } # revm does not re-export this feature so we enable it here
+derive_more = { version = "1.0.0", features = [
+    "from",
+    "display",
+], default-features = false }
 
 [features]
 default = []
