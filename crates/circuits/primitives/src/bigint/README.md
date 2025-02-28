@@ -76,3 +76,10 @@ If we combine the operations into one chip, we will also need extra columns: `op
 Therefore we will just have separate chips for different operations.
 
 We are unsure if division is actually needed, so commented out for now.
+
+## Note on `is_valid` boolean check
+
+Both the `CheckCarryModToZeroSubAir` and `CheckCarryToZeroSubAir` subair's do not assert that `is_valid` is boolean.
+They assume the parent air already does this.
+
+This is to avoid duplicating the `is_valid` boolean check every time we use these subair's, since we may call `CheckCarryModToZeroSubAir::eval` multiple times in the parent air's `eval` method.

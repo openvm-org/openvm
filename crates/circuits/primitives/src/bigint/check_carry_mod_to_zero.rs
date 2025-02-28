@@ -55,6 +55,9 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryModToZeroSubAir {
         AB::Expr: 'a,
         AB: 'a;
 
+    /// Assumes that the parent chip has already asserted `is_valid` is to be boolean.
+    /// This is to avoid duplicating that constraint since this subair's eval method is
+    /// often called multiple times from the parent air.
     fn eval<'a>(
         &'a self,
         builder: &'a mut AB,
@@ -68,7 +71,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryModToZeroSubAir {
         AB::Expr: 'a,
     {
         let CheckCarryModToZeroCols { quotient, carries } = cols;
-        builder.assert_bool(is_valid.clone());
         let q_offset = AB::F::from_canonical_usize(1 << self.check_carry_to_zero.limb_bits);
         for &q in quotient.iter() {
             range_check(
