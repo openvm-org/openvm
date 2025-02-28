@@ -1,8 +1,10 @@
-use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::FieldAlgebra};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_field::{Field, FieldAlgebra},
+};
 
 use super::{utils::range_check, OverflowInt};
 use crate::SubAir;
-
 pub struct CheckCarryToZeroCols<T> {
     pub carries: Vec<T>,
 }
@@ -76,6 +78,12 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
                 is_valid.clone(),
             );
         }
+
+        // Ensure that the carry constraints below don't overflow.
+        assert!(
+            self.decomp + self.limb_bits < AB::F::bits(),
+            "range_checker_bits + limb_bits >= modulus_bits"
+        );
 
         // 2. Constrain the carries and expr.
         let mut previous_carry = AB::Expr::ZERO;
