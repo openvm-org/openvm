@@ -421,7 +421,6 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
     ) {
         assert!(self.builder.is_finalized());
         assert_eq!(inputs.len(), self.num_input);
-        // Remove this if this is no longer the case in the future.
         assert_eq!(self.num_variables, self.constraints.len());
 
         assert_eq!(flags.len(), self.builder.num_flags);
