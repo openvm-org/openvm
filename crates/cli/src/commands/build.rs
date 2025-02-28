@@ -17,7 +17,7 @@ use crate::{
 #[command(name = "build", about = "Compile an OpenVM program")]
 pub struct BuildCmd {
     #[clap(flatten)]
-    pub(crate) build_args: BuildArgs,
+    build_args: BuildArgs,
 }
 
 impl BuildCmd {
