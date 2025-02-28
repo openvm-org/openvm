@@ -2,7 +2,12 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use eyre::Result;
-use openvm_sdk::{fs::read_exe_from_file, Sdk};
+use openvm_circuit::arch::instructions::exe::VmExe;
+use openvm_sdk::{
+    config::{AppConfig, SdkVmConfig},
+    fs::read_exe_from_file,
+    Sdk, F,
+};
 
 use crate::{
     default::{DEFAULT_APP_CONFIG_PATH, DEFAULT_APP_EXE_PATH},
@@ -24,10 +29,23 @@ pub struct RunCmd {
 
 impl RunCmd {
     pub fn run(&self) -> Result<()> {
-        let exe = read_exe_from_file(&self.exe)?;
-        let app_config = read_config_toml_or_default(&self.config)?;
-        let output = Sdk.execute(exe, app_config.app_vm_config, read_to_stdin(&self.input)?)?;
-        println!("Execution output: {:?}", output);
+        execute(self.exe.clone(), &self.config, &self.input)?;
         Ok(())
     }
+}
+
+pub(crate) fn execute(
+    exe_path: PathBuf,
+    config: &PathBuf,
+    input: &Option<Input>,
+) -> Result<(VmExe<F>, AppConfig<SdkVmConfig>)> {
+    let exe = read_exe_from_file(exe_path)?;
+    let app_config = read_config_toml_or_default(config)?;
+    let output = Sdk.execute(
+        exe.clone(),
+        app_config.app_vm_config.clone(),
+        read_to_stdin(input)?,
+    )?;
+    println!("Execution output: {:?}", output);
+    Ok((exe, app_config))
 }
