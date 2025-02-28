@@ -44,7 +44,7 @@ Each supported operation (namely +-*) updates the max abs value.
 
 Given an OverflowInt with `max_overflow_bits = m`, and assume the non-overflow limb bits is `k`.
 The positive carry is at most `m - k` bits. And since the negative carry is rounding down (see below section) it’s at most (in the abs sense) `-2^(m-k)`.
-So the range of carry should be `[2^(m-k), 2^(m-k))`. The way we range-check this is by adding `2^(m-k)` to it so it’s within `[0, 2^(m-k+1))` and this within `m-k+1` bits.
+So the range of carry should be `[-2^(m-k), 2^(m-k))`. The way we range-check this is by adding `2^(m-k)` to it so it’s within `[0, 2^(m-k+1))` and this within `m-k+1` bits.
 
 ### Negative carries
 
