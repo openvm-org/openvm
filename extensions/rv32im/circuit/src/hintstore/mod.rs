@@ -17,7 +17,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    utils::next_power_of_two_or_zero,
+    utils::{next_power_of_two_or_zero, not},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -113,8 +113,10 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
 
         let is_valid = local_cols.is_single + local_cols.is_buffer;
         let is_start = local_cols.is_single + local_cols.is_buffer_start;
-        // should only be used when is_buffer is true
-        let is_end = AB::Expr::ONE - next_cols.is_buffer + next_cols.is_buffer_start;
+        // `is_end` is false iff the next row is a buffer row that is not buffer start
+        // This is boolean because is_buffer_start == 1 => is_buffer == 1
+        // Note: every non-valid row has `is_end == 1`
+        let is_end = not::<AB::Expr>(next_cols.is_buffer) + next_cols.is_buffer_start;
 
         let mut rem_words = AB::Expr::ZERO;
         let mut next_rem_words = AB::Expr::ZERO;
@@ -130,6 +132,20 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             next_mem_ptr = next_mem_ptr * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
                 + next_cols.mem_ptr_limbs[i];
         }
+
+        // Constrain that if local is invalid, then the next state is invalid as well
+        builder
+            .when_transition()
+            .when(not::<AB::Expr>(is_valid.clone()))
+            .assert_zero(next_cols.is_single + next_cols.is_buffer);
+
+        // Constrain that when we start a buffer, the is_buffer_start is set to 1
+        builder
+            .when(local_cols.is_single)
+            .assert_one(is_end.clone());
+        builder
+            .when_first_row()
+            .assert_one(not::<AB::Expr>(local_cols.is_buffer) + local_cols.is_buffer_start);
 
         // read mem_ptr
         self.memory_bridge
@@ -157,10 +173,6 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             )
             .eval(builder, local_cols.is_buffer_start);
 
-        builder
-            .when(local_cols.is_single)
-            .assert_one(rem_words.clone());
-
         // write hint
         self.memory_bridge
             .write(
@@ -175,9 +187,9 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             * AB::F::from_canonical_usize(HINT_STOREW as usize + self.offset))
             + (local_cols.is_buffer
                 * AB::F::from_canonical_usize(HINT_BUFFER as usize + self.offset));
-        let to_pc = local_cols.from_state.pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP);
+
         self.execution_bridge
-            .execute(
+            .execute_and_increment_pc(
                 expected_opcode,
                 [
                     local_cols.is_buffer * (local_cols.num_words_ptr),
@@ -187,11 +199,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
                     AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
                 ],
                 local_cols.from_state,
-                ExecutionState {
-                    pc: to_pc,
-                    timestamp: timestamp
-                        + (rem_words.clone() * AB::F::from_canonical_usize(timestamp_delta)),
-                },
+                rem_words.clone() * AB::F::from_canonical_usize(timestamp_delta),
             )
             .eval(builder, is_start.clone());
 
@@ -220,14 +228,25 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
         }
 
         // buffer transition
+        // Note: is_single == 1 implies is_valid == 1 and is_end == 1, so this asserts rem_words == 1 when is_single == 1
         builder
-            .when(local_cols.is_buffer)
+            .when(is_valid)
             .when(is_end.clone())
             .assert_one(rem_words.clone());
 
-        let mut when_buffer_transition =
-            builder.when(local_cols.is_buffer * (AB::Expr::ONE - is_end.clone()));
+        let mut when_buffer_transition = builder.when(not::<AB::Expr>(is_end.clone()));
+        // Notes on `rem_words`: we constrain that `rem_words` doesn't overflow when we first read it and
+        // that on each row it decreases by one (below). We also constrain that when the current instruction ends then `rem_words` is 1.
+        // However, we don't constrain that when `rem_words` is 1 then we have to end the current instruction.
+        // The only way to exploit this if we to do some multiple of `p` number of additional illegal `buffer` rows where `p` is the modulus of `F`.
+        // However, when doing `p` additional `buffer` rows we will always increment `mem_ptr` to an illegal memory address at some point,
+        // which prevents this exploit.
         when_buffer_transition.assert_one(rem_words.clone() - next_rem_words.clone());
+        // Note: we only care about the `next_mem_ptr = compose(next_mem_ptr_limb)` and not the individual limbs:
+        // the limbs do not need to be in the range, they can be anything to make `next_mem_ptr` correct --
+        // this is just a way to not have to have another column for `mem_ptr`.
+        // The constraint we care about is `next.mem_ptr == local.mem_ptr + 4`.
+        // Finally, since we increment by `4` each time, any out of bounds memory access will be rejected by the memory bus before we overflow the field.
         when_buffer_transition.assert_eq(
             next_mem_ptr.clone() - mem_ptr.clone(),
             AB::F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS),
