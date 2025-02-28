@@ -28,8 +28,8 @@ pub struct BenchCmd {
     #[clap(long, action)]
     output: Option<PathBuf>,
 
-    #[clap(long, action)]
-    profile: bool,
+    #[clap(long, action, default_value = "false", help = "enable tracing")]
+    tracing: bool,
 
     #[clap(long, action)]
     verbose: bool,
@@ -40,7 +40,7 @@ pub struct BenchCmd {
 
 impl BenchCmd {
     pub fn run(&self) -> Result<()> {
-        if self.profile {
+        if self.tracing {
             setup_tracing();
         }
         let elf_path = build(&self.build_args)?.unwrap();
