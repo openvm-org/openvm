@@ -46,8 +46,12 @@ impl BenchCmd {
             setup_tracing();
         }
 
-        let elf_path = build(&self.build_args)?.unwrap();
-        let (exe, _vm_config) = execute(elf_path, &self.build_args.config, &self.input).unwrap();
+        let _elf_path = build(&self.build_args)?.unwrap();
+        let (exe, _vm_config) = execute(
+            self.build_args.exe_output.clone(),
+            &self.build_args.config,
+            &self.input,
+        )?;
 
         let app_log_blowup = 2;
         let engine = BabyBearPoseidon2Engine::new(
