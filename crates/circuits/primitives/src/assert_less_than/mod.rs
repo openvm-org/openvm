@@ -98,10 +98,6 @@ impl AssertLtSubAir {
         }
     }
 
-    pub fn when_transition(self) -> AssertLtWhenTransitionAir {
-        AssertLtWhenTransitionAir(self)
-    }
-
     pub fn range_max_bits(&self) -> usize {
         self.bus.range_max_bits
     }
@@ -183,44 +179,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLtSubAir {
         // Note: every AIR that uses this sub-AIR must include the range checks for soundness
         self.eval_range_checks(builder, lower_decomp, io.count.clone());
         self.eval_without_range_checks(builder, io, lower_decomp);
-    }
-}
-
-/// The same subair as [AssertLtSubAir] except that non-range check
-/// constraints are not imposed on the last row.
-/// Intended use case is for asserting less than between entries in
-/// adjacent rows.
-#[derive(Clone, Copy, Debug)]
-pub struct AssertLtWhenTransitionAir(pub AssertLtSubAir);
-
-impl<AB: InteractionBuilder> SubAir<AB> for AssertLtWhenTransitionAir {
-    type AirContext<'a>
-        = (AssertLessThanIo<AB::Expr>, &'a [AB::Var])
-    where
-        AB::Expr: 'a,
-        AB::Var: 'a,
-        AB: 'a;
-
-    /// Imposes the non-interaction constraints on all except the last row. This is
-    /// intended for use when the comparators `x, y` are on adjacent rows.
-    ///
-    /// This function does also enable the interaction constraints _on every row_.
-    /// The `eval_interactions` performs range checks on `lower_decomp` on every row, even
-    /// though in this AIR the lower_decomp is not used on the last row.
-    /// This simply means the trace generation must fill in the last row with numbers in
-    /// range (e.g., with zeros)
-    fn eval<'a>(
-        &'a self,
-        builder: &'a mut AB,
-        (io, lower_decomp): (AssertLessThanIo<AB::Expr>, &'a [AB::Var]),
-    ) where
-        AB::Var: 'a,
-        AB::Expr: 'a,
-    {
-        self.0
-            .eval_range_checks(builder, lower_decomp, io.count.clone());
-        self.0
-            .eval_without_range_checks(&mut builder.when_transition(), io, lower_decomp);
     }
 }
 
