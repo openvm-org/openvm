@@ -11,6 +11,12 @@ pub struct RangeTupleCheckerBus<const N: usize> {
 
 impl<const N: usize> RangeTupleCheckerBus<N> {
     pub fn new(index: usize, sizes: [u32; N]) -> Self {
+        let mut product = 1u32;
+        for &size in sizes.iter() {
+            product = product
+                .checked_mul(size)
+                .expect("The number of the range tuple checker rows is too large");
+        }
         Self { index, sizes }
     }
 
