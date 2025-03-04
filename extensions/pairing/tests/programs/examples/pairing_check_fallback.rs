@@ -48,35 +48,55 @@ mod bn254 {
             _Q: &[AffinePoint<Self::Fp2>],
         ) -> (Self::Fp12, Self::Fp12) {
             // return dummy values
-            (Fp12::ONE, Fp12::ZERO)
+            (Fp12::ZERO, Fp12::ZERO)
         }
 
+        // copied from Bn254::pairing_check
         fn pairing_check(
             P: &[AffinePoint<Self::Fp>],
             Q: &[AffinePoint<Self::Fp2>],
         ) -> Result<(), PairingCheckError> {
-            let (c, u) = Self::pairing_check_hint(P, Q);
-            // TODO: handle c = 0
-            let c_inv = Fp12::ONE.div_unsafe(&c);
-
-            // f * u == c^λ
-            // f * u == c^{6x + 2 + q^3 - q^2 + q}
-            // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
-            // where fc == f * c^-{6x + 2}
-            // c_mul = c^-{q^3 - q^2 + q}
-            let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
-            let c_q2 = FieldExtension::frobenius_map(&c, 2);
-            let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
-            let c_mul = c_q3_inv * c_q2 * c_q_inv;
-
-            // Compute miller loop with c_inv
-            let fc = Bn254::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
-
-            if fc * c_mul * u == Fp12::ONE {
-                Ok(())
-            } else {
+            Self::try_honest_pairing_check(P, Q).unwrap_or_else(|| {
                 let f = Bn254::multi_miller_loop(P, Q);
                 exp_check_fallback(&f, &Bn254::FINAL_EXPONENT)
+            })
+        }
+    }
+
+    #[allow(non_snake_case)]
+    impl Bn254Wrapper {
+        // copied from Bn254::try_honest_pairing_check
+        fn try_honest_pairing_check(
+            P: &[AffinePoint<<Self as PairingCheck>::Fp>],
+            Q: &[AffinePoint<<Self as PairingCheck>::Fp2>],
+        ) -> Option<Result<(), PairingCheckError>> {
+            let (c, s) = Self::pairing_check_hint(P, Q);
+
+            // f * s = c^{q - x}
+            // f * s = c^q * c^-x
+            // f * c^x * c^-q * s = 1,
+            //   where fc = f * c'^x (embedded Miller loop with c conjugate inverse),
+            //   and the curve seed x = -0xd201000000010000
+            //   the miller loop computation includes a conjugation at the end because the value of the
+            //   seed is negative, so we need to conjugate the miller loop input c as c'. We then substitute
+            //   y = -x to get c^-y and finally compute c'^-y as input to the miller loop:
+            // f * c'^-y * c^-q * s = 1
+            let c_q = FieldExtension::frobenius_map(&c, 1);
+            let c_conj = c.conjugate();
+            if c_conj == Fp12::ZERO {
+                return None;
+            }
+            let c_conj_inv = Fp12::ONE.div_unsafe(&c_conj);
+
+            // fc = f_{Miller,x,Q}(P) * c^{x}
+            // where
+            //   fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} ), with c' denoting the conjugate of c
+            let fc = Bn254::multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
+
+            if fc * s == c_q {
+                Some(Ok(()))
+            } else {
+                None
             }
         }
     }
@@ -141,13 +161,28 @@ mod bls12_381 {
             _Q: &[AffinePoint<Self::Fp2>],
         ) -> (Self::Fp12, Self::Fp12) {
             // return dummy values
-            (Fp12::ONE, Fp12::ZERO)
+            (Fp12::ZERO, Fp12::ZERO)
         }
 
+        // copied from Bls12_381::pairing_check
         fn pairing_check(
             P: &[AffinePoint<Self::Fp>],
             Q: &[AffinePoint<Self::Fp2>],
         ) -> Result<(), PairingCheckError> {
+            Self::try_honest_pairing_check(P, Q).unwrap_or_else(|| {
+                let f = Bls12_381::multi_miller_loop(P, Q);
+                exp_check_fallback(&f, &Bls12_381::FINAL_EXPONENT)
+            })
+        }
+    }
+
+    #[allow(non_snake_case)]
+    impl Bls12_381Wrapper {
+        // copied from Bls12_381::try_honest_pairing_check
+        fn try_honest_pairing_check(
+            P: &[AffinePoint<<Self as PairingCheck>::Fp>],
+            Q: &[AffinePoint<<Self as PairingCheck>::Fp2>],
+        ) -> Option<Result<(), PairingCheckError>> {
             let (c, s) = Self::pairing_check_hint(P, Q);
 
             // f * s = c^{q - x}
@@ -160,8 +195,11 @@ mod bls12_381 {
             //   y = -x to get c^-y and finally compute c'^-y as input to the miller loop:
             // f * c'^-y * c^-q * s = 1
             let c_q = FieldExtension::frobenius_map(&c, 1);
-            // TODO: handle c = 0
-            let c_conj_inv = Fp12::ONE.div_unsafe(&c.conjugate());
+            let c_conj = c.conjugate();
+            if c_conj == Fp12::ZERO {
+                return None;
+            }
+            let c_conj_inv = Fp12::ONE.div_unsafe(&c_conj);
 
             // fc = f_{Miller,x,Q}(P) * c^{x}
             // where
@@ -169,10 +207,9 @@ mod bls12_381 {
             let fc = Bls12_381::multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
 
             if fc * s == c_q {
-                Ok(())
+                Some(Ok(()))
             } else {
-                let f = Bls12_381::multi_miller_loop(P, Q);
-                exp_check_fallback(&f, &Bls12_381::FINAL_EXPONENT)
+                None
             }
         }
     }
