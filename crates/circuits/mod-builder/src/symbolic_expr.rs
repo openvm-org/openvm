@@ -24,6 +24,7 @@ pub enum SymbolicExpr {
     Sub(Box<SymbolicExpr>, Box<SymbolicExpr>),
     Mul(Box<SymbolicExpr>, Box<SymbolicExpr>),
     // Division is not allowed in "constraints", but can only be used in "computes"
+    // Note that division by zero in "computes" will panic.
     Div(Box<SymbolicExpr>, Box<SymbolicExpr>),
     // Add integer
     IntAdd(Box<SymbolicExpr>, isize),
@@ -149,6 +150,7 @@ impl Mul<SymbolicExpr> for &SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div for SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -157,6 +159,7 @@ impl Div for SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div<&SymbolicExpr> for SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -165,6 +168,7 @@ impl Div<&SymbolicExpr> for SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div for &SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -173,6 +177,7 @@ impl Div for &SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div<SymbolicExpr> for &SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -517,6 +522,7 @@ impl SymbolicExpr {
 
     /// Result will be within [0, prime).
     /// self should be a compute expression.
+    /// Note that division by zero will panic.
     pub fn compute(
         &self,
         inputs: &[BigUint],

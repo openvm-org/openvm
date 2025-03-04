@@ -20,6 +20,7 @@ See the [examples section](#examples) for code examples to follow along with.
 5. Use the `FieldVariable`s to build the expression.
    Just use the `FieldVariables` as algebraic variables to construct expressions.
    You can use the `+`, `-`, `*`, `/`, operators and the `square`, `int_add` (add a scalar), `int_mul` (multiply by a scalar) methods.
+   Note that division by zero will panic.
    You can also use the `select` method to select between two `FieldVariable`s based on a flag.
 
    Each `FieldVariable` holds an abstract syntax tree representation of its expression.

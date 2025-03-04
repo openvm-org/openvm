@@ -256,6 +256,7 @@ impl FieldVariable {
     }
 
     // expr cannot have division, so auto-save a new variable.
+    // Note that division by zero will panic.
     pub fn div(&mut self, other: &mut FieldVariable) -> FieldVariable {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
         let builder = self.builder.borrow();
@@ -398,6 +399,7 @@ impl Mul<&mut FieldVariable> for &mut FieldVariable {
     }
 }
 
+// Note that division by zero will panic.
 impl Div<FieldVariable> for FieldVariable {
     type Output = FieldVariable;
 
