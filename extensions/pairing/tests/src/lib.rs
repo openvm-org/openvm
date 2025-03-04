@@ -291,6 +291,61 @@ mod bn254 {
         air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
+
+    #[test]
+    fn test_bn254_pairing_check_fallback() -> Result<()> {
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_check_fallback",
+            ["bn254"],
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        )?;
+
+        let S = G1Affine::generator();
+        let Q = G2Affine::generator();
+
+        let mut S_mul = [
+            G1Affine::from(S * Fr::from(1)),
+            G1Affine::from(S * Fr::from(2)),
+        ];
+        S_mul[1].y = -S_mul[1].y;
+        let Q_mul = [
+            G2Affine::from(Q * Fr::from(2)),
+            G2Affine::from(Q * Fr::from(1)),
+        ];
+
+        let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+        let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+
+        // Gather inputs
+        let io0 = s
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
+            .map(FieldAlgebra::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io1 = q
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter())
+            .flat_map(|fp2| fp2.to_coeffs())
+            .flat_map(|fp| fp.to_bytes())
+            .map(FieldAlgebra::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
+
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -572,6 +627,60 @@ mod bls12_381 {
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "pairing_check",
+            ["bls12_381"],
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        )?;
+
+        let S = G1Affine::generator();
+        let Q = G2Affine::generator();
+
+        let mut S_mul = [
+            G1Affine::from(S * Fr::from(1)),
+            G1Affine::from(S * Fr::from(2)),
+        ];
+        S_mul[1].y = -S_mul[1].y;
+        let Q_mul = [
+            G2Affine::from(Q * Fr::from(2)),
+            G2Affine::from(Q * Fr::from(1)),
+        ];
+        let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+        let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+
+        // Gather inputs
+        let io0 = s
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
+            .map(FieldAlgebra::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io1 = q
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter())
+            .flat_map(|fp2| fp2.to_coeffs())
+            .flat_map(|fp| fp.to_bytes())
+            .map(FieldAlgebra::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
+
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_bls12_381_pairing_check_fallback() -> Result<()> {
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_check_fallback",
             ["bls12_381"],
         )?;
         let openvm_exe = VmExe::from_elf(

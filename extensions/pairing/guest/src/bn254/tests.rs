@@ -2,6 +2,8 @@ use group::{ff::Field, prime::PrimeCurveAffine};
 use halo2curves_axiom::bn256::{
     Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1,
 };
+use num_bigint::BigUint;
+use num_traits::One;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
 use rand::{rngs::StdRng, SeedableRng};
@@ -14,7 +16,7 @@ use crate::{
             convert_bn254_halo2_fq2_to_fp2, convert_bn254_halo2_fq_to_fp,
             convert_g2_affine_halo2_to_openvm,
         },
-        Bn254, G2Affine as OpenVmG2Affine,
+        Bn254, G2Affine as OpenVmG2Affine, BN254_MODULUS, BN254_ORDER,
     },
     pairing::{
         fp2_invert_assign, fp6_invert_assign, fp6_square_assign, FinalExp, MultiMillerLoop,
@@ -279,4 +281,10 @@ fn test_bn254_pairing_check_hint_host() {
 
     assert_eq!(c, c_cmp);
     assert_eq!(u, u_cmp);
+}
+
+#[test]
+fn test_bn254_final_exponent() {
+    let final_exp = (BN254_MODULUS.pow(12) - BigUint::one()) / BN254_ORDER.clone();
+    assert_eq!(Bn254::FINAL_EXPONENT.to_vec(), final_exp.to_bytes_be());
 }

@@ -18,8 +18,8 @@ use {
 
 use super::{Bls12_381, Fp, Fp12, Fp2};
 use crate::pairing::{
-    Evaluatable, EvaluatedLine, FromLineMType, LineMulMType, MillerStep, MultiMillerLoop,
-    PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
+    exp_check_fallback, Evaluatable, EvaluatedLine, FromLineMType, LineMulMType, MillerStep,
+    MultiMillerLoop, PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
 };
 #[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
 use crate::{
@@ -362,7 +362,8 @@ impl PairingCheck for Bls12_381 {
         if fc * s == c_q {
             Ok(())
         } else {
-            Err(PairingCheckError)
+            let f = Self::multi_miller_loop(P, Q);
+            exp_check_fallback(&f, &Self::FINAL_EXPONENT)
         }
     }
 }
