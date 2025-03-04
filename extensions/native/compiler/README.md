@@ -12,7 +12,7 @@ Native compiler supports two modes:
 - Static mode: the program is compiled into a Halo2 circuit. This mode doesn't support jump and heap allocation. This
   means that the program always has a **fixed-length** execution trace. In this mode, all loops are unrolled at compile
   time.
-- Dynamic mode: the program is compiled into a STARK circuit. This mode supports jum and heap allocation.
+- Dynamic mode: the program is compiled into a STARK circuit. This mode supports jump and heap allocation.
   This means that the program could have a **variable-length** execution trace.
 
 # Variable
@@ -135,6 +135,9 @@ So far functions are not supported in DSL.
 
 ## Control Flow
 `Builder` unrolls loops/branches if the condition can be evaluated at compile time.
+
+Be careful when using assignments in loops/branches. Using `set_value`/`assign` which can be executed at runtime instead 
+of Rust assignment(`=`), which can only be executed at compile time.
 
 # AsmCompiler
 
