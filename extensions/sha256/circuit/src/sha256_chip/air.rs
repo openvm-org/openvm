@@ -134,25 +134,25 @@ impl Sha256VmAir {
         local: &Sha256VmRoundCols<AB::Var>,
         next: &Sha256VmRoundCols<AB::Var>,
     ) {
-        let next_is_lastest_row = next.inner.flags.is_digest_row * next.inner.flags.is_last_block;
+        let next_is_last_row = next.inner.flags.is_digest_row * next.inner.flags.is_last_block;
 
         // Constrain `padding_occured`
         builder.assert_bool(local.control.padding_occurred);
         builder
-            .when(next_is_lastest_row.clone())
+            .when(next_is_last_row.clone())
             .assert_one(local.control.padding_occurred);
 
         builder
-            .when(next_is_lastest_row.clone())
+            .when(next_is_last_row.clone())
             .assert_zero(next.control.padding_occurred);
 
         builder
-            .when(local.control.padding_occurred - next_is_lastest_row.clone())
+            .when(local.control.padding_occurred - next_is_last_row.clone())
             .assert_one(next.control.padding_occurred);
 
         builder
             .when_transition()
-            .when(not(next.inner.flags.is_first_4_rows) - next_is_lastest_row)
+            .when(not(next.inner.flags.is_first_4_rows) - next_is_last_row)
             .assert_eq(
                 next.control.padding_occurred,
                 local.control.padding_occurred,

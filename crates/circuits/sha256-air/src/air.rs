@@ -238,8 +238,9 @@ impl Sha256Air {
         let local_is_padding_row = local_cols.flags.is_padding_row();
         let next_is_padding_row = next_cols.flags.is_padding_row();
 
-        // Checking the very last block has `is_last_block` -> at least one block is a `is_last_block`
-        // the rest of the constraining of `is_last_block` should be done by the wrapper chip
+        // We check that the very last block has `is_last_block` set to true, which guarantees that
+        // there is at least one complete message. If other digest rows have `is_last_block` set to true,
+        // then the trace will be interpreted as containing multiple messages.
         builder
             .when(next_is_padding_row.clone())
             .when(local_cols.flags.is_digest_row)
@@ -342,6 +343,10 @@ impl Sha256Air {
         self.eval_digest_row(builder, local_cols, next_cols);
         let local_cols: &Sha256DigestCols<AB::Var> =
             local[start_col..start_col + SHA256_DIGEST_WIDTH].borrow();
+        // We will pass `next_is_padding_row` as the `is_last_block_of_trace` parameter because
+        // a given digest row is in the last block of the trace if and only if the next row is a padding row.
+        // This is because each block has 17 rows, so the length of the trace without padding is a multiple
+        // of 17, which means there will always be padding after the last digest row.
         self.eval_prev_hash::<AB>(builder, local_cols, next_is_padding_row);
     }
 
@@ -351,7 +356,7 @@ impl Sha256Air {
         &self,
         builder: &mut AB,
         local: &Sha256DigestCols<AB::Var>,
-        is_lastest_block: AB::Expr,
+        is_last_block_of_trace: AB::Expr, // note this indicates the last block of the trace, not the last block of the message
     ) {
         // Constrain that next block's `prev_hash` is equal to the current block's `hash`
         let composed_hash: [[<AB as AirBuilder>::Expr; SHA256_WORD_U16S]; SHA256_HASH_WORDS] =
@@ -365,7 +370,7 @@ impl Sha256Air {
             });
         // Need to handle the case if this is the very last block of the trace matrix
         let next_global_block_idx = select(
-            is_lastest_block,
+            is_last_block_of_trace,
             AB::Expr::ONE,
             local.flags.global_block_idx + AB::Expr::ONE,
         );
