@@ -135,14 +135,20 @@ where
         self.config.system().continuation_enabled
     }
 
-    pub fn execute_segments(
+    /// Executes the program in segments.
+    /// After each segment is executed, call the provided closure on the execution result.
+    /// Returns the results from each closure, one per segment.
+    ///
+    /// The closure takes `f(segment_idx, segment) -> R`.
+    pub fn execute_and_then<R>(
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
+        mut f: impl FnMut(usize, ExecutionSegment<F, VC>) -> R,
+    ) -> Result<Vec<R>, ExecutionError> {
         let mem_config = self.config.system().memory_config;
         let exe = exe.into();
-        let mut segments = vec![];
+        let mut segment_results = vec![];
         let memory = AddressMap::from_iter(
             mem_config.as_offset,
             1 << mem_config.as_height,
@@ -156,16 +162,26 @@ where
         loop {
             let _span = info_span!("execute_segment", segment = segment_idx).entered();
             let one_segment_result = self.execute_until_segment(exe.clone(), state)?;
-            segments.push(one_segment_result.segment);
+            segment_results.push(f(segment_idx, one_segment_result.segment));
             if one_segment_result.next_state.is_none() {
                 break;
             }
             state = one_segment_result.next_state.unwrap();
             segment_idx += 1;
         }
-        tracing::debug!("Number of continuation segments: {}", segments.len());
+        tracing::debug!("Number of continuation segments: {}", segment_results.len());
+        #[cfg(feature = "bench-metrics")]
+        metrics::counter!("num_segments").absolute(segment_results.len() as u64);
 
-        Ok(segments)
+        Ok(segment_results)
+    }
+
+    pub fn execute_segments(
+        &self,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
+    ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
+        self.execute_and_then(exe, input, |_, seg| seg)
     }
 
     /// Executes a program until a segmentation happens.
@@ -232,9 +248,10 @@ where
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
-        let mut results = self.execute_segments(exe, input)?;
-        let last = results.last_mut().unwrap();
-        let final_memory = mem::take(&mut last.final_memory);
+        let mut last = None;
+        self.execute_and_then(exe, input, |_, seg| last = Some(seg))?;
+        let last = last.expect("at least one segment must be executed");
+        let final_memory = last.final_memory;
         let end_state =
             last.chip_complex.connector_chip().boundary_states[1].expect("end state must be set");
         if end_state.is_terminate != 1 {
@@ -275,6 +292,7 @@ where
             input,
         )
     }
+
     fn execute_and_generate_impl<SC: StarkGenericConfig>(
         &self,
         exe: VmExe<F>,
@@ -286,18 +304,15 @@ where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let mut segments = self.execute_segments(exe, input)?;
-        let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
+        let mut final_memory = None;
+        let per_segment = self.execute_and_then(exe, input, |seg_idx, mut seg| {
+            final_memory = mem::take(&mut seg.final_memory);
+            tracing::info_span!("trace_gen", segment = seg_idx)
+                .in_scope(|| seg.generate_proof_input(committed_program.clone()))
+        })?;
 
         Ok(VmExecutorResult {
-            per_segment: segments
-                .into_iter()
-                .enumerate()
-                .map(|(seg_idx, seg)| {
-                    tracing::info_span!("trace_gen", segment = seg_idx)
-                        .in_scope(|| seg.generate_proof_input(committed_program.clone()))
-                })
-                .collect(),
+            per_segment,
             final_memory,
         })
     }
@@ -535,8 +550,6 @@ where
         pk: &MultiStarkProvingKey<SC>,
         results: VmExecutorResult<SC>,
     ) -> Vec<Proof<SC>> {
-        #[cfg(feature = "bench-metrics")]
-        metrics::counter!("num_segments").absolute(results.per_segment.len() as u64);
         results
             .per_segment
             .into_iter()

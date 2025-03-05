@@ -118,6 +118,7 @@ where
     VC: VmConfig<F>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
+    /// Memory image after segment was executed. Not used in trace generation.
     pub final_memory: Option<MemoryImage<F>>,
 
     pub since_last_segment_check: usize,
