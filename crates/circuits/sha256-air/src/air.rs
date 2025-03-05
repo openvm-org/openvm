@@ -496,12 +496,12 @@ impl Sha256Air {
                 builder
                     .when(is_row_4_15)
                     .assert_bool(next.message_schedule.carry_or_buffer[i][j * 2 + 1]);
-                // Constrain w being composed of bits
-                for j in 0..SHA256_WORD_BITS {
-                    builder
-                        .when(next.flags.is_round_row)
-                        .assert_bool(next.message_schedule.w[i][j]);
-                }
+            }
+            // Constrain w being composed of bits
+            for j in 0..SHA256_WORD_BITS {
+                builder
+                    .when(next.flags.is_round_row)
+                    .assert_bool(next.message_schedule.w[i][j]);
             }
         }
     }
