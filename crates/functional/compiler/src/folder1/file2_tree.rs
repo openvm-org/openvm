@@ -15,7 +15,7 @@ use crate::folder1::ir::Material;
 
 #[derive(Clone)]
 pub struct ExpressionContainer {
-    pub(crate) expression: Arc<Mutex<Expression>>,
+    pub(crate) expression: Box<Expression>,
     pub(crate) tipo: Option<Type>,
 }
 
@@ -359,14 +359,13 @@ impl RootContainer {
 impl ExpressionContainer {
     pub fn new(expression: Expression) -> Self {
         Self {
-            expression: Arc::new(Mutex::new(expression)),
+            expression: Box::new(expression),
             tipo: None,
         }
     }
 
     fn children(&self) -> Vec<ExpressionContainer> {
-        let guard = self.expression.lock().unwrap();
-        match &*guard {
+        match self.expression.as_ref() {
             Expression::Algebraic { fields, .. } => {
                 fields.iter().map(|field| field.clone()).collect()
             }
@@ -377,8 +376,7 @@ impl ExpressionContainer {
     }
 
     pub fn dependencies(&self, declaration: bool) -> Vec<String> {
-        let guard = self.expression.lock().unwrap();
-        match &*guard {
+        match self.expression.as_ref() {
             Expression::Variable { name } => vec![name.clone()],
             Expression::Let { name } if declaration => {
                 if declaration {
@@ -401,8 +399,7 @@ impl ExpressionContainer {
         path: &ScopePath,
         material: Material,
     ) -> Result<(), CompilationError> {
-        let mut guard = self.expression.lock().unwrap();
-        match &mut *guard {
+        match self.expression.as_mut() {
             Expression::Constant { .. } => {
                 self.tipo = Some(Type::Field);
             }
@@ -565,117 +562,110 @@ impl ExpressionContainer {
         path: &ScopePath,
         material: Material,
     ) -> Result<(), CompilationError> {
-        let mut needs_resolve = false;
-        {
-            let mut guard = self.expression.lock().unwrap();
-            match &mut *guard {
-                Expression::Let { name } => {
-                    material.assert_type(
-                        &function_container.get_declaration_type(path, name)?,
-                        expected_type,
-                    )?;
-                    if material == Material::Dematerialized
-                        && expected_type.contains_reference(&function_container.type_set(), true)?
-                    {
-                        return Err(CompilationError::ReferenceDefinitionMustBeMaterialized(
-                            name.clone(),
-                        ));
-                    }
-                    function_container.define(path, name)?;
+        match self.expression.as_mut() {
+            Expression::Let { name } => {
+                material.assert_type(
+                    &function_container.get_declaration_type(path, name)?,
+                    expected_type,
+                )?;
+                if material == Material::Dematerialized
+                    && expected_type.contains_reference(&function_container.type_set(), true)?
+                {
+                    return Err(CompilationError::ReferenceDefinitionMustBeMaterialized(
+                        name.clone(),
+                    ));
                 }
-                Expression::Define { name } => {
-                    let declaration_type = match material {
-                        Material::Materialized => expected_type.clone(),
-                        Material::Dematerialized => {
-                            Type::Unmaterialized(Arc::new(expected_type.clone()))
-                        }
-                    };
-                    function_container.declare(path, name, declaration_type)?;
-                    function_container.define(path, name)?;
+                function_container.define(path, name)?;
+            }
+            Expression::Define { name } => {
+                let declaration_type = match material {
+                    Material::Materialized => expected_type.clone(),
+                    Material::Dematerialized => {
+                        Type::Unmaterialized(Arc::new(expected_type.clone()))
+                    }
+                };
+                function_container.declare(path, name, declaration_type)?;
+                function_container.define(path, name)?;
+            }
+            Expression::Algebraic {
+                constructor,
+                fields,
+            } => {
+                let expected_component_types = function_container
+                    .type_set()
+                    .get_component_types(constructor)?;
+                if fields.len() != expected_component_types.len() {
+                    return Err(CompilationError::IncorrectNumberOfComponents(
+                        constructor.clone(),
+                        fields.len(),
+                        expected_component_types.len(),
+                    ));
                 }
-                Expression::Algebraic {
-                    constructor,
-                    fields,
-                } => {
-                    let expected_component_types = function_container
-                        .type_set()
-                        .get_component_types(constructor)?;
-                    if fields.len() != expected_component_types.len() {
-                        return Err(CompilationError::IncorrectNumberOfComponents(
-                            constructor.clone(),
-                            fields.len(),
-                            expected_component_types.len(),
-                        ));
-                    }
-                    for (field, expected_field_type) in
-                        fields.iter_mut().zip_eq(expected_component_types.iter())
-                    {
-                        field.resolve_top_down(
-                            expected_field_type,
-                            function_container,
-                            path,
-                            material,
-                        )?;
-                    }
-
-                    material.assert_type(
-                        &function_container
-                            .type_set()
-                            .get_constructor_type(constructor)?,
-                        expected_type,
-                    )?;
-                }
-                Expression::ConstArray { elements } => {
-                    let (elem_type, len) = expected_type.get_const_array_type(material)?;
-                    if elements.len() != len {
-                        return Err(CompilationError::IncorrectNumberOfElementsInConstArray(
-                            elements.len(),
-                            len,
-                        ));
-                    }
-                    for element in elements.iter_mut() {
-                        element.resolve_top_down(elem_type, function_container, path, material)?;
-                    }
-                }
-                Expression::Dematerialized { value } => {
-                    if material == Material::Materialized {
-                        match expected_type {
-                            Type::Unmaterialized(_) => {}
-                            _ => {
-                                return Err(CompilationError::UnexpectedUnmaterialized(
-                                    expected_type.clone(),
-                                ))
-                            }
-                        }
-                    }
-                    value.resolve_top_down(
-                        expected_type,
+                for (field, expected_field_type) in
+                    fields.iter_mut().zip_eq(expected_component_types.iter())
+                {
+                    field.resolve_top_down(
+                        expected_field_type,
                         function_container,
                         path,
-                        Material::Dematerialized,
+                        material,
                     )?;
                 }
-                _ => {
-                    needs_resolve = true;
+
+                material.assert_type(
+                    &function_container
+                        .type_set()
+                        .get_constructor_type(constructor)?,
+                    expected_type,
+                )?;
+            }
+            Expression::ConstArray { elements } => {
+                let (elem_type, len) = expected_type.get_const_array_type(material)?;
+                if elements.len() != len {
+                    return Err(CompilationError::IncorrectNumberOfElementsInConstArray(
+                        elements.len(),
+                        len,
+                    ));
+                }
+                for element in elements.iter_mut() {
+                    element.resolve_top_down(elem_type, function_container, path, material)?;
+                }
+            }
+            Expression::Dematerialized { value } => {
+                if material == Material::Materialized {
+                    match expected_type {
+                        Type::Unmaterialized(_) => {}
+                        _ => {
+                            return Err(CompilationError::UnexpectedUnmaterialized(
+                                expected_type.clone(),
+                            ))
+                        }
+                    }
+                }
+                value.resolve_top_down(
+                    expected_type,
+                    function_container,
+                    path,
+                    Material::Dematerialized,
+                )?;
+            }
+            _ => {
+                if expected_type.contains_reference(&function_container.type_set(), false)? {
+                    return Err(CompilationError::CannotEquateReferences(
+                        expected_type.clone(),
+                    ));
+                }
+                self.resolve_defined(function_container, path, material)?;
+                if !material.same_type(&self.tipo.clone().unwrap(), &expected_type) {
+                    return Err(CompilationError::UnexpectedType(
+                        self.tipo.clone().unwrap(),
+                        expected_type.clone(),
+                    ));
                 }
             }
         }
-        if needs_resolve {
-            if expected_type.contains_reference(&function_container.type_set(), false)? {
-                return Err(CompilationError::CannotEquateReferences(
-                    expected_type.clone(),
-                ));
-            }
-            self.resolve_defined(function_container, path, material)?;
-            if !material.same_type(&self.tipo.clone().unwrap(), &expected_type) {
-                return Err(CompilationError::UnexpectedType(
-                    self.tipo.clone().unwrap(),
-                    expected_type.clone(),
-                ));
-            }
-        } else {
-            self.tipo = Some(expected_type.clone());
-        }
+
+        self.tipo = Some(expected_type.clone());
         Ok(())
     }
 }

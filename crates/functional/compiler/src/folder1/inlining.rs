@@ -285,8 +285,7 @@ impl Atom {
 
 impl ExpressionContainer {
     fn inline(&mut self, renamer: &Renamer) {
-        let mut guard = self.expression.lock().unwrap();
-        match &mut *guard {
+        match self.expression.as_mut() {
             Expression::Constant { .. } => {}
             Expression::Variable { name } => {
                 renamer.rename(name);

@@ -67,8 +67,7 @@ impl ExpressionContainer {
         representation_table: &mut RepresentationTable,
         scope: &ScopePath,
     ) -> Vec<AirExpression> {
-        let guard = self.expression.lock().unwrap();
-        match &*guard {
+        match self.expression.as_ref() {
             Expression::Constant { value } => {
                 vec![AirExpression::constant(*value)]
             }
@@ -153,90 +152,87 @@ impl ExpressionContainer {
         scope: &ScopePath,
         representation: &mut [Option<AirExpression>],
     ) {
-        let mut need_to_do_defined = false;
-        {
-            let guard = self.expression.lock().unwrap();
-            match &*guard {
-                Expression::Constant { value } => {
+        match self.expression.as_ref() {
+            Expression::Constant { value } => {
+                air_constructor.add_scoped_constraint(
+                    scope,
+                    vec![AirExpression::constant(*value)],
+                    representation,
+                );
+            }
+            Expression::Let { name } => {
+                air_constructor.add_scoped_constraint(
+                    scope,
+                    representation_table.get_representation(scope, name),
+                    representation,
+                );
+            }
+            Expression::Define { name } => {
+                representation_table.fill_in_and_add_representation(
+                    air_constructor,
+                    scope,
+                    name,
+                    representation,
+                );
+            }
+            Expression::Algebraic {
+                constructor,
+                fields,
+            } => {
+                let type_name = &type_set.constructors[constructor].0;
+                let tipo = &type_set.types[type_name];
+                let mut offset = 0;
+                if tipo.variants.len() != 1 {
+                    let i = tipo
+                        .variants
+                        .iter()
+                        .position(|variant| &variant.name == constructor)
+                        .unwrap();
                     air_constructor.add_scoped_constraint(
                         scope,
-                        vec![AirExpression::constant(*value)],
-                        representation,
+                        vec![AirExpression::constant(i as isize)],
+                        &mut representation[0..1],
                     );
+                    offset += 1;
                 }
-                Expression::Let { name } => {
-                    air_constructor.add_scoped_constraint(
-                        scope,
-                        representation_table.get_representation(scope, name),
-                        representation,
-                    );
-                }
-                Expression::Define { name } => {
-                    representation_table.fill_in_and_add_representation(
+                for field in fields {
+                    let type_length = type_set.calc_type_size(field.get_type());
+                    field.represent_top_down(
+                        type_set,
+                        representation_table,
                         air_constructor,
                         scope,
-                        name,
-                        representation,
+                        &mut representation[offset..offset + type_length],
                     );
-                }
-                Expression::Algebraic {
-                    constructor,
-                    fields,
-                } => {
-                    let type_name = &type_set.constructors[constructor].0;
-                    let tipo = &type_set.types[type_name];
-                    let mut offset = 0;
-                    if tipo.variants.len() != 1 {
-                        let i = tipo
-                            .variants
-                            .iter()
-                            .position(|variant| &variant.name == constructor)
-                            .unwrap();
-                        air_constructor.add_scoped_constraint(
-                            scope,
-                            vec![AirExpression::constant(i as isize)],
-                            &mut representation[0..1],
-                        );
-                        offset += 1;
-                    }
-                    for field in fields {
-                        let type_length = type_set.calc_type_size(field.get_type());
-                        field.represent_top_down(
-                            type_set,
-                            representation_table,
-                            air_constructor,
-                            scope,
-                            &mut representation[offset..offset + type_length],
-                        );
-                        offset += type_length;
-                    }
-                }
-                Expression::Dematerialized { .. } => {}
-                Expression::ConstArray { elements } => {
-                    let (elem_type, _) = self
-                        .get_type()
-                        .get_const_array_type(Material::Materialized)
-                        .unwrap();
-                    let elem_size = type_set.calc_type_size(elem_type);
-                    for (i, element) in elements.iter().enumerate() {
-                        element.represent_top_down(
-                            type_set,
-                            representation_table,
-                            air_constructor,
-                            scope,
-                            &mut representation[i * elem_size..(i + 1) * elem_size],
-                        );
-                    }
-                }
-                _ => {
-                    need_to_do_defined = true;
+                    offset += type_length;
                 }
             }
-        }
-        if need_to_do_defined {
-            let defined_representation =
-                self.represent_defined(type_set, representation_table, scope);
-            air_constructor.add_scoped_constraint(scope, defined_representation, representation);
+            Expression::Dematerialized { .. } => {}
+            Expression::ConstArray { elements } => {
+                let (elem_type, _) = self
+                    .get_type()
+                    .get_const_array_type(Material::Materialized)
+                    .unwrap();
+                let elem_size = type_set.calc_type_size(elem_type);
+                for (i, element) in elements.iter().enumerate() {
+                    element.represent_top_down(
+                        type_set,
+                        representation_table,
+                        air_constructor,
+                        scope,
+                        &mut representation[i * elem_size..(i + 1) * elem_size],
+                    );
+                }
+            }
+            _ => {
+                let defined_representation =
+                    self.represent_defined(type_set, representation_table, scope);
+                air_constructor.add_scoped_constraint(
+                    scope,
+                    defined_representation,
+                    representation,
+                );
+            }
         }
     }
 

@@ -101,8 +101,7 @@ impl ExpressionContainer {
         namer: &VariableNamer,
         type_set: &TypeSet,
     ) -> TokenStream {
-        let guard = self.expression.lock().unwrap();
-        match &*guard {
+        match self.expression.as_ref() {
             Expression::Constant { value } => isize_to_field_elem(*value),
             Expression::Variable { name } => namer.variable_name(scope, name),
             Expression::Let { .. } => unreachable!(),
@@ -195,20 +194,18 @@ impl ExpressionContainer {
         namer: &mut VariableNamer,
         type_set: &TypeSet,
     ) -> TokenStream {
-        let this_copy = this.clone();
-        let guard = self.expression.lock().unwrap();
-        match &*guard {
+        match self.expression.as_ref() {
             Expression::Let { name } => {
                 let name = namer.variable_name(scope, name);
-                return quote! {
+                quote! {
                     #name = #this;
-                };
+                }
             }
             Expression::Define { name } => {
                 let name = namer.variable_name(scope, name);
-                return quote! {
+                quote! {
                     #name = #this;
-                };
+                }
             }
             Expression::Algebraic {
                 constructor,
@@ -223,16 +220,16 @@ impl ExpressionContainer {
                     .iter()
                     .zip_eq(names.iter())
                     .map(|(field, name)| field.transpile_top_down(scope, name, namer, type_set));
-                return quote! {
+                quote! {
                     if let #type_name(#(#names),*) = #this {
                         #(#insides)*
                     } else {
                         panic!();
                     }
-                };
+                }
             }
             Expression::Dematerialized { value } => {
-                return value.transpile_top_down(scope, this, namer, type_set);
+                value.transpile_top_down(scope, this, namer, type_set)
             }
             Expression::ConstArray { elements } => {
                 let names = (0..elements.len())
@@ -242,16 +239,17 @@ impl ExpressionContainer {
                     .iter()
                     .zip_eq(names.iter())
                     .map(|(elem, name)| elem.transpile_top_down(scope, name, namer, type_set));
-                return quote! {
+                quote! {
                     let [(#(#names),*)] = #this;
                     #(#insides)*
-                };
+                }
             }
-            _ => {}
-        }
-        let defined = self.transpile_defined(scope, namer, type_set);
-        quote! {
-            assert_eq!(#this_copy, #defined);
+            _ => {
+                let defined = self.transpile_defined(scope, namer, type_set);
+                quote! {
+                    assert_eq!(#this, #defined);
+                }
+            }
         }
     }
 }
