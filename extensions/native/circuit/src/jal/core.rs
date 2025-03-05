@@ -43,11 +43,13 @@ where
 {
     fn eval(
         &self,
-        _builder: &mut AB,
+        builder: &mut AB,
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &JalCoreCols<_> = local_core.borrow();
+
+        builder.assert_bool(cols.is_valid);
 
         AdapterAirContext {
             to_pc: Some(from_pc.into() + cols.imm.into()),
