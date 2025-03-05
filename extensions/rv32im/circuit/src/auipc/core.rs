@@ -11,7 +11,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -29,8 +29,10 @@ const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct Rv32AuipcCoreCols<T> {
     pub is_valid: T,
+    // The limbs of the immediate except the least significant limb since it is always 0
     pub imm_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
-    pub pc_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
+    // The limbs of the PC except the most significant and the least significant limbs
+    pub pc_limbs: [T; RV32_REGISTER_NUM_LIMBS - 2],
     pub rd_data: [T; RV32_REGISTER_NUM_LIMBS],
 }
 
@@ -70,45 +72,92 @@ where
             rd_data,
         } = *cols;
         builder.assert_bool(is_valid);
-        let intermed_val = pc_limbs
+
+        // We want to constrain:
+        // rd = pc + imm (i32 add) where rd_data represents limbs of rd, pc_limbs are limbs of pc except most and least significant, imm_limbs are limbs of imm except least significant
+
+        // We know that rd_data[0] is equal to the least significant limb of PC
+        // Thus, the intermediate value will be equal to PC without its most significant limb:
+        let intermed_val = rd_data[0]
+            + pc_limbs
+                .iter()
+                .enumerate()
+                .fold(AB::Expr::ZERO, |acc, (i, &val)| {
+                    acc + val * AB::Expr::from_canonical_u32(1 << ((i + 1) * RV32_CELL_BITS))
+                });
+
+        // We can then compute the most significant limb of PC
+        let pc_msl = (from_pc - intermed_val)
+            * AB::F::from_canonical_usize(1 << (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1)))
+                .inverse();
+
+        // The vector pc_limbs contains the actual limbs of PC in little endian order
+        let pc_limbs = [rd_data[0]]
             .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_u32(1 << ((i + 1) * RV32_CELL_BITS))
-            });
+            .chain(pc_limbs.iter())
+            .map(|x| (*x).into())
+            .chain([pc_msl])
+            .collect::<Vec<AB::Expr>>();
+
+        let mut carry: [AB::Expr; RV32_REGISTER_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
+        let carry_divide = AB::F::from_canonical_usize(1 << RV32_CELL_BITS).inverse();
+
+        // Don't need to constrain the least significant limb of the addition
+        // since the least significant limb of immediate is 0 so rd_data[0] is just pc_limbs[0]
+        // Reminder: the imm_limbs array doesn't include the least significant limb thus i-1 is used in the loop
+        for i in 1..RV32_REGISTER_NUM_LIMBS {
+            carry[i] = AB::Expr::from(carry_divide)
+                * (pc_limbs[i].clone() + imm_limbs[i - 1] - rd_data[i] + carry[i - 1].clone());
+            builder.when(is_valid).assert_bool(carry[i].clone());
+        }
+
+        // Range checking of rd_data entries to RV32_CELL_BITS bits
+        for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
+            self.bus
+                .send_range(rd_data[i * 2], rd_data[i * 2 + 1])
+                .eval(builder, is_valid);
+        }
+
+        // The immediate and PC limbs need range checking to ensure they're within [0, 2^RV32_CELL_BITS)
+        // Since we range check two items at a time, doing this way helps efficiently divide the limbs into groups of 2
+        // Note: range checking the limbs of immediate and PC separately would result in additional range checks
+        //       since they both have odd number of limbs that need to be range checked
+        let mut need_range_check: Vec<AB::Expr> = Vec::new();
+        for limb in imm_limbs {
+            need_range_check.push(limb.into());
+        }
+
+        // pc_limbs[0] is already range checked through rd_data[0]
+        for (i, limb) in pc_limbs.iter().skip(1).enumerate() {
+            if i == pc_limbs.len() - 1 {
+                // Range check the most significant limb of pc to be in [0, 2^{PC_BITS-(RV32_REGISTER_NUM_LIMBS-1)*RV32_CELL_BITS})
+                need_range_check.push(
+                    (*limb).clone()
+                        * AB::Expr::from_canonical_usize(
+                            1 << (pc_limbs.len() * RV32_CELL_BITS - PC_BITS),
+                        ),
+                );
+            } else {
+                need_range_check.push((*limb).clone());
+            }
+        }
+
+        // need_range_check contains (RV32_REGISTER_NUM_LIMBS - 1) elements from imm_limbs
+        // and (RV32_REGISTER_NUM_LIMBS - 1) elements from pc_limbs
+        // Hence, is of even length 2*RV32_REGISTER_NUM_LIMBS - 4
+        assert_eq!(need_range_check.len() % 2, 0);
+        for pair in need_range_check.chunks_exact(2) {
+            self.bus
+                .send_range(pair[0].clone(), pair[1].clone())
+                .eval(builder, is_valid);
+        }
+
         let imm = imm_limbs
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_u32(1 << (i * RV32_CELL_BITS))
             });
-
-        builder
-            .when(cols.is_valid)
-            .assert_eq(rd_data[0], from_pc - intermed_val);
-
-        let mut carry: [AB::Expr; RV32_REGISTER_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
-        let carry_divide = AB::F::from_canonical_usize(1 << RV32_CELL_BITS).inverse();
-
-        for i in 1..RV32_REGISTER_NUM_LIMBS {
-            carry[i] = AB::Expr::from(carry_divide)
-                * (pc_limbs[i - 1] + imm_limbs[i - 1] - rd_data[i] + carry[i - 1].clone());
-            builder.when(is_valid).assert_bool(carry[i].clone());
-        }
-
-        // Range checking to 8 bits
-        for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
-            self.bus
-                .send_range(rd_data[i * 2], rd_data[i * 2 + 1])
-                .eval(builder, is_valid);
-        }
-        let limbs = [imm_limbs, pc_limbs].concat();
-        for i in 0..(RV32_REGISTER_NUM_LIMBS - 2) {
-            self.bus
-                .send_range(limbs[i * 2], limbs[i * 2 + 1])
-                .eval(builder, is_valid);
-        }
-
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, AUIPC);
         AdapterAirContext {
             to_pc: None,
@@ -131,7 +180,7 @@ where
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32AuipcCoreRecord<F> {
     pub imm_limbs: [F; RV32_REGISTER_NUM_LIMBS - 1],
-    pub pc_limbs: [F; RV32_REGISTER_NUM_LIMBS - 1],
+    pub pc_limbs: [F; RV32_REGISTER_NUM_LIMBS - 2],
     pub rd_data: [F; RV32_REGISTER_NUM_LIMBS],
 }
 
@@ -177,24 +226,36 @@ where
         let output = AdapterRuntimeContext::without_pc([rd_data_field]);
 
         let imm_limbs = array::from_fn(|i| (imm >> (i * RV32_CELL_BITS)) & RV32_LIMB_MAX);
-        let pc_limbs = array::from_fn(|i| (from_pc >> ((i + 1) * RV32_CELL_BITS)) & RV32_LIMB_MAX);
+        let pc_limbs: [u32; RV32_REGISTER_NUM_LIMBS] =
+            array::from_fn(|i| (from_pc >> (i * RV32_CELL_BITS)) & RV32_LIMB_MAX);
 
         for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
             self.bitwise_lookup_chip
                 .request_range(rd_data[i * 2], rd_data[i * 2 + 1]);
         }
 
-        let limbs: Vec<u32> = [imm_limbs, pc_limbs].concat();
-        for i in 0..(RV32_REGISTER_NUM_LIMBS - 2) {
-            self.bitwise_lookup_chip
-                .request_range(limbs[i * 2], limbs[i * 2 + 1]);
+        let mut need_range_check: Vec<u32> = Vec::new();
+        for limb in imm_limbs {
+            need_range_check.push(limb);
+        }
+
+        for (i, limb) in pc_limbs.iter().skip(1).enumerate() {
+            if i == pc_limbs.len() - 1 {
+                need_range_check.push((*limb) << (pc_limbs.len() * RV32_CELL_BITS - PC_BITS));
+            } else {
+                need_range_check.push(*limb);
+            }
+        }
+
+        for pair in need_range_check.chunks(2) {
+            self.bitwise_lookup_chip.request_range(pair[0], pair[1]);
         }
 
         Ok((
             output,
             Self::Record {
                 imm_limbs: imm_limbs.map(F::from_canonical_u32),
-                pc_limbs: pc_limbs.map(F::from_canonical_u32),
+                pc_limbs: array::from_fn(|i| F::from_canonical_u32(pc_limbs[i + 1])),
                 rd_data: rd_data.map(F::from_canonical_u32),
             },
         ))
