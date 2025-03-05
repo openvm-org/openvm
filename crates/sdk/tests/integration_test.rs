@@ -31,7 +31,7 @@ use openvm_sdk::{
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::{p3_field::FieldAlgebra, Chip},
@@ -88,7 +88,7 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
         program
     };
     Sdk.commit_app_exe(
-        standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
+        FriParameters::new_for_testing(app_log_blowup),
         program.into(),
     )
     .unwrap()
@@ -108,11 +108,9 @@ fn agg_config_for_test() -> AggConfig {
 fn agg_stark_config_for_test() -> AggStarkConfig {
     AggStarkConfig {
         max_num_user_public_values: NUM_PUB_VALUES,
-        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP),
-        internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(
-            INTERNAL_LOG_BLOWUP,
-        ),
-        root_fri_params: standard_fri_params_with_100_bits_conjectured_security(ROOT_LOG_BLOWUP),
+        leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP),
+        internal_fri_params: FriParameters::new_for_testing(INTERNAL_LOG_BLOWUP),
+        root_fri_params: FriParameters::new_for_testing(ROOT_LOG_BLOWUP),
         profiling: false,
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
@@ -124,8 +122,7 @@ fn agg_stark_config_for_test() -> AggStarkConfig {
 
 fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
     AppConfig {
-        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup)
-            .into(),
+        app_fri_params: FriParameters::new_for_testing(app_log_blowup).into(),
         app_vm_config: NativeConfig::new(
             SystemConfig::default()
                 .with_max_segment_len(200)
@@ -133,8 +130,7 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
                 .with_public_values(NUM_PUB_VALUES),
             Native,
         ),
-        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP)
-            .into(),
+        leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP).into(),
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()

@@ -104,8 +104,8 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "ssh://git@github.com/axiom-crypto/stark-backend-private.git", rev = "518633d9de2d6cf63a8b134a8ceae210af936ad1", default-features = false }
-openvm-stark-sdk = { git = "ssh://git@github.com/axiom-crypto/stark-backend-private.git", rev = "518633d9de2d6cf63a8b134a8ceae210af936ad1", default-features = false }
+openvm-stark-backend = { git = "ssh://git@github.com/axiom-crypto/stark-backend-private.git", rev = "738c68157058a0f95d4b9e96deb01b1f36309bfa", default-features = false }
+openvm-stark-sdk = { git = "ssh://git@github.com/axiom-crypto/stark-backend-private.git", rev = "738c68157058a0f95d4b9e96deb01b1f36309bfa", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }

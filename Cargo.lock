@@ -4515,7 +4515,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.0.0-rc.2"
-source = "git+ssh://git@github.com/axiom-crypto/stark-backend-private.git?rev=518633d9de2d6cf63a8b134a8ceae210af936ad1#518633d9de2d6cf63a8b134a8ceae210af936ad1"
+source = "git+ssh://git@github.com/axiom-crypto/stark-backend-private.git?rev=738c68157058a0f95d4b9e96deb01b1f36309bfa#738c68157058a0f95d4b9e96deb01b1f36309bfa"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -4543,7 +4543,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.0.0-rc.2"
-source = "git+ssh://git@github.com/axiom-crypto/stark-backend-private.git?rev=518633d9de2d6cf63a8b134a8ceae210af936ad1#518633d9de2d6cf63a8b134a8ceae210af936ad1"
+source = "git+ssh://git@github.com/axiom-crypto/stark-backend-private.git?rev=738c68157058a0f95d4b9e96deb01b1f36309bfa#738c68157058a0f95d4b9e96deb01b1f36309bfa"
 dependencies = [
  "derivative",
  "derive_more 0.99.19",

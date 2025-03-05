@@ -14,7 +14,6 @@ use openvm_stark_sdk::{
     collect_airs_and_inputs,
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
         FriParameters,
     },
     dummy_airs::{
@@ -97,7 +96,7 @@ where
 fn test_fibonacci_small() {
     run_recursive_test(
         fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 5),
-        standard_fri_params_with_100_bits_conjectured_security(3),
+        FriParameters::new_for_testing(3),
     )
 }
 
@@ -119,7 +118,7 @@ fn test_fibonacci() {
 fn test_interactions() {
     run_recursive_test(
         interaction_test_proof_input::<BabyBearPoseidon2Config>(),
-        standard_fri_params_with_100_bits_conjectured_security(3),
+        FriParameters::new_for_testing(3),
     )
 }
 
@@ -127,14 +126,14 @@ fn test_interactions() {
 fn test_unordered() {
     run_recursive_test(
         unordered_test_proof_input::<BabyBearPoseidon2Config>(),
-        standard_fri_params_with_100_bits_conjectured_security(3),
+        FriParameters::new_for_testing(3),
     )
 }
 
 #[test]
 fn test_optional_air() {
     use openvm_stark_backend::{engine::StarkEngine, prover::types::ProofInput, Chip};
-    let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
+    let fri_params = FriParameters::new_for_testing(3);
     let engine = BabyBearPoseidon2Engine::new(fri_params);
     let fib_chip = FibonacciChip::new(0, 1, 8);
     let send_chip1 = DummyInteractionChip::new_without_partition(1, true, 0);

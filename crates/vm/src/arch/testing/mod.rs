@@ -20,11 +20,11 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::{
-        baby_bear_blake3::{self, BabyBearBlake3Config},
-        baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
-        setup_tracing_with_log_level,
+        baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        setup_tracing_with_log_level, FriParameters,
     },
-    engine::StarkEngine,
+    engine::{StarkEngine, StarkFriEngine},
     p3_baby_bear::BabyBear,
 };
 use program::ProgramTester;
@@ -391,7 +391,7 @@ impl VmChipTester<BabyBearPoseidon2Config> {
     pub fn simple_test(
         &self,
     ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
-        self.test(baby_bear_poseidon2::default_engine)
+        self.test(|| BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1)))
     }
 
     pub fn simple_test_with_expected_error(&self, expected_error: VerificationError) {
@@ -406,7 +406,7 @@ impl VmChipTester<BabyBearPoseidon2Config> {
 
 impl VmChipTester<BabyBearBlake3Config> {
     pub fn simple_test(&self) -> Result<VerificationData<BabyBearBlake3Config>, VerificationError> {
-        self.test(baby_bear_blake3::default_engine)
+        self.test(|| BabyBearBlake3Engine::new(FriParameters::new_for_testing(1)))
     }
 
     pub fn simple_test_with_expected_error(&self, expected_error: VerificationError) {
