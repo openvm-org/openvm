@@ -64,20 +64,26 @@ pub fn type_to_identifier(tipo: &Type) -> String {
 pub fn function_struct_name(name: &str) -> TokenStream {
     ident(&format!("TLFunction_{}", name))
 }
+pub fn memory_struct_name() -> TokenStream {
+    quote! { Memory }
+}
+pub fn tracker_struct_name() -> TokenStream {
+    quote! { Tracker }
+}
 
 // functions
 
-const ISIZE_TO_FIELD_ELEM: &str = "isize_to_field_elem";
-const EQ_TO_BOOL: &str = "eq_to_bool";
-const TRACKER: &str = "tracker";
-const MEMORY: &str = "memory";
-const CREATE_REF: &str = "create_ref";
-const DEREFERENCE: &str = "dereference";
-const CREATE_EMPTY_UNDER_CONSTRUCTION_ARRAY: &str = "create_empty_under_construction_array";
-const APPEND_UNDER_CONSTRUCTION_ARRAY: &str = "append_under_construction_array";
-const FINALIZE_ARRAY: &str = "finalize_array";
-const ARRAY_ACCESS: &str = "array_access";
-const STAGE: &str = "stage";
+pub const ISIZE_TO_FIELD_ELEM: &str = "isize_to_field_elem";
+pub const EQ_TO_BOOL: &str = "eq_to_bool";
+pub const TRACKER: &str = "tracker";
+pub const MEMORY: &str = "memory";
+pub const CREATE_REF: &str = "create_ref";
+pub const DEREFERENCE: &str = "dereference";
+pub const CREATE_EMPTY_UNDER_CONSTRUCTION_ARRAY: &str = "create_empty_under_construction_array";
+pub const APPEND_UNDER_CONSTRUCTION_ARRAY: &str = "append_under_construction_array";
+pub const FINALIZE_ARRAY: &str = "finalize_array";
+pub const ARRAY_ACCESS: &str = "array_access";
+pub const STAGE: &str = "stage";
 
 pub fn isize_to_field_elem(x: impl ToTokens) -> TokenStream {
     let function_name = ident(ISIZE_TO_FIELD_ELEM);
@@ -156,16 +162,19 @@ pub fn array_access(tipo: &Type, array: impl ToTokens, index: impl ToTokens) -> 
 }
 
 pub fn execute_stage(callee: impl ToTokens, index: usize) -> TokenStream {
+    let tracker = ident(TRACKER);
     let function_name = ident(&format!("{}_{}", STAGE, index));
     quote! {
-        #callee.#function_name()
+        #callee.#function_name(#tracker)
     }
 }
 
 pub fn define_stage(stage_index: usize, body: TokenStream) -> TokenStream {
+    let tracker = ident(TRACKER);
+    let tracker_struct = tracker_struct_name();
     let function_name = ident(&format!("{}_{}", STAGE, stage_index));
     quote! {
-        fn #function_name() {
+        fn #function_name(#tracker: &mut #tracker_struct) {
             #body
         }
     }

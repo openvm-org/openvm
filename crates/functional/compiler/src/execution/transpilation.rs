@@ -408,7 +408,7 @@ impl FlatFunctionCall {
         let struct_name = function_struct_name(&self.function_name);
         if stage.index == 0 {
             block.push(quote! {
-                #callee = Box::new(#struct_name::init());
+                #callee = Box::new(#struct_name::default());
             });
         };
         let empty_declaration_set = DeclarationSet::new();

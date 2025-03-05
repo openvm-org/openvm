@@ -11,7 +11,7 @@ use crate::{
     folder1::{
         file2_tree::ScopePath,
         file3::{Atom, FlattenedFunction},
-        ir::{Material, Statement},
+        ir::{Material, Statement, Type},
         stage1::Stage2Program,
     },
 };
@@ -87,11 +87,14 @@ impl FlattenedFunction {
         }
     }
 
-    pub fn transpile_init(&self) -> TokenStream {
+    pub fn transpile_default_impl(&self) -> TokenStream {
+        let struct_name = function_struct_name(&self.name);
         quote! {
-            pub fn init() -> Self {
-                unsafe {
-                    std::mem::zeroed()
+            impl Default for #struct_name {
+                fn default() -> Self {
+                    unsafe {
+                        std::mem::zeroed()
+                    }
                 }
             }
         }
@@ -147,16 +150,42 @@ impl FlattenedFunction {
     }
 
     pub fn transpile_impl(&self, program: &Stage2Program) -> TokenStream {
-        let mut methods = vec![];
-        methods.push(self.transpile_init());
+        let mut stages = vec![];
         for i in 0..self.stages.len() {
-            methods.push(self.transpile_stage(i, program));
+            stages.push(self.transpile_stage(i, program));
         }
         let struct_name = function_struct_name(&self.name);
         quote! {
             impl #struct_name {
-                #(#methods)*
+                #(#stages)*
             }
         }
+    }
+
+    pub fn transpile(&self, program: &Stage2Program) -> TokenStream {
+        let declaration = self.transpile_struct_declaration();
+        let default_impl = self.transpile_default_impl();
+        let implementation = self.transpile_impl(program);
+        quote! {
+            #declaration
+            #default_impl
+            #implementation
+        }
+    }
+
+    pub fn get_types_in_memory(&self) -> Vec<Type> {
+        let mut result = Vec::new();
+        for statement in self.statements.iter() {
+            match &statement.statement {
+                Statement::Reference { data, .. } => {
+                    result.push(data.get_type().clone());
+                }
+                Statement::EmptyUnderConstructionArray { elem_type, .. } => {
+                    result.push(elem_type.clone());
+                }
+                _ => {}
+            }
+        }
+        result
     }
 }
