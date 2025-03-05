@@ -1,6 +1,47 @@
-# RISC-V to OpenVM Transpilation
+# RISC-V ELF Transpilation to OpenVM Executable
 
-VM extensions consisting of intrinsics are transpiled from [custom RISC-V instructions](./RISCV.md) using a modular transpiler from the RISC-V ELF format to OpenVM assembly. This document specifies the behavior of the transpiler and uses the following notation:
+The OpenVM framework supports transpilation of a RISC-V ELF consisting of the RV32IM instruction set as well as [custom RISC-V instructions](./RISCV.md) specified by VM extensions into an OpenVM executable.
+
+## Transpiler Framework
+
+The transpiler is a function that converts a [RISC-V ELF](https://github.com/riscv-non-isa/riscv-elf-psabi-doc/blob/master/riscv-elf.adoc) into an OpenVM executable, where an **OpenVM executable** is defined as the following pieces of data:
+
+- Program ROM
+- Starting program counter `pc_0`
+- Initial data memory
+
+The OpenVM executable forms a part of the [initial VM state](./ISA.md#virtual-machine-state).
+
+We define a RISC-V **machine code block** to be a 32-bit aligned contiguous sequence of bits in the RISC-V program memory, where the bit length is variable and a multiple of 32. The code block _may_ contain instructions from standard or non-standard RISC-V ISA extensions, but it may also contain arbitrary bits.
+
+The transpiler is configured upon construction with the set of VM extensions to support. In order to be supported by the transpiler, a VM extension must specify a set of RISC-V machine code blocks and rules for mapping each code block to a sequences of _potentially multiple_ [OpenVM instructions](./ISA.md#openvm-instruction-set).
+
+The transpilation rules must satisfy:
+
+- A read or write to the RISC-V program counter corresponds to a read or write to the program counter of the same value in OpenVM. This includes the implicit read of the program counter to fetch the instruction from program code, as well as any implicit `pc += 4` advancement in some RISC-V instructions. In transpilations where a single RISC-V code block is mapped to multiple OpenVM instructions (e.g., [Kernel Code](#openvm-kernel-code-transpilation)), the intermediate OpenVM instructions **may** change the value of the program counter to a program address that is not the start of a RISC-V instruction. It is required that at the end of the RISC-V code block, the program counter is set to the start of a valid RISC-V instruction in the RISC-V machine code.
+- A RISC-V 32-bit register `x{i}` read or write access corresponds to an OpenVM memory access at `[4 * i: 4]_1` **except** for writes to `x0`, see [below](#register-x0-handling). The 32-bits of `x{i}` are represented as 4 little-endian bytes in OpenVM memory.
+  - A RISC-V code block must **never** map to any OpenVM instruction that changes the value of `[0:4]_1` in OpenVM memory.
+- A RISC-V 32-bit user memory access of the `j`th byte in word `i` corresponds to an OpenVM memory access at `[4 * i + j]_2`.
+- If the RISC-V code block is a standard instruction from the [RISC-V Instruction Set Manual Volume I: Unprivileged ISA](https://lf-riscv.atlassian.net/wiki/spaces/HOME/pages/16154769/RISC-V+Technical+Specifications) ([pdf](https://drive.google.com/file/d/1uviu1nH-tScFfgrovvFCrj7Omv8tFtkp/view)), then the transpilation rule must map the RISC-V instruction to an OpenVM instruction that follows the RISC-V specification after applying the above correspondences to register and memory accesses.
+
+The above requirements, together with the invariants of the OpenVM ISA, imply that transpilation will only be valid for programs where:
+
+- The program code does not have program address greater than or equal to `2^PC_BITS`.
+- The program does not access memory outside the range `[0, 2^addr_max_bits)`: programs that attempt such accesses will fail to execute.
+
+A transpiler configuration is only considered valid if there are no two transpilation rules that may map the same RISC-V code block to different OpenVM instructions.
+
+- When defining a new VM extension with transpiler support, the associated RISC-V code blocks should be chosen to avoid conflicts with RISC-V code blocks from other pre-existing VM extensions that the new VM extension expects to be compatible with.
+
+### Register `x0` Handling
+
+As specified in Section 2.1 of [RISC-V Instruction Set Manual Volume I: Unprivileged ISA](https://lf-riscv.atlassian.net/wiki/spaces/HOME/pages/16154769/RISC-V+Technical+Specifications) ([pdf](https://drive.google.com/file/d/1uviu1nH-tScFfgrovvFCrj7Omv8tFtkp/view)), register `x0` is hardwired to zero and must **never** be written to.
+
+The OpenVM ISA treats `[0:4]_1` as normal read/write memory and makes no guarantees on memory accesses to this location. The transpiler must **never** transpile a RISC-V code block to any OpenVM instruction that changes the value of `[0:4]_1` in OpenVM memory. For compatibility with the RISC-V ISA, the transpiler must always transpile a RISC-V instruction to an OpenVM instruction that matches the RISC-V specification. In particular, any RISC-V instruction that has `rd=x0` must be transpiled to either the `NOP` OpenVM instruction if it has no side effects or to an OpenVM instruction that executes the expected side effect and does not change the value of `[0:4]_1`.
+
+## Transpiler Specification for Default VM Extensions
+
+This section specifies the behavior of the transpiler for the default VM extensions with the custom RISC-V instructions specified [here](./RISCV.md). We use the following notation:
 
 - Let `ind(rd)` denote `4 * (register index)`, which is in `0..128`. In particular, it fits in one field element.
 - We use `itof` for the function that takes 12-bits (or 21-bits in case of J-type) to a signed integer and then mapping to the corresponding field element. So `0b11…11` goes to `-1` in `F`.
@@ -12,11 +53,6 @@ VM extensions consisting of intrinsics are transpiled from [custom RISC-V instru
 - For a phantom instruction `ins`, `disc(ins)` is the discriminant specified in the [ISA specification](./ISA.md#system-instructions).
 - For a phantom instruction `ins` and a 16-bit `c_upper`, `phantom_c(c_upper, ins) = c_upper << 16 | disc(ins)` is the corresponding 32-bit operand `c` for PHANTOM.
 
-The transpilation will only be valid for programs where:
-
-- The program code does not have program address greater than or equal to `2^PC_BITS`.
-- The program does not access memory outside the range `[0, 2^addr_max_bits)`.
-
 We now specify the transpilation for system instructions and the default set of VM extensions.
 
 ## System Instructions
@@ -27,7 +63,7 @@ We now specify the transpilation for system instructions and the default set of 
 
 ## RV32IM Extension
 
-Transpilation from RV32IM to OpenVM assembly follows the mapping below, which is generally 
+Transpilation from RV32IM to OpenVM assembly follows the mapping below, which is generally
 a 1-1 translation between RV32IM instructions and OpenVM instructions. The main exception relates
 to handling of the `x0` register, which discards writes and has value `0` in all reads.
 We handle writes to `x0` in transpilation as follows:
@@ -39,14 +75,14 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 
 ### System Level Extensions to RV32IM
 
-| RISC-V Inst | OpenVM Instruction                                                         |
-| ----------- | -------------------------------------------------------------------------- |
-| hintstorew  | HINT_STOREW_RV32 `0, ind(rd), _, 1, 2`                                     |
-| hintbuffer  | HINT_BUFFER_RV32 `ind(rs1), ind(rd), _, 1, 2`                              |
-| reveal      | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3, 1, sign_of(imm)` |
-| hintinput   | PHANTOM `_, _, disc(Rv32HintInput)`                                        |
-| printstr    | PHANTOM `ind(rd), ind(rs1), disc(Rv32PrintStr)`                            |
-| hintrandom  | PHANTOM `ind(rd), _, disc(Rv32HintRandom)`                                 |
+| RISC-V Inst | OpenVM Instruction                                               |
+| ----------- | ---------------------------------------------------------------- |
+| hintstorew  | HINT_STOREW_RV32 `0, ind(rd), _, 1, 2`                           |
+| hintbuffer  | HINT_BUFFER_RV32 `ind(rs1), ind(rd), _, 1, 2`                    |
+| reveal      | STOREW_RV32 `ind(rs1), ind(rd), utof(sign_extend_16(imm)), 1, 3, 1, sign_of(imm)` |
+| hintinput   | PHANTOM `_, _, disc(Rv32HintInput)`                              |
+| printstr    | PHANTOM `ind(rd), ind(rs1), disc(Rv32PrintStr)`                  |
+| hintrandom  | PHANTOM `ind(rd), _, disc(Rv32HintRandom)`                       |
 
 ### Standard RV32IM Instructions
 
@@ -163,12 +199,12 @@ Each VM extension's behavior is specified below.
 
 ### Elliptic Curve Extension
 
-| RISC-V Inst     | OpenVM Instruction                                                                                                                                    |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| sw_add_ne\<C\>  | EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                               |
-| sw_double\<C\>  | EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                                                                                                      |
-| setup\<C\>      | SETUP_EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) != 0`, SETUP_EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 0` |
-| hint_decompress | PHANTOM `ind(rd), ind(rs1), phantom_c(curve_idx, HintDecompress)`                                                                                     |
+| RISC-V Inst     | OpenVM Instruction                                                                                                                                                |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| sw_add_ne\<C\>  | EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                           |
+| sw_double\<C\>  | EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                                                                                                                  |
+| setup\<C\>      | SETUP_EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) != 0`, SETUP_EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) = 0` |
+| hint_decompress | PHANTOM `ind(rs1), ind(rs2), phantom_c(curve_idx, HintDecompress)`                                                                                                |
 
 ### Pairing Extension
 
@@ -182,4 +218,80 @@ Each VM extension's behavior is specified below.
 | mul_by_01234               | MUL_BY_01234_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
 | mul_023_by_023             | MUL_023_BY_023_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
 | mul_by_02345               | MUL_BY_02345_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| hint_final_exp             | PHANTOM `ind(rs1), pairing_idx, phantom_c(pairing_idx, HintFinalExp)`    |
+| hint_final_exp             | PHANTOM `ind(rs1), ind(rs2), phantom_c(pairing_idx, HintFinalExp)`       |
+
+## OpenVM Kernel Code Transpilation
+This section specifies the transpilation of custom RISC-V [kernel code](./RISCV.md#classification-of-custom-risc-v-machine-code) to OpenVM instructions.
+This transpilation differs from the ones described above in that a custom RISC-V code block of more than 32-bits is used to specify a single OpenVM instruction,
+and a single 32-bit RISC-V instruction is also used to specify multiple (nonexistent) instructions.
+
+We use the following 32-bit RISC-V code blocks in conjunction with other arbitrary code blocks to transpile custom RISC-V kernel code to OpenVM instructions.
+
+We have 3 special 32-bit code blocks:
+
+| Abbr.       | 32-bit Code | Name                                                   |
+| ----------- | ----------- | ------------------------------------------------------ |
+| lfii        | 0b00000000000000000111000000001011 | Long Form Instruction Indicator |
+| gi          | 0b00000010000000000111000000001011 | Gap Indicator                   |
+| vri         | 0b10000000000000000000000001110100 | Variable Register Indicator     |
+
+Note that the `vri` code block does not conform to RISC-V instruction naming conventions and is only used after `lfii` as described below. The `vri` code is the 32-bit big-endian encoding of `2^31 + 116`.
+
+### Overview
+
+We specify a format in which an arbitrary sequence of OpenVM instructions can be serialized into a 32-bit aligned code block
+which can be inserted into the RISC-V ELF. The transpiler is then able to recognize this code block and transpile it (effectively deserializing) back into the original OpenVM instructions.
+
+To do this, suppose we have a sequence of OpenVM instructions `[i_1, ..., i_l]`. These will be serialized into the 
+concatenation of the code blocks:
+
+```
+lfii [i_1 encoding]
+lfii [i_2 encoding]
+...
+lfii [i_l encoding]
+gi [gap encoding]
+```
+This will be an overall code block of `32 * m` bits, where `m > l`, which will be transpiled to only `l` OpenVM instructions. The instructions are encoded as described [below](#openvm-instruction-encoding).
+If the starting program address of the RISC-V code block is `a` (in bytes), then the OpenVM instructions `i_1, ..., i_l` will be at addresses `[a, a + 4, ..., a + 4 * (l - 1)]` in the OpenVM program ROM. The addresses `[a + 4 * l, ..., a + 4 * (m - 1)]` will be left empty in the OpenVM program ROM to maintain compatibility with RISC-V program addresses. The _gap_ between `l` and `m` is encoded by the [gap encoding](#gap-encoding).
+
+### OpenVM Instruction Encoding
+An OpenVM instruction is encoded to a RISC-V code block as follows. 
+We identify the 31-bit field `F` with `{0, ..., p - 1}` where `p` is the prime modulus. 
+We encode `u32` as 32-bits in little-endian format.
+
+Let the instruction be `opcode operand_1 operand_2 ... operand_n` where each opcode and operand is a field element.  
+Then to encode it into a 32-bit aligned code block, we first write `lfii`, followed by the number of operands `n` (as `u32`), followed by `opcode` (as `u32`).
+We then encode each operand, which can happen in one of two ways:
+- The operand is encoded as field element in 32-bits.
+- The operand is encoded as first `vri`,
+then an I-Type instruction with only `rs1` and `imm` being nonzero,
+such that the value of the operand is `(LIMBS * rs1) + imm`.
+`LIMBS` is the number of limbs in a register, i.e., 4 on a 32-bit architecture.
+
+The first encoding method is preferred. 
+The second encoding method is used when the operand is a register being referenced from e.g. Rust,
+where we do not know the exact value of the register but are allowed to reference the register in an assembly instruction,
+but only by specifying it as one of `rs1`, `rs2`, `rd`.
+
+The two methods of encoding an operand are unambiguous for a 31-bit prime field `F`,
+as `vri` is chosen to be larger than `2^31`.
+
+### Gap Encoding
+The transpiler also allows for the transpilation of gaps, i.e., addresses in the RISC-V program memory that do not map to OpenVM instructions.
+The purpose of this is to maintain the validity of `pc` offsets when using the above encoding of OpenVM instructions.
+
+A gap is encoded by first writing `gi`, then the number of instructions to be skipped (i.e. the length of the gap) as `u32`.
+Note that the number of instructions to be skipped is not the same as the number of bytes to be skipped --
+on a 32-bit architecture, these will differ by a factor of 4.
+
+The gap code block is used to signify the end of a block of kernel code.
+
+### Kernel Code Assumptions
+
+The above transpilation procedure allows the insertion of arbitrary serialized OpenVM instructions into the RISC-V ELF as kernel code. To maintain the guarantees of the transpiler framework, the kernel code must satisfy the following safety assumptions:
+
+- All code exiting the code block must jump to a valid RISC-V instruction in the machine code
+- Code from outside of the kernel code block must not jump into the middle of a kernel code block
+- Kernel code must not write to `[0:4]_1` in OpenVM memory
+- Kernel code must only write bytes to address space `2` in OpenVM memory

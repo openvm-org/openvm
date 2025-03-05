@@ -1,21 +1,93 @@
 # OpenVM Instruction Set Architecture
 
-OpenVM supports an extensible instruction set, with different groups of opcodes supported by different VM extensions. This specification describes the overall architecture and default VM extensions which ship with OpenVM, which are:
+OpenVM supports an extensible instruction set, with different groups of opcodes supported by different VM extensions.
+This specification describes the overall architecture and default VM extensions which ship with OpenVM, which are:
 
 - [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
 - [Native](#native-extension): An extension supporting native field arithmetic for proof recursion and aggregation.
 - [Keccak-256](#keccak-extension): An extension implementing the Keccak-256 hash function compatibly with RISC-V memory.
 - [SHA2-256](#sha2-256-extension): An extension implementing the SHA2-256 hash function compatibly with RISC-V memory.
-- [BigInt](#bigint-extension): An extension supporting 256-bit signed and unsigned integer arithmetic, including multiplication. This extension respects the RISC-V memory format.
-- [Algebra](#algebra-extension): An extension supporting modular arithmetic over arbitrary fields and their complex field extensions. This extension respects the RISC-V memory format.
-- [Elliptic curve](#elliptic-curve-extension): An extension for elliptic curve operations over Weierstrass curves, including addition and doubling. This can be used to implement multi-scalar multiplication and ECDSA scalar multiplication. This extension respects the RISC-V memory format.
-- [Pairing](#pairing-extension): An extension containing opcodes used to implement the optimal Ate pairing on the BN254 and BLS12-381 curves. This extension respects the RISC-V memory format.
+- [BigInt](#bigint-extension): An extension supporting 256-bit signed and unsigned integer arithmetic, including
+  multiplication. This extension respects the RISC-V memory format.
+- [Algebra](#algebra-extension): An extension supporting modular arithmetic over arbitrary fields and their complex
+  field extensions. This extension respects the RISC-V memory format.
+- [Elliptic curve](#elliptic-curve-extension): An extension for elliptic curve operations over Weierstrass curves,
+  including addition and doubling. This can be used to implement multi-scalar multiplication and ECDSA scalar
+  multiplication. This extension respects the RISC-V memory format.
+- [Pairing](#pairing-extension): An extension containing opcodes used to implement the optimal Ate pairing on the BN254
+  and BLS12-381 curves. This extension respects the RISC-V memory format.
 
-In addition to these default extensions, developers are able to extend the ISA by defining their own custom VM extensions. For reader convenience, we provide a mapping between the code-level representation of opcodes in OpenVM and the opcodes below [here](./isa-table.md).
+In addition to these default extensions, developers are able to extend the ISA by defining their own custom VM
+extensions. For reader convenience, we provide a mapping between the code-level representation of opcodes in OpenVM and
+the opcodes below [here](./isa-table.md).
 
-## Architecture Overview
+## Constants and Configuration Parameters
 
-### Instruction format
+OpenVM depends on the following parameters, some of which are fixed and some of which are configurable:
+
+| Name                | Description                                                        | Constraints                                                           |
+| ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `F`                 | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field. |
+| `PC_BITS`           | The number of bits in the program counter.                         | Fixed to 30.                                                          |
+| `DEFAULT_PC_STEP`   | The default program counter step size.                             | Fixed to 4.                                                           |
+| `LIMB_BITS`         | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                           |
+| `as_offset`         | The index of the first writable address space.                     | Fixed to 1.                                                           |
+| `as_height`         | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `as_height <= F::bits() - 2`               |
+| `pointer_max_bits`  | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`        |
+| `num_public_values` | The number of user public values.                                  | Configurable.                                                         |
+
+We explain these parameters in subsequent sections.
+
+### Prime Field
+
+The ISA globally depends on a prime field `F`. This field is currently fixed to Baby Bear, with modulus `15 * 2^27 + 1`, but it may change in the future to another
+31-bit field. Unless otherwise specified, we will identify the elements of `F` with the integers `{0, ..., F::modulus() - 1}`,
+where `F::modulus()` is the prime modulus of the field.
+
+## Virtual Machine State
+
+The virtual machine is a state machine that is executed on a physical host machine.
+The state of the virtual machine consists of the following components:
+
+**Guest State**:
+
+- [Program ROM](#program-rom) (Read Only)
+- [Program Counter](#program-counter) `pc`
+- [Data Memory](#data-memory) (Read/Write)
+- [User Public Outputs](#user-public-outputs)
+
+**Host State**:
+
+- [Input Stream](#inputs-and-hints)
+- [Hint Stream](#inputs-and-hints)
+- [Hint Spaces](#inputs-and-hints)
+
+The **initial state** of the virtual machine consists of:
+
+- Program ROM - immutable throughout VM execution
+- `pc_0` - starting program counter
+- Initial data memory
+- No user public outputs
+- Input stream
+- Empty hint stream
+- Empty hint spaces
+
+We describe these components in more detail below.
+
+### Program ROM
+
+OpenVM operates under the Harvard architecture, where program code is stored separately from data
+memory. The program code is loaded as read-only memory (ROM) in the VM state prior to execution, and it remains
+immutable throughout the execution.
+
+Program code is a map from `[0, 2^PC_BITS)` to the space of instructions `F^{NUM_OPERANDS + 1}`, where
+
+- `PC_BITS = 30`
+- `NUM_OPERANDS = 7`.
+
+Instructions will typically only exist at a subset of the indices in `[0, 2^PC_BITS)`.
+
+#### Instruction format
 
 Instructions are encoded as a global opcode (field element) followed by `NUM_OPERANDS = 7` operands (field elements):
 
@@ -23,41 +95,54 @@ Instructions are encoded as a global opcode (field element) followed by `NUM_OPE
 opcode, a, b, c, d, e, f, g
 ```
 
-An instruction does not need to use all operands, and trailing unused operands should be
-set to zero.
+An instruction does not need to use all operands, and trailing unused operands are suggested to be
+set to zero, but this won't be checked.
 
-### Program ROM
+In the following sections, you will see operands like `a, b, c, 1, e`. `1` here means a fixed address space. In this
+case, `d` is suggested be set to `1`, but this won't be checked.
 
-OpenVM operates under the Harvard architecture, where program code is stored separately from main
-memory. Code is addressed by any field element in range `[0, 2^PC_BITS)` where `PC_BITS = 30`.
+### Program Counter
 
-There is a single special purpose register `pc` for the program counter of type `F` which stores the location of the instruction being executed. (We may extend `pc` to multiple field elements to increase the program address space size in the future.)
+There is a single special purpose register `pc` for the program counter of type `F` which stores the location of the
+instruction being executed. During execution, the program counter must always be a valid program address, meaning that it
+is an element in the range `[0, 2^PC_BITS)` where the program code is defined.
 
-The program code is committed as a cached trace. The validity of the program code and its cached trace must be checked
-outside of ZK. A valid program code must have all instructions stored at locations in range `[0, 2^PC_BITS)`. While the
-instructions can be stored at any locations, we will by default follow RISC-V in storing instructions at multiples of
-`DEFAULT_PC_STEP = 4`.
+### Data Memory
 
-### Memory
-
-Memory is comprised of addressable cells which represent a single field element indexed by **address space** and **pointer**. The number of supported address spaces and the size of each address space are configurable constants.
+Data memory is a random access memory (RAM) which supports read and write operations. Memory is comprised of addressable
+cells which represent a single field element indexed by **address space** and **pointer**. The number of supported
+address spaces and the size of each address space are configurable constants.
 
 - Valid address spaces not used for immediates lie in `[1, 1 + 2^as_height)` for configuration constant `as_height`.
-- Valid pointers lie in `[0, 2^pointer_max_bits)` for configuration constant `pointer_max_bits`.
+- Valid pointers are field elements that lie in `[0, 2^pointer_max_bits)`, for
+  configuration constant `pointer_max_bits`. When accessing an address out of `[0, 2^pointer_max_bits)`, the VM should
+  panic.
 
-These configuration constants must satisfy `as_height, pointer_max_bits <= F::bits() - 2` in OpenVM to enable the underlying ZK verification. We use the following notation to denote cells in memory:
+These configuration constants must satisfy `as_height, pointer_max_bits <= F::bits() - 2`. We use the following notation
+to denote cells in memory:
 
 - `[a]_d` denotes the single-cell value at pointer location `a` in address space `d`. This is a single
   field element.
 - `[a:N]_d` denotes the slice `[a..a + N]_d` -- this is a length-`N` array of field elements.
 
+#### Immediates
+
+We reserve a special address space `0` for immediates. The framework enforces that address space `0` is never written
+to. Address space `0` is considered a read-only array with `[a]_0 = a` for any `a` in `F`.
+
 #### Memory Accesses and Block Accesses
 
-VM instructions can access (read or write) a contiguous list of cells (called a **block**) in a single address space. The block size must be in the set `{1, 2, 4, 8, 16, 32, 64}`, and the access does not need to be aligned, meaning that it can start from any pointer address, even those not divisible by the block size. An access is called a **block access** if it has size greater than 1.
+VM instructions can access (read or write) a contiguous list of cells (called a **block**) in a single address space.
+The block size must be in the set `{1, 2, 4, 8, 16, 32, 64}`, and the access does not need to be aligned, meaning that
+it can start from any pointer address, even those not divisible by the block size. An access is called a **block access
+** if it has size greater than 1. Block accesses are not supported for address space `0`.
 
 #### Address Spaces
 
-Different address spaces are used for different purposes in OpenVM. Memory cells in all address spaces are always field elements, but certain address spaces may impose the additional constraint that all elements fit into a maximum number of bits. The existing extensions reference the following set of address spaces, but user-defined extensions are free to use additional address spaces:
+Different address spaces are used for different purposes in OpenVM. Memory cells in all address spaces are always field
+elements, but certain address spaces may impose the additional constraint that all elements fit into a maximum number of
+bits. The existing extensions reference the following set of address spaces, but user-defined extensions are free to
+introduce additional address spaces:
 
 | Address Space | Name        | Notes and Constraints                                                             |
 | ------------- | ----------- | --------------------------------------------------------------------------------- |
@@ -67,43 +152,93 @@ Different address spaces are used for different purposes in OpenVM. Memory cells
 | `3`           | User IO     |                                                                                   |
 | `4`           | Native      | Elements are typically full native field elements.                                |
 
+When adding a new user address space, the invariants of the memory cells in that address space must be declared, and all
+instructions must ensure that these invariants are preserved.
+
+ℹ️ When adding a new instruction to the ISA, the instruction **must declare its supported address spaces** and respect
+the invariants of those address spaces. In particular, all instructions must respect the invariants of the address spaces above.
+
 ### Inputs and Hints
 
-To enable user input and non-determinism in OpenVM programs, we maintain the following three data structures during runtime execution:
+To enable user input and non-determinism in OpenVM programs, the host state maintains the following three data
+structures during runtime execution:
 
-- `input_stream`: a private non-interactive queue of vectors of field elements which is provided at the start of runtime execution
-- `hint_stream`: a queue of values populated during runtime execution via [phantom sub-instructions](#phantom-sub-instructions) such as `Rv32HintInput`, `NativeHintInput`, and `NativeHintBits`.
-- `hint_space`: a append-only vector of vectors of field elements used to store hints during runtime execution via [phantom sub-instructions](#phantom-sub-instructions) such as `NativeHintLoad`.
+- `input_stream`: a private non-interactive queue of vectors of field elements which is provided at the start of runtime
+  execution
+- `hint_stream`: a queue of values populated during runtime execution
+  via [phantom sub-instructions](#phantom-sub-instructions) such as `Rv32HintInput`, `NativeHintInput`, and
+  `NativeHintBits`.
+- `hint_space`: a append-only vector of vectors of field elements used to store hints during runtime execution
+  via [phantom sub-instructions](#phantom-sub-instructions) such as `NativeHintLoad`.
 
-These data structures do not live in OpenVM memory, and their state is not constrained in ZK. At runtime, instructions like `HINT_STORE_RV32` (from the RV32IM extension) and `HINT_STOREW`, `HINT_STOREW4` (from the native extension) can read from the `hint_stream` and write them to OpenVM memory to provide non-deterministic hints.
+These data structures are **not** part of the guest state, and their state depends on host behavior that cannot be determined by the guest.
 
-### Public Inputs and Outputs
+### User Public Outputs
 
-To make program inputs or outputs public, OpenVM allows the user to specify a list of field elements to make public. To populate this list, users can use:
+To make program outputs public, OpenVM allows the user to specify a list of field elements to make public. To populate
+this list, users can use:
 
 - If continuations are enabled: `REVEAL_RV32` (from the RV32IM extension)
 - If continuations are disabled: `PUBLISH` (from the system extension)
 
-The list is initially empty and has maximum length `max_num_public_values` given by a VM configuration parameter.
+The list is of length `num_public_values`, where `num_public_values` is a VM configuration parameter. By default, any element in the list that is never initialized is set to zero.
+
+## Instruction Execution
+
+Starting from the initial VM state, the VM executes instructions according to the program ROM. Instruction execution is
+a transition function on the mutable parts of the VM state:
+
+- Program Counter
+- Data Memory
+- User Public Outputs
+- Input Stream
+- Hint Stream
+- Hint Spaces
+
+which must satisfy the following conditions:
+
+- Let `from_pc` be the program counter at the start of the instruction execution. The `from_pc` must be the address of a
+  valid instruction in the program ROM.
+- The execution must match the instruction from the program ROM.
+- The execution has full read/write access to the data memory, except address space `0` must be read-only.
+- User public outputs can be set at any index in `[0, num_public_values)`. If continuations are disabled, a public
+  value cannot be overwritten with a different value once it is set.
+- Input stream can only be popped from the front as a queue. Appends are not allowed.
+- Full read/write access to the hint stream.
+- Hint spaces can be read from at any index. Hint spaces may be mutated only by append.
+- The program counter is set to a new `to_pc` at the end of the instruction execution.
+  Instructions are only considered valid if `to_pc` is the address of a valid instruction in the program ROM.
+
+ℹ️ Notes for extension developers: The specification of new instructions should carefully consider `to_pc` overflows, especially when you want to move `pc` with
+a positive offset.
+
+### Guest Instruction Execution
+
+We define **guest instruction execution** to be the subset of instruction execution that only mutates the guest state:
+
+- Program Counter
+- Data Memory
+- User Public Outputs
+
+Guest instruction execution may still depend on read access to the host state.
+For example, instructions like `HINT_STORE_RV32` (from the RV32IM extension) and `HINT_STOREW`, `HINT_STOREW4` (from the native extension) can
+read from the `hint_stream` and write them to OpenVM memory to provide non-deterministic hints.
+
+⚠️ Safeguards:
+
+- All instructions should ensure that the modifications to the guest state are protected from non-deterministic host states, as the guest has no control
+  over the host state. For example,
+  the start address and length of modified guest memory must be derived from instruction operands or guest state (as opposed to being derived from host state).
 
 ### Phantom Instructions
 
-To facilitate hinting and debugging on the host, OpenVM supports the notion of **phantom instructions**. These are instructions which are identical to a no-op at the level of the OpenVM state, but which may be used to specify unconstrained behavior on the host. Use cases of phantom instructions include interacting with the input or hint streams or displaying debug information on the host machine.
+To facilitate hinting and debugging on the host, OpenVM supports the notion of **phantom instructions**. These are
+instructions which are identical to a no-op at the level of the OpenVM guest state, but which may be used to specify
+unconstrained behavior on the host. Use cases of phantom instructions include interacting with the input or hint streams
+or displaying debug information on the host machine.
 
-### Constants and Configuration Parameters
-
-OpenVM depends on the following parameters, some of which are fixed and some of which are configurable:
-
-| Name                    | Description                                                        | Constraints                                                           |
-| ----------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `F`                     | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field. |
-| `PC_BITS`               | The number of bits in the program counter.                         | Fixed to 30.                                                          |
-| `DEFAULT_PC_STEP`       | The default program counter step size.                             | Fixed to 4.                                                           |
-| `LIMB_BITS`             | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                           |
-| `as_offset`             | The index of the first writable address space.                     | Fixed to 1.                                                           |
-| `as_height`             | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `as_height <= F::bits() - 2`               |
-| `pointer_max_bits`      | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`        |
-| `max_num_public_values` | The maximum number of public values.                               | Configurable.                                                         |
+Notes for extension developers: `PhantomDiscriminant` should be unique for each phantom instruction. If you want your
+new extension to be compatible with some extensions, you need select some compatible `PhantomDiscriminant`.
 
 ## OpenVM Instruction Set
 
@@ -120,22 +255,25 @@ instructions will set `to_pc = from_pc + DEFAULT_PC_STEP`. We will use the follo
 - `decompose(c)` where `c` is a field element means `c.as_canonical_u32().to_le_bytes()`.
 - `r32{0}(a) := i32([a:4]_1)` means casting the value at `[a:4]_1` to `i32`.
 
-In the specification, operands marked with `_` are not used and should be set to zero. Trailing unused operands should also be set to zero.
+In the specification, operands marked with `_` are not used and should be set to zero. Trailing unused operands should
+also be set to zero.
 
 ### System Instructions
 
 The opcodes below are supported by the OpenVM system and do not belong to any VM extension.
 
-| Name      | Operands    | Description                                                                                                                                                                       |
-| --------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TERMINATE | `_, _, c`   | Terminates execution with exit code `c`. Sets `to_pc = from_pc`.                                                                                                                  |
-| PHANTOM   | `_, _, c`   | Sets `to_pc = from_pc + DEFAULT_PC_STEP`. The operand `c` determines which phantom instruction (see below) is run.                                                                |
-| PUBLISH   | `a,b,_,d,e` | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to `max_num_public_values`. Only valid when continuations are disabled. |
+| Name      | Operands    | Description                                                                                                                                                                   |
+| --------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TERMINATE | `_, _, c`   | Terminates execution with exit code `c`. Sets `to_pc = from_pc`.                                                                                                              |
+| PHANTOM   | `_, _, c`   | Sets `to_pc = from_pc + DEFAULT_PC_STEP`. The operand `c` determines which phantom instruction (see below) is run.                                                            |
+| PUBLISH   | `a,b,_,d,e` | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to `num_public_values`. Only valid when continuations are disabled. |
 
 The behavior of the PHANTOM opcode is determined by the operand `c`.
 More specifically, the low 16-bits `c.as_canonical_u32() & 0xffff` are used as a discriminant to determine a phantom
-sub-instruction. Phantom sub-instructions supported by the system are listed below, and VM extensions can define additional phantom sub-instructions.
-Phantom sub-instructions are only allowed to use operands `a,b` and `c_upper = c.as_canonical_u32() >> 16` and must always advance the program counter by `DEFAULT_PC_STEP`.
+sub-instruction. Phantom sub-instructions supported by the system are listed below, and VM extensions can define
+additional phantom sub-instructions.
+Phantom sub-instructions are only allowed to use operands `a,b` and `c_upper = c.as_canonical_u32() >> 16` and must
+always advance the program counter by `DEFAULT_PC_STEP`.
 
 | Name       | Discriminant | Operands | Description                                                                                          |
 | ---------- | ------------ | -------- | ---------------------------------------------------------------------------------------------------- |
@@ -146,11 +284,20 @@ Phantom sub-instructions are only allowed to use operands `a,b` and `c_upper = c
 
 ### RV32IM Extension
 
-The RV32IM extension introduces OpenVM opcodes which support 32-bit RISC-V via transpilation from a standard RV32IM ELF binary, specified [here](./RISCV.md). These consist of opcodes corresponding 1-1 with RV32IM opcodes, as well as additional user IO opcodes and phantom sub-instructions to support input and debug printing on the host. We denote the OpenVM opcode corresponding to a RV32IM opcode by appending `_RV32`.
+The RV32IM extension introduces OpenVM opcodes which support 32-bit RISC-V via transpilation from a standard RV32IM ELF
+binary, specified [here](./RISCV.md). These consist of opcodes corresponding 1-1 with RV32IM opcodes, as well as
+additional user IO opcodes and phantom sub-instructions to support input and debug printing on the host. We denote the
+OpenVM opcode corresponding to a RV32IM opcode by appending `_RV32`.
 
-The RV32IM extension uses address space `0` for immediates, address space `1` for registers, and address space `2` for memory. As explained [here](#address-spaces), cells in address spaces `1` and `2` are constrained to be bytes, and all instructions preserve this constraint.
+The RV32IM extension uses address space `0` for immediates, address space `1` for registers, and address space `2` for
+memory. As explained [here](#address-spaces), cells in address spaces `1` and `2` are constrained to be bytes, and all
+instructions preserve this constraint.
 
-The `i`th RISC-V register is represented by the block `[4 * i:4]_1` of 4 limbs in address space `1`. All memory addresses in address space `1` behave uniformly, and in particular writes to the block `[0:4]_1` corresponding to the RISC-V register `x0` are allowed in the RV32IM extension. However, as detailed in [RV32IM Transpilation](./transpiler.md#rv32im-transpilation), any OpenVM program transpiled from a RV32IM ELF will never contain such a write and conforms to the RV32IM specification.
+The `i`th RISC-V register is represented by the block `[4 * i:4]_1` of 4 limbs in address space `1`. All memory
+addresses in address space `1` behave uniformly, and in particular writes to the block `[0:4]_1` corresponding to the
+RISC-V register `x0` are allowed in the RV32IM extension. However, as detailed
+in [RV32IM Transpilation](./transpiler.md#rv32im-transpilation), any OpenVM program transpiled from a RV32IM ELF will
+never contain such a write and conforms to the RV32IM specification.
 
 #### ALU
 
@@ -211,10 +358,10 @@ For branch instructions, we fix `d = e = 1`. For jump instructions, we fix `d = 
 | BGE_RV32   | `a,b,c,1,1`      | `if(i32([a:4]_1) >= i32([b:4]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                  |
 | BLTU_RV32  | `a,b,c,1,1`      | `if(u32([a:4]_1) < u32([b:4]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                   |
 | BGEU_RV32  | `a,b,c,1,1`      | `if(u32([a:4]_1) >= u32([b:4]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                  |
-| JAL_RV32   | `a,_,c,1,_,f`    | `if(f!=0) [a:4]_1 = decompose(pc+4); pc += c`. The operand `f` is assumed to be boolean. The`pc`increment is always done regardless of `f`'s value. Here `i32(c)`must be in`[-2^24, 2^24)`.                                                                                                                                                                                 |
-| JALR_RV32  | `a,b,c,1,_,f, g` | `if(f!=0) [a:4]_1 = decompose(pc+4); pc = F::from_canonical_u32(i32([b:4]_1) + sign_extend(decompose(c)[0:2], g) as u32)`. Constrains that `i32([b:4]_1) + sign_extend(decompose(c)[0:2], g) is in [0, 2^PC_BITS)`. Here `u32(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
+| JAL_RV32   | `a,_,c,1,_,f`    | `if(f!=0) [a:4]_1 = decompose(pc+4); pc += c`. The operand `f` is assumed to be boolean. The `pc` increment is always done regardless of `f`'s value. Here `i32(c)`must be in`[-2^24, 2^24)`.                                                                                                                                                                                 |
+| JALR_RV32  | `a,b,c,1,_,f,g` | `if(f!=0) [a:4]_1 = decompose(pc+4); pc = F::from_canonical_u32(i32([b:4]_1) + sign_extend(decompose(c)[0:2], g) as u32)`. Constrains that `i32([b:4]_1) + sign_extend(decompose(c)[0:2], g) is in [0, 2^PC_BITS)`. Here `u32(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
 | LUI_RV32   | `a,_,c,1,_,1`    | `[a:4]_1 = u32(c) << 12`. Here `i32(c)` must be in `[0, 2^20)`.                                                                                                                                                                                                                                                                                                             |
-| AUIPC_RV32 | `a,_,c,1,_,_`    | `[a:4]_1 = decompose(pc) + (decompose(c) << 12)`. Here `i32(c)` must be in `[0, 2^20)`.                                                                                                                                                                                                                                                                                     |
+| AUIPC_RV32 | `a,_,c,1,_,_`    | `[a:4]_1 = decompose(pc) + (decompose(c) << 8)`. Here `i32(c)` must be in `[0, 2^24)`.                                                                                                                                                                                                                                                                                     |
 
 For branch and JAL_RV32 instructions, the instructions assume that the operand `i32(c)` is in `[-2^24,2^24)`. The
 assignment `pc += c` is done as field elements.
@@ -227,8 +374,9 @@ The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` de
 the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering the 32 bits as the 2's complement of an `i32`. Then it is added to the register value `i32([b:4]_1)`, where 32-bit overflow is ignored. The instruction is only valid if the resulting `i32` is in range `[0, 2^PC_BITS)`. The
 result is then cast to `u32` and then to `F` and assigned to `pc`.
 
-For LUI_RV32 and AUIPC_RV32, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits. The instruction does not
-need to interpret whether the register is signed or unsigned.
+For LUI_RV32, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits. 
+For AUIPC_RV32, we are treating `c` in `[0, 2^24)` as a raw encoding of 24-bits. 
+The instruction does not need to interpret whether the register is signed or unsigned.
 For AUIPC_RV32, the addition is treated as unchecked `u32` addition since that is the same as `i32` addition at the bit
 level.
 
@@ -283,12 +431,15 @@ The RV32IM extension defines the following phantom sub-instructions.
 
 ### Native Extension
 
-The native extension operates over native field elements and has instructions tailored for STARK proof recursion. It does not constrain memory elements to be bytes and most instructions only write to address space `4`, with the notable exception of CASTF.
+The native extension operates over native field elements and has instructions tailored for STARK proof recursion. It
+does not constrain memory elements to be bytes and most instructions only write to address space `4`, with the notable
+exception of CASTF.
 
 #### Base
 
 In the instructions below, `d,e` must be either `0` or `4` except in CASTF, which may write to address space `2`.
-Additional restrictions are applied on a per-instruction basis. In particular, the immediate address space `0` is allowed for non-vectorized
+Additional restrictions are applied on a per-instruction basis. In particular, the immediate address space `0` is
+allowed for non-vectorized
 reads but not allowed for writes. When using immediates, we interpret `[a]_0` as the immediate value `a`.
 
 | Name         | Operands    | Description                                                                                                                                                                                                                                                                                 |
@@ -344,11 +495,14 @@ The instructions below do block accesses with block size `1` and `CHUNK` in addr
 
 The native extension uses the following Poseidon2 constants:
 
-- `PID`: This identifier provides domain separation between different Poseidon2 constants. We use `0` to identify [`POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48), but the Mat4 used is Plonky3's with a Montgomery reduction.
+- `PID`: This identifier provides domain separation between different Poseidon2 constants. We use `0` to identify [
+  `POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48),
+  but the Mat4 used is Plonky3's with a Montgomery reduction.
 - `CHUNK`: We use `CHUNK = 8` for the native extension.
 - `WIDTH`: We use `WIDTH = 16` for the native extension.
 
-The input (of size `WIDTH`) is read in two batches of size `CHUNK`, and, similarly, the output is written in either one or two batches of size `CHUNK`, depending on the output size of the corresponding opcode.
+The input (of size `WIDTH`) is read in two batches of size `CHUNK`, and, similarly, the output is written in either one
+or two batches of size `CHUNK`, depending on the output size of the corresponding opcode.
 
 #### Proof Verification
 
@@ -373,7 +527,8 @@ The native extension defines the following phantom sub-instructions.
 
 ### Keccak Extension
 
-The Keccak extension supports the Keccak256 hash function. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes.
+The Keccak extension supports the Keccak256 hash function. The extension operates on address spaces `1` and `2`, meaning
+all memory cells are constrained to be bytes.
 
 | Name           | Operands    | Description                                                                                                       |
 | -------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -381,7 +536,8 @@ The Keccak extension supports the Keccak256 hash function. The extension operate
 
 ### SHA2-256 Extension
 
-The SHA2-256 extension supports the SHA2-256 hash function. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes.
+The SHA2-256 extension supports the SHA2-256 hash function. The extension operates on address spaces `1` and `2`,
+meaning all memory cells are constrained to be bytes.
 
 | Name        | Operands    | Description                                                                                                                                                              |
 | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -389,7 +545,10 @@ The SHA2-256 extension supports the SHA2-256 hash function. The extension operat
 
 ### BigInt Extension
 
-The BigInt extension supports operations on 256-bit signed and unsigned integers. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes. Pointers to the representation of the elements are read from address space `1` and the elements themselves are read/written from address space `2`. Each instruction performs block accesses with block size `4` in address space `1` and block size `32` in address space `2`.
+The BigInt extension supports operations on 256-bit signed and unsigned integers. The extension operates on address
+spaces `1` and `2`, meaning all memory cells are constrained to be bytes. Pointers to the representation of the elements
+are read from address space `1` and the elements themselves are read/written from address space `2`. Each instruction
+performs block accesses with block size `4` in address space `1` and block size `32` in address space `2`.
 
 **Note:** These instructions are not the same as instructions on 256-bit registers.
 
@@ -430,9 +589,14 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 
 ### Algebra Extension
 
-The algebra extension supports modular arithmetic over arbitrary fields and their complex field extensions. It is configured to specify a list of supported moduli. The configuration of each supported positive integer modulus `N` includes associated configuration parameters `N::NUM_LIMBS` and `N::BLOCK_SIZE` (defined below).
+The algebra extension supports modular arithmetic over arbitrary fields and their complex field extensions. It is
+configured to specify a list of supported moduli. The configuration of each supported positive integer modulus `N`
+includes associated configuration parameters `N::NUM_LIMBS` and `N::BLOCK_SIZE` (defined below).
 
-The instructions perform operations on unsigned big integers representing elements in the modulus. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes. Pointers to the representation of the elements are read from address space `1` and the elements themselves are read/written from address space `2`.
+The instructions perform operations on unsigned big integers representing elements in the modulus. The extension
+operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes. Pointers to the
+representation of the elements are read from address space `1` and the elements themselves are read/written from address
+space `2`.
 
 An element in the ring of integers modulo `N`is represented as an unsigned big integer with `N::NUM_LIMBS` limbs with
 each limb having `LIMB_BITS = 8` bits. For each instruction, the input elements
@@ -443,7 +607,9 @@ the same format that is congruent modulo `N` to the respective operation applied
 
 For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`.
 Each instruction performs block accesses with block size `4` in address space `1` and block size `N::BLOCK_SIZE` in
-address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall that `N::BLOCK_SIZE` must be a power of 2.
+address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall that `N::BLOCK_SIZE` must be a power of
+
+2.
 
 | Name                      | Operands    | Description                                                                                                                                                                                                |
 | ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -467,9 +633,11 @@ format with each limb having `LIMB_BITS` bits.
 
 #### Complex Extension Field
 
-A complex extension field `Fp2` is the quadratic extension of a prime field `Fp` with irreducible polynomial `X^2 + 1`. An element in `Fp2` is a pair `c0: Fp, c1: Fp` such that `c0 + c1 u` represents a point in `Fp2` where `u^2 = -1`.
+A complex extension field `Fp2` is the quadratic extension of a prime field `Fp` with irreducible polynomial `X^2 + 1`.
+An element in `Fp2` is a pair `c0: Fp, c1: Fp` such that `c0 + c1 u` represents a point in `Fp2` where `u^2 = -1`.
 
-The complex extension field `Fp2` is supported only if the modular arithmetic instructions for `Fp::MODULUS` is also supported.
+The complex extension field `Fp2` is supported only if the modular arithmetic instructions for `Fp::MODULUS` is also
+supported.
 The memory layout of `Fp2` is then that of two concatenated `Fp` elements,
 and the block size for memory accesses is the block size of `Fp`.
 
@@ -495,10 +663,12 @@ r32_fp2(a) -> Fp2 {
 ### Elliptic Curve Extension
 
 The elliptic curve extension supports arithmetic over elliptic curves `C` in Weierstrass form given by
-equation `C: y^2 = x^3 + C::A * x + C::B` where `C::A` and `C::B` are constants in the coordinate field. We note that the definitions of the
+equation `C: y^2 = x^3 + C::A * x + C::B` where `C::A` and `C::B` are constants in the coordinate field. We note that
+the definitions of the
 curve arithmetic operations do not depend on `C::B`. The VM configuration will specify a list of supported curves. For
 each Weierstrass curve `C` there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (
-defined below). The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes.
+defined below). The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be
+bytes.
 
 An affine curve point `EcPoint(x, y)` is a pair of `x,y` where each element is an array of `C::COORD_SIZE` elements each
 with `LIMB_BITS = 8` bits. When the coordinate field `C::Fp` of `C` is prime, the format of `x,y` is guaranteed to be
@@ -532,11 +702,16 @@ The elliptic curve extension defines the following phantom sub-instructions.
 
 ### Pairing Extension
 
-The pairing extension supports opcodes tailored to accelerate pairing checks using the optimal Ate pairing over certain classes of pairing friendly elliptic curves. For a curve `C` to be supported, the VM must have enabled instructions for `C::Fp` and `C::Fp2`. The memory block size is `C::Fp::BLOCK_SIZE` for both reads and writes. The currently supported curves are BN254 and BLS12-381. The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes.
+The pairing extension supports opcodes tailored to accelerate pairing checks using the optimal Ate pairing over certain
+classes of pairing friendly elliptic curves. For a curve `C` to be supported, the VM must have enabled instructions for
+`C::Fp` and `C::Fp2`. The memory block size is `C::Fp::BLOCK_SIZE` for both reads and writes. The currently supported
+curves are BN254 and BLS12-381. The extension operates on address spaces `1` and `2`, meaning all memory cells are
+constrained to be bytes.
 
 We lay out `Fp12` in memory as `c0, ..., c5` where `c_i: Fp2` and the `Fp12` element is `c0 + c1 w + ... + c5 w^5` where
 `w^6 = C::XI` in `Fp2`, where `C::Xi: Fp2` is an associated constant. Both `UnevaluatedLine<Fp2>` and
-`EvaluatedLine<Fp2>` are laid out in memory the same as `[Fp2; 2]`. For more detailed descriptions of the instructions, refer to [the detailed spec](https://hackmd.io/NjMhWt1HTDOB7TIKmTOMFw?view).
+`EvaluatedLine<Fp2>` are laid out in memory the same as `[Fp2; 2]`. For more detailed descriptions of the instructions,
+refer to [the detailed spec](https://hackmd.io/NjMhWt1HTDOB7TIKmTOMFw?view).
 
 | Name                            | Operands    | Description                                                                                                                                                                                                                                                                                                                |
 | ------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -559,4 +734,5 @@ The pairing extension defines the following phantom sub-instructions.
 
 ## Acknowledgements
 
-The design of the native extension was inspired by [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with changes suggested by Max Gillet for compatibility with existing ISAs.
+The design of the native extension was inspired by [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with
+changes suggested by Max Gillet for compatibility with existing ISAs.
