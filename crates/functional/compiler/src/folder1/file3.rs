@@ -29,6 +29,7 @@ pub struct FlattenedFunction {
     pub(crate) atoms_staged: Vec<Vec<Atom>>,
     pub(crate) declaration_set: DeclarationSet,
 
+    pub(crate) name: String,
     pub(crate) uses_timestamp: bool,
     pub(crate) function_id: usize,
 }
@@ -145,6 +146,7 @@ impl FlattenedFunction {
         }
 
         let mut flattened_function = Self {
+            name: function.function.name.clone(),
             inline: function.function.inline,
             arguments,
             stages,

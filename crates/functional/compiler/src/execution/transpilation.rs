@@ -3,30 +3,27 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 use crate::{
-    execution::util::*,
+    execution::constants::*,
     folder1::{
         file2_tree::{DeclarationSet, ExpressionContainer, ScopePath},
+        file3::{FlatFunctionCall, FlatMatch, FlatStatement},
+        function_resolution::Stage,
         ir::{ArithmeticOperator, Expression, Material, Statement},
         type_resolution::TypeSet,
     },
 };
 
-pub struct VariableNamer<'a> {
-    counter: usize,
+pub struct FieldNamer<'a> {
     declaration_set: &'a DeclarationSet,
 }
 
-impl<'a> VariableNamer<'a> {
-    pub fn new(declaration_set: &'a DeclarationSet) -> Self {
-        Self {
-            counter: 0,
-            declaration_set,
-        }
+impl<'a> FieldNamer<'a> {
+    pub(crate) fn new(declaration_set: &'a DeclarationSet) -> Self {
+        Self { declaration_set }
     }
-    pub fn new_temporary_name(&mut self) -> TokenStream {
-        self.counter += 1;
-        ident(&format!("temp_{}", self.counter))
-    }
+}
+
+impl<'a> FieldNamer<'a> {
     pub fn scope_name(&self, scope: &ScopePath) -> TokenStream {
         let mut full_name = "scope".to_string();
         for (i, branch) in scope.0.iter() {
@@ -40,25 +37,60 @@ impl<'a> VariableNamer<'a> {
         for (i, branch) in scope.0.iter() {
             full_name.extend(format!("_{}_{}", i, branch).chars());
         }
-        let name = ident(&full_name);
-        quote! {
-            self.#name
-        }
+        ident(&full_name)
     }
     pub fn reference_name(&self, index: usize) -> TokenStream {
-        let name = ident(&format!("ref_{}", index));
-        quote! {
-            self.#name
-        }
+        ident(&format!("ref_{}", index))
     }
     pub fn finalized_array_name(&self, index: usize) -> TokenStream {
-        let name = ident(&format!("finalized_array_{}", index));
+        ident(&format!("finalized_array_{}", index))
+    }
+    pub fn callee_name(&self, index: usize) -> TokenStream {
+        ident(&format!("callee_{}", index))
+    }
+    pub fn argument_name(&self, index: usize) -> TokenStream {
+        ident(&format!("argument_{}", index))
+    }
+}
+
+pub struct VariableNamer<'a> {
+    counter: usize,
+    field_namer: FieldNamer<'a>,
+}
+
+impl<'a> VariableNamer<'a> {
+    pub fn new(declaration_set: &'a DeclarationSet) -> Self {
+        Self {
+            counter: 0,
+            field_namer: FieldNamer::new(declaration_set),
+        }
+    }
+    pub fn new_temporary_name(&mut self) -> TokenStream {
+        self.counter += 1;
+        ident(&format!("temp_{}", self.counter))
+    }
+    pub fn refer_to_field(&self, name: TokenStream) -> TokenStream {
         quote! {
             self.#name
         }
     }
-    pub fn type_name(&self, name: &str) -> TokenStream {
-        ident(&format!("TL_{}", name))
+    pub fn scope_name(&self, scope: &ScopePath) -> TokenStream {
+        self.refer_to_field(self.field_namer.scope_name(scope))
+    }
+    pub fn variable_name(&self, curr: &ScopePath, name: &str) -> TokenStream {
+        self.refer_to_field(self.field_namer.variable_name(curr, name))
+    }
+    pub fn reference_name(&self, index: usize) -> TokenStream {
+        self.refer_to_field(self.field_namer.reference_name(index))
+    }
+    pub fn finalized_array_name(&self, index: usize) -> TokenStream {
+        self.refer_to_field(self.field_namer.finalized_array_name(index))
+    }
+    pub fn callee_name(&self, index: usize) -> TokenStream {
+        self.refer_to_field(self.field_namer.callee_name(index))
+    }
+    pub fn argument_name(&self, index: usize) -> TokenStream {
+        self.refer_to_field(self.field_namer.argument_name(index))
     }
 }
 
@@ -80,7 +112,7 @@ impl ExpressionContainer {
                 fields,
             } => {
                 let type_name =
-                    namer.type_name(&type_set.get_constructor_type_name(constructor).unwrap());
+                    type_name(&type_set.get_constructor_type_name(constructor).unwrap());
                 let fields = fields
                     .iter()
                     .map(|field| field.transpile_defined(scope, namer, type_set));
@@ -107,7 +139,7 @@ impl ExpressionContainer {
                 right.transpile_defined(scope, namer, type_set),
             ),
             Expression::EmptyConstArray { elem_type } => {
-                let elem_type = namer.type_to_rust(elem_type);
+                let elem_type = type_to_rust(elem_type);
                 quote! {
                     [#elem_type; 0]
                 }
@@ -183,7 +215,7 @@ impl ExpressionContainer {
                 fields,
             } => {
                 let type_name =
-                    namer.type_name(&type_set.get_constructor_type_name(constructor).unwrap());
+                    type_name(&type_set.get_constructor_type_name(constructor).unwrap());
                 let names = (0..fields.len())
                     .map(|_| namer.new_temporary_name())
                     .collect::<Vec<_>>();
@@ -224,18 +256,18 @@ impl ExpressionContainer {
     }
 }
 
-impl Statement {
+impl FlatStatement {
     pub fn transpile(
         &self,
         index: usize,
-        scope: &ScopePath,
-        material: Material,
         type_set: &TypeSet,
         declaration_set: &DeclarationSet,
     ) -> TokenStream {
         let mut namer = VariableNamer::new(declaration_set);
-        let block = match self {
-            Statement::VariableDeclaration { name, tipo } => quote! {},
+        let scope = &self.scope;
+        let material = self.material;
+        let block = match &self.statement {
+            Statement::VariableDeclaration { .. } => quote! {},
             Statement::Equality { left, right } => {
                 let right = right.transpile_defined(scope, &namer, type_set);
                 left.transpile_top_down(scope, &right, &mut namer, type_set)
@@ -244,7 +276,7 @@ impl Statement {
                 reference: reference_expression,
                 data,
             } => {
-                let type_identifier = namer.type_to_identifier(data.get_type());
+                let type_identifier = type_to_identifier(data.get_type());
                 let data = data.transpile_defined(scope, &namer, type_set);
                 let reference = create_ref(type_identifier, data);
                 let (init, this) = match material {
@@ -278,35 +310,33 @@ impl Statement {
                 data: data_expression,
                 reference,
             } => {
-                let type_identifier = namer.type_to_identifier(reference.get_type());
+                let tipo = reference.get_type();
                 let reference = reference.transpile_defined(scope, &namer, type_set);
                 data_expression.transpile_top_down(
                     scope,
-                    &dereference(type_identifier, reference),
+                    &dereference(tipo, reference),
                     &mut namer,
                     type_set,
                 )
             }
-            Statement::EmptyUnderConstructionArray { array, elem_type } => {
-                let type_identifier = namer.type_to_identifier(elem_type);
-                array.transpile_top_down(
+            Statement::EmptyUnderConstructionArray { array, elem_type } => array
+                .transpile_top_down(
                     scope,
-                    &create_empty_under_construction_array(type_identifier),
+                    &create_empty_under_construction_array(elem_type),
                     &mut namer,
                     type_set,
-                )
-            }
+                ),
             Statement::UnderConstructionArrayPrepend {
                 new_array,
                 elem,
                 old_array,
             } => {
-                let type_identifier = namer.type_to_identifier(elem.get_type());
+                let tipo = elem.get_type();
                 let old_array = old_array.transpile_defined(scope, &namer, type_set);
                 let elem = elem.transpile_defined(scope, &namer, type_set);
                 new_array.transpile_top_down(
                     scope,
-                    &prepend_under_construction_array(type_identifier, old_array, elem),
+                    &prepend_under_construction_array(tipo, old_array, elem),
                     &mut namer,
                     type_set,
                 )
@@ -315,10 +345,10 @@ impl Statement {
                 finalized: finalized_expression,
                 under_construction,
             } => {
-                let type_identifier = namer.type_to_identifier(under_construction.get_type());
+                let tipo = under_construction.get_type();
                 let under_construction =
                     under_construction.transpile_defined(scope, &namer, type_set);
-                let finalized = finalize_array(type_identifier, under_construction);
+                let finalized = finalize_array(tipo, under_construction);
                 let (init, this) = match material {
                     Material::Materialized => {
                         let finalized_array_name = namer.finalized_array_name(index);
@@ -347,12 +377,12 @@ impl Statement {
                 }
             }
             Statement::ArrayAccess { elem, array, index } => {
-                let type_identifier = namer.type_to_identifier(elem.get_type());
+                let tipo = elem.get_type();
                 let array = array.transpile_defined(scope, &namer, type_set);
                 let index = index.transpile_defined(scope, &namer, type_set);
                 elem.transpile_top_down(
                     scope,
-                    &array_access(type_identifier, array, index),
+                    &array_access(tipo, array, index),
                     &mut namer,
                     type_set,
                 )
@@ -361,6 +391,92 @@ impl Statement {
         let scope_name = namer.scope_name(scope);
         quote! {
             if #scope_name { #block }
+        }
+    }
+}
+
+impl FlatFunctionCall {
+    pub fn transpile(
+        &self,
+        stage: Stage,
+        index: usize,
+        type_set: &TypeSet,
+        declaration_set: &DeclarationSet,
+    ) -> TokenStream {
+        let mut namer = VariableNamer::new(declaration_set);
+        let mut block = vec![];
+
+        let callee = namer.callee_name(index);
+        let struct_name = function_struct_name(&self.function_name);
+        if stage.index == 0 {
+            block.push(quote! {
+                #callee = Box::new(#struct_name::init());
+            });
+        };
+        let empty_declaration_set = DeclarationSet::new();
+        let blank_field_namer = FieldNamer::new(&empty_declaration_set);
+        for i in stage.start..stage.mid {
+            let argument = &self.arguments[i].transpile_defined(&self.scope, &namer, type_set);
+            let callee_field = blank_field_namer.argument_name(i);
+            block.push(quote! {
+                #callee.#callee_field = #argument;
+            });
+        }
+        block.push(execute_stage(&callee, stage.index));
+        for i in stage.mid..stage.end {
+            let callee_field = blank_field_namer.argument_name(i);
+            block.push(self.arguments[i].transpile_top_down(
+                &self.scope,
+                &quote! { #callee.#callee_field },
+                &mut namer,
+                type_set,
+            ));
+        }
+
+        let scope_name = namer.scope_name(&self.scope);
+        quote! {
+            if #scope_name { #(#block)* }
+        }
+    }
+}
+
+impl FlatMatch {
+    pub fn transpile(
+        &self,
+        _: usize,
+        type_set: &TypeSet,
+        declaration_set: &DeclarationSet,
+    ) -> TokenStream {
+        let mut namer = VariableNamer::new(declaration_set);
+        let type_name = type_to_rust(&self.value.get_type());
+
+        let mut arms = vec![];
+        for (constructor, components) in self.branches.iter() {
+            let scope = self.scope.then(self.index, constructor.clone());
+            let scope_name = namer.scope_name(&scope);
+            let temps = (0..components.len())
+                .map(|_| namer.new_temporary_name())
+                .collect::<Vec<_>>();
+            let fields = components
+                .iter()
+                .map(|component| namer.variable_name(&scope, component));
+            let arm = quote! {
+                #type_name::#constructor(#(#temps),*) => {
+                    #(#fields = #temps;)*
+                    #scope_name = true;
+                }
+            };
+            arms.push(arm);
+        }
+
+        let scope_name = namer.scope_name(&self.scope);
+        let value = self.value.transpile_defined(&self.scope, &namer, type_set);
+        quote! {
+            if #scope_name {
+                match #type_name::#value {
+                    #(#arms)*
+                }
+            }
         }
     }
 }

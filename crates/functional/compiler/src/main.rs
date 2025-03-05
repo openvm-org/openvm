@@ -6,14 +6,31 @@ pub mod folder1;
 
 struct Bing(usize, usize);
 
-#[derive(Clone, Copy)]
+/*#[derive(Clone, Copy)]
 struct A {
-    b: &'static B,
+    b: &'static mut B,
 }
 
 struct B {
     a: A,
 }
+
+enum C {
+    D(usize, usize),
+}
+
+struct E {
+    f: usize,
+    g: usize,
+}
+
+impl E {
+    fn assign(&mut self, c: C) {
+        match c {
+            C::D(a, b) => {}
+        }
+    }
+}*/
 
 fn main() {
     println!("Hello, world!");
