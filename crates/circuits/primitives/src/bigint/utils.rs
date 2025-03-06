@@ -1,7 +1,7 @@
 use std::{cmp::max, collections::VecDeque, iter::repeat, ops::Neg, str::FromStr};
 
 use num_bigint::{BigInt, BigUint, Sign};
-use num_traits::{FromPrimitive, Num, One, ToPrimitive, Zero};
+use num_traits::{FromPrimitive, Num, ToPrimitive, Zero};
 use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::PrimeField64};
 
 use crate::var_range::VariableRangeCheckerBus;
@@ -27,11 +27,11 @@ pub fn range_check<AB: InteractionBuilder>(
 }
 
 pub fn secp256k1_coord_prime() -> BigUint {
-    let mut result = BigUint::one() << 256;
-    for power in [32, 9, 8, 7, 6, 4, 0] {
-        result -= BigUint::one() << power;
-    }
-    result
+    BigUint::from_str_radix(
+        "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f",
+        16,
+    )
+    .unwrap()
 }
 
 pub fn secp256k1_scalar_prime() -> BigUint {
