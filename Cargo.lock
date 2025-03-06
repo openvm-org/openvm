@@ -3825,6 +3825,7 @@ dependencies = [
  "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
+ "rand",
  "serde",
  "serde_with",
  "strum",
@@ -3844,6 +3845,7 @@ dependencies = [
  "lazy_static",
  "num-bigint 0.4.6",
  "num-traits",
+ "once_cell",
  "openvm",
  "openvm-algebra-guest",
  "openvm-algebra-moduli-macros",
@@ -3861,6 +3863,8 @@ name = "openvm-ecc-integration-tests"
 version = "1.0.0-rc.1"
 dependencies = [
  "eyre",
+ "hex-literal",
+ "num-bigint 0.4.6",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
  "openvm-circuit",

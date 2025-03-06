@@ -39,7 +39,8 @@ pub fn main() {
     let prehash = keccak256(black_box(msg));
 
     let recovered_key =
-        VerifyingKey::<Secp256k1>::recover_from_prehash_noverify(&prehash, &signature, recid);
+        VerifyingKey::<Secp256k1>::recover_from_prehash_noverify(&prehash, &signature, recid)
+            .unwrap();
 
     let expected_key = ecdsa::VerifyingKey::from_sec1_bytes(&hex!(
         "0200866db99873b09fc2fb1e3ba549b156e96d1a567e3284f5f0e859a83320cb8b"

@@ -23,6 +23,7 @@ openvm-rv32im-guest = { workspace = true }
 openvm-algebra-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }
 openvm-algebra-moduli-macros = { workspace = true }
+once_cell = { version = "1.20.3", default-features = false, features = ["race", "alloc"] }
 
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }

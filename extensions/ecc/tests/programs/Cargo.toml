@@ -13,6 +13,7 @@ openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros", default-
 openvm-algebra-guest = { path = "../../../algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { path = "../../../algebra/moduli-macros", default-features = false }
 openvm-keccak256-guest = { path = "../../../keccak256/guest", default-features = false }
+openvm-rv32im-guest = { path = "../../../../extensions/rv32im/guest", default-features = false }
 
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
@@ -25,11 +26,21 @@ k256 = { version = "0.13.3", default-features = false, features = [
     "ecdsa",
 ], optional = true }
 
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint = "0.4.6"
+
 [features]
 default = []
 std = ["serde/std", "openvm/std", "openvm-ecc-guest/std"]
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
 p256 = ["openvm-ecc-guest/p256"]
+
+# Features to enable specific tests within decompress_invalid_hint.rs
+# Note that these tests are expected to not terminate
+test_secp256k1_possible = []
+test_secp256k1_impossible = []
+test_mycurve_possible = []
+test_mycurve_impossible = []
 
 [profile.release]
 panic = "abort"
@@ -50,6 +61,10 @@ required-features = ["k256", "p256"]
 
 [[example]]
 name = "decompress"
+required-features = ["k256"]
+
+[[example]]
+name = "decompress_invalid_hint"
 required-features = ["k256"]
 
 [[example]]

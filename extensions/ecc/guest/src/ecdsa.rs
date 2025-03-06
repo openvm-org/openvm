@@ -59,7 +59,7 @@ where
             Tag::CompressedEvenY | Tag::CompressedOddY => {
                 let x = Coordinate::<C>::from_be_bytes(&bytes[1..]);
                 let rec_id = bytes[0] & 1;
-                let point = FromCompressed::decompress(x, &rec_id);
+                let point = FromCompressed::decompress(x, &rec_id).ok_or_else(Error::new)?;
                 Ok(Self { point })
             }
 
@@ -67,7 +67,7 @@ where
                 let (x_bytes, y_bytes) = bytes[1..].split_at(Coordinate::<C>::NUM_LIMBS);
                 let x = Coordinate::<C>::from_be_bytes(x_bytes);
                 let y = Coordinate::<C>::from_be_bytes(y_bytes);
-                let point = <C as IntrinsicCurve>::Point::from_xy(x, y).unwrap();
+                let point = <C as IntrinsicCurve>::Point::from_xy(x, y).ok_or_else(Error::new)?;
                 Ok(Self { point })
             }
 
@@ -153,7 +153,7 @@ where
         prehash: &[u8],
         sig: &[u8],
         recovery_id: RecoveryId,
-    ) -> VerifyingKey<C>
+    ) -> Result<Self>
     where
         for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
         for<'a> &'a Coordinate<C>: Mul<&'a Coordinate<C>, Output = Coordinate<C>>,
@@ -185,7 +185,7 @@ where
         }
         let rec_id = recovery_id.to_byte();
         // The point R decompressed from x-coordinate `r`
-        let R: C::Point = FromCompressed::decompress(x, &rec_id);
+        let R: C::Point = FromCompressed::decompress(x, &rec_id).ok_or_else(Error::new)?;
 
         let neg_u1 = z.div_unsafe(&r);
         let u2 = s.div_unsafe(&r);
@@ -193,7 +193,7 @@ where
         let point = <C as IntrinsicCurve>::msm(&[neg_u1, u2], &[NEG_G, R]);
         let public_key = PublicKey { point };
 
-        VerifyingKey { inner: public_key }
+        Ok(VerifyingKey { inner: public_key })
     }
 
     // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270

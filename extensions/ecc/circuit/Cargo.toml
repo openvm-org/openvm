@@ -31,6 +31,7 @@ num-integer = { workspace = true }
 serde = { workspace = true }
 serde_with = { workspace = true }
 itertools = { workspace = true }
+rand = { workspace = true, features = ["std_rng"] }
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
