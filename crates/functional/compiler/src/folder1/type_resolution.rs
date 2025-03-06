@@ -9,7 +9,7 @@ use crate::folder1::ir::Material;
 #[derive(Clone)]
 pub struct TypeSet {
     pub type_order: Vec<String>,
-    pub types: HashMap<String, AlgebraicTypeDeclaration>,
+    pub algebraic_types: HashMap<String, AlgebraicTypeDeclaration>,
     pub constructors: HashMap<String, (String, Vec<Type>)>,
 }
 
@@ -49,7 +49,7 @@ impl TypeSet {
         }
         Ok(Self {
             type_order,
-            types,
+            algebraic_types: types,
             constructors,
         })
     }
@@ -57,7 +57,7 @@ impl TypeSet {
         &self,
         name: &String,
     ) -> Result<&AlgebraicTypeDeclaration, CompilationError> {
-        if let Some(algebraic_type) = self.types.get(name) {
+        if let Some(algebraic_type) = self.algebraic_types.get(name) {
             Ok(algebraic_type)
         } else {
             Err(CompilationError::UndefinedType(name.clone()))

@@ -79,7 +79,7 @@ impl ExpressionContainer {
                 fields,
             } => {
                 let type_name = &type_set.constructors[constructor].0;
-                let tipo = &type_set.types[type_name];
+                let tipo = &type_set.algebraic_types[type_name];
                 let mut result = Vec::new();
                 if tipo.variants.len() != 1 {
                     let i = tipo
@@ -180,7 +180,7 @@ impl ExpressionContainer {
                 fields,
             } => {
                 let type_name = &type_set.constructors[constructor].0;
-                let tipo = &type_set.types[type_name];
+                let tipo = &type_set.algebraic_types[type_name];
                 let mut offset = 0;
                 if tipo.variants.len() != 1 {
                     let i = tipo

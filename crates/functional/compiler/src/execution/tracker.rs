@@ -44,6 +44,23 @@ impl Stage2Program {
             functions.push(function.transpile(self));
             types_in_memory.extend(function.get_types_in_memory());
         }
+        let mut algebraic_types = vec![];
+        for algebraic_type in self.types.algebraic_types.values() {
+            let mut variants = vec![];
+            for variant in algebraic_type.variants.iter() {
+                let name = ident(&variant.name);
+                let rust_components = variant.components.iter().map(type_to_rust);
+                variants.push(quote! {
+                    #name(#(#rust_components),*),
+                });
+            }
+            let name = type_name(&algebraic_type.name);
+            algebraic_types.push(quote! {
+                enum #name {
+                    #(#variants)*
+                }
+            });
+        }
         let tracker = rust_tracker(types_in_memory);
         quote! {
             #tracker

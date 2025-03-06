@@ -134,7 +134,7 @@ impl TypeSet {
             Type::Array(_) => 2,
             Type::UnderConstructionArray(_) => 2,
             Type::NamedType(name) => {
-                let algebraic_type = &self.types[name];
+                let algebraic_type = &self.algebraic_types[name];
                 let max_variant_size = algebraic_type
                     .variants
                     .iter()
