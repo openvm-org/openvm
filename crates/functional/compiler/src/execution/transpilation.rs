@@ -25,6 +25,7 @@ impl<'a> FieldNamer<'a> {
 
 impl<'a> FieldNamer<'a> {
     pub fn scope_name(&self, scope: &ScopePath) -> TokenStream {
+        assert!(!scope.0.is_empty());
         let mut full_name = "scope".to_string();
         for (i, branch) in scope.0.iter() {
             full_name.extend(format!("_{}_{}", i, branch).chars());
@@ -76,6 +77,18 @@ impl<'a> VariableNamer<'a> {
     }
     pub fn scope_name(&self, scope: &ScopePath) -> TokenStream {
         self.refer_to_field(self.field_namer.scope_name(scope))
+    }
+    pub fn scoped(&self, scope: &ScopePath, body: TokenStream) -> TokenStream {
+        if scope.0.is_empty() {
+            body
+        } else {
+            let scope_name = self.scope_name(scope);
+            quote! {
+                if #scope_name {
+                    #body
+                }
+            }
+        }
     }
     pub fn variable_name(&self, curr: &ScopePath, name: &str) -> TokenStream {
         self.refer_to_field(self.field_namer.variable_name(curr, name))
@@ -259,16 +272,15 @@ impl FlatStatement {
         &self,
         index: usize,
         type_set: &TypeSet,
-        declaration_set: &DeclarationSet,
+        namer: &mut VariableNamer,
     ) -> TokenStream {
-        let mut namer = VariableNamer::new(declaration_set);
         let scope = &self.scope;
         let material = self.material;
         let block = match &self.statement {
             Statement::VariableDeclaration { .. } => quote! {},
             Statement::Equality { left, right } => {
                 let right = right.transpile_defined(scope, &namer, type_set);
-                left.transpile_top_down(scope, &right, &mut namer, type_set)
+                left.transpile_top_down(scope, &right, namer, type_set)
             }
             Statement::Reference {
                 reference: reference_expression,
@@ -298,7 +310,7 @@ impl FlatStatement {
                     }
                 };
                 let following =
-                    reference_expression.transpile_top_down(scope, &this, &mut namer, type_set);
+                    reference_expression.transpile_top_down(scope, &this, namer, type_set);
                 quote! {
                     #init
                     #following
@@ -313,7 +325,7 @@ impl FlatStatement {
                 data_expression.transpile_top_down(
                     scope,
                     &dereference(tipo, reference),
-                    &mut namer,
+                    namer,
                     type_set,
                 )
             }
@@ -321,7 +333,7 @@ impl FlatStatement {
                 .transpile_top_down(
                     scope,
                     &create_empty_under_construction_array(elem_type),
-                    &mut namer,
+                    namer,
                     type_set,
                 ),
             Statement::UnderConstructionArrayPrepend {
@@ -335,7 +347,7 @@ impl FlatStatement {
                 new_array.transpile_top_down(
                     scope,
                     &prepend_under_construction_array(tipo, old_array, elem),
-                    &mut namer,
+                    namer,
                     type_set,
                 )
             }
@@ -368,7 +380,7 @@ impl FlatStatement {
                     }
                 };
                 let following =
-                    finalized_expression.transpile_top_down(scope, &this, &mut namer, type_set);
+                    finalized_expression.transpile_top_down(scope, &this, namer, type_set);
                 quote! {
                     #init
                     #following
@@ -378,18 +390,10 @@ impl FlatStatement {
                 let tipo = elem.get_type();
                 let array = array.transpile_defined(scope, &namer, type_set);
                 let index = index.transpile_defined(scope, &namer, type_set);
-                elem.transpile_top_down(
-                    scope,
-                    &array_access(tipo, array, index),
-                    &mut namer,
-                    type_set,
-                )
+                elem.transpile_top_down(scope, &array_access(tipo, array, index), namer, type_set)
             }
         };
-        let scope_name = namer.scope_name(scope);
-        quote! {
-            if #scope_name { #block }
-        }
+        namer.scoped(scope, block)
     }
 }
 
@@ -399,9 +403,8 @@ impl FlatFunctionCall {
         stage: Stage,
         index: usize,
         type_set: &TypeSet,
-        declaration_set: &DeclarationSet,
+        namer: &mut VariableNamer,
     ) -> TokenStream {
-        let mut namer = VariableNamer::new(declaration_set);
         let mut block = vec![];
 
         let callee = namer.callee_name(index);
@@ -426,15 +429,12 @@ impl FlatFunctionCall {
             block.push(self.arguments[i].transpile_top_down(
                 &self.scope,
                 &quote! { #callee.#callee_field },
-                &mut namer,
+                namer,
                 type_set,
             ));
         }
 
-        let scope_name = namer.scope_name(&self.scope);
-        quote! {
-            if #scope_name { #(#block)* }
-        }
+        namer.scoped(&self.scope, quote! { #(#block)* })
     }
 }
 
@@ -443,9 +443,8 @@ impl FlatMatch {
         &self,
         _: usize,
         type_set: &TypeSet,
-        declaration_set: &DeclarationSet,
+        namer: &mut VariableNamer,
     ) -> TokenStream {
-        let mut namer = VariableNamer::new(declaration_set);
         let type_name = type_to_rust(&self.value.get_type());
 
         let mut arms = vec![];
@@ -467,14 +466,14 @@ impl FlatMatch {
             arms.push(arm);
         }
 
-        let scope_name = namer.scope_name(&self.scope);
-        let value = self.value.transpile_defined(&self.scope, &namer, type_set);
-        quote! {
-            if #scope_name {
+        let value = self.value.transpile_defined(&self.scope, namer, type_set);
+        namer.scoped(
+            &self.scope,
+            quote! {
                 match #type_name::#value {
                     #(#arms)*
                 }
-            }
-        }
+            },
+        )
     }
 }

@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -34,21 +32,14 @@ impl FlattenedFunction {
                 pub #name: #tipo,
             });
         }
-        let mut scopes = HashSet::new();
-        for statement in self.statements.iter() {
-            scopes.insert(statement.scope.clone());
-        }
         for matchi in self.matches.iter() {
-            scopes.insert(matchi.scope.clone());
-        }
-        for function_call in self.function_calls.iter() {
-            scopes.insert(function_call.scope.clone());
-        }
-        for scope in scopes {
-            let name = field_namer.scope_name(&scope);
-            fields.push(quote! {
-                pub #name: bool,
-            });
+            for (constructor, _) in matchi.branches.iter() {
+                let scope = matchi.scope.then(matchi.index, constructor.clone());
+                let name = field_namer.scope_name(&scope);
+                fields.push(quote! {
+                    pub #name: bool,
+                });
+            }
         }
         let ref_type = reference_type();
         let array_type = array_type();
@@ -102,43 +93,39 @@ impl FlattenedFunction {
 
     pub fn transpile_stage(&self, stage_index: usize, program: &Stage2Program) -> TokenStream {
         let mut transpiled_atoms = vec![];
+        let mut namer = VariableNamer::new(&self.declaration_set);
         for atom in self.atoms_staged[stage_index].iter() {
-            let transpiled_atom = match atom {
-                Atom::Statement(index) => {
-                    self.statements[*index].transpile(*index, &program.types, &self.declaration_set)
-                }
-                Atom::Match(index) => {
-                    self.matches[*index].transpile(*index, &program.types, &self.declaration_set)
-                }
-                Atom::PartialFunctionCall(index, stage) => self.function_calls[*index].transpile(
-                    *stage,
-                    *index,
-                    &program.types,
-                    &self.declaration_set,
-                ),
-                Atom::InArgument(index) => {
-                    let mut namer = VariableNamer::new(&self.declaration_set);
-                    let argument_name = namer.argument_name(*index);
-                    self.arguments[*index].transpile_top_down(
-                        &ScopePath::empty(),
-                        &argument_name,
-                        &mut namer,
-                        &program.types,
-                    )
-                }
-                Atom::OutArgument(index) => {
-                    let namer = VariableNamer::new(&self.declaration_set);
-                    let argument_name = namer.argument_name(*index);
-                    let argument_value = self.arguments[*index].transpile_defined(
-                        &ScopePath::empty(),
-                        &namer,
-                        &program.types,
-                    );
-                    quote! {
-                        #argument_name = #argument_value;
+            let transpiled_atom =
+                match atom {
+                    Atom::Statement(index) => {
+                        self.statements[*index].transpile(*index, &program.types, &mut namer)
                     }
-                }
-            };
+                    Atom::Match(index) => {
+                        self.matches[*index].transpile(*index, &program.types, &mut namer)
+                    }
+                    Atom::PartialFunctionCall(index, stage) => self.function_calls[*index]
+                        .transpile(*stage, *index, &program.types, &mut namer),
+                    Atom::InArgument(index) => {
+                        let argument_name = namer.argument_name(*index);
+                        self.arguments[*index].transpile_top_down(
+                            &ScopePath::empty(),
+                            &argument_name,
+                            &mut namer,
+                            &program.types,
+                        )
+                    }
+                    Atom::OutArgument(index) => {
+                        let argument_name = namer.argument_name(*index);
+                        let argument_value = self.arguments[*index].transpile_defined(
+                            &ScopePath::empty(),
+                            &namer,
+                            &program.types,
+                        );
+                        quote! {
+                            #argument_name = #argument_value;
+                        }
+                    }
+                };
             transpiled_atoms.push(transpiled_atom);
         }
         define_stage(
