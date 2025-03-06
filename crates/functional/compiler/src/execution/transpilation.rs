@@ -49,9 +49,6 @@ impl<'a> FieldNamer<'a> {
     pub fn callee_name(&self, index: usize) -> TokenStream {
         ident(&format!("callee_{}", index))
     }
-    pub fn argument_name(&self, index: usize) -> TokenStream {
-        ident(&format!("argument_{}", index))
-    }
 }
 
 pub struct VariableNamer<'a> {
@@ -102,8 +99,8 @@ impl<'a> VariableNamer<'a> {
     pub fn callee_name(&self, index: usize) -> TokenStream {
         self.refer_to_field(self.field_namer.callee_name(index))
     }
-    pub fn argument_name(&self, index: usize) -> TokenStream {
-        self.refer_to_field(self.field_namer.argument_name(index))
+    pub fn in_argument_name(&self, index: usize) -> TokenStream {
+        ident(&format!("argument_{}", index))
     }
 }
 
@@ -414,21 +411,23 @@ impl FlatFunctionCall {
                 #callee = Box::new(#struct_name::default());
             });
         };
-        let empty_declaration_set = DeclarationSet::new();
-        let blank_field_namer = FieldNamer::new(&empty_declaration_set);
-        for i in stage.start..stage.mid {
-            let argument = &self.arguments[i].transpile_defined(&self.scope, &namer, type_set);
-            let callee_field = blank_field_namer.argument_name(i);
-            block.push(quote! {
-                #callee.#callee_field = #argument;
-            });
-        }
-        block.push(execute_stage(&callee, stage.index));
+        let in_arguments = self.arguments[stage.start..stage.mid]
+            .iter()
+            .map(|argument| argument.transpile_defined(&self.scope, namer, type_set))
+            .collect();
+        let out_argument_names = (stage.start..stage.mid)
+            .map(|_| namer.new_temporary_name())
+            .collect();
+        block.push(execute_stage(
+            &callee,
+            &in_arguments,
+            &out_argument_names,
+            stage.index,
+        ));
         for i in stage.mid..stage.end {
-            let callee_field = blank_field_namer.argument_name(i);
             block.push(self.arguments[i].transpile_top_down(
                 &self.scope,
-                &quote! { #callee.#callee_field },
+                &out_argument_names[i - stage.mid],
                 namer,
                 type_set,
             ));
