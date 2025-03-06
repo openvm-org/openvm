@@ -83,3 +83,13 @@ In `FieldExpr::eval` the constraints are evaluated as an `OverflowInt<AB::Expr>`
 The `CheckCarryModToZeroSubAir` sub air constrains the carries to `[0, 2^range_checker_bits)` and then adds constraints `previous_carry + current_limb == 2^limb_bits * current_carry` for each limb.
 In order for these constraints to be sound, we must ensure the RHS does not overflow, which is what the precondition does. 
 Note that `modulus_bits` is the modulus of the proof system, not the modulus used by `mod-builder` for arithmetic.
+
+### Note on value of `range_checker_bits`
+
+If `range_checker_bits` is too small, the carries resulting from the product of two `FieldVariable`'s may be too large to be range checked.
+If you encounter [this assert](https://github.com/openvm-org/openvm/blob/f1b484499b9c059d14949cdfaa648906757ca7aa/crates/circuits/primitives/src/bigint/utils.rs#L18C1-L24C1) failing, then this might be your problem.
+Increase `range_checker_bits` and try again.
+
+This error could also occur if you are calling `FieldVariable::int_add` or `FieldVariable::int_mul` with large constants.
+These methods are not meant to be called with large constants.
+Instead create a constant with `ExprBuilder::new_const` and use that. 
