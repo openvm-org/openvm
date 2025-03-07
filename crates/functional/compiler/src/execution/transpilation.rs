@@ -195,6 +195,12 @@ impl ExpressionContainer {
                     [#(#array[#indices]),*]
                 }
             }
+            Expression::ConstArrayRepeated { element, length } => {
+                let element = element.transpile_defined(scope, namer, type_set);
+                quote! {
+                    [#element; #length]
+                }
+            }
         }
     }
 

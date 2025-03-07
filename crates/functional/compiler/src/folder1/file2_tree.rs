@@ -555,6 +555,18 @@ impl ExpressionContainer {
                 }
                 self.tipo = Some(Type::ConstArray(elem_type.clone().into(), *to - *from).into());
             }
+            Expression::ConstArrayRepeated { element, length } => {
+                element.resolve_defined(function_container, path, material)?;
+                let elem_type = element.get_type();
+                if elem_type
+                    .contains_under_construction_array(&function_container.type_set)
+                    .unwrap()
+                {
+                    return Err(CompilationError::DuplicateUnderConstructionArrayUsageInConstArray);
+                }
+
+                self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), *length).into());
+            }
         }
         Ok(())
     }

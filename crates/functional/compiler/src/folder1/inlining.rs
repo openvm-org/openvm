@@ -339,6 +339,9 @@ impl ExpressionContainer {
             } => {
                 array.inline(renamer);
             }
+            Expression::ConstArrayRepeated { element, length: _ } => {
+                element.inline(renamer);
+            }
         };
     }
 }

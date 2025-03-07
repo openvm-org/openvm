@@ -116,6 +116,10 @@ pub enum Expression {
         from: usize,
         to: usize,
     },
+    ConstArrayRepeated {
+        element: ExpressionContainer,
+        length: usize,
+    },
 } // components of an algebraic value can be extracted using match, don’t need to have an expression for them
 
 #[derive(Clone)]

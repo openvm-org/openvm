@@ -142,6 +142,17 @@ impl ExpressionContainer {
                 let elem_size = type_set.calc_type_size(elem_type);
                 array_representation[from * elem_size..to * elem_size].to_vec()
             }
+            Expression::ConstArrayRepeated { element, length } => {
+                let element_representation =
+                    element.represent_defined(type_set, representation_table, scope);
+                let elem_type = element.get_type();
+                let elem_size = type_set.calc_type_size(elem_type);
+                let mut result = Vec::with_capacity(*length * elem_size);
+                for _ in 0..*length {
+                    result.extend(element_representation.clone());
+                }
+                result
+            }
         }
     }
 
