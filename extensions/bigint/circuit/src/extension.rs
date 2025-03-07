@@ -191,7 +191,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             ),
             BranchLessThanCoreChip::new(
                 bitwise_lu_chip.clone(),
-                Rv32LessThan256Opcode::CLASS_OFFSET,
+                Rv32BranchLessThan256Opcode::CLASS_OFFSET,
             ),
             offline_memory.clone(),
         );
