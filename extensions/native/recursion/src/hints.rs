@@ -97,7 +97,11 @@ impl Hintable<InnerConfig> for InnerChallenge {
     }
 
     fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        vec![self.as_base_slice().to_vec()]
+        self.as_base_slice()
+            .iter()
+            .copied()
+            .map(|x| vec![x])
+            .collect()
     }
 }
 

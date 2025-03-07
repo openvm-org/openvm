@@ -3,7 +3,7 @@ use std::{iter::Zip, vec::IntoIter};
 use backtrace::Backtrace;
 use itertools::izip;
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -413,8 +413,14 @@ impl<C: Config> Builder<C> {
     }
 
     pub fn hint_ext(&mut self) -> Ext<C::F, C::EF> {
-        let arr = self.hint_exts();
-        self.get(&arr, RVar::zero())
+        let flattened = self.hint_felts_fixed(C::EF::D);
+
+        // Simply recast memory as Array<Ext>.
+        let array: Array<C, Ext<_, _>> = match flattened {
+            Array::Fixed(_) => unreachable!(),
+            Array::Dyn(ptr, _) => Array::Dyn(ptr, Usize::from(1)),
+        };
+        self.get(&array, 0)
     }
 
     /// Hint a vector of variables.
@@ -427,6 +433,10 @@ impl<C: Config> Builder<C> {
     /// Hint a vector of felts.
     pub fn hint_felts(&mut self) -> Array<C, Felt<C::F>> {
         self.hint_words()
+    }
+
+    pub fn hint_felts_fixed(&mut self, len: impl Into<RVar<C::N>>) -> Array<C, Felt<C::F>> {
+        self.hint_words_fixed(len)
     }
 
     /// Hints an array of V and assumes V::size_of() == 1.
@@ -450,7 +460,6 @@ impl<C: Config> Builder<C> {
 
         let vlen: Var<C::N> = self.uninit();
         self.load(vlen, ptr, index);
-
         let arr = self.dyn_array(vlen);
 
         // Write the content hints directly into the array memory.
@@ -462,15 +471,34 @@ impl<C: Config> Builder<C> {
             };
             builder.operations.push(DslIr::StoreHintWord(
                 Ptr {
-                    address: match ptr_vec[0] {
-                        RVar::Const(_) => unreachable!(),
-                        RVar::Val(v) => v,
-                    },
+                    address: ptr_vec[0].variable(),
                 },
                 index,
             ));
         });
+        arr
+    }
 
+    /// Hints an array of V and assumes V::size_of() == 1.
+    fn hint_words_fixed<V: MemVariable<C>>(&mut self, len: impl Into<RVar<C::N>>) -> Array<C, V> {
+        assert_eq!(V::size_of(), 1);
+
+        let arr = self.dyn_array(len.into());
+        // Write the content hints directly into the array memory.
+        iter_zip!(self, arr).for_each(|ptr_vec, builder| {
+            let index = MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: 1,
+            };
+            builder.operations.push(DslIr::HintFelt());
+            builder.operations.push(DslIr::StoreHintWord(
+                Ptr {
+                    address: ptr_vec[0].variable(),
+                },
+                index,
+            ));
+        });
         arr
     }
 
