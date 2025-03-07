@@ -3460,6 +3460,7 @@ dependencies = [
  "hex-literal",
  "num-bigint 0.4.6",
  "num-traits",
+ "openvm-custom-insn",
  "openvm-platform",
  "openvm-rv32im-guest",
  "serde",
@@ -3848,6 +3849,7 @@ dependencies = [
  "openvm",
  "openvm-algebra-guest",
  "openvm-algebra-moduli-macros",
+ "openvm-custom-insn",
  "openvm-ecc-sw-macros",
  "openvm-platform",
  "openvm-rv32im-guest",
@@ -4193,6 +4195,7 @@ dependencies = [
  "openvm-algebra-complex-macros",
  "openvm-algebra-guest",
  "openvm-algebra-moduli-macros",
+ "openvm-custom-insn",
  "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
  "openvm-platform",
@@ -4254,6 +4257,7 @@ dependencies = [
  "getrandom 0.2.15",
  "libm",
  "openvm-custom-insn",
+ "openvm-rv32im-guest",
  "stability",
  "strum_macros",
 ]
@@ -4348,7 +4352,7 @@ dependencies = [
 name = "openvm-rv32im-guest"
 version = "1.0.0-rc.1"
 dependencies = [
- "openvm-platform",
+ "openvm-custom-insn",
  "strum_macros",
 ]
 
@@ -4376,6 +4380,7 @@ dependencies = [
 name = "openvm-rv32im-transpiler"
 version = "1.0.0-rc.1"
 dependencies = [
+ "openvm-custom-insn",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-rv32im-guest",

@@ -7,6 +7,7 @@ edition = "2021"
 [dependencies]
 openvm = { path = "../../../../crates/toolchain/openvm" }
 openvm-platform = { path = "../../../../crates/toolchain/platform" }
+openvm-custom-insn = { path = "../../../../crates/toolchain/custom_insn", default-features = false }
 
 openvm-ecc-guest = { path = "../../guest", default-features = false }
 openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros", default-features = false }

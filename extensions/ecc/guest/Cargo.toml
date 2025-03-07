@@ -19,6 +19,7 @@ elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
 k256 = { workspace = true, optional = true }
 p256 = { workspace = true, optional = true }
 hex-literal = { workspace = true }
+openvm-custom-insn = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 openvm-algebra-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }

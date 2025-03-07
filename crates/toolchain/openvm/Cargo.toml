@@ -13,6 +13,7 @@ openvm-platform = { workspace = true, features = [
     "rust-runtime",
     "export-getrandom",
 ] }
+openvm-custom-insn = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 hex-literal.workspace = true
@@ -33,4 +34,4 @@ getrandom = ["openvm-platform/getrandom"]
 # The zkVM uses a bump-pointer heap allocator by default which does not free
 # memory. This will use a slower linked-list heap allocator to reclaim memory.
 heap-embedded-alloc = ["openvm-platform/heap-embedded-alloc"]
-std = ["serde/std"]
+std = ["serde/std", "openvm-platform/std"]

@@ -20,6 +20,7 @@ openvm-algebra-moduli-macros = { workspace = true }
 openvm-ecc-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }
 openvm-algebra-complex-macros = { workspace = true }
+openvm-custom-insn = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 
 # Used for `halo2curves` feature

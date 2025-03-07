@@ -1,54 +1,15 @@
 use super::WORD_SIZE;
 
-pub const MEM_BITS: usize = 28;
+pub const MEM_BITS: usize = 29;
 pub const MEM_SIZE: usize = 1 << MEM_BITS;
 pub const GUEST_MIN_MEM: usize = 0x0000_0400;
-pub const GUEST_MAX_MEM: usize = SYSTEM.start;
+pub const GUEST_MAX_MEM: usize = MEM_SIZE;
 
 /// Top of stack; stack grows down from this location.
 pub const STACK_TOP: u32 = 0x0020_0400;
 /// Program (text followed by data and then bss) gets loaded in
 /// starting at this location.  HEAP begins right afterwards.
 pub const TEXT_START: u32 = 0x0020_0800;
-pub const SYSTEM: Region = Region::new(0x0C00_0000, mb(16));
-pub const PAGE_TABLE: Region = Region::new(0x0D00_0000, mb(16));
-pub const PRE_LOAD: Region = Region::new(0x0D70_0000, mb(9));
-
-pub struct Region {
-    start: usize,
-    len_bytes: usize,
-}
-
-impl Region {
-    pub const fn new(start: usize, len_bytes: usize) -> Self {
-        Self { start, len_bytes }
-    }
-
-    pub const fn start(&self) -> usize {
-        self.start
-    }
-
-    pub const fn len_bytes(&self) -> usize {
-        self.len_bytes
-    }
-
-    pub const fn len_words(&self) -> usize {
-        assert!((self.len_bytes % WORD_SIZE) == 0);
-        self.len_bytes / WORD_SIZE
-    }
-
-    pub const fn end(&self) -> usize {
-        self.start + self.len_bytes
-    }
-}
-
-const fn kb(kb: usize) -> usize {
-    kb * 1024
-}
-
-const fn mb(mb: usize) -> usize {
-    kb(mb * 1024)
-}
 
 /// Returns whether `addr` is within guest memory bounds.
 pub fn is_guest_memory(addr: u32) -> bool {
@@ -61,6 +22,8 @@ pub fn is_guest_memory(addr: u32) -> bool {
 #[cfg(feature = "rust-runtime")]
 #[no_mangle]
 pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u8 {
+    use crate::print::println;
+
     #[cfg(target_os = "zkvm")]
     extern "C" {
         // This symbol is defined by the loader and marks the end
@@ -99,6 +62,7 @@ pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u
             unsafe { HEAP_POS = new_heap_pos };
         }
         _ => {
+            println("ERROR: Maximum memory exceeded, program terminating.");
             super::rust_rt::terminate::<1>();
         }
     }
