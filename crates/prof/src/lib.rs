@@ -8,6 +8,7 @@ use eyre::Result;
 use crate::types::{Labels, Metric, MetricDb, MetricsFile};
 
 pub mod aggregate;
+pub mod recorder;
 pub mod summary;
 pub mod types;
 
