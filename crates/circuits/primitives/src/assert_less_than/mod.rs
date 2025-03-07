@@ -189,7 +189,7 @@ impl<F: Field> TraceSubRowGenerator<F> for AssertLtSubAir {
     /// lower_decomp
     type ColsMut<'a> = &'a mut [F];
 
-    /// Should only be used when `io.count != 0`.
+    /// Should only be used when `io.count != 0` i.e. only on non-padding rows.
     #[inline(always)]
     fn generate_subrow<'a>(
         &'a self,
