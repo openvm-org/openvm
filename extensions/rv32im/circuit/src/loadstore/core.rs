@@ -142,6 +142,7 @@ where
             is_load,
             opcode_when(&[LoadW0, LoadHu0, LoadHu2, LoadBu0, LoadBu1, LoadBu2, LoadBu3]),
         );
+        builder.when(is_load).assert_one(is_valid);
 
         // there are three parts to write_data:
         // 1st limb is always read_data

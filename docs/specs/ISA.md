@@ -323,7 +323,7 @@ unsigned integer, and convert to field element. In the instructions below, `[c:4
 #### Load/Store
 
 For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
-The address space `e` can be any [valid address space](#addressing).
+The address space `e` can be `0`, `1`, or `2` for load instructions, and `2`, `3`, or `4` for store instructions.
 The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking 
 the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering 
 the 32 bits as the 2's complement of an `i32`.

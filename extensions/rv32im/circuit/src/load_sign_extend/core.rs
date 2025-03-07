@@ -161,9 +161,9 @@ where
             reads: (prev_data, read_data).into(),
             writes: [write_data].into(),
             instruction: LoadStoreInstruction {
-                is_valid,
+                is_valid: is_valid.clone(),
                 opcode: expected_opcode,
-                is_load: AB::Expr::ONE,
+                is_load: is_valid,
                 load_shift_amount,
                 store_shift_amount: AB::Expr::ZERO,
             }

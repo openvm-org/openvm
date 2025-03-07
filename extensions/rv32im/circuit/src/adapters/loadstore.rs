@@ -49,9 +49,11 @@ use crate::adapters::RV32_CELL_BITS;
 /// This adapter always batch reads/writes 4 bytes,
 /// thus it needs to shift left the memory pointer by some amount in case of not 4 byte aligned intermediate pointers
 pub struct LoadStoreInstruction<T> {
+    /// is_valid is constrained to be bool
     pub is_valid: T,
-    // Absolute opcode number
+    /// Absolute opcode number
     pub opcode: T,
+    /// is_load is constrained to be bool, and can only be 1 if is_valid is 1
     pub is_load: T,
 
     /// Keeping two separate shift amounts is needed for getting the read_ptr/write_ptr with degree 2
@@ -206,13 +208,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
 
         let write_count = local_cols.needs_write;
 
+        // constrain is_load == 1 and rd == x0 when write_count == 0
         builder.assert_bool(write_count);
         builder.when(write_count).assert_one(is_valid.clone());
         builder
-            .when(not(write_count) * is_valid.clone())
+            .when(is_valid.clone() - write_count)
             .assert_one(is_load.clone());
         builder
-            .when(not(write_count) * is_valid.clone())
+            .when(is_valid.clone() - write_count)
             .assert_zero(local_cols.rd_rs2_ptr);
 
         // read rs1
@@ -265,6 +268,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
 
         let mem_ptr = local_cols.mem_ptr_limbs[0]
             + local_cols.mem_ptr_limbs[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
+
+        let is_store = is_valid.clone() - is_load.clone();
+        // constrain mem_as to be in {0, 1, 2} if the instruction is a load,
+        // and in {2, 3, 4} if the instruction is a store
+        builder.assert_tern(local_cols.mem_as - is_store * AB::Expr::TWO);
+        builder
+            .when(not::<AB::Expr>(is_valid.clone()))
+            .assert_zero(local_cols.mem_as);
 
         // read_as is 2 for loads and 1 for stores
         let read_as = select::<AB::Expr>(
