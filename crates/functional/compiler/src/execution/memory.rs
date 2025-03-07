@@ -17,14 +17,14 @@ fn rust_memory() -> TokenStream {
     let array_access = ident(ARRAY_ACCESS);
 
     quote! {
-        #[derive(Clone, Copy)]
+        #[derive(Clone, Copy, Debug)]
         pub struct #reference_struct(usize);
-        #[derive(Clone, Copy)]
+        #[derive(Clone, Copy, Debug)]
         pub struct #under_construction_array_struct(usize);
-        #[derive(Clone, Copy)]
+        #[derive(Clone, Copy, Debug)]
         pub struct #array_struct(usize);
 
-        #[derive(Default)]
+        #[derive(Default, Debug)]
         pub struct #memory_struct<T: Copy + Clone> {
             pub references: Vec<T>,
             pub reference_timestamps: Vec<usize>,

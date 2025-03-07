@@ -140,10 +140,11 @@ impl ExpressionContainer {
                     ArithmeticOperator::Plus => quote! { #left + #right },
                     ArithmeticOperator::Minus => quote! { #left - #right },
                     ArithmeticOperator::Times => quote! { #left * #right },
+                    ArithmeticOperator::Div => quote! { #left / #right },
                 }
             }
             Expression::Dematerialized { value } => value.transpile_defined(scope, namer, type_set),
-            Expression::EqUnmaterialized { left, right } => eq_to_bool(
+            Expression::Eq { left, right } => eq_to_bool(
                 left.transpile_defined(scope, namer, type_set),
                 right.transpile_defined(scope, namer, type_set),
             ),

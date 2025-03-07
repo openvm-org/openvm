@@ -41,4 +41,7 @@ pub enum CompilationError {
     OutOfBoundsConstArrayAccess(usize, usize),
     OutOfBoundsConstArraySlice(usize, usize, usize),
     IncorrectNumberOfElementsInConstArray(usize, usize),
+
+    EqMustBeDematerialized(),
+    DivMustBeDematerialized(),
 }

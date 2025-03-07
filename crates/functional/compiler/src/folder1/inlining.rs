@@ -315,7 +315,7 @@ impl ExpressionContainer {
             Expression::Dematerialized { value } => {
                 value.inline(renamer);
             }
-            Expression::EqUnmaterialized { left, right } => {
+            Expression::Eq { left, right } => {
                 left.inline(renamer);
                 right.inline(renamer);
             }

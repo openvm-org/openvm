@@ -59,11 +59,12 @@ impl Type {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ArithmeticOperator {
     Plus,
     Minus,
     Times,
+    Div,
 }
 
 #[derive(Clone)]
@@ -92,7 +93,7 @@ pub enum Expression {
     Dematerialized {
         value: ExpressionContainer,
     },
-    EqUnmaterialized {
+    Eq {
         left: ExpressionContainer,
         right: ExpressionContainer,
     },

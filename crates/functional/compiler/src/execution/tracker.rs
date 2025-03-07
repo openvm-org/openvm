@@ -56,6 +56,7 @@ impl Stage2Program {
             }
             let name = type_name(&algebraic_type.name);
             algebraic_types.push(quote! {
+                #[derive(PartialEq, Eq, Debug, Clone, Copy)]
                 enum #name {
                     #(#variants)*
                 }

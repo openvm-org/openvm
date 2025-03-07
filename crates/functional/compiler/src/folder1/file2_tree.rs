@@ -11,7 +11,7 @@ use super::{
     ir::{Expression, Type},
     type_resolution::TypeSet,
 };
-use crate::folder1::ir::Material;
+use crate::folder1::ir::{ArithmeticOperator, Material};
 
 #[derive(Clone)]
 pub struct ExpressionContainer {
@@ -457,10 +457,13 @@ impl ExpressionContainer {
                 );
             }
             Expression::Arithmetic {
-                operator: _,
+                operator,
                 left,
                 right,
             } => {
+                if *operator == ArithmeticOperator::Div && material == Material::Materialized {
+                    return Err(CompilationError::DivMustBeDematerialized());
+                }
                 left.resolve_defined(function_container, path, material)?;
                 if !material.same_type(&left.tipo.clone().unwrap(), &Type::Field) {
                     return Err(CompilationError::IncorrectTypeInArithmetic(
@@ -479,7 +482,10 @@ impl ExpressionContainer {
                 value.resolve_defined(function_container, path, Material::Dematerialized)?;
                 self.tipo = Some(Type::Unmaterialized(Arc::new(value.tipo.clone().unwrap())));
             }
-            Expression::EqUnmaterialized { left, right } => {
+            Expression::Eq { left, right } => {
+                if material == Material::Materialized {
+                    return Err(CompilationError::EqMustBeDematerialized());
+                }
                 left.resolve_defined(function_container, path, Material::Dematerialized)?;
                 right.resolve_defined(function_container, path, Material::Dematerialized)?;
                 if !Material::Dematerialized
@@ -490,9 +496,7 @@ impl ExpressionContainer {
                         right.tipo.clone().unwrap(),
                     ));
                 }
-                self.tipo = Some(Type::Unmaterialized(
-                    Type::NamedType("Bool".to_string()).into(),
-                ));
+                self.tipo = Some(Type::NamedType("Bool".to_string()));
             }
             Expression::EmptyConstArray { elem_type } => {
                 self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), 0).into());

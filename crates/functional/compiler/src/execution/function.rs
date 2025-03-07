@@ -65,6 +65,7 @@ impl FlattenedFunction {
 
         let struct_name = function_struct_name(&self.name);
         quote! {
+            #[derive(Debug)]
             pub struct #struct_name {
                 #(#fields)*
             }

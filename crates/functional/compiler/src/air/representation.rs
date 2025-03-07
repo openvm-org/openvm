@@ -109,10 +109,11 @@ impl ExpressionContainer {
                     ArithmeticOperator::Plus => left.plus(right),
                     ArithmeticOperator::Minus => left.minus(right),
                     ArithmeticOperator::Times => left.times(right),
+                    ArithmeticOperator::Div => unreachable!(),
                 }]
             }
             Expression::Dematerialized { .. } => vec![],
-            Expression::EqUnmaterialized { .. } => vec![],
+            Expression::Eq { .. } => unreachable!(),
             Expression::EmptyConstArray { .. } => vec![],
             Expression::ConstArray { elements } => elements
                 .iter()

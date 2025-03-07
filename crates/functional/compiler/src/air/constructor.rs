@@ -331,7 +331,6 @@ impl FlattenedFunction {
         air_tree.init(&self.tree, &relevant_scopes);
 
         let mut air_constructor = AirConstructor::default();
-        let root_expression = air_tree.calc_scope_expressions(&mut air_constructor);
 
         let (left_timestamp, start_timestamp) = if self.uses_timestamp {
             let left_timestamp = AirExpression::single_cell(air_constructor.make_cell());
@@ -339,7 +338,6 @@ impl FlattenedFunction {
             for (i, statement) in self.statements.iter().enumerate() {
                 if let FlatStatement {
                     material: Material::Materialized,
-                    scope,
                     statement: Statement::Reference { .. },
                     ..
                 } = statement
