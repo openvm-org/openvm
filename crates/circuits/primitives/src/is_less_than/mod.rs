@@ -85,6 +85,7 @@ pub struct IsLtSubAir {
 
 impl IsLtSubAir {
     pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
+        assert!(max_bits <= 29); // see soundness requirement above
         let decomp_limbs = max_bits.div_ceil(bus.range_max_bits);
         Self {
             bus,
@@ -140,7 +141,7 @@ impl IsLtSubAir {
     }
 
     #[inline(always)]
-    pub fn eval_range_checks<AB: InteractionBuilder>(
+    pub(crate) fn eval_range_checks<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         lower_decomp: &[AB::Var],

@@ -90,6 +90,7 @@ pub struct AssertLtSubAir {
 
 impl AssertLtSubAir {
     pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
+        assert!(max_bits <= 29); // see soundness requirement above
         let decomp_limbs = max_bits.div_ceil(bus.range_max_bits);
         Self {
             bus,
