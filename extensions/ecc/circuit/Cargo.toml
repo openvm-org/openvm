@@ -25,7 +25,7 @@ num-traits = { workspace = true }
 strum = { workspace = true }
 derive_more = { workspace = true }
 derive-new = { workspace = true }
-once_cell = { workspace = true }
+once_cell = { workspace = true, features = ["std"] }
 eyre = { workspace = true }
 num-integer = { workspace = true }
 serde = { workspace = true }

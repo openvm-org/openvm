@@ -30,7 +30,6 @@ rand.workspace = true
 serde.workspace = true
 serde-big-array.workspace = true
 toml.workspace = true
-once_cell.workspace = true
 cfg-if.workspace = true
 metrics = { workspace = true, optional = true }
 metrics-derive = { workspace = true, optional = true }

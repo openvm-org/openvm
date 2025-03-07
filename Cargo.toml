@@ -202,7 +202,6 @@ serde_with = "3.11.0"
 clap = "4.5.23"
 toml = "0.8.14"
 lazy_static = "1.5.0"
-once_cell = "1.19.0"
 derive-new = "0.6.0"
 derive_more = { version = "1.0.0", features = [
     "display",
@@ -238,6 +237,7 @@ bitcode = { version = "0.6.3", default-features = false, features = ["serde"] }
 serde = { version = "1.0.201", default-features = false, features = ["derive"] }
 hex-literal = { version = "0.4.1", default-features = false }
 bytemuck = { version = "1.20.0", default-features = false }
+once_cell = { version = "1.20", default-features = false }
 
 # cryptography, default-features = false for no_std
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
