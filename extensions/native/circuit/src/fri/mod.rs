@@ -1,7 +1,6 @@
 use core::ops::Deref;
 use std::{
     borrow::{Borrow, BorrowMut},
-    collections::HashMap,
     mem::offset_of,
     sync::{Arc, Mutex},
 };
