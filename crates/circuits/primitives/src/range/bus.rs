@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, LookupBus},
-    p3_field::FieldAlgebra,
+    p3_field::{FieldAlgebra, PrimeField32},
 };
 
 /// Represents a bus for `x` where `x` must lie in the range `[0, range_max)`.
@@ -21,8 +21,16 @@ impl RangeCheckBus {
     /// Range check that `x` is in the range `[0, 2^max_bits)`.
     ///
     /// This can be used when `2^max_bits < self.range_max` **if `2 * self.range_max` is less than the field modulus**.
-    pub fn range_check<T>(&self, x: impl Into<T>, max_bits: usize) -> BitsCheckBusInteraction<T> {
+    pub fn range_check<T: FieldAlgebra>(
+        &self,
+        x: impl Into<T>,
+        max_bits: usize,
+    ) -> BitsCheckBusInteraction<T>
+    where
+        T::F: PrimeField32,
+    {
         debug_assert!((1 << max_bits) <= self.range_max);
+        debug_assert!(self.range_max < T::F::ORDER_U32 / 2);
         let shift = self.range_max - (1 << max_bits);
         BitsCheckBusInteraction {
             x: x.into(),
