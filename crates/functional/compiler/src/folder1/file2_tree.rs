@@ -366,9 +366,7 @@ impl ExpressionContainer {
 
     fn children(&self) -> Vec<ExpressionContainer> {
         match self.expression.as_ref() {
-            Expression::Algebraic { fields, .. } => {
-                fields.iter().map(|field| field.clone()).collect()
-            }
+            Expression::Algebraic { fields, .. } => fields.to_vec(),
             Expression::Arithmetic { left, right, .. } => vec![left.clone(), right.clone()],
             Expression::Dematerialized { value, .. } => vec![value.clone()],
             _ => vec![],
@@ -496,10 +494,19 @@ impl ExpressionContainer {
                         right.tipo.clone().unwrap(),
                     ));
                 }
+                if left
+                    .get_type()
+                    .contains_reference(&function_container.type_set, false)
+                    .unwrap()
+                {
+                    return Err(CompilationError::CannotEquateReferences(
+                        left.get_type().clone(),
+                    ));
+                }
                 self.tipo = Some(Type::NamedType("Bool".to_string()));
             }
             Expression::EmptyConstArray { elem_type } => {
-                self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), 0).into());
+                self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), 0));
             }
             Expression::ConstArray { elements } => {
                 if elements.is_empty() {
@@ -519,7 +526,7 @@ impl ExpressionContainer {
                         ));
                     }
                 }
-                self.tipo = Some(Type::ConstArray(Arc::new(elem_type), elements.len()).into());
+                self.tipo = Some(Type::ConstArray(Arc::new(elem_type), elements.len()));
             }
             Expression::ConstArrayConcatenation { left, right } => {
                 left.resolve_defined(function_container, path, material)?;
@@ -534,8 +541,7 @@ impl ExpressionContainer {
                         ),
                     );
                 }
-                self.tipo =
-                    Some(Type::ConstArray(elem_type_1.clone().into(), len_1 + len_2).into());
+                self.tipo = Some(Type::ConstArray(elem_type_1.clone().into(), len_1 + len_2));
             }
             Expression::ConstArrayAccess { array, index } => {
                 array.resolve_defined(function_container, path, material)?;
@@ -553,7 +559,7 @@ impl ExpressionContainer {
                         *from, *to, len,
                     ));
                 }
-                self.tipo = Some(Type::ConstArray(elem_type.clone().into(), *to - *from).into());
+                self.tipo = Some(Type::ConstArray(elem_type.clone().into(), *to - *from));
             }
             Expression::ConstArrayRepeated { element, length } => {
                 element.resolve_defined(function_container, path, material)?;
@@ -565,7 +571,7 @@ impl ExpressionContainer {
                     return Err(CompilationError::DuplicateUnderConstructionArrayUsageInConstArray);
                 }
 
-                self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), *length).into());
+                self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), *length));
             }
         }
         Ok(())

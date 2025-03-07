@@ -3,6 +3,7 @@ use quote::quote;
 pub mod air;
 pub mod execution;
 pub mod folder1;
+pub mod parser;
 
 struct Bing(usize, usize);
 

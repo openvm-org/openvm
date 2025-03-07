@@ -12,3 +12,4 @@ license.workspace = true
 proc-macro2 = "1.0.93"
 quote = "1.0.39"
 itertools = "0.14.0"
+pest = "2.7.15"

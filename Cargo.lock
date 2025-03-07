@@ -1292,6 +1292,7 @@ name = "compiler"
 version = "1.0.0-rc.1"
 dependencies = [
  "itertools 0.14.0",
+ "pest",
  "proc-macro2",
  "quote",
 ]
