@@ -2,15 +2,18 @@ use std::{cmp::max, collections::VecDeque, iter::repeat, ops::Neg, str::FromStr}
 
 use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{FromPrimitive, Num, ToPrimitive, Zero};
-use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::PrimeField64};
+use openvm_stark_backend::{
+    interaction::{BusIndex, InteractionBuilder},
+    p3_field::PrimeField64,
+};
 
 use crate::var_range::VariableRangeCheckerBus;
 
 // Checks that the given expression is within bits number of bits.
 pub fn range_check<AB: InteractionBuilder>(
     builder: &mut AB,
-    range_bus: usize, // The bus number for range checker.
-    decomp: usize,    // The ranger checker checks the numbers are within decomp bits.
+    range_bus: BusIndex, // The bus number for range checker.
+    decomp: usize,       // The ranger checker checks the numbers are within decomp bits.
     bits: usize,
     into_expr: impl Into<AB::Expr>,
     count: impl Into<AB::Expr>,

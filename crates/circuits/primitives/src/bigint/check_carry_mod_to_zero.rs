@@ -1,6 +1,9 @@
 use itertools::Itertools;
 use num_bigint::BigUint;
-use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::FieldAlgebra};
+use openvm_stark_backend::{
+    interaction::{BusIndex, InteractionBuilder},
+    p3_field::FieldAlgebra,
+};
 
 use super::{
     check_carry_to_zero::{CheckCarryToZeroCols, CheckCarryToZeroSubAir},
@@ -30,7 +33,7 @@ impl CheckCarryModToZeroSubAir {
     pub fn new(
         modulus: BigUint,
         limb_bits: usize,
-        range_checker_bus: usize,
+        range_checker_bus: BusIndex,
         decomp: usize,
     ) -> Self {
         let check_carry_to_zero = CheckCarryToZeroSubAir::new(limb_bits, range_checker_bus, decomp);

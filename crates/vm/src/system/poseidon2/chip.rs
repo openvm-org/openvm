@@ -4,7 +4,10 @@ use std::{
 };
 
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{
+    interaction::{BusIndex, LookupBus},
+    p3_field::PrimeField32,
+};
 use rustc_hash::FxHashMap;
 
 use super::{
@@ -20,10 +23,13 @@ pub struct Poseidon2PeripheryBaseChip<F: PrimeField32, const SBOX_REGISTERS: usi
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS> {
-    pub fn new(poseidon2_config: Poseidon2Config<F>, bus_idx: usize) -> Self {
+    pub fn new(poseidon2_config: Poseidon2Config<F>, bus_idx: BusIndex) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         Self {
-            air: Arc::new(Poseidon2PeripheryAir::new(subchip.air.clone(), bus_idx)),
+            air: Arc::new(Poseidon2PeripheryAir::new(
+                subchip.air.clone(),
+                LookupBus::new(bus_idx),
+            )),
             subchip,
             records: FxHashMap::default(),
         }

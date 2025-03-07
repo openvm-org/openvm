@@ -9,11 +9,13 @@ use std::{
 use itertools::Itertools;
 #[cfg(feature = "bench-metrics")]
 use openvm_circuit::metrics::cycle_tracker::CycleTracker;
-use openvm_stark_backend::p3_field::{ExtensionField, PrimeField};
+use openvm_stark_backend::p3_field::{ExtensionField, Field, PrimeField};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
-        gates::{circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip},
+        gates::{
+            circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip, RangeInstructions,
+        },
         halo2_proofs::halo2curves::bn256::Fr,
         utils::{biguint_to_fe, ScalarField},
         Context,
@@ -416,6 +418,11 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         let x = ext_chip.reduce_max_bits(ctx, exts[&a.0]);
                         exts.insert(a.0, x);
                     }
+                    DslIr::CircuitLessThan(a, b) => {
+                        range.range_check(ctx, vars[&a.0], C::F::bits());
+                        range.range_check(ctx, vars[&b.0], C::F::bits());
+                        range.check_less_than(ctx, vars[&a.0], vars[&b.0], C::F::bits());
+                    }
                     DslIr::CycleTrackerStart(_name) => {
                         #[cfg(feature = "bench-metrics")]
                         cell_tracker.start(_name);
@@ -492,6 +499,7 @@ fn is_babybear_ir<C: Config>(ir: &DslIr<C>) -> bool {
             | DslIr::CircuitFelts2Ext(_, _)
             | DslIr::CircuitFeltReduce(_)
             | DslIr::CircuitExtReduce(_)
+            | DslIr::CircuitLessThan(..)
             | DslIr::ImmE(_, _)
             | DslIr::AddE(_, _, _)
             | DslIr::AddEF(_, _, _)

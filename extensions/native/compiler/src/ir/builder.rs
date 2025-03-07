@@ -3,7 +3,7 @@ use std::{iter::Zip, vec::IntoIter};
 use backtrace::Backtrace;
 use itertools::izip;
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use openvm_stark_backend::p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -282,7 +282,7 @@ impl<C: Config> Builder<C> {
     }
 
     /// Asserts that lhs is less than rhs in time O(rhs).
-    pub fn assert_less_than_slow<
+    pub fn assert_less_than_slow_small_rhs<
         LhsExpr: Into<SymbolicVar<C::N>>,
         RhsExpr: Into<SymbolicVar<C::N>>,
     >(
@@ -299,6 +299,32 @@ impl<C: Config> Builder<C> {
             builder.assign(&product, product.clone() * diff);
         });
         self.assert_usize_eq(product, RVar::from(0));
+    }
+
+    /// Asserts that lhs is less than rhs in time O(log(lhs) + log(rhs)).
+    ///
+    /// Only works for Felt == BabyBear and in the VM.
+    ///
+    /// Uses bit decomposition hint, which has large constant factor overhead, so prefer
+    /// [assert_less_than_slow_small_rhs] when rhs is small.
+    pub fn assert_less_than_slow_bit_decomp(&mut self, lhs: Var<C::N>, rhs: Var<C::N>) {
+        let lhs = self.unsafe_cast_var_to_felt(lhs);
+        let rhs = self.unsafe_cast_var_to_felt(rhs);
+
+        let lhs_bits = self.num2bits_f(lhs, C::N::bits() as u32);
+        let rhs_bits = self.num2bits_f(rhs, C::N::bits() as u32);
+
+        let is_lt: Var<_> = self.eval(C::N::ZERO);
+
+        iter_zip!(self, lhs_bits, rhs_bits).for_each(|ptr_vec, builder| {
+            let lhs_bit = builder.iter_ptr_get(&lhs_bits, ptr_vec[0]);
+            let rhs_bit = builder.iter_ptr_get(&rhs_bits, ptr_vec[1]);
+
+            builder.if_ne(lhs_bit, rhs_bit).then(|builder| {
+                builder.assign(&is_lt, rhs_bit);
+            });
+        });
+        self.assert_var_eq(is_lt, C::N::ONE);
     }
 
     /// Evaluate a block of operations over a range from start to end.

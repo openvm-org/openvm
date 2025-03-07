@@ -1,44 +1,47 @@
 use openvm_stark_backend::{
-    interaction::{InteractionBuilder, InteractionType},
+    interaction::{BusIndex, InteractionBuilder, LookupBus},
     p3_field::FieldAlgebra,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RangeTupleCheckerBus<const N: usize> {
-    pub index: usize,
+    pub inner: LookupBus,
     pub sizes: [u32; N],
 }
 
 impl<const N: usize> RangeTupleCheckerBus<N> {
-    pub fn new(index: usize, sizes: [u32; N]) -> Self {
+    pub fn new(index: BusIndex, sizes: [u32; N]) -> Self {
         let mut product = 1u32;
         for &size in sizes.iter() {
             product = product
                 .checked_mul(size)
                 .expect("The number of the range tuple checker rows is too large");
         }
-        Self { index, sizes }
+        Self {
+            inner: LookupBus::new(index),
+            sizes,
+        }
     }
 
     #[must_use]
     pub fn send<T>(&self, tuple: Vec<impl Into<T>>) -> RangeTupleCheckerBusInteraction<T> {
-        self.push(tuple, InteractionType::Send)
+        self.push(tuple, true)
     }
 
     #[must_use]
     pub fn receive<T>(&self, tuple: Vec<impl Into<T>>) -> RangeTupleCheckerBusInteraction<T> {
-        self.push(tuple, InteractionType::Receive)
+        self.push(tuple, false)
     }
 
     pub fn push<T>(
         &self,
         tuple: Vec<impl Into<T>>,
-        interaction_type: InteractionType,
+        is_lookup: bool,
     ) -> RangeTupleCheckerBusInteraction<T> {
         RangeTupleCheckerBusInteraction {
             tuple: tuple.into_iter().map(|t| t.into()).collect(),
-            bus_index: self.index,
-            interaction_type,
+            bus: self.inner,
+            is_lookup,
         }
     }
 }
@@ -46,8 +49,8 @@ impl<const N: usize> RangeTupleCheckerBus<N> {
 #[derive(Clone, Debug)]
 pub struct RangeTupleCheckerBusInteraction<T> {
     pub tuple: Vec<T>,
-    pub bus_index: usize,
-    pub interaction_type: InteractionType,
+    pub bus: LookupBus,
+    pub is_lookup: bool,
 }
 
 impl<T: FieldAlgebra> RangeTupleCheckerBusInteraction<T> {
@@ -55,6 +58,10 @@ impl<T: FieldAlgebra> RangeTupleCheckerBusInteraction<T> {
     where
         AB: InteractionBuilder<Expr = T>,
     {
-        builder.push_interaction(self.bus_index, self.tuple, count, self.interaction_type);
+        if self.is_lookup {
+            self.bus.lookup_key(builder, self.tuple, count);
+        } else {
+            self.bus.add_key_with_lookups(builder, self.tuple, count);
+        }
     }
 }

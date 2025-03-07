@@ -21,7 +21,7 @@ impl<C: Config> Builder<C> {
     /// Converts a felt to bits. Will result in a failed assertion if `num` has more than `num_bits` bits.
     /// Only works for C::F = BabyBear
     pub fn num2bits_f(&mut self, num: Felt<C::F>, num_bits: u32) -> Array<C, Var<C::N>> {
-        assert!(TypeId::of::<C::F>() == TypeId::of::<BabyBear>());
+        assert_eq!(TypeId::of::<C::F>(), TypeId::of::<BabyBear>());
 
         self.push(DslIr::HintBitsF(num, num_bits));
         let output = self.dyn_array::<Felt<_>>(num_bits as usize);

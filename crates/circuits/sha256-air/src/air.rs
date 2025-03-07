@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
     SubAir,
 };
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
+    interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::Matrix,
@@ -26,15 +26,15 @@ pub struct Sha256Air {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub row_idx_encoder: Encoder,
     /// Internal bus for self-interactions in this AIR.
-    bus_idx: usize,
+    bus: PermutationCheckBus,
 }
 
 impl Sha256Air {
-    pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, self_bus_idx: usize) -> Self {
+    pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, self_bus_idx: BusIndex) -> Self {
         Self {
             bitwise_lookup_bus,
             row_idx_encoder: Encoder::new(17, 2, false),
-            bus_idx: self_bus_idx,
+            bus: PermutationCheckBus::new(self_bus_idx),
         }
     }
 }
@@ -375,8 +375,8 @@ impl Sha256Air {
             local.flags.global_block_idx + AB::Expr::ONE,
         );
         // The following interactions constrain certain values from block to block
-        builder.push_send(
-            self.bus_idx,
+        self.bus.send(
+            builder,
             composed_hash
                 .into_iter()
                 .flatten()
@@ -384,8 +384,8 @@ impl Sha256Air {
             local.flags.is_digest_row,
         );
 
-        builder.push_receive(
-            self.bus_idx,
+        self.bus.receive(
+            builder,
             local
                 .prev_hash
                 .into_iter()

@@ -100,8 +100,7 @@ fn test_vm_1() {
 
 #[test]
 fn test_vm_override_executor_height() {
-    let fri_params = FriParameters::standard_fast();
-    let e = BabyBearPoseidon2Engine::new(fri_params);
+    let e = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let program = Program::<BabyBear>::from_instructions(&[
         Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 4, 0, 0, 0),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),

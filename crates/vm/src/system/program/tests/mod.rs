@@ -36,7 +36,7 @@ assert_impl_all!(VmCommittedExe<BabyBearPoseidon2Config>: Serialize, Deserialize
 assert_impl_all!(VmCommittedExe<BabyBearPoseidon2RootConfig>: Serialize, DeserializeOwned);
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
-    let bus = ProgramBus(READ_INSTRUCTION_BUS);
+    let bus = ProgramBus::new(READ_INSTRUCTION_BUS);
     let mut chip = ProgramChip::new_with_program(program.clone(), bus);
     let mut execution_frequencies = vec![0; program.len()];
     for pc_idx in execution {
@@ -46,7 +46,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let program_air = chip.air;
     let program_proof_input = chip.generate_air_proof_input(None);
 
-    let counter_air = DummyInteractionAir::new(9, true, bus.0);
+    let counter_air = DummyInteractionAir::new(9, true, bus.inner.index);
     let mut program_cells = vec![];
     for (index, frequency) in execution_frequencies.into_iter().enumerate() {
         let option = program.get_instruction_and_debug_info(index);
@@ -176,7 +176,7 @@ fn test_program_negative() {
         Instruction::large_from_isize(LOADW.global_opcode(), -1, 0, 0, 1, 1, 0, 1),
         Instruction::large_from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0, 0, 0),
     ];
-    let bus = ProgramBus(READ_INSTRUCTION_BUS);
+    let bus = ProgramBus::new(READ_INSTRUCTION_BUS);
     let program = Program::from_instructions(&instructions);
 
     let mut chip = ProgramChip::new_with_program(program, bus);
@@ -188,7 +188,7 @@ fn test_program_negative() {
     let program_air = chip.air;
     let program_proof_input = chip.generate_air_proof_input(None);
 
-    let counter_air = DummyInteractionAir::new(7, true, bus.0);
+    let counter_air = DummyInteractionAir::new(7, true, bus.inner.index);
     let mut program_rows = vec![];
     for (pc_idx, instruction) in instructions.iter().enumerate() {
         program_rows.extend(vec![

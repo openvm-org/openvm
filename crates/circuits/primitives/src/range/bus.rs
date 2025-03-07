@@ -1,18 +1,21 @@
 use openvm_stark_backend::{
-    interaction::{InteractionBuilder, InteractionType},
+    interaction::{BusIndex, InteractionBuilder, LookupBus},
     p3_field::FieldAlgebra,
 };
 
 /// Represents a bus for `x` where `x` must lie in the range `[0, range_max)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RangeCheckBus {
-    pub index: usize,
+    pub inner: LookupBus,
     pub range_max: u32,
 }
 
 impl RangeCheckBus {
-    pub const fn new(index: usize, range_max: u32) -> Self {
-        Self { index, range_max }
+    pub const fn new(index: BusIndex, range_max: u32) -> Self {
+        Self {
+            inner: LookupBus::new(index),
+            range_max,
+        }
     }
 
     /// Range check that `x` is in the range `[0, 2^max_bits)`.
@@ -24,28 +27,28 @@ impl RangeCheckBus {
         BitsCheckBusInteraction {
             x: x.into(),
             shift,
-            bus_index: self.index,
+            bus: self.inner,
         }
     }
 
     pub fn send<T>(&self, x: impl Into<T>) -> RangeCheckBusInteraction<T> {
-        self.push(x, InteractionType::Send)
+        self.push(x, true)
     }
 
     pub fn receive<T>(&self, x: impl Into<T>) -> RangeCheckBusInteraction<T> {
-        self.push(x, InteractionType::Receive)
+        self.push(x, false)
     }
 
-    pub fn push<T>(
-        &self,
-        x: impl Into<T>,
-        interaction_type: InteractionType,
-    ) -> RangeCheckBusInteraction<T> {
+    pub fn push<T>(&self, x: impl Into<T>, is_lookup: bool) -> RangeCheckBusInteraction<T> {
         RangeCheckBusInteraction {
             x: x.into(),
-            bus_index: self.index,
-            interaction_type,
+            bus: self.inner,
+            is_lookup,
         }
+    }
+
+    pub fn index(&self) -> BusIndex {
+        self.inner.index
     }
 }
 
@@ -53,15 +56,15 @@ impl RangeCheckBus {
 pub struct BitsCheckBusInteraction<T> {
     pub x: T,
     pub shift: u32,
-    pub bus_index: usize,
+    pub bus: LookupBus,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct RangeCheckBusInteraction<T> {
     pub x: T,
 
-    pub bus_index: usize,
-    pub interaction_type: InteractionType,
+    pub bus: LookupBus,
+    pub is_lookup: bool,
 }
 
 impl<T: FieldAlgebra> RangeCheckBusInteraction<T> {
@@ -70,7 +73,11 @@ impl<T: FieldAlgebra> RangeCheckBusInteraction<T> {
     where
         AB: InteractionBuilder<Expr = T>,
     {
-        builder.push_interaction(self.bus_index, [self.x], count, self.interaction_type);
+        if self.is_lookup {
+            self.bus.lookup_key(builder, [self.x], count);
+        } else {
+            self.bus.add_key_with_lookups(builder, [self.x], count);
+        }
     }
 }
 
@@ -86,12 +93,12 @@ impl<T: FieldAlgebra> BitsCheckBusInteraction<T> {
             // - this will hold if `x < 2^max_bits` (necessary)
             // - if `x < range_max` then we know the integer value `x.as_canonical_u32() + (range_max - 2^max_bits) < 2*range_max`.
             //   **Assuming that `2*range_max < F::MODULUS`, then additionally knowing `x + (range_max - 2^max_bits) < range_max` implies `x < 2^max_bits`.
-            builder.push_send(
-                self.bus_index,
+            self.bus.lookup_key(
+                builder,
                 [self.x.clone() + AB::Expr::from_canonical_u32(self.shift)],
                 count.clone(),
             );
         }
-        builder.push_send(self.bus_index, [self.x], count);
+        self.bus.lookup_key(builder, [self.x], count);
     }
 }

@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    interaction::InteractionBuilder,
+    interaction::{BusIndex, InteractionBuilder},
     p3_air::{Air, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_maybe_rayon::prelude::{IndexedParallelIterator, ParallelIterator, ParallelSliceMut},
@@ -85,7 +85,7 @@ impl ChipUsageGetter for Sha256TestChip {
     }
 }
 
-const SELF_BUS_IDX: usize = 28;
+const SELF_BUS_IDX: BusIndex = 28;
 #[test]
 fn rand_sha256_test() {
     let mut rng = create_seeded_rng();

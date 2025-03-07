@@ -21,7 +21,7 @@ use openvm_instructions::{
 use openvm_rv32im_circuit::adapters::read_rv32_register;
 use openvm_sha256_air::{Sha256Air, SHA256_BLOCK_BITS};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{interaction::BusIndex, p3_field::PrimeField32};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -77,7 +77,7 @@ impl<F: PrimeField32> Sha256VmChip<F> {
         }: SystemPort,
         address_bits: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
-        self_bus_idx: usize,
+        self_bus_idx: BusIndex,
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {

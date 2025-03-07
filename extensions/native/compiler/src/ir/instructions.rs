@@ -256,6 +256,9 @@ pub enum DslIr<C: Config> {
     CircuitFeltReduce(Felt<C::F>),
     /// Halo2 only. Reduce an Ext so later computation becomes cheaper.
     CircuitExtReduce(Ext<C::F, C::EF>),
+    /// Halo2 only. Asserts that `a, b` both have <= `C::F::bits()` and then asserts `a < b`.
+    /// Assumes that `C::F::bits() < C::N::bits()`.
+    CircuitLessThan(Var<C::N>, Var<C::N>),
     /// FriReducedOpening(alpha, hint_id, is_init, at_x_array, at_z_array, result)
     FriReducedOpening(
         Ext<C::F, C::EF>,

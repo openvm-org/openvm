@@ -4,7 +4,10 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
 };
-use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::FieldAlgebra};
+use openvm_stark_backend::{
+    interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
+    p3_field::FieldAlgebra,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -118,7 +121,22 @@ pub struct ExecutionState<T> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ExecutionBus(pub usize);
+pub struct ExecutionBus {
+    pub inner: PermutationCheckBus,
+}
+
+impl ExecutionBus {
+    pub const fn new(index: BusIndex) -> Self {
+        Self {
+            inner: PermutationCheckBus::new(index),
+        }
+    }
+
+    #[inline(always)]
+    pub fn index(&self) -> BusIndex {
+        self.inner.index
+    }
+}
 
 #[derive(Copy, Clone, Debug)]
 pub struct ExecutionBridge {
@@ -171,10 +189,11 @@ impl<T> ExecutionState<T> {
 }
 
 impl ExecutionBus {
+    /// Caller must constrain that `enabled` is boolean.
     pub fn execute_and_increment_pc<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        multiplicity: impl Into<AB::Expr>,
+        enabled: impl Into<AB::Expr>,
         prev_state: ExecutionState<AB::Expr>,
         timestamp_change: impl Into<AB::Expr>,
     ) {
@@ -182,25 +201,27 @@ impl ExecutionBus {
             pc: prev_state.pc.clone() + AB::F::ONE,
             timestamp: prev_state.timestamp.clone() + timestamp_change.into(),
         };
-        self.execute(builder, multiplicity, prev_state, next_state);
+        self.execute(builder, enabled, prev_state, next_state);
     }
+
+    /// Caller must constrain that `enabled` is boolean.
     pub fn execute<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        multiplicity: impl Into<AB::Expr>,
+        enabled: impl Into<AB::Expr>,
         prev_state: ExecutionState<impl Into<AB::Expr>>,
         next_state: ExecutionState<impl Into<AB::Expr>>,
     ) {
-        let multiplicity = multiplicity.into();
-        builder.push_receive(
-            self.0,
+        let enabled = enabled.into();
+        self.inner.receive(
+            builder,
             [prev_state.pc.into(), prev_state.timestamp.into()],
-            multiplicity.clone(),
+            enabled.clone(),
         );
-        builder.push_send(
-            self.0,
+        self.inner.send(
+            builder,
             [next_state.pc.into(), next_state.timestamp.into()],
-            multiplicity,
+            enabled,
         );
     }
 }
@@ -265,20 +286,21 @@ impl ExecutionBridge {
 }
 
 impl<AB: InteractionBuilder> ExecutionBridgeInteractor<AB> {
-    pub fn eval(self, builder: &mut AB, multiplicity: impl Into<AB::Expr>) {
-        let multiplicity = multiplicity.into();
+    /// Caller must constrain that `enabled` is boolean.
+    pub fn eval(self, builder: &mut AB, enabled: impl Into<AB::Expr>) {
+        let enabled = enabled.into();
 
         // Interaction with program
-        self.program_bus.send_instruction(
+        self.program_bus.lookup_instruction(
             builder,
             self.from_state.pc.clone(),
             self.opcode,
             self.operands,
-            multiplicity.clone(),
+            enabled.clone(),
         );
 
         self.execution_bus
-            .execute(builder, multiplicity, self.from_state, self.to_state);
+            .execute(builder, enabled, self.from_state, self.to_state);
     }
 }
 

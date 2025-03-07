@@ -200,7 +200,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             builder.system_port(),
             offline_memory.clone(),
             Poseidon2Config::default(),
-            VerifyBatchBus(builder.new_bus_idx()),
+            VerifyBatchBus::new(builder.new_bus_idx()),
             builder.streams().clone(),
         );
         inventory.add_executor(

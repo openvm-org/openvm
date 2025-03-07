@@ -4,6 +4,7 @@ use openvm_circuit::utils::gen_vm_program_test_proof_input;
 use openvm_native_circuit::NativeConfig;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    interaction::BusIndex,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
@@ -44,7 +45,7 @@ pub fn interaction_test_proof_input<SC: StarkGenericConfig>() -> ProofInputForTe
 where
     Val<SC>: PrimeField32,
 {
-    const BUS: usize = 0;
+    const BUS: BusIndex = 0;
     let mut send_chip1 = DummyInteractionChip::new_without_partition(2, true, BUS);
     let mut send_chip2 = DummyInteractionChip::new_without_partition(2, true, BUS);
     let mut recv_chip = DummyInteractionChip::new_without_partition(2, false, BUS);
@@ -69,7 +70,7 @@ pub fn unordered_test_proof_input<SC: StarkGenericConfig>() -> ProofInputForTest
 where
     Val<SC>: PrimeField32,
 {
-    const BUS: usize = 0;
+    const BUS: BusIndex = 0;
     const SENDER_HEIGHT: usize = 2;
     const RECEIVER_HEIGHT: usize = 4;
     let sender_air = DummyInteractionAir::new(1, true, BUS);

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use air::ListAir;
+use openvm_stark_backend::interaction::BusIndex;
 
 use crate::range::RangeCheckerChip;
 
@@ -28,7 +29,7 @@ impl ListChip {
         self.range_checker.range_max()
     }
 
-    pub fn bus_index(&self) -> usize {
-        self.air.bus.index
+    pub fn bus_index(&self) -> BusIndex {
+        self.air.bus.inner.index
     }
 }

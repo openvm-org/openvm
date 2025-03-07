@@ -124,7 +124,7 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
             ExecutionState::new(end.pc, end.timestamp),
             ExecutionState::new(begin.pc, begin.timestamp),
         );
-        self.program_bus.send_instruction(
+        self.program_bus.lookup_instruction(
             builder,
             end.pc,
             AB::Expr::from_canonical_usize(TERMINATE.global_opcode().as_usize()),

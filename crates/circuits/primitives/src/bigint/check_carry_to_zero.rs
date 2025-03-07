@@ -1,5 +1,5 @@
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
+    interaction::{BusIndex, InteractionBuilder},
     p3_field::{Field, FieldAlgebra},
 };
 
@@ -14,7 +14,7 @@ pub struct CheckCarryToZeroSubAir {
     // The number of bits for each limb (not overflowed). Example: 10.
     pub limb_bits: usize,
 
-    pub range_checker_bus: usize,
+    pub range_checker_bus: BusIndex,
     // The range checker decomp bits.
     pub decomp: usize,
 }
@@ -29,7 +29,7 @@ pub fn get_carry_max_abs_and_bits(max_overflow_bits: usize, limb_bits: usize) ->
 }
 
 impl CheckCarryToZeroSubAir {
-    pub fn new(limb_bits: usize, range_checker_bus: usize, decomp: usize) -> Self {
+    pub fn new(limb_bits: usize, range_checker_bus: BusIndex, decomp: usize) -> Self {
         Self {
             limb_bits,
             range_checker_bus,

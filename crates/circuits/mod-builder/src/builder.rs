@@ -242,7 +242,7 @@ impl FieldExpr {
         let subair = CheckCarryModToZeroSubAir::new(
             builder.prime.clone(),
             builder.limb_bits,
-            range_bus.index,
+            range_bus.inner.index,
             range_bus.range_max_bits,
         );
         FieldExpr {
@@ -390,7 +390,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             for limb in var.limbs().iter() {
                 range_check(
                     builder,
-                    self.range_bus.index,
+                    self.range_bus.inner.index,
                     self.range_bus.range_max_bits,
                     self.limb_bits,
                     limb.clone(),

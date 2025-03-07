@@ -13,7 +13,7 @@ use openvm_native_compiler::{
 use openvm_poseidon2_air::{Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS};
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
-    interaction::{InteractionBuilder, InteractionType},
+    interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::Matrix,
@@ -678,7 +678,7 @@ impl VerifyBatchBus {
         &self,
         builder: &mut AB,
         send: bool,
-        multiplicity: impl Into<AB::Expr>,
+        enabled: impl Into<AB::Expr>,
         start_timestamp: impl Into<AB::Expr>,
         end_timestamp: impl Into<AB::Expr>,
         opened_base_pointer: impl Into<AB::Expr>,
@@ -696,18 +696,23 @@ impl VerifyBatchBus {
             final_opened_index.into(),
         ];
         fields.extend(hash.into_iter().map(Into::into));
-        builder.push_interaction(
-            self.0,
-            fields,
-            multiplicity.into(),
-            if send {
-                InteractionType::Send
-            } else {
-                InteractionType::Receive
-            },
-        );
+        if send {
+            self.inner.send(builder, fields, enabled.into());
+        } else {
+            self.inner.receive(builder, fields, enabled.into());
+        }
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct VerifyBatchBus(pub usize);
+pub struct VerifyBatchBus {
+    inner: PermutationCheckBus,
+}
+
+impl VerifyBatchBus {
+    pub const fn new(index: BusIndex) -> Self {
+        Self {
+            inner: PermutationCheckBus::new(index),
+        }
+    }
+}

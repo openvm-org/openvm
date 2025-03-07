@@ -5,7 +5,7 @@ use openvm_native_compiler::{
 use openvm_stark_backend::{
     air_builders::symbolic::SymbolicExpressionDag,
     config::{Com, StarkGenericConfig, Val},
-    keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth},
+    keygen::types::{LinearConstraint, MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth},
     p3_util::log2_strict_usize,
 };
 
@@ -66,6 +66,8 @@ where
 pub struct MultiStarkVerificationAdvice<C: Config> {
     pub per_air: Vec<StarkVerificationAdvice<C>>,
     pub num_challenges_to_sample: Vec<usize>,
+    pub trace_height_constraints: Vec<LinearConstraint>,
+    pub log_up_pow_bits: usize,
 }
 
 /// Create MultiStarkVerificationAdvice for an inner config.
@@ -76,13 +78,15 @@ where
     Com<SC>: Into<[C::F; DIGEST_SIZE]>,
 {
     let num_challenges_to_sample = vk.num_challenges_per_phase();
-    let MultiStarkVerifyingKey::<SC> { per_air } = vk;
     MultiStarkVerificationAdvice {
-        per_air: per_air
+        per_air: vk
+            .per_air
             .iter()
             .map(|vk| new_from_inner_vk::<SC, C>(vk.clone()))
             .collect(),
         num_challenges_to_sample,
+        trace_height_constraints: vk.trace_height_constraints.clone(),
+        log_up_pow_bits: vk.log_up_pow_bits,
     }
 }
 

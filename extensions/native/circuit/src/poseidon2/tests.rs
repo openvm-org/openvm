@@ -38,7 +38,7 @@ use crate::{
     NativeConfig,
 };
 
-const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus(7);
+const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
 
 fn compute_commit<F: Field>(
     dim: &[usize],

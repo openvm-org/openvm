@@ -20,6 +20,7 @@ pub struct StarkProofVariable<C: Config> {
     pub per_air: Array<C, AirProofDataVariable<C>>,
     /// A permutation of AIR indexes which are sorted by log_degree in descending order.
     pub air_perm_by_height: Array<C, Usize<C::N>>,
+    pub log_up_pow_witness: Felt<C::F>,
 }
 
 #[derive(DslVariable, Clone)]
@@ -40,6 +41,30 @@ pub struct MultiStarkVerificationAdviceVariable<C: Config> {
     /// Shape is as same as the shape of the original VK's `num_challenges_to_sample.
     /// Each element is 0 or 1. 1 means the challenge should be sampled.
     pub num_challenges_to_sample_mask: Vec<Vec<Usize<C::N>>>,
+    pub trace_height_constraint_system: TraceHeightConstraintSystem<C>,
+}
+
+#[derive(Clone)]
+pub struct LinearConstraintVariable<C: Config> {
+    pub coefficients: Array<C, Var<C::N>>,
+    pub threshold: Var<C::N>,
+    /// Whether `threshold == p`, to help distinguish from `threshold == 0` in the field.
+    pub is_threshold_at_p: bool,
+}
+
+#[derive(Clone)]
+pub struct TraceHeightConstraintSystem<C: Config> {
+    /// Linear constraints where each constraint includes all trace heights.
+    pub height_constraints: Vec<LinearConstraintVariable<C>>,
+    /// Optional hard constraints on the height of each trace, derived from the above
+    /// `height_constraints` to ensure that c_{ij} * a_j does not overflow the field.
+    pub height_maxes: Array<C, OptionalVar<C>>,
+}
+
+#[derive(DslVariable, Clone)]
+pub struct OptionalVar<C: Config> {
+    pub is_some: Usize<C::N>,
+    pub value: Var<C::N>,
 }
 
 #[derive(DslVariable, Clone)]

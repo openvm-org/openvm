@@ -7,6 +7,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
+    interaction::BusIndex,
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -21,7 +22,7 @@ use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreChip, Rv32AuipcCoreCols};
 use crate::adapters::{Rv32RdWriteAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
 const IMM_BITS: usize = 24;
-const BITWISE_OP_LOOKUP_BUS: usize = 9;
+const BITWISE_OP_LOOKUP_BUS: BusIndex = 9;
 
 type F = BabyBear;
 

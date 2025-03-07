@@ -280,12 +280,14 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
         let raw_air_perm_by_height = Vec::<usize>::read(builder);
         // A hacky way to transmute from Array of Var to Array of Usize.
         let air_perm_by_height = unsafe_array_transmute(raw_air_perm_by_height);
+        let log_up_pow_witness = builder.hint_felt();
 
         StarkProofVariable {
             commitments,
             opening,
             per_air,
             air_perm_by_height,
+            log_up_pow_witness,
         }
     }
 
@@ -301,6 +303,13 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
             .sorted_by_key(|i| Reverse(self.per_air[*i].degree))
             .collect();
         stream.extend(air_perm_by_height.write());
+        stream.extend(
+            self.rap_phase_seq_proof
+                .as_ref()
+                .map(|p| p.logup_pow_witness)
+                .unwrap_or_default()
+                .write(),
+        );
 
         stream
     }

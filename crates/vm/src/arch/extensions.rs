@@ -20,6 +20,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
+    interaction::{BusIndex, PermutationCheckBus},
     p3_commit::PolynomialSpace,
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::Matrix,
@@ -38,7 +39,6 @@ use crate::metrics::VmMetrics;
 use crate::system::{
     connector::VmConnectorChip,
     memory::{
-        merkle::{DirectCompressionBus, MemoryMerkleBus},
         offline_checker::{MemoryBridge, MemoryBus},
         MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
     },
@@ -152,7 +152,7 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
         }
     }
 
-    pub fn new_bus_idx(&mut self) -> usize {
+    pub fn new_bus_idx(&mut self) -> BusIndex {
         self.bus_idx_mgr.new_bus_idx()
     }
 
@@ -440,7 +440,7 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct BusIndexManager {
     /// All existing buses use indices in [0, bus_idx_max)
-    bus_idx_max: usize,
+    bus_idx_max: BusIndex,
 }
 
 impl BusIndexManager {
@@ -448,9 +448,9 @@ impl BusIndexManager {
         Self { bus_idx_max: 0 }
     }
 
-    pub fn new_bus_idx(&mut self) -> usize {
+    pub fn new_bus_idx(&mut self) -> BusIndex {
         let idx = self.bus_idx_max;
-        self.bus_idx_max += 1;
+        self.bus_idx_max = self.bus_idx_max.checked_add(1).unwrap();
         idx
     }
 }
@@ -526,9 +526,9 @@ pub enum SystemPeriphery<F: PrimeField32> {
 impl<F: PrimeField32> SystemComplex<F> {
     pub fn new(config: SystemConfig) -> Self {
         let mut bus_idx_mgr = BusIndexManager::new();
-        let execution_bus = ExecutionBus(bus_idx_mgr.new_bus_idx());
-        let memory_bus = MemoryBus(bus_idx_mgr.new_bus_idx());
-        let program_bus = ProgramBus(bus_idx_mgr.new_bus_idx());
+        let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
+        let memory_bus = MemoryBus::new(bus_idx_mgr.new_bus_idx());
+        let program_bus = ProgramBus::new(bus_idx_mgr.new_bus_idx());
         let range_bus =
             VariableRangeCheckerBus::new(bus_idx_mgr.new_bus_idx(), config.memory_config.decomp);
 
@@ -538,8 +538,8 @@ impl<F: PrimeField32> SystemComplex<F> {
                 memory_bus,
                 config.memory_config,
                 range_checker.clone(),
-                MemoryMerkleBus(bus_idx_mgr.new_bus_idx()),
-                DirectCompressionBus(bus_idx_mgr.new_bus_idx()),
+                PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
+                PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
             )
         } else {
             MemoryController::with_volatile_memory(
@@ -579,7 +579,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 .interface_chip
                 .compression_bus()
                 .unwrap()
-                .0;
+                .index;
             let chip = Poseidon2PeripheryChip::new(
                 vm_poseidon2_config(),
                 direct_bus_idx,
@@ -1265,14 +1265,14 @@ mod tests {
     fn test_system_bus_indices() {
         let config = SystemConfig::default().with_continuations();
         let complex = SystemComplex::<BabyBear>::new(config);
-        assert_eq!(complex.base.execution_bus().0, 0);
-        assert_eq!(complex.base.memory_bus().0, 1);
-        assert_eq!(complex.base.program_bus().0, 2);
-        assert_eq!(complex.base.range_checker_bus().index, 3);
+        assert_eq!(complex.base.execution_bus().index(), 0);
+        assert_eq!(complex.base.memory_bus().index(), 1);
+        assert_eq!(complex.base.program_bus().index(), 2);
+        assert_eq!(complex.base.range_checker_bus().index(), 3);
         match &complex.memory_controller().interface_chip {
             MemoryInterface::Persistent { boundary_chip, .. } => {
-                assert_eq!(boundary_chip.air.merkle_bus.0, 4);
-                assert_eq!(boundary_chip.air.compression_bus.0, 5);
+                assert_eq!(boundary_chip.air.merkle_bus.index, 4);
+                assert_eq!(boundary_chip.air.compression_bus.index, 5);
             }
             _ => unreachable!(),
         };
