@@ -273,6 +273,15 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             .collect(),
         AsmInstruction::Trap => vec![
             Instruction::phantom(PhantomDiscriminant(SysPhantom::DebugPanic as u16), F::ZERO, F::ZERO, 0),
+            // Ensure that the program terminates unsuccessfully.
+            inst(
+                options.opcode_with_offset(SystemOpcode::TERMINATE),
+                F::ZERO,
+                F::ZERO,
+                F::ONE,
+                AS::Immediate,
+                AS::Immediate,
+            ),
         ],
         AsmInstruction::Halt => vec![
             // terminate
