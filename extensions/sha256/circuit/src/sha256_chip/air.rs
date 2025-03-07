@@ -29,6 +29,8 @@ use super::{
     SHA256VM_ROUND_WIDTH, SHA256VM_WIDTH, SHA256_READ_SIZE,
 };
 
+/// Sha256VmAir does all constraints related to message padding and
+/// the Sha256Air subair constrains the actual hash
 #[derive(Clone, Debug, derive_new::new)]
 pub struct Sha256VmAir {
     pub execution_bridge: ExecutionBridge,
@@ -36,6 +38,7 @@ pub struct Sha256VmAir {
     /// Bus to send byte checks to
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     /// Maximum number of bits allowed for an address pointer
+    /// Must be at least 24
     pub ptr_max_bits: usize,
     pub(super) sha256_subair: Sha256Air,
     pub(super) padding_encoder: Encoder,
@@ -85,7 +88,8 @@ pub(super) enum PaddingFlags {
     FirstPadding15,
     /// FIRST_PADDING_i_LastRow: it is the first row with padding and there are i cells of non-padding
     ///                          AND it is the last reading row of the message
-    /// NOTE: if the Last row has padding it has to be at least 9 cells
+    /// NOTE: if the Last row has padding it has to be at least 9 cells since the last 8 cells are padded with
+    /// the message length
     FirstPadding0_LastRow,
     FirstPadding1_LastRow,
     FirstPadding2_LastRow,
@@ -136,20 +140,29 @@ impl Sha256VmAir {
     ) {
         let next_is_last_row = next.inner.flags.is_digest_row * next.inner.flags.is_last_block;
 
-        // Constrain `padding_occured`
+        // Constrain that `padding_occured` is 1 on a suffix of rows in each message, excluding the last
+        // digest row, and 0 everywhere else. Furthermore, the suffix starts in the first 4 rows of some block.
+
         builder.assert_bool(local.control.padding_occurred);
+        // Last round row in the last block has padding_occurred = 1
+        // This is the end of the suffix
         builder
             .when(next_is_last_row.clone())
             .assert_one(local.control.padding_occurred);
 
+        // Digest row in the last block has padding_occurred = 0
         builder
             .when(next_is_last_row.clone())
             .assert_zero(next.control.padding_occurred);
 
+        // If padding_occurred = 1 in the current row, then padding_occurred = 1 in the next row,
+        // unless next is the last digest row
         builder
             .when(local.control.padding_occurred - next_is_last_row.clone())
             .assert_one(next.control.padding_occurred);
 
+        // If next row is not first 4 rows of a block, then next.padding_occurred = local.padding_occurred.
+        // So padding_occurred only changes in the first 4 rows of a block.
         builder
             .when_transition()
             .when(not(next.inner.flags.is_first_4_rows) - next_is_last_row)
@@ -161,10 +174,13 @@ impl Sha256VmAir {
         // Constrain the that the start of the padding is correct
         let next_is_first_padding_row =
             next.control.padding_occurred - local.control.padding_occurred;
+        // Row index if its between 0..4, else 0
         let next_row_idx = self.sha256_subair.row_idx_encoder.flag_with_val::<AB>(
             &next.inner.flags.row_idx,
             &(0..4).map(|x| (x, x)).collect::<Vec<_>>(),
         );
+        // How many non-padding cells there are in the next row.
+        // Will be 0 on non-padding rows.
         let next_padding_offset = self.padding_encoder.flag_with_val::<AB>(
             &next.control.pad_flags,
             &(0..16)
@@ -177,13 +193,19 @@ impl Sha256VmAir {
                 .collect::<Vec<_>>(),
         );
 
+        // Will be 0 on last digest row since:
+        //   - padding_occurred = 0 is constrained above
+        //   - next_row_idx = 0 since row_idx is not in 0..4
+        //   - and next_padding_offset = 0 since `pad_flags = NotConsidered`
         let expected_len = next.inner.flags.local_block_idx
             * next.control.padding_occurred
             * AB::Expr::from_canonical_usize(SHA256_BLOCK_U8S)
             + next_row_idx * AB::Expr::from_canonical_usize(SHA256_READ_SIZE)
             + next_padding_offset;
 
-        // Note: if `next_is_first_padding_row` == -1, then expected_len = 0
+        // Note: `next_is_first_padding_row` is either -1,0,1
+        // If 1, then this constrains the length of message
+        // If -1, then `next` must be the last digest row and so this constraint will be 0 == 0
         builder.when(next_is_first_padding_row).assert_eq(
             expected_len,
             next.control.len * next.control.padding_occurred,
@@ -218,25 +240,30 @@ impl Sha256VmAir {
             .row_idx_encoder
             .contains_flag::<AB>(&next.inner.flags.row_idx, &[3]);
 
+        // `pad_flags` is `NotConsidered` on all rows except the first 4 rows of a block
         builder.assert_eq(
             not(next.inner.flags.is_first_4_rows),
             is_next_not_considered,
         );
 
+        // `pad_flags` is `EntirePadding` if the previous row is padding
         builder.when(next.inner.flags.is_first_4_rows).assert_eq(
             local.control.padding_occurred * next.control.padding_occurred,
             is_next_entire_padding,
         );
 
+        // `pad_flags` is `FirstPadding*` if current row is padding and the previous row is not padding
         builder.when(next.inner.flags.is_first_4_rows).assert_eq(
             not(local.control.padding_occurred) * next.control.padding_occurred,
             is_next_first_padding,
         );
 
+        // `pad_flags` is `NotPadding` if current row is not padding
         builder
             .when(next.inner.flags.is_first_4_rows)
             .assert_eq(not(next.control.padding_occurred), is_next_not_padding);
 
+        // `pad_flags` is `*LastRow` on the row that contsrains the last four words of the message
         builder
             .when(next.inner.flags.is_last_block)
             .assert_eq(is_next_4th_row, is_next_last_padding);
@@ -320,6 +347,8 @@ impl Sha256VmAir {
                 };
             builder.when(should_be_zero).assert_zero(w.clone());
 
+            // Assumes bit-length of message is a multiple of 8 (message is bytes)
+            // This is true because the message is given as &[u8]
             let should_be_128 = self
                 .padding_encoder
                 .contains_flag::<AB>(&local.control.pad_flags, &[FirstPadding0 as usize + i])
@@ -367,7 +396,9 @@ impl Sha256VmAir {
                 + local.inner.message_schedule.w[3][2],
         );
 
-        // We can't support messages longer than 2^30 bytes
+        // We can't support messages longer than 2^30 bytes because the length has to fit in a field element.
+        // So, constrain that the first 4 bytes of the length are 0.
+        // Thus, the bit-length is < 2^32 so the message is < 2^29 bytes.
         for i in 8..12 {
             builder
                 .when(is_last_padding_row.clone())
@@ -493,6 +524,7 @@ impl Sha256VmAir {
         let shift = AB::Expr::from_canonical_usize(
             1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.ptr_max_bits),
         );
+        // This only works if self.ptr_max_bits >= 24 which is typically the case
         self.bitwise_lookup_bus
             .send_range(
                 // It is fine to shift like this since we already know that dst_ptr and src_ptr have [RV32_CELL_BITS] bits

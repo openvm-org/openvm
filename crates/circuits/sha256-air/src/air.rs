@@ -21,6 +21,7 @@ use super::{
 };
 use crate::constraint_word_addition;
 
+/// Expects the message to be padded to a multiple of 512 bits
 #[derive(Clone, Debug)]
 pub struct Sha256Air {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
@@ -236,6 +237,8 @@ impl Sha256Air {
             next[start_col..start_col + SHA256_ROUND_WIDTH].borrow();
 
         let local_is_padding_row = local_cols.flags.is_padding_row();
+        // Note that there will always be a padding row in the trace since the unpadded height is a multiple of 17.
+        // So the next row is padding iff the current block is the last block in the trace.
         let next_is_padding_row = next_cols.flags.is_padding_row();
 
         // We check that the very last block has `is_last_block` set to true, which guarantees that
@@ -262,13 +265,13 @@ impl Sha256Air {
         builder
             .when(local_cols.flags.is_digest_row)
             .assert_zero(next_cols.flags.is_digest_row);
-        // Constrin how much the row index changes by
+        // Constrain how much the row index changes by
         // round->round: 1
         // round->digest: 1
         // digest->round: -16
         // digest->padding: 1
         // padding->padding: 0
-        // Other transitions are not allowed by the above
+        // Other transitions are not allowed by the above constraints
         let delta = local_cols.flags.is_round_row * AB::Expr::ONE
             + local_cols.flags.is_digest_row
                 * next_cols.flags.is_round_row
@@ -293,14 +296,18 @@ impl Sha256Air {
         // Constrain the global block index
         // We set the global block index to 0 for padding rows
         // Starting with 1 so it is not the same as the padding rows
+
+        // Global block index is 1 on first row
         builder
             .when_first_row()
             .assert_one(local_cols.flags.global_block_idx);
 
+        // Global block index is constant on all rows in a block
         builder.when(local_cols.flags.is_round_row).assert_eq(
             local_cols.flags.global_block_idx,
             next_cols.flags.global_block_idx,
         );
+        // Global block index increases by 1 between blocks
         builder
             .when_transition()
             .when(local_cols.flags.is_digest_row)
@@ -309,16 +316,21 @@ impl Sha256Air {
                 local_cols.flags.global_block_idx + AB::Expr::ONE,
                 next_cols.flags.global_block_idx,
             );
+        // Global block index is 0 on padding rows
         builder
             .when(local_is_padding_row.clone())
             .assert_zero(local_cols.flags.global_block_idx);
 
         // Constrain the local block index
         // We set the local block index to 0 for padding rows
+
+        // Local block index is constant on all rows in a block
+        // and its value on padding rows is equal to its value on the first block
         builder.when(not(local_cols.flags.is_digest_row)).assert_eq(
             local_cols.flags.local_block_idx,
             next_cols.flags.local_block_idx,
         );
+        // Local block index increases by 1 between blocks in the same message
         builder
             .when(local_cols.flags.is_digest_row)
             .when(not(local_cols.flags.is_last_block))
@@ -326,7 +338,8 @@ impl Sha256Air {
                 local_cols.flags.local_block_idx + AB::Expr::ONE,
                 next_cols.flags.local_block_idx,
             );
-
+        // Local block index is 0 on padding rows
+        // Combined with the above, this means that the local block index is 0 in the first block
         builder
             .when(local_cols.flags.is_digest_row)
             .when(local_cols.flags.is_last_block)
@@ -339,10 +352,6 @@ impl Sha256Air {
         self.eval_digest_row(builder, local_cols, next_cols);
         let local_cols: &Sha256DigestCols<AB::Var> =
             local[start_col..start_col + SHA256_DIGEST_WIDTH].borrow();
-        // We will pass `next_is_padding_row` as the `is_last_block_of_trace` parameter because
-        // a given digest row is in the last block of the trace if and only if the next row is a padding row.
-        // This is because each block has 17 rows, so the length of the trace without padding is a multiple
-        // of 17, which means there will always be padding after the last digest row.
         self.eval_prev_hash::<AB>(builder, local_cols, next_is_padding_row);
     }
 
@@ -408,7 +417,7 @@ impl Sha256Air {
         // Constrain `w_3` for `next` row
         for i in 0..SHA256_ROUNDS_PER_ROW - 1 {
             // here we constrain the w_3 of the i_th word of the next row
-            // w_3 of is w[i+4-3] = w[i+1]
+            // w_3 of next is w[i+4-3] = w[i+1]
             let w_3 = w[i + 1].map(|x| x.into());
             let expected_w_3 = next.schedule_helper.w_3[i];
             for j in 0..SHA256_WORD_U16S {
@@ -420,7 +429,7 @@ impl Sha256Air {
         }
 
         // Constrain intermed for `next` row
-        // We will only constrain intermed_12 for rows [3, 14], and let it unconstrained for other rows
+        // We will only constrain intermed_12 for rows [3, 14], and let it be unconstrained for other rows
         // Other rows should put the needed value in intermed_12 to make the below summation constraint hold
         let is_row_3_14 = self
             .row_idx_encoder
@@ -438,6 +447,8 @@ impl Sha256Air {
                 let w_idx_limb = compose::<AB::Expr>(&w_idx[j * 16..(j + 1) * 16], 1);
                 let sig_w_limb = compose::<AB::Expr>(&sig_w[j * 16..(j + 1) * 16], 1);
 
+                // We would like to constrain this only on rows 0..16, but we can't do a conditional check because the degree is already 3.
+                // So we must fill in `intermed_4` with dummy values on rows 0 and 16 to ensure the constraint holds on these rows.
                 builder.when_transition().assert_eq(
                     next.schedule_helper.intermed_4[i][j],
                     w_idx_limb + sig_w_limb,
@@ -474,6 +485,9 @@ impl Sha256Air {
             });
 
             // Constrain `W_{idx} = sig_1(W_{idx-2}) + W_{idx-7} + sig_0(W_{idx-15}) + W_{idx-16}`
+            // We would like to constrain this only on rows 4..16, but we can't do a conditional check because the degree of sum is already 3
+            // So we must fill in `intermed_12` with dummy values on rows 0..3 and 15 and 16 to ensure the constraint holds on rows
+            // 0..4 and 16. Note that the dummy value goes in the previous row to make the current row's constraint hold.
             constraint_word_addition(
                 // Note: here we can't do a conditional check because the degree of sum is already 3
                 &mut builder.when_transition(),
@@ -542,6 +556,8 @@ impl Sha256Air {
             });
 
             // Constrain `a = h + sig_1(e) + ch(e, f, g) + K + W + sig_0(a) + Maj(a, b, c)`
+            // We have to enforce this constraint on all rows since the degree of the constraint is already 3.
+            // So, we must fill in `carry_a` with dummy values on digest rows to ensure the constraint holds.
             constraint_word_addition(
                 builder,
                 &[
@@ -557,6 +573,8 @@ impl Sha256Air {
             );
 
             // Constrain `e = d + h + sig_1(e) + ch(e, f, g) + K + W`
+            // We have to enforce this constraint on all rows since the degree of the constraint is already 3.
+            // So, we must fill in `carry_e` with dummy values on digest rows to ensure the constraint holds.
             constraint_word_addition(
                 builder,
                 &[
