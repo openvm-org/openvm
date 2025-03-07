@@ -6,7 +6,7 @@ This crate contains the circuit for the SHA256 VM extension.
 
 See the [FIPS standard](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf), in particular, section 6.2 for reference.
 
-In short,
+In short the SHA-256 algorithm works as follows.
 1. Pad the message to 512 bits and split it into 512-bit 'blocks'.
 2. Initialize a hash state consisting of eight 32-bit words.
 3. For each block, 
@@ -22,7 +22,7 @@ The first 16 rows of each block are called 'round rows', and each of them repres
 Each row constrains updates to the working variables on each round, and it also constrains the message schedule words based on previous rounds.
 The final row is called a 'digest row' and it produces a final hash for the block, computed as the sum of the working variables and the previous block's final hash.
 
-Note that this chip only supports message of length less than `2^29` bytes.
+Note that this chip only supports messages of length less than `2^29` bytes.
 
 ### Storing working variables
 
