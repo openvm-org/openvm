@@ -12,6 +12,9 @@ use super::{
 /// - First 16 rows use Sha256RoundCols
 /// - Final row uses Sha256DigestCols
 ///
+/// Note that for soundness, we require that there is always a padding row after the last digest row in the trace.
+/// Right now, this is true because the unpadded height is a multiple of 17, and thus not a power of 2.
+///
 /// Sha256RoundCols and Sha256DigestCols share the same first 3 fields:
 /// - flags
 /// - work_vars/hash (same type, different name)
