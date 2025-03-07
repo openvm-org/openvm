@@ -40,6 +40,11 @@ pub fn get_advice_per_air<C: Config>(
             });
         });
     }
+    // Assert that all AIRs in air_ids are covered.
+    // This will ensure that
+    // - `air_ids` are in increasing order and that
+    // - `air_ids.len() <= m_advice.per_air.len()`.
+    builder.assert_var_eq(idx, air_ids.len());
 
     MultiStarkVerificationAdviceVariable {
         per_air: advice_per_air,
