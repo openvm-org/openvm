@@ -228,7 +228,9 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
         }
 
         // buffer transition
-        // Note: is_single == 1 implies is_valid == 1 and is_end == 1, so this asserts rem_words == 1 when is_single == 1
+        // `is_end` implies that the next row belongs to a new instruction,
+        // which could be one of empty, hint_single, or hint_buffer
+        // Constrains that when the current row is not empty and `is_end == 1`, then `rem_words` is 1
         builder
             .when(is_valid)
             .when(is_end.clone())
