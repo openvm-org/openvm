@@ -179,10 +179,10 @@ pub enum DslIr<C: Config> {
     StoreHeapPtr(Ptr<C::N>),
 
     // Bits.
-    /// Decompose a variable into size bits (bits = num2bits(var, size)). Should only be used when target is a circuit.
-    CircuitNum2BitsV(Var<C::N>, usize, Vec<Var<C::N>>),
     /// Decompose a field element into bits (bits = num2bits(felt)). Should only be used when target is a circuit.
     CircuitNum2BitsF(Felt<C::F>, Vec<Var<C::N>>),
+    /// Decompose a Var into 16-bit limbs.
+    CircuitVarTo64BitsF(Var<C::N>, [Felt<C::F>; 4]),
 
     // Hashing.
     /// Permutes an array of baby bear elements using Poseidon2 (output = p2_permute(array)).

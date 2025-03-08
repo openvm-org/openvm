@@ -236,14 +236,6 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     opcode: ConstraintOpcode::NegE,
                     args: vec![vec![a.id()], vec![b.id()]],
                 }),
-                DslIr::CircuitNum2BitsV(value, bits, output) => constraints.push(Constraint {
-                    opcode: ConstraintOpcode::Num2BitsV,
-                    args: vec![
-                        output.iter().map(|x| x.id()).collect(),
-                        vec![value.id()],
-                        vec![bits.to_string()],
-                    ],
-                }),
                 DslIr::CircuitNum2BitsF(value, output) => constraints.push(Constraint {
                     opcode: ConstraintOpcode::Num2BitsF,
                     args: vec![output.iter().map(|x| x.id()).collect(), vec![value.id()]],

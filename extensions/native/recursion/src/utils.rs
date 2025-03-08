@@ -52,19 +52,9 @@ pub fn reduce_32<C: Config>(builder: &mut Builder<C>, vals: &[Felt<C::F>]) -> Va
 
 /// Reference: <https://github.com/Plonky3/Plonky3/blob/622375885320ac6bf3c338001760ed8f2230e3cb/field/src/helpers.rs#L149>
 pub fn split_32<C: Config>(builder: &mut Builder<C>, val: Var<C::N>, n: usize) -> Vec<Felt<C::F>> {
-    let bits = builder.num2bits_v_circuit(val, 256);
-    let mut results = Vec::new();
-    for i in 0..n {
-        let result: Felt<C::F> = builder.eval(C::F::ZERO);
-        for j in 0..64 {
-            let bit = bits[i * 64 + j];
-            let t = builder.eval(result + C::F::from_wrapped_u64(1 << j));
-            let z = builder.select_f(bit, t, result);
-            builder.assign(&result, z);
-        }
-        results.push(result);
-    }
-    results
+    let felts = builder.var_to_64bits_f_circuit(val);
+    assert!(n <= felts.len());
+    felts[0..n].to_vec()
 }
 
 /// Eval two expressions, return in the reversed order if cond == 1. Otherwise, return in the original order.

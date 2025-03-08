@@ -1,4 +1,4 @@
-use std::any::TypeId;
+use std::{any::TypeId, array};
 
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -6,18 +6,6 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use super::{Array, Builder, Config, DslIr, Felt, MemIndex, Var};
 
 impl<C: Config> Builder<C> {
-    /// Converts a variable to bits inside a circuit.
-    pub fn num2bits_v_circuit(&mut self, num: Var<C::N>, bits: usize) -> Vec<Var<C::N>> {
-        let mut output = Vec::new();
-        for _ in 0..bits {
-            output.push(self.uninit());
-        }
-
-        self.push(DslIr::CircuitNum2BitsV(num, bits, output.clone()));
-
-        output
-    }
-
     /// Converts a felt to bits. Will result in a failed assertion if `num` has more than `num_bits` bits.
     /// Only works for C::F = BabyBear
     pub fn num2bits_f(&mut self, num: Felt<C::F>, num_bits: u32) -> Array<C, Var<C::N>> {
@@ -93,5 +81,12 @@ impl<C: Config> Builder<C> {
             self.assign(&result, result + bits[i] * C::N::from_canonical_u32(1 << i));
         }
         result
+    }
+
+    /// Decompose a Var into 64-bit Felt limbs.
+    pub fn var_to_64bits_f_circuit(&mut self, value: Var<C::N>) -> [Felt<C::F>; 4] {
+        let ret = array::from_fn(|_| self.uninit());
+        self.push(DslIr::CircuitVarTo64BitsF(value, ret));
+        ret
     }
 }
