@@ -261,7 +261,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
         let timestamp_delta = memory.timestamp() - from_state.timestamp;
         debug_assert!(
             timestamp_delta == 4,
-            "timestamp delta is {}, expected 2",
+            "timestamp delta is {}, expected 4",
             timestamp_delta
         );
 
