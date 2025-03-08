@@ -9,7 +9,7 @@ use std::{
 use itertools::Itertools;
 #[cfg(feature = "bench-metrics")]
 use openvm_circuit::metrics::cycle_tracker::CycleTracker;
-use openvm_stark_backend::p3_field::{ExtensionField, Field, PrimeField};
+use openvm_stark_backend::p3_field::{ExtensionField, Field, FieldAlgebra, PrimeField};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
@@ -175,8 +175,12 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         vars.insert(a.0, x);
                     }
                     DslIr::AddVI(a, b, c) => {
-                        let tmp = ctx.load_constant(convert_fr(&c));
-                        let x = gate.add(ctx, vars[&b.0], tmp);
+                        let x = if c.is_zero() {
+                            vars[&b.0]
+                        } else {
+                            let tmp = ctx.load_constant(convert_fr(&c));
+                            gate.add(ctx, vars[&b.0], tmp)
+                        };
                         vars.insert(a.0, x);
                     }
                     DslIr::AddF(a, b, c) => {
@@ -184,8 +188,12 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         felts.insert(a.0, x);
                     }
                     DslIr::AddFI(a, b, c) => {
-                        let tmp = f_chip.load_constant(ctx, c);
-                        let x = f_chip.add(ctx, felts[&b.0], tmp);
+                        let x = if c.is_zero() {
+                            felts[&b.0]
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, c);
+                            f_chip.add(ctx, felts[&b.0], tmp)
+                        };
                         felts.insert(a.0, x);
                     }
                     DslIr::AddE(a, b, c) => {
@@ -198,14 +206,23 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         exts.insert(a.0, x);
                     }
                     DslIr::AddEFI(a, b, c) => {
-                        let tmp = f_chip.load_constant(ctx, c);
-                        let mut x = exts[&b.0];
-                        x.0[0] = f_chip.add(ctx, x.0[0], tmp);
+                        let x = if c.is_zero() {
+                            exts[&b.0]
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, c);
+                            let mut x = exts[&b.0];
+                            x.0[0] = f_chip.add(ctx, x.0[0], tmp);
+                            x
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::AddEI(a, b, c) => {
-                        let tmp = ext_chip.load_constant(ctx, c);
-                        let x = ext_chip.add(ctx, exts[&b.0], tmp);
+                        let x = if c.is_zero() {
+                            exts[&b.0]
+                        } else {
+                            let tmp = ext_chip.load_constant(ctx, c);
+                            ext_chip.add(ctx, exts[&b.0], tmp)
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::AddEFFI(a, b, c) => {
@@ -231,8 +248,12 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         exts.insert(a.0, x);
                     }
                     DslIr::SubEI(a, b, c) => {
-                        let tmp = ext_chip.load_constant(ctx, c);
-                        let x = ext_chip.sub(ctx, exts[&b.0], tmp);
+                        let x = if c.is_zero() {
+                            exts[&b.0]
+                        } else {
+                            let tmp = ext_chip.load_constant(ctx, c);
+                            ext_chip.sub(ctx, exts[&b.0], tmp)
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::SubVIN(a, b, c) => {
@@ -246,9 +267,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         exts.insert(a.0, x);
                     }
                     DslIr::SubEFI(a, b, c) => {
-                        let tmp = f_chip.load_constant(ctx, c);
-                        let mut x = exts[&b.0];
-                        x.0[0] = f_chip.sub(ctx, x.0[0], tmp);
+                        let x = if c.is_zero() {
+                            exts[&b.0]
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, c);
+                            let mut x = exts[&b.0];
+                            x.0[0] = f_chip.sub(ctx, x.0[0], tmp);
+                            x
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::MulV(a, b, c) => {
@@ -256,8 +282,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         vars.insert(a.0, x);
                     }
                     DslIr::MulVI(a, b, c) => {
-                        let tmp = ctx.load_constant(convert_fr(&c));
-                        let x = gate.mul(ctx, vars[&b.0], tmp);
+                        let x = if c.is_one() {
+                            vars[&b.0]
+                        } else if c.is_zero() {
+                            ctx.load_zero()
+                        } else {
+                            let tmp = ctx.load_constant(convert_fr(&c));
+                            gate.mul(ctx, vars[&b.0], tmp)
+                        };
                         vars.insert(a.0, x);
                     }
                     DslIr::MulF(a, b, c) => {
@@ -265,8 +297,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         felts.insert(a.0, x);
                     }
                     DslIr::MulFI(a, b, c) => {
-                        let tmp = f_chip.load_constant(ctx, c);
-                        let x = f_chip.mul(ctx, felts[&b.0], tmp);
+                        let x = if c.is_one() {
+                            felts[&b.0]
+                        } else if c.is_zero() {
+                            f_chip.load_constant(ctx, BabyBear::ZERO)
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, c);
+                            f_chip.mul(ctx, felts[&b.0], tmp)
+                        };
                         felts.insert(a.0, x);
                     }
                     DslIr::MulE(a, b, c) => {
@@ -274,8 +312,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         exts.insert(a.0, x);
                     }
                     DslIr::MulEI(a, b, c) => {
-                        let tmp = ext_chip.load_constant(ctx, c);
-                        let x = ext_chip.mul(ctx, exts[&b.0], tmp);
+                        let x = if c.is_one() {
+                            exts[&b.0]
+                        } else if c.is_zero() {
+                            ext_chip.load_constant(ctx, BabyBearExt4::ZERO)
+                        } else {
+                            let tmp = ext_chip.load_constant(ctx, c);
+                            ext_chip.mul(ctx, exts[&b.0], tmp)
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::MulEF(a, b, c) => {
@@ -283,8 +327,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         exts.insert(a.0, x);
                     }
                     DslIr::MulEFI(a, b, c) => {
-                        let tmp = f_chip.load_constant(ctx, c);
-                        let x = ext_chip.scalar_mul(ctx, exts[&b.0], tmp);
+                        let x = if c.is_one() {
+                            exts[&b.0]
+                        } else if c.is_zero() {
+                            ext_chip.load_constant(ctx, BabyBearExt4::ZERO)
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, c);
+                            ext_chip.scalar_mul(ctx, exts[&b.0], tmp)
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::DivF(a, b, c) => {
@@ -294,7 +344,11 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     DslIr::DivFIN(a, b, c) => {
                         // a = b / c
                         let tmp = f_chip.load_constant(ctx, b);
-                        let x = f_chip.div(ctx, tmp, felts[&c.0]);
+                        let x = if b.is_zero() {
+                            tmp
+                        } else {
+                            f_chip.div(ctx, tmp, felts[&c.0])
+                        };
                         felts.insert(a.0, x);
                     }
                     DslIr::DivE(a, b, c) => {
@@ -303,7 +357,11 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     }
                     DslIr::DivEIN(a, b, c) => {
                         let tmp = ext_chip.load_constant(ctx, b);
-                        let x = ext_chip.div(ctx, tmp, exts[&c.0]);
+                        let x = if b.is_zero() {
+                            tmp
+                        } else {
+                            ext_chip.div(ctx, tmp, exts[&c.0])
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::NegE(a, b) => {
@@ -365,15 +423,25 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         f_chip.assert_equal(ctx, felts[&a.0], felts[&b.0]);
                     }
                     DslIr::AssertEqFI(a, b) => {
-                        let tmp = f_chip.load_constant(ctx, b);
-                        f_chip.assert_equal(ctx, felts[&a.0], tmp);
+                        if b.is_zero() {
+                            f_chip.assert_zero(ctx, felts[&a.0]);
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, b);
+                            f_chip.assert_equal(ctx, felts[&a.0], tmp);
+                        }
                     }
                     DslIr::AssertEqE(a, b) => {
                         ext_chip.assert_equal(ctx, exts[&a.0], exts[&b.0]);
                     }
                     DslIr::AssertEqEI(a, b) => {
-                        let tmp = ext_chip.load_constant(ctx, b);
-                        ext_chip.assert_equal(ctx, exts[&a.0], tmp);
+                        // Note: we could check if each coordinate of `b` is zero separately for a little more efficiency,
+                        // but omitting to simplify the code
+                        if b.is_zero() {
+                            ext_chip.assert_zero(ctx, exts[&a.0]);
+                        } else {
+                            let tmp = ext_chip.load_constant(ctx, b);
+                            ext_chip.assert_equal(ctx, exts[&a.0], tmp);
+                        }
                     }
                     DslIr::PrintV(a) => {
                         println!("PrintV: {:?}", vars[&a.0].value());
