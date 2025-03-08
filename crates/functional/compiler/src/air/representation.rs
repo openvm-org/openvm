@@ -8,7 +8,7 @@ use crate::{
         constructor::{AirConstructor, TimestampUsage},
     },
     folder1::{
-        file2_tree::{ExpressionContainer, ScopePath},
+        file2_tree::{DeclarationSet, ExpressionContainer, ScopePath},
         file3::{FlatFunctionCall, FlatMatch, FlatStatement},
         function_resolution::Stage,
         ir::{ArithmeticOperator, Expression, Material, Statement, Type},
@@ -22,15 +22,38 @@ pub struct Representation {
     pub owned: Vec<bool>,
 }
 
-#[derive(Default)]
-pub struct RepresentationTable {
-    representations: HashMap<(ScopePath, String), Representation>,
+impl Representation {
+    pub fn add(&mut self, other: &Representation) {
+        for (here, there) in self.expressions.iter_mut().zip(other.expressions.iter()) {
+            *here = here.plus(there);
+        }
+    }
+
+    pub fn unowned(&self) -> Representation {
+        Representation {
+            expressions: self.expressions.clone(),
+            owned: vec![false; self.expressions.len()],
+        }
+    }
 }
 
-impl RepresentationTable {
-    fn get_representation(&mut self, scope: &ScopePath, name: &String) -> Vec<AirExpression> {
-        for prefix in scope.prefixes() {
-            let representation = self.representations.get(&(prefix.clone(), name.clone()));
+pub struct RepresentationTable<'a> {
+    representations: HashMap<(ScopePath, String), Representation>,
+    declaration_set: &'a DeclarationSet,
+}
+
+impl<'a> RepresentationTable<'a> {
+    pub fn new(declaration_set: &'a DeclarationSet) -> Self {
+        Self {
+            representations: HashMap::new(),
+            declaration_set,
+        }
+    }
+    fn get_representation(&mut self, scope: &ScopePath, name: &str) -> Vec<AirExpression> {
+        for prefix in scope.prefixes().rev() {
+            let representation = self
+                .representations
+                .get(&(prefix.clone(), name.to_string()));
             if let Some(representation) = representation {
                 return representation.expressions.clone();
             }
@@ -57,8 +80,7 @@ impl RepresentationTable {
                 *right = Some(expression);
             }
         }
-        self.representations
-            .insert((scope.clone(), name.clone()), representation);
+        self.insert_representation(scope, name, representation);
     }
     pub fn add_representation(
         &mut self,
@@ -67,13 +89,39 @@ impl RepresentationTable {
         representation: Vec<AirExpression>,
     ) {
         let representation_len = representation.len();
-        self.representations.insert(
-            (scope.clone(), name.clone()),
+        self.insert_representation(
+            scope,
+            name,
             Representation {
                 expressions: representation,
                 owned: vec![false; representation_len],
             },
         );
+    }
+    fn insert_representation(
+        &mut self,
+        scope: &ScopePath,
+        name: &str,
+        representation: Representation,
+    ) {
+        let mut ancestor = self.declaration_set.get_declaration_scope(scope, name);
+        while ancestor.0.len() < scope.0.len() {
+            if let Some(current_representation) = self
+                .representations
+                .get_mut(&(ancestor.clone(), name.to_string()))
+            {
+                current_representation.add(&representation);
+            } else {
+                self.representations.insert(
+                    (ancestor.clone(), name.to_string()),
+                    representation.unowned(),
+                );
+            }
+            let i = ancestor.0.len();
+            ancestor = ancestor.then(scope.0[i].0, scope.0[i].1.clone());
+        }
+        self.representations
+            .insert((scope.clone(), name.to_string()), representation);
     }
 }
 
@@ -310,45 +358,35 @@ impl FlatMatch {
         air_constructor: &mut AirConstructor,
     ) {
         if self.material == Material::Materialized {
-            let mut representation = vec![None; type_set.calc_type_size(self.value.get_type())];
-
             let type_name = self
                 .value
                 .get_type()
                 .get_named_type(Material::Materialized)
                 .unwrap();
             let tipo = &type_set.algebraic_types[type_name];
-            if tipo.variants.len() != 1 {
-                let mut variant_expression = AirExpression::zero();
-                for (constructor, _) in self.branches.iter() {
-                    let scope = self.scope.then(self.index, constructor.clone());
+
+            for (constructor, components) in self.branches.iter() {
+                let scope = self.scope.then(self.index, constructor.clone());
+                let mut representation = vec![None; type_set.calc_type_size(self.value.get_type())];
+                if tipo.variants.len() != 1 {
                     let variant_index = tipo
                         .variants
                         .iter()
                         .position(|variant| &variant.name == constructor)
                         .unwrap();
-                    variant_expression = variant_expression.plus(
-                        &air_constructor
-                            .get_scope_expression(&scope)
-                            .times(&AirExpression::constant(variant_index as isize)),
-                    );
+                    representation[0] = Some(AirExpression::constant(variant_index as isize));
                 }
-                representation[0] = Some(variant_expression);
-            }
+                self.value.represent_top_down(
+                    type_set,
+                    representation_table,
+                    air_constructor,
+                    &scope,
+                    &mut representation,
+                );
+                let representation: Vec<_> =
+                    representation.into_iter().map(|x| x.unwrap()).collect();
 
-            self.value.represent_top_down(
-                type_set,
-                representation_table,
-                air_constructor,
-                &self.scope,
-                &mut representation,
-            );
-
-            let representation: Vec<_> = representation.into_iter().map(|x| x.unwrap()).collect();
-
-            for (constructor, components) in self.branches.iter() {
                 let mut offset = if tipo.variants.len() == 1 { 0 } else { 1 };
-                let scope = self.scope.then(self.index, constructor.clone());
                 for (component, tipo) in components.iter().zip_eq(
                     tipo.variants
                         .iter()

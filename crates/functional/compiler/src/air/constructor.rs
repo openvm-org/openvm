@@ -373,7 +373,7 @@ impl FlattenedFunction {
             None
         };
 
-        let mut representation_table = RepresentationTable::default();
+        let mut representation_table = RepresentationTable::new(&self.declaration_set);
 
         let mut function_call_interactions = vec![];
         for (i, function_call) in self.function_calls.iter().enumerate() {

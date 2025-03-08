@@ -339,7 +339,7 @@ impl ScopePath {
         false
     }
 
-    pub fn prefixes<'a>(&'a self) -> impl Iterator<Item = Self> + 'a {
+    pub fn prefixes<'a>(&'a self) -> impl DoubleEndedIterator<Item = Self> + 'a {
         (0..=self.0.len()).map(move |i| ScopePath(self.0[..i].to_vec()))
     }
 
