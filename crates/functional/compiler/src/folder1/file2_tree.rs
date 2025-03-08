@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use itertools::Itertools;
@@ -39,6 +39,7 @@ pub struct ScopeContainer {
     banned_declarations: HashSet<String>,
 
     definitions: HashSet<String>,
+    representations: HashSet<String>,
     under_construction_array_usages: HashSet<String>,
 }
 
@@ -75,6 +76,7 @@ impl ScopeContainer {
             declarations: HashMap::new(),
             banned_declarations: HashSet::new(),
             definitions: HashSet::new(),
+            representations: HashSet::new(),
             under_construction_array_usages: HashSet::new(),
         }
     }
@@ -138,6 +140,41 @@ impl ScopeContainer {
         }
         Ok(())
     }
+    fn represent(
+        &mut self,
+        path: &ScopePath,
+        path_index: usize,
+        name: &String,
+    ) -> Result<(), CompilationError> {
+        if path_index == path.0.len() {
+            if self.representations.contains(name) {
+                return Err(CompilationError::DuplicateRepresentation(name.clone()));
+            }
+            self.representations.insert(name.clone());
+        } else {
+            let (i, constructor) = &path.0[path_index];
+            let branches = &mut self.children[*i];
+            let branch = branches.get_mut(constructor).unwrap();
+            branch.define(path, path_index + 1, name)?;
+
+            let mut present_in_all_branches = true;
+            for (_, branch) in branches.iter() {
+                if !branch.representations.contains(name) {
+                    present_in_all_branches = false;
+                }
+            }
+            if present_in_all_branches {
+                for (_, branch) in branches.iter_mut() {
+                    branch.representations.remove(name);
+                }
+                if self.representations.contains(name) {
+                    return Err(CompilationError::DuplicateDefinition(name.clone()));
+                }
+                self.representations.insert(name.clone());
+            }
+        }
+        Ok(())
+    }
     pub fn is_declared(&self, path: &ScopePath, name: &String) -> bool {
         let mut scope = self;
         let mut depth = 0;
@@ -158,6 +195,21 @@ impl ScopeContainer {
         let mut depth = 0;
         loop {
             if scope.definitions.contains(name) {
+                return true;
+            }
+            if depth == path.0.len() {
+                return false;
+            }
+            let (i, constructor) = &path.0[depth];
+            scope = scope.children[*i].get(constructor).unwrap();
+            depth += 1;
+        }
+    }
+    pub fn is_represented(&self, path: &ScopePath, name: &String) -> bool {
+        let mut scope = self;
+        let mut depth = 0;
+        loop {
+            if scope.representations.contains(name) {
                 return true;
             }
             if depth == path.0.len() {
@@ -221,6 +273,23 @@ impl ScopeContainer {
                 );
             }
         }
+    }
+
+    pub fn verify_completeness(&self, type_set: &TypeSet) -> Result<(), CompilationError> {
+        for (name, tipo) in self.declarations.iter() {
+            if !self.definitions.contains(name) {
+                return Err(CompilationError::UndeclaredVariable(name.clone()));
+            }
+            if type_set.calc_type_size(tipo) > 0 && !self.representations.contains(name) {
+                return Err(CompilationError::UnrepresentedVariable(name.clone()));
+            }
+        }
+        for matchi in self.children.iter() {
+            for child in matchi.values() {
+                child.verify_completeness(type_set)?;
+            }
+        }
+        Ok(())
     }
 
     pub fn unpack(&self, declaration_set: &mut DeclarationSet) {
@@ -306,7 +375,7 @@ impl RootContainer {
                 return Ok(tipo.clone());
             }
             if depth == path.0.len() {
-                return Err(CompilationError::UndeclaredVariable(name.clone()));
+                unreachable!();
             }
             let (x, constructor) = &path.0[depth];
             scope = &scope.children[*x][constructor];
@@ -343,6 +412,10 @@ impl RootContainer {
         self.root_scope.define(path, 0, name)
     }
 
+    pub fn represent(&mut self, path: &ScopePath, name: &String) -> Result<(), CompilationError> {
+        self.root_scope.represent(path, 0, name)
+    }
+
     fn use_under_construction_array(
         &mut self,
         path: &ScopePath,
@@ -354,6 +427,13 @@ impl RootContainer {
     fn type_set(&self) -> Arc<TypeSet> {
         self.type_set.clone()
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DependencyType {
+    Declaration,
+    Definition,
+    Representation,
 }
 
 impl ExpressionContainer {
@@ -373,20 +453,29 @@ impl ExpressionContainer {
         }
     }
 
-    pub fn dependencies(&self, declaration: bool) -> Vec<String> {
+    pub fn dependencies(&self, dependency_type: DependencyType) -> Vec<String> {
         match self.expression.as_ref() {
-            Expression::Variable { name } => vec![name.clone()],
-            Expression::Let { name } if declaration => {
-                if declaration {
-                    vec![name.clone()]
-                } else {
+            Expression::Variable {
+                name,
+                declares,
+                defines,
+                represents,
+            } => {
+                let all_good = match dependency_type {
+                    DependencyType::Declaration => *declares,
+                    DependencyType::Definition => *defines,
+                    DependencyType::Representation => *represents,
+                };
+                if all_good {
                     vec![]
+                } else {
+                    vec![name.clone()]
                 }
             }
             _ => self
                 .children()
                 .iter()
-                .flat_map(|child| child.dependencies(declaration))
+                .flat_map(|child| child.dependencies(dependency_type))
                 .collect(),
         }
     }
@@ -396,12 +485,25 @@ impl ExpressionContainer {
         function_container: &mut RootContainer,
         path: &ScopePath,
         material: Material,
+        can_represent: bool,
     ) -> Result<(), CompilationError> {
         match self.expression.as_mut() {
             Expression::Constant { .. } => {
                 self.tipo = Some(Type::Field);
             }
-            Expression::Variable { name } => {
+            Expression::Variable {
+                name,
+                declares,
+                defines,
+                represents,
+            } => {
+                if *defines {
+                    return Err(CompilationError::CannotAssignHere(name.clone()));
+                }
+                if *represents && !can_represent {
+                    return Err(CompilationError::CannotRepresentHere(name.clone()));
+                }
+                assert!(!*declares);
                 self.tipo = Some(function_container.get_declaration_type(path, name)?);
                 if self
                     .tipo
@@ -411,12 +513,6 @@ impl ExpressionContainer {
                 {
                     function_container.use_under_construction_array(path, name)?;
                 }
-            }
-            Expression::Let { name } => {
-                return Err(CompilationError::CannotAssignHere(name.clone()));
-            }
-            Expression::Define { name } => {
-                return Err(CompilationError::CannotAssignHere(name.clone()));
             }
             Expression::Algebraic {
                 constructor,
@@ -437,7 +533,7 @@ impl ExpressionContainer {
                     fields.iter_mut().zip_eq(expected_component_types.iter())
                 {
                     index += 1;
-                    field.resolve_defined(function_container, path, material)?;
+                    field.resolve_defined(function_container, path, material, can_represent)?;
                     if !material.same_type(&field.tipo.clone().unwrap(), expected_type) {
                         return Err(CompilationError::IncorrectTypeInComponent(
                             constructor.clone(),
@@ -462,13 +558,13 @@ impl ExpressionContainer {
                 if *operator == ArithmeticOperator::Div && material == Material::Materialized {
                     return Err(CompilationError::DivMustBeDematerialized());
                 }
-                left.resolve_defined(function_container, path, material)?;
+                left.resolve_defined(function_container, path, material, false)?;
                 if !material.same_type(&left.tipo.clone().unwrap(), &Type::Field) {
                     return Err(CompilationError::IncorrectTypeInArithmetic(
                         left.tipo.clone().unwrap(),
                     ));
                 }
-                right.resolve_defined(function_container, path, material)?;
+                right.resolve_defined(function_container, path, material, false)?;
                 if !material.same_type(&right.tipo.clone().unwrap(), &Type::Field) {
                     return Err(CompilationError::IncorrectTypeInArithmetic(
                         right.tipo.clone().unwrap(),
@@ -477,15 +573,20 @@ impl ExpressionContainer {
                 self.tipo = Some(Type::Field);
             }
             Expression::Dematerialized { value } => {
-                value.resolve_defined(function_container, path, Material::Dematerialized)?;
+                value.resolve_defined(
+                    function_container,
+                    path,
+                    Material::Dematerialized,
+                    can_represent,
+                )?;
                 self.tipo = Some(Type::Unmaterialized(Arc::new(value.tipo.clone().unwrap())));
             }
             Expression::Eq { left, right } => {
                 if material == Material::Materialized {
                     return Err(CompilationError::EqMustBeDematerialized());
                 }
-                left.resolve_defined(function_container, path, Material::Dematerialized)?;
-                right.resolve_defined(function_container, path, Material::Dematerialized)?;
+                left.resolve_defined(function_container, path, Material::Dematerialized, false)?;
+                right.resolve_defined(function_container, path, Material::Dematerialized, false)?;
                 if !Material::Dematerialized
                     .same_type(&left.tipo.clone().unwrap(), &right.tipo.clone().unwrap())
                 {
@@ -513,7 +614,7 @@ impl ExpressionContainer {
                     return Err(CompilationError::CannotInferEmptyConstArrayType());
                 }
                 for element in elements.iter_mut() {
-                    element.resolve_defined(function_container, path, material)?;
+                    element.resolve_defined(function_container, path, material, can_represent)?;
                 }
                 let elem_type = elements[0].tipo.clone().unwrap();
                 for (i, element) in elements.iter().enumerate() {
@@ -529,8 +630,8 @@ impl ExpressionContainer {
                 self.tipo = Some(Type::ConstArray(Arc::new(elem_type), elements.len()));
             }
             Expression::ConstArrayConcatenation { left, right } => {
-                left.resolve_defined(function_container, path, material)?;
-                right.resolve_defined(function_container, path, material)?;
+                left.resolve_defined(function_container, path, material, false)?;
+                right.resolve_defined(function_container, path, material, false)?;
                 let (elem_type_1, len_1) = left.get_type().get_const_array_type(material)?;
                 let (elem_type_2, len_2) = right.get_type().get_const_array_type(material)?;
                 if !material.same_type(&elem_type_1, &elem_type_2) {
@@ -544,7 +645,7 @@ impl ExpressionContainer {
                 self.tipo = Some(Type::ConstArray(elem_type_1.clone().into(), len_1 + len_2));
             }
             Expression::ConstArrayAccess { array, index } => {
-                array.resolve_defined(function_container, path, material)?;
+                array.resolve_defined(function_container, path, material, false)?;
                 let (elem_type, len) = array.get_type().get_const_array_type(material)?;
                 if *index >= len {
                     return Err(CompilationError::OutOfBoundsConstArrayAccess(*index, len));
@@ -552,7 +653,7 @@ impl ExpressionContainer {
                 self.tipo = Some(elem_type.clone());
             }
             Expression::ConstArraySlice { array, from, to } => {
-                array.resolve_defined(function_container, path, material)?;
+                array.resolve_defined(function_container, path, material, false)?;
                 let (elem_type, len) = array.get_type().get_const_array_type(material)?;
                 if *from > *to || *to > len {
                     return Err(CompilationError::OutOfBoundsConstArraySlice(
@@ -562,7 +663,7 @@ impl ExpressionContainer {
                 self.tipo = Some(Type::ConstArray(elem_type.clone().into(), *to - *from));
             }
             Expression::ConstArrayRepeated { element, length } => {
-                element.resolve_defined(function_container, path, material)?;
+                element.resolve_defined(function_container, path, material, false)?;
                 let elem_type = element.get_type();
                 if elem_type
                     .contains_under_construction_array(&function_container.type_set)
@@ -577,7 +678,7 @@ impl ExpressionContainer {
         Ok(())
     }
 
-    pub fn resolve_top_down(
+    pub fn resolve_definition_top_down(
         &mut self,
         expected_type: &Type,
         function_container: &mut RootContainer,
@@ -585,7 +686,28 @@ impl ExpressionContainer {
         material: Material,
     ) -> Result<(), CompilationError> {
         match self.expression.as_mut() {
-            Expression::Let { name } => {
+            Expression::Variable {
+                name,
+                declares: true,
+                defines,
+                ..
+            } => {
+                assert!(*defines);
+                let declaration_type = match material {
+                    Material::Materialized => expected_type.clone(),
+                    Material::Dematerialized => {
+                        Type::Unmaterialized(Arc::new(expected_type.clone()))
+                    }
+                };
+                function_container.declare(path, name, declaration_type)?;
+                function_container.define(path, name)?;
+            }
+            Expression::Variable {
+                name,
+                declares: false,
+                defines: true,
+                ..
+            } => {
                 material.assert_type(
                     &function_container.get_declaration_type(path, name)?,
                     expected_type,
@@ -597,16 +719,6 @@ impl ExpressionContainer {
                         name.clone(),
                     ));
                 }
-                function_container.define(path, name)?;
-            }
-            Expression::Define { name } => {
-                let declaration_type = match material {
-                    Material::Materialized => expected_type.clone(),
-                    Material::Dematerialized => {
-                        Type::Unmaterialized(Arc::new(expected_type.clone()))
-                    }
-                };
-                function_container.declare(path, name, declaration_type)?;
                 function_container.define(path, name)?;
             }
             Expression::Algebraic {
@@ -626,7 +738,7 @@ impl ExpressionContainer {
                 for (field, expected_field_type) in
                     fields.iter_mut().zip_eq(expected_component_types.iter())
                 {
-                    field.resolve_top_down(
+                    field.resolve_definition_top_down(
                         expected_field_type,
                         function_container,
                         path,
@@ -650,7 +762,12 @@ impl ExpressionContainer {
                     ));
                 }
                 for element in elements.iter_mut() {
-                    element.resolve_top_down(elem_type, function_container, path, material)?;
+                    element.resolve_definition_top_down(
+                        elem_type,
+                        function_container,
+                        path,
+                        material,
+                    )?;
                 }
             }
             Expression::Dematerialized { value } => {
@@ -664,7 +781,7 @@ impl ExpressionContainer {
                         }
                     }
                 }
-                value.resolve_top_down(
+                value.resolve_definition_top_down(
                     expected_type,
                     function_container,
                     path,
@@ -677,7 +794,7 @@ impl ExpressionContainer {
                         expected_type.clone(),
                     ));
                 }
-                self.resolve_defined(function_container, path, material)?;
+                self.resolve_defined(function_container, path, material, true)?;
                 if !material.same_type(&self.tipo.clone().unwrap(), &expected_type) {
                     return Err(CompilationError::UnexpectedType(
                         self.tipo.clone().unwrap(),
@@ -688,6 +805,37 @@ impl ExpressionContainer {
         }
 
         self.tipo = Some(expected_type.clone());
+        Ok(())
+    }
+
+    pub fn resolve_representation(
+        &self,
+        function_container: &mut RootContainer,
+        path: &ScopePath,
+    ) -> Result<(), CompilationError> {
+        match self.expression.as_ref() {
+            Expression::Variable {
+                name, represents, ..
+            } => {
+                if *represents {
+                    function_container.represent(path, name)?;
+                }
+            }
+            Expression::Algebraic { fields, .. } => {
+                for field in fields {
+                    field.resolve_representation(function_container, path)?;
+                }
+            }
+            Expression::ConstArray { elements } => {
+                for element in elements {
+                    element.resolve_representation(function_container, path)?;
+                }
+            }
+            Expression::Dematerialized { value } => {
+                value.resolve_representation(function_container, path)?;
+            }
+            _ => {}
+        }
         Ok(())
     }
 }

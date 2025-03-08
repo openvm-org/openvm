@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, env::var};
+
+use itertools::Itertools;
 
 use crate::{
     air::{
@@ -58,10 +60,25 @@ impl RepresentationTable {
         self.representations
             .insert((scope.clone(), name.clone()), representation);
     }
+    pub fn add_representation(
+        &mut self,
+        scope: &ScopePath,
+        name: &String,
+        representation: Vec<AirExpression>,
+    ) {
+        let representation_len = representation.len();
+        self.representations.insert(
+            (scope.clone(), name.clone()),
+            Representation {
+                expressions: representation,
+                owned: vec![false; representation_len],
+            },
+        );
+    }
 }
 
 impl ExpressionContainer {
-    pub fn represent_defined(
+    pub fn calc_representation(
         &self,
         type_set: &TypeSet,
         representation_table: &mut RepresentationTable,
@@ -71,9 +88,12 @@ impl ExpressionContainer {
             Expression::Constant { value } => {
                 vec![AirExpression::constant(*value)]
             }
-            Expression::Variable { name } => representation_table.get_representation(scope, name),
-            Expression::Let { .. } => unreachable!(),
-            Expression::Define { .. } => unreachable!(),
+            Expression::Variable {
+                name, represents, ..
+            } => {
+                assert!(!*represents);
+                representation_table.get_representation(scope, name)
+            }
             Expression::Algebraic {
                 constructor,
                 fields,
@@ -90,7 +110,7 @@ impl ExpressionContainer {
                     result.push(AirExpression::constant(i as isize));
                 }
                 for field in fields {
-                    result.extend(field.represent_defined(type_set, representation_table, scope));
+                    result.extend(field.calc_representation(type_set, representation_table, scope));
                 }
                 let type_length = type_set.calc_type_size(&Type::NamedType(type_name.clone()));
                 while result.len() < type_length {
@@ -103,8 +123,8 @@ impl ExpressionContainer {
                 left,
                 right,
             } => {
-                let left = &left.represent_defined(type_set, representation_table, scope)[0];
-                let right = &right.represent_defined(type_set, representation_table, scope)[0];
+                let left = &left.calc_representation(type_set, representation_table, scope)[0];
+                let right = &right.calc_representation(type_set, representation_table, scope)[0];
                 vec![match operator {
                     ArithmeticOperator::Plus => left.plus(right),
                     ArithmeticOperator::Minus => left.minus(right),
@@ -118,23 +138,23 @@ impl ExpressionContainer {
             Expression::ConstArray { elements } => elements
                 .iter()
                 .flat_map(|element| {
-                    element.represent_defined(type_set, representation_table, scope)
+                    element.calc_representation(type_set, representation_table, scope)
                 })
                 .collect(),
             Expression::ConstArrayConcatenation { left, right } => left
-                .represent_defined(type_set, representation_table, scope)
+                .calc_representation(type_set, representation_table, scope)
                 .into_iter()
-                .chain(right.represent_defined(type_set, representation_table, scope))
+                .chain(right.calc_representation(type_set, representation_table, scope))
                 .collect(),
             Expression::ConstArrayAccess { array, index } => {
                 let array_representation =
-                    array.represent_defined(type_set, representation_table, scope);
+                    array.calc_representation(type_set, representation_table, scope);
                 let elem_size = type_set.calc_type_size(self.get_type());
                 array_representation[index * elem_size..(index + 1) * elem_size].to_vec()
             }
             Expression::ConstArraySlice { array, from, to } => {
                 let array_representation =
-                    array.represent_defined(type_set, representation_table, scope);
+                    array.calc_representation(type_set, representation_table, scope);
                 let (elem_type, _) = array
                     .get_type()
                     .get_const_array_type(Material::Materialized)
@@ -144,7 +164,7 @@ impl ExpressionContainer {
             }
             Expression::ConstArrayRepeated { element, length } => {
                 let element_representation =
-                    element.represent_defined(type_set, representation_table, scope);
+                    element.calc_representation(type_set, representation_table, scope);
                 let elem_type = element.get_type();
                 let elem_size = type_set.calc_type_size(elem_type);
                 let mut result = Vec::with_capacity(*length * elem_size);
@@ -172,14 +192,11 @@ impl ExpressionContainer {
                     representation,
                 );
             }
-            Expression::Let { name } => {
-                air_constructor.add_scoped_constraint(
-                    scope,
-                    representation_table.get_representation(scope, name),
-                    representation,
-                );
-            }
-            Expression::Define { name } => {
+            Expression::Variable {
+                name,
+                represents: true,
+                ..
+            } => {
                 representation_table.fill_in_and_add_representation(
                     air_constructor,
                     scope,
@@ -238,7 +255,7 @@ impl ExpressionContainer {
             }
             _ => {
                 let defined_representation =
-                    self.represent_defined(type_set, representation_table, scope);
+                    self.calc_representation(type_set, representation_table, scope);
                 air_constructor.add_scoped_constraint(
                     scope,
                     defined_representation,
@@ -293,29 +310,61 @@ impl FlatMatch {
         air_constructor: &mut AirConstructor,
     ) {
         if self.material == Material::Materialized {
-            let representation: Vec<_> =
-                self.value
-                    .represent_defined(type_set, representation_table, &ScopePath::empty());
+            let mut representation = vec![None; type_set.calc_type_size(self.value.get_type())];
+
+            let type_name = self
+                .value
+                .get_type()
+                .get_named_type(Material::Materialized)
+                .unwrap();
+            let tipo = &type_set.algebraic_types[type_name];
+            if tipo.variants.len() != 1 {
+                let mut variant_expression = AirExpression::zero();
+                for (constructor, _) in self.branches.iter() {
+                    let scope = self.scope.then(self.index, constructor.clone());
+                    let variant_index = tipo
+                        .variants
+                        .iter()
+                        .position(|variant| &variant.name == constructor)
+                        .unwrap();
+                    variant_expression = variant_expression.plus(
+                        &air_constructor
+                            .get_scope_expression(&scope)
+                            .times(&AirExpression::constant(variant_index as isize)),
+                    );
+                }
+                representation[0] = Some(variant_expression);
+            }
+
+            self.value.represent_top_down(
+                type_set,
+                representation_table,
+                air_constructor,
+                &self.scope,
+                &mut representation,
+            );
+
+            let representation: Vec<_> = representation.into_iter().map(|x| x.unwrap()).collect();
 
             for (constructor, components) in self.branches.iter() {
-                let receiver_expression = ExpressionContainer::new(Expression::Algebraic {
-                    constructor: constructor.clone(),
-                    fields: components
+                let mut offset = if tipo.variants.len() == 1 { 0 } else { 1 };
+                let scope = self.scope.then(self.index, constructor.clone());
+                for (component, tipo) in components.iter().zip_eq(
+                    tipo.variants
                         .iter()
-                        .map(|component| {
-                            ExpressionContainer::new(Expression::Define {
-                                name: component.clone(),
-                            })
-                        })
-                        .collect(),
-                });
-                receiver_expression.represent_top_down_fixed(
-                    type_set,
-                    representation_table,
-                    air_constructor,
-                    &ScopePath::empty(),
-                    &representation,
-                );
+                        .find(|variant| &variant.name == constructor)
+                        .unwrap()
+                        .components
+                        .iter(),
+                ) {
+                    let type_size = type_set.calc_type_size(tipo);
+                    representation_table.add_representation(
+                        &scope,
+                        component,
+                        representation[offset..offset + type_size].to_vec(),
+                    );
+                    offset += type_size;
+                }
             }
         }
     }
@@ -332,7 +381,7 @@ impl FlatFunctionCall {
     ) {
         for i in stage.start..stage.mid {
             let argument = &self.arguments[i];
-            interaction.fields.extend(argument.represent_defined(
+            interaction.fields.extend(argument.calc_representation(
                 type_set,
                 representation_table,
                 &ScopePath::empty(),
@@ -361,17 +410,23 @@ impl FlatStatement {
     ) {
         if self.material == Material::Materialized {
             match &self.statement {
-                Statement::VariableDeclaration { name, tipo } => {
-                    representation_table.fill_in_and_add_representation(
-                        air_constructor,
-                        &self.scope,
-                        name,
-                        &mut vec![None; type_set.calc_type_size(tipo)],
-                    );
+                Statement::VariableDeclaration {
+                    name,
+                    tipo,
+                    represents,
+                } => {
+                    if *represents {
+                        representation_table.fill_in_and_add_representation(
+                            air_constructor,
+                            &self.scope,
+                            name,
+                            &mut vec![None; type_set.calc_type_size(tipo)],
+                        );
+                    }
                 }
                 Statement::Equality { left, right } => {
                     let representation =
-                        right.represent_defined(type_set, representation_table, &self.scope);
+                        right.calc_representation(type_set, representation_table, &self.scope);
                     let mut representation: Vec<_> = representation.into_iter().map(Some).collect();
                     left.represent_top_down(
                         type_set,
@@ -383,7 +438,7 @@ impl FlatStatement {
                 }
                 Statement::Reference { reference, data } => {
                     let data_representation =
-                        data.represent_defined(type_set, representation_table, &self.scope);
+                        data.calc_representation(type_set, representation_table, &self.scope);
                     let reference_representation = reference.create_representation_top_down(
                         type_set,
                         representation_table,
@@ -407,7 +462,7 @@ impl FlatStatement {
                 }
                 Statement::Dereference { data, reference } => {
                     let reference_representation =
-                        reference.represent_defined(type_set, representation_table, &self.scope);
+                        reference.calc_representation(type_set, representation_table, &self.scope);
                     let data_representation = data.create_representation_top_down(
                         type_set,
                         representation_table,
@@ -443,9 +498,9 @@ impl FlatStatement {
                     old_array,
                 } => {
                     let old_array_representation =
-                        old_array.represent_defined(type_set, representation_table, &self.scope);
+                        old_array.calc_representation(type_set, representation_table, &self.scope);
                     let elem_representation =
-                        elem.represent_defined(type_set, representation_table, &self.scope);
+                        elem.calc_representation(type_set, representation_table, &self.scope);
                     let mut new_array_representation = vec![
                         Some(old_array_representation[0].minus(&AirExpression::one())),
                         Some(old_array_representation[1].plus(&AirExpression::one())),
@@ -477,7 +532,7 @@ impl FlatStatement {
                     finalized,
                     under_construction,
                 } => {
-                    let under_construction_representation = under_construction.represent_defined(
+                    let under_construction_representation = under_construction.calc_representation(
                         type_set,
                         representation_table,
                         &self.scope,
@@ -500,9 +555,9 @@ impl FlatStatement {
                 }
                 Statement::ArrayAccess { array, index, elem } => {
                     let array_representation =
-                        array.represent_defined(type_set, representation_table, &self.scope);
+                        array.calc_representation(type_set, representation_table, &self.scope);
                     let index_representation =
-                        index.represent_defined(type_set, representation_table, &self.scope);
+                        index.calc_representation(type_set, representation_table, &self.scope);
                     let elem_representation = elem.create_representation_top_down(
                         type_set,
                         representation_table,

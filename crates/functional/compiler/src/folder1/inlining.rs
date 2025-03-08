@@ -6,7 +6,7 @@ use super::{
     ir::{Expression, Statement},
 };
 use crate::folder1::{
-    file3::{FlatFunctionCall, FlatMatch, FlatStatement},
+    file3::{FlatFunctionCall, FlatMatch, FlatStatement, RepresentationOrder},
     ir::Material,
 };
 
@@ -125,13 +125,30 @@ impl FlattenedFunction {
             function_call.inline(renamer, path_offset, path_prefix, material);
         }
 
+        let mut atom_replacements = HashMap::new();
         let mut atoms_staged = take(&mut self.atoms_staged);
         for stage in atoms_staged.iter_mut() {
             for atom in stage.iter_mut() {
+                let old_atom = *atom;
                 atom.inline(self, target, &argument_fulfillments, path_prefix, material);
+                atom_replacements.insert(old_atom, *atom);
             }
         }
         self.atoms_staged = atoms_staged;
+        match &mut self.representation_order {
+            RepresentationOrder::Inline(atoms_staged) => {
+                for stage in atoms_staged.iter_mut() {
+                    for atom in stage.iter_mut() {
+                        *atom = atom_replacements[atom];
+                    }
+                }
+            }
+            RepresentationOrder::NotInline(atoms_staged) => {
+                for atom in atoms_staged.iter_mut() {
+                    *atom = atom_replacements[atom];
+                }
+            }
+        }
     }
 }
 
@@ -287,13 +304,7 @@ impl ExpressionContainer {
     fn inline(&mut self, renamer: &Renamer) {
         match self.expression.as_mut() {
             Expression::Constant { .. } => {}
-            Expression::Variable { name } => {
-                renamer.rename(name);
-            }
-            Expression::Let { name } => {
-                renamer.rename(name);
-            }
-            Expression::Define { name } => {
+            Expression::Variable { name, .. } => {
                 renamer.rename(name);
             }
             Expression::Algebraic {

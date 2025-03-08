@@ -74,12 +74,9 @@ pub enum Expression {
     },
     Variable {
         name: String,
-    }, // includes arguments and components from match
-    Let {
-        name: String,
-    },
-    Define {
-        name: String,
+        declares: bool,
+        defines: bool,
+        represents: bool,
     },
     Algebraic {
         constructor: String,
@@ -127,6 +124,7 @@ pub enum Statement {
     VariableDeclaration {
         name: String,
         tipo: Type,
+        represents: bool,
     },
     Equality {
         left: ExpressionContainer,

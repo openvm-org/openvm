@@ -105,7 +105,7 @@ impl FunctionContainer {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Stage {
     pub index: usize,
     pub start: usize,

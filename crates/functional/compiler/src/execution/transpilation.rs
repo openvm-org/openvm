@@ -113,9 +113,10 @@ impl ExpressionContainer {
     ) -> TokenStream {
         match self.expression.as_ref() {
             Expression::Constant { value } => isize_to_field_elem(*value),
-            Expression::Variable { name } => namer.variable_name(scope, name),
-            Expression::Let { .. } => unreachable!(),
-            Expression::Define { .. } => unreachable!(),
+            Expression::Variable { name, defines, .. } => {
+                assert!(!*defines);
+                namer.variable_name(scope, name)
+            }
             Expression::Algebraic {
                 constructor,
                 fields,
@@ -212,13 +213,11 @@ impl ExpressionContainer {
         type_set: &TypeSet,
     ) -> TokenStream {
         match self.expression.as_ref() {
-            Expression::Let { name } => {
-                let name = namer.variable_name(scope, name);
-                quote! {
-                    #name = #this;
-                }
-            }
-            Expression::Define { name } => {
+            Expression::Variable {
+                name,
+                defines: true,
+                ..
+            } => {
                 let name = namer.variable_name(scope, name);
                 quote! {
                     #name = #this;

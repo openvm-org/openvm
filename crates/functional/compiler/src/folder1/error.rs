@@ -4,7 +4,9 @@ use super::ir::Type;
 pub enum CompilationError {
     UndeclaredVariable(String),
     UndefinedVariable(String),
+    UnrepresentedVariable(String),
     CannotAssignHere(String),
+    CannotRepresentHere(String),
     CannotEquateReferences(Type),
     ReferenceDefinitionMustBeMaterialized(String),
     IncorrectNumberOfComponents(String, usize, usize),
@@ -15,6 +17,7 @@ pub enum CompilationError {
     IncorrectTypesInEquality(Type, Type),
     DuplicateDeclaration(String),
     DuplicateDefinition(String),
+    DuplicateRepresentation(String),
     DuplicateUnderConstructionArrayUsage(String),
     UndefinedType(String),
     UndefinedConstructor(String),
@@ -31,7 +34,8 @@ pub enum CompilationError {
     IncorrectTypeForArgument(String, usize, Type, Type),
     IncorrectTypeForOutArgument(usize, Type, Type),
 
-    CannotOrderStatements(),
+    CannotOrderStatementsForDefinition(),
+    CannotOrderStatementsForRepresentation(),
     TypesSelfReferential(),
     InlineFunctionsSelfReferential(),
 
@@ -45,4 +49,8 @@ pub enum CompilationError {
 
     EqMustBeDematerialized(),
     DivMustBeDematerialized(),
+
+    DuplicateConstructorName(String),
+    DuplicateTypeName(String),
+    TypeNameCannotBeF,
 }

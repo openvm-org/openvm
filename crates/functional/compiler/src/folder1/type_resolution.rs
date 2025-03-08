@@ -40,10 +40,23 @@ impl TypeSet {
             type_order.push(type_declaration.name.clone());
             defined_types.insert(type_declaration.name.clone());
             for variant in type_declaration.variants.iter() {
+                if constructors.contains_key(&variant.name) {
+                    return Err(CompilationError::DuplicateConstructorName(
+                        variant.name.clone(),
+                    ));
+                }
                 constructors.insert(
                     variant.name.clone(),
                     (type_declaration.name.clone(), variant.components.clone()),
                 );
+            }
+            if types.contains_key(&type_declaration.name) {
+                return Err(CompilationError::DuplicateTypeName(
+                    type_declaration.name.clone(),
+                ));
+            }
+            if type_declaration.name == "F" {
+                return Err(CompilationError::TypeNameCannotBeF);
             }
             types.insert(type_declaration.name.clone(), type_declaration);
         }
