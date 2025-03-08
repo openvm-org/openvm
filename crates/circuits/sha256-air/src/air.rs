@@ -33,7 +33,7 @@ impl Sha256Air {
     pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, self_bus_idx: BusIndex) -> Self {
         Self {
             bitwise_lookup_bus,
-            row_idx_encoder: Encoder::new(17, 2, false),
+            row_idx_encoder: Encoder::new(18, 2, false),
             bus: PermutationCheckBus::new(self_bus_idx),
         }
     }

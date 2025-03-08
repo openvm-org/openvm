@@ -102,8 +102,8 @@ pub(super) enum PaddingFlags {
 }
 
 impl PaddingFlags {
-    /// The number of padding flags (not including NotConsidered)
-    pub const COUNT: usize = EntirePadding as usize;
+    /// The number of padding flags (including NotConsidered)
+    pub const COUNT: usize = EntirePadding as usize + 1;
 }
 
 use PaddingFlags::*;
