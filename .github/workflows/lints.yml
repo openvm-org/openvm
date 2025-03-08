@@ -71,3 +71,8 @@ jobs:
               echo "Skipping $crate_path as it does not contain a Cargo.toml"
             fi
           done
+
+      - name: Cargo audit
+        run: |
+          cargo install cargo-audit
+          cargo audit
