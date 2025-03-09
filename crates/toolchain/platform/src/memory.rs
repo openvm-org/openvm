@@ -1,5 +1,3 @@
-use super::WORD_SIZE;
-
 pub const MEM_BITS: usize = 29;
 pub const MEM_SIZE: usize = 1 << MEM_BITS;
 pub const GUEST_MIN_MEM: usize = 0x0000_0400;
@@ -49,7 +47,7 @@ pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u
 
     // Honor requested alignment if larger than word size.
     // Note: align is typically a power of two.
-    let align = usize::max(align, WORD_SIZE);
+    let align = usize::max(align, super::WORD_SIZE);
 
     let offset = heap_pos & (align - 1);
     if offset != 0 {

@@ -551,7 +551,12 @@ impl<F: PrimeField32> SystemComplex<F> {
         let memory_bridge = memory_controller.memory_bridge();
         let offline_memory = memory_controller.offline_memory();
         let program_chip = ProgramChip::new(program_bus);
-        let connector_chip = VmConnectorChip::new(execution_bus, program_bus);
+        let connector_chip = VmConnectorChip::new(
+            execution_bus,
+            program_bus,
+            range_checker.clone(),
+            config.memory_config.clk_max_bits,
+        );
 
         let mut inventory = VmInventory::new();
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.

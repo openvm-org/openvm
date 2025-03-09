@@ -4,6 +4,9 @@ use std::{
     sync::Arc,
 };
 
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::LocalOpcode;
 use openvm_stark_backend::{
@@ -34,6 +37,9 @@ pub const DEFAULT_SUSPEND_EXIT_CODE: u32 = 42;
 pub struct VmConnectorAir {
     pub execution_bus: ExecutionBus,
     pub program_bus: ProgramBus,
+    pub range_bus: VariableRangeCheckerBus,
+    /// The final timestamp will be constrained to be in the range [0, 2^timestamp_max_bits).
+    timestamp_max_bits: usize,
 }
 
 #[derive(Debug, Clone, Copy, AlignedBorrow)]
@@ -59,11 +65,23 @@ impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
 impl<F: Field> PartitionedBaseAir<F> for VmConnectorAir {}
 impl<F: Field> BaseAir<F> for VmConnectorAir {
     fn width(&self) -> usize {
-        4
+        5
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
         Some(RowMajorMatrix::new_col(vec![F::ZERO, F::ONE]))
+    }
+}
+
+impl VmConnectorAir {
+    /// Returns (low_bits, high_bits) to range check.
+    fn timestamp_limb_bits(&self) -> (usize, usize) {
+        let range_max_bits = self.range_bus.range_max_bits;
+        if self.timestamp_max_bits <= range_max_bits {
+            (self.timestamp_max_bits, 0)
+        } else {
+            (range_max_bits, self.timestamp_max_bits - range_max_bits)
+        }
     }
 }
 
@@ -74,6 +92,8 @@ pub struct ConnectorCols<T> {
     pub timestamp: T,
     pub is_terminate: T,
     pub exit_code: T,
+    /// Lowest `range_bus.range_max_bits` bits of the timestamp
+    timestamp_low_limb: T,
 }
 
 impl<T: Copy> ConnectorCols<T> {
@@ -83,11 +103,18 @@ impl<T: Copy> ConnectorCols<T> {
             timestamp: f(self.timestamp),
             is_terminate: f(self.is_terminate),
             exit_code: f(self.exit_code),
+            timestamp_low_limb: f(self.timestamp_low_limb),
         }
     }
 
-    fn flatten(&self) -> [T; 4] {
-        [self.pc, self.timestamp, self.is_terminate, self.exit_code]
+    fn flatten(&self) -> [T; 5] {
+        [
+            self.pc,
+            self.timestamp,
+            self.is_terminate,
+            self.exit_code,
+            self.timestamp_low_limb,
+        ]
     }
 }
 
@@ -131,23 +158,51 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
             [AB::Expr::ZERO, AB::Expr::ZERO, end.exit_code.into()],
             (AB::Expr::ONE - prep_local[0]) * end.is_terminate,
         );
+
+        // The following constraints hold on every row, so we rename `begin` to `local` to avoid confusion.
+        let local = begin;
+        // We decompose and range check `local.timestamp` as `timestamp_low_limb, timestamp_high_limb` where
+        // `timestamp = timestamp_low_limb + timestamp_high_limb * 2^range_max_bits`.
+        let (low_bits, high_bits) = self.timestamp_limb_bits();
+        let high_limb = (local.timestamp - local.timestamp_low_limb)
+            * AB::F::ONE.div_2exp_u64(self.range_bus.range_max_bits as u64);
+        self.range_bus
+            .range_check(local.timestamp_low_limb, low_bits)
+            .eval(builder, AB::Expr::ONE);
+        self.range_bus
+            .range_check(high_limb, high_bits)
+            .eval(builder, AB::Expr::ONE);
     }
 }
 
-#[derive(Debug)]
 pub struct VmConnectorChip<F> {
     pub air: VmConnectorAir,
+    pub range_checker: SharedVariableRangeCheckerChip,
     pub boundary_states: [Option<ConnectorCols<u32>>; 2],
     _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField32> VmConnectorChip<F> {
-    pub fn new(execution_bus: ExecutionBus, program_bus: ProgramBus) -> Self {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        range_checker: SharedVariableRangeCheckerChip,
+        timestamp_max_bits: usize,
+    ) -> Self {
+        assert!(
+            range_checker.bus().range_max_bits * 2 >= timestamp_max_bits,
+            "Range checker not large enough: range_max_bits={}, timestamp_max_bits={}",
+            range_checker.bus().range_max_bits,
+            timestamp_max_bits
+        );
         Self {
             air: VmConnectorAir {
                 execution_bus,
                 program_bus,
+                range_bus: range_checker.bus(),
+                timestamp_max_bits,
             },
+            range_checker,
             boundary_states: [None, None],
             _marker: PhantomData,
         }
@@ -159,6 +214,7 @@ impl<F: PrimeField32> VmConnectorChip<F> {
             timestamp: state.timestamp,
             is_terminate: 0,
             exit_code: 0,
+            timestamp_low_limb: 0, // will be computed during tracegen
         });
     }
 
@@ -168,6 +224,7 @@ impl<F: PrimeField32> VmConnectorChip<F> {
             timestamp: state.timestamp,
             is_terminate: exit_code.is_some() as u32,
             exit_code: exit_code.unwrap_or(DEFAULT_SUSPEND_EXIT_CODE),
+            timestamp_low_limb: 0, // will be computed during tracegen
         });
     }
 }
@@ -182,9 +239,19 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let [initial_state, final_state] = self
-            .boundary_states
-            .map(|state| state.unwrap().map(Val::<SC>::from_canonical_u32));
+        let [initial_state, final_state] = self.boundary_states.map(|state| {
+            let mut state = state.unwrap();
+            // Decompose and range check timestamp
+            let range_max_bits = self.range_checker.range_max_bits();
+            let timestamp_low_limb = state.timestamp & ((1u32 << range_max_bits) - 1);
+            state.timestamp_low_limb = timestamp_low_limb;
+            let (low_bits, high_bits) = self.air.timestamp_limb_bits();
+            self.range_checker.add_count(timestamp_low_limb, low_bits);
+            self.range_checker
+                .add_count(state.timestamp >> range_max_bits, high_bits);
+
+            state.map(Val::<SC>::from_canonical_u32)
+        });
 
         let trace = RowMajorMatrix::new(
             [initial_state.flatten(), final_state.flatten()].concat(),
@@ -216,6 +283,6 @@ impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {
     }
 
     fn trace_width(&self) -> usize {
-        4
+        5
     }
 }
