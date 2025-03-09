@@ -2,8 +2,6 @@ images:
   arm64-rust-riscv-dev-32gb:
     platform: "linux"
     arch: "arm64"
-    owner: "912452651013"
-    # owner: "405894839083"
-    # name: "arm64-rust-riscv-dev-32gb"
-    ami: "ami-0276be31ce0779233"
-    # ami: "ami-040a96edd406c9478"
+    owner: "405894839083"
+    name: "arm64-rust-riscv-dev-32gb"
+    ami: "ami-040a96edd406c9478"
