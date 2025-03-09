@@ -245,10 +245,6 @@ impl Sha256Air {
             .when(next_is_padding_row.clone())
             .when(local_cols.flags.is_digest_row)
             .assert_one(local_cols.flags.is_last_block);
-        builder
-            .when_last_row()
-            .when(local_cols.flags.is_digest_row)
-            .assert_one(local_cols.flags.is_last_block);
         // If we are in a round row, the next row cannot be a padding row
         builder
             .when(local_cols.flags.is_round_row)
