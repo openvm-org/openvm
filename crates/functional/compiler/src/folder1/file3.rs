@@ -532,6 +532,7 @@ impl FlattenedFunction {
             },
         }
     }
+    
     fn resolve_definition(
         &mut self,
         atom: Atom,

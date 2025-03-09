@@ -403,6 +403,7 @@ impl FlatMatch {
                     );
                     offset += type_size;
                 }
+                air_constructor.add_scoped_constraint(&scope, representation[offset..].to_vec(), &mut vec![Some(AirExpression::zero()); representation.len() - offset]);
             }
         }
     }
