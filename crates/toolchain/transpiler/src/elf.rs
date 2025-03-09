@@ -11,7 +11,7 @@ use elf::{
 use eyre::{self, bail, ContextCompat};
 #[cfg(feature = "function-span")]
 use openvm_instructions::exe::FnBound;
-use openvm_instructions::exe::FnBounds;
+use openvm_instructions::{exe::FnBounds, program::MAX_ALLOWED_PC};
 use openvm_platform::WORD_SIZE;
 
 pub const ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
@@ -171,6 +171,8 @@ impl Elf {
                     bail!(
                         "address [0x{addr:08x}] exceeds maximum address for guest programs [0x{max_mem:08x}]"
                     );
+                } else if addr > MAX_ALLOWED_PC && (segment.p_flags & PF_X) != 0 {
+                    bail!("instruction address [0x{addr:08x}] exceeds maximum PC [0x{MAX_ALLOWED_PC:08x}]");
                 }
 
                 // If we are reading past the end of the file, then break.
