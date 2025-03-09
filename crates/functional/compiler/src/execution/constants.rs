@@ -3,7 +3,7 @@ use quote::{quote, ToTokens};
 
 use crate::{
     execution::transpilation::VariableNamer,
-    folder1::{file3::FlattenedFunction, function_resolution::Stage, ir::Type},
+    folder1::{file3::FlattenedFunction, ir::Type},
 };
 
 pub fn ident(s: &str) -> TokenStream {

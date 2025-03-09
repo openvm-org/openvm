@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env::var};
+use std::collections::HashMap;
 
 use itertools::Itertools;
 
@@ -403,7 +403,11 @@ impl FlatMatch {
                     );
                     offset += type_size;
                 }
-                air_constructor.add_scoped_constraint(&scope, representation[offset..].to_vec(), &mut vec![Some(AirExpression::zero()); representation.len() - offset]);
+                air_constructor.add_scoped_constraint(
+                    &scope,
+                    representation[offset..].to_vec(),
+                    &mut vec![Some(AirExpression::zero()); representation.len() - offset],
+                );
             }
         }
     }
@@ -521,7 +525,7 @@ impl FlatStatement {
                         },
                     );
                 }
-                Statement::EmptyUnderConstructionArray { array, elem_type } => {
+                Statement::EmptyUnderConstructionArray { array, .. } => {
                     let mut representation = vec![None, Some(AirExpression::zero())];
                     array.represent_top_down(
                         type_set,

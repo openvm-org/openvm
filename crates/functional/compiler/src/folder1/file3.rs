@@ -181,6 +181,7 @@ impl FlattenedFunction {
 
         let mut root_container = RootContainer::new(type_set, function_set, function);
         flattened_function.order_for_execution(&mut root_container)?;
+        flattened_function.order_for_representation(&mut root_container)?;
         root_container
             .root_scope
             .verify_completeness(root_container.type_set.as_ref())?;
@@ -456,9 +457,11 @@ impl FlattenedFunction {
     }
     fn viable_for_definition(&self, root_container: &RootContainer, atom: Atom) -> bool {
         let scope = &self.scope(atom);
-        self.dependencies(atom, DependencyType::Definition)
-            .iter()
-            .all(|dependency| root_container.root_scope.is_defined(scope, dependency))
+        root_container.root_scope.scope_exists(scope)
+            && self
+                .dependencies(atom, DependencyType::Definition)
+                .iter()
+                .all(|dependency| root_container.root_scope.is_defined(scope, dependency))
             && self
                 .dependencies(atom, DependencyType::Declaration)
                 .iter()
@@ -532,7 +535,7 @@ impl FlattenedFunction {
             },
         }
     }
-    
+
     fn resolve_definition(
         &mut self,
         atom: Atom,
