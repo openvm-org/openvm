@@ -327,6 +327,13 @@ impl<C: Config> Builder<C> {
         self.assert_var_eq(is_lt, C::N::ONE);
     }
 
+    /// asserts that x has at most num_bits bits
+    pub fn range_check_var(&mut self, x: Var<C::N>, num_bits: usize) {
+        assert!(!self.flags.static_only, "range_check_var is dynamic");
+        assert!(num_bits <= 30);
+        self.trace_push(DslIr::RangeCheckV(x, num_bits));
+    }
+
     /// Evaluate a block of operations over a range from start to end.
     pub fn range(
         &mut self,

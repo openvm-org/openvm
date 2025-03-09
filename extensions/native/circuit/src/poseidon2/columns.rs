@@ -2,7 +2,7 @@ use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryW
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_poseidon2_air::Poseidon2SubCols;
 
-use crate::poseidon2::CHUNK;
+use crate::{poseidon2::CHUNK, utils::const_max};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -41,11 +41,8 @@ pub struct NativePoseidon2Cols<T, const SBOX_REGISTERS: usize> {
     )],
 }
 
-const fn max(a: usize, b: usize) -> usize {
-    [a, b][(a < b) as usize]
-}
 const fn max3(a: usize, b: usize, c: usize) -> usize {
-    max(a, max(b, c))
+    const_max(a, const_max(b, c))
 }
 #[repr(C)]
 #[derive(AlignedBorrow)]

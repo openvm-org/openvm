@@ -286,6 +286,9 @@ pub enum DslIr<C: Config> {
         Array<C, Var<C::N>>,
         Array<C, Felt<C::F>>,
     ),
+    /// RangeCheckV(v, bit)
+    /// Assert that v < 2^bit.
+    RangeCheckV(Var<C::N>, usize),
 
     /// Start the cycle tracker used by a block of code annotated by the string input. Calling this with the same
     /// string will end the open cycle tracker instance and start a new one with an increasing numeric postfix.

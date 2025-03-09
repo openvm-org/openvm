@@ -84,6 +84,16 @@ pub enum NativeJalOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
+#[opcode_offset = 0x120]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum NativeRangeCheckOpcode {
+    RANGE_CHECK,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
+)]
 #[opcode_offset = 0x125]
 #[repr(usize)]
 pub enum CastfOpcode {

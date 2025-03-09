@@ -37,7 +37,10 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use static_assertions::const_assert_eq;
 
-use crate::field_extension::{FieldExtension, EXT_DEG};
+use crate::{
+    field_extension::{FieldExtension, EXT_DEG},
+    utils::const_max,
+};
 
 #[cfg(test)]
 mod tests;
@@ -118,9 +121,6 @@ const_assert_eq!(
     offset_of!(Instruction2Cols<u8>, write_a_x_is_first)
 );
 
-const fn const_max(a: usize, b: usize) -> usize {
-    [a, b][(a < b) as usize]
-}
 pub const OVERALL_WIDTH: usize = const_max(const_max(WL_WIDTH, INS_1_WIDTH), INS_2_WIDTH);
 const_assert_eq!(OVERALL_WIDTH, 27);
 

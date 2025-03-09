@@ -2,13 +2,12 @@ use air::VerifyBatchBus;
 use alu_native_adapter::AluNativeAdapterChip;
 use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
-use jal_native_adapter::JalNativeAdapterChip;
 use loadstore_native_adapter::NativeLoadStoreAdapterChip;
 use native_vectorized_adapter::NativeVectorizedAdapterChip;
 use openvm_circuit::{
     arch::{
-        MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex,
-        VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, SystemPort,
+        VmChipComplex, VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -17,8 +16,8 @@ use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
-    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom, Poseidon2Opcode,
-    VerifyBatchOpcode, BLOCK_LOAD_STORE_SIZE,
+    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom,
+    NativeRangeCheckOpcode, Poseidon2Opcode, VerifyBatchOpcode, BLOCK_LOAD_STORE_SIZE,
 };
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::{
@@ -83,7 +82,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     LoadStore(NativeLoadStoreChip<F, 1>),
     BlockLoadStore(NativeLoadStoreChip<F, 4>),
     BranchEqual(NativeBranchEqChip<F>),
-    Jal(NativeJalChip<F>),
+    Jal(JalRangeCheckChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
     FriReducedOpening(FriReducedOpeningChip<F>),
@@ -157,12 +156,18 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             NativeBranchEqualOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let jal_chip = NativeJalChip::new(
-            JalNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_bridge),
-            JalCoreChip::new(),
+        let jal_chip = JalRangeCheckChip::new(
+            ExecutionBridge::new(execution_bus, program_bus),
             offline_memory.clone(),
+            builder.system_base().range_checker_chip.clone(),
         );
-        inventory.add_executor(jal_chip, NativeJalOpcode::iter().map(|x| x.global_opcode()))?;
+        inventory.add_executor(
+            jal_chip,
+            [
+                NativeJalOpcode::JAL.global_opcode(),
+                NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(),
+            ],
+        )?;
 
         let field_arithmetic_chip = FieldArithmeticChip::new(
             AluNativeAdapterChip::<F>::new(execution_bus, program_bus, memory_bridge),

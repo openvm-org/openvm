@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     asm::{AsmInstruction, AssemblyCode},
     FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
-    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom, Poseidon2Opcode,
-    VerifyBatchOpcode,
+    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom,
+    NativeRangeCheckOpcode, Poseidon2Opcode, VerifyBatchOpcode,
 };
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -509,6 +509,20 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             f: i32_f(commit),
             g: F::from_canonical_usize(4).inverse(),
         }],
+        AsmInstruction::RangeCheck(v, x_bit, y_bit) => {
+            assert!((0..=16).contains(&x_bit));
+            assert!((0..=14).contains(&y_bit));
+            vec!
+            [inst(
+                options.opcode_with_offset(NativeRangeCheckOpcode::RANGE_CHECK),
+                i32_f(v),
+                i32_f(x_bit),
+                i32_f(y_bit),
+                AS::Native,
+                // Here it just requires a 0
+                AS::Immediate,
+            )]
+        }
     };
 
     let debug_infos = vec![debug_info; instructions.len()];
