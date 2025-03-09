@@ -24,9 +24,6 @@ jobs:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-arm64
     steps:
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v4
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly

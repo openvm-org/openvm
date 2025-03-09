@@ -19,9 +19,6 @@ jobs:
       - extras=s3-cache
     steps:
       - uses: runs-on/action@v1
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v4
 
       - uses: codespell-project/actions-codespell@v2
