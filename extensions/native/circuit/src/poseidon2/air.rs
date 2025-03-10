@@ -116,12 +116,6 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .assert_zero(next.incorporate_sibling);
         builder.assert_eq(end.clone() * next.incorporate_row, next.start_top_level);
 
-        // ensure that inside row rows are actually contiguous
-        builder
-            .when(inside_row)
-            .when(not(end_inside_row))
-            .assert_one(next.inside_row);
-
         // poseidon2 constraints are always checked
         let mut sub_builder =
             SubAirBuilder::<AB, Poseidon2SubAir<AB::F, SBOX_REGISTERS>, AB::F>::new(
@@ -181,6 +175,12 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         builder
             .when(inside_row - end_inside_row)
             .assert_eq(next.very_first_timestamp, very_first_timestamp);
+
+        // ensure that inside row rows are actually contiguous
+        builder
+            .when(inside_row)
+            .when(not(end_inside_row))
+            .assert_one(next.inside_row);
 
         // right input
 
