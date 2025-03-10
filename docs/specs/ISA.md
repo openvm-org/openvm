@@ -168,8 +168,9 @@ structures during runtime execution:
 - `hint_stream`: a queue of values populated during runtime execution
   via [phantom sub-instructions](#phantom-sub-instructions) such as `Rv32HintInput`, `NativeHintInput`, and
   `NativeHintBits`.
-- `hint_space`: a append-only vector of vectors of field elements used to store hints during runtime execution
-  via [phantom sub-instructions](#phantom-sub-instructions) such as `NativeHintLoad`.
+- `hint_space`: a vector of vectors of field elements used to store hints during runtime execution
+  via [phantom sub-instructions](#phantom-sub-instructions) such as `NativeHintLoad`. The outer `hint_space` vector is append-only, but
+  each internal `hint_space[hint_id]` vector may be mutated, including deletions, by the host.
 
 These data structures are **not** part of the guest state, and their state depends on host behavior that cannot be determined by the guest.
 
@@ -324,13 +325,13 @@ unsigned integer, and convert to field element. In the instructions below, `[c:4
 
 For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
 The address space `e` can be `0`, `1`, or `2` for load instructions, and `2`, `3`, or `4` for store instructions.
-The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking 
-the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering 
+The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking
+the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering
 the 32 bits as the 2's complement of an `i32`.
-We will use shorthand `r32{c,g}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2], g)` as `i32`. This means performing 
-signed 32-bit addition with the value of the register `[b:4]_1`. For consistency with other notation, 
+We will use shorthand `r32{c,g}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2], g)` as `i32`. This means performing
+signed 32-bit addition with the value of the register `[b:4]_1`. For consistency with other notation,
 we define the shorthand `r32{c}(b)` to mean `r32{c,g}(b)` where `g` is set to the most significant bit of `c`.
-Memory access to `ptr: i32` is only valid if `0 <= ptr < 2^addr_max_bits` and the access is aligned to the data size, in 
+Memory access to `ptr: i32` is only valid if `0 <= ptr < 2^addr_max_bits` and the access is aligned to the data size, in
 which case it is an access to `F::from_canonical_u32(ptr as u32)`.
 
 All load/store instructions always do block accesses of block size `4`, even for LOADB_RV32 and STOREB_RV32.
@@ -370,12 +371,12 @@ In valid programs, the `from_pc` is always in `[0, 2^PC_BITS)`. We will only use
 `[0, 2^PC_BITS)`.
 
 For JALR_RV32, we treat `c` in `[0, 2^16)` as a raw encoding of 16-bits.
-The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking 
+The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking
 the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering the 32 bits as the 2's complement of an `i32`. Then it is added to the register value `i32([b:4]_1)`, where 32-bit overflow is ignored. The instruction is only valid if the resulting `i32` is in range `[0, 2^PC_BITS)`. The
 result is then cast to `u32` and then to `F` and assigned to `pc`.
 
-For LUI_RV32, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits. 
-For AUIPC_RV32, we are treating `c` in `[0, 2^24)` as a raw encoding of 24-bits. 
+For LUI_RV32, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits.
+For AUIPC_RV32, we are treating `c` in `[0, 2^24)` as a raw encoding of 24-bits.
 The instruction does not need to interpret whether the register is signed or unsigned.
 For AUIPC_RV32, the addition is treated as unchecked `u32` addition since that is the same as `i32` addition at the bit
 level.
@@ -511,7 +512,7 @@ We have the following special opcodes tailored to optimize FRI proof verificatio
 
 | Name                                                                                                                                                                                                                     | Operands        | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| VERIFY_BATCH `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e,f,g` | Further described [here](../../extensions/native/circuit/src/poseidon2/README.md). Due to already having a large number of operands, the address space is fixed to be `AS::Native = 4`. Computes `mmcs::verify_batch`. In the native address space, `[a], [b], [e], [f]` should be the array start pointers for the dimensions array, the opened values array (which contains more arrays) and the commitment (which is an array of length `CHUNK`). `[c]` should be the length of the opened values array (and so should be equal to the length of the dimensions array as well). `[d]` should be the hint id of proofs. `g` should be the reciprocal of the size (in field elements) of the values contained in the opened values array: if the opened values array contains field elements, `g` should be 1; if the opened values array contains extension field elements, `g` should be 1/4. |
+| VERIFY_BATCH `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e,f,g` | Further described [here](../../extensions/native/circuit/src/poseidon2/README.md). Due to already having a large number of operands, the address space is fixed to be `AS::Native = 4`. Computes `mmcs::verify_batch`. In the native address space, `[a], [b], [e], [f]` should be the array start pointers for the dimensions array, the opened values array (which contains more arrays) and the commitment (which is an array of length `CHUNK`). `[c]` should be the length of the opened values array (and so should be equal to the length of the dimensions array as well). `[d]` should be the hint id of proofs. `g` should be the reciprocal of the size (in field elements) of the values contained in the opened values array: if the opened values array contains field elements, `g` should be 1; if the opened values array contains extension field elements, `g` should be 1/4. This instruction removes elements from `hint_space[[d]]` as they are read. |
 | FRI_REDUCED_OPENING                                                                                                                                                                                                      | `a,b,c,d,e,f,g` | Let `a_ptr = [a]_4`, `b_ptr = [b]_4`, `length = [c]_4`, `alpha = [d:EXT_DEG]_4`, `hint_id = [f]_4`, `is_init = [g]_4`. `a_ptr` is the address of Felt array `a_arr` and `b_ptr` is the address of Ext array `b_arr`. Compute `sum((b_arr[i] - a_arr[i]) * alpha ^ i)` for `i=0..length` and write the value into `[e:EXT_DEG]_4`. It is required that `is_init` is boolean. If `is_init == 0`, read content of `a_arr` from the hint space at index `hint_id` and write into `a_arr`. Otherwise, read `a_arr` from memory.                                                                                                                                                                                                                                                                                                                                                                       |
 
 #### Phantom Sub-Instructions
