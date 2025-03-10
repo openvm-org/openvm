@@ -164,7 +164,12 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub mem_as: T,
     /// prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
     pub write_base_aux: MemoryBaseAuxCols<T>,
-    /// needs_write is 1 if rd != x0 and 0 if rd == x0 in case of Load
+    /// Only writes if `needs_write`.
+    /// If the instruction is a Load:
+    /// - Sets `needs_write` to 0 iff `rd == x0`
+    ///
+    /// Otherwise:
+    /// - Sets `needs_write` to 1
     pub needs_write: T,
 }
 
@@ -208,15 +213,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
 
         let write_count = local_cols.needs_write;
 
-        // constrain is_load == 1 and rd == x0 when write_count == 0
+        // This constraint ensures that the memory write only occurs when `is_valid == 1`.
         builder.assert_bool(write_count);
         builder.when(write_count).assert_one(is_valid.clone());
-        builder
-            .when(is_valid.clone() - write_count)
-            .assert_one(is_load.clone());
-        builder
-            .when(is_valid.clone() - write_count)
-            .assert_zero(local_cols.rd_rs2_ptr);
 
         // read rs1
         self.memory_bridge
