@@ -137,21 +137,23 @@ where
             })
         };
 
-        // constrain that is_load matches the opcode
+        // Constrain that is_load matches the opcode
         builder.assert_eq(
             is_load,
             opcode_when(&[LoadW0, LoadHu0, LoadHu2, LoadBu0, LoadBu1, LoadBu2, LoadBu3]),
         );
         builder.when(is_load).assert_one(is_valid);
 
-        // there are three parts to write_data:
-        // 1st limb is always read_data
-        // 2nd to (NUM_CELLS/2)th limbs are read_data if loadw/loadhu/storew/storeh
-        //                                  prev_data if storeb
-        //                                  zero if loadbu
-        // (NUM_CELLS/2 + 1)th to last limbs are read_data if loadw/storew
-        //                                  prev_data if storeb/storeh
-        //                                  zero if loadbu/loadhu
+        // There are three parts to write_data:
+        // - 1st limb is always read_data
+        // - 2nd to (NUM_CELLS/2)th limbs are:
+        //   - read_data if loadw/loadhu/storew/storeh
+        //   - prev_data if storeb
+        //   - zero if loadbu
+        // - (NUM_CELLS/2 + 1)th to last limbs are:
+        //   - read_data if loadw/storew
+        //   - prev_data if storeb/storeh
+        //   - zero if loadbu/loadhu
         // Shifting needs to be carefully handled in case by case basis
         // refer to [run_write_data] for the expected behavior in each case
         for (i, cell) in write_data.iter().enumerate() {

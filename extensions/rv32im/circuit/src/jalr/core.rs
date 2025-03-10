@@ -97,7 +97,7 @@ where
 
         builder.assert_bool(is_valid);
 
-        // composed = composed(rd_data) - rd[0]
+        // composed is the composition of 3 most significant limbs of rd
         let composed = rd
             .iter()
             .enumerate()
@@ -130,7 +130,7 @@ where
 
         builder.assert_bool(imm_sign);
 
-        // constrain to_pc_least_sig_bit + 2 * to_pc_limbs = rs1 + imm as a i32 addition with 2 limbs
+        // Constrain to_pc_least_sig_bit + 2 * to_pc_limbs = rs1 + imm as a i32 addition with 2 limbs
         // RISC-V spec explicitly sets the least significant bit of `to_pc` to 0
         let rs1_limbs_01 = rs1[0] + rs1[1] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
         let rs1_limbs_23 = rs1[2] + rs1[3] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);

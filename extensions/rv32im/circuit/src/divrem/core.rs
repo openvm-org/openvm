@@ -299,10 +299,11 @@ where
         }
         // - If r_prime != c, then prefix_sum = 1 so marker[i] must be 1 iff i is the first index where diff != 0.
         //   Constrains that diff == lt_diff where lt_diff is non-zero.
-        // - If r_prime == c, then prefix_sum = 0 and lt_diff = 0.
+        // - If r_prime == c, then prefix_sum = 0.
         //   Here, prefix_sum cannot be 1 because all diff are zero, making diff == lt_diff fails.
 
         builder.when(is_valid.clone()).assert_one(prefix_sum);
+        // Range check to ensure lt_diff is non-zero.
         self.bitwise_lookup_bus
             .send_range(cols.lt_diff - AB::Expr::ONE, AB::F::ZERO)
             .eval(builder, is_valid.clone() - special_case);

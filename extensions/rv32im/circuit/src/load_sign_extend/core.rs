@@ -119,9 +119,9 @@ where
         let limb_mask = data_most_sig_bit * AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1);
 
         // there are three parts to write_data:
-        //      1st limb is always shifted_read_data
-        //      2nd to (NUM_CELLS/2)th limbs are read_data if loadh and sign extended if loadb
-        //      (NUM_CELLS/2 + 1)th to last limbs are always sign extended limbs
+        // - 1st limb is always shifted_read_data
+        // - 2nd to (NUM_CELLS/2)th limbs are read_data if loadh and sign extended if loadb
+        // - (NUM_CELLS/2 + 1)th to last limbs are always sign extended limbs
         let write_data: [AB::Expr; NUM_CELLS] = array::from_fn(|i| {
             if i == 0 {
                 (is_loadh + is_loadb0) * shifted_read_data[i].into()
