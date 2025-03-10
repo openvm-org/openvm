@@ -362,7 +362,9 @@ impl Sha256VmAir {
 
         // We constrain that the appended length is in bytes
         builder.when(is_last_padding_row.clone()).assert_zero(
-            local.inner.message_schedule.w[3][0] + local.inner.message_schedule.w[3][1],
+            local.inner.message_schedule.w[3][0]
+                + local.inner.message_schedule.w[3][1]
+                + local.inner.message_schedule.w[3][2],
         );
 
         // We can't support messages longer than 2^30 bytes
