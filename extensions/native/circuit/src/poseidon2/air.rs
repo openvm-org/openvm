@@ -114,15 +114,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         builder
             .when(end.clone())
             .assert_zero(next.incorporate_sibling);
-        builder
-            .when(end.clone())
-            .when(next.incorporate_row)
-            .assert_one(next.start_top_level);
-        // start_top_level is not used and does not affect anything on non-top level rows, but
-        // we constrain it to zero for clarity
-        builder
-            .when(not::<AB::Expr>(incorporate_row + incorporate_sibling))
-            .assert_zero(start_top_level);
+        builder.assert_eq(end.clone() * next.incorporate_row, next.start_top_level);
 
         // ensure that inside row rows are actually contiguous
         builder
