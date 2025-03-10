@@ -176,9 +176,8 @@ Given:
 
 This circuit proves that:
 
-- `compose(rd) == compose(pc_limbs) + compose(imm_limbs) * 2^12`
+- `compose(rd) == compose(pc_limbs) + compose(imm_limbs) * 2^8`
 - `compose(pc_limbs) == pc` and `compose(pc_limbs) < 2^PC_MAX_BITS`
-- `compose(imm_limbs) < 2^12`
 
 #### 8. [Less_than](./less_than/core.rs)
 
