@@ -120,7 +120,7 @@ fn rand_range_check_test() {
         let y = rng.gen_range(0..1 << 14);
         f(x, y)
     }));
-    f((1 << 16) - 1, (1 << 14) - 1);
+    test_cases.push(f((1 << 16) - 1, (1 << 14) - 1));
     set_and_execute_range_check(&mut tester, &mut chip, &mut rng, test_cases);
     let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
