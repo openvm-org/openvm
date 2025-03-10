@@ -73,8 +73,10 @@ where
         } = *cols;
         builder.assert_bool(is_valid);
 
-        // We want to constrain:
-        // rd = pc + imm (i32 add) where rd_data represents limbs of rd, pc_limbs are limbs of pc except most and least significant, imm_limbs are limbs of imm except least significant
+        // We want to constrain rd = pc + imm (i32 add) where:
+        // - rd_data represents limbs of rd
+        // - pc_limbs are limbs of pc except the most and least significant limbs
+        // - imm_limbs are limbs of imm except the least significant limb
 
         // We know that rd_data[0] is equal to the least significant limb of PC
         // Thus, the intermediate value will be equal to PC without its most significant limb:
@@ -86,7 +88,7 @@ where
                     acc + val * AB::Expr::from_canonical_u32(1 << ((i + 1) * RV32_CELL_BITS))
                 });
 
-        // We can then compute the most significant limb of PC
+        // Compute the most significant limb of PC
         let pc_msl = (from_pc - intermed_val)
             * AB::F::from_canonical_usize(1 << (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1)))
                 .inverse();
@@ -103,8 +105,8 @@ where
         let carry_divide = AB::F::from_canonical_usize(1 << RV32_CELL_BITS).inverse();
 
         // Don't need to constrain the least significant limb of the addition
-        // since the least significant limb of immediate is 0 so rd_data[0] is just pc_limbs[0]
-        // Reminder: the imm_limbs array doesn't include the least significant limb thus i-1 is used in the loop
+        // since we already know that rd_data[0] = pc_limbs[0] and the least significant limb of imm is 0
+        // Note: imm_limbs doesn't include the least significant limb so imm_limbs[i - 1] means the i-th limb of imm
         for i in 1..RV32_REGISTER_NUM_LIMBS {
             carry[i] = AB::Expr::from(carry_divide)
                 * (pc_limbs[i].clone() + imm_limbs[i - 1] - rd_data[i] + carry[i - 1].clone());
@@ -144,7 +146,7 @@ where
 
         // need_range_check contains (RV32_REGISTER_NUM_LIMBS - 1) elements from imm_limbs
         // and (RV32_REGISTER_NUM_LIMBS - 1) elements from pc_limbs
-        // Hence, is of even length 2*RV32_REGISTER_NUM_LIMBS - 4
+        // Hence, is of even length 2*RV32_REGISTER_NUM_LIMBS - 2
         assert_eq!(need_range_check.len() % 2, 0);
         for pair in need_range_check.chunks_exact(2) {
             self.bus

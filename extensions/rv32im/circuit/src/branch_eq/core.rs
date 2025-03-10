@@ -86,13 +86,17 @@ where
             cols.cmp_result * cols.opcode_beq_flag + not(cols.cmp_result) * cols.opcode_bne_flag;
         let mut sum = cmp_eq.clone();
 
-        // For BEQ, inv_marker is filled with 0 except at the lowest index i such that
-        // a[i] != b[i]. If such an i exists inv_marker[i] is the inverse of a[i] - b[i],
-        // meaning sum should be 1.
+        // For BEQ, inv_marker is used to check equality of a and b:
+        // - If a == b, all inv_marker values must be 0 (sum = 0)
+        // - If a != b, inv_marker contains 0s for all positions except ONE position i where a[i] != b[i]
+        // - At this position, inv_marker[i] contains the multiplicative inverse of (a[i] - b[i])
+        // - This ensures inv_marker[i] * (a[i] - b[i]) = 1, making the sum = 1
+        // Note: There might be multiple valid inv_marker if a != b.
+        // But as long as the trace can provide at least one, that’s sufficient to prove a != b.
         //
-        // Note if cmp_eq == 0, then it is impossible to have sum != 0 if a == b. If
-        // cmp_eq == 1, then it is impossible for a[i] - b[i] == 0 to pass for all i if
-        // a != b.
+        // Note:
+        // - If cmp_eq == 0, then it is impossible to have sum != 0 if a == b.
+        // - If cmp_eq == 1, then it is impossible for a[i] - b[i] == 0 to pass for all i if a != b.
         for i in 0..NUM_LIMBS {
             sum += (a[i] - b[i]) * inv_marker[i];
             builder.assert_zero(cmp_eq.clone() * (a[i] - b[i]));

@@ -54,7 +54,7 @@ pub struct DivRemCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
     // Auxiliary columns to constrain that 0 <= |r| < |c|. When sign_xor == 1 we have
     // r_prime = -r, and when sign_xor == 0 we have r_prime = r. Each r_inv[i] is the
-    // field inverse of r_prime - 2^LIMB_BITS, ensures each r_prime[i] is in range.
+    // field inverse of r_prime[i] - 2^LIMB_BITS, ensures each r_prime[i] is in range.
     pub r_prime: [T; NUM_LIMBS],
     pub r_inv: [T; NUM_LIMBS],
     pub lt_marker: [T; NUM_LIMBS],
@@ -120,8 +120,7 @@ where
         let q = &cols.q;
         let r = &cols.r;
 
-        // Constrain that b = (c * q + r') % 2^{NUM_LIMBS * LIMB_BITS} and range check
-        // each element in q.
+        // Constrain that b = (c * q + r) % 2^{NUM_LIMBS * LIMB_BITS} and range checkeach element in q.
         let b_ext = cols.b_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
         let c_ext = cols.c_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
         let carry_divide = AB::F::from_canonical_u32(1 << LIMB_BITS).inverse();
@@ -142,7 +141,7 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        // Constrain that the upper limbs of b = c * q + r' are all equal to b_ext and
+        // Constrain that the upper limbs of b = c * q + r are all equal to b_ext and
         // range check each element in r.
         let q_ext = cols.q_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
         let mut carry_ext: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
@@ -211,13 +210,8 @@ where
             .assert_one(r_sum * cols.r_sum_inv);
 
         // Constrain the correctness of b_sign and c_sign. Note that we do not need to
-        // check that the sign of r is b_sign since we cannot have r' <_u c (or c <_u r'
+        // check that the sign of r is b_sign since we cannot have r_prime < c (or c < r_prime
         // if c is negative) if this is not the case.
-        //
-        // To constrain the correctness of q_sign we make sure if q is non-zero then
-        // q_sign = b_sign ^ c_sign, and if q_sign = 1 then q is non-zero. Note q_sum
-        // is guaranteed to be non-zero if q is non-zero since we've range checked each
-        // limb of q to be within [0, 2^LIMB_BITS) already.
         let signed = cols.opcode_div_flag + cols.opcode_rem_flag;
 
         builder.assert_bool(cols.b_sign);
@@ -233,16 +227,19 @@ where
             cols.sign_xor,
         );
 
+        // To constrain the correctness of q_sign we make sure if q is non-zero then
+        // q_sign = b_sign ^ c_sign, and if q is zero then q_sign = 0.
+        // Note:
+        // - q_sum is guaranteed to be non-zero if q is non-zero since we've range checked each
+        // limb of q to be within [0, 2^LIMB_BITS) already.
+        // - If q is zero and q_ext satisfies the constraint b = c * q + r, then q_sign must be 0.
+        // Thus, we do not need additional constraints in case q is zero.
         let nonzero_q = q.iter().fold(AB::Expr::ZERO, |acc, q| acc + *q);
         builder.assert_bool(cols.q_sign);
         builder
             .when(nonzero_q)
             .when(not(cols.zero_divisor))
             .assert_eq(cols.q_sign, cols.sign_xor);
-        builder
-            .when_ne(cols.q_sign, cols.sign_xor)
-            .when(not(cols.zero_divisor))
-            .assert_zero(cols.q_sign);
 
         // Check that the signs of b and c are correct.
         let sign_mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
@@ -253,9 +250,9 @@ where
             )
             .eval(builder, signed.clone());
 
-        // Constrain that 0 <= |r| < |c| by checking that r' <_u c (unsigned LT). By
+        // Constrain that 0 <= |r| < |c| by checking that r_prime < c (unsigned LT). By
         // definition, the sign of r must be b_sign. If c is negative then we want
-        // to constrain c <_u r'. If c is positive, then we want to constrain r' <_u c.
+        // to constrain c < r_prime. If c is positive, then we want to constrain r_prime < c.
         //
         // Because we already constrain that r and q are correct for special cases,
         // we skip the range check when special_case = 1.
@@ -263,14 +260,14 @@ where
         let mut carry_lt: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
 
         for i in 0..NUM_LIMBS {
-            // When the signs of r (i.e. b) and c are the same, r' = r.
+            // When the signs of r (i.e. b) and c are the same, r_prime = r.
             builder.when(not(cols.sign_xor)).assert_eq(r[i], r_p[i]);
 
-            // When the signs of r and c are different, r' = -r. To constrain this, we
-            // first ensure each r[i] + r'[i] + carry[i - 1] is in {0, 2^LIMB_BITS}, and
-            // that when the sum is 0 then r'[i] = 0 as well. Passing both constraints
-            // implies that 0 <= r'[i] <= 2^LIMB_BITS, and in order to ensure r'[i] !=
-            // 2^LIMB_BITS we check that r'[i] - 2^LIMB_BITS has an inverse in F.
+            // When the signs of r and c are different, r_prime = -r. To constrain this, we
+            // first ensure each r[i] + r_prime[i] + carry[i - 1] is in {0, 2^LIMB_BITS}, and
+            // that when the sum is 0 then r_prime[i] = 0 as well. Passing both constraints
+            // implies that 0 <= r_prime[i] <= 2^LIMB_BITS, and in order to ensure r_prime[i] !=
+            // 2^LIMB_BITS we check that r_prime[i] - 2^LIMB_BITS has an inverse in F.
             let last_carry = if i > 0 {
                 carry_lt[i - 1].clone()
             } else {
@@ -300,6 +297,10 @@ where
             builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
             builder.when(marker[i]).assert_eq(cols.lt_diff, diff);
         }
+        // - If r_prime != c, then prefix_sum = 1 so marker[i] must be 1 iff i is the first index where diff != 0.
+        //   Constrains that diff == lt_diff where lt_diff is non-zero.
+        // - If r_prime == c, then prefix_sum = 0 and lt_diff = 0.
+        //   Here, prefix_sum cannot be 1 because all diff are zero, making diff == lt_diff fails.
 
         builder.when(is_valid.clone()).assert_one(prefix_sum);
         self.bitwise_lookup_bus
