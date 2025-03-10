@@ -75,3 +75,166 @@ Given `rd`, the destination pointer `to_pc`, and a flag indicating if `rd` is `x
 
 - A memory write to register `rd` is performed if `rd` is not `x0`
 - The instruction is executed successfully by the VM and the program counter is set to `to_pc`
+
+### Core
+
+**Note:** For the core chips, we do not need to constrain the instructions operands (which is given in the statement), since they are already constrained by the adapter through execution bus. The main goal is to constrain the result matches the specification of the instruction.
+
+#### 1. [Base ALU](./base_alu/core.rs)
+
+Given:
+
+- `b`, `c` are decompositions of the operands
+- `a` is the decomposition of the result
+- `opcode` indicating the operation to be performed
+
+This circuit proves that `a` is the correct decomposition of the result of the operation `opcode` applied to `compose(b)` and `compose(c)`.
+
+#### 2. [Branch_Eq](./branch_eq/core.rs)
+
+Given:
+
+- `a`, `b` are decompositions of the operands
+- `opcode_beq_flag` and `opcode_bne_flag` indicating if the instruction is a branch equal or branch not equal
+- `imm` is the immediate value
+- `to_pc` is the destination pointer
+
+This circuit proves that:
+
+- If `opcode_beq_flag` is true and `a` is equal to `b`, then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
+- If `opcode_bne_flag` is true and `a` is not equal to `b`, then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
+
+#### 3. [Branch_Lt](./branch_lt/core.rs)
+
+Given:
+
+- `a`, `b` are decompositions of the operands
+- Flags indicating if the instruction is one of `blt`, `bltu`, `bge`, `bgeu`
+- `imm` is the immediate value
+- `to_pc` is the destination pointer
+
+This circuit proves that:
+
+- If the instruction is `blt` and `compose(a) < compose(b)` (signed comparison), then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
+- If the instruction is `bltu` and `compose(a) < compose(b)` (unsigned comparison), then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
+- If the instruction is `bge` and `compose(a) >= compose(b)` (signed comparison), then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
+- If the instruction is `bgeu` and `compose(a) >= compose(b)` (unsigned comparison), then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
+
+#### 4. [Divrem](./divrem/core.rs)
+
+Given:
+
+- `b`, `c` are decompositions of the operands
+- `q` is the quotient
+- `r` is the remainder
+- `a` is the decomposition of the result
+- Flags indicating if the instruction is `div`, `divu`, `rem`, `remu`
+
+This circuit proves that:
+
+- `compose(b) = compose(c) * compose(q) + compose(r)`
+- `0 <= |compose(r)| < |compose(c)|`
+- If `compose(c) == 0`, then `compose(q) == -1` for signed operations and `compose(q) == 2^32 - 1` for unsigned operations
+- `q` and `r` are the correct decompositions of the quotient and remainder
+- `a = q` if the instruction is `div` or `divu`
+- `a = r` if the instruction is `rem` or `remu`
+
+#### 5. [JAL_LUI](./jal_lui/core.rs)
+
+Given:
+
+- `rd` is the decomposition of the operand
+- `imm` is the immediate value
+- `to_pc` is the destination pointer
+- `opcode` indicating the operation to be performed
+
+This circuit proves that:
+
+- If `opcode` is `jal`, then `to_pc == pc + imm` and `decompose(rd) == pc + 4`
+- If `opcode` is `lui`, then `to_pc == pc + 4` and `decompose(rd) == imm * 2^8`
+
+#### 6. [JALR](./jalr/core.rs)
+
+Given:
+
+- `rd`, `rs1` are decompositions of the operands
+- `imm` is the immediate value
+- `to_pc_limbs` are the decomposition of the destination pointer
+
+This circuit proves that:
+
+- `compose(to_pc_limbs) == compose(rs1) + imm`
+- `compose(rd) == pc + 4`
+
+#### 7. [AUIPC](./auipc/core.rs)
+
+Given:
+
+- `rd` is the decomposition of the operands
+- `imm_limbs` are the decomposition of the immediate value
+- `pc_limbs` are the decomposition of the program counter
+
+This circuit proves that:
+
+- `compose(rd) == compose(pc_limbs) + compose(imm_limbs) * 2^12`
+- `compose(pc_limbs) == pc` and `compose(pc_limbs) < 2^PC_MAX_BITS`
+- `compose(imm_limbs) < 2^12`
+
+#### 8. [Less_than](./less_than/core.rs)
+
+Given:
+
+- `b`, `c` are decompositions of the operands
+- `a` is the result
+- `opcode` indicating the operation to be performed
+
+This circuit proves that:
+
+- If `opcode` is `slt` and `compose(b) < compose(c)` (signed comparison), then `compose(a) == 1`.
+- If `opcode` is `sltu`, then `compose(b) < compose(c)` (unsigned comparison), then `compose(a) == 1`.
+- Otherwise, `compose(a) == 0`.
+
+#### 9. [Load_sign_extend](./load_sign_extend/core.rs) and [Loadstore](./loadstore/core.rs)
+
+Given:
+
+- `read_data` is the data read from `aligned(mem_as[rs1 + imm])` if the instruction is load, otherwise it is the data read from `rd`
+- `write_data` is the data to be written to `rd` if the instruction is load, otherwise it is the data to be written to `mem_as[rs1 + imm]`
+- Flags indicating which instruction is being executed
+
+This circuit proves that `write_data == shift(read_data)` with shift amount adjusted for the instruction.
+
+#### 10. [Mul](./mul/core.rs)
+
+Given:
+
+- `b`, `c` are decompositions of the operands
+- `a` is the decomposition of the lower 32 bits of the result
+- `opcode` indicating the operation to be performed
+
+This circuit proves that `a` is the correct decomposition of the lower 32 bits of `compose(b) * compose(c)`.
+
+#### 11. [MULH](./mulh/core.rs)
+
+Given:
+
+- `b`, `c` are decompositions of the operands
+- `a` is the decomposition of the upper 32 bits of the result
+- `opcode` indicating the operation to be performed
+
+This circuit proves that `a` is the correct decomposition of the upper 32 bits of `compose(b) * compose(c)`.
+
+#### 12. [Shift](./shift/core.rs)
+
+Given:
+
+- `b`, `c` are decompositions of the operands
+- `a` is the decomposition of the result
+- `opcode` indicating the operation to be performed
+
+This circuit proves that:
+
+- If `opcode` is `sll`, then `compose(a) == compose(b) << (compose(c) % 32)`
+- If `opcode` is `srl`, then `compose(a) == compose(b) >> (compose(c) % 32)`
+- If `opcode` is `sra`, then `compose(a) == sign_extend(compose(b) >> (compose(c) % 32))`
+- `a` is the correct decomposition of the result to 8-bit limbs
