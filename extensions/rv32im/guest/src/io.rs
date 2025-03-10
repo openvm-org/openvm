@@ -55,7 +55,7 @@ pub fn hint_random(len: usize) {
     );
 }
 
-/// Store rs1 to [[rd] + imm]_2.
+/// Store rs1 to [[rd] + imm]_3.
 #[macro_export]
 macro_rules! reveal {
     ($rd:ident, $rs1:ident, $imm:expr) => {

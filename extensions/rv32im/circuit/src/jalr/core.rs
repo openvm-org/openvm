@@ -107,7 +107,11 @@ where
 
         let least_sig_limb = from_pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP) - composed;
 
-        // rd_data is the final data needed
+        // rd_data is the final decomposition of `from_pc + DEFAULT_PC_STEP` we need.
+        // The range check on `least_sig_limb` also ensures that `rd_data` correctly represents `from_pc + DEFAULT_PC_STEP`.
+        // Specifically, if `rd_data` does not match the expected limb, then `least_sig_limb` becomes
+        // the real `least_sig_limb` plus the difference between `composed` and the three most significant limbs of `from_pc + DEFAULT_PC_STEP`.
+        // In that case, `least_sig_limb` >= 2^RV32_CELL_BITS.
         let rd_data = array::from_fn(|i| {
             if i == 0 {
                 least_sig_limb.clone()
