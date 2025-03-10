@@ -88,13 +88,15 @@ pub fn new_from_outer_multi_vk(
     vk: &MultiStarkVerifyingKey<BabyBearPoseidon2RootConfig>,
 ) -> MultiStarkVerificationAdvice<OuterConfig> {
     let num_challenges_to_sample = vk.num_challenges_per_phase();
-    let MultiStarkVerifyingKey::<BabyBearPoseidon2RootConfig> { per_air } = vk;
     MultiStarkVerificationAdvice {
-        per_air: per_air
+        per_air: vk
+            .per_air
             .clone()
             .into_iter()
             .map(new_from_outer_vkv2)
             .collect(),
         num_challenges_to_sample,
+        trace_height_constraints: vk.trace_height_constraints.clone(),
+        log_up_pow_bits: vk.log_up_pow_bits,
     }
 }

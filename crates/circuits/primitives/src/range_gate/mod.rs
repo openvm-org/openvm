@@ -10,7 +10,7 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
+    interaction::{BusIndex, InteractionBuilder},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -101,8 +101,8 @@ impl RangeCheckerGateChip {
         self.air.bus
     }
 
-    pub fn bus_index(&self) -> usize {
-        self.air.bus.index
+    pub fn bus_index(&self) -> BusIndex {
+        self.air.bus.inner.index
     }
 
     pub fn range_max(&self) -> u32 {

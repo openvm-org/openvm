@@ -5,7 +5,7 @@ use crate::{PhantomImm, PHANTOM_FUNCT3, SYSTEM_OPCODE};
 #[macro_export]
 macro_rules! hint_store_u32 {
     ($x:expr) => {
-        openvm_platform::custom_insn_i!(
+        openvm_custom_insn::custom_insn_i!(
             opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
             funct3 = openvm_rv32im_guest::HINT_FUNCT3,
             rd = In $x,
@@ -20,7 +20,7 @@ macro_rules! hint_store_u32 {
 macro_rules! hint_buffer_u32 {
     ($x:expr, $len:expr) => {
         if $len != 0 {
-            openvm_platform::custom_insn_i!(
+            openvm_custom_insn::custom_insn_i!(
                 opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
                 funct3 = openvm_rv32im_guest::HINT_FUNCT3,
                 rd = In $x,
@@ -34,7 +34,7 @@ macro_rules! hint_buffer_u32 {
 /// Reset the hint stream with the next hint.
 #[inline(always)]
 pub fn hint_input() {
-    openvm_platform::custom_insn_i!(
+    openvm_custom_insn::custom_insn_i!(
         opcode = SYSTEM_OPCODE,
         funct3 = PHANTOM_FUNCT3,
         rd = Const "x0",
@@ -46,7 +46,7 @@ pub fn hint_input() {
 /// Reset the hint stream with `len` random `u32`s
 #[inline(always)]
 pub fn hint_random(len: usize) {
-    openvm_platform::custom_insn_i!(
+    openvm_custom_insn::custom_insn_i!(
         opcode = SYSTEM_OPCODE,
         funct3 = PHANTOM_FUNCT3,
         rd = In len,
@@ -59,7 +59,7 @@ pub fn hint_random(len: usize) {
 #[macro_export]
 macro_rules! reveal {
     ($rd:ident, $rs1:ident, $imm:expr) => {
-        openvm_platform::custom_insn_i!(
+        openvm_custom_insn::custom_insn_i!(
             opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
             funct3 = openvm_rv32im_guest::REVEAL_FUNCT3,
             rd = In $rd,
@@ -77,7 +77,7 @@ pub fn print_str_from_bytes(str_as_bytes: &[u8]) {
 
 #[inline(always)]
 pub fn raw_print_str_from_bytes(msg_ptr: *const u8, len: usize) {
-    openvm_platform::custom_insn_i!(
+    openvm_custom_insn::custom_insn_i!(
         opcode = SYSTEM_OPCODE,
         funct3 = PHANTOM_FUNCT3,
         rd = In msg_ptr,

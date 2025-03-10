@@ -28,7 +28,7 @@ serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 lazy_static.workspace = true
-once_cell = { workspace = true, optional = true }
+once_cell = { workspace = true, optional = true, features = ["std"] }
 metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 

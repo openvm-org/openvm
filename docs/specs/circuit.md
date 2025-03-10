@@ -169,3 +169,95 @@ where we allow `N` to be different powers of two.
 The values of $a, v_i$ that appear in the trace of the access adapter chip are generated on-demand based on the needs of the
 runtime memory access. In other words, the converter inserts additional writes into the MEMORY_BUS when needed in order
 to link up accesses of different word sizes.
+
+### Timestamp Range Assertions
+
+The execution and memory buses both contain a field for **timestamp** as a way to chronologically order instruction execution and the VM state accesses therein.
+The timestamp is a global variable shared across all chips within a single VM circuit that is monotonically increasing across VM execution.
+For the offline memory checking argument described above to work, we require that the `timestamp` always remains in the range `[0, 2^timestamp_max_bits)`, where
+`timestamp_max_bits` is a configurable parameter of the VM, but we require `timestamp_max_bits <= 29` when the proof system base field is 31 bits.
+In order for the VM circuit to maintain this invariant, we **require** that each VM chip that interacts with the execution and memory buses must satisfy the following condition:
+
+> [!IMPORTANT]
+> In the AIR, the amount that the timestamp is constrained to increase during execution of a single instruction is at most `num_interactions * num_rows_per_execution`.
+
+Here `num_interactions` is the number of interactions in the AIR: this is a static property of the AIR.
+The number of interactions does not depend on the number of trace rows, and it doesn't depend on whether messages are actually sent or not. In general, the trace for the execution of a single instruction can
+use multiple rows in the chip's trace matrix: this is represented by `num_rows_per_execution`. In summary
+we bound the integer amount that the timestamp should increment in a single instruction execution based on the number of interactions and the number of rows in the trace.
+
+Let us explain how this condition aids in the timestamp range bound.
+As part of the LogUp soundness checks, the verifier always checks the inequality:
+```
+sum_i height[i] * num_interactions[i] < p
+```
+where the sum is over all AIRs in the STARK proof, `height[i]` is the trace height of AIR `i`, and `num_interactions[i]` is the number of interactions in AIR `i`. The sum is taken over the integers and checked to be less than the modulus `p` of the base field.
+
+Given the condition on instruction execution above, we deduce from this inequality the inequality
+```
+sum_{instruction_execution} timestamp_delta < p - 1
+```
+where the sum is over all instruction executions and `timestamp_delta` is the integer amount the timestamp increased in that execution. The change from `p` to `p - 1` is because the sum of AIRs includes the Connector AIR, which does not increment timestamp and has trace height 2 and at least one interaction (in fact it has 5).
+Within a VM circuit, the timestamp is always initialized to `1` and then advanced only during
+instruction execution. Thus from our discussion above, we deduce that the `end_timestamp`,
+defined as the timestamp the Connector Chip receives to signal either execution should be suspended
+or terminated, does not overflow the base field. Thus all intermediate timestamps also do not overflow.
+Given this, to constrain that all timestamps throughout the course of instruction execution are in
+the range `[0, 2^timestamp_max_bits)`, it suffices to range check the `end_timestamp`.
+This is done by the Connector AIR.
+
+#### Inspection of VM Chip Timestamp Increments
+Below we perform a survey on all VM chips contained in the OpenVM system and the standard VM extensions
+to justify that they all satisfy the condition on timestamp increments.
+
+In all AIRs for instruction executors, the timestamp delta of a single instruction execution
+is constrained via the `ExecutionBridge` as the difference between the timestamps in the two
+interactions on the execution bus for the "from" and "to" states. In most AIRs, the `timestamp_delta`
+is a constant which is computed by starting at `0` and incrementing by `1` on each memory access.
+The memory access constraint is done via the `MemoryBridge` interface.
+Any use of `read` or `write` via `MemoryBridge` uses `4` interactions: 2 on memory bus, 2 for range checks.
+Therefore for chips where instruction execution uses only 1 row of the trace and timestamp increments
+once per memory access as above, we actually have that `timestamp_delta <= num_interactions / 4`.
+This includes all chips that use the integration API and `VmChipWrapper`.
+
+Therefore it remains to examine:
+
+1. All chips that compute the timestamp delta via incrementing by 1 per memory access but where single instruction execution may use multiple trace rows.
+2. All cases where the timestamp delta is manually set in a custom way.
+
+The chips that fall into these categories are:
+
+| Name                  | timestamp_delta | # of interactions | Comment                                                                                                                  |
+| --------------------- | --------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| PhantomChip           | 1               | 3 | Case 2. No memory accesses, 3 interactions from program bus and execution bus. |
+| KeccakVmChip          | -               | -                 | Case 2. Special timestamp jump. |
+| FriReducedOpeningChip | –               | –                 | Case 1. |
+| NativePoseidon2Chip   | –               | –                 | Case 1. |
+| Rv32HintStoreChip     | –               | –                 | Case 1. |
+| Sha256VmChip          | –               | –                 | Case 1. |
+
+The PhantomChip satisfies the condition because `1 < 3`.
+
+All the chips in Case 1 can use a variable number of trace rows to execute a single instruction, but
+the AIR constraints all maintain that the timestamp increments by 1 per memory access and this accounts for all increments of the timestamp. Therefore we have `timestamp_delta <= num_interactions * num_rows_per_execution / 4` in these cases.
+
+##### KeccakVmChip
+
+It remains to analyze KeccakVmChip. Here the `KeccakVmAir::timestamp_change` is `len + 45` where `len`
+refers to the length of the input in bytes. This is an overestimate used to simplify AIR constraints
+because the AIR cannot compute the non-algebraic expression `ceil(len / 136) * 20`.
+
+In the AIR constraints :
+
+- `constrain_absorb` adds at least `min(68, sponge.block_bytes.len())` interactions on the XOR bus.
+- `eval_instruction` does an `execute_and_increment_pc` (3), 3 memory reads (12) and 2 lookups (2), giving a total of `17` interactions.
+- `constrain_input_read` does 34 memory reads (136),
+- `constrain_output_write` does 8 memory writes (32)
+
+In total, there are at least 253 interactions.
+
+A single KECCAK256_RV32 instruction uses `ceil((len + 1) / 136) * 24` rows (where `NUM_ROUNDS = 24`).
+We have shown that
+```
+len + 45 < 253 * ceil((len + 1) / 136) * 24 <= num_interactions * num_rows_per_execution
+```

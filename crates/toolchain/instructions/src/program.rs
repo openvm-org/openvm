@@ -11,7 +11,7 @@ pub const PC_BITS: usize = 30;
 /// from the fact that each standard RISC-V instruction is 32-bits = 4 bytes.
 pub const DEFAULT_PC_STEP: u32 = 4;
 pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
-const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
+pub const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Program<F> {
@@ -43,10 +43,6 @@ impl<F: Field> Program<F> {
         pc_base: u32,
         max_num_public_values: usize,
     ) -> Self {
-        assert!(
-            instructions.is_empty()
-                || pc_base + (instructions.len() as u32 - 1) * step <= MAX_ALLOWED_PC
-        );
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
@@ -64,10 +60,6 @@ impl<F: Field> Program<F> {
         pc_base: u32,
         max_num_public_values: usize,
     ) -> Self {
-        assert!(
-            instructions.is_empty()
-                || pc_base + (instructions.len() as u32 - 1) * step <= MAX_ALLOWED_PC
-        );
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
@@ -85,7 +77,6 @@ impl<F: Field> Program<F> {
         instructions: &[Instruction<F>],
         debug_infos: &[Option<DebugInfo>],
     ) -> Self {
-        assert!(instructions.is_empty() || instructions.len() as u32 - 1 <= MAX_ALLOWED_PC);
         Self {
             instructions_and_debug_infos: instructions
                 .iter()

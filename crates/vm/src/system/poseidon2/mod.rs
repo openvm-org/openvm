@@ -11,6 +11,7 @@
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    interaction::BusIndex,
     p3_field::PrimeField32,
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
@@ -37,7 +38,7 @@ pub enum Poseidon2PeripheryChip<F: PrimeField32> {
 impl<F: PrimeField32> Poseidon2PeripheryChip<F> {
     pub fn new(
         poseidon2_config: Poseidon2Config<F>,
-        bus_idx: usize,
+        bus_idx: BusIndex,
         max_constraint_degree: usize,
     ) -> Self {
         if max_constraint_degree >= 7 {

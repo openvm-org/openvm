@@ -1,9 +1,7 @@
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
 use crate::system::memory::{
-    merkle::{DirectCompressionBus, MemoryMerkleChip},
-    persistent::PersistentBoundaryChip,
-    volatile::VolatileBoundaryChip,
+    merkle::MemoryMerkleChip, persistent::PersistentBoundaryChip, volatile::VolatileBoundaryChip,
     MemoryImage, CHUNK,
 };
 
@@ -34,7 +32,7 @@ impl<F: PrimeField32> MemoryInterface<F> {
         }
     }
 
-    pub fn compression_bus(&self) -> Option<DirectCompressionBus> {
+    pub fn compression_bus(&self) -> Option<PermutationCheckBus> {
         match self {
             MemoryInterface::Volatile { .. } => None,
             MemoryInterface::Persistent { merkle_chip, .. } => {

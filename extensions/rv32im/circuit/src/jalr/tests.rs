@@ -31,24 +31,21 @@ type F = BabyBear;
 fn into_limbs(num: u32) -> [u32; 4] {
     array::from_fn(|i| (num >> (8 * i)) & 255)
 }
-fn sign_extend(num: u32) -> u32 {
-    if num & 0x8000 != 0 {
-        num | 0xffff0000
-    } else {
-        num
-    }
-}
+
+#[allow(clippy::too_many_arguments)]
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32JalrChip<F>,
     rng: &mut StdRng,
     opcode: Rv32JalrOpcode,
     initial_imm: Option<u32>,
+    initial_imm_sign: Option<u32>,
     initial_pc: Option<u32>,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
 ) {
     let imm = initial_imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
-    let imm_ext = sign_extend(imm);
+    let imm_sign = initial_imm_sign.unwrap_or(rng.gen_range(0..2));
+    let imm_ext = imm + imm_sign * (0xffffffff ^ ((1 << IMM_BITS) - 1));
     let a = rng.gen_range(0..32) << 2;
     let b = rng.gen_range(1..32) << 2;
     let to_pc = rng.gen_range(0..(1 << PC_BITS));
@@ -62,7 +59,15 @@ fn set_and_execute(
         chip,
         &Instruction::from_usize(
             opcode.global_opcode(),
-            [a, b, imm as usize, 1, 0, (a != 0) as usize, 0],
+            [
+                a,
+                b,
+                imm as usize,
+                1,
+                0,
+                (a != 0) as usize,
+                imm_sign as usize,
+            ],
         ),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
@@ -102,7 +107,16 @@ fn rand_jalr_test() {
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, JALR, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut rng,
+            JALR,
+            None,
+            None,
+            None,
+            None,
+        );
     }
 
     drop(range_checker_chip);
@@ -123,7 +137,8 @@ fn run_negative_jalr_test(
     opcode: Rv32JalrOpcode,
     initial_pc: Option<u32>,
     initial_rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    imm: Option<u32>,
+    initial_imm: Option<u32>,
+    initial_imm_sign: Option<u32>,
     rd_data: Option<[u32; RV32_REGISTER_NUM_LIMBS - 1]>,
     rs1_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     to_pc_least_sig_bit: Option<u32>,
@@ -151,7 +166,8 @@ fn run_negative_jalr_test(
         &mut chip,
         &mut rng,
         opcode,
-        imm,
+        initial_imm,
+        initial_imm_sign,
         initial_pc,
         initial_rs1,
     );
@@ -208,6 +224,7 @@ fn invalid_cols_negative_tests() {
         None,
         None,
         Some(15362),
+        Some(0),
         None,
         None,
         None,
@@ -219,8 +236,23 @@ fn invalid_cols_negative_tests() {
     run_negative_jalr_test(
         JALR,
         None,
+        None,
+        Some(15362),
+        Some(1),
+        None,
+        None,
+        None,
+        None,
+        Some(0),
+        VerificationError::OodEvaluationMismatch,
+    );
+
+    run_negative_jalr_test(
+        JALR,
+        None,
         Some([23, 154, 67, 28]),
         Some(42512),
+        Some(1),
         None,
         None,
         Some(0),
@@ -237,6 +269,7 @@ fn overflow_negative_tests() {
         Some(251),
         None,
         None,
+        None,
         Some([1, 0, 0]),
         None,
         None,
@@ -250,6 +283,7 @@ fn overflow_negative_tests() {
         None,
         Some([0, 0, 0, 0]),
         Some((1 << 15) - 2),
+        Some(0),
         None,
         None,
         None,
@@ -261,6 +295,7 @@ fn overflow_negative_tests() {
         VerificationError::ChallengePhaseError,
     );
 }
+
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///
@@ -284,7 +319,16 @@ fn execute_roundtrip_sanity_test() {
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, JALR, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut rng,
+            JALR,
+            None,
+            None,
+            None,
+            None,
+        );
     }
 }
 

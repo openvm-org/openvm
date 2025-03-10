@@ -15,6 +15,8 @@ use crate::serde::Deserializer;
 
 mod read;
 
+pub use openvm_platform::print::{print, println};
+
 /// Read `size: u32` and then `size` bytes from the hint stream into a vector.
 pub fn read_vec() -> Vec<u8> {
     hint_input();
@@ -87,20 +89,6 @@ pub fn reveal(x: u32, index: usize) {
     openvm_rv32im_guest::reveal!(byte_index, x, 0);
     #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
     println!("reveal {} at byte location {}", x, index * 4);
-}
-
-/// Print a UTF-8 string to stdout on host machine for debugging purposes.
-#[allow(unused_variables)]
-pub fn print<S: AsRef<str>>(s: S) {
-    #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
-    print!("{}", s.as_ref());
-    #[cfg(target_os = "zkvm")]
-    openvm_rv32im_guest::print_str_from_bytes(s.as_ref().as_bytes());
-}
-
-pub fn println<S: AsRef<str>>(s: S) {
-    print(s);
-    print("\n");
 }
 
 /// A no-alloc writer to print to stdout on host machine for debugging purposes.

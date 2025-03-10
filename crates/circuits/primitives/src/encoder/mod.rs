@@ -10,6 +10,7 @@ use crate::SubAir;
 #[derive(Clone, Debug)]
 pub struct Encoder {
     var_cnt: usize,
+    /// The number of flags, excluding the invalid/dummy flag.
     flag_cnt: usize,
     /// Maximal degree of the flag expressions.
     /// The maximal degree of the equalities in the AIR, however, **is one higher:** that is, `max_flag_degree + 1`.
@@ -33,7 +34,9 @@ impl Encoder {
             }
             res
         };
-        let k = (0..).find(|&x| binomial(x) > cnt as u32).unwrap() as usize;
+        let k = (0..)
+            .find(|&x| binomial(x) >= cnt as u32 + reserve_invalid as u32)
+            .unwrap() as usize;
         let mut cur = vec![0u32; k];
         let mut sum = 0;
         let mut pts = Vec::new();
@@ -91,18 +94,12 @@ impl Encoder {
         flag_idx: usize,
         vars: &[AB::Var],
     ) -> AB::Expr {
-        assert!(
-            flag_idx + self.reserve_invalid as usize <= self.flag_cnt,
-            "flag index out of range"
-        );
+        assert!(flag_idx < self.flag_cnt, "flag index out of range");
         self.expression_for_point::<AB>(&self.pts[flag_idx + self.reserve_invalid as usize], vars)
     }
 
     pub fn get_flag_pt(&self, flag_idx: usize) -> Vec<u32> {
-        assert!(
-            flag_idx + self.reserve_invalid as usize <= self.flag_cnt,
-            "flag index out of range"
-        );
+        assert!(flag_idx < self.flag_cnt, "flag index out of range");
         self.pts[flag_idx + self.reserve_invalid as usize].clone()
     }
 
@@ -118,7 +115,7 @@ impl Encoder {
 
     pub fn sum_of_unused<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> AB::Expr {
         let mut expr = AB::Expr::ZERO;
-        for i in self.flag_cnt + 1..self.pts.len() {
+        for i in (self.flag_cnt + self.reserve_invalid as usize)..self.pts.len() {
             expr += self.expression_for_point::<AB>(&self.pts[i], vars);
         }
         expr

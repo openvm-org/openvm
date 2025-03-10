@@ -14,8 +14,8 @@ use {
 
 use super::{Bn254, Fp, Fp12, Fp2};
 use crate::pairing::{
-    Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep, MultiMillerLoop,
-    PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
+    exp_check_fallback, Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep,
+    MultiMillerLoop, PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
 };
 #[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
 use crate::{
@@ -372,7 +372,23 @@ impl PairingCheck for Bn254 {
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
     ) -> Result<(), PairingCheckError> {
+        Self::try_honest_pairing_check(P, Q).unwrap_or_else(|| {
+            let f = Self::multi_miller_loop(P, Q);
+            exp_check_fallback(&f, &Self::FINAL_EXPONENT)
+        })
+    }
+}
+
+#[allow(non_snake_case)]
+impl Bn254 {
+    fn try_honest_pairing_check(
+        P: &[AffinePoint<<Self as PairingCheck>::Fp>],
+        Q: &[AffinePoint<<Self as PairingCheck>::Fp2>],
+    ) -> Option<Result<(), PairingCheckError>> {
         let (c, u) = Self::pairing_check_hint(P, Q);
+        if c == Fp12::ZERO {
+            return None;
+        }
         let c_inv = Fp12::ONE.div_unsafe(&c);
 
         // f * u == c^λ
@@ -389,9 +405,9 @@ impl PairingCheck for Bn254 {
         let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
 
         if fc * c_mul * u == Fp12::ONE {
-            Ok(())
+            Some(Ok(()))
         } else {
-            Err(PairingCheckError)
+            None
         }
     }
 }

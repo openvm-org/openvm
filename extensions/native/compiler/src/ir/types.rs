@@ -1061,7 +1061,7 @@ impl<F: Field, EF: ExtensionField<F>> Ext<F, EF> {
                     lhs_value.assign_with_caches(lhs.clone(), builder, ext_cache, base_cache);
                     ext_cache.insert(lhs.clone(), lhs_value);
                     let rhs_value = Self::uninit(builder);
-                    rhs_value.assign(rhs.clone(), builder);
+                    rhs_value.assign_with_caches(rhs.clone(), builder, ext_cache, base_cache);
                     builder.push(DslIr::SubE(*self, lhs_value, rhs_value));
                 }
             },

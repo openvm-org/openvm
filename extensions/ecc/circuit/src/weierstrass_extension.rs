@@ -210,8 +210,13 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                 panic!("Modulus too large");
             }
         }
+        let non_qr_hint_sub_ex = phantom::NonQrHintSubEx::new(self.supported_curves.clone());
         builder.add_phantom_sub_executor(
-            phantom::DecompressHintSubEx::new(self.supported_curves.clone()),
+            non_qr_hint_sub_ex.clone(),
+            PhantomDiscriminant(EccPhantom::HintNonQr as u16),
+        )?;
+        builder.add_phantom_sub_executor(
+            phantom::DecompressHintSubEx::new(non_qr_hint_sub_ex),
             PhantomDiscriminant(EccPhantom::HintDecompress as u16),
         )?;
 
@@ -220,25 +225,36 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
 }
 
 pub(crate) mod phantom {
-    use std::iter::repeat;
+    use std::{
+        iter::{once, repeat},
+        ops::Deref,
+    };
 
     use eyre::bail;
-    use num_bigint::BigUint;
+    use num_bigint::{BigUint, RandBigInt};
     use num_integer::Integer;
-    use num_traits::One;
+    use num_traits::{FromPrimitive, One};
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
+    use openvm_ecc_guest::weierstrass::DecompressionHint;
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
     use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
+    use rand::{rngs::StdRng, SeedableRng};
 
     use super::CurveConfig;
 
     #[derive(derive_new::new)]
-    pub struct DecompressHintSubEx {
-        pub supported_curves: Vec<CurveConfig>,
+    pub struct DecompressHintSubEx(NonQrHintSubEx);
+
+    impl Deref for DecompressHintSubEx {
+        type Target = NonQrHintSubEx;
+
+        fn deref(&self) -> &NonQrHintSubEx {
+            &self.0
+        }
     }
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for DecompressHintSubEx {
@@ -259,11 +275,6 @@ pub(crate) mod phantom {
                 );
             }
             let curve = &self.supported_curves[c_idx];
-            let modulus_mod_4 = BigUint::from(3u8) & curve.modulus.clone();
-            if modulus_mod_4 != BigUint::from(3u8) {
-                bail!("Currently only supporting curves with modulus congruent to 3 mod 4.");
-                // TODO: Tonelli-Shanks algorithm
-            }
             let rs1 = unsafe_read_rv32_register(memory, a);
             let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
                 32
@@ -286,31 +297,200 @@ pub(crate) mod phantom {
                 F::from_canonical_u32(RV32_MEMORY_AS),
                 F::from_canonical_u32(rs2),
             );
-            let y = decompress_point(x, rec_id.as_canonical_u32() & 1 == 1, curve);
-            let y_bytes = y
+            let hint = self.decompress_point(x, rec_id.as_canonical_u32() & 1 == 1, c_idx);
+            let hint_bytes = once(F::from_bool(hint.possible))
+                .chain(repeat(F::ZERO))
+                .take(4)
+                .chain(
+                    hint.sqrt
+                        .to_bytes_le()
+                        .into_iter()
+                        .map(F::from_canonical_u8)
+                        .chain(repeat(F::ZERO))
+                        .take(num_limbs),
+                )
+                .collect();
+            streams.hint_stream = hint_bytes;
+            Ok(())
+        }
+    }
+
+    impl DecompressHintSubEx {
+        fn decompress_point(
+            &self,
+            x: BigUint,
+            is_y_odd: bool,
+            curve_idx: usize,
+        ) -> DecompressionHint<BigUint> {
+            let curve = &self.supported_curves[curve_idx];
+            let alpha = ((&x * &x * &x) + (&x * &curve.a) + &curve.b) % &curve.modulus;
+            match mod_sqrt(&alpha, &curve.modulus, &self.non_qrs[curve_idx]) {
+                Some(beta) => {
+                    if is_y_odd == beta.is_odd() {
+                        DecompressionHint {
+                            possible: true,
+                            sqrt: beta,
+                        }
+                    } else {
+                        DecompressionHint {
+                            possible: true,
+                            sqrt: &curve.modulus - &beta,
+                        }
+                    }
+                }
+                None => {
+                    debug_assert_eq!(
+                        self.non_qrs[curve_idx]
+                            .modpow(&((&curve.modulus - BigUint::one()) >> 1), &curve.modulus),
+                        &curve.modulus - BigUint::one()
+                    );
+                    let sqrt = mod_sqrt(
+                        &(&alpha * &self.non_qrs[curve_idx]),
+                        &curve.modulus,
+                        &self.non_qrs[curve_idx],
+                    )
+                    .unwrap();
+                    DecompressionHint {
+                        possible: false,
+                        sqrt,
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn mod_sqrt(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigUint> {
+        if modulus % 4u32 == BigUint::from_u8(3).unwrap() {
+            // x^(1/2) = x^((p+1)/4) when p = 3 mod 4
+            let exponent = (modulus + BigUint::one()) >> 2;
+            let ret = x.modpow(&exponent, modulus);
+            if &ret * &ret % modulus == x % modulus {
+                Some(ret)
+            } else {
+                None
+            }
+        } else {
+            // Tonelli-Shanks algorithm
+            // https://en.wikipedia.org/wiki/Tonelli%E2%80%93Shanks_algorithm#The_algorithm
+            let mut q = modulus - BigUint::one();
+            let mut s = 0;
+            while &q % 2u32 == BigUint::ZERO {
+                s += 1;
+                q /= 2u32;
+            }
+            let z = non_qr;
+            let mut m = s;
+            let mut c = z.modpow(&q, modulus);
+            let mut t = x.modpow(&q, modulus);
+            let mut r = x.modpow(&((q + BigUint::one()) >> 1), modulus);
+            loop {
+                if t == BigUint::ZERO {
+                    return Some(BigUint::ZERO);
+                }
+                if t == BigUint::one() {
+                    return Some(r);
+                }
+                let mut i = 0;
+                let mut tmp = t.clone();
+                while tmp != BigUint::one() && i < m {
+                    tmp = &tmp * &tmp % modulus;
+                    i += 1;
+                }
+                if i == m {
+                    // self is not a quadratic residue
+                    return None;
+                }
+                for _ in 0..m - i - 1 {
+                    c = &c * &c % modulus;
+                }
+                let b = c;
+                m = i;
+                c = &b * &b % modulus;
+                t = ((t * &b % modulus) * &b) % modulus;
+                r = (r * b) % modulus;
+            }
+        }
+    }
+
+    #[derive(Clone)]
+    pub struct NonQrHintSubEx {
+        pub supported_curves: Vec<CurveConfig>,
+        pub non_qrs: Vec<BigUint>,
+    }
+
+    impl NonQrHintSubEx {
+        pub fn new(supported_curves: Vec<CurveConfig>) -> Self {
+            let non_qrs = supported_curves
+                .iter()
+                .map(|curve| find_non_qr(&curve.modulus))
+                .collect();
+            Self {
+                supported_curves,
+                non_qrs,
+            }
+        }
+    }
+
+    impl<F: PrimeField32> PhantomSubExecutor<F> for NonQrHintSubEx {
+        fn phantom_execute(
+            &mut self,
+            _: &MemoryController<F>,
+            streams: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            _: F,
+            _: F,
+            c_upper: u16,
+        ) -> eyre::Result<()> {
+            let c_idx = c_upper as usize;
+            if c_idx >= self.supported_curves.len() {
+                bail!(
+                    "Curve index {c_idx} out of range: {} supported curves",
+                    self.supported_curves.len()
+                );
+            }
+            let curve = &self.supported_curves[c_idx];
+
+            let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
+                32
+            } else if curve.modulus.bits().div_ceil(8) <= 48 {
+                48
+            } else {
+                bail!("Modulus too large")
+            };
+
+            let hint_bytes = self.non_qrs[c_idx]
                 .to_bytes_le()
                 .into_iter()
                 .map(F::from_canonical_u8)
                 .chain(repeat(F::ZERO))
                 .take(num_limbs)
                 .collect();
-            streams.hint_stream = y_bytes;
+            streams.hint_stream = hint_bytes;
             Ok(())
         }
     }
 
-    fn decompress_point(x: BigUint, is_y_odd: bool, curve: &CurveConfig) -> BigUint {
-        let alpha = ((&x * &x * &x) + (&x * &curve.a) + &curve.b) % &curve.modulus;
-        let beta = mod_sqrt(alpha, &curve.modulus);
-        if is_y_odd == beta.is_odd() {
-            beta
+    // Returns a non-quadratic residue in the field
+    fn find_non_qr(modulus: &BigUint) -> BigUint {
+        if modulus % 4u32 == BigUint::from(3u8) {
+            modulus - BigUint::one()
+        } else if modulus % 8u32 == BigUint::from(5u8) {
+            BigUint::from_u8(2u8).unwrap()
         } else {
-            &curve.modulus - &beta
+            let mut rng = StdRng::from_entropy();
+            // let mut rand = RandomBits::new(modulus.bits());
+            let mut non_qr = rng.gen_biguint_range(
+                &BigUint::from_u8(2).unwrap(),
+                &(modulus - BigUint::from_u8(1).unwrap()),
+            );
+            let exponent = (modulus - BigUint::one()) >> 2;
+            while non_qr.modpow(&exponent, modulus) != modulus - BigUint::one() {
+                non_qr = rng.gen_biguint_range(
+                    &BigUint::from_u8(2).unwrap(),
+                    &(modulus - BigUint::from_u8(1).unwrap()),
+                );
+            }
+            non_qr
         }
-    }
-
-    fn mod_sqrt(x: BigUint, modulus: &BigUint) -> BigUint {
-        let exponent = (modulus + BigUint::one()) >> 2;
-        x.modpow(&exponent, modulus)
     }
 }

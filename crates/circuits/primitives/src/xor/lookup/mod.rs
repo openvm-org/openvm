@@ -10,7 +10,7 @@ use std::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    interaction::InteractionBuilder,
+    interaction::{BusIndex, InteractionBuilder, LookupBus},
     p3_air::{Air, BaseAir, PairBuilder},
     p3_field::Field,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -97,7 +97,7 @@ pub struct XorLookupChip<const M: usize> {
 }
 
 impl<const M: usize> XorLookupChip<M> {
-    pub fn new(bus: usize) -> Self {
+    pub fn new(bus: BusIndex) -> Self {
         let mut count = vec![];
         for _ in 0..(1 << M) {
             let mut row = vec![];
@@ -107,7 +107,7 @@ impl<const M: usize> XorLookupChip<M> {
             count.push(row);
         }
         Self {
-            air: XorLookupAir::new(XorBus(bus)),
+            air: XorLookupAir::new(XorBus(LookupBus::new(bus))),
             count,
         }
     }

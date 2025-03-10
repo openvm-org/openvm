@@ -26,6 +26,7 @@ pub enum Rv32WeierstrassOpcode {
 #[repr(u16)]
 pub enum EccPhantom {
     HintDecompress = 0x40,
+    HintNonQr = 0x41,
 }
 
 #[derive(Default)]
@@ -63,6 +64,15 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                     PhantomDiscriminant(EccPhantom::HintDecompress as u16),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    curve_idx as u16,
+                )));
+            }
+            if let Some(SwBaseFunct7::HintNonQr) = SwBaseFunct7::from_repr(base_funct7) {
+                assert_eq!(dec_insn.rd, 0);
+                return Some(TranspilerOutput::one_to_one(Instruction::phantom(
+                    PhantomDiscriminant(EccPhantom::HintNonQr as u16),
+                    F::ZERO,
+                    F::ZERO,
                     curve_idx as u16,
                 )));
             }

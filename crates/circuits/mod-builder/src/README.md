@@ -72,3 +72,14 @@ However, there are some cases that all-0 row doesn't satisfy the constraints: wh
   For these chips, we will pad the trace with a "dummy row".
   This dummy row will be created by evaluating the constraints with all-0 inputs and all-0 flags, and setting `is_valid` to 0.
   See the `FieldExpressionCoreChip::finalize` method for details.
+
+## Note on configuring `range_checker_bits`
+
+The following precondition is asserted by `mod-builder`:
+`limb_bits + range_checker_bits < modulus_bits` where `modulus_bits` is the modulus of the proof system.
+
+**Explanation**:
+In `FieldExpr::eval` the constraints are evaluated as an `OverflowInt<AB::Expr>` and then passed to the `CheckCarryModToZeroSubAir` sub air.
+The `CheckCarryModToZeroSubAir` sub air constrains the carries to `[0, 2^range_checker_bits)` and then adds constraints `previous_carry + current_limb == 2^limb_bits * current_carry` for each limb.
+In order for these constraints to be sound, we must ensure the RHS does not overflow, which is what the precondition does. 
+Note that `modulus_bits` is the modulus of the proof system, not the modulus used by `mod-builder` for arithmetic.

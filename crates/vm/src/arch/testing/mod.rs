@@ -12,6 +12,7 @@ use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
+    interaction::BusIndex,
     p3_field::PrimeField32,
     p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
     prover::types::AirProofInput,
@@ -20,11 +21,11 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::{
-        baby_bear_blake3::{self, BabyBearBlake3Config},
-        baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
-        setup_tracing_with_log_level,
+        baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        setup_tracing_with_log_level, FriParameters,
     },
-    engine::StarkEngine,
+    engine::{StarkEngine, StarkFriEngine},
     p3_baby_bear::BabyBear,
 };
 use program::ProgramTester;
@@ -53,16 +54,16 @@ pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
 pub use test_adapter::TestAdapterChip;
 
-pub const EXECUTION_BUS: usize = 0;
-pub const MEMORY_BUS: usize = 1;
-pub const POSEIDON2_DIRECT_BUS: usize = 6;
-pub const READ_INSTRUCTION_BUS: usize = 8;
-pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
-pub const BYTE_XOR_BUS: usize = 10;
-pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
-pub const MEMORY_MERKLE_BUS: usize = 12;
+pub const EXECUTION_BUS: BusIndex = 0;
+pub const MEMORY_BUS: BusIndex = 1;
+pub const POSEIDON2_DIRECT_BUS: BusIndex = 6;
+pub const READ_INSTRUCTION_BUS: BusIndex = 8;
+pub const BITWISE_OP_LOOKUP_BUS: BusIndex = 9;
+pub const BYTE_XOR_BUS: BusIndex = 10;
+pub const RANGE_TUPLE_CHECKER_BUS: BusIndex = 11;
+pub const MEMORY_MERKLE_BUS: BusIndex = 12;
 
-const RANGE_CHECKER_BUS: usize = 4;
+const RANGE_CHECKER_BUS: BusIndex = 4;
 
 pub struct VmChipTestBuilder<F: PrimeField32> {
     pub memory: MemoryTester<F>,
@@ -279,14 +280,14 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             mem_config.decomp,
         ));
         let memory_controller = MemoryController::with_volatile_memory(
-            MemoryBus(MEMORY_BUS),
+            MemoryBus::new(MEMORY_BUS),
             mem_config,
             range_checker,
         );
         Self {
             memory: MemoryTester::new(Rc::new(RefCell::new(memory_controller))),
-            execution: ExecutionTester::new(ExecutionBus(EXECUTION_BUS)),
-            program: ProgramTester::new(ProgramBus(READ_INSTRUCTION_BUS)),
+            execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
+            program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
             rng: StdRng::seed_from_u64(0),
             default_register: 0,
             default_pointer: 0,
@@ -391,7 +392,7 @@ impl VmChipTester<BabyBearPoseidon2Config> {
     pub fn simple_test(
         &self,
     ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
-        self.test(baby_bear_poseidon2::default_engine)
+        self.test(|| BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1)))
     }
 
     pub fn simple_test_with_expected_error(&self, expected_error: VerificationError) {
@@ -406,7 +407,7 @@ impl VmChipTester<BabyBearPoseidon2Config> {
 
 impl VmChipTester<BabyBearBlake3Config> {
     pub fn simple_test(&self) -> Result<VerificationData<BabyBearBlake3Config>, VerificationError> {
-        self.test(baby_bear_blake3::default_engine)
+        self.test(|| BabyBearBlake3Engine::new(FriParameters::new_for_testing(1)))
     }
 
     pub fn simple_test_with_expected_error(&self, expected_error: VerificationError) {

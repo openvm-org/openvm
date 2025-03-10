@@ -125,6 +125,13 @@ impl<N: PrimeField> RVar<N> {
             _ => panic!("RVar::field_value() called on non-const value"),
         }
     }
+
+    pub fn variable(&self) -> Var<N> {
+        match self {
+            RVar::Const(_) => panic!("RVar::variable() called on const value"),
+            RVar::Val(var) => *var,
+        }
+    }
 }
 
 impl<N: Field> Hash for SymbolicVar<N> {

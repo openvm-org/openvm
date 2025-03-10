@@ -100,8 +100,7 @@ fn test_vm_1() {
 
 #[test]
 fn test_vm_override_executor_height() {
-    let fri_params = FriParameters::standard_fast();
-    let e = BabyBearPoseidon2Engine::new(fri_params);
+    let e = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let program = Program::<BabyBear>::from_instructions(&[
         Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 4, 0, 0, 0),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -321,7 +320,7 @@ fn test_vm_initial_memory() {
 fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 10, 6, 64, 1024), 0),
+        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 64, 1024), 0),
         native: Default::default(),
     }
     .with_continuations();
@@ -622,7 +621,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
 
     let program = Program::from_instructions(&instructions);
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 10, 6, 64, 1024), 0)
+        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 64, 1024), 0)
             .with_continuations(),
         native: Default::default(),
     };

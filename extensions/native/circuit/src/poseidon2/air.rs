@@ -13,7 +13,7 @@ use openvm_native_compiler::{
 use openvm_poseidon2_air::{Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS};
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
-    interaction::{InteractionBuilder, InteractionType},
+    interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::Matrix,
@@ -104,12 +104,26 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         builder.assert_bool(end_inside_row);
         builder.when(end_inside_row).assert_one(inside_row);
         builder.assert_bool(end_top_level);
+        builder
+            .when(end_top_level)
+            .assert_one(incorporate_row + incorporate_sibling);
 
         let end = end_inside_row + end_top_level + simple + (AB::Expr::ONE - enabled.clone());
+
+        // top level should start with incorporate_row = true, start_top_level = true
+        builder
+            .when(end.clone())
+            .assert_zero(next.incorporate_sibling);
         builder
             .when(end.clone())
             .when(next.incorporate_row)
             .assert_one(next.start_top_level);
+
+        // ensure that inside row rows are actually contiguous
+        builder
+            .when(inside_row)
+            .when(not(end_inside_row))
+            .assert_one(next.inside_row);
 
         // poseidon2 constraints are always checked
         let mut sub_builder =
@@ -664,7 +678,7 @@ impl VerifyBatchBus {
         &self,
         builder: &mut AB,
         send: bool,
-        multiplicity: impl Into<AB::Expr>,
+        enabled: impl Into<AB::Expr>,
         start_timestamp: impl Into<AB::Expr>,
         end_timestamp: impl Into<AB::Expr>,
         opened_base_pointer: impl Into<AB::Expr>,
@@ -682,18 +696,23 @@ impl VerifyBatchBus {
             final_opened_index.into(),
         ];
         fields.extend(hash.into_iter().map(Into::into));
-        builder.push_interaction(
-            self.0,
-            fields,
-            multiplicity.into(),
-            if send {
-                InteractionType::Send
-            } else {
-                InteractionType::Receive
-            },
-        );
+        if send {
+            self.inner.send(builder, fields, enabled.into());
+        } else {
+            self.inner.receive(builder, fields, enabled.into());
+        }
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct VerifyBatchBus(pub usize);
+pub struct VerifyBatchBus {
+    inner: PermutationCheckBus,
+}
+
+impl VerifyBatchBus {
+    pub const fn new(index: BusIndex) -> Self {
+        Self {
+            inner: PermutationCheckBus::new(index),
+        }
+    }
+}

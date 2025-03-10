@@ -33,6 +33,7 @@ sha3 = "0.10.8"
 lazy_static.workspace = true
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 halo2curves-axiom = { workspace = true }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 
 [features]
 default = []

@@ -180,13 +180,15 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
                 let dec_insn = IType::new(instruction_u32);
                 let imm_u16 = (dec_insn.imm as u32) & 0xffff;
                 // REVEAL_RV32 is a pseudo-instruction for STOREW_RV32 a,b,c,1,3
-                Some(Instruction::from_isize(
+                Some(Instruction::large_from_isize(
                     Rv32LoadStoreOpcode::STOREW.global_opcode(),
                     (RV32_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
                     (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
                     imm_u16 as isize,
                     1,
                     3,
+                    1,
+                    (dec_insn.imm < 0) as isize,
                 ))
             }
             _ => return None,

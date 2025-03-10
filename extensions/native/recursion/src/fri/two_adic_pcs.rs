@@ -2,7 +2,7 @@ use openvm_native_compiler::prelude::*;
 use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::{
     p3_commit::TwoAdicMultiplicativeCoset,
-    p3_field::{FieldAlgebra, TwoAdicField},
+    p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField},
 };
 use p3_symmetric::Hash;
 
@@ -62,6 +62,39 @@ pub fn verify_two_adic_pcs<C: Config>(
     let g = builder.generator();
 
     let log_blowup = config.log_blowup;
+    iter_zip!(builder, rounds).for_each(|ptr_vec, builder| {
+        let round = builder.iter_ptr_get(&rounds, ptr_vec[0]);
+        iter_zip!(builder, round.mats).for_each(|ptr_vec, builder| {
+            let mat = builder.iter_ptr_get(&round.mats, ptr_vec[0]);
+            iter_zip!(builder, mat.values).for_each(|ptr_vec, builder| {
+                let value = builder.iter_ptr_get(&mat.values, ptr_vec[0]);
+                iter_zip!(builder, value).for_each(|ptr_vec, builder| {
+                    if builder.flags.static_only {
+                        let ext = builder.iter_ptr_get(&value, ptr_vec[0]);
+                        let arr = builder.ext2felt(ext);
+                        challenger.observe_slice(builder, arr);
+                    } else {
+                        let ptr = ptr_vec[0];
+                        for i in 0..C::EF::D {
+                            let f: Felt<_> = builder.uninit();
+                            builder.load(
+                                f,
+                                Ptr {
+                                    address: ptr.variable(),
+                                },
+                                MemIndex {
+                                    index: RVar::from(i),
+                                    offset: 0,
+                                    size: 1,
+                                },
+                            );
+                            challenger.observe(builder, f);
+                        }
+                    }
+                });
+            });
+        });
+    });
     let alpha = challenger.sample_ext(builder);
     if builder.flags.static_only {
         builder.ext_reduce_circuit(alpha);

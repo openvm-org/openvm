@@ -1,8 +1,8 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    utils::disable_debug_builder, verifier::VerificationError, AirRef,
+    interaction::BusIndex, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*, utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
@@ -13,8 +13,7 @@ use rand::Rng;
 
 use crate::xor::XorLookupChip;
 
-// duplicated here from vm/src/system/vm/chip_set.rs to avoid importing vm in openvm-circuit-primitives
-const BYTE_XOR_BUS: usize = 10;
+const BYTE_XOR_BUS: BusIndex = 10;
 
 #[test]
 fn test_xor_limbs_chip() {

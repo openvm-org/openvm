@@ -12,6 +12,7 @@ on:
       - "crates/toolchain/build/**"
       - "crates/toolchain/macros/**"
       - "crates/toolchain/tests/**"
+      - ".github/workflows/riscv.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

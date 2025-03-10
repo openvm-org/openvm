@@ -47,6 +47,11 @@ pub struct DivRemCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub q_sign: T,
     pub sign_xor: T,
 
+    // Auxiliary columns to constrain that zero_divisor = 1 if and only if c = 0.
+    pub c_sum_inv: T,
+    // Auxiliary columns to constrain that r_zero = 1 if and only if r = 0 and zero_divisor = 0.
+    pub r_sum_inv: T,
+
     // Auxiliary columns to constrain that 0 <= |r| < |c|. When sign_xor == 1 we have
     // r_prime = -r, and when sign_xor == 0 we have r_prime = r. Each r_inv[i] is the
     // field inverse of r_prime - 2^LIMB_BITS, ensures each r_prime[i] is in range.
@@ -174,16 +179,36 @@ where
         let special_case = cols.zero_divisor + cols.r_zero;
         builder.assert_bool(special_case.clone());
 
+        // Constrain that zero_divisor = 1 if and only if c = 0.
         builder.assert_bool(cols.zero_divisor);
         let mut when_zero_divisor = builder.when(cols.zero_divisor);
         for i in 0..NUM_LIMBS {
             when_zero_divisor.assert_zero(c[i]);
             when_zero_divisor.assert_eq(q[i], AB::F::from_canonical_u32((1 << LIMB_BITS) - 1));
         }
+        // c_sum is guaranteed to be non-zero if c is non-zero since we assume
+        // each limb of c to be within [0, 2^LIMB_BITS) already.
+        // To constrain that if c = 0 then zero_divisor = 1, we check that if zero_divisor = 0
+        // and is_valid = 1 then c_sum is non-zero using c_sum_inv.
+        let c_sum = c.iter().fold(AB::Expr::ZERO, |acc, c| acc + *c);
+        let valid_and_not_zero_divisor = is_valid.clone() - cols.zero_divisor;
+        builder.assert_bool(valid_and_not_zero_divisor.clone());
+        builder
+            .when(valid_and_not_zero_divisor)
+            .assert_one(c_sum * cols.c_sum_inv);
 
+        // Constrain that r_zero = 1 if and only if r = 0 and zero_divisor = 0.
         builder.assert_bool(cols.r_zero);
         r.iter()
             .for_each(|r_i| builder.when(cols.r_zero).assert_zero(*r_i));
+        // To constrain that if r = 0 and zero_divisor = 0 then r_zero = 1, we check that
+        // if special_case = 0 and is_valid = 1 then r_sum is non-zero (using r_sum_inv).
+        let r_sum = r.iter().fold(AB::Expr::ZERO, |acc, r| acc + *r);
+        let valid_and_not_special_case = is_valid.clone() - special_case.clone();
+        builder.assert_bool(valid_and_not_special_case.clone());
+        builder
+            .when(valid_and_not_special_case)
+            .assert_one(r_sum * cols.r_sum_inv);
 
         // Constrain the correctness of b_sign and c_sign. Note that we do not need to
         // check that the sign of r is b_sign since we cannot have r' <_u c (or c <_u r'
@@ -365,6 +390,8 @@ pub struct DivRemCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub c_sign: T,
     pub q_sign: T,
     pub sign_xor: T,
+    pub c_sum_inv: T,
+    pub r_sum_inv: T,
     #[serde(with = "BigArray")]
     pub r_prime: [T; NUM_LIMBS],
     #[serde(with = "BigArray")]
@@ -433,6 +460,14 @@ where
             );
         }
 
+        let c_sum_f = data[1].iter().fold(F::ZERO, |acc, c| acc + *c);
+        let c_sum_inv_f = c_sum_f.try_inverse().unwrap_or(F::ZERO);
+
+        let r_sum_f = r
+            .iter()
+            .fold(F::ZERO, |acc, r| acc + F::from_canonical_u32(*r));
+        let r_sum_inv_f = r_sum_f.try_inverse().unwrap_or(F::ZERO);
+
         let (lt_diff_idx, lt_diff_val) = if case == DivRemCoreSpecialCase::None && !r_zero {
             let idx = run_sltu_diff_idx(&c, &r_prime, c_sign);
             let val = if c_sign {
@@ -462,6 +497,8 @@ where
             c_sign: F::from_bool(c_sign),
             q_sign: F::from_bool(q_sign),
             sign_xor: F::from_bool(sign_xor),
+            c_sum_inv: c_sum_inv_f,
+            r_sum_inv: r_sum_inv_f,
             r_prime: r_prime_f,
             r_inv: r_prime_f.map(|r| (r - F::from_canonical_u32(256)).inverse()),
             lt_diff_val: F::from_canonical_u32(lt_diff_val),
@@ -487,6 +524,8 @@ where
         row_slice.c_sign = record.c_sign;
         row_slice.q_sign = record.q_sign;
         row_slice.sign_xor = record.sign_xor;
+        row_slice.c_sum_inv = record.c_sum_inv;
+        row_slice.r_sum_inv = record.r_sum_inv;
         row_slice.r_prime = record.r_prime;
         row_slice.r_inv = record.r_inv;
         row_slice.lt_marker = array::from_fn(|i| F::from_bool(i == record.lt_diff_idx));

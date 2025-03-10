@@ -57,7 +57,11 @@ impl<F: PrimeField32> TranspilerExtension<F> for LongFormTranspilerExtension {
                 f: operands[5],
                 g: operands[6],
             };
-            Some(TranspilerOutput::many_to_one(instruction, j))
+            if operands.len() == 7 {
+                Some(TranspilerOutput::many_to_one(instruction, j))
+            } else {
+                None
+            }
         } else if instruction_stream[0] == GAP_INDICATOR {
             Some(TranspilerOutput::gap(instruction_stream[1] as usize, 2))
         } else {

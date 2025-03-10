@@ -87,6 +87,8 @@ pub struct Sha256FlagsCols<T> {
     /// A flag that indicates if the current row is among the first 4 rows of a block
     pub is_first_4_rows: T,
     pub is_digest_row: T,
+    // A flag that indicates if the current row is the last block of the message.
+    // This flag is only used in digest rows.
     pub is_last_block: T,
     /// We will encode the row index [0..17) using 5 cells
     pub row_idx: [T; SHA256_ROW_VAR_CNT],
@@ -97,10 +99,14 @@ pub struct Sha256FlagsCols<T> {
 }
 
 impl<O, T: Copy + core::ops::Add<Output = O>> Sha256FlagsCols<T> {
+    // This refers to the padding rows that are added to the air to make the trace length a power of 2.
+    // Not to be confused with the padding added to messages as part of the SHA hash function.
     pub fn is_not_padding_row(&self) -> O {
         self.is_round_row + self.is_digest_row
     }
 
+    // This refers to the padding rows that are added to the air to make the trace length a power of 2.
+    // Not to be confused with the padding added to messages as part of the SHA hash function.
     pub fn is_padding_row(&self) -> O
     where
         O: FieldAlgebra,

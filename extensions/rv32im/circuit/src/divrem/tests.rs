@@ -317,6 +317,10 @@ fn run_rv32_divrem_negative_test(
         }
         if let Some(r) = prank_vals.r {
             cols.r = r.map(F::from_canonical_u32);
+            let r_sum = r.iter().sum::<u32>();
+            cols.r_sum_inv = F::from_canonical_u32(r_sum)
+                .try_inverse()
+                .unwrap_or(F::ZERO);
         }
         if let Some(r_prime) = prank_vals.r_prime {
             cols.r_prime = r_prime.map(F::from_canonical_u32);
@@ -501,6 +505,43 @@ fn rv32_divrem_false_r_zero_flag_negative_test() {
         r_prime: Some([86, 0, 0, 0]),
         diff_val: Some(36),
         r_zero: Some(true),
+        ..Default::default()
+    };
+    run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);
+    run_rv32_divrem_negative_test(false, b, c, &prank_vals, false);
+}
+
+#[test]
+fn rv32_divrem_unset_zero_divisor_flag_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        zero_divisor: Some(false),
+        ..Default::default()
+    };
+    run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);
+    run_rv32_divrem_negative_test(false, b, c, &prank_vals, false);
+}
+
+#[test]
+fn rv32_divrem_wrong_r_zero_flag_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        zero_divisor: Some(false),
+        r_zero: Some(true),
+        ..Default::default()
+    };
+    run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);
+    run_rv32_divrem_negative_test(false, b, c, &prank_vals, false);
+}
+
+#[test]
+fn rv32_divrem_unset_r_zero_flag_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+    let prank_vals = DivRemPrankValues {
+        r_zero: Some(false),
         ..Default::default()
     };
     run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);

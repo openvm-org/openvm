@@ -38,7 +38,7 @@ use crate::{
     NativeConfig,
 };
 
-const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus(7);
+const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
 
 fn compute_commit<F: Field>(
     dim: &[usize],
@@ -455,7 +455,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
 }
 
 fn get_engine() -> BabyBearBlake3Engine {
-    BabyBearBlake3Engine::new(standard_fri_params_with_100_bits_conjectured_security(3))
+    BabyBearBlake3Engine::new(FriParameters::new_for_testing(3))
 }
 
 #[test]

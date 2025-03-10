@@ -1,32 +1,27 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
+use openvm_circuit::arch::{testing::VmChipTestBuilder, ExecutionBridge};
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
     LocalOpcode,
 };
-use openvm_native_compiler::NativeJalOpcode::*;
+use openvm_native_compiler::{NativeJalOpcode::*, NativeRangeCheckOpcode::RANGE_CHECK};
 use openvm_stark_backend::{
-    p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
     utils::disable_debug_builder,
     verifier::VerificationError,
-    Chip, ChipUsageGetter,
+    Chip,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{
-    super::adapters::jal_native_adapter::JalNativeAdapterChip, JalCoreChip, JalCoreCols,
-    NativeJalChip,
-};
+use crate::{jal::JalRangeCheckCols, JalRangeCheckChip};
 type F = BabyBear;
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut NativeJalChip<F>,
+    chip: &mut JalRangeCheckChip<F>,
     rng: &mut StdRng,
     initial_imm: Option<u32>,
     initial_pc: Option<u32>,
@@ -50,17 +45,41 @@ fn set_and_execute(
     assert_eq!(rd_data, tester.read::<1>(d, a)[0].as_canonical_u32());
 }
 
-fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeJalChip<F>) {
+struct RangeCheckTestCase {
+    val: u32,
+    x_bit: u32,
+    y_bit: u32,
+}
+
+fn set_and_execute_range_check(
+    tester: &mut VmChipTestBuilder<F>,
+    chip: &mut JalRangeCheckChip<F>,
+    rng: &mut StdRng,
+    test_cases: Vec<RangeCheckTestCase>,
+) {
+    let a = rng.gen_range(0..32) << 2;
+    for RangeCheckTestCase { val, x_bit, y_bit } in test_cases {
+        let d = 4usize;
+
+        tester.write_cell(d, a, F::from_canonical_u32(val));
+        tester.execute_with_pc(
+            chip,
+            &Instruction::from_usize(
+                RANGE_CHECK.global_opcode(),
+                [a, x_bit as usize, y_bit as usize, d, 0, 0, 0],
+            ),
+            rng.gen_range(0..(1 << PC_BITS)),
+        );
+    }
+}
+
+fn setup() -> (StdRng, VmChipTestBuilder<F>, JalRangeCheckChip<F>) {
     let rng = create_seeded_rng();
     let tester = VmChipTestBuilder::default();
-
-    let adapter = JalNativeAdapterChip::<F>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-    );
-    let inner = JalCoreChip::new();
-    let chip = NativeJalChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
+    let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
+    let offline_memory = tester.offline_memory_mutex_arc();
+    let range_checker = tester.range_checker();
+    let chip = JalRangeCheckChip::<F>::new(execution_bridge, offline_memory, range_checker);
     (rng, tester, chip)
 }
 
@@ -77,23 +96,89 @@ fn rand_jal_test() {
 }
 
 #[test]
+fn rand_range_check_test() {
+    let (mut rng, mut tester, mut chip) = setup();
+    let f = |x: u32, y: u32| RangeCheckTestCase {
+        val: x + y * (1 << 16),
+        x_bit: 32 - x.leading_zeros(),
+        y_bit: 32 - y.leading_zeros(),
+    };
+    let mut test_cases: Vec<_> = (0..10)
+        .map(|_| {
+            let x = 0;
+            let y = rng.gen_range(0..1 << 14);
+            f(x, y)
+        })
+        .collect();
+    test_cases.extend((0..10).map(|_| {
+        let x = rng.gen_range(0..1 << 16);
+        let y = 0;
+        f(x, y)
+    }));
+    test_cases.extend((0..10).map(|_| {
+        let x = rng.gen_range(0..1 << 16);
+        let y = rng.gen_range(0..1 << 14);
+        f(x, y)
+    }));
+    f((1 << 16) - 1, (1 << 14) - 1);
+    set_and_execute_range_check(&mut tester, &mut chip, &mut rng, test_cases);
+    let tester = tester.build().load(chip).finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn negative_range_check_test() {
+    {
+        let (mut rng, mut tester, chip) = setup();
+        let mut chip = chip.with_debug();
+        set_and_execute_range_check(
+            &mut tester,
+            &mut chip,
+            &mut rng,
+            vec![RangeCheckTestCase {
+                x_bit: 1,
+                y_bit: 1,
+                val: 2,
+            }],
+        );
+        let tester = tester.build().load(chip).finalize();
+        disable_debug_builder();
+        let result = tester.simple_test();
+        assert!(result.is_err());
+    }
+    {
+        let (mut rng, mut tester, chip) = setup();
+        let mut chip = chip.with_debug();
+        set_and_execute_range_check(
+            &mut tester,
+            &mut chip,
+            &mut rng,
+            vec![RangeCheckTestCase {
+                x_bit: 1,
+                y_bit: 0,
+                val: 1 << 16,
+            }],
+        );
+        let tester = tester.build().load(chip).finalize();
+        disable_debug_builder();
+        let result = tester.simple_test();
+        assert!(result.is_err());
+    }
+}
+
+#[test]
 fn negative_jal_test() {
     let (mut rng, mut tester, mut chip) = setup();
-    let adapter_width = BaseAir::<F>::width(chip.adapter.air());
     set_and_execute(&mut tester, &mut chip, &mut rng, None, None);
 
     let tester = tester.build();
 
-    let jal_trace_width = chip.trace_width();
     let chip_air = chip.air();
     let mut chip_input = chip.generate_air_proof_input();
     let jal_trace = chip_input.raw.common_main.as_mut().unwrap();
     {
-        let mut trace_row = jal_trace.row_slice(0).to_vec();
-        let (_, core_row) = trace_row.split_at_mut(adapter_width);
-        let core_cols: &mut JalCoreCols<F> = core_row.borrow_mut();
-        core_cols.imm = F::from_canonical_u32(rng.gen_range(1 << 11..1 << 12));
-        *jal_trace = RowMajorMatrix::new(trace_row, jal_trace_width);
+        let col: &mut JalRangeCheckCols<_> = jal_trace.row_mut(0).borrow_mut();
+        col.b = F::from_canonical_u32(rng.gen_range(1 << 11..1 << 12));
     }
     disable_debug_builder();
     let tester = tester

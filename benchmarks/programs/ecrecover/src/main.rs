@@ -3,23 +3,21 @@
 
 extern crate alloc;
 
-use alloy_primitives::{B256, B512, Bytes, keccak256};
+use alloy_primitives::{keccak256, Bytes, B256, B512};
 use k256::{
     ecdsa::{Error, RecoveryId, Signature},
     Secp256k1,
 };
 use openvm::io::read_vec;
-use openvm_algebra_guest::field::FieldExtension;
 #[allow(unused_imports)]
 use openvm_ecc_guest::{
     algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
 };
-use openvm_ecc_guest::AffinePoint;
 #[allow(unused_imports, clippy::single_component_path_imports)]
 use openvm_keccak256_guest;
 // export native keccak
 use revm_precompile::{
-    Error as PrecompileError, PrecompileOutput, PrecompileResult, utilities::right_pad,
+    utilities::right_pad, Error as PrecompileError, PrecompileOutput, PrecompileResult,
 };
 
 openvm::entry!(main);
@@ -42,7 +40,6 @@ pub fn main() {
         let recovered = ec_recover_run(&Bytes::from(input), 3000).unwrap();
         assert_eq!(recovered.bytes.as_ref(), expected_address);
     }
-
 }
 
 // OpenVM version of ecrecover precompile.
@@ -57,7 +54,7 @@ pub fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
 
     // annoying: Signature::to_bytes copies from slice
     let recovered_key =
-        VerifyingKey::<Secp256k1>::recover_from_prehash_noverify(&msg[..], &sig.to_bytes(), recid);
+        VerifyingKey::<Secp256k1>::recover_from_prehash_noverify(&msg[..], &sig.to_bytes(), recid)?;
     let public_key = recovered_key.as_affine();
     let mut encoded = [0u8; 64];
     encoded[..32].copy_from_slice(&public_key.x().to_be_bytes());

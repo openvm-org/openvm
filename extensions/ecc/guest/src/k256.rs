@@ -1,3 +1,5 @@
+extern crate alloc;
+
 use core::ops::{Add, Neg};
 
 use hex_literal::hex;

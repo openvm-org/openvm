@@ -1,6 +1,10 @@
 #[cfg(test)]
 mod tests {
+    use core::str::FromStr;
+
     use eyre::Result;
+    use hex_literal::hex;
+    use num_bigint::BigUint;
     use openvm_algebra_circuit::ModularExtension;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{
@@ -8,7 +12,7 @@ mod tests {
         utils::{air_test, air_test_with_min_segments},
     };
     use openvm_ecc_circuit::{
-        Rv32WeierstrassConfig, WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG,
+        CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -100,18 +104,105 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        let config =
+            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(),
+                CurveConfig {
+                    modulus: BigUint::from_str("115792089237316195423570985008687907853269984665640564039457584007913129639501")
+                        .unwrap(),
+                    // unused, set to modulus
+                    scalar: BigUint::from_str("115792089237316195423570985008687907853269984665640564039457584007913129639501")
+                        .unwrap(),
+                    a: BigUint::ZERO,
+                    b: BigUint::from_str("3").unwrap(),
+                },
+            ]);
 
         let p = Secp256k1Affine::generator();
         let p = (p + p + p).to_affine();
         println!("decompressed: {:?}", p);
-        let coords: Vec<_> = [p.x.to_bytes(), p.y.to_bytes()]
+        let q_x: [u8; 32] =
+            hex!("0100000000000000000000000000000000000000000000000000000000000000");
+        let q_y: [u8; 32] =
+            hex!("0200000000000000000000000000000000000000000000000000000000000000");
+
+        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y]
             .concat()
             .into_iter()
             .map(FieldAlgebra::from_canonical_u8)
             .collect();
         air_test_with_min_segments(config, openvm_exe, vec![coords], 1);
         Ok(())
+    }
+
+    fn test_decompress_invalid_specific_test(test_type: &str) -> Result<()> {
+        use openvm_ecc_guest::halo2curves::{group::Curve, secp256k1::Secp256k1Affine};
+
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "decompress_invalid_hint",
+            ["k256", test_type],
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        let config =
+            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(),
+                CurveConfig {
+                    modulus: BigUint::from_str("115792089237316195423570985008687907853269984665640564039457584007913129639501")
+                        .unwrap(),
+                    // unused, set to modulus
+                    scalar: BigUint::from_str("115792089237316195423570985008687907853269984665640564039457584007913129639501")
+                        .unwrap(),
+                    a: BigUint::ZERO,
+                    b: BigUint::from_str("3").unwrap(),
+                },
+            ]);
+
+        let p = Secp256k1Affine::generator();
+        let p = (p + p + p).to_affine();
+        println!("decompressed: {:?}", p);
+        let q_x: [u8; 32] =
+            hex!("0100000000000000000000000000000000000000000000000000000000000000");
+        let q_y: [u8; 32] =
+            hex!("0200000000000000000000000000000000000000000000000000000000000000");
+
+        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y]
+            .concat()
+            .into_iter()
+            .map(FieldAlgebra::from_canonical_u8)
+            .collect();
+        air_test_with_min_segments(config, openvm_exe, vec![coords], 1);
+        Ok(())
+    }
+
+    #[ignore = "expected to infinite loop"]
+    #[test]
+    fn test_decompress_invalid_hint_secp256k1_possible() -> Result<()> {
+        test_decompress_invalid_specific_test("test_secp256k1_possible")
+    }
+
+    #[ignore = "expected to infinite loop"]
+    #[test]
+    fn test_decompress_invalid_hint_secp256k1_impossible() -> Result<()> {
+        test_decompress_invalid_specific_test("test_secp256k1_impossible")
+    }
+
+    #[ignore = "expected to infinite loop"]
+    #[test]
+    fn test_decompress_invalid_hint_mycurve_possible() -> Result<()> {
+        test_decompress_invalid_specific_test("test_mycurve_possible")
+    }
+
+    #[ignore = "expected to infinite loop"]
+    #[test]
+    fn test_decompress_invalid_hint_mycurve_impossible() -> Result<()> {
+        test_decompress_invalid_specific_test("test_mycurve_impossible")
     }
 
     #[test]

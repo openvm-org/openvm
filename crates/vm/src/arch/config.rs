@@ -44,6 +44,7 @@ pub struct MemoryConfig {
     /// The offset of the address space.
     pub as_offset: u32,
     pub pointer_max_bits: usize,
+    /// All timestamps must be in the range `[0, 2^clk_max_bits)`. Maximum allowed: 29.
     pub clk_max_bits: usize,
     /// Limb size used by the range checker
     pub decomp: usize,
@@ -108,6 +109,10 @@ impl SystemConfig {
         num_public_values: usize,
     ) -> Self {
         let segmentation_strategy = get_default_segmentation_strategy();
+        assert!(
+            memory_config.clk_max_bits <= 29,
+            "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
+        );
         Self {
             max_constraint_degree,
             continuation_enabled: false,

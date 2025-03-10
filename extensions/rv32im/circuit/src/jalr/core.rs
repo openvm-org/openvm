@@ -4,7 +4,7 @@ use std::{
 };
 
 use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    AdapterAirContext, AdapterRuntimeContext, Result, SignedImmInstruction, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::{
@@ -76,7 +76,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1]>,
     I::Writes: From<[[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1]>,
-    I::ProcessedInstruction: From<ImmInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<SignedImmInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -160,10 +160,11 @@ where
             to_pc: Some(to_pc),
             reads: [rs1.map(|x| x.into())].into(),
             writes: [rd_data].into(),
-            instruction: ImmInstruction {
+            instruction: SignedImmInstruction {
                 is_valid: is_valid.into(),
                 opcode: expected_opcode,
                 immediate: imm.into(),
+                imm_sign: imm_sign.into(),
             }
             .into(),
         }
@@ -212,12 +213,12 @@ where
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction { opcode, c, .. } = *instruction;
+        let Instruction { opcode, c, g, .. } = *instruction;
         let local_opcode =
             Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(Rv32JalrOpcode::CLASS_OFFSET));
 
         let imm = c.as_canonical_u32();
-        let imm_sign = (imm & 0x8000) >> 15;
+        let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         let rs1 = reads.into()[0];
@@ -252,7 +253,7 @@ where
                 rs1_data: rs1,
                 to_pc_least_sig_bit: F::from_canonical_u32(to_pc_least_sig_bit),
                 to_pc_limbs,
-                imm_sign: F::from_canonical_u32(imm_sign),
+                imm_sign: g,
             },
         ))
     }

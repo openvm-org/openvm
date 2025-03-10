@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, ImmInstruction, Result, VmAdapterAir, VmAdapterChip,
+        ExecutionBus, ExecutionState, Result, SignedImmInstruction, VmAdapterAir, VmAdapterChip,
         VmAdapterInterface,
     },
     system::{
@@ -90,7 +90,7 @@ impl<F: Field> BaseAir<F> for Rv32JalrAdapterAir {
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
     type Interface = BasicAdapterInterface<
         AB::Expr,
-        ImmInstruction<AB::Expr>,
+        SignedImmInstruction<AB::Expr>,
         1,
         1,
         RV32_REGISTER_NUM_LIMBS,
@@ -158,6 +158,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
                     AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     AB::Expr::ZERO,
                     write_count.into(),
+                    ctx.instruction.imm_sign,
                 ],
                 local_cols.from_state,
                 ExecutionState {
@@ -180,7 +181,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
     type Air = Rv32JalrAdapterAir;
     type Interface = BasicAdapterInterface<
         F,
-        ImmInstruction<F>,
+        SignedImmInstruction<F>,
         1,
         1,
         RV32_REGISTER_NUM_LIMBS,

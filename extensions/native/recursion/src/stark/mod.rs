@@ -1,10 +1,10 @@
-use std::marker::PhantomData;
+use std::{iter::zip, marker::PhantomData};
 
 use itertools::Itertools;
 use openvm_circuit::arch::instructions::program::Program;
 use openvm_native_compiler::{
     conversion::CompilerOptions,
-    ir::{Array, ArrayLike, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
+    ir::{Array, ArrayLike, Builder, Config, DslIr, Ext, ExtConst, Felt, SymbolicExt, Usize, Var},
     prelude::RVar,
 };
 use openvm_native_compiler_derive::iter_zip;
@@ -33,7 +33,8 @@ use crate::{
     types::{InnerConfig, MultiStarkVerificationAdvice, StarkVerificationAdvice},
     utils::const_fri_config,
     vars::{
-        AdjacentOpenedValuesVariable, AirProofDataVariable, CommitmentsVariable, StarkProofVariable,
+        AdjacentOpenedValuesVariable, AirProofDataVariable, CommitmentsVariable,
+        StarkProofVariable, TraceHeightConstraintSystem,
     },
     view::get_advice_per_air,
 };
@@ -143,6 +144,7 @@ where
             // Extra checking for air_perm_by_height is unnecessary because only a valid permutation
             // can pass the FRI verification.
             air_perm_by_height,
+            log_up_pow_witness,
         } = proof;
 
         if m_advice.num_challenges_to_sample.len() > 1 {
@@ -167,7 +169,7 @@ where
             let one: Usize<_> = builder.eval(C::N::ONE);
             iter_zip!(builder, air_perm_by_height).for_each(|ptr_vec, builder| {
                 let perm_i = builder.iter_ptr_get(air_perm_by_height, ptr_vec[0]);
-                builder.assert_less_than_slow(perm_i.clone(), num_airs);
+                builder.assert_less_than_slow_small_rhs(perm_i.clone(), num_airs);
                 builder.set_value(&mask, perm_i.clone(), one.clone());
             });
             // Check that each index of mask was set, i.e., that `air_perm_by_height` is a permutation.
@@ -179,7 +181,7 @@ where
                 builder.assert_usize_eq(mask_i, one.clone());
 
                 let air_proof = builder.get(air_proofs, perm_i.clone());
-                builder.assert_less_than_slow(
+                builder.assert_less_than_slow_small_rhs(
                     air_proof.log_degree.clone(),
                     prev_log_height_plus_one.clone(),
                 );
@@ -190,6 +192,16 @@ where
             });
             air_perm_by_height
         };
+
+        // OK: trace_height_constraint_system comes from vkey so requirements of
+        // `check_trace_height_constraints` are met.
+        builder.cycle_tracker_start("CheckTraceHeightConstraints");
+        Self::check_trace_height_constraints(
+            builder,
+            &m_advice_var.trace_height_constraint_system,
+            air_proofs,
+        );
+        builder.cycle_tracker_end("CheckTraceHeightConstraints");
 
         builder.range(0, num_airs).for_each(|i_vec, builder| {
             let i = i_vec[0];
@@ -253,7 +265,7 @@ where
             challenger.observe(builder, log_degree);
 
             // Constrain that degree_bits is in [0, MAX_TWO_ADICITY].
-            builder.assert_less_than_slow(
+            builder.assert_less_than_slow_small_rhs(
                 air_proof.log_degree.clone(),
                 RVar::from(MAX_TWO_ADICITY + 1),
             );
@@ -262,6 +274,9 @@ where
         let challenges_per_phase = builder.array(num_phases);
 
         builder.if_eq(num_phases, RVar::one()).then(|builder| {
+            // Proof of work phase.
+            challenger.check_witness(builder, m_advice.log_up_pow_bits, *log_up_pow_witness);
+
             let phase_idx = RVar::zero();
             let num_to_sample = RVar::from(2);
             let provided_num_to_sample = builder.get(&num_challenges_to_sample, phase_idx);
@@ -754,6 +769,71 @@ where
         builder.assert_usize_eq(air_idx, air_ids.len());
 
         builder.cycle_tracker_end("stage-e-verify-constraints");
+    }
+
+    /// For constraint `i` in `trace_height_constraints` with coefficients a_i1, ..., a_ik and
+    /// threshold b_i, checks that
+    ///    a_i1 * x_1 + ... + a_ik * x_k < b_i,
+    /// where `x_i` is the height of the trace given in `air_proofs[j]` with `j` such that
+    /// `air_proofs[j].air_id = i`.
+    ///
+    /// The caller must ensure the following is met:
+    /// * `constraint_system.constraints.len() == num_airs`
+    /// * `constraint_system.constraints[air_proofs[i].air_id]` is valid for all `i`
+    fn check_trace_height_constraints(
+        builder: &mut Builder<C>,
+        constraint_system: &TraceHeightConstraintSystem<C>,
+        air_proofs: &Array<C, AirProofDataVariable<C>>,
+    ) {
+        // We compute and store `a_i1 * x_1 + ... + a_ik * x_k` in `values[i]`.
+        let values: Vec<Var<C::N>> = (0..constraint_system.height_constraints.len())
+            .map(|_| builder.eval(C::N::ZERO))
+            .collect();
+
+        let assert_less_than = |builder: &mut Builder<C>, a, b| {
+            if builder.flags.static_only {
+                builder.push(DslIr::CircuitLessThan(a, b));
+            } else {
+                builder.assert_less_than_slow_bit_decomp(a, b);
+            }
+        };
+
+        // Will index by log_air_height. Max value is assumed to be MAX_TWO_ADICITY - 1.
+        let pows_of_two: Array<C, Var<C::N>> = builder.array(MAX_TWO_ADICITY);
+        let cur: Var<C::N> = builder.constant(C::N::ONE);
+        iter_zip!(builder, pows_of_two).for_each(|ptr_vec, builder| {
+            builder.iter_ptr_set(&pows_of_two, ptr_vec[0], cur);
+            builder.assign(&cur, cur + cur);
+        });
+
+        iter_zip!(builder, air_proofs).for_each(|ptr_vec, builder| {
+            let air_proof_data = builder.iter_ptr_get(air_proofs, ptr_vec[0]);
+
+            let height = builder.get(&pows_of_two, air_proof_data.log_degree);
+            let height_max = builder.get(
+                &constraint_system.height_maxes,
+                air_proof_data.air_id.clone(),
+            );
+            builder
+                .if_eq(height_max.is_some, C::N::ONE)
+                .then(|builder| {
+                    assert_less_than(builder, height, height_max.value);
+                });
+
+            for (i, constraint) in constraint_system.height_constraints.iter().enumerate() {
+                let coeff = builder.get(&constraint.coefficients, air_proof_data.air_id.clone());
+
+                let new_value: Var<C::N> = builder.eval(values[i] + coeff * height);
+                let new_value_plus_one: Var<C::N> = builder.eval(new_value + C::N::ONE);
+                assert_less_than(builder, values[i], new_value_plus_one);
+                builder.assign(&values[i], new_value);
+            }
+        });
+        for (value, constraint) in zip(values, &constraint_system.height_constraints) {
+            if builder.flags.static_only || !constraint.is_threshold_at_p {
+                assert_less_than(builder, value, constraint.threshold);
+            }
+        }
     }
 
     /// Reference: [openvm_stark_backend::verifier::constraints::verify_single_rap_constraints]

@@ -11,7 +11,7 @@ pub use miller_loop::*;
 pub use miller_step::*;
 use openvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
-    Field, IntMod,
+    ExpBytes, Field, IntMod,
 };
 use openvm_ecc_guest::AffinePoint;
 #[allow(unused_imports)]
@@ -55,6 +55,20 @@ pub trait PairingCheck {
     ) -> Result<(), PairingCheckError>;
 }
 
+// Square and multiply implementation of final exponentiation. Used if the hint fails to prove
+// the pairing check.
+// `exp` should be big-endian.
+pub fn exp_check_fallback<F: Field + ExpBytes>(f: &F, exp: &[u8]) -> Result<(), PairingCheckError>
+where
+    for<'a> &'a F: core::ops::Mul<&'a F, Output = F>,
+{
+    if f.exp_bytes(true, exp) == F::ONE {
+        Ok(())
+    } else {
+        Err(PairingCheckError)
+    }
+}
+
 pub const fn shifted_funct7<P: PairingIntrinsics>(funct7: PairingBaseFunct7) -> usize {
     P::PAIRING_IDX * (PairingBaseFunct7::PAIRING_MAX_KINDS as usize) + funct7 as usize
 }
@@ -66,5 +80,47 @@ impl core::error::Error for PairingCheckError {}
 impl core::fmt::Display for PairingCheckError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "Pairing check failed")
+    }
+}
+
+#[cfg(all(test, not(target_os = "zkvm")))]
+mod tests {
+    use num_bigint::BigUint;
+    use openvm_algebra_moduli_macros::{moduli_declare, moduli_init};
+
+    use super::*;
+
+    moduli_declare! {
+        F13 { modulus = "13" },
+    }
+
+    moduli_init! {
+        "13",
+    }
+
+    impl Field for F13 {
+        type SelfRef<'a> = &'a Self;
+        const ZERO: Self = <Self as IntMod>::ZERO;
+        const ONE: Self = <Self as IntMod>::ONE;
+
+        fn double_assign(&mut self) {
+            IntMod::double_assign(self);
+        }
+
+        fn square_assign(&mut self) {
+            IntMod::square_assign(self);
+        }
+    }
+
+    #[test]
+    fn test_pairing_check_fallback() {
+        let a = F13::from_u8(2);
+        let b = BigUint::from(12u32);
+        let result = exp_check_fallback(&a, &b.to_bytes_be());
+        assert_eq!(result, Ok(()));
+
+        let b = BigUint::from(11u32);
+        let result = exp_check_fallback(&a, &b.to_bytes_be());
+        assert_eq!(result, Err(PairingCheckError));
     }
 }

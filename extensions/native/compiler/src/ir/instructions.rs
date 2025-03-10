@@ -179,10 +179,10 @@ pub enum DslIr<C: Config> {
     StoreHeapPtr(Ptr<C::N>),
 
     // Bits.
-    /// Decompose a variable into size bits (bits = num2bits(var, size)). Should only be used when target is a circuit.
-    CircuitNum2BitsV(Var<C::N>, usize, Vec<Var<C::N>>),
     /// Decompose a field element into bits (bits = num2bits(felt)). Should only be used when target is a circuit.
     CircuitNum2BitsF(Felt<C::F>, Vec<Var<C::N>>),
+    /// Decompose a Var into 16-bit limbs.
+    CircuitVarTo64BitsF(Var<C::N>, [Felt<C::F>; 4]),
 
     // Hashing.
     /// Permutes an array of baby bear elements using Poseidon2 (output = p2_permute(array)).
@@ -256,6 +256,9 @@ pub enum DslIr<C: Config> {
     CircuitFeltReduce(Felt<C::F>),
     /// Halo2 only. Reduce an Ext so later computation becomes cheaper.
     CircuitExtReduce(Ext<C::F, C::EF>),
+    /// Halo2 only. Asserts that `a, b` both have <= `C::F::bits()` and then asserts `a < b`.
+    /// Assumes that `C::F::bits() < C::N::bits()`.
+    CircuitLessThan(Var<C::N>, Var<C::N>),
     /// FriReducedOpening(alpha, hint_id, is_init, at_x_array, at_z_array, result)
     FriReducedOpening(
         Ext<C::F, C::EF>,
@@ -283,6 +286,9 @@ pub enum DslIr<C: Config> {
         Array<C, Var<C::N>>,
         Array<C, Felt<C::F>>,
     ),
+    /// RangeCheckV(v, bit)
+    /// Assert that v < 2^bit.
+    RangeCheckV(Var<C::N>, usize),
 
     /// Start the cycle tracker used by a block of code annotated by the string input. Calling this with the same
     /// string will end the open cycle tracker instance and start a new one with an increasing numeric postfix.

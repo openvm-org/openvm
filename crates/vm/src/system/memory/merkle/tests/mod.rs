@@ -6,8 +6,11 @@ use std::{
 };
 
 use openvm_stark_backend::{
-    interaction::InteractionType, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput, Chip, ChipUsageGetter,
+    interaction::{PermutationCheckBus, PermutationInteractionType},
+    p3_field::FieldAlgebra,
+    p3_matrix::dense::RowMajorMatrix,
+    prover::types::AirProofInput,
+    Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -16,13 +19,12 @@ use openvm_stark_sdk::{
 };
 use rand::RngCore;
 
-use super::DirectCompressionBus;
 use crate::{
     arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
     system::memory::{
         merkle::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
-            MemoryMerkleBus, MemoryMerkleChip,
+            MemoryMerkleChip,
         },
         paged_vec::{AddressMap, PAGE_SIZE},
         tree::MemoryNode,
@@ -33,7 +35,7 @@ use crate::{
 mod util;
 
 const DEFAULT_CHUNK: usize = 8;
-const COMPRESSION_BUS: DirectCompressionBus = DirectCompressionBus(POSEIDON2_DIRECT_BUS);
+const COMPRESSION_BUS: PermutationCheckBus = PermutationCheckBus::new(POSEIDON2_DIRECT_BUS);
 
 fn test<const CHUNK: usize>(
     memory_dimensions: MemoryDimensions,
@@ -46,7 +48,7 @@ fn test<const CHUNK: usize>(
         address_height,
         as_offset,
     } = memory_dimensions;
-    let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
+    let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
 
     // checking validity of test data
     for ((address_space, pointer), value) in final_memory.items() {
@@ -97,9 +99,9 @@ fn test<const CHUNK: usize>(
     let chip_air = chip.air();
     let chip_api = chip.generate_air_proof_input();
 
-    let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, merkle_bus.0);
+    let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, merkle_bus.index);
     let mut dummy_interaction_trace_rows = vec![];
-    let mut interaction = |interaction_type: InteractionType,
+    let mut interaction = |interaction_type: PermutationInteractionType,
                            is_compress: bool,
                            height: usize,
                            as_label: u32,
@@ -111,8 +113,8 @@ fn test<const CHUNK: usize>(
             BabyBear::ONE
         };
         dummy_interaction_trace_rows.push(match interaction_type {
-            InteractionType::Send => expand_direction,
-            InteractionType::Receive => -expand_direction,
+            PermutationInteractionType::Send => expand_direction,
+            PermutationInteractionType::Receive => -expand_direction,
         });
         dummy_interaction_trace_rows.extend([
             expand_direction,
@@ -132,7 +134,7 @@ fn test<const CHUNK: usize>(
         });
         let as_label = address_space - as_offset;
         interaction(
-            InteractionType::Send,
+            PermutationInteractionType::Send,
             false,
             0,
             as_label,
@@ -143,7 +145,7 @@ fn test<const CHUNK: usize>(
             .get(&(address_space, address_label))
             .unwrap();
         interaction(
-            InteractionType::Send,
+            PermutationInteractionType::Send,
             true,
             0,
             as_label,
@@ -282,7 +284,7 @@ fn expand_test_no_accesses() {
 
     let mut chip: MemoryMerkleChip<DEFAULT_CHUNK, _> = MemoryMerkleChip::new(
         memory_dimensions,
-        MemoryMerkleBus(MEMORY_MERKLE_BUS),
+        PermutationCheckBus::new(MEMORY_MERKLE_BUS),
         COMPRESSION_BUS,
     );
 
@@ -322,7 +324,7 @@ fn expand_test_negative() {
 
     let mut chip = MemoryMerkleChip::<DEFAULT_CHUNK, _>::new(
         memory_dimensions,
-        MemoryMerkleBus(MEMORY_MERKLE_BUS),
+        PermutationCheckBus::new(MEMORY_MERKLE_BUS),
         COMPRESSION_BUS,
     );
 
