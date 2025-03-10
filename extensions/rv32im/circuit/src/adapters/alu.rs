@@ -91,7 +91,7 @@ pub struct Rv32BaseAluAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
     pub rs1_ptr: T,
-    // Pointer if rs2 was a read, immediate value otherwise
+    /// Pointer if rs2 was a read, immediate value otherwise
     pub rs2: T,
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: T,
@@ -137,7 +137,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
-        // // if rs2 is an immediate value, constrain that its 4-byte representation is correct
+        // If rs2 is an immediate value, constrain that:
+        // 1. It's a 16-bit two's complement integer (stored in rs2_limbs[0] and rs2_limbs[1])
+        // 2. It's properly sign-extended to 32-bits (the upper limbs must match the sign bit)
         let rs2_limbs = ctx.reads[1].clone();
         let rs2_sign = rs2_limbs[2].clone();
         let rs2_imm = rs2_limbs[0].clone()
@@ -153,10 +155,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
         );
         self.bitwise_lookup_bus
             .send_range(rs2_limbs[0].clone(), rs2_limbs[1].clone())
-            .eval(
-                builder,
-                not(local.rs2_as) * ctx.instruction.is_valid.clone(),
-            );
+            .eval(builder, ctx.instruction.is_valid.clone() - local.rs2_as);
 
         self.memory_bridge
             .read(

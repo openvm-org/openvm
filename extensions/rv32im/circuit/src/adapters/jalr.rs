@@ -72,6 +72,8 @@ pub struct Rv32JalrAdapterCols<T> {
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
     pub rd_ptr: T,
     pub rd_aux_cols: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    /// Only writes if `needs_write`.
+    /// Sets `needs_write` to 0 iff `rd == x0`
     pub needs_write: T,
 }
 
