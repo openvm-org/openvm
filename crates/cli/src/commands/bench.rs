@@ -5,7 +5,6 @@ use clap::Parser;
 use eyre::Result;
 use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
 use openvm_keccak256_circuit::Keccak256Rv32Config;
-use openvm_sdk::fs::read_exe_from_file;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
     engine::StarkFriEngine,
@@ -16,8 +15,11 @@ use openvm_stark_sdk::{
     },
 };
 
-use super::build::{build, BuildArgs};
-use crate::util::{classical_exe_path, write_status, Input};
+use super::{
+    build::{build, BuildArgs},
+    run::execute,
+};
+use crate::util::{write_status, Input};
 
 #[derive(Clone, Parser)]
 #[command(name = "bench", about = "(default) Build and prove a program")]
@@ -28,8 +30,8 @@ pub struct BenchCmd {
     #[clap(long, action)]
     output: Option<PathBuf>,
 
-    #[clap(long, action)]
-    profile: bool,
+    #[clap(long, action, default_value = "false", help = "enable tracing")]
+    tracing: bool,
 
     #[clap(long, action)]
     verbose: bool,
@@ -40,12 +42,16 @@ pub struct BenchCmd {
 
 impl BenchCmd {
     pub fn run(&self) -> Result<()> {
-        if self.profile {
+        if self.tracing {
             setup_tracing();
         }
-        let elf_path = build(&self.build_args)?.unwrap();
-        let exe_path = classical_exe_path(&elf_path);
-        let exe = read_exe_from_file(&exe_path)?;
+
+        let _elf_path = build(&self.build_args)?.unwrap();
+        let (exe, _vm_config) = execute(
+            self.build_args.exe_output.clone(),
+            &self.build_args.config,
+            &self.input,
+        )?;
 
         let app_log_blowup = 2;
         let engine = BabyBearPoseidon2Engine::new(
