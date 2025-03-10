@@ -88,7 +88,10 @@ Given:
 - `a` is the decomposition of the result
 - `opcode` indicating the operation to be performed
 
-This circuit proves that `a` is the correct decomposition of the result of the operation `opcode` applied to `compose(b)` and `compose(c)`.
+This circuit proves that:
+
+- `compose(a) == compose(b) op compose(c)`
+- `a` limbs are in range `[0, 2^RV32_CELL_BITS)`
 
 #### 2. [Branch_Eq](./branch_eq/core.rs)
 
@@ -135,7 +138,7 @@ This circuit proves that:
 - `compose(b) = compose(c) * compose(q) + compose(r)`
 - `0 <= |compose(r)| < |compose(c)|`
 - If `compose(c) == 0`, then `compose(q) == -1` for signed operations and `compose(q) == 2^32 - 1` for unsigned operations
-- `q` and `r` are the correct decompositions of the quotient and remainder
+- `q` and `r` limbs are in range `[0, 2^RV32_CELL_BITS)`
 - `a = q` if the instruction is `div` or `divu`
 - `a = r` if the instruction is `rem` or `remu`
 
@@ -165,6 +168,7 @@ This circuit proves that:
 
 - `compose(to_pc_limbs) == compose(rs1) + imm`
 - `compose(rd) == pc + 4`
+- `to_pc_limbs` limbs are in range `[0, 2^RV32_CELL_BITS)`
 
 #### 7. [AUIPC](./auipc/core.rs)
 
@@ -178,6 +182,7 @@ This circuit proves that:
 
 - `compose(rd) == compose(pc_limbs) + compose(imm_limbs) * 2^8`
 - `compose(pc_limbs) == pc` and `compose(pc_limbs) < 2^PC_MAX_BITS`
+- `rd`, `imm_limbs`, `pc_limbs` limbs are in range `[0, 2^RV32_CELL_BITS)`
 
 #### 8. [Less_than](./less_than/core.rs)
 
@@ -189,9 +194,9 @@ Given:
 
 This circuit proves that:
 
-- If `opcode` is `slt` and `compose(b) < compose(c)` (signed comparison), then `compose(a) == 1`.
-- If `opcode` is `sltu`, then `compose(b) < compose(c)` (unsigned comparison), then `compose(a) == 1`.
-- Otherwise, `compose(a) == 0`.
+- If `opcode` is `slt` and `compose(b) < compose(c)` (signed comparison), then `a` is 1.
+- If `opcode` is `sltu`, then `compose(b) < compose(c)` (unsigned comparison), then `a` is 1.
+- Otherwise, `a` is 0.
 
 #### 9. [Load_sign_extend](./load_sign_extend/core.rs) and [Loadstore](./loadstore/core.rs)
 
@@ -211,7 +216,10 @@ Given:
 - `a` is the decomposition of the lower 32 bits of the result
 - `opcode` indicating the operation to be performed
 
-This circuit proves that `a` is the correct decomposition of the lower 32 bits of `compose(b) * compose(c)`.
+This circuit proves that:
+
+- `compose(a) == compose(b) * compose(c) % 2^32`
+- `a` limbs are in range `[0, 2^RV32_CELL_BITS)`
 
 #### 11. [MULH](./mulh/core.rs)
 
@@ -221,7 +229,10 @@ Given:
 - `a` is the decomposition of the upper 32 bits of the result
 - `opcode` indicating the operation to be performed
 
-This circuit proves that `a` is the correct decomposition of the upper 32 bits of `compose(b) * compose(c)`.
+This circuit proves that:
+
+- `compose(a) == compose(b) * compose(c) / 2^32`
+- `a` limbs are in range `[0, 2^RV32_CELL_BITS)`
 
 #### 12. [Shift](./shift/core.rs)
 
@@ -236,4 +247,4 @@ This circuit proves that:
 - If `opcode` is `sll`, then `compose(a) == compose(b) << (compose(c) % 32)`
 - If `opcode` is `srl`, then `compose(a) == compose(b) >> (compose(c) % 32)`
 - If `opcode` is `sra`, then `compose(a) == sign_extend(compose(b) >> (compose(c) % 32))`
-- `a` is the correct decomposition of the result to 8-bit limbs
+- `a` limbs are in range `[0, 2^RV32_CELL_BITS)`
