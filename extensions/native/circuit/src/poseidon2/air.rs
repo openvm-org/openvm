@@ -417,7 +417,6 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         let mut when_top_level_not_end =
             builder.when(incorporate_row + incorporate_sibling - end_top_level);
-        when_top_level_not_end.assert_zero(next.start_top_level);
         when_top_level_not_end
             .assert_eq(next_top_level_specific.dim_base_pointer, dim_base_pointer);
 
