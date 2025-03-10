@@ -36,14 +36,14 @@ s_1 = (s_0 >> 1) + [T_1 + T_2, 0, 0, 0, T_1, 0, 0, 0]
     = [0, a, b, c, d, e, f, g] + [T_1 + T_2, 0, 0, 0, T_1, 0, 0, 0]
     = [T_1 + T_2, a, b, c, d + T_1, e, f, g]
 ```
-where `T_1` and `T_2` are certain functions of the working variables and message data (see the spec).
+where `T_1` and `T_2` are certain functions of the working variables and message data (see the FIPS spec).
 So if `a_i` and `e_i` denote the values of `a` and `e` after the `i`th round, for `0 <= i < 4`, then the state `s_3` after the fourth round can be written as `s_3 = [a_3, a_2, a_1, a_0, e_3, e_2, e_1, e_0]`.
 
 ### Message schedule constraints
 
 The algorithm for computing the message schedule involves message schedule words from 16 rounds ago.
 Since we can only constrain two rows at a time, we cannot access data from more than four rounds ago for the first round in each row.
-So, we maintain intermediate values that we call `intermed_4`, `intermed_8` and `intermed_12`, where `intermed_i = w_i + sig_0(w_{i+1})` where `w_i` is the value of `w` from `i` rounds ago and `sig_0` denotes the `sigma_0` function from the spec.
+So, we maintain intermediate values that we call `intermed_4`, `intermed_8` and `intermed_12`, where `intermed_i = w_i + sig_0(w_{i+1})` where `w_i` is the value of `w` from `i` rounds ago and `sig_0` denotes the `sigma_0` function from the FIPS spec.
 Since we can reliably constrain values from four rounds ago, we can build up `intermed_16` from these values, which is needed for computing the message schedule.
 
 ### Note about `is_last_block`
