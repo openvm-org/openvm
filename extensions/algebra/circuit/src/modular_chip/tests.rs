@@ -117,7 +117,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         };
 
         // Write to memories
-        // For each bigunint (a, b, r), there are 2 writes:
+        // For each biguint (a, b, r), there are 2 writes:
         // 1. address_ptr which stores the actual address
         // 2. actual address which stores the biguint limbs
         // The write of result r is done in the chip.
@@ -246,7 +246,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         };
 
         // Write to memories
-        // For each bigunint (a, b, r), there are 2 writes:
+        // For each biguint (a, b, r), there are 2 writes:
         // 1. address_ptr which stores the actual address
         // 2. actual address which stores the biguint limbs
         // The write of result r is done in the chip.
