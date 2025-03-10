@@ -19,7 +19,7 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
     for i in 0..N {
         for j in 0..N {
             for k in 0..N {
-                c[i][j] += &a[i][k] * &b[k][j];
+                c[i][j] += a[i][k] * b[k][j];
             }
         }
     }
