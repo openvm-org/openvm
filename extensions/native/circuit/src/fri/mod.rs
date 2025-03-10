@@ -1,7 +1,6 @@
 use core::ops::Deref;
 use std::{
     borrow::{Borrow, BorrowMut},
-    collections::HashMap,
     mem::offset_of,
     sync::{Arc, Mutex},
 };
@@ -508,7 +507,6 @@ pub struct FriReducedOpeningChip<F: Field> {
     height: usize,
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     streams: Arc<Mutex<Streams<F>>>,
-    hint_offsets: HashMap<usize, usize>,
 }
 impl<F: PrimeField32> FriReducedOpeningChip<F> {
     pub fn new(
@@ -528,7 +526,6 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
             height: 0,
             offline_memory,
             streams,
-            hint_offsets: HashMap::default(),
         }
     }
 }
@@ -560,7 +557,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
 
         let hint_id_f = memory.unsafe_read_cell(addr_space, hint_id_ptr);
         let hint_id = hint_id_f.as_canonical_u32() as usize;
-        let hint_offset = self.hint_offsets.get(&hint_id).copied().unwrap_or(0);
 
         let alpha = alpha_read.1;
         let length = length_read.1.as_canonical_u32() as usize;
@@ -572,21 +568,17 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         let mut result = [F::ZERO; EXT_DEG];
 
         let data = if is_init == 0 {
-            self.hint_offsets.insert(hint_id, hint_offset + length);
-            let streams = self.streams.lock().unwrap();
-            streams.hint_space[hint_id][hint_offset..hint_offset + length].to_vec()
+            let mut streams = self.streams.lock().unwrap();
+            let hint_steam = &mut streams.hint_space[hint_id];
+            hint_steam.drain(0..length).collect()
         } else {
             vec![]
         };
         #[allow(clippy::needless_range_loop)]
         for i in 0..length {
             let a_rw = if is_init == 0 {
-                let (record_id, _) = memory.write_cell(
-                    addr_space,
-                    a_ptr + F::from_canonical_usize(i),
-                    // Values in the hint space are flattened. We use hint_offset to find the corresponding value.
-                    data[i],
-                );
+                let (record_id, _) =
+                    memory.write_cell(addr_space, a_ptr + F::from_canonical_usize(i), data[i]);
                 (record_id, data[i])
             } else {
                 memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i))
