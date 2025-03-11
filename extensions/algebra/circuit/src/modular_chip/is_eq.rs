@@ -178,6 +178,13 @@ where
             cols.is_valid * AB::F::from_canonical_u8(2),
         );
 
+        builder
+            .when(cols.is_setup)
+            .assert_eq(cols.c_lt_mark, AB::F::from_canonical_u8(2));
+        builder
+            .when(cols.is_setup)
+            .assert_eq(lt_marker_sum.clone(), AB::F::from_canonical_u8(2));
+
         // Constrain that b, c < N (i.e. modulus).
         let modulus = self.modulus_limbs.map(AB::F::from_canonical_u32);
         let mut prefix_sum = AB::Expr::ZERO;
@@ -194,7 +201,7 @@ where
             // being 1 indicates b[i] < N[i].
             builder
                 .when_ne(prefix_sum.clone(), AB::F::ONE)
-                .when_ne(prefix_sum.clone(), lt_marker_sum.clone())
+                .when_ne(prefix_sum.clone(), lt_marker_sum.clone() - cols.is_setup)
                 .assert_eq(cols.b[i], modulus[i]);
             builder
                 .when_ne(cols.lt_marker[i], AB::F::ZERO)
