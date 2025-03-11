@@ -1,10 +1,7 @@
 use proc_macro2::{Ident, Span, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 
-use crate::{
-    execution::transpilation::VariableNamer,
-    folder1::{file3::FlattenedFunction, ir::Type},
-};
+use crate::folder1::ir::Type;
 
 pub fn ident(s: &str) -> TokenStream {
     TokenStream::from(TokenTree::Ident(Ident::new(s, Span::call_site())))

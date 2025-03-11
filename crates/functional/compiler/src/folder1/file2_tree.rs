@@ -113,7 +113,6 @@ impl ScopeContainer {
     ) -> Result<(), CompilationError> {
         if path_index == path.0.len() {
             if self.definitions.contains(name) {
-                panic!("duplicate definition {}", name);
                 return Err(CompilationError::DuplicateDefinition(name.clone()));
             }
             self.definitions.insert(name.clone());
@@ -134,7 +133,6 @@ impl ScopeContainer {
                     branch.definitions.remove(name);
                 }
                 if self.definitions.contains(name) {
-                    panic!("duplicate definition {}", name);
                     return Err(CompilationError::DuplicateDefinition(name.clone()));
                 }
                 self.definitions.insert(name.clone());

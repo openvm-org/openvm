@@ -3,7 +3,7 @@ use quote::quote;
 
 use crate::execution::constants::*;
 
-fn rust_memory() -> TokenStream {
+pub fn rust_memory() -> TokenStream {
     let memory_struct = memory_struct_name();
     let reference_struct = reference_type();
     let under_construction_array_struct = array_type();

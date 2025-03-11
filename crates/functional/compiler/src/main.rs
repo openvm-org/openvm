@@ -9,8 +9,9 @@ use crate::folder1::{
 };
 
 pub mod air;
-// pub mod execution;
+pub mod execution;
 pub mod folder1;
+mod transpiled_fibonacci;
 // pub mod parser;
 
 fn main() {
@@ -211,5 +212,7 @@ fn main() {
     };
 
     let stage2_program = stage1(program).unwrap();
-    println!("{:?}", stage2_program);
+    //println!("{:?}", stage2_program);
+    let transpiled = stage2_program.transpile();
+    println!("{}", transpiled);
 }

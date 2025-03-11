@@ -5,6 +5,7 @@ use crate::{
     execution::constants::*,
     folder1::{ir::Type, stage1::Stage2Program},
 };
+use crate::execution::memory::rust_memory;
 
 pub fn rust_tracker(types_in_memory: Vec<Type>) -> TokenStream {
     let mut distinct_types = vec![];
@@ -63,8 +64,10 @@ impl Stage2Program {
             });
         }
         let tracker = rust_tracker(types_in_memory);
+        let memory = rust_memory();
         quote! {
             #tracker
+            #memory
             #(#functions)*
         }
     }
