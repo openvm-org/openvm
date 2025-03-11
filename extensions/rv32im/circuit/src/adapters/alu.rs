@@ -155,7 +155,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
         );
         self.bitwise_lookup_bus
             .send_range(rs2_limbs[0].clone(), rs2_limbs[1].clone())
-            .eval(builder, ctx.instruction.is_valid.clone() - local.rs2_as);
+            .eval(
+                builder,
+                not(local.rs2_as) * ctx.instruction.is_valid.clone(),
+            );
 
         self.memory_bridge
             .read(
