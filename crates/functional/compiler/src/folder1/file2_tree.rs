@@ -113,6 +113,7 @@ impl ScopeContainer {
     ) -> Result<(), CompilationError> {
         if path_index == path.0.len() {
             if self.definitions.contains(name) {
+                panic!("duplicate definition {}", name);
                 return Err(CompilationError::DuplicateDefinition(name.clone()));
             }
             self.definitions.insert(name.clone());
@@ -133,6 +134,7 @@ impl ScopeContainer {
                     branch.definitions.remove(name);
                 }
                 if self.definitions.contains(name) {
+                    panic!("duplicate definition {}", name);
                     return Err(CompilationError::DuplicateDefinition(name.clone()));
                 }
                 self.definitions.insert(name.clone());
@@ -155,7 +157,7 @@ impl ScopeContainer {
             let (i, constructor) = &path.0[path_index];
             let branches = &mut self.children[*i];
             let branch = branches.get_mut(constructor).unwrap();
-            branch.define(path, path_index + 1, name)?;
+            branch.represent(path, path_index + 1, name)?;
 
             let mut present_in_all_branches = true;
             for (_, branch) in branches.iter() {
@@ -168,7 +170,7 @@ impl ScopeContainer {
                     branch.representations.remove(name);
                 }
                 if self.representations.contains(name) {
-                    return Err(CompilationError::DuplicateDefinition(name.clone()));
+                    return Err(CompilationError::DuplicateRepresentation(name.clone()));
                 }
                 self.representations.insert(name.clone());
             }
