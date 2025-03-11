@@ -190,6 +190,18 @@ impl ScopeContainer {
             depth += 1;
         }
     }
+    pub fn get_declaration_type(&self, path: &ScopePath, name: &String) -> Type {
+        let mut scope = self;
+        let mut depth = 0;
+        loop {
+            if scope.declarations.contains_key(name) {
+                return scope.declarations[name].clone();
+            }
+            let (i, constructor) = &path.0[depth];
+            scope = scope.children[*i].get(constructor).unwrap();
+            depth += 1;
+        }
+    }
     pub fn is_defined(&self, path: &ScopePath, name: &String) -> bool {
         let mut scope = self;
         let mut depth = 0;
@@ -205,7 +217,15 @@ impl ScopeContainer {
             depth += 1;
         }
     }
-    pub fn is_represented(&self, path: &ScopePath, name: &String) -> bool {
+    pub fn is_represented(&self, path: &ScopePath, name: &String, type_set: &TypeSet) -> bool {
+        if !self.is_declared(path, name) {
+            return false;
+        }
+        let tipo = self.get_declaration_type(path, name);
+        if type_set.calc_type_size(&tipo) == 0 {
+            return true;
+        }
+
         let mut scope = self;
         let mut depth = 0;
         loop {

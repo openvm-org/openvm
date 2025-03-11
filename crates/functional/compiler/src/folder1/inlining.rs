@@ -102,7 +102,7 @@ impl FlattenedFunction {
         argument_fulfillments: Vec<ExpressionContainer>,
     ) {
         for argument in self.arguments.iter_mut() {
-            argument.inline(renamer);
+            renamer.rename(&mut argument.name);
         }
 
         let old_declaration_set = take(&mut self.declaration_set);
@@ -130,25 +130,77 @@ impl FlattenedFunction {
         for stage in atoms_staged.iter_mut() {
             for atom in stage.iter_mut() {
                 let old_atom = *atom;
-                atom.inline(self, target, &argument_fulfillments, path_prefix, material);
+                atom.inline(target);
                 atom_replacements.insert(old_atom, *atom);
             }
         }
         self.atoms_staged = atoms_staged;
-        match &mut self.representation_order {
-            RepresentationOrder::Inline(atoms_staged) => {
-                for stage in atoms_staged.iter_mut() {
-                    for atom in stage.iter_mut() {
-                        *atom = atom_replacements[atom];
-                    }
-                }
-            }
-            RepresentationOrder::NotInline(atoms_staged) => {
-                for atom in atoms_staged.iter_mut() {
-                    *atom = atom_replacements[atom];
-                }
+
+        let mut atoms_staged_representation = match &mut self.representation_order {
+            RepresentationOrder::Inline(atoms_staged) => take(atoms_staged),
+            RepresentationOrder::NotInline(_) => unreachable!(),
+        };
+
+        for stage in atoms_staged_representation.iter_mut() {
+            for atom in stage.iter_mut() {
+                *atom = atom_replacements[atom];
             }
         }
+
+        for stage in self.stages.iter() {
+            for i in stage.start..stage.mid {
+                if !self.arguments[i].represents {
+                    panic!("representation via inline functions is currently limited to matching definition order (argument {})", i);
+                }
+                let index = target.statements.len() + self.statements.len();
+                let mut argument_expression = ExpressionContainer::new(Expression::Variable {
+                    name: self.arguments[i].name.clone(),
+                    declares: true,
+                    defines: true,
+                    represents: self.arguments[i].represents,
+                });
+                argument_expression.tipo = Some(self.arguments[i].tipo.clone());
+                self.statements.push(FlatStatement {
+                    material,
+                    scope: path_prefix.clone(),
+                    statement: Statement::Equality {
+                        left: argument_expression,
+                        right: argument_fulfillments[i].clone(),
+                    },
+                });
+                self.atoms_staged[stage.index].insert(0, Atom::Statement(index));
+                atoms_staged_representation[stage.index].insert(0, Atom::Statement(index));
+            }
+            for i in stage.mid..stage.end {
+                if self.arguments[i].represents {
+                    panic!("representation via inline functions is currently limited to matching definition order (argument {})", i);
+                }
+                let declaration_index = target.statements.len() + self.statements.len();
+                let out_index = declaration_index + 1;
+                self.statements.push(FlatStatement {
+                    material,
+                    scope: path_prefix.clone(),
+                    statement: Statement::VariableDeclaration {
+                        name: self.arguments[i].name.clone(),
+                        tipo: self.arguments[i].tipo.clone(),
+                        represents: false,
+                    },
+                });
+                let mut argument_expression = ExpressionContainer::new(Expression::Variable {
+                    name: self.arguments[i].name.clone(),
+                    declares: false,
+                    defines: false,
+                    represents: self.arguments[i].represents,
+                });
+                argument_expression.tipo = Some(self.arguments[i].tipo.clone());
+                self.atoms_staged[0].insert(0, Atom::Statement(declaration_index));
+                self.atoms_staged[stage.index].push(Atom::Statement(out_index));
+                atoms_staged_representation[0].insert(0, Atom::Statement(declaration_index));
+                atoms_staged_representation[stage.index].push(Atom::Statement(out_index));
+            }
+        }
+
+        self.representation_order = RepresentationOrder::Inline(atoms_staged_representation);
     }
 }
 
@@ -233,7 +285,7 @@ impl FlatMatch {
 
         for (_, components) in branches.iter_mut() {
             for component in components.iter_mut() {
-                renamer.rename(component);
+                renamer.rename(&mut component.name);
             }
         }
     }
@@ -262,16 +314,9 @@ impl FlatFunctionCall {
 }
 
 impl Atom {
-    pub fn inline(
-        &mut self,
-        home: &mut FlattenedFunction,
-        target: &FlattenedFunction,
-        argument_fulfillments: &Vec<ExpressionContainer>,
-        path_prefix: &ScopePath,
-        imposed_material: Material,
-    ) {
+    pub fn inline(&mut self, target: &FlattenedFunction) {
         match self {
-            Atom::InArgument(argument_index) => {
+            /*Atom::InArgument(argument_index) => {
                 home.statements.push(FlatStatement {
                     material: imposed_material,
                     scope: path_prefix.clone(),
@@ -292,7 +337,7 @@ impl Atom {
                     },
                 });
                 *self = Atom::Statement(target.statements.len() + home.statements.len() - 1);
-            }
+            }*/
             Atom::Match(index) => *index += target.matches.len(),
             Atom::Statement(index) => *index += target.statements.len(),
             Atom::PartialFunctionCall(index, _) => *index += target.function_calls.len(),

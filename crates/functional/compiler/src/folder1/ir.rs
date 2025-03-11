@@ -164,10 +164,16 @@ pub struct FunctionCall {
     pub arguments: Vec<ExpressionContainer>,
 }
 
+#[derive(Clone, Debug)]
+pub struct BranchComponent {
+    pub name: String,
+    pub represents: bool,
+}
+
 #[derive(Clone)]
 pub struct Branch {
     pub constructor: String,
-    pub components: Vec<String>,
+    pub components: Vec<BranchComponent>,
     pub body: Body,
 }
 
@@ -196,7 +202,8 @@ pub enum ArgumentBehavior {
 pub struct Argument {
     pub(crate) behavior: ArgumentBehavior,
     pub(crate) tipo: Type,
-    pub(crate) value: Expression,
+    pub(crate) name: String,
+    pub(crate) represents: bool,
 }
 
 #[derive(Clone)]

@@ -9,6 +9,7 @@ use crate::{
         file3::{FlatFunctionCall, FlatMatch, FlatStatement},
         function_resolution::Stage,
         ir::{ArithmeticOperator, Expression, Material, Statement},
+        stage1::Stage2Program,
         type_resolution::TypeSet,
     },
 };
@@ -23,6 +24,14 @@ impl<'a> FieldNamer<'a> {
     }
 }
 
+pub fn name_field_according_to_scope(scope: &ScopePath, name: &str) -> TokenStream {
+    let mut full_name = name.to_string();
+    for (i, branch) in scope.0.iter() {
+        full_name.extend(format!("_{}_{}", i, branch).chars());
+    }
+    ident(&full_name)
+}
+
 impl<'a> FieldNamer<'a> {
     pub fn scope_name(&self, scope: &ScopePath) -> TokenStream {
         assert!(!scope.0.is_empty());
@@ -34,11 +43,7 @@ impl<'a> FieldNamer<'a> {
     }
     pub fn variable_name(&self, curr: &ScopePath, name: &str) -> TokenStream {
         let scope = self.declaration_set.get_declaration_scope(curr, name);
-        let mut full_name = name.to_string();
-        for (i, branch) in scope.0.iter() {
-            full_name.extend(format!("_{}_{}", i, branch).chars());
-        }
-        ident(&full_name)
+        name_field_according_to_scope(&scope, name)
     }
     pub fn reference_name(&self, index: usize) -> TokenStream {
         ident(&format!("ref_{}", index))
@@ -98,9 +103,6 @@ impl<'a> VariableNamer<'a> {
     }
     pub fn callee_name(&self, index: usize) -> TokenStream {
         self.refer_to_field(self.field_namer.callee_name(index))
-    }
-    pub fn in_argument_name(&self, index: usize) -> TokenStream {
-        ident(&format!("argument_{}", index))
     }
 }
 
@@ -274,9 +276,10 @@ impl FlatStatement {
     pub fn transpile(
         &self,
         index: usize,
-        type_set: &TypeSet,
+        program: &Stage2Program,
         namer: &mut VariableNamer,
     ) -> TokenStream {
+        let type_set = &program.types;
         let scope = &self.scope;
         let material = self.material;
         let block = match &self.statement {
@@ -406,34 +409,40 @@ impl FlatFunctionCall {
         stage: Stage,
         index: usize,
         type_set: &TypeSet,
+        program: &Stage2Program,
         namer: &mut VariableNamer,
     ) -> TokenStream {
         let mut block = vec![];
 
-        let callee = namer.callee_name(index);
-        let struct_name = function_struct_name(&self.function_name);
+        let callee = &program.functions[&self.function_name];
+
+        let callee_field = namer.callee_name(index);
         if stage.index == 0 {
+            let struct_name = function_struct_name(&self.function_name);
             block.push(quote! {
-                #callee = Box::new(#struct_name::default());
+                #callee_field = Box::new(#struct_name::default());
             });
         };
-        let in_arguments = self.arguments[stage.start..stage.mid]
-            .iter()
-            .map(|argument| argument.transpile_defined(&self.scope, namer, type_set))
-            .collect();
-        let out_argument_names = (stage.start..stage.mid)
-            .map(|_| namer.new_temporary_name())
-            .collect();
-        block.push(execute_stage(
-            &callee,
-            &in_arguments,
-            &out_argument_names,
-            stage.index,
-        ));
+
+        for i in stage.start..stage.mid {
+            let argument = &self.arguments[i].transpile_defined(&self.scope, &namer, type_set);
+            let argument_field = name_field_according_to_scope(
+                &ScopePath::empty(),
+                callee.arguments[i].name.as_str(),
+            );
+            block.push(quote! {
+                #callee_field.#argument_field = #argument;
+            });
+        }
+        block.push(execute_stage(&callee_field, stage.index));
         for i in stage.mid..stage.end {
+            let argument_field = name_field_according_to_scope(
+                &ScopePath::empty(),
+                callee.arguments[i].name.as_str(),
+            );
             block.push(self.arguments[i].transpile_top_down(
                 &self.scope,
-                &out_argument_names[i - stage.mid],
+                &quote! { #callee_field.#argument_field },
                 namer,
                 type_set,
             ));
@@ -447,10 +456,11 @@ impl FlatMatch {
     pub fn transpile(
         &self,
         _: usize,
-        type_set: &TypeSet,
+        program: &Stage2Program,
         namer: &mut VariableNamer,
     ) -> TokenStream {
-        let type_name = type_to_rust(&self.value.get_type());
+        let type_set = &program.types;
+        let type_name = type_to_rust(self.value.get_type());
 
         let mut arms = vec![];
         for (constructor, components) in self.branches.iter() {
@@ -461,7 +471,7 @@ impl FlatMatch {
                 .collect::<Vec<_>>();
             let fields = components
                 .iter()
-                .map(|component| namer.variable_name(&scope, component));
+                .map(|component| namer.variable_name(&scope, &component.name));
             let arm = quote! {
                 #type_name::#constructor(#(#temps),*) => {
                     #(#fields = #temps;)*

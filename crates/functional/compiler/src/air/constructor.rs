@@ -9,7 +9,7 @@ use crate::{
     },
     folder1::{
         file2_tree::ScopePath,
-        file3::{Atom, FlatStatement, FlattenedFunction, Tree},
+        file3::{Atom, FlatStatement, FlattenedFunction, RepresentationOrder, Tree},
         ir::{Material, Statement, Type},
         stage1::Stage2Program,
         type_resolution::TypeSet,
@@ -410,67 +410,51 @@ impl FlattenedFunction {
             own_call_interaction.fields.push(right_timestamp.unwrap());
         }
 
-        for atoms in self.atoms_staged.iter() {
-            for &atom in atoms {
-                match atom {
-                    Atom::Statement(index) => {
-                        self.statements[index].enforce(
-                            index,
-                            &program.types,
-                            &mut representation_table,
-                            &mut air_constructor,
-                        );
-                    }
-                    Atom::Match(index) => {
-                        self.matches[index].enforce(
-                            &program.types,
-                            &mut representation_table,
-                            &mut air_constructor,
-                        );
-                    }
-                    Atom::PartialFunctionCall(index, stage) => {
-                        self.function_calls[index].represent_stage(
-                            function_call_interactions
-                                .get_mut(index)
-                                .unwrap()
-                                .as_mut()
-                                .unwrap(),
-                            stage,
-                            &program.types,
-                            &mut representation_table,
-                            &mut air_constructor,
-                        );
-                    }
-                    Atom::InArgument(index) => {
-                        let argument = &self.arguments[index];
-                        let mut representation =
-                            vec![None; program.types.calc_type_size(argument.get_type())];
-                        argument.represent_top_down(
-                            &program.types,
-                            &mut representation_table,
-                            &mut air_constructor,
-                            &ScopePath::empty(),
-                            &mut representation,
-                        );
-                        let representation: Vec<_> =
-                            representation.into_iter().map(|x| x.unwrap()).collect();
-                        own_call_interaction.fields.extend(representation);
-                    }
-                    Atom::OutArgument(index) => {
-                        let argument = &self.arguments[index];
-                        let mut representation =
-                            vec![None; program.types.calc_type_size(argument.get_type())];
-                        argument.represent_top_down(
-                            &program.types,
-                            &mut representation_table,
-                            &mut air_constructor,
-                            &ScopePath::empty(),
-                            &mut representation,
-                        );
-                        let representation: Vec<_> =
-                            representation.into_iter().map(|x| x.unwrap()).collect();
-                        own_call_interaction.fields.extend(representation);
-                    }
+        for argument in self.arguments.iter() {
+            if argument.represents {
+                representation_table.fill_in_and_add_representation(
+                    &mut air_constructor,
+                    &ScopePath::empty(),
+                    &argument.name,
+                    &mut vec![None; program.types.calc_type_size(&argument.tipo)],
+                );
+            }
+        }
+
+        let representation_order = match &self.representation_order {
+            RepresentationOrder::Inline(_) => unreachable!(),
+            RepresentationOrder::NotInline(rep) => rep,
+        };
+
+        for atom in representation_order.iter() {
+            match *atom {
+                Atom::Statement(index) => {
+                    self.statements[index].enforce(
+                        index,
+                        &program.types,
+                        &mut representation_table,
+                        &mut air_constructor,
+                    );
+                }
+                Atom::Match(index) => {
+                    self.matches[index].enforce(
+                        &program.types,
+                        &mut representation_table,
+                        &mut air_constructor,
+                    );
+                }
+                Atom::PartialFunctionCall(index, stage) => {
+                    self.function_calls[index].represent_stage(
+                        function_call_interactions
+                            .get_mut(index)
+                            .unwrap()
+                            .as_mut()
+                            .unwrap(),
+                        stage,
+                        &program.types,
+                        &mut representation_table,
+                        &mut air_constructor,
+                    );
                 }
             }
         }

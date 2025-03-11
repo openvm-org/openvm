@@ -12,7 +12,7 @@ use super::{
 use crate::folder1::{
     file2_tree::DependencyType,
     function_resolution::Stage,
-    ir::{FunctionCall, Material},
+    ir::{Argument, BranchComponent, FunctionCall, Material},
 };
 
 #[derive(Clone)]
@@ -31,7 +31,7 @@ impl Default for RepresentationOrder {
 pub struct FlattenedFunction {
     pub(crate) inline: bool,
     pub(crate) stages: Vec<Stage>,
-    pub(crate) arguments: Vec<ExpressionContainer>,
+    pub(crate) arguments: Vec<Argument>,
 
     pub(crate) statements: Vec<FlatStatement>,
     pub(crate) function_calls: Vec<FlatFunctionCall>,
@@ -61,7 +61,7 @@ pub struct FlatMatch {
     pub scope: ScopePath,
     pub index: usize,
     pub value: ExpressionContainer,
-    pub branches: Vec<(String, Vec<String>)>,
+    pub branches: Vec<(String, Vec<BranchComponent>)>,
 }
 
 #[derive(Clone)]
@@ -88,8 +88,6 @@ pub enum Atom {
     Match(usize),
     Statement(usize),
     PartialFunctionCall(usize, Stage),
-    InArgument(usize),
-    OutArgument(usize),
 }
 
 #[derive(Clone)]
@@ -128,12 +126,7 @@ impl FlattenedFunction {
         function_set: Arc<FunctionSet>,
         function_id: usize,
     ) -> Result<Self, CompilationError> {
-        let arguments = function
-            .function
-            .arguments
-            .iter()
-            .map(|argument| ExpressionContainer::new(argument.value.clone()))
-            .collect();
+        let arguments = function.function.arguments.clone();
         let stages = function.stages.clone();
 
         let mut statements = Vec::new();
@@ -268,51 +261,48 @@ impl FlattenedFunction {
                 root_container.current_function.stages[0].clone(),
             ));
         }
+        for argument in self.arguments.iter() {
+            root_container.declare(&ScopePath::empty(), &argument.name, argument.tipo.clone())?;
+        }
 
         for stage in root_container.current_function.stages.clone() {
             let mut ordered_atoms = Vec::new();
             for argument_index in stage.start..stage.mid {
-                let argument_atom = Atom::InArgument(argument_index);
-                if !self.viable_for_definition(root_container, argument_atom) {
-                    return Err(CompilationError::CannotOrderStatementsForDefinition());
-                }
-                self.resolve_definition(argument_atom, root_container)?;
-                ordered_atoms.push(argument_atom);
+                root_container.define(&ScopePath::empty(), &self.arguments[argument_index].name)?;
+            }
+            loop {
+                let i = disp_atoms
+                    .iter()
+                    .position(|&atom| self.viable_for_definition(root_container, atom));
+                if let Some(i) = i {
+                    let atom = disp_atoms.remove(i);
+                    self.resolve_definition(atom, root_container)?;
+                    ordered_atoms.push(atom);
 
-                loop {
-                    let i = disp_atoms
-                        .iter()
-                        .position(|&atom| self.viable_for_definition(root_container, atom));
-                    if let Some(i) = i {
-                        let atom = disp_atoms.remove(i);
-                        self.resolve_definition(atom, root_container)?;
-                        ordered_atoms.push(atom);
-
-                        if let Atom::PartialFunctionCall(index, _) = atom {
-                            function_calls_current_stage[index] += 1;
-                            let callee = root_container
-                                .function_set
-                                .get_function(&self.function_calls[index].function_name)
-                                .unwrap();
-                            if function_calls_current_stage[index] < callee.stages.len() {
-                                disp_atoms.push(Atom::PartialFunctionCall(
-                                    index,
-                                    callee.stages[function_calls_current_stage[index]],
-                                ));
-                            }
+                    if let Atom::PartialFunctionCall(index, _) = atom {
+                        function_calls_current_stage[index] += 1;
+                        let callee = root_container
+                            .function_set
+                            .get_function(&self.function_calls[index].function_name)
+                            .unwrap();
+                        if function_calls_current_stage[index] < callee.stages.len() {
+                            disp_atoms.push(Atom::PartialFunctionCall(
+                                index,
+                                callee.stages[function_calls_current_stage[index]],
+                            ));
                         }
-                    } else {
-                        break;
                     }
+                } else {
+                    break;
                 }
             }
             for argument_index in stage.mid..stage.end {
-                let argument_atom = Atom::OutArgument(argument_index);
-                if !self.viable_for_definition(root_container, argument_atom) {
+                if !root_container
+                    .root_scope
+                    .is_defined(&ScopePath::empty(), &self.arguments[argument_index].name)
+                {
                     return Err(CompilationError::CannotOrderStatementsForDefinition());
                 }
-                self.resolve_definition(argument_atom, root_container)?;
-                ordered_atoms.push(argument_atom);
             }
             self.atoms_staged.push(ordered_atoms);
         }
@@ -355,59 +345,59 @@ impl FlattenedFunction {
             let mut atoms_staged = vec![];
             for stage in root_container.current_function.stages.clone() {
                 let mut ordered_atoms = Vec::new();
-                for argument_index in stage.start..stage.mid {
-                    let argument_atom = Atom::InArgument(argument_index);
-                    self.resolve_representation(argument_atom, root_container)?;
-                    ordered_atoms.push(argument_atom);
+                for i in stage.start..stage.mid {
+                    if self.arguments[i].represents {
+                        root_container.represent(&ScopePath::empty(), &self.arguments[i].name)?;
+                    }
+                }
+                loop {
+                    let i = disp_atoms
+                        .iter()
+                        .position(|&atom| self.viable_for_representation(root_container, atom));
+                    if let Some(i) = i {
+                        let atom = disp_atoms.remove(i);
+                        self.resolve_representation(atom, root_container)?;
+                        ordered_atoms.push(atom);
 
-                    loop {
-                        let i = disp_atoms
-                            .iter()
-                            .position(|&atom| self.viable_for_representation(root_container, atom));
-                        if let Some(i) = i {
-                            let atom = disp_atoms.remove(i);
-                            self.resolve_representation(atom, root_container)?;
-                            ordered_atoms.push(atom);
-
-                            if let Atom::PartialFunctionCall(index, _) = atom {
-                                let callee = root_container
-                                    .function_set
-                                    .get_function(&self.function_calls[index].function_name)
-                                    .unwrap();
-                                if callee.function.inline {
-                                    function_calls_current_stage[index] += 1;
-                                    if function_calls_current_stage[index] < callee.stages.len() {
-                                        disp_atoms.push(Atom::PartialFunctionCall(
-                                            index,
-                                            callee.stages[function_calls_current_stage[index]],
-                                        ));
-                                    }
+                        if let Atom::PartialFunctionCall(index, _) = atom {
+                            let callee = root_container
+                                .function_set
+                                .get_function(&self.function_calls[index].function_name)
+                                .unwrap();
+                            if callee.function.inline {
+                                function_calls_current_stage[index] += 1;
+                                if function_calls_current_stage[index] < callee.stages.len() {
+                                    disp_atoms.push(Atom::PartialFunctionCall(
+                                        index,
+                                        callee.stages[function_calls_current_stage[index]],
+                                    ));
                                 }
                             }
-                        } else {
-                            break;
                         }
+                    } else {
+                        break;
                     }
                 }
                 for argument_index in stage.mid..stage.end {
-                    let argument_atom = Atom::OutArgument(argument_index);
-                    if !self.viable_for_representation(root_container, argument_atom) {
+                    if !root_container.root_scope.is_represented(
+                        &ScopePath::empty(),
+                        &self.arguments[argument_index].name,
+                        &root_container.type_set,
+                    ) {
                         return Err(CompilationError::CannotOrderStatementsForRepresentation());
                     }
-                    ordered_atoms.push(argument_atom);
                 }
                 atoms_staged.push(ordered_atoms);
             }
             self.representation_order = RepresentationOrder::Inline(atoms_staged);
         } else {
-            let mut ordered_atoms = Vec::new();
-            for stage in self.stages.iter() {
-                for argument_index in stage.start..stage.mid {
-                    let argument_atom = Atom::InArgument(argument_index);
-                    self.resolve_representation(argument_atom, root_container)?;
-                    ordered_atoms.push(argument_atom);
+            for argument in self.arguments.iter() {
+                if argument.represents {
+                    root_container.represent(&ScopePath::empty(), &argument.name)?;
                 }
             }
+
+            let mut ordered_atoms = Vec::new();
             loop {
                 let i = disp_atoms
                     .iter()
@@ -451,8 +441,6 @@ impl FlattenedFunction {
             Atom::Match(index) => self.matches[index].scope.clone(),
             Atom::Statement(index) => self.statements[index].scope.clone(),
             Atom::PartialFunctionCall(index, _) => self.function_calls[index].scope.clone(),
-            Atom::InArgument(_) => ScopePath::empty(),
-            Atom::OutArgument(_) => ScopePath::empty(),
         }
     }
     fn viable_for_definition(&self, root_container: &RootContainer, atom: Atom) -> bool {
@@ -471,9 +459,16 @@ impl FlattenedFunction {
         let scope = &self.scope(atom);
         self.dependencies(atom, DependencyType::Representation)
             .iter()
-            .all(|dependency| root_container.root_scope.is_represented(scope, dependency))
+            .all(|dependency| {
+                root_container.root_scope.is_represented(
+                    scope,
+                    dependency,
+                    &root_container.type_set,
+                )
+            })
     }
     fn dependencies(&self, atom: Atom, dependency_type: DependencyType) -> Vec<String> {
+        assert_ne!(dependency_type, DependencyType::Representation);
         match atom {
             Atom::Match(index) => self.matches[index].value.dependencies(dependency_type),
             Atom::PartialFunctionCall(index, stage) => {
@@ -481,12 +476,6 @@ impl FlattenedFunction {
                 (stage.start..stage.end)
                     .flat_map(|i| call.arguments[i].dependencies(dependency_type))
                     .collect()
-            }
-            Atom::InArgument(argument_index) => {
-                self.arguments[argument_index].dependencies(dependency_type)
-            }
-            Atom::OutArgument(argument_index) => {
-                self.arguments[argument_index].dependencies(dependency_type)
             }
             Atom::Statement(index) => match &self.statements[index].statement {
                 Statement::VariableDeclaration { .. } => vec![],
@@ -572,39 +561,9 @@ impl FlattenedFunction {
                         .clone();
                     let new_path = scope.then(*index, constructor.clone());
                     for (component, tipo) in components.iter().zip_eq(component_types.iter()) {
-                        root_container.declare(&new_path, component, material.wrap(tipo))?;
-                        root_container.define(&new_path, component)?;
+                        root_container.declare(&new_path, &component.name, material.wrap(tipo))?;
+                        root_container.define(&new_path, &component.name)?;
                     }
-                }
-            }
-            Atom::InArgument(argument_index) => {
-                self.arguments[argument_index].resolve_definition_top_down(
-                    &root_container
-                        .current_function
-                        .argument_type(argument_index)
-                        .clone(),
-                    root_container,
-                    &ScopePath::empty(),
-                    Material::Materialized,
-                )?;
-            }
-            Atom::OutArgument(argument_index) => {
-                let expression = &mut self.arguments[argument_index];
-                expression.resolve_defined(
-                    root_container,
-                    &ScopePath::empty(),
-                    Material::Dematerialized,
-                    false,
-                )?;
-                let expected_type = root_container
-                    .current_function
-                    .argument_type(argument_index);
-                if expression.get_type() != expected_type {
-                    return Err(CompilationError::IncorrectTypeForOutArgument(
-                        argument_index,
-                        expression.get_type().clone(),
-                        expected_type.clone(),
-                    ));
                 }
             }
             Atom::Statement(index) => {
@@ -787,15 +746,12 @@ impl FlattenedFunction {
                 for (constructor, components) in branches {
                     let new_path = scope.then(*index, constructor.clone());
                     for component in components.iter() {
-                        root_container.represent(&new_path, component)?;
+                        if component.represents {
+                            root_container.represent(&new_path, &component.name)?;
+                        }
                     }
                 }
             }
-            Atom::InArgument(argument_index) => {
-                self.arguments[argument_index]
-                    .resolve_representation(root_container, &ScopePath::empty())?;
-            }
-            Atom::OutArgument(_) => unreachable!(),
             Atom::Statement(index) => {
                 let FlatStatement {
                     material: _,

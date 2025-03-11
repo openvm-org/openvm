@@ -7,7 +7,6 @@ use crate::{
         transpilation::{FieldNamer, VariableNamer},
     },
     folder1::{
-        file2_tree::ScopePath,
         file3::{Atom, FlattenedFunction},
         ir::{Material, Statement, Type},
         stage1::Stage2Program,
@@ -88,45 +87,24 @@ impl FlattenedFunction {
     pub fn transpile_stage(&self, stage_index: usize, program: &Stage2Program) -> TokenStream {
         let mut transpiled_atoms = vec![];
         let mut namer = VariableNamer::new(&self.declaration_set);
-        let mut out_arguments = vec![];
         for atom in self.atoms_staged[stage_index].iter() {
             let transpiled_atom =
                 match atom {
                     Atom::Statement(index) => {
-                        self.statements[*index].transpile(*index, &program.types, &mut namer)
+                        self.statements[*index].transpile(*index, program, &mut namer)
                     }
                     Atom::Match(index) => {
-                        self.matches[*index].transpile(*index, &program.types, &mut namer)
+                        self.matches[*index].transpile(*index, program, &mut namer)
                     }
                     Atom::PartialFunctionCall(index, stage) => self.function_calls[*index]
-                        .transpile(*stage, *index, &program.types, &mut namer),
-                    Atom::InArgument(index) => {
-                        let argument_name = namer.in_argument_name(*index);
-                        self.arguments[*index].transpile_top_down(
-                            &ScopePath::empty(),
-                            &argument_name,
-                            &mut namer,
-                            &program.types,
-                        )
-                    }
-                    Atom::OutArgument(index) => {
-                        out_arguments.push(self.arguments[*index].transpile_defined(
-                            &ScopePath::empty(),
-                            &namer,
-                            &program.types,
-                        ));
-                        quote! {}
-                    }
+                        .transpile(*stage, *index, &program.types, program, &mut namer),
                 };
             transpiled_atoms.push(transpiled_atom);
         }
         define_stage(
-            self,
             stage_index,
-            &namer,
             quote! {
                 #(#transpiled_atoms)*
-                (#(#out_arguments),*)
             },
         )
     }

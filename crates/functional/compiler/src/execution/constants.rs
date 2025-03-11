@@ -164,40 +164,20 @@ pub fn array_access(tipo: &Type, array: impl ToTokens, index: impl ToTokens) -> 
     }
 }
 
-pub fn execute_stage(
-    callee: impl ToTokens,
-    in_arguments: &Vec<TokenStream>,
-    out_arguments: &Vec<TokenStream>,
-    index: usize,
-) -> TokenStream {
+pub fn execute_stage(callee: impl ToTokens, index: usize) -> TokenStream {
     let tracker = ident(TRACKER);
     let function_name = ident(&format!("{}_{}", STAGE, index));
     quote! {
-        let (#(#out_arguments),*) = #callee.#function_name(#tracker, #(#in_arguments),*);
+        #callee.#function_name(#tracker);
     }
 }
 
-pub fn define_stage(
-    function: &FlattenedFunction,
-    stage_index: usize,
-    namer: &VariableNamer,
-    body: TokenStream,
-) -> TokenStream {
+pub fn define_stage(stage_index: usize, body: TokenStream) -> TokenStream {
     let tracker = ident(TRACKER);
     let tracker_struct = tracker_struct_name();
     let function_name = ident(&format!("{}_{}", STAGE, stage_index));
-
-    let stage = function.stages[stage_index];
-
-    let in_argument_names = (stage.start..stage.mid).map(|index| namer.in_argument_name(index));
-    let in_argument_types = function.arguments[stage.start..stage.mid]
-        .iter()
-        .map(|argument| type_to_rust(argument.get_type()));
-    let out_argument_types = function.arguments[stage.mid..stage.end]
-        .iter()
-        .map(|argument| type_to_rust(argument.get_type()));
     quote! {
-        fn #function_name(#tracker: &mut #tracker_struct, #(#in_argument_names: #in_argument_types),*) -> (#(#out_argument_types),*) {
+        fn #function_name(#tracker: &mut #tracker_struct) {
             #body
         }
     }

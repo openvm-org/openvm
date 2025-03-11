@@ -398,7 +398,7 @@ impl FlatMatch {
                     let type_size = type_set.calc_type_size(tipo);
                     representation_table.add_representation(
                         &scope,
-                        component,
+                        &component.name,
                         representation[offset..offset + type_size].to_vec(),
                     );
                     offset += type_size;
