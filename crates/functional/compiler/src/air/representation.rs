@@ -376,6 +376,27 @@ impl FlatMatch {
                         .unwrap();
                     representation[0] = Some(AirExpression::constant(variant_index as isize));
                 }
+                let type_components = &tipo
+                    .variants
+                    .iter()
+                    .find(|variant| &variant.name == constructor)
+                    .unwrap()
+                    .components;
+
+                // get from ones that are represented elsewhere
+                let mut offset = if tipo.variants.len() == 1 { 0 } else { 1 };
+                for (component, tipo) in components.iter().zip_eq(type_components.iter()) {
+                    if !component.represents {
+                        let component_representation =
+                            representation_table.get_representation(&scope, &component.name);
+                        for (i, expression) in component_representation.iter().enumerate() {
+                            representation[offset + i] = Some(expression.clone());
+                        }
+                    }
+                    let type_size = type_set.calc_type_size(tipo);
+                    offset += type_size;
+                }
+
                 self.value.represent_top_down(
                     type_set,
                     representation_table,
@@ -387,20 +408,15 @@ impl FlatMatch {
                     representation.into_iter().map(|x| x.unwrap()).collect();
 
                 let mut offset = if tipo.variants.len() == 1 { 0 } else { 1 };
-                for (component, tipo) in components.iter().zip_eq(
-                    tipo.variants
-                        .iter()
-                        .find(|variant| &variant.name == constructor)
-                        .unwrap()
-                        .components
-                        .iter(),
-                ) {
+                for (component, tipo) in components.iter().zip_eq(type_components.iter()) {
                     let type_size = type_set.calc_type_size(tipo);
-                    representation_table.add_representation(
-                        &scope,
-                        &component.name,
-                        representation[offset..offset + type_size].to_vec(),
-                    );
+                    if component.represents {
+                        representation_table.add_representation(
+                            &scope,
+                            &component.name,
+                            representation[offset..offset + type_size].to_vec(),
+                        );
+                    }
                     offset += type_size;
                 }
                 air_constructor.add_scoped_constraint(

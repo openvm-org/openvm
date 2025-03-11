@@ -356,7 +356,7 @@ impl FlattenedFunction {
                         .position(|&atom| self.viable_for_representation(root_container, atom));
                     if let Some(i) = i {
                         let atom = disp_atoms.remove(i);
-                        self.resolve_representation(atom, root_container)?;
+                        self.try_resolve_representation(atom, root_container)?;
                         ordered_atoms.push(atom);
 
                         if let Atom::PartialFunctionCall(index, _) = atom {
@@ -404,7 +404,7 @@ impl FlattenedFunction {
                     .position(|&atom| self.viable_for_representation(root_container, atom));
                 if let Some(i) = i {
                     let atom = disp_atoms.remove(i);
-                    self.resolve_representation(atom, root_container)?;
+                    self.try_resolve_representation(atom, root_container)?;
                     ordered_atoms.push(atom);
 
                     if let Atom::PartialFunctionCall(index, _) = atom {
@@ -456,6 +456,22 @@ impl FlattenedFunction {
                 .all(|dependency| root_container.root_scope.is_declared(scope, dependency))
     }
     fn viable_for_representation(&self, root_container: &RootContainer, atom: Atom) -> bool {
+        if let Atom::Match(index) = atom {
+            for (constructor, components) in self.matches[index].branches.iter() {
+                let scope_here = self.scope(atom).then(index, constructor.clone());
+                for component in components.iter() {
+                    if !component.represents
+                        && !root_container.root_scope.is_represented(
+                            &scope_here,
+                            &component.name,
+                            &root_container.type_set,
+                        )
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
         let scope = &self.scope(atom);
         self.dependencies(atom, DependencyType::Representation)
             .iter()
@@ -468,7 +484,6 @@ impl FlattenedFunction {
             })
     }
     fn dependencies(&self, atom: Atom, dependency_type: DependencyType) -> Vec<String> {
-        assert_ne!(dependency_type, DependencyType::Representation);
         match atom {
             Atom::Match(index) => self.matches[index].value.dependencies(dependency_type),
             Atom::PartialFunctionCall(index, stage) => {
@@ -728,7 +743,7 @@ impl FlattenedFunction {
         Ok(())
     }
 
-    fn resolve_representation(
+    fn try_resolve_representation(
         &self,
         atom: Atom,
         root_container: &mut RootContainer,
@@ -742,6 +757,7 @@ impl FlattenedFunction {
                     value,
                     branches,
                 } = &self.matches[flat_index];
+
                 value.resolve_representation(root_container, scope)?;
                 for (constructor, components) in branches {
                     let new_path = scope.then(*index, constructor.clone());

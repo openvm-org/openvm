@@ -500,6 +500,18 @@ impl ExpressionContainer {
         }
     }
 
+    pub fn does_representing(&self) -> bool {
+        match self.expression.as_ref() {
+            Expression::Variable {
+                represents: true, ..
+            } => true,
+            _ => self
+                .children()
+                .iter()
+                .any(|child| child.does_representing()),
+        }
+    }
+
     pub fn resolve_defined(
         &mut self,
         function_container: &mut RootContainer,
