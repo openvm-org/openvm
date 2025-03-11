@@ -10,14 +10,16 @@ use crate::folder1::{
     ir::Material,
 };
 
-struct Renamer {}
+pub struct Renamer {
+    identity: usize,
+}
 
 impl Renamer {
     pub fn new(identity: usize) -> Self {
-        todo!()
+        Self { identity }
     }
     pub fn rename(&self, name: &mut String) {
-        todo!()
+        *name = format!("inline{}_{}", self.identity, name);
     }
 }
 
