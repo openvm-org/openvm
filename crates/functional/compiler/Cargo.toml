@@ -14,3 +14,5 @@ quote = "1.0.39"
 itertools = "0.14.0"
 pest = "2.7.15"
 pest_derive = "2.7.15"
+
+openvm-stark-sdk = { workspace = true }

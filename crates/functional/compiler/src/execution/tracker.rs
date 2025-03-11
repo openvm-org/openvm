@@ -5,6 +5,7 @@ use crate::{
     execution::constants::*,
     folder1::{ir::Type, stage1::Stage2Program},
 };
+use crate::execution::helpers::rust_helpers;
 use crate::execution::memory::rust_memory;
 
 pub fn rust_tracker(types_in_memory: Vec<Type>) -> TokenStream {
@@ -65,9 +66,17 @@ impl Stage2Program {
         }
         let tracker = rust_tracker(types_in_memory);
         let memory = rust_memory();
+        let helpers = rust_helpers();
+        
+        let field_type = field_type();
         quote! {
+            use openvm_stark_sdk::openvm_stark_backend::p3_field::FieldAlgebra;
+            type #field_type = openvm_stark_sdk::p3_baby_bear::BabyBear;
+
             #tracker
             #memory
+            #helpers
+            #(#algebraic_types)*
             #(#functions)*
         }
     }
