@@ -26,6 +26,13 @@ const RESERVED_HIGH_BITS: usize = 2;
 
 #[derive(Copy, Clone, Debug)]
 pub struct AssignedBabyBear {
+    /// Logically `value` is a signed integer represented as `Bn254Fr`.
+    /// Invariants:
+    /// - `|value|` never overflows `Bn254Fr`
+    /// - `|value| < 2^max_bits` and `max_bits <= Fr::CAPACITY - RESERVED_HIGH_BITS`
+    ///
+    /// Basically `value` could do arithmetic operations without extra constraints as long as the
+    /// result doesn't overflow `Bn254Fr`. And it's easy to track `max_bits` of the result.
     pub value: AssignedValue<Fr>,
     /// The value is guaranteed to be less than 2^max_bits.
     pub max_bits: usize,
@@ -71,7 +78,7 @@ impl BabyBearChip {
 
     pub fn reduce(&self, ctx: &mut Context<Fr>, a: AssignedBabyBear) -> AssignedBabyBear {
         debug_assert!(fe_to_bigint(a.value.value()).bits() as usize <= a.max_bits);
-        let (_, r) = signed_div_mod(&self.range, ctx, a.value, BabyBear::ORDER_U32, a.max_bits);
+        let (_, r) = signed_div_mod(&self.range, ctx, a.value, a.max_bits);
         let r = AssignedBabyBear {
             value: r,
             max_bits: BABYBEAR_MAX_BITS,
@@ -308,6 +315,7 @@ impl BabyBearChip {
     }
 
     pub fn assert_zero(&self, ctx: &mut Context<Fr>, a: AssignedBabyBear) {
+        // The proof of correctness of this function is listed in `signed_div_mod`.
         debug_assert_eq!(a.to_baby_bear(), BabyBear::ZERO);
         assert!(a.max_bits <= Fr::CAPACITY as usize - RESERVED_HIGH_BITS);
         let a_num_bits = a.max_bits;
@@ -333,13 +341,6 @@ impl BabyBearChip {
                 .gate()
                 .add(ctx, div, QuantumCell::Constant(biguint_to_fe(&bound)));
         debug_assert!(*shifted_div.value() < biguint_to_fe(&(&bound * 2u32 + 1u32)));
-        // in this use case, we know that a.max_bits <= Fr::CAPACITY - RESERVED_HIGH_BITS, which means that
-        // bound has at most Fr::CAPACITY - RESERVED_HIGH_BITS - BABYBEAR_ORDER_BITS bits.
-        // In particular, 2 * bound + 1 has at most Fr::CAPACITY - RESERVED_HIGH_BITS - BABYBEAR_ORDER_BITS + 1 bits.
-        // Most notably, suppose we could fake |p * shifted_div - p * shifted_div'| < p, with both shifted_div and shifted_div'
-        // distinct and satisfying the range check. We note that |shifted_div-shifted_div'| < 1 << (Fr::CAPACITY - RESERVED_HIGH_BITS - BABYBEAR_ORDER_BITS + 1)
-        // In particular, even if we multiply by babybear, we have 0 < p * |shifted_div-shifted_div'| < 1 << (Fr::CAPACITY - RESERVED_HIGH_BITS + 2)
-        // its pretty clear that this has no overlap with (-p, p), so we are safe.
         self.range
             .range_check(ctx, shifted_div, (bound * 2u32 + 1u32).bits() as usize);
     }
@@ -351,28 +352,61 @@ impl BabyBearChip {
     }
 }
 
-/// Constrains and returns `(c, r)` such that `a = b * c + r`.
+/// Constrains and returns `(c, r)` such that `a = BabyBear::ORDER_U32 * c + r`.
 ///
 /// * a: [QuantumCell] value to divide
-/// * b: [BigUint] value to divide by
 /// * a_num_bits: number of bits needed to represent the absolute value of `a`
 ///
 /// ## Assumptions
-/// * `b != 0` and that `abs(a) < 2^a_max_bits`
 /// * `a_max_bits < F::CAPACITY = F::NUM_BITS - RESERVED_HIGH_BITS`
 ///   * Unsafe behavior if `a_max_bits >= F::CAPACITY`
 fn signed_div_mod<F>(
     range: &RangeChip<F>,
     ctx: &mut Context<F>,
     a: impl Into<QuantumCell<F>>,
-    b: impl Into<BigUint>,
     a_num_bits: usize,
 ) -> (AssignedValue<F>, AssignedValue<F>)
 where
     F: BigPrimeField,
 {
+    // Proof of correctness:
+    // Let `b` be the order of `BabyBear` and `p` be the order of `Fr`.
+    // First we introduce witness `div` and `rem`.
+    // We constraint:
+    // (1) `div * b + rem ≡ a (mod p)`
+    // (2) `0 <= rem < b`
+    // Logically we want `div = a // b`. Because (2) and `a` could be negative, `div` could
+    // be negative. Therefore, we have `|div| = |a // b| = |a| // b < 2^max_bits // b = bound` and
+    // we can say `shifted_div = div + bound` is in `[0, 2 * bound)`.
+    // In practice, it's expensive to assert `shifted_div` is less than `2 * bound` which is not a
+    // power of 2s. Instead, we add a looser constraint:
+    // (3) `shifted_div < 2^max_bits/2^(BABYBEAR_ORDER_BITS-1)=2^(max_bits-BABYBEAR_ORDER_BITS+1)`
+    //
+    // Let's check if |div * b + rem| can overflow:
+    // - `div` has at most `max_bits-BABYBEAR_ORDER_BITS` bits
+    // - `b` has `BABYBEAR_ORDER_BITS` bits.
+    // - `rem` has at most `BABYBEAR_ORDER_BITS` bits.
+    // When `max_bits > BABYBEAR_ORDER_BITS`, `|div * b + rem|` has at most `max_bits+1` bits.
+    // Because of the invariant `max_bits <= Fr::CAPACITY - RESERVED_HIGH_BITS`, `|div * b + rem|`
+    // cannot overflow.
+    //
+    // Let's check if the looser constraint will cause some problem:
+    // Assume there are other `div'` and `rem'` satisfying:
+    // `div * b + rem ≡ div' * b + rem' (mod p)`
+    // Then we have:
+    // `(div - div') * b ≡ rem' - rem (mod p)`
+    // (3) => `|(div - div') * b| < 2^(max_bits+1) < p`
+    // (2) => `|rem' - rem| < b`
+    // There could be 3 cases:
+    // a. `-b < (div - div') * b < b` or;
+    // b. `0 < (div - div') * b + p < b` or;
+    // c. `-b < (div - div') * b - p < 0`
+    // Case (a) is impossible because `div != div'`.
+    // Case (b) and (c) imply:
+    // |div - div'|  > (p-b) // b > 2^(Fr::CAPACITY - (BABYBEAR_ORDER_BITS - 1) - 1) = 2^(Fr::CAPACITY - BABYBEAR_ORDER_BITS)
+    // (3) also constrains that this is impossible.
     let a = a.into();
-    let b = b.into();
+    let b = BigUint::from(BabyBear::ORDER_U32);
     let a_val = fe_to_bigint(a.value());
     assert!(a_val.bits() <= a_num_bits as u64);
     let (div, rem) = a_val.div_mod_floor(&b.clone().into());
@@ -394,15 +428,7 @@ where
         .gate()
         .add(ctx, div, QuantumCell::Constant(biguint_to_fe(&bound)));
     debug_assert!(*shifted_div.value() < biguint_to_fe(&(&bound * 2u32 + 1u32)));
-    // in this use case, we know that a.max_bits <= Fr::CAPACITY - RESERVED_HIGH_BITS, which means that
-    // bound has at most Fr::CAPACITY - RESERVED_HIGH_BITS - BABYBEAR_ORDER_BITS bits.
-    // In particular, 2 * bound + 1 has at most Fr::CAPACITY - RESERVED_HIGH_BITS - BABYBEAR_ORDER_BITS + 1 bits.
-    // Most notably, suppose we could fake |p * shifted_div - p * shifted_div'| < p, with both shifted_div and shifted_div'
-    // distinct and satisfying the range check. We note that |shifted_div-shifted_div'| < 1 << (Fr::CAPACITY - RESERVED_HIGH_BITS - BABYBEAR_ORDER_BITS + 1)
-    // In particular, even if we multiply by babybear, we have 0 < p * |shifted_div-shifted_div'| < 1 << (Fr::CAPACITY - RESERVED_HIGH_BITS + 2)
-    // its pretty clear that this has no overlap with (-p, p), so we are safe.
     range.range_check(ctx, shifted_div, (bound * 2u32 + 1u32).bits() as usize);
-    // Constrain that remainder is less than divisor (i.e. `r < b`).
     debug_assert!(*rem.value() < biguint_to_fe(&b));
     range.check_big_less_than_safe(ctx, rem, b);
     (div, rem)
