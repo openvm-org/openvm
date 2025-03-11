@@ -6,7 +6,6 @@ use crate::execution::constants::*;
 pub fn rust_memory() -> TokenStream {
     let memory_struct = memory_struct_name();
     let reference_struct = reference_type();
-    let under_construction_array_struct = array_type();
     let array_struct = array_type();
 
     let create_ref = ident(CREATE_REF);
@@ -19,8 +18,6 @@ pub fn rust_memory() -> TokenStream {
     quote! {
         #[derive(Clone, Copy, Debug)]
         pub struct #reference_struct(usize);
-        #[derive(Clone, Copy, Debug)]
-        pub struct #under_construction_array_struct(usize);
         #[derive(Clone, Copy, Debug)]
         pub struct #array_struct(usize);
 
@@ -44,19 +41,19 @@ pub fn rust_memory() -> TokenStream {
                 self.references[reference.0]
             }
 
-            pub fn #create_empty_under_construction_array(&mut self) -> #under_construction_array_struct {
+            pub fn #create_empty_under_construction_array(&mut self) -> #array_struct {
                 let index = self.arrays.len();
                 self.arrays.push(vec![]);
                 self.array_timestamps.push(0);
-                #under_construction_array_struct(index)
+                #array_struct(index)
             }
 
-            pub fn #append_under_construction_array(&mut self, array: #under_construction_array_struct, value: T) {
+            pub fn #append_under_construction_array(&mut self, array: #array_struct, value: T) {
                 self.arrays[array.0].push(value);
             }
 
-            pub fn #finalize_array(&mut self, array: #under_construction_array_struct) -> #array_struct {
-                #array_struct(array.0)
+            pub fn #finalize_array(&mut self, array: #array_struct) -> #array_struct {
+                array
             }
 
             pub fn #array_access(&self, array: #array_struct, index: usize) -> T {
