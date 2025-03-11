@@ -40,6 +40,12 @@ impl FlattenedFunction {
                 function_name,
                 arguments,
             } = &function_call;
+            // hacky, would be nice some other way
+            if function_name == &self.name {
+                inline_results.push(InlineResult::NotInlined(self.function_calls.len()));
+                self.function_calls.push(function_call.clone());
+                continue;
+            }
             let callee = &functions[function_name];
             if callee.inline {
                 let path_offset = self.tree.num_branches(scope);

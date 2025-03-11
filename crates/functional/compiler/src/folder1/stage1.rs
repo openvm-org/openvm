@@ -62,10 +62,12 @@ impl FlattenedFunction {
         }
 
         for function_call in self.function_calls.iter() {
-            let callee = &functions[&function_call.function_name];
-            if callee.uses_timestamp {
-                self.uses_timestamp = true;
-                return true;
+            if function_call.function_name != self.name {
+                let callee = &functions[&function_call.function_name];
+                if callee.uses_timestamp {
+                    self.uses_timestamp = true;
+                    return true;
+                }
             }
         }
 
