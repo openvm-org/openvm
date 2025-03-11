@@ -15,7 +15,7 @@ use crate::folder1::{
     ir::{Argument, BranchComponent, FunctionCall, Material},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum RepresentationOrder {
     Inline(Vec<Vec<Atom>>),
     NotInline(Vec<Atom>),
@@ -27,7 +27,7 @@ impl Default for RepresentationOrder {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FlattenedFunction {
     pub(crate) inline: bool,
     pub(crate) stages: Vec<Stage>,
@@ -48,14 +48,14 @@ pub struct FlattenedFunction {
     pub(crate) function_id: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FlatStatement {
     pub material: Material,
     pub scope: ScopePath,
     pub statement: Statement,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FlatMatch {
     pub material: Material,
     pub scope: ScopePath,
@@ -64,7 +64,7 @@ pub struct FlatMatch {
     pub branches: Vec<(String, Vec<BranchComponent>)>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FlatFunctionCall {
     pub material: Material,
     pub scope: ScopePath,
@@ -83,14 +83,14 @@ impl FlatFunctionCall {
     }
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub enum Atom {
     Match(usize),
     Statement(usize),
     PartialFunctionCall(usize, Stage),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Tree {
     pub children: Vec<HashMap<String, Tree>>,
 }

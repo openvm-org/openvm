@@ -5,6 +5,7 @@ use super::{
     ir::Program, type_resolution::TypeSet,
 };
 
+#[derive(Debug)]
 pub struct Stage2Program {
     pub types: TypeSet,
     pub functions: HashMap<String, FlattenedFunction>,

@@ -5,6 +5,7 @@ use crate::folder1::{
         ArithmeticOperator, Body, Branch, Expression, Function, FunctionCall, Match, Material,
         Program, Statement, Type,
     },
+    stage1::stage1,
 };
 
 pub mod air;
@@ -53,6 +54,7 @@ fn main() {
             ],
             body: Body {
                 statements: vec![],
+                function_calls: vec![],
                 matches: vec![Match {
                     value: ExpressionContainer::new(Expression::Eq {
                         left: ExpressionContainer::new(Expression::Variable {
@@ -207,4 +209,7 @@ fn main() {
             inline: false,
         }],
     };
+
+    let stage2_program = stage1(program).unwrap();
+    println!("{:?}", stage2_program);
 }

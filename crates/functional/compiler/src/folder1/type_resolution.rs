@@ -6,7 +6,7 @@ use super::{
 };
 use crate::folder1::ir::Material;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TypeSet {
     pub type_order: Vec<String>,
     pub algebraic_types: HashMap<String, AlgebraicTypeDeclaration>,

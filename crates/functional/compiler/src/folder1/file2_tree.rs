@@ -13,7 +13,7 @@ use super::{
 };
 use crate::folder1::ir::{ArithmeticOperator, Material};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ExpressionContainer {
     pub(crate) expression: Box<Expression>,
     pub(crate) tipo: Option<Type>,
@@ -43,7 +43,7 @@ pub struct ScopeContainer {
     under_construction_array_usages: HashSet<String>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct DeclarationSet {
     pub declarations: HashMap<(ScopePath, String), Type>,
 }
@@ -317,7 +317,7 @@ impl ScopeContainer {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ScopePath(pub Vec<(usize, String)>);
 
 impl ScopePath {

@@ -67,7 +67,7 @@ pub enum ArithmeticOperator {
     Div,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Expression {
     Constant {
         value: isize,
@@ -119,7 +119,7 @@ pub enum Expression {
     },
 } // components of an algebraic value can be extracted using match, don’t need to have an expression for them
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Statement {
     VariableDeclaration {
         name: String,
@@ -158,7 +158,7 @@ pub enum Statement {
     },
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FunctionCall {
     pub function: String,
     pub arguments: Vec<ExpressionContainer>,
@@ -170,21 +170,21 @@ pub struct BranchComponent {
     pub represents: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Branch {
     pub constructor: String,
     pub components: Vec<BranchComponent>,
     pub body: Body,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Match {
     pub value: ExpressionContainer,
     pub check_material: Material,
     pub branches: Vec<Branch>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Body {
     //bool equals whether statement is materialized or not
     pub statements: Vec<(Material, Statement)>,
@@ -192,13 +192,13 @@ pub struct Body {
     pub function_calls: Vec<(Material, FunctionCall)>,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ArgumentBehavior {
     In,
     Out,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Argument {
     pub(crate) behavior: ArgumentBehavior,
     pub(crate) tipo: Type,
@@ -206,7 +206,7 @@ pub struct Argument {
     pub(crate) represents: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Function {
     pub name: String,
     pub arguments: Vec<Argument>,
@@ -214,24 +214,25 @@ pub struct Function {
     pub inline: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AlgebraicTypeVariant {
     pub name: String,
     pub components: Vec<Type>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AlgebraicTypeDeclaration {
     pub name: String,
     pub variants: Vec<AlgebraicTypeVariant>,
 }
 
+#[derive(Clone, Debug)]
 pub struct Program {
     pub algebraic_types: Vec<AlgebraicTypeDeclaration>,
     pub functions: Vec<Function>,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Material {
     Materialized,
     Dematerialized,
