@@ -1,80 +1,210 @@
-// use crate::parser::LanguageParser;
+use crate::folder1::{
+    file2_tree::ExpressionContainer,
+    ir::{
+        AlgebraicTypeDeclaration, AlgebraicTypeVariant, Argument, ArgumentBehavior,
+        ArithmeticOperator, Body, Branch, Expression, Function, FunctionCall, Match, Material,
+        Program, Statement, Type,
+    },
+};
 
 pub mod air;
 pub mod execution;
 pub mod folder1;
 // pub mod parser;
 
-struct Bing(usize, usize);
-
-/*#[derive(Clone, Copy)]
-struct A {
-    b: &'static mut B,
-}
-
-struct B {
-    a: A,
-}
-
-enum C {
-    D(usize, usize),
-}
-
-struct E {
-    f: usize,
-    g: usize,
-}
-
-impl E {
-    fn assign(&mut self, c: C) {
-        match c {
-            C::D(a, b) => {}
-        }
-    }
-}*/
-
-use pest::Parser;
-use pest_derive::Parser;
-
-#[derive(Parser)]
-#[grammar_inline = r#"
-// your grammar here
-a = { "a" }
-number_literal = @{ "-"? ~ '0'..'9'+ }
-plus = { "+" }
-minus = { "-" }
-times = { "*" }
-expr = { number_literal ~ ((plus | minus | times) ~ expr)? }
-
-"#]
-struct MyParser;
-
 fn main() {
     println!("Hello, world!");
-    /*let bing = Bing(1, 2);
-    let mut x = 4;
-    let mut y = 5;
-    Bing(x, y) = bing;
 
-    let Bing(a, y) = Bing(3, 4);
-
-    let x = [] as [usize; 0];
-
-    let a = [1, 2, 3, 4, 5];
-    let b: [i32; 3];
-    //b = a[1..4];*/
-
-    /*let array = quote! { array_name };
-    let indices = 0..3;
-    let slice = quote! {
-        [#(#array[#indices]),*]
+    let program = Program {
+        algebraic_types: vec![AlgebraicTypeDeclaration {
+            name: "Bool".to_string(),
+            variants: vec![
+                AlgebraicTypeVariant {
+                    name: "True".to_string(),
+                    components: vec![],
+                },
+                AlgebraicTypeVariant {
+                    name: "False".to_string(),
+                    components: vec![],
+                },
+            ],
+        }],
+        functions: vec![Function {
+            name: "fibonacci".to_string(),
+            arguments: vec![
+                Argument {
+                    behavior: ArgumentBehavior::In,
+                    tipo: Type::Field,
+                    name: "n".to_string(),
+                    represents: true,
+                },
+                Argument {
+                    behavior: ArgumentBehavior::Out,
+                    tipo: Type::Field,
+                    name: "a".to_string(),
+                    represents: false,
+                },
+                Argument {
+                    behavior: ArgumentBehavior::Out,
+                    tipo: Type::Field,
+                    name: "b".to_string(),
+                    represents: false,
+                },
+            ],
+            body: Body {
+                statements: vec![],
+                matches: vec![Match {
+                    value: ExpressionContainer::new(Expression::Eq {
+                        left: ExpressionContainer::new(Expression::Variable {
+                            name: "n".to_string(),
+                            declares: false,
+                            defines: false,
+                            represents: false,
+                        }),
+                        right: ExpressionContainer::new(Expression::Constant { value: 0 }),
+                    }),
+                    check_material: Material::Dematerialized,
+                    branches: vec![
+                        Branch {
+                            constructor: "True".to_string(),
+                            components: vec![],
+                            body: Body {
+                                statements: vec![
+                                    (
+                                        Material::Materialized,
+                                        Statement::Equality {
+                                            left: ExpressionContainer::new(Expression::Variable {
+                                                name: "n".to_string(),
+                                                declares: false,
+                                                defines: false,
+                                                represents: false,
+                                            }),
+                                            right: ExpressionContainer::new(Expression::Constant {
+                                                value: 0,
+                                            }),
+                                        },
+                                    ),
+                                    (
+                                        Material::Materialized,
+                                        Statement::Equality {
+                                            left: ExpressionContainer::new(Expression::Variable {
+                                                name: "a".to_string(),
+                                                declares: false,
+                                                defines: true,
+                                                represents: true,
+                                            }),
+                                            right: ExpressionContainer::new(Expression::Constant {
+                                                value: 0,
+                                            }),
+                                        },
+                                    ),
+                                    (
+                                        Material::Materialized,
+                                        Statement::Equality {
+                                            left: ExpressionContainer::new(Expression::Variable {
+                                                name: "b".to_string(),
+                                                declares: false,
+                                                defines: true,
+                                                represents: true,
+                                            }),
+                                            right: ExpressionContainer::new(Expression::Constant {
+                                                value: 1,
+                                            }),
+                                        },
+                                    ),
+                                ],
+                                matches: vec![],
+                                function_calls: vec![],
+                            },
+                        },
+                        Branch {
+                            constructor: "False".to_string(),
+                            components: vec![],
+                            body: Body {
+                                function_calls: vec![(
+                                    Material::Materialized,
+                                    FunctionCall {
+                                        function: "fibonacci".to_string(),
+                                        arguments: vec![
+                                            ExpressionContainer::new(Expression::Variable {
+                                                name: "n".to_string(),
+                                                declares: false,
+                                                defines: false,
+                                                represents: false,
+                                            }),
+                                            ExpressionContainer::new(Expression::Variable {
+                                                name: "x".to_string(),
+                                                declares: true,
+                                                defines: true,
+                                                represents: true,
+                                            }),
+                                            ExpressionContainer::new(Expression::Variable {
+                                                name: "y".to_string(),
+                                                declares: true,
+                                                defines: true,
+                                                represents: true,
+                                            }),
+                                        ],
+                                    },
+                                )],
+                                matches: vec![],
+                                statements: vec![
+                                    (
+                                        Material::Materialized,
+                                        Statement::Equality {
+                                            left: ExpressionContainer::new(Expression::Variable {
+                                                name: "a".to_string(),
+                                                declares: false,
+                                                defines: true,
+                                                represents: true,
+                                            }),
+                                            right: ExpressionContainer::new(Expression::Variable {
+                                                name: "y".to_string(),
+                                                declares: false,
+                                                defines: false,
+                                                represents: false,
+                                            }),
+                                        },
+                                    ),
+                                    (
+                                        Material::Materialized,
+                                        Statement::Equality {
+                                            left: ExpressionContainer::new(Expression::Variable {
+                                                name: "b".to_string(),
+                                                declares: false,
+                                                defines: true,
+                                                represents: true,
+                                            }),
+                                            right: ExpressionContainer::new(
+                                                Expression::Arithmetic {
+                                                    operator: ArithmeticOperator::Plus,
+                                                    left: ExpressionContainer::new(
+                                                        Expression::Variable {
+                                                            name: "x".to_string(),
+                                                            declares: false,
+                                                            defines: false,
+                                                            represents: false,
+                                                        },
+                                                    ),
+                                                    right: ExpressionContainer::new(
+                                                        Expression::Variable {
+                                                            name: "y".to_string(),
+                                                            declares: false,
+                                                            defines: false,
+                                                            represents: false,
+                                                        },
+                                                    ),
+                                                },
+                                            ),
+                                        },
+                                    ),
+                                ],
+                            },
+                        },
+                    ],
+                }],
+            },
+            inline: false,
+        }],
     };
-    println!("{}", slice);*/
-
-    /*let not_a_program = "wef wbwoeif";
-    let parse_result = LanguageParser::parse(Rule::program, not_a_program);
-    println!("{:?}", parse_result);*/
-
-    let parse_result = MyParser::parse(Rule::expr, "1+2*3");
-    println!("{:?}", parse_result);
 }

@@ -1,0 +1,14 @@
+fn fibonacci(in<F> n, out<F> a, out<F> b) (
+    {match n == 0} (
+        True => (
+            n = 0;
+            fix a = 0;
+            fix b = 1;
+        ),
+        False => (
+            fibonacci(n - 1, def x, def y);
+            fix a = y;
+            fix b = x + y;
+        ),
+    )
+)

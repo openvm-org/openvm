@@ -227,8 +227,8 @@ pub struct AlgebraicTypeDeclaration {
 }
 
 pub struct Program {
-    pub functions: Vec<Function>,
     pub algebraic_types: Vec<AlgebraicTypeDeclaration>,
+    pub functions: Vec<Function>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
