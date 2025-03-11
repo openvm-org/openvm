@@ -7,6 +7,7 @@ use crate::folder1::{
     },
     stage1::stage1,
 };
+use crate::transpiled_fibonacci::{isize_to_field_elem, TLFunction_fibonacci, Tracker};
 
 pub mod air;
 pub mod execution;
@@ -16,7 +17,17 @@ pub mod transpiled_fibonacci;
 
 fn main() {
     println!("Hello, world!");
+    compile_and_transpile_fibonacci();
+}
 
+fn test_fibonacci() {
+    let mut tracker = Tracker::default();
+    let mut fibonacci = TLFunction_fibonacci::default();
+    fibonacci.n = isize_to_field_elem(12);
+    //fibonacci.sta
+}
+    
+fn compile_and_transpile_fibonacci() {
     let program = Program {
         algebraic_types: vec![AlgebraicTypeDeclaration {
             name: "Bool".to_string(),

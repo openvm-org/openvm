@@ -57,17 +57,17 @@ pub fn eq_to_bool<T: Eq>(x: T, y: T) -> TL_Bool {
     }
 }
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
-enum TL_Bool {
+pub enum TL_Bool {
     True(),
     False(),
 }
 #[derive(Debug)]
 pub struct TLFunction_fibonacci {
     pub y_0_False: F,
-    pub x_0_False: F,
-    pub n: F,
     pub a: F,
+    pub n: F,
     pub b: F,
+    pub x_0_False: F,
     pub scope_0_True: bool,
     pub scope_0_False: bool,
     pub callee_0: Box<TLFunction_fibonacci>,
@@ -78,7 +78,7 @@ impl Default for TLFunction_fibonacci {
     }
 }
 impl TLFunction_fibonacci {
-    fn stage_0(&mut self, tracker: &mut Tracker) {
+    pub fn stage_0(&mut self, tracker: &mut Tracker) {
         match eq_to_bool(self.n, isize_to_field_elem(0isize)) {
             TL_Bool::True() => {
                 self.scope_0_True = true;

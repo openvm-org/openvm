@@ -174,7 +174,7 @@ pub fn define_stage(stage_index: usize, body: TokenStream) -> TokenStream {
     let tracker_struct = tracker_struct_name();
     let function_name = ident(&format!("{}_{}", STAGE, stage_index));
     quote! {
-        fn #function_name(&mut self, #tracker: &mut #tracker_struct) {
+        pub fn #function_name(&mut self, #tracker: &mut #tracker_struct) {
             #body
         }
     }
