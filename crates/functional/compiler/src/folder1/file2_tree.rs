@@ -395,7 +395,7 @@ impl RootContainer {
                 return Ok(tipo.clone());
             }
             if depth == path.0.len() {
-                unreachable!();
+                return Err(CompilationError::UndeclaredVariable(name.clone()));
             }
             let (x, constructor) = &path.0[depth];
             scope = &scope.children[*x][constructor];
