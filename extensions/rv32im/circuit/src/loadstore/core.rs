@@ -197,7 +197,7 @@ where
                             prev_data[i]
                         }
                     + opcode_when(&[StoreH2])
-                        * if i + 2 < NUM_CELLS / 2 {
+                        * if i - 2 < NUM_CELLS / 2 {
                             read_data[i - 2]
                         } else {
                             prev_data[i]
