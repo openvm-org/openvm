@@ -4,14 +4,14 @@ This crate includes tests for OpenVM toolchain that involve starting from a Rust
 
 ## How to Add a Test
 
-1. Add a new guest program file to [programs/examples](./programs/examples).
+1. Add a new guest program file to [programs/examples](../../../benchmarks/programs).
 
 See [Writing the Guest Program](../../../benchmarks/README.md#writing-the-guest-program) for more detailed instructions.
 
 The `programs` directory is a single crate to make it easier to add small test programs. The crate is **not** part of the main workspace.
 Your IDE will likely not lint or use rust-analyzer on the crate while in the workspace, so you should open a separate IDE workspace from `programs` while writing your guest program.
 
-2. Add a rust test to the current crate in [`src`](./src).
+2. Add a rust test to the current crate in [`src`](../../../benchmarks/src).
 
 Follow the existing examples. There is a utility function `build_example_program` which will compile the guest program with target set to RISC-V and read the output RISC-V ELF file.
 For runtime tests, create a `VmExecutor` with the `VmConfig` you want, and then call `execute`. The `execute` function take in `Into<VmExe<F>>`, which the decoded RISC-V ELF `Elf` struct implements (this `Into` is where transpilation to OpenVM executable happens).
