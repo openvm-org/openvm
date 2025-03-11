@@ -4,9 +4,9 @@ use openvm_stark_sdk::openvm_stark_backend::p3_field::FieldAlgebra;
 type F = openvm_stark_sdk::p3_baby_bear::BabyBear;
 #[derive(Default, Debug)]
 pub struct Tracker {}
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Default, Debug)]
 pub struct TLRef(usize);
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Default, Debug)]
 pub struct TLArray(usize);
 #[derive(Default, Debug)]
 pub struct Memory<T: Copy + Clone> {
@@ -56,26 +56,26 @@ pub fn eq_to_bool<T: Eq>(x: T, y: T) -> TL_Bool {
         TL_Bool::False()
     }
 }
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum TL_Bool {
     True(),
     False(),
 }
-#[derive(Debug)]
+impl Default for TL_Bool {
+    fn default() -> Self {
+        Self::True()
+    }
+}
+#[derive(Default, Debug)]
 pub struct TLFunction_fibonacci {
-    pub y_0_False: F,
-    pub a: F,
+    pub x_0_False: F,
     pub n: F,
     pub b: F,
-    pub x_0_False: F,
+    pub a: F,
+    pub y_0_False: F,
     pub scope_0_True: bool,
     pub scope_0_False: bool,
-    pub callee_0: Box<TLFunction_fibonacci>,
-}
-impl Default for TLFunction_fibonacci {
-    fn default() -> Self {
-        unsafe { std::mem::zeroed() }
-    }
+    pub callee_0: Box<Option<TLFunction_fibonacci>>,
 }
 impl TLFunction_fibonacci {
     pub fn stage_0(&mut self, tracker: &mut Tracker) {
@@ -97,11 +97,11 @@ impl TLFunction_fibonacci {
             self.b = isize_to_field_elem(1isize);
         }
         if self.scope_0_False {
-            self.callee_0 = Box::new(TLFunction_fibonacci::default());
-            self.callee_0.n = self.n;
-            self.callee_0.stage_0(tracker);
-            self.x_0_False = self.callee_0.a;
-            self.y_0_False = self.callee_0.b;
+            self.callee_0 = Box::new(Some(TLFunction_fibonacci::default()));
+            self.callee_0.as_mut().as_mut().unwrap().n = self.n;
+            self.callee_0.as_mut().as_mut().unwrap().stage_0(tracker);
+            self.x_0_False = self.callee_0.as_ref().as_ref().unwrap().a;
+            self.y_0_False = self.callee_0.as_ref().as_ref().unwrap().b;
         }
         if self.scope_0_False {
             self.a = self.y_0_False;

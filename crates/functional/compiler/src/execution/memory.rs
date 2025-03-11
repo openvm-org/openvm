@@ -16,9 +16,9 @@ pub fn rust_memory() -> TokenStream {
     let array_access = ident(ARRAY_ACCESS);
 
     quote! {
-        #[derive(Clone, Copy, Debug)]
+        #[derive(Clone, Copy, Default, Debug)]
         pub struct #reference_struct(usize);
-        #[derive(Clone, Copy, Debug)]
+        #[derive(Clone, Copy, Default, Debug)]
         pub struct #array_struct(usize);
 
         #[derive(Default, Debug)]

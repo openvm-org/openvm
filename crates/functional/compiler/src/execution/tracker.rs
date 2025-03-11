@@ -2,11 +2,13 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 use crate::{
-    execution::constants::*,
-    folder1::{ir::Type, stage1::Stage2Program},
+    execution::{constants::*, helpers::rust_helpers, memory::rust_memory},
+    folder1::{
+        ir::{AlgebraicTypeDeclaration, Type},
+        stage1::Stage2Program,
+        type_resolution::TypeSet,
+    },
 };
-use crate::execution::helpers::rust_helpers;
-use crate::execution::memory::rust_memory;
 
 pub fn rust_tracker(types_in_memory: Vec<Type>) -> TokenStream {
     let mut distinct_types = vec![];
@@ -38,6 +40,45 @@ pub fn rust_tracker(types_in_memory: Vec<Type>) -> TokenStream {
     }
 }
 
+impl AlgebraicTypeDeclaration {
+    pub fn transpile(&self, type_set: &TypeSet) -> TokenStream {
+        let mut variants = vec![];
+        for variant in self.variants.iter() {
+            let name = ident(&variant.name);
+            let rust_components = variant.components.iter().map(type_to_rust);
+            variants.push(quote! {
+                #name(#(#rust_components),*),
+            });
+        }
+
+        let eq_derive = if Type::NamedType(self.name.clone())
+            .contains_reference(type_set, false)
+            .unwrap()
+        {
+            quote! {}
+        } else {
+            quote! {PartialEq, Eq, }
+        };
+        let name = type_name(&self.name);
+
+        let default_variant_name = ident(&self.variants[0].name);
+        let defaults = vec![quote! { Default::default() }; self.variants[0].components.len()];
+
+        quote! {
+            #[derive(#eq_derive Clone, Copy, Debug)]
+            pub enum #name {
+                #(#variants)*
+            }
+
+            impl Default for #name {
+                fn default() -> Self {
+                    Self::#default_variant_name(#(#defaults),*)
+                }
+            }
+        }
+    }
+}
+
 impl Stage2Program {
     pub fn transpile(&self) -> TokenStream {
         let mut functions = vec![];
@@ -46,28 +87,15 @@ impl Stage2Program {
             functions.push(function.transpile(self));
             types_in_memory.extend(function.get_types_in_memory());
         }
-        let mut algebraic_types = vec![];
-        for algebraic_type in self.types.algebraic_types.values() {
-            let mut variants = vec![];
-            for variant in algebraic_type.variants.iter() {
-                let name = ident(&variant.name);
-                let rust_components = variant.components.iter().map(type_to_rust);
-                variants.push(quote! {
-                    #name(#(#rust_components),*),
-                });
-            }
-            let name = type_name(&algebraic_type.name);
-            algebraic_types.push(quote! {
-                #[derive(PartialEq, Eq, Debug, Clone, Copy)]
-                pub enum #name {
-                    #(#variants)*
-                }
-            });
-        }
+        let algebraic_types = self
+            .types
+            .algebraic_types
+            .values()
+            .map(|tipo| tipo.transpile(&self.types));
         let tracker = rust_tracker(types_in_memory);
         let memory = rust_memory();
         let helpers = rust_helpers();
-        
+
         let field_type = field_type();
         quote! {
             use std::ops::Neg;

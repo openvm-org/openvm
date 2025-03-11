@@ -58,28 +58,15 @@ impl FlattenedFunction {
             let name = field_namer.callee_name(i);
             let struct_name = function_struct_name(&function_call.function_name);
             fields.push(quote! {
-                pub #name: Box<#struct_name>,
+                pub #name: Box<Option<#struct_name>>,
             });
         }
 
         let struct_name = function_struct_name(&self.name);
         quote! {
-            #[derive(Debug)]
+            #[derive(Default, Debug)]
             pub struct #struct_name {
                 #(#fields)*
-            }
-        }
-    }
-
-    pub fn transpile_default_impl(&self) -> TokenStream {
-        let struct_name = function_struct_name(&self.name);
-        quote! {
-            impl Default for #struct_name {
-                fn default() -> Self {
-                    unsafe {
-                        std::mem::zeroed()
-                    }
-                }
             }
         }
     }
@@ -124,11 +111,9 @@ impl FlattenedFunction {
 
     pub fn transpile(&self, program: &Stage2Program) -> TokenStream {
         let declaration = self.transpile_struct_declaration();
-        let default_impl = self.transpile_default_impl();
         let implementation = self.transpile_impl(program);
         quote! {
             #declaration
-            #default_impl
             #implementation
         }
     }

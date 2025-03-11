@@ -53,4 +53,5 @@ pub enum CompilationError {
     DuplicateConstructorName(String),
     DuplicateTypeName(String),
     TypeNameCannotBeF,
+    AlgebraicTypeCannotBeEmpty(String),
 }

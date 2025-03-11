@@ -420,7 +420,7 @@ impl FlatFunctionCall {
         if stage.index == 0 {
             let struct_name = function_struct_name(&self.function_name);
             block.push(quote! {
-                #callee_field = Box::new(#struct_name::default());
+                #callee_field = Box::new(Some(#struct_name::default()));
             });
         };
 
@@ -431,7 +431,7 @@ impl FlatFunctionCall {
                 callee.arguments[i].name.as_str(),
             );
             block.push(quote! {
-                #callee_field.#argument_field = #argument;
+                #callee_field.as_mut().as_mut().unwrap().#argument_field = #argument;
             });
         }
         block.push(execute_stage(&callee_field, stage.index));
@@ -442,7 +442,7 @@ impl FlatFunctionCall {
             );
             block.push(self.arguments[i].transpile_top_down(
                 &self.scope,
-                &quote! { #callee_field.#argument_field },
+                &quote! { #callee_field.as_ref().as_ref().unwrap().#argument_field },
                 namer,
                 type_set,
             ));

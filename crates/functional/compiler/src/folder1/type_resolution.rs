@@ -37,6 +37,11 @@ impl TypeSet {
                 })
                 .ok_or(CompilationError::TypesSelfReferential())?;
             let type_declaration = type_declarations.remove(i);
+            if type_declaration.variants.is_empty() {
+                return Err(CompilationError::AlgebraicTypeCannotBeEmpty(
+                    type_declaration.name.clone(),
+                ));
+            }
             type_order.push(type_declaration.name.clone());
             defined_types.insert(type_declaration.name.clone());
             for variant in type_declaration.variants.iter() {

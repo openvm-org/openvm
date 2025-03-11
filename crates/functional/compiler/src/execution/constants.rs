@@ -165,7 +165,7 @@ pub fn execute_stage(callee: impl ToTokens, index: usize) -> TokenStream {
     let tracker = ident(TRACKER);
     let function_name = ident(&format!("{}_{}", STAGE, index));
     quote! {
-        #callee.#function_name(#tracker);
+        #callee.as_mut().as_mut().unwrap().#function_name(#tracker);
     }
 }
 

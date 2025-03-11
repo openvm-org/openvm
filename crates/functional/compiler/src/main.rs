@@ -1,13 +1,15 @@
-use crate::folder1::{
-    file2_tree::ExpressionContainer,
-    ir::{
-        AlgebraicTypeDeclaration, AlgebraicTypeVariant, Argument, ArgumentBehavior,
-        ArithmeticOperator, Body, Branch, Expression, Function, FunctionCall, Match, Material,
-        Program, Statement, Type,
+use crate::{
+    folder1::{
+        file2_tree::ExpressionContainer,
+        ir::{
+            AlgebraicTypeDeclaration, AlgebraicTypeVariant, Argument, ArgumentBehavior,
+            ArithmeticOperator, Body, Branch, Expression, Function, FunctionCall, Match, Material,
+            Program, Statement, Type,
+        },
+        stage1::stage1,
     },
-    stage1::stage1,
+    transpiled_fibonacci::{isize_to_field_elem, TLFunction_fibonacci, Tracker},
 };
-use crate::transpiled_fibonacci::{isize_to_field_elem, TLFunction_fibonacci, Tracker};
 
 pub mod air;
 pub mod execution;
@@ -17,16 +19,22 @@ pub mod transpiled_fibonacci;
 
 fn main() {
     println!("Hello, world!");
-    compile_and_transpile_fibonacci();
+    //compile_and_transpile_fibonacci();
+    test_fibonacci();
+    
+    //let mut x = Box::new(Some(vec![]));
+    //x.as_mut().as_mut().unwrap().push(1);
 }
 
 fn test_fibonacci() {
     let mut tracker = Tracker::default();
     let mut fibonacci = TLFunction_fibonacci::default();
     fibonacci.n = isize_to_field_elem(12);
-    //fibonacci.sta
+    fibonacci.stage_0(&mut tracker);
+    assert_eq!(fibonacci.a, isize_to_field_elem(144));
+    println!("success")
 }
-    
+
 fn compile_and_transpile_fibonacci() {
     let program = Program {
         algebraic_types: vec![AlgebraicTypeDeclaration {
