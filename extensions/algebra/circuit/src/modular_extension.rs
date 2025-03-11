@@ -1,4 +1,4 @@
-use derive_more::derive::From;
+use derive_more::From;
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
