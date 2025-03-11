@@ -41,13 +41,14 @@ pub struct ModularIsEqualCoreCols<T, const READ_LIMBS: usize> {
     // Auxiliary columns for subair EQ comparison between b and c.
     pub eq_marker: [T; READ_LIMBS],
 
-    // Auxiliary columns to ensure both b and c are smaller than modulus N. Let i and j
-    // be the most significant indices such that b[i] < N[i] and c[j] < N[j], both of
-    // which exist iff b, c < N. Then, b_lt_diff = N[i] - b[i] and c_lt_diff = N[j] -
-    // c[j], where both must be in [0, 2^READ_LIMBS).
+    // Auxiliary columns to ensure both b and c are smaller than modulus N. Let b_diff_idx be
+    // an index such that b[b_diff_idx] < N[b_diff_idx] and b[i] = N[i] for all i > b_diff_idx,
+    // where larger indices correspond to more significant limbs. Such an index exists iff b < N.
+    // Define c_diff_idx analogously. Then let b_lt_diff = N[b_diff_idx] - b[b_diff_idx] and
+    // c_lt_diff = N[c_diff_idx] - c[c_diff_idx], where both must be in [0, 2^LIMB_BITS).
     //
-    // Additionally, set lt_marker[i] = 1, lt_marker[j] = c_lt_mark, and 0 everywhere
-    // else. If i == j then c_lt_mark = 1, else c_lt_mark = 2.
+    // Additionally, set lt_marker[b_diff_idx] = 1, lt_marker[c_diff_idx] = c_lt_mark, and 0 everywhere
+    // else. If b_diff_idx == c_diff_idx then c_lt_mark = 1, else c_lt_mark = 2.
     pub lt_marker: [T; READ_LIMBS],
     pub b_lt_diff: T,
     pub c_lt_diff: T,
@@ -150,19 +151,25 @@ where
             .iter()
             .fold(AB::Expr::ZERO, |acc, x| acc + (*x) * (*x - AB::F::ONE));
 
+        // Constrain that c_lt_mark is either 1 or 2.
         builder
             .when(cols.is_valid - cols.is_setup)
             .assert_bool(cols.c_lt_mark - AB::F::ONE);
 
+        // If c_lt_mark is 1, then lt_marker_sum is 1
         builder
             .when(cols.is_valid - cols.is_setup)
             .when_ne(cols.c_lt_mark, AB::F::from_canonical_u8(2))
             .assert_one(lt_marker_sum.clone());
 
+        // If c_lt_mark is 2, then lt_marker_sum is 3
         builder
             .when(cols.is_valid - cols.is_setup)
             .when_ne(cols.c_lt_mark, AB::F::ONE)
             .assert_eq(lt_marker_sum.clone(), AB::F::from_canonical_u8(3));
+
+        // This constraint, along with the constraint (below) that lt_marker[i] is 0, 1, or 2,
+        // ensures that lt_marker has exactly one 2.
         builder.when_ne(cols.c_lt_mark, AB::F::ONE).assert_eq(
             lt_marker_one_check_sum,
             cols.is_valid * AB::F::from_canonical_u8(2),
