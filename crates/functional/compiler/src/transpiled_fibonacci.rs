@@ -68,9 +68,9 @@ impl Default for TL_Bool {
 }
 #[derive(Default, Debug)]
 pub struct TLFunction_fibonacci {
-    pub x_0_False: F,
     pub n: F,
     pub b: F,
+    pub x_0_False: F,
     pub a: F,
     pub y_0_False: F,
     pub scope_0_True: bool,
@@ -98,7 +98,7 @@ impl TLFunction_fibonacci {
         }
         if self.scope_0_False {
             self.callee_0 = Box::new(Some(TLFunction_fibonacci::default()));
-            self.callee_0.as_mut().as_mut().unwrap().n = self.n;
+            self.callee_0.as_mut().as_mut().unwrap().n = self.n - isize_to_field_elem(1isize);
             self.callee_0.as_mut().as_mut().unwrap().stage_0(tracker);
             self.x_0_False = self.callee_0.as_ref().as_ref().unwrap().a;
             self.y_0_False = self.callee_0.as_ref().as_ref().unwrap().b;

@@ -19,9 +19,9 @@ pub mod transpiled_fibonacci;
 
 fn main() {
     println!("Hello, world!");
-    //compile_and_transpile_fibonacci();
+    // compile_and_transpile_fibonacci();
     test_fibonacci();
-    
+
     //let mut x = Box::new(Some(vec![]));
     //x.as_mut().as_mut().unwrap().push(1);
 }
@@ -148,11 +148,19 @@ fn compile_and_transpile_fibonacci() {
                                     FunctionCall {
                                         function: "fibonacci".to_string(),
                                         arguments: vec![
-                                            ExpressionContainer::new(Expression::Variable {
-                                                name: "n".to_string(),
-                                                declares: false,
-                                                defines: false,
-                                                represents: false,
+                                            ExpressionContainer::new(Expression::Arithmetic {
+                                                operator: ArithmeticOperator::Minus,
+                                                left: ExpressionContainer::new(
+                                                    Expression::Variable {
+                                                        name: "n".to_string(),
+                                                        declares: false,
+                                                        defines: false,
+                                                        represents: false,
+                                                    },
+                                                ),
+                                                right: ExpressionContainer::new(
+                                                    Expression::Constant { value: 1 },
+                                                ),
                                             }),
                                             ExpressionContainer::new(Expression::Variable {
                                                 name: "x".to_string(),
