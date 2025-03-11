@@ -472,6 +472,7 @@ impl FlatMatch {
             let fields = components
                 .iter()
                 .map(|component| namer.variable_name(&scope, &component.name));
+            let constructor = ident(&constructor);
             let arm = quote! {
                 #type_name::#constructor(#(#temps),*) => {
                     #(#fields = #temps;)*
@@ -485,7 +486,7 @@ impl FlatMatch {
         namer.scoped(
             &self.scope,
             quote! {
-                match #type_name::#value {
+                match #value {
                     #(#arms)*
                 }
             },

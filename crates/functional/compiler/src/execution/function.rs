@@ -58,7 +58,7 @@ impl FlattenedFunction {
             let name = field_namer.callee_name(i);
             let struct_name = function_struct_name(&function_call.function_name);
             fields.push(quote! {
-                pub #name: #struct_name,
+                pub #name: Box<#struct_name>,
             });
         }
 

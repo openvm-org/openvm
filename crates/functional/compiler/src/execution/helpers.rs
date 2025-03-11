@@ -21,9 +21,9 @@ pub fn rust_helpers() -> TokenStream {
         
         pub fn #eq_to_bool<T: Eq>(x: T, y: T) -> #bool_type {
             if x == y {
-                #bool_type::True
+                #bool_type::True()
             } else {
-                #bool_type::False
+                #bool_type::False()
             }
         }
     }
