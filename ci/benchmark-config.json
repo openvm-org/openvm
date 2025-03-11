@@ -8,9 +8,9 @@
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",
-          "memory_allocator": "mimalloc",
-          "app_log_blowup": 2,
-          "leaf_log_blowup": 2
+          "memory_allocator": "jemalloc",
+          "app_log_blowup": 1,
+          "leaf_log_blowup": 1
         }
       ]
     },
@@ -22,9 +22,9 @@
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",
-          "memory_allocator": "mimalloc",
-          "app_log_blowup": 2,
-          "leaf_log_blowup": 2
+          "memory_allocator": "jemalloc",
+          "app_log_blowup": 1,
+          "leaf_log_blowup": 1
         }
       ]
     },
@@ -36,9 +36,9 @@
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",
-          "memory_allocator": "mimalloc",
-          "app_log_blowup": 2,
-          "leaf_log_blowup": 2
+          "memory_allocator": "jemalloc",
+          "app_log_blowup": 1,
+          "leaf_log_blowup": 1
         }
       ]
     },
@@ -50,11 +50,11 @@
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",
-          "memory_allocator": "mimalloc",
-          "app_log_blowup": 2,
-          "leaf_log_blowup": 2,
-          "root_log_blowup": 2,
+          "memory_allocator": "jemalloc",
+          "app_log_blowup": 1,
+          "leaf_log_blowup": 1,
           "internal_log_blowup": 2,
+          "root_log_blowup": 3,
           "max_segment_length": 1048476
         }
       ]
@@ -67,9 +67,23 @@
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",
-          "memory_allocator": "mimalloc",
-          "app_log_blowup": 2,
-          "leaf_log_blowup": 2
+          "memory_allocator": "jemalloc",
+          "app_log_blowup": 1,
+          "leaf_log_blowup": 1
+        }
+      ]
+    },
+    {
+      "name": "pairing",
+      "id": "pairing",
+      "working_directory": "benchmarks",
+      "e2e_bench": false,
+      "run_params": [
+        {
+          "instance_type": "64cpu-linux-arm64",
+          "memory_allocator": "jemalloc",
+          "app_log_blowup": 1,
+          "leaf_log_blowup": 1
         }
       ]
     }
