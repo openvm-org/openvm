@@ -61,11 +61,33 @@ Some constraints have degree three, and so we cannot restrict them to particular
 We must enforce them on all rows, and in order to ensure they hold on the remaining rows we must fill in some cells with appropriate dummy values.
 We use this trick in several places in this chip.
 
+### Block index counter variables
+
+There are two "block index" counter variables in each row of the air named `global_block_idx` and `local_block_idx`.
+Both of these variables take on the same value on all 17 rows in a block. 
+
+The `global_block_idx` is the index of the block in the entire trace.
+The very first 17 rows in the trace will have `global_block_idx = 1` and the counter will increment by 1 between blocks.  
+The padding rows will all have `global_block_idx = 0`.
+The `global_block_idx` is used in interaction constraints to constrain the value of `hash` between blocks.
+
+The  `local_block_idx` is the index of the block in the current message.
+It starts at 0 for the first block of each message and increments by 1 for each block.
+The `local_block_idx` is reset to 0 after each message.
+The padding rows will all have `local_block_idx = 0`.
+The `local_block_idx` is used to calculate the length of the message processed so far when the first padding row is encountered.
+
+### VM air vs SubAir
+
+The SHA-256 VM extension chip uses the `Sha256Air` SubAir to help constrain the SHA-256 hash.
+The VM extension air constrains the correctness of the SHA message padding, while the SubAir adds all other constraints related to the hash algorithm.
+The VM extension air also constrains memory reads and writes.
+
 ### A gotcha about padding rows
 
 There are two senses of the word padding used in the context of this chip and this can be confusing.
 First, we use padding to refer to the extra bits added to the message that is input to the SHA-256 algorithm in order to make the input's length a multiple of 512 bits.
 So, we may use the term 'padding rows' to refer to round rows that correspond to the padded bits of a message (as in `Sha256VmAir::eval_padding_row`).
 Second, the dummy rows that are added to the trace to make the trace height a power of 2 are also called padding rows (see the `is_padding_row` flag).
-In the subair, padding row probably means dummy row.
+In the SubAir, padding row probably means dummy row.
 In the VM air, it probably refers to SHA-256 padding.
