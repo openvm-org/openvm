@@ -378,7 +378,7 @@ fn test_vm_1_persistent() {
 
     let result_for_proof = vm.execute_and_generate(program, vec![]).unwrap();
     let proofs = vm.prove(&pk, result_for_proof);
-    vm.verify(&pk.get_vk(), proofs, 0, None)
+    vm.verify(&pk.get_vk(), proofs, None)
         .expect("Verification failed");
 }
 

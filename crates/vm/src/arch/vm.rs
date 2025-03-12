@@ -601,12 +601,13 @@ where
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
         user_public_values: Option<&UserPublicValuesProof<{ CHUNK }, Val<SC>>>,
-    ) -> Result<[F; 8], VmVerificationError>
+    ) -> Result<(), VmVerificationError>
     where
         Val<SC>: PrimeField32,
     {
         if self.config().system().continuation_enabled {
             self.verify_segments(vk, proofs, user_public_values)
+                .map(|_| ())
         } else {
             assert_eq!(proofs.len(), 1);
             self.verify_single(vk, &proofs.into_iter().next().unwrap())
