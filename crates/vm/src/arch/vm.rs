@@ -590,8 +590,12 @@ where
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
-    ) -> Result<(), VerificationError> {
-        self.engine.verify(vk, proof)
+    ) -> Result<[F; 8], VerificationError>
+    where
+        Com<SC>: Into<[F; 8]>,
+    {
+        self.engine.verify(vk, proof)?;
+        Ok(Self::exe_commit_from_proof(proof, &vm_poseidon2_hasher()))
     }
 
     /// Verify segment proofs, checking continuation boundary conditions between segments if VM memory is persistent
@@ -600,14 +604,13 @@ where
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
         user_public_values: Option<&UserPublicValuesProof<{ CHUNK }, Val<SC>>>,
-    ) -> Result<(), VmVerificationError>
+    ) -> Result<[F; 8], VmVerificationError>
     where
         Val<SC>: PrimeField32,
         Com<SC>: Into<[F; 8]>,
     {
         if self.config().system().continuation_enabled {
             self.verify_segments(vk, proofs, user_public_values)
-                .map(|_| ())
         } else {
             assert_eq!(proofs.len(), 1);
             self.verify_single(vk, &proofs.into_iter().next().unwrap())
@@ -801,8 +804,18 @@ where
         }) {
             return Err(VmVerificationError::ProgramCommitMismatch);
         }
+
+        Ok(Self::exe_commit_from_proof(&proofs[0], &hasher))
+    }
+
+    fn exe_commit_from_proof(proof: &Proof<SC>, hasher: &impl Hasher<CHUNK, F>) -> [F; 8]
+    where
+        Com<SC>: Into<[F; 8]>,
+    {
+        let app_program_commit = proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].clone();
+        let app_program_commit = app_program_commit.into();
         let init_memory_commit = {
-            let pvs: &MemoryMerklePvs<F, CHUNK> = proofs[0]
+            let pvs: &MemoryMerklePvs<F, CHUNK> = proof
                 .per_air
                 .iter()
                 .find(|air| air.air_id == MERKLE_AIR_ID)
@@ -813,7 +826,7 @@ where
             pvs.final_root
         };
         let pc_start = {
-            let pvs: &VmConnectorPvs<_> = proofs[0]
+            let pvs: &VmConnectorPvs<_> = proof
                 .per_air
                 .iter()
                 .find(|air| air.air_id == CONNECTOR_AIR_ID)
@@ -828,8 +841,7 @@ where
         let app_program_commit = hasher.hash(&app_program_commit);
         let init_memory_commit = hasher.hash(&init_memory_commit);
         let result = hasher.compress(&app_program_commit, &init_memory_commit);
-        let result = hasher.compress(&result, &hasher.hash(&pc_start_padded));
 
-        Ok(result)
+        hasher.compress(&result, &hasher.hash(&pc_start_padded))
     }
 }
