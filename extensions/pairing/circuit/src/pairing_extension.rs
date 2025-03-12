@@ -2,26 +2,22 @@ use derive_more::derive::From;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
-    arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
+    arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
-};
+use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_circuit::CurveConfig;
-use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
-use openvm_mod_circuit_builder::ExprBuilderConfig;
+use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
     bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER, BLS12_381_XI_ISIZE},
     bn254::{BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
-use openvm_pairing_transpiler::{PairingOpcode, PairingPhantom};
-use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, FromRepr};
+use strum::FromRepr;
 
 use super::*;
 
@@ -88,91 +84,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
         &self,
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
-        let mut inventory = VmInventory::new();
-        let SystemPort {
-            execution_bus,
-            program_bus,
-            memory_bridge,
-        } = builder.system_port();
-        let bitwise_lu_chip = if let Some(&chip) = builder
-            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-            .first()
-        {
-            chip.clone()
-        } else {
-            let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
-            inventory.add_periphery_chip(chip.clone());
-            chip
-        };
-        let range_checker = builder.system_base().range_checker_chip.clone();
-        let offline_memory = builder.system_base().offline_memory();
-        let address_bits = builder.system_config().memory_config.pointer_max_bits;
-        for curve in self.supported_curves.iter() {
-            let pairing_idx = *curve as usize;
-            let pairing_class_offset =
-                PairingOpcode::CLASS_OFFSET + pairing_idx * PairingOpcode::COUNT;
-            match curve {
-                PairingCurve::Bn254 => {
-                    let bn_config = ExprBuilderConfig {
-                        modulus: curve.curve_config().modulus.clone(),
-                        num_limbs: 32,
-                        limb_bits: 8,
-                    };
-                    let miller_double_and_add = MillerDoubleAndAddStepChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 4, 12, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bn_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::MillerDoubleAndAddStepRv32_32(
-                            miller_double_and_add,
-                        ),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset
-                                + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
-                        )],
-                    )?;
-                }
-                PairingCurve::Bls12_381 => {
-                    let bls_config = ExprBuilderConfig {
-                        modulus: curve.curve_config().modulus.clone(),
-                        num_limbs: 48,
-                        limb_bits: 8,
-                    };
-                    let miller_double_and_add = MillerDoubleAndAddStepChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 12, 36, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bls_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::MillerDoubleAndAddStepRv32_48(
-                            miller_double_and_add,
-                        ),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset
-                                + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
-                        )],
-                    )?;
-                }
-            }
-        }
+        let inventory = VmInventory::new();
 
         builder.add_phantom_sub_executor(
             phantom::PairingHintSubEx,

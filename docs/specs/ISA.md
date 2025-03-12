@@ -710,10 +710,6 @@ classes of pairing friendly elliptic curves. For a curve `C` to be supported, th
 curves are BN254 and BLS12-381. The extension operates on address spaces `1` and `2`, meaning all memory cells are
 constrained to be bytes.
 
-| Name                            | Operands    | Description                                                                                                                                                                                                                                                                                                                |
-| ------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MILLER_DOUBLE_AND_ADD_STEP\<C\> | `a,b,c,1,2` | Let `S: EcPoint<Fp2>` be read starting from `[r32{0}(b)]_2` and `Q: EcPoint<Fp2>` be read starting from `[r32{0}(c)]_2`. The output `miller_double_and_add_step(S, Q): (EcPoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>)` is written contiguously to memory starting at `[r32{0}(a)]_2`.                          |
-
 #### Phantom Sub-Instructions
 
 The pairing extension defines the following phantom sub-instructions.

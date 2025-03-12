@@ -58,8 +58,13 @@ mod bls12_381 {
         "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
     }
 
+    openvm_algebra_complex_macros::complex_init! {
+        Bls12_381Fp2 { mod_idx = 0 },
+    }
+
     pub fn test_fp12_mul(io: &[u8]) {
         setup_0();
+        setup_all_complex_extensions();
         assert_eq!(io.len(), 48 * 36);
 
         let f0 = &io[0..48 * 12];

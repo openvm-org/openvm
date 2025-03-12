@@ -202,10 +202,6 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 #### Instructions
 
-| VM Extension | `LocalOpcode` | ISA Instruction |
-| ------------- | ---------- | ------------- |
-| Pairing | `PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP` | MILLER_DOUBLE_AND_ADD_STEP\<C\> |
-
 #### Phantom Sub-Instructions
 
 | VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |

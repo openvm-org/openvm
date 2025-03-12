@@ -4,10 +4,11 @@ use openvm_instructions::{
 use openvm_instructions_derive::LocalOpcode;
 use openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3};
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
+use openvm_transpiler::{TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
+// NOTE: the following opcodes are enabled only in testing and not enabled in the VM Extension
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
@@ -16,7 +17,6 @@ use strum::{EnumCount, EnumIter, FromRepr};
 #[allow(non_camel_case_types)]
 pub enum PairingOpcode {
     MILLER_DOUBLE_AND_ADD_STEP,
-    // NOTE: the following are enabled only in testing and not enabled in the VM Extension
     MILLER_DOUBLE_STEP,
     EVALUATE_LINE,
     MUL_013_BY_013,
@@ -25,7 +25,7 @@ pub enum PairingOpcode {
     MUL_BY_02345,
 }
 
-// NOTE: Fp12 is only enabled in testing and not enabled in the VM Extension
+// NOTE: Fp12 opcodes are only enabled in testing and not enabled in the VM Extension
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
@@ -107,22 +107,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for PairingTranspilerExtension {
                 pairing_idx as u16,
             )));
         }
-        let global_opcode = match PairingBaseFunct7::from_repr(base_funct7) {
-            Some(PairingBaseFunct7::MillerDoubleAndAddStep) => {
-                PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize + PairingOpcode::CLASS_OFFSET
-            }
-            _ => unimplemented!(),
-        };
-
-        assert!(PairingOpcode::COUNT <= PairingBaseFunct7::PAIRING_MAX_KINDS as usize);
-        let pairing_idx_shift = pairing_idx * PairingOpcode::COUNT;
-        let global_opcode = global_opcode + pairing_idx_shift;
-
-        Some(TranspilerOutput::one_to_one(from_r_type(
-            global_opcode,
-            2,
-            &dec_insn,
-            true,
-        )))
+        None
     }
 }
