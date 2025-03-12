@@ -1,8 +1,8 @@
 | group | app.proof_time_ms | app.cycles | app.cells_used | leaf.proof_time_ms | leaf.cycles | leaf.cells_used |
 | -- | -- | -- | -- | -- | -- | -- |
-| [pairing](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/1413/pairing-9c25e66b5e25c6c1a8a3025ef79ef9b05db515f7.md) | 4,290 |  1,456,033 |  80,890,499 | 27,295 |  5,514,997 |  548,596,422 |
+| [pairing](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/1413/pairing-dc046ed8c01317af72b1bfe7f35f0f6462f859ee.md) | 4,644 |  1,599,034 |  87,543,575 | 24,193 |  4,779,489 |  462,274,276 |
 
 
-Commit: https://github.com/openvm-org/openvm/commit/9c25e66b5e25c6c1a8a3025ef79ef9b05db515f7
+Commit: https://github.com/openvm-org/openvm/commit/dc046ed8c01317af72b1bfe7f35f0f6462f859ee
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/13801774352)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/13802097425)
