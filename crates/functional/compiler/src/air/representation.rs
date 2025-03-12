@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, env::var};
 
 use itertools::Itertools;
 
@@ -33,6 +33,16 @@ impl Representation {
         Representation {
             expressions: self.expressions.clone(),
             owned: vec![false; self.expressions.len()],
+        }
+    }
+
+    pub fn all_some(options: &[Option<AirExpression>]) -> Self {
+        Self {
+            expressions: options
+                .iter()
+                .map(|x| x.as_ref().unwrap().clone())
+                .collect(),
+            owned: vec![false; options.len()],
         }
     }
 }
@@ -120,8 +130,19 @@ impl<'a> RepresentationTable<'a> {
             let i = ancestor.0.len();
             ancestor = ancestor.then(scope.0[i].0, scope.0[i].1.clone());
         }
-        self.representations
+        self.add_scope_specific_representation(scope, name, representation);
+    }
+
+    fn add_scope_specific_representation(
+        &mut self,
+        scope: &ScopePath,
+        name: &str,
+        representation: Representation,
+    ) {
+        let prev = self
+            .representations
             .insert((scope.clone(), name.to_string()), representation);
+        assert!(prev.is_none());
     }
 }
 
@@ -231,26 +252,37 @@ impl ExpressionContainer {
         air_constructor: &mut AirConstructor,
         scope: &ScopePath,
         representation: &mut [Option<AirExpression>],
+        supplementary: bool, // if supplementary is true then representation should not have None
     ) {
         match self.expression.as_ref() {
             Expression::Constant { value } => {
-                air_constructor.add_scoped_constraint(
-                    scope,
-                    vec![AirExpression::constant(*value)],
-                    representation,
-                );
+                if !supplementary {
+                    air_constructor.add_scoped_constraint(
+                        scope,
+                        vec![AirExpression::constant(*value)],
+                        representation,
+                    );
+                }
             }
             Expression::Variable {
                 name,
                 represents: true,
                 ..
             } => {
-                representation_table.fill_in_and_add_representation(
-                    air_constructor,
-                    scope,
-                    name,
-                    representation,
-                );
+                if supplementary {
+                    representation_table.add_scope_specific_representation(
+                        scope,
+                        name,
+                        Representation::all_some(representation),
+                    )
+                } else {
+                    representation_table.fill_in_and_add_representation(
+                        air_constructor,
+                        scope,
+                        name,
+                        representation,
+                    );
+                }
             }
             Expression::Algebraic {
                 constructor,
@@ -265,11 +297,13 @@ impl ExpressionContainer {
                         .iter()
                         .position(|variant| &variant.name == constructor)
                         .unwrap();
-                    air_constructor.add_scoped_constraint(
-                        scope,
-                        vec![AirExpression::constant(i as isize)],
-                        &mut representation[0..1],
-                    );
+                    if !supplementary {
+                        air_constructor.add_scoped_constraint(
+                            scope,
+                            vec![AirExpression::constant(i as isize)],
+                            &mut representation[0..1],
+                        );
+                    }
                     offset += 1;
                 }
                 for field in fields {
@@ -280,6 +314,7 @@ impl ExpressionContainer {
                         air_constructor,
                         scope,
                         &mut representation[offset..offset + type_length],
+                        supplementary,
                     );
                     offset += type_length;
                 }
@@ -298,17 +333,20 @@ impl ExpressionContainer {
                         air_constructor,
                         scope,
                         &mut representation[i * elem_size..(i + 1) * elem_size],
+                        supplementary,
                     );
                 }
             }
             _ => {
-                let defined_representation =
-                    self.calc_representation(type_set, representation_table, scope);
-                air_constructor.add_scoped_constraint(
-                    scope,
-                    defined_representation,
-                    representation,
-                );
+                if !supplementary {
+                    let defined_representation =
+                        self.calc_representation(type_set, representation_table, scope);
+                    air_constructor.add_scoped_constraint(
+                        scope,
+                        defined_representation,
+                        representation,
+                    );
+                }
             }
         }
     }
@@ -327,6 +365,7 @@ impl ExpressionContainer {
             air_constructor,
             scope,
             &mut representation,
+            false,
         );
         representation.into_iter().map(Option::unwrap).collect()
     }
@@ -346,6 +385,7 @@ impl ExpressionContainer {
             air_constructor,
             scope,
             &mut representation,
+            false,
         );
     }
 }
@@ -365,65 +405,135 @@ impl FlatMatch {
                 .unwrap();
             let tipo = &type_set.algebraic_types[type_name];
 
-            for (constructor, components) in self.branches.iter() {
-                let scope = self.scope.then(self.index, constructor.clone());
+            // make representation of matched value uniform other than variant if possible
+            if self
+                .branches
+                .iter()
+                .all(|(_, components)| components.iter().all(|component| component.represents))
+            {
                 let mut representation = vec![None; type_set.calc_type_size(self.value.get_type())];
                 if tipo.variants.len() != 1 {
-                    let variant_index = tipo
-                        .variants
-                        .iter()
-                        .position(|variant| &variant.name == constructor)
-                        .unwrap();
-                    representation[0] = Some(AirExpression::constant(variant_index as isize));
-                }
-                let type_components = &tipo
-                    .variants
-                    .iter()
-                    .find(|variant| &variant.name == constructor)
-                    .unwrap()
-                    .components;
-
-                // get from ones that are represented elsewhere
-                let mut offset = if tipo.variants.len() == 1 { 0 } else { 1 };
-                for (component, tipo) in components.iter().zip_eq(type_components.iter()) {
-                    if !component.represents {
-                        let component_representation =
-                            representation_table.get_representation(&scope, &component.name);
-                        for (i, expression) in component_representation.iter().enumerate() {
-                            representation[offset + i] = Some(expression.clone());
-                        }
+                    let mut variant_number = AirExpression::zero();
+                    for (i, (constructor, _)) in self.branches.iter().enumerate() {
+                        let scope = self.scope.then(self.index, constructor.clone());
+                        variant_number = variant_number.plus(
+                            &air_constructor
+                                .get_scope_expression(&scope)
+                                .times(&AirExpression::constant(i as isize)),
+                        );
                     }
-                    let type_size = type_set.calc_type_size(tipo);
-                    offset += type_size;
+                    representation[0] = Some(variant_number);
                 }
-
                 self.value.represent_top_down(
                     type_set,
                     representation_table,
                     air_constructor,
-                    &scope,
+                    &self.scope,
                     &mut representation,
+                    false,
                 );
-                let representation: Vec<_> =
-                    representation.into_iter().map(|x| x.unwrap()).collect();
-
-                let mut offset = if tipo.variants.len() == 1 { 0 } else { 1 };
-                for (component, tipo) in components.iter().zip_eq(type_components.iter()) {
-                    let type_size = type_set.calc_type_size(tipo);
-                    if component.represents {
-                        representation_table.add_representation(
+                let mut representation =
+                    representation.into_iter().map(Option::unwrap).collect_vec();
+                for (i, (constructor, components)) in self.branches.iter().enumerate() {
+                    let scope = self.scope.then(self.index, constructor.clone());
+                    if tipo.variants.len() == 1 {
+                        representation[0] = AirExpression::constant(i as isize);
+                        self.value.represent_top_down(
+                            type_set,
+                            representation_table,
+                            air_constructor,
                             &scope,
-                            &component.name,
-                            representation[offset..offset + type_size].to_vec(),
+                            &mut representation.iter().cloned().map(Some).collect_vec(),
+                            true,
                         );
                     }
-                    offset += type_size;
+                    let mut offset = if tipo.variants.len() == 1 { 0 } else { 1 };
+                    let type_components = &tipo
+                        .variants
+                        .iter()
+                        .find(|variant| &variant.name == constructor)
+                        .unwrap()
+                        .components;
+                    for (component, tipo) in components.iter().zip_eq(type_components.iter()) {
+                        let type_size = type_set.calc_type_size(tipo);
+                        if component.represents {
+                            representation_table.add_representation(
+                                &scope,
+                                &component.name,
+                                representation[offset..offset + type_size].to_vec(),
+                            );
+                        }
+                        offset += type_size;
+                    }
+                    air_constructor.add_scoped_constraint(
+                        &scope,
+                        representation[offset..].to_vec(),
+                        &mut vec![Some(AirExpression::zero()); representation.len() - offset],
+                    );
                 }
-                air_constructor.add_scoped_constraint(
-                    &scope,
-                    representation[offset..].to_vec(),
-                    &mut vec![Some(AirExpression::zero()); representation.len() - offset],
-                );
+            } else {
+                for (constructor, components) in self.branches.iter() {
+                    let scope = self.scope.then(self.index, constructor.clone());
+                    let mut representation =
+                        vec![None; type_set.calc_type_size(self.value.get_type())];
+                    if tipo.variants.len() != 1 {
+                        let variant_index = tipo
+                            .variants
+                            .iter()
+                            .position(|variant| &variant.name == constructor)
+                            .unwrap();
+                        representation[0] = Some(AirExpression::constant(variant_index as isize));
+                    }
+                    let type_components = &tipo
+                        .variants
+                        .iter()
+                        .find(|variant| &variant.name == constructor)
+                        .unwrap()
+                        .components;
+
+                    // get from ones that are represented elsewhere
+                    let mut offset = if tipo.variants.len() == 1 { 0 } else { 1 };
+                    for (component, tipo) in components.iter().zip_eq(type_components.iter()) {
+                        if !component.represents {
+                            let component_representation =
+                                representation_table.get_representation(&scope, &component.name);
+                            for (i, expression) in component_representation.iter().enumerate() {
+                                representation[offset + i] = Some(expression.clone());
+                            }
+                        }
+                        let type_size = type_set.calc_type_size(tipo);
+                        offset += type_size;
+                    }
+
+                    self.value.represent_top_down(
+                        type_set,
+                        representation_table,
+                        air_constructor,
+                        &scope,
+                        &mut representation,
+                        false,
+                    );
+                    let representation: Vec<_> =
+                        representation.into_iter().map(|x| x.unwrap()).collect();
+
+                    let mut offset = if tipo.variants.len() == 1 { 0 } else { 1 };
+                    for (component, tipo) in components.iter().zip_eq(type_components.iter()) {
+                        let type_size = type_set.calc_type_size(tipo);
+                        if component.represents {
+                            representation_table.add_representation(
+                                &scope,
+                                &component.name,
+                                representation[offset..offset + type_size].to_vec(),
+                            );
+                        }
+                        offset += type_size;
+                    }
+                    air_constructor.add_scoped_constraint(
+                        &scope,
+                        representation[offset..].to_vec(),
+                        &mut vec![Some(AirExpression::zero()); representation.len() - offset],
+                    );
+                }
             }
         }
     }
@@ -493,6 +603,7 @@ impl FlatStatement {
                         air_constructor,
                         &self.scope,
                         &mut representation,
+                        false,
                     );
                 }
                 Statement::Reference { reference, data } => {
@@ -549,6 +660,7 @@ impl FlatStatement {
                         air_constructor,
                         &self.scope,
                         &mut representation,
+                        false,
                     );
                 }
                 Statement::UnderConstructionArrayPrepend {
@@ -570,6 +682,7 @@ impl FlatStatement {
                         air_constructor,
                         &self.scope,
                         &mut new_array_representation,
+                        false,
                     );
 
                     let multiplicity_cell =
