@@ -4,7 +4,7 @@ use openvm_poseidon2_air::Poseidon2SubCols;
 
 use crate::{poseidon2::CHUNK, utils::const_max};
 
-/// A valid trace is composed four types of contiguous blocks:
+/// A valid trace is composed of four types of contiguous blocks:
 ///
 /// 1. **Disabled Block:** A single row marked as disabled.
 /// 2. **Simple Block:** A single row handling permutation/compression operations.
