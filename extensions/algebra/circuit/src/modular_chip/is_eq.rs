@@ -47,8 +47,11 @@ pub struct ModularIsEqualCoreCols<T, const READ_LIMBS: usize> {
     // Define c_diff_idx analogously. Then let b_lt_diff = N[b_diff_idx] - b[b_diff_idx] and
     // c_lt_diff = N[c_diff_idx] - c[c_diff_idx], where both must be in [0, 2^LIMB_BITS).
     //
-    // Additionally, set lt_marker[b_diff_idx] = 1, lt_marker[c_diff_idx] = c_lt_mark, and 0 everywhere
-    // else. If b_diff_idx == c_diff_idx then c_lt_mark = 1, else c_lt_mark = 2.
+    // To constrain the above, we will use lt_marker, which will indicate where b_diff_idx and c_diff_idx are.
+    // Set lt_marker[b_diff_idx] = 1, lt_marker[c_diff_idx] = c_lt_mark, and 0 everywhere
+    // else. If b_diff_idx == c_diff_idx then c_lt_mark = 1, else c_lt_mark = 2. The purpose of
+    // c_lt_mark is to handle the edge case where b_diff_idx == c_diff_idx (because we cannot set
+    // lt_marker[b_diff_idx] to 1 and 2 at the same time).
     pub lt_marker: [T; READ_LIMBS],
     pub b_lt_diff: T,
     pub c_lt_diff: T,
