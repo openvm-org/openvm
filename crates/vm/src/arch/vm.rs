@@ -7,6 +7,7 @@ use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
+    p3_util::log2_strict_usize,
     proof::Proof,
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
@@ -16,14 +17,22 @@ use openvm_stark_backend::{
 use thiserror::Error;
 use tracing::info_span;
 
-use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
+use super::{
+    hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
+    ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
+};
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::segment::ExecutionSegment,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{merkle::MemoryMerklePvs, paged_vec::AddressMap, MemoryImage, CHUNK},
+        memory::{
+            merkle::MemoryMerklePvs,
+            paged_vec::AddressMap,
+            tree::public_values::{UserPublicValuesProof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET},
+            MemoryImage, CHUNK,
+        },
         program::trace::VmCommittedExe,
     },
 };
@@ -455,6 +464,12 @@ pub enum VmVerificationError {
 
     #[error("duplicate air (air_id: {air_id})")]
     DuplicateAir { air_id: usize },
+
+    #[error("final memory root mismatch")]
+    FinalMemoryRootMismatch,
+
+    #[error("wrong user public values memory location")]
+    WrongUserPublicValuesMemoryLocation,
 }
 
 pub struct VirtualMachine<SC: StarkGenericConfig, E, VC> {
@@ -581,12 +596,13 @@ where
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
         initial_pc: u32,
+        user_public_values: Option<&UserPublicValuesProof<{ CHUNK }, Val<SC>>>,
     ) -> Result<(), VmVerificationError>
     where
         Val<SC>: PrimeField32,
     {
         if self.config().system().continuation_enabled {
-            self.verify_segments(vk, proofs, initial_pc)
+            self.verify_segments(vk, proofs, initial_pc, user_public_values)
         } else {
             assert_eq!(proofs.len(), 1);
             self.verify_single(vk, &proofs.into_iter().next().unwrap())
@@ -600,12 +616,69 @@ where
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
         initial_pc: u32,
+        user_public_values: Option<&UserPublicValuesProof<{ CHUNK }, Val<SC>>>,
     ) -> Result<(), VmVerificationError>
     where
         Val<SC>: PrimeField32,
     {
         let mut prev_final_memory_root = None;
         let mut prev_final_pc = None;
+
+        // Check user public values
+        if user_public_values.is_none() != (self.config().system().num_public_values == 0) {
+            return Err(VmVerificationError::NumPublicValuesMismatch {
+                expected: self.config().system().num_public_values,
+                actual: match user_public_values {
+                    Some(user_public_values) => user_public_values.public_values.len(),
+                    None => 0,
+                },
+            });
+        }
+
+        let pv_hash = user_public_values
+            .map(|user_public_values| {
+                let mut pv_hash = user_public_values.public_values_commit;
+                for (right, sibling) in user_public_values.proof.iter() {
+                    pv_hash = if *right {
+                        vm_poseidon2_hasher().compress(sibling, &pv_hash)
+                    } else {
+                        vm_poseidon2_hasher().compress(&pv_hash, sibling)
+                    }
+                }
+
+                // Check that it corresponds to the proper memory location
+                let memory_dimensions = self.config().system().memory_config.memory_dimensions();
+                let address_space = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET;
+                let turns = user_public_values
+                    .proof
+                    .iter()
+                    .map(|(left, _)| *left)
+                    .rev()
+                    .collect::<Vec<_>>();
+                let pv_chunk_height =
+                    log2_strict_usize(user_public_values.public_values.len() / CHUNK);
+                if turns.len() != memory_dimensions.overall_height() - pv_chunk_height {
+                    return Err(VmVerificationError::WrongUserPublicValuesMemoryLocation);
+                }
+                // First we need to go to the certain address space
+                for (i, value) in turns.iter().enumerate().take(memory_dimensions.as_height) {
+                    if *value
+                        != ((address_space & (1 << (memory_dimensions.as_height - i - 1))) > 0)
+                    {
+                        return Err(VmVerificationError::WrongUserPublicValuesMemoryLocation);
+                    }
+                }
+                // Then to the left a certain number of times
+                for i in 0..(memory_dimensions.address_height - pv_chunk_height) {
+                    let j = i + memory_dimensions.as_height;
+                    if turns[j] {
+                        return Err(VmVerificationError::WrongUserPublicValuesMemoryLocation);
+                    }
+                }
+
+                Ok(pv_hash)
+            })
+            .transpose()?;
 
         for (i, proof) in proofs.iter().enumerate() {
             let res = self.engine.verify(vk, proof);
@@ -681,25 +754,10 @@ where
                     }
                     prev_final_memory_root = Some(pvs.final_root);
 
-                    // if i == proofs.len() - 1 {
-                    //     // If this is the last segment
-                    //     let memory_dimensions =
-                    //         self.config().system().memory_config.memory_dimensions();
-                    //     let pv_as =
-                    //         PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
-                    //     let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
-
-                    //     // Get the expected number of public values
-                    //     let num_public_values = self.config().system().num_public_values;
-
-                    //     // Verify each public value is correctly stored in memory
-                    //     for i in 0..num_public_values {
-                    //         let addr = (PUBLIC_VALUES_ADDRESS_SPACE_OFFSET, i as u32);
-                    //         let value = memory_get_value(pvs.final_root, addr, memory_dimensions);
-                    //         // Here we would verify the value matches expected public value
-                    //         // But we need access to the expected public values to compare against
-                    //     }
-                    // }
+                    // Check that the final root matches the root obtained from the user public values proof
+                    if pv_hash.is_some() && pv_hash.unwrap() != pvs.final_root {
+                        return Err(VmVerificationError::FinalMemoryRootMismatch);
+                    }
                 } else {
                     if !pvs.is_empty() {
                         return Err(VmVerificationError::UnexpectedPvs {
@@ -726,6 +784,7 @@ where
                 });
             }
         }
+
         Ok(())
     }
 }

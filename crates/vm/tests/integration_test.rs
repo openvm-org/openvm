@@ -319,8 +319,9 @@ fn test_vm_initial_memory() {
 #[test]
 fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let system_config = SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 64, 1024), 0);
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 64, 1024), 0),
+        system: system_config.clone(),
         native: Default::default(),
     }
     .with_continuations();
@@ -377,7 +378,7 @@ fn test_vm_1_persistent() {
 
     let result_for_proof = vm.execute_and_generate(program, vec![]).unwrap();
     let proofs = vm.prove(&pk, result_for_proof);
-    vm.verify(&pk.get_vk(), proofs, 0)
+    vm.verify(&pk.get_vk(), proofs, 0, None)
         .expect("Verification failed");
 }
 

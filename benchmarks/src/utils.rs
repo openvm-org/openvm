@@ -240,8 +240,13 @@ where
     let prover = AppProver::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name);
     let app_proof = prover.generate_app_proof(input_stream);
     // 6. Verify STARK proofs, including boundary conditions.
-    vm.verify(&vk, app_proof.per_segment.clone(), pc_start)
-        .expect("Verification failed");
+    vm.verify(
+        &vk,
+        app_proof.per_segment.clone(),
+        pc_start,
+        Some(&app_proof.user_public_values),
+    )
+    .expect("Verification failed");
     if let Some(leaf_vm_config) = leaf_vm_config {
         let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);
         let leaf_prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(

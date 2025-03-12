@@ -20,7 +20,7 @@ pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = 2;
 ))]
 pub struct UserPublicValuesProof<const CHUNK: usize, F> {
     /// Proof of the path from the root of public values to the memory root in the format of (`bit`, `hash`)
-    /// `bit`: If `bit` is true, public values are in the left child, otherwise in the right child.
+    /// `bit`: If `bit` is true, public values are in the right child, otherwise in the left child.
     /// `hash`: Hash of the sibling node.
     pub proof: Vec<(bool, [F; CHUNK])>,
     /// Raw public values. Its length should be a power of two * CHUNK.

@@ -3,7 +3,12 @@ use std::{path::PathBuf, time::Instant};
 use anstyle::*;
 use clap::Parser;
 use eyre::Result;
-use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
+use openvm_circuit::{
+    arch::{
+        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, VirtualMachine, VmConfig,
+    },
+    system::memory::tree::public_values::UserPublicValuesProof,
+};
 use openvm_keccak256_circuit::Keccak256Rv32Config;
 use openvm_sdk::fs::read_exe_from_file;
 use openvm_stark_sdk::{
@@ -88,6 +93,7 @@ where
     let pc_start = exe.pc_start;
     // 1. Generate proving key from config.
     tracing::info!("fri.log_blowup: {}", engine.fri_params().log_blowup);
+    let system_config = config.system().clone();
     let vm = VirtualMachine::<SC, E, VC>::new(engine, config);
     let pk = vm.keygen();
     // 2. Commit to the exe by generating cached trace for program.
@@ -95,6 +101,12 @@ where
     // 3. Executes runtime again without metric collection and generate trace.
     let start = Instant::now();
     let results = vm.execute_and_generate_with_cached_program(committed_exe, input_stream)?;
+    let user_pv_proof = UserPublicValuesProof::compute(
+        system_config.memory_config.memory_dimensions(),
+        system_config.num_public_values,
+        &vm_poseidon2_hasher(),
+        results.final_memory.as_ref().unwrap(),
+    );
     let execute_and_trace_gen_time_ms = start.elapsed().as_millis();
     // 4. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
     // vm.prove will emit metrics for proof time of each segment
@@ -106,7 +118,7 @@ where
 
     // 6. Verify STARK proofs.
     let vk = pk.get_vk();
-    vm.verify(&vk, proofs.clone(), pc_start)
+    vm.verify(&vk, proofs.clone(), pc_start, Some(&user_pv_proof))
         .expect("Verification failed");
 
     Ok(total_proving_time_ms)

@@ -15,9 +15,13 @@ use openvm_stark_sdk::{
     utils::ProofInputForTest,
 };
 
-use crate::arch::{
-    vm::{VirtualMachine, VmExecutor},
-    Streams, VmConfig, VmMemoryState,
+use crate::{
+    arch::{
+        hasher::poseidon2::vm_poseidon2_hasher,
+        vm::{VirtualMachine, VmExecutor},
+        Streams, VmConfig, VmMemoryState,
+    },
+    system::memory::tree::public_values::UserPublicValuesProof,
 };
 
 pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
@@ -43,7 +47,8 @@ where
 {
     setup_tracing();
     let mut log_blowup = 1;
-    while config.system().max_constraint_degree > (1 << log_blowup) + 1 {
+    let system_config = config.system().clone();
+    while system_config.max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
     let exe = exe.into();
@@ -54,9 +59,15 @@ where
     let mut result = vm.execute_and_generate(exe, input).unwrap();
     let final_memory = result.final_memory.take();
     let proofs = vm.prove(&pk, result);
+    let user_pv_proof = UserPublicValuesProof::compute(
+        system_config.memory_config.memory_dimensions(),
+        system_config.num_public_values,
+        &vm_poseidon2_hasher(),
+        final_memory.as_ref().unwrap(),
+    );
 
     assert!(proofs.len() >= min_segments);
-    vm.verify(&pk.get_vk(), proofs, pc_start)
+    vm.verify(&pk.get_vk(), proofs, pc_start, Some(&user_pv_proof))
         .expect("segment proofs should verify");
     final_memory
 }
