@@ -15,7 +15,7 @@ use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
     engine::StarkFriEngine,
     openvm_stark_backend::{
-        config::{StarkGenericConfig, Val},
+        config::{Com, StarkGenericConfig, Val},
         p3_field::PrimeField32,
         Chip,
     },
@@ -88,6 +88,7 @@ where
     VC: VmConfig<Val<SC>>,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
+    Com<SC>: Into<[Val<SC>; 8]>,
 {
     let exe = exe.into();
     // 1. Generate proving key from config.

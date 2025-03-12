@@ -493,7 +493,6 @@ where
     VC: VmConfig<F>,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
-    Com<SC>: Into<[F; 8]>,
 {
     pub fn new(engine: E, config: VC) -> Self {
         let executor = VmExecutor::new(config);
@@ -604,6 +603,7 @@ where
     ) -> Result<(), VmVerificationError>
     where
         Val<SC>: PrimeField32,
+        Com<SC>: Into<[F; 8]>,
     {
         if self.config().system().continuation_enabled {
             self.verify_segments(vk, proofs, user_public_values)
@@ -624,6 +624,7 @@ where
     ) -> Result<[F; 8], VmVerificationError>
     where
         Val<SC>: PrimeField32,
+        Com<SC>: Into<[F; 8]>,
     {
         let mut prev_final_memory_root = None;
         let mut prev_final_pc = None;
