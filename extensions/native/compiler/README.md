@@ -18,7 +18,7 @@ Native compiler supports two modes:
 # DSL
 
 A DSL program is an intermediate representation of the target program, which could be a OpenVM `Program` using Native
-extension in dynamic mode or a Halo2 circuit in static mode. The motivation is to:
+extension in dynamic mode or a Halo2 circuit in static mode. The motivation is:
 
 - DSL is more human friendly.
 - Unify the programs in static and dynamic mode.
