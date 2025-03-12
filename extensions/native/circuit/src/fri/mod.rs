@@ -277,20 +277,18 @@ impl FriReducedOpeningAir {
             let mut next_ins = builder.when(next.general.is_ins_row);
             let mut local_non_ins =
                 next_ins.when_ne(local.prefix.general.is_ins_row, AB::Expr::ONE);
-            // The row after a workload row can only be the first instruction row.
+            // An instruction row after a workload row must be the first instruction row.
             local_non_ins.assert_one(next.general.a_or_is_first);
         }
         {
             let mut when_first_row = builder.when_first_row();
-            let mut when_enabled = when_first_row
-                .when(local.prefix.general.is_ins_row + local.prefix.general.is_workload_row);
             // First row must be a workload row.
-            when_enabled.assert_one(local.prefix.general.is_workload_row);
-            // Workload rows must start with the first element.
-            when_enabled.assert_zero(local.prefix.data.idx);
+            when_first_row.assert_one(local.prefix.general.is_workload_row);
+            // Initial workload rows must start with the first element.
+            when_first_row.assert_zero(local.prefix.data.idx);
             // local.result is all 0s.
             assert_array_eq(
-                &mut when_enabled,
+                &mut when_first_row,
                 local.prefix.data.result,
                 [AB::Expr::ZERO; EXT_DEG],
             );
