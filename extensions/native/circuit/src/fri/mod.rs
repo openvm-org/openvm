@@ -68,13 +68,9 @@ struct Instruction1Cols<T> {
 
     b_ptr_ptr: T,
     b_ptr_aux: MemoryReadAuxCols<T>,
-
-    /// A trick to reduce 1 degree. When `is_ins_row = 1`, `write_a_x_is_first = write_a * is_first`.
-    /// This field must align in both Instruction1Cols and Instruction2Cols.
-    write_a_x_is_first: T,
 }
 const INS_1_WIDTH: usize = Instruction1Cols::<u8>::width();
-const_assert_eq!(INS_1_WIDTH, 26);
+const_assert_eq!(INS_1_WIDTH, 25);
 const_assert_eq!(
     offset_of!(WorkloadCols<u8>, prefix),
     offset_of!(Instruction1Cols<u8>, prefix)
@@ -98,20 +94,12 @@ struct Instruction2Cols<T> {
 
     is_init_ptr: T,
     is_init_aux: MemoryReadAuxCols<T>,
-
-    /// A trick to reduce 1 degree. When `is_ins_row = 1`, `write_a_x_is_first = write_a * is_first`.
-    /// This field must align in both Instruction1Cols and Instruction2Cols.
-    write_a_x_is_first: T,
 }
 const INS_2_WIDTH: usize = Instruction2Cols::<u8>::width();
-const_assert_eq!(INS_2_WIDTH, 26);
+const_assert_eq!(INS_2_WIDTH, 25);
 const_assert_eq!(
     offset_of!(WorkloadCols<u8>, prefix) + offset_of!(PrefixCols<u8>, general),
     offset_of!(Instruction2Cols<u8>, general)
-);
-const_assert_eq!(
-    offset_of!(Instruction1Cols<u8>, write_a_x_is_first),
-    offset_of!(Instruction2Cols<u8>, write_a_x_is_first)
 );
 
 pub const OVERALL_WIDTH: usize = const_max(const_max(WL_WIDTH, INS_1_WIDTH), INS_2_WIDTH);
@@ -324,13 +312,6 @@ impl FriReducedOpeningAir {
         let next: &Instruction2Cols<AB::Var> = next_slice[..INS_2_WIDTH].borrow();
         // `is_ins_row` already indicates enabled.
         let mut is_ins_row = builder.when(local.prefix.general.is_ins_row);
-        // These constraints of `is_ins_row` apply to both Instruction1Cols and Instruction2Cols. It's a trick to reduce 1 degree.
-        // `write_a` refers to a random field in Instruction2Cols but `write_a_x_is_first` must be 0 because `is_first` is 0.
-        is_ins_row.assert_eq(
-            local.write_a_x_is_first,
-            local.prefix.data.write_a * local.prefix.general.a_or_is_first,
-        );
-        is_ins_row.assert_bool(local.write_a_x_is_first);
         let mut is_first_ins = is_ins_row.when(local.prefix.general.a_or_is_first);
         // ATTENTION: degree of is_first_ins is 2
         is_first_ins.assert_one(next.general.is_ins_row);
@@ -739,7 +720,6 @@ fn record_to_rows<F: PrimeField32>(
             a_ptr_aux,
             b_ptr_ptr,
             b_ptr_aux,
-            write_a_x_is_first: write_a,
         };
     }
     // Instruction2Cols
@@ -762,7 +742,6 @@ fn record_to_rows<F: PrimeField32>(
             hint_id_ptr,
             is_init_ptr,
             is_init_aux,
-            write_a_x_is_first: F::ZERO,
         };
     }
 }
