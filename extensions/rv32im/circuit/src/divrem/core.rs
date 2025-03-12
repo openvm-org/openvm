@@ -232,7 +232,8 @@ where
         // Note:
         // - q_sum is guaranteed to be non-zero if q is non-zero since we've range checked each
         // limb of q to be within [0, 2^LIMB_BITS) already.
-        // - If q is zero and q_ext satisfies the constraint b = c * q + r, then q_sign must be 0.
+        // - If q is zero and q_ext satisfies the constraint
+        // sign_extend(b) = sign_extend(c) * sign_extend(q) + sign_extend(r), then q_sign must be 0.
         // Thus, we do not need additional constraints in case q is zero.
         let nonzero_q = q.iter().fold(AB::Expr::ZERO, |acc, q| acc + *q);
         builder.assert_bool(cols.q_sign);
@@ -240,6 +241,10 @@ where
             .when(nonzero_q)
             .when(not(cols.zero_divisor))
             .assert_eq(cols.q_sign, cols.sign_xor);
+        builder
+            .when_ne(cols.q_sign, cols.sign_xor)
+            .when(not(cols.zero_divisor))
+            .assert_zero(cols.q_sign);
 
         // Check that the signs of b and c are correct.
         let sign_mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
