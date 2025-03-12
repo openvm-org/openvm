@@ -67,37 +67,21 @@ impl FromLineMType<Fp2> for Fp12 {
 impl LineMulMType<Fp2, Fp12> for Bls12_381 {
     /// Multiplies two lines in 023-form to get an element in 02345-form
     fn mul_023_by_023(l0: &EvaluatedLine<Fp2>, l1: &EvaluatedLine<Fp2>) -> [Fp2; 5] {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            let b0 = &l0.b;
-            let c0 = &l0.c;
-            let b1 = &l1.b;
-            let c1 = &l1.c;
+        let b0 = &l0.b;
+        let c0 = &l0.c;
+        let b1 = &l1.b;
+        let c1 = &l1.c;
 
-            // where w⁶ = xi
-            // l0 * l1 = c0c1 + (c0b1 + c1b0)w² + (c0 + c1)w³ + (b0b1)w⁴ + (b0 +b1)w⁵ + w⁶
-            //         = (c0c1 + xi) + (c0b1 + c1b0)w² + (c0 + c1)w³ + (b0b1)w⁴ + (b0 + b1)w⁵
-            let x0 = c0 * c1 + Bls12_381::XI;
-            let x2 = c0 * b1 + c1 * b0;
-            let x3 = c0 + c1;
-            let x4 = b0 * b1;
-            let x5 = b0 + b1;
+        // where w⁶ = xi
+        // l0 * l1 = c0c1 + (c0b1 + c1b0)w² + (c0 + c1)w³ + (b0b1)w⁴ + (b0 +b1)w⁵ + w⁶
+        //         = (c0c1 + xi) + (c0b1 + c1b0)w² + (c0 + c1)w³ + (b0b1)w⁴ + (b0 + b1)w⁵
+        let x0 = c0 * c1 + Bls12_381::XI;
+        let x2 = c0 * b1 + c1 * b0;
+        let x3 = c0 + c1;
+        let x4 = b0 * b1;
+        let x5 = b0 + b1;
 
-            [x0, x2, x3, x4, x5]
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<[Fp2; 5]> = MaybeUninit::uninit();
-            custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<Bls12_381>(PairingBaseFunct7::Mul023By023),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In l0 as *const EvaluatedLine<Fp2>,
-                rs2 = In l1 as *const EvaluatedLine<Fp2>
-            );
-            unsafe { uninit.assume_init() }
-        }
+        [x0, x2, x3, x4, x5]
     }
 
     /// Multiplies a line in 02345-form with a Fp12 element to get an Fp12 element

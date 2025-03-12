@@ -70,12 +70,10 @@ pub enum PairingExtensionExecutor<F: PrimeField32> {
     MillerDoubleStepRv32_32(MillerDoubleStepChip<F, 4, 8, 32>),
     MillerDoubleAndAddStepRv32_32(MillerDoubleAndAddStepChip<F, 4, 12, 32>),
     EvaluateLineRv32_32(EvaluateLineChip<F, 4, 2, 4, 32>),
-    EcLineMul013By013(EcLineMul013By013Chip<F, 4, 10, 32>),
     // bls12-381 (48 limbs)
     MillerDoubleStepRv32_48(MillerDoubleStepChip<F, 12, 24, 16>),
     MillerDoubleAndAddStepRv32_48(MillerDoubleAndAddStepChip<F, 12, 36, 16>),
     EvaluateLineRv32_48(EvaluateLineChip<F, 12, 6, 12, 16>),
-    EcLineMul023By023(EcLineMul023By023Chip<F, 12, 30, 16>),
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
@@ -183,26 +181,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                             pairing_class_offset + PairingOpcode::EVALUATE_LINE as usize,
                         )],
                     )?;
-                    let mul013 = EcLineMul013By013Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 4, 10, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        range_checker.clone(),
-                        bn_config.clone(),
-                        curve.xi(),
-                        pairing_class_offset,
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::EcLineMul013By013(mul013),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::MUL_013_BY_013 as usize,
-                        )],
-                    )?;
                 }
                 PairingCurve::Bls12_381 => {
                     let bls_config = ExprBuilderConfig {
@@ -268,26 +246,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         PairingExtensionExecutor::EvaluateLineRv32_48(eval_line),
                         [VmOpcode::from_usize(
                             pairing_class_offset + PairingOpcode::EVALUATE_LINE as usize,
-                        )],
-                    )?;
-                    let mul023 = EcLineMul023By023Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 12, 30, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        range_checker.clone(),
-                        bls_config.clone(),
-                        curve.xi(),
-                        pairing_class_offset,
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::EcLineMul023By023(mul023),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::MUL_023_BY_023 as usize,
                         )],
                     )?;
                 }

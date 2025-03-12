@@ -18,13 +18,14 @@ pub enum PairingOpcode {
     MILLER_DOUBLE_STEP,
     MILLER_DOUBLE_AND_ADD_STEP,
     EVALUATE_LINE,
+    // NOTE: the following are enabled only in testing and not enabled in the VM Extension
     MUL_013_BY_013,
     MUL_023_BY_023,
-    // NOTE: the following are enabled only in testing and not enabled in the VM Extension
     MUL_BY_01234,
     MUL_BY_02345,
 }
 
+// NOTE: Fp12 is only enabled in testing and not enabled in the VM Extension
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
 )]
@@ -116,12 +117,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for PairingTranspilerExtension {
             }
             Some(PairingBaseFunct7::EvaluateLine) => {
                 PairingOpcode::EVALUATE_LINE as usize + PairingOpcode::CLASS_OFFSET
-            }
-            Some(PairingBaseFunct7::Mul013By013) => {
-                PairingOpcode::MUL_013_BY_013 as usize + PairingOpcode::CLASS_OFFSET
-            }
-            Some(PairingBaseFunct7::Mul023By023) => {
-                PairingOpcode::MUL_023_BY_023 as usize + PairingOpcode::CLASS_OFFSET
             }
             _ => unimplemented!(),
         };

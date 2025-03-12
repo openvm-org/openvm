@@ -12,8 +12,6 @@ pub enum PairingBaseFunct7 {
     MillerDoubleStep = 0,
     MillerDoubleAndAddStep,
     EvaluateLine,
-    Mul013By013,
-    Mul023By023,
     HintFinalExp,
 }
 
