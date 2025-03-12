@@ -189,7 +189,9 @@ overflow at compile time.
 Memory allocation is done by moving the value at `HEAP_PTR` forward with the help of `A0`. Currently, there is no 
 de-allocation at compiler-level. But users can de-allocate by manually resetting the value at `HEAP_PTR`.
 
-The top of the memory is `2^29`. The limit comes from ISA properties. Trying to allocate more than available memory will
+**[!WARNING]**
+
+The top of the memory is `2^29`. Trying to allocate more than available memory will
 cause a runtime error and cannot generate a valid proof.
 
 ## Control Flow
