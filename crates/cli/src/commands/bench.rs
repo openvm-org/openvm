@@ -85,6 +85,7 @@ where
     VC::Periphery: Chip<SC>,
 {
     let exe = exe.into();
+    let pc_start = exe.pc_start;
     // 1. Generate proving key from config.
     tracing::info!("fri.log_blowup: {}", engine.fri_params().log_blowup);
     let vm = VirtualMachine::<SC, E, VC>::new(engine, config);
@@ -105,7 +106,8 @@ where
 
     // 6. Verify STARK proofs.
     let vk = pk.get_vk();
-    vm.verify(&vk, proofs.clone()).expect("Verification failed");
+    vm.verify(&vk, proofs.clone(), pc_start)
+        .expect("Verification failed");
 
     Ok(total_proving_time_ms)
 }

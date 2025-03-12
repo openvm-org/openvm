@@ -449,6 +449,12 @@ pub enum VmVerificationError {
 
     #[error("stark verification error: {0}")]
     StarkError(#[from] VerificationError),
+
+    #[error("missing air (air_id: {air_id})")]
+    MissingAir { air_id: usize },
+
+    #[error("duplicate air (air_id: {air_id})")]
+    DuplicateAir { air_id: usize },
 }
 
 pub struct VirtualMachine<SC: StarkGenericConfig, E, VC> {
@@ -574,12 +580,13 @@ where
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
+        initial_pc: u32,
     ) -> Result<(), VmVerificationError>
     where
         Val<SC>: PrimeField32,
     {
         if self.config().system().continuation_enabled {
-            self.verify_segments(vk, proofs)
+            self.verify_segments(vk, proofs, initial_pc)
         } else {
             assert_eq!(proofs.len(), 1);
             self.verify_single(vk, &proofs.into_iter().next().unwrap())
@@ -592,6 +599,7 @@ where
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
+        initial_pc: u32,
     ) -> Result<(), VmVerificationError>
     where
         Val<SC>: PrimeField32,
@@ -606,12 +614,21 @@ where
                 Err(e) => return Err(VmVerificationError::StarkError(e)),
             };
 
+            let mut has_connector_air = false;
+            let mut has_merkle_air = false;
+
             // Check public values.
             for air_proof_data in proof.per_air.iter() {
                 let pvs = &air_proof_data.public_values;
                 let air_vk = &vk.per_air[air_proof_data.air_id];
 
                 if air_proof_data.air_id == CONNECTOR_AIR_ID {
+                    if has_connector_air {
+                        return Err(VmVerificationError::DuplicateAir {
+                            air_id: CONNECTOR_AIR_ID,
+                        });
+                    }
+                    has_connector_air = true;
                     let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
 
                     if i != 0 {
@@ -622,8 +639,11 @@ where
                                 prev_final: prev_final_pc.unwrap().as_canonical_u32(),
                             });
                         }
-                    } else {
-                        // TODO: Fetch initial pc from program
+                    } else if pvs.initial_pc.as_canonical_u32() != initial_pc {
+                        return Err(VmVerificationError::InitialPcMismatch {
+                            initial: pvs.initial_pc.as_canonical_u32(),
+                            prev_final: initial_pc,
+                        });
                     }
                     prev_final_pc = Some(pvs.final_pc);
 
@@ -647,6 +667,12 @@ where
                         });
                     }
                 } else if air_proof_data.air_id == MERKLE_AIR_ID {
+                    if has_merkle_air {
+                        return Err(VmVerificationError::DuplicateAir {
+                            air_id: MERKLE_AIR_ID,
+                        });
+                    }
+                    has_merkle_air = true;
                     let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
 
                     // Check that initial root matches the previous final root.
@@ -654,6 +680,26 @@ where
                         return Err(VmVerificationError::InitialMemoryRootMismatch);
                     }
                     prev_final_memory_root = Some(pvs.final_root);
+
+                    // if i == proofs.len() - 1 {
+                    //     // If this is the last segment
+                    //     let memory_dimensions =
+                    //         self.config().system().memory_config.memory_dimensions();
+                    //     let pv_as =
+                    //         PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
+                    //     let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
+
+                    //     // Get the expected number of public values
+                    //     let num_public_values = self.config().system().num_public_values;
+
+                    //     // Verify each public value is correctly stored in memory
+                    //     for i in 0..num_public_values {
+                    //         let addr = (PUBLIC_VALUES_ADDRESS_SPACE_OFFSET, i as u32);
+                    //         let value = memory_get_value(pvs.final_root, addr, memory_dimensions);
+                    //         // Here we would verify the value matches expected public value
+                    //         // But we need access to the expected public values to compare against
+                    //     }
+                    // }
                 } else {
                     if !pvs.is_empty() {
                         return Err(VmVerificationError::UnexpectedPvs {
@@ -668,6 +714,16 @@ where
                         });
                     }
                 }
+            }
+            if !has_connector_air {
+                return Err(VmVerificationError::MissingAir {
+                    air_id: CONNECTOR_AIR_ID,
+                });
+            }
+            if !has_merkle_air {
+                return Err(VmVerificationError::MissingAir {
+                    air_id: MERKLE_AIR_ID,
+                });
             }
         }
         Ok(())

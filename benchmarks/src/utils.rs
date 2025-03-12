@@ -215,6 +215,9 @@ where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
+    let exe = exe.into();
+    let pc_start = exe.pc_start;
+
     let bench_name = bench_name.to_string();
     let engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params.fri_params);
     let vm = VirtualMachine::new(engine, app_config.app_vm_config.clone());
@@ -237,7 +240,7 @@ where
     let prover = AppProver::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name);
     let app_proof = prover.generate_app_proof(input_stream);
     // 6. Verify STARK proofs, including boundary conditions.
-    vm.verify(&vk, app_proof.per_segment.clone())
+    vm.verify(&vk, app_proof.per_segment.clone(), pc_start)
         .expect("Verification failed");
     if let Some(leaf_vm_config) = leaf_vm_config {
         let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);

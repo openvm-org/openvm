@@ -46,6 +46,8 @@ where
     while config.system().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
+    let exe = exe.into();
+    let pc_start = exe.pc_start;
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
@@ -54,7 +56,7 @@ where
     let proofs = vm.prove(&pk, result);
 
     assert!(proofs.len() >= min_segments);
-    vm.verify(&pk.get_vk(), proofs)
+    vm.verify(&pk.get_vk(), proofs, pc_start)
         .expect("segment proofs should verify");
     final_memory
 }
