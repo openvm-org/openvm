@@ -56,47 +56,29 @@ where
     fn miller_double_step(
         s: &AffinePoint<Self::Fp2>,
     ) -> (AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp2>) {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            let one = &Self::Fp2::ONE;
-            let two = &(one + one);
-            let three = &(one + two);
+        let two: &Self::Fp2 = &<P as PairingIntrinsics>::FP2_TWO;
+        let three: &Self::Fp2 = &<P as PairingIntrinsics>::FP2_THREE;
 
-            let x = &s.x;
-            let y = &s.y;
-            // λ = (3x^2) / (2y)
-            let lambda = &((three * x * x).div_unsafe(&(two * y)));
-            // x_2s = λ^2 - 2x
-            let x_2s = lambda * lambda - two * x;
-            // y_2s = λ(x - x_2s) - y
-            let y_2s = lambda * &(x - &x_2s) - y;
-            let two_s = AffinePoint { x: x_2s, y: y_2s };
+        let x = &s.x;
+        let y = &s.y;
+        // λ = (3x^2) / (2y)
+        let lambda = &((three * x * x).div_unsafe(&(two * y)));
+        // x_2s = λ^2 - 2x
+        let x_2s = lambda * lambda - two * x;
+        // y_2s = λ(x - x_2s) - y
+        let y_2s = lambda * &(x - &x_2s) - y;
+        let two_s = AffinePoint { x: x_2s, y: y_2s };
 
-            // Tangent line
-            //   1 + b' (x_P / y_P) w^-1 + c' (1 / y_P) w^-3
-            // where
-            //   l_{\Psi(S),\Psi(S)}(P) = (λ * x_S - y_S) (1 / y_P)  - λ (x_P / y_P) w^2 + w^3
-            // x0 = λ * x_S - y_S
-            // x2 = - λ
-            let b = Self::Fp2::ZERO - lambda;
-            let c = lambda * x - y;
+        // Tangent line
+        //   1 + b' (x_P / y_P) w^-1 + c' (1 / y_P) w^-3
+        // where
+        //   l_{\Psi(S),\Psi(S)}(P) = (λ * x_S - y_S) (1 / y_P)  - λ (x_P / y_P) w^2 + w^3
+        // x0 = λ * x_S - y_S
+        // x2 = - λ
+        let b = Self::Fp2::ZERO - lambda;
+        let c = lambda * x - y;
 
-            (two_s, UnevaluatedLine { b, c })
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<(AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp2>)> =
-                MaybeUninit::uninit();
-            custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<P>(PairingBaseFunct7::MillerDoubleStep),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In s as *const _,
-                rs2 = Const "x0"
-            );
-            unsafe { uninit.assume_init() }
-        }
+        (two_s, UnevaluatedLine { b, c })
     }
 
     /// Miller add step

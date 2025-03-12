@@ -204,7 +204,6 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Pairing | `PairingOpcode::MILLER_DOUBLE_STEP` | MILLER_DOUBLE_STEP\<C\> |
 | Pairing | `PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP` | MILLER_DOUBLE_AND_ADD_STEP\<C\> |
 | Pairing | `PairingOpcode::EVALUATE_LINE` | EVALUATE_LINE\<C\> |
 

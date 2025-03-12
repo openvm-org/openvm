@@ -67,11 +67,9 @@ pub struct PairingExtension {
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]
 pub enum PairingExtensionExecutor<F: PrimeField32> {
     // bn254 (32 limbs)
-    MillerDoubleStepRv32_32(MillerDoubleStepChip<F, 4, 8, 32>),
     MillerDoubleAndAddStepRv32_32(MillerDoubleAndAddStepChip<F, 4, 12, 32>),
     EvaluateLineRv32_32(EvaluateLineChip<F, 4, 2, 4, 32>),
     // bls12-381 (48 limbs)
-    MillerDoubleStepRv32_48(MillerDoubleStepChip<F, 12, 24, 16>),
     MillerDoubleAndAddStepRv32_48(MillerDoubleAndAddStepChip<F, 12, 36, 16>),
     EvaluateLineRv32_48(EvaluateLineChip<F, 12, 6, 12, 16>),
 }
@@ -121,25 +119,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         num_limbs: 32,
                         limb_bits: 8,
                     };
-                    let miller_double = MillerDoubleStepChip::new(
-                        Rv32VecHeapAdapterChip::<F, 1, 4, 8, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bn_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::MillerDoubleStepRv32_32(miller_double),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                        )],
-                    )?;
                     let miller_double_and_add = MillerDoubleAndAddStepChip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 4, 12, 32, 32>::new(
                             execution_bus,
@@ -188,25 +167,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         num_limbs: 48,
                         limb_bits: 8,
                     };
-                    let miller_double = MillerDoubleStepChip::new(
-                        Rv32VecHeapAdapterChip::<F, 1, 12, 24, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bls_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::MillerDoubleStepRv32_48(miller_double),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                        )],
-                    )?;
                     let miller_double_and_add = MillerDoubleAndAddStepChip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 12, 36, 16, 16>::new(
                             execution_bus,

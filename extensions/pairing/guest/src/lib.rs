@@ -9,10 +9,9 @@ pub const PAIRING_FUNCT3: u8 = 0b011;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
 #[repr(u8)]
 pub enum PairingBaseFunct7 {
-    MillerDoubleStep = 0,
+    HintFinalExp = 0,
     MillerDoubleAndAddStep,
     EvaluateLine,
-    HintFinalExp,
 }
 
 impl PairingBaseFunct7 {

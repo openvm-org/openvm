@@ -32,6 +32,9 @@ pub trait PairingIntrinsics {
     /// Multiplication constants for the Frobenius map for coefficients in Fp2 c1..=c5 for powers 0..12
     /// FROBENIUS_COEFFS\[i\]\[j\] = \xi^{(j + 1) * (p^i - 1)/6} when p = 1 (mod 6)
     const FROBENIUS_COEFFS: [[Self::Fp2; 5]; 12];
+
+    const FP2_TWO: Self::Fp2;
+    const FP2_THREE: Self::Fp2;
 }
 
 #[allow(non_snake_case)]

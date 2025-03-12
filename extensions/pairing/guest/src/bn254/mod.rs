@@ -207,6 +207,8 @@ impl PairingIntrinsics for Bn254 {
 
     const PAIRING_IDX: usize = 0;
     const XI: Fp2 = Fp2::new(Fp::from_const_u8(9), Fp::from_const_u8(1));
+    const FP2_TWO: Fp2 = Fp2::new(Fp::from_const_u8(2), Fp::from_const_u8(0));
+    const FP2_THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::from_const_u8(0));
     const FROBENIUS_COEFFS: [[Self::Fp2; 5]; 12] = [
         [
             Fp2 {

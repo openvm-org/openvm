@@ -15,10 +15,10 @@ use strum::{EnumCount, EnumIter, FromRepr};
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum PairingOpcode {
-    MILLER_DOUBLE_STEP,
     MILLER_DOUBLE_AND_ADD_STEP,
     EVALUATE_LINE,
     // NOTE: the following are enabled only in testing and not enabled in the VM Extension
+    MILLER_DOUBLE_STEP,
     MUL_013_BY_013,
     MUL_023_BY_023,
     MUL_BY_01234,
@@ -108,10 +108,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for PairingTranspilerExtension {
             )));
         }
         let global_opcode = match PairingBaseFunct7::from_repr(base_funct7) {
-            Some(PairingBaseFunct7::MillerDoubleStep) => {
-                assert_eq!(dec_insn.rs2, 0);
-                PairingOpcode::MILLER_DOUBLE_STEP as usize + PairingOpcode::CLASS_OFFSET
-            }
             Some(PairingBaseFunct7::MillerDoubleAndAddStep) => {
                 PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize + PairingOpcode::CLASS_OFFSET
             }

@@ -210,10 +210,10 @@ Each VM extension's behavior is specified below.
 
 | RISC-V Inst                | OpenVM Instruction                                                       |
 | -------------------------- | ------------------------------------------------------------------------ |
-| miller_double_step         | MILLER_DOUBLE_STEP_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                |
+| hint_final_exp             | PHANTOM `ind(rs1), ind(rs2), phantom_c(pairing_idx, HintFinalExp)`       |
 | miller_double_and_add_step | MILLER_DOUBLE_AND_ADD_STEP_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
 | evaluate_line              | EVALUATE_LINE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`              |
-| hint_final_exp             | PHANTOM `ind(rs1), ind(rs2), phantom_c(pairing_idx, HintFinalExp)`       |
+
 
 ## OpenVM Kernel Code Transpilation
 This section specifies the transpilation of custom RISC-V [kernel code](./RISCV.md#classification-of-custom-risc-v-machine-code) to OpenVM instructions.
