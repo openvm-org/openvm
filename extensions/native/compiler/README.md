@@ -4,6 +4,7 @@ Currently `builder.eval` always creates a new variable. When the expression is a
 `builder.eval` to evaluate an expression causes an unnecessary variable assignment, which impacts performance
 significantly.
 
+
 The naming of `builder.eval` is semantically incorrect because creating a new variable is out of scope of "eval".
 However, the assumption is taken too widely to fix. So we introduce a new method `builder.eval_expr` for the real
 "evaluation".
