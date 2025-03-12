@@ -216,7 +216,6 @@ where
     VC::Periphery: Chip<SC>,
 {
     let exe = exe.into();
-    let pc_start = exe.pc_start;
 
     let bench_name = bench_name.to_string();
     let engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params.fri_params);
@@ -243,7 +242,6 @@ where
     vm.verify(
         &vk,
         app_proof.per_segment.clone(),
-        pc_start,
         Some(&app_proof.user_public_values),
     )
     .expect("Verification failed");

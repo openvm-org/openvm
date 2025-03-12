@@ -52,7 +52,6 @@ where
         log_blowup += 1;
     }
     let exe = exe.into();
-    let pc_start = exe.pc_start;
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
@@ -71,7 +70,7 @@ where
     };
 
     assert!(proofs.len() >= min_segments);
-    vm.verify(&pk.get_vk(), proofs, pc_start, user_pv_proof.as_ref())
+    vm.verify(&pk.get_vk(), proofs, user_pv_proof.as_ref())
         .expect("segment proofs should verify");
     final_memory
 }

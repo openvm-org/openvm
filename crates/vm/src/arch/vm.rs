@@ -2,7 +2,7 @@ use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync:
 
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig, Val},
+    config::{Com, Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
@@ -20,6 +20,7 @@ use tracing::info_span;
 use super::{
     hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
     ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
+    PROGRAM_CACHED_TRACE_INDEX,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -470,6 +471,9 @@ pub enum VmVerificationError {
 
     #[error("wrong user public values memory location")]
     WrongUserPublicValuesMemoryLocation,
+
+    #[error("program commit mismatch (different segments have different program commitments)")]
+    ProgramCommitMismatch,
 }
 
 pub struct VirtualMachine<SC: StarkGenericConfig, E, VC> {
@@ -489,6 +493,7 @@ where
     VC: VmConfig<F>,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
+    Com<SC>: Into<[F; 8]>,
 {
     pub fn new(engine: E, config: VC) -> Self {
         let executor = VmExecutor::new(config);
@@ -595,14 +600,13 @@ where
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
-        initial_pc: u32,
         user_public_values: Option<&UserPublicValuesProof<{ CHUNK }, Val<SC>>>,
-    ) -> Result<(), VmVerificationError>
+    ) -> Result<[F; 8], VmVerificationError>
     where
         Val<SC>: PrimeField32,
     {
         if self.config().system().continuation_enabled {
-            self.verify_segments(vk, proofs, initial_pc, user_public_values)
+            self.verify_segments(vk, proofs, user_public_values)
         } else {
             assert_eq!(proofs.len(), 1);
             self.verify_single(vk, &proofs.into_iter().next().unwrap())
@@ -615,14 +619,15 @@ where
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
-        initial_pc: u32,
         user_public_values: Option<&UserPublicValuesProof<{ CHUNK }, Val<SC>>>,
-    ) -> Result<(), VmVerificationError>
+    ) -> Result<[F; 8], VmVerificationError>
     where
         Val<SC>: PrimeField32,
     {
         let mut prev_final_memory_root = None;
         let mut prev_final_pc = None;
+
+        let hasher = vm_poseidon2_hasher();
 
         // Check user public values
         if user_public_values.is_none() != (self.config().system().num_public_values == 0) {
@@ -640,9 +645,9 @@ where
                 let mut pv_hash = user_public_values.public_values_commit;
                 for (right, sibling) in user_public_values.proof.iter() {
                     pv_hash = if *right {
-                        vm_poseidon2_hasher().compress(sibling, &pv_hash)
+                        hasher.compress(sibling, &pv_hash)
                     } else {
-                        vm_poseidon2_hasher().compress(&pv_hash, sibling)
+                        hasher.compress(&pv_hash, sibling)
                     }
                 }
 
@@ -712,11 +717,6 @@ where
                                 prev_final: prev_final_pc.unwrap().as_canonical_u32(),
                             });
                         }
-                    } else if pvs.initial_pc.as_canonical_u32() != initial_pc {
-                        return Err(VmVerificationError::InitialPcMismatch {
-                            initial: pvs.initial_pc.as_canonical_u32(),
-                            prev_final: initial_pc,
-                        });
                     }
                     prev_final_pc = Some(pvs.final_pc);
 
@@ -788,6 +788,46 @@ where
             }
         }
 
-        Ok(())
+        let app_program_commit =
+            proofs[0].commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].clone();
+        let app_program_commit = app_program_commit.into();
+        if proofs.iter().any(|proof| {
+            proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX]
+                .clone()
+                .into()
+                != app_program_commit
+        }) {
+            return Err(VmVerificationError::ProgramCommitMismatch);
+        }
+        let init_memory_commit = {
+            let pvs: &MemoryMerklePvs<F, CHUNK> = proofs[0]
+                .per_air
+                .iter()
+                .find(|air| air.air_id == MERKLE_AIR_ID)
+                .unwrap()
+                .public_values
+                .as_slice()
+                .borrow();
+            pvs.final_root
+        };
+        let pc_start = {
+            let pvs: &VmConnectorPvs<_> = proofs[0]
+                .per_air
+                .iter()
+                .find(|air| air.air_id == CONNECTOR_AIR_ID)
+                .unwrap()
+                .public_values
+                .as_slice()
+                .borrow();
+            pvs.initial_pc
+        };
+        let mut pc_start_padded = [F::ZERO; 8];
+        pc_start_padded[0] = pc_start;
+        let app_program_commit = hasher.hash(&app_program_commit);
+        let init_memory_commit = hasher.hash(&init_memory_commit);
+        let result = hasher.compress(&app_program_commit, &init_memory_commit);
+        let result = hasher.compress(&result, &hasher.hash(&pc_start_padded));
+
+        Ok(result)
     }
 }
