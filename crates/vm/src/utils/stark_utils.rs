@@ -59,15 +59,19 @@ where
     let mut result = vm.execute_and_generate(exe, input).unwrap();
     let final_memory = result.final_memory.take();
     let proofs = vm.prove(&pk, result);
-    let user_pv_proof = UserPublicValuesProof::compute(
-        system_config.memory_config.memory_dimensions(),
-        system_config.num_public_values,
-        &vm_poseidon2_hasher(),
-        final_memory.as_ref().unwrap(),
-    );
+    let user_pv_proof = if system_config.num_public_values > 0 {
+        Some(UserPublicValuesProof::compute(
+            system_config.memory_config.memory_dimensions(),
+            system_config.num_public_values,
+            &vm_poseidon2_hasher(),
+            final_memory.as_ref().unwrap(),
+        ))
+    } else {
+        None
+    };
 
     assert!(proofs.len() >= min_segments);
-    vm.verify(&pk.get_vk(), proofs, pc_start, Some(&user_pv_proof))
+    vm.verify(&pk.get_vk(), proofs, pc_start, user_pv_proof.as_ref())
         .expect("segment proofs should verify");
     final_memory
 }
