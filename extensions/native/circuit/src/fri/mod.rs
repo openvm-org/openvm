@@ -84,8 +84,6 @@ const_assert_eq!(
 #[derive(Debug, AlignedBorrow)]
 struct Instruction2Cols<T> {
     general: GeneralCols<T>,
-    // is_first = 0 means the second instruction row.
-    is_first: T,
 
     length_ptr: T,
     length_aux: MemoryReadAuxCols<T>,
@@ -112,10 +110,6 @@ const_assert_eq!(
     offset_of!(Instruction2Cols<u8>, general)
 );
 const_assert_eq!(
-    offset_of!(Instruction1Cols<u8>, prefix) + offset_of!(PrefixCols<u8>, a_or_is_first),
-    offset_of!(Instruction2Cols<u8>, is_first)
-);
-const_assert_eq!(
     offset_of!(Instruction1Cols<u8>, write_a_x_is_first),
     offset_of!(Instruction2Cols<u8>, write_a_x_is_first)
 );
@@ -131,9 +125,12 @@ struct GeneralCols<T> {
     /// Whether the row is an instruction row.
     is_ins_row: T,
     timestamp: T,
+    /// WorkloadCols uses this column as `a`. Instruction columns use this as `is_first` which
+    /// indicates whether this is the first row of an instruction row. This is to save a column.
+    a_or_is_first: T,
 }
 const GENERAL_WIDTH: usize = GeneralCols::<u8>::width();
-const_assert_eq!(GENERAL_WIDTH, 3);
+const_assert_eq!(GENERAL_WIDTH, 4);
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -154,9 +151,6 @@ const_assert_eq!(DATA_WIDTH, 12);
 #[derive(Debug, AlignedBorrow)]
 struct PrefixCols<T> {
     general: GeneralCols<T>,
-    /// WorkloadCols uses this column as `a`. Instruction1Cols uses this column as `is_first` which
-    /// indicates whether this is the first row of an instruction row. This is to save a column.
-    a_or_is_first: T,
     data: DataCols<T>,
 }
 const PREFIX_WIDTH: usize = PrefixCols::<u8>::width();
@@ -235,7 +229,7 @@ impl FriReducedOpeningAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(native_as.clone(), next.data.a_ptr),
-                [local.prefix.a_or_is_first],
+                [local.prefix.general.a_or_is_first],
                 start_timestamp + ptr_reads,
                 local.a_aux.as_ref(),
             )
@@ -244,7 +238,7 @@ impl FriReducedOpeningAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(native_as.clone(), next.data.a_ptr),
-                [local.prefix.a_or_is_first],
+                [local.prefix.general.a_or_is_first],
                 start_timestamp + ptr_reads,
                 &local.a_aux,
             )
@@ -293,7 +287,7 @@ impl FriReducedOpeningAir {
                 .for_each(|(e, b)| {
                     *e += (*b).into();
                 });
-            expected_result[0] -= local.prefix.a_or_is_first.into();
+            expected_result[0] -= local.prefix.general.a_or_is_first.into();
             assert_array_eq(&mut builder, expected_result, next.data.result);
         }
         {
@@ -301,7 +295,7 @@ impl FriReducedOpeningAir {
             let mut local_non_ins =
                 next_ins.when_ne(local.prefix.general.is_ins_row, AB::Expr::ONE);
             // The row after a workload row can only be the first instruction row.
-            local_non_ins.assert_one(next.a_or_is_first);
+            local_non_ins.assert_one(next.general.a_or_is_first);
         }
         {
             let mut when_first_row = builder.when_first_row();
@@ -334,17 +328,17 @@ impl FriReducedOpeningAir {
         // `write_a` refers to a random field in Instruction2Cols but `write_a_x_is_first` must be 0 because `is_first` is 0.
         is_ins_row.assert_eq(
             local.write_a_x_is_first,
-            local.prefix.data.write_a * local.prefix.a_or_is_first,
+            local.prefix.data.write_a * local.prefix.general.a_or_is_first,
         );
         is_ins_row.assert_bool(local.write_a_x_is_first);
-        let mut is_first_ins = is_ins_row.when(local.prefix.a_or_is_first);
+        let mut is_first_ins = is_ins_row.when(local.prefix.general.a_or_is_first);
         // ATTENTION: degree of is_first_ins is 2
         is_first_ins.assert_one(next.general.is_ins_row);
-        is_first_ins.assert_zero(next.is_first);
+        is_first_ins.assert_zero(next.general.a_or_is_first);
 
         let local_data = &local.prefix.data;
         let length = local.prefix.data.idx;
-        let multiplicity = local.prefix.general.is_ins_row * local.prefix.a_or_is_first;
+        let multiplicity = local.prefix.general.is_ins_row * local.prefix.general.a_or_is_first;
         let start_timestamp = local.prefix.general.timestamp;
         let write_timestamp = start_timestamp
             + AB::Expr::TWO * length
@@ -440,12 +434,13 @@ impl FriReducedOpeningAir {
             // If the last row is enabled, it must be the second row of an instruction row. This
             // is a safeguard for edge cases.
             enabled.assert_one(local.general.is_ins_row);
-            enabled.assert_zero(local.is_first);
+            enabled.assert_zero(local.general.a_or_is_first);
         }
         {
             let mut when_transition = builder.when_transition();
             let mut is_ins_row = when_transition.when(local.general.is_ins_row);
-            let mut not_first_ins_row = is_ins_row.when_ne(local.is_first, AB::Expr::ONE);
+            let mut not_first_ins_row =
+                is_ins_row.when_ne(local.general.a_or_is_first, AB::Expr::ONE);
             // ATTENTION: degree of not_first_ins_row is 2
             // Because all the following assert 0, we don't need to check next.enabled.
             // The next row must be a workload row.
@@ -690,8 +685,8 @@ fn record_to_rows<F: PrimeField32>(
                     is_workload_row: F::ONE,
                     is_ins_row: F::ZERO,
                     timestamp: record.start_timestamp + F::from_canonical_usize((length - i) * 2),
+                    a_or_is_first: a,
                 },
-                a_or_is_first: a,
                 data: DataCols {
                     a_ptr: a_ptr + F::from_canonical_usize(length - i),
                     write_a,
@@ -728,8 +723,8 @@ fn record_to_rows<F: PrimeField32>(
                     is_workload_row: F::ZERO,
                     is_ins_row: F::ONE,
                     timestamp: record.start_timestamp,
+                    a_or_is_first: F::ONE,
                 },
-                a_or_is_first: F::ONE,
                 data: DataCols {
                     a_ptr,
                     write_a,
@@ -756,8 +751,8 @@ fn record_to_rows<F: PrimeField32>(
                 is_workload_row: F::ZERO,
                 is_ins_row: F::ONE,
                 timestamp: record.start_timestamp,
+                a_or_is_first: F::ZERO,
             },
-            is_first: F::ZERO,
             length_ptr,
             length_aux,
             alpha_ptr,
