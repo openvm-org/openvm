@@ -105,6 +105,7 @@ impl AirConstructor {
     }
 
     pub fn set_scope_expression(&mut self, scope: &ScopePath, expression: AirExpression) {
+        self.add_single_constraint(expression.clone(), expression.times(&expression));
         self.scope_expressions.insert(scope.clone(), expression);
     }
 
