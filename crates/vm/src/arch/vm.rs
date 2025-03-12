@@ -755,7 +755,10 @@ where
                     prev_final_memory_root = Some(pvs.final_root);
 
                     // Check that the final root matches the root obtained from the user public values proof
-                    if pv_hash.is_some() && pv_hash.unwrap() != pvs.final_root {
+                    if i == proofs.len() - 1
+                        && pv_hash.is_some()
+                        && pv_hash.unwrap() != pvs.final_root
+                    {
                         return Err(VmVerificationError::FinalMemoryRootMismatch);
                     }
                 } else {
