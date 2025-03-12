@@ -1,6 +1,4 @@
 use alloc::vec::Vec;
-#[cfg(target_os = "zkvm")]
-use core::mem::MaybeUninit;
 use core::ops::{Mul, MulAssign, Neg};
 
 use openvm_algebra_guest::{
