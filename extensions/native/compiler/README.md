@@ -5,7 +5,7 @@ Currently `builder.eval` always creates a new variable. When the expression is a
 significantly.
 
 The naming of `builder.eval` is semantically incorrect because creating a new variable is out of scope of "eval".
-However, the assumption is taken too widely to fix. So we introduce a new method `builder.eval_expr` for the real
+However, the assumption dfdfis taken too widely to fix. So we introduce a new method `builder.eval_expr` for the real
 "evaluation".dfd
 
 `builder.eval_expr` returns a **[right value](https://www.oreilly.com/library/view/c-in-a/059600298X/ch03s01.html#:~:text=The%20term%20rvalue%20is%20a,are%20close%20to%20the%20truth.)**,
