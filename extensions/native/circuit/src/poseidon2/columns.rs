@@ -127,16 +127,16 @@ pub struct TopLevelSpecificCols<T> {
     /// Starts at zero in a top-level block and increments by one after each `incorporate_sibling` row.
     pub proof_index: T,
 
-    /// Memory aux columns for either `initial_height` or `root_is_on_right`. On an `incorporate_row`
-    /// row, aux columns for reading `dims[initial_opened_index]`, and otherwise aux columns for
-    /// `index_bits[proof_index]`.
-    pub read_initial_height_or_root_is_on_right: MemoryReadAuxCols<T>,
+    /// Memory aux columns for reading either `initial_height` or `sibling_is_on_right`. On an
+    /// `incorporate_row` row, aux columns for reading `dims[initial_opened_index]`, and otherwise
+    /// aux columns for `index_bits[proof_index]`.
+    pub read_initial_height_or_sibling_is_on_right: MemoryReadAuxCols<T>,
     /// Memory aux columns for reading `dims[final_opened_index]`.
     pub read_final_height: MemoryReadAuxCols<T>,
 
-    /// Indicator for whether `root_is_on_right`. Constrained to equal `index_bits[proof_index]` on
-    /// `incorporate_sibling` rows. Unconstrained on other rows.
-    pub root_is_on_right: T,
+    /// Indicator for whether the sibling being incorporated (if any) is on the right. Constrained
+    /// to equal `index_bits[proof_index]` on `incorporate_sibling` rows. Unconstrained on other rows.
+    pub sibling_is_on_right: T,
     /// Pointer to the Merkle root.
     pub commit_pointer: T,
     /// Memory aux columns for reading the Merkle root.

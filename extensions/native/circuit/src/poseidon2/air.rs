@@ -327,9 +327,9 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             index_base_pointer_read,
             commit_pointer_read,
             proof_index,
-            read_initial_height_or_root_is_on_right,
+            read_initial_height_or_sibling_is_on_right,
             read_final_height,
-            root_is_on_right,
+            sibling_is_on_right,
             commit_pointer,
             commit_read,
         } = top_level_specific;
@@ -502,7 +502,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                 MemoryAddress::new(self.address_space, dim_base_pointer + initial_opened_index),
                 [log_height],
                 end_timestamp - AB::F::TWO,
-                &read_initial_height_or_root_is_on_right,
+                &read_initial_height_or_sibling_is_on_right,
             )
             .eval(builder, incorporate_row);
         self.memory_bridge
@@ -532,20 +532,20 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         self.memory_bridge
             .read(
                 MemoryAddress::new(self.address_space, index_base_pointer + proof_index),
-                [root_is_on_right],
+                [sibling_is_on_right],
                 timestamp_after_initial_reads.clone(),
-                &read_initial_height_or_root_is_on_right,
+                &read_initial_height_or_sibling_is_on_right,
             )
             .eval(builder, incorporate_sibling);
 
         for i in 0..CHUNK {
             builder
                 .when(next.incorporate_sibling)
-                .when(next_top_level_specific.root_is_on_right)
+                .when(next_top_level_specific.sibling_is_on_right)
                 .assert_eq(next_right_input[i], left_output[i]);
             builder
                 .when(next.incorporate_sibling)
-                .when(AB::Expr::ONE - next_top_level_specific.root_is_on_right)
+                .when(AB::Expr::ONE - next_top_level_specific.sibling_is_on_right)
                 .assert_eq(next_left_input[i], left_output[i]);
         }
 

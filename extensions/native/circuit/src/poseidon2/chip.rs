@@ -65,8 +65,8 @@ pub struct TopLevelRecord<F: Field> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct IncorporateSiblingRecord<F: Field> {
-    pub read_root_is_on_right: RecordId,
-    pub root_is_on_right: bool,
+    pub read_sibling_is_on_right: RecordId,
+    pub sibling_is_on_right: bool,
     pub p2_input: [F; 2 * CHUNK],
 }
 
@@ -432,13 +432,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                         memory.increment_timestamp();
                     }
 
-                    let (read_root_is_on_right, root_is_on_right) = memory.read_cell(
+                    let (read_sibling_is_on_right, sibling_is_on_right) = memory.read_cell(
                         address_space,
                         index_base_pointer + F::from_canonical_usize(sibling_index),
                     );
-                    let root_is_on_right = root_is_on_right == F::ONE;
+                    let sibling_is_on_right = sibling_is_on_right == F::ONE;
                     let sibling = sibling_proof[sibling_index];
-                    let (p2_input, new_root) = if root_is_on_right {
+                    let (p2_input, new_root) = if sibling_is_on_right {
                         self.compress(sibling, root)
                     } else {
                         self.compress(root, sibling)
@@ -447,8 +447,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 
                     self.height += 1;
                     Some(IncorporateSiblingRecord {
-                        read_root_is_on_right,
-                        root_is_on_right,
+                        read_sibling_is_on_right,
+                        sibling_is_on_right,
                         p2_input,
                     })
                 };
