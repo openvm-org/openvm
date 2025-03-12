@@ -178,6 +178,11 @@ where
             cols.is_valid * AB::F::from_canonical_u8(2),
         );
 
+        // Handle the setup row constraints.
+        // When is_setup = 1, constrain c_lt_mark = 2 and lt_marker_sum = 2
+        // This ensures that lt_marker has exactly one 2 and the remaining entries are 0.
+        // Since lt_marker has no 1, we will end up constraining that b[i] = N[i] for all i
+        // instead of just for i > b_diff_idx.
         builder
             .when(cols.is_setup)
             .assert_eq(cols.c_lt_mark, AB::F::from_canonical_u8(2));
@@ -197,23 +202,33 @@ where
                     * (cols.lt_marker[i] - cols.c_lt_mark),
             );
 
-            // Constrain b < N. Note lt_marker_sum is either 1 or 3, and that lt_marker[i]
-            // being 1 indicates b[i] < N[i].
+            // Constrain b < N.
+            // First, we constrain b[i] = N[i] for i > b_diff_idx.
+            // We do this by constraining that b[i] = N[i] when prefix_sum is not 1 or lt_marker_sum.
+            //  - If is_setup = 0, then lt_marker_sum is either 1 or 3. In this case, prefix_sum is 0, 1, 2, or 3.
+            //    It can be verified by casework that i > b_diff_idx iff prefix_sum is not 1 or lt_marker_sum.
+            //  - If is_setup = 1, then we want to constrain b[i] = N[i] for all i. In this case, lt_marker_sum is 2
+            //    and prefix_sum is 0 or 2. So we constrain b[i] = N[i] when prefix_sum is not 1, which works.
             builder
                 .when_ne(prefix_sum.clone(), AB::F::ONE)
                 .when_ne(prefix_sum.clone(), lt_marker_sum.clone() - cols.is_setup)
                 .assert_eq(cols.b[i], modulus[i]);
+            // Note that lt_marker[i] is either 0, 1, or 2 and lt_marker[i] being 1 indicates b[i] < N[i] (i.e. i == b_diff_idx).
             builder
                 .when_ne(cols.lt_marker[i], AB::F::ZERO)
                 .when_ne(cols.lt_marker[i], AB::F::from_canonical_u8(2))
                 .assert_eq(AB::Expr::from(modulus[i]) - cols.b[i], cols.b_lt_diff);
 
-            // Constrain c < N. Note lt_marker[i] being c_lt_mark indicates c[i] < N[i],
-            // and that c_lt_mark is either 1 or 2.
+            // Constrain c < N.
+            // First, we constrain c[i] = N[i] for i > c_diff_idx.
+            // We do this by constraining that c[i] = N[i] when prefix_sum is not c_lt_mark or lt_marker_sum.
+            // It can be verified by casework that i > c_diff_idx iff prefix_sum is not c_lt_mark or lt_marker_sum.
             builder
                 .when_ne(prefix_sum.clone(), cols.c_lt_mark)
                 .when_ne(prefix_sum.clone(), lt_marker_sum.clone())
                 .assert_eq(cols.c[i], modulus[i]);
+            // Note that lt_marker[i] is either 0, 1, or 2 and lt_marker[i] being c_lt_mark indicates c[i] < N[i] (i.e. i == c_diff_idx).
+            // Since c_lt_mark is 1 or 2, we have {0, 1, 2} \ {0, 3 - c_lt_mark} = {c_lt_mark}.
             builder
                 .when_ne(cols.lt_marker[i], AB::F::ZERO)
                 .when_ne(
@@ -223,6 +238,7 @@ where
                 .assert_eq(AB::Expr::from(modulus[i]) - cols.c[i], cols.c_lt_diff);
         }
 
+        // Check that b_lt_diff and c_lt_diff are positive
         self.bus
             .send_range(
                 cols.b_lt_diff - AB::Expr::ONE,
