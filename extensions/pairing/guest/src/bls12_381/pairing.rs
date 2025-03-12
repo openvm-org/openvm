@@ -107,67 +107,51 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
 
     /// Multiplies a line in 02345-form with a Fp12 element to get an Fp12 element
     fn mul_by_02345(f: &Fp12, x: &[Fp2; 5]) -> Fp12 {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            // we update the order of the coefficients to match the Fp12 coefficient ordering:
-            // Fp12 {
-            //   c0: Fp6 {
-            //     c0: x0,
-            //     c1: x2,
-            //     c2: x4,
-            //   },
-            //   c1: Fp6 {
-            //     c0: x1,
-            //     c1: x3,
-            //     c2: x5,
-            //   },
-            // }
-            let o0 = &x[0]; // coeff x0
-            let o1 = &x[1]; // coeff x2
-            let o2 = &x[3]; // coeff x4
-            let o4 = &x[2]; // coeff x3
-            let o5 = &x[4]; // coeff x5
+        // we update the order of the coefficients to match the Fp12 coefficient ordering:
+        // Fp12 {
+        //   c0: Fp6 {
+        //     c0: x0,
+        //     c1: x2,
+        //     c2: x4,
+        //   },
+        //   c1: Fp6 {
+        //     c0: x1,
+        //     c1: x3,
+        //     c2: x5,
+        //   },
+        // }
+        let o0 = &x[0]; // coeff x0
+        let o1 = &x[1]; // coeff x2
+        let o2 = &x[3]; // coeff x4
+        let o4 = &x[2]; // coeff x3
+        let o5 = &x[4]; // coeff x5
 
-            let xi = &Bls12_381::XI;
+        let xi = &Bls12_381::XI;
 
-            let self_coeffs = f.clone().to_coeffs();
-            let s0 = &self_coeffs[0];
-            let s1 = &self_coeffs[2];
-            let s2 = &self_coeffs[4];
-            let s3 = &self_coeffs[1];
-            let s4 = &self_coeffs[3];
-            let s5 = &self_coeffs[5];
+        let self_coeffs = &f.c;
+        let s0 = &self_coeffs[0];
+        let s1 = &self_coeffs[2];
+        let s2 = &self_coeffs[4];
+        let s3 = &self_coeffs[1];
+        let s4 = &self_coeffs[3];
+        let s5 = &self_coeffs[5];
 
-            // NOTE[yj]: Hand-calculated multiplication for Fp12 * 02345 ∈ Fp2; this is likely not the most efficient implementation
-            // c00 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4)
-            // c01 = cs0co1 + cs1co0 + xi(cs2co2 + cs4co5 + cs5co4)
-            // c02 = cs0co2 + cs1co1 + cs2co0 + cs3co4 + xi(cs5co5)
-            // c10 = cs3co0 + xi(cs1co5 + cs2co4 + cs4co2 + cs5co1)
-            // c11 = cs0co4 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
-            // c12 = cs0co5 + cs1co4 + cs3co2 + cs4co1 + cs5co0
-            //   where cs*: self.c*
-            let c00 = s0 * o0 + xi * &(s1 * o2 + s2 * o1 + s3 * o5 + s4 * o4);
-            let c01 = s0 * o1 + s1 * o0 + xi * &(s2 * o2 + s4 * o5 + s5 * o4);
-            let c02 = s0 * o2 + s1 * o1 + s2 * o0 + s3 * o4 + xi * &(s5 * o5);
-            let c10 = s3 * o0 + xi * &(s1 * o5 + s2 * o4 + s4 * o2 + s5 * o1);
-            let c11 = s0 * o4 + s3 * o1 + s4 * o0 + xi * &(s2 * o5 + s5 * o2);
-            let c12 = s0 * o5 + s1 * o4 + s3 * o2 + s4 * o1 + s5 * o0;
+        // NOTE[yj]: Hand-calculated multiplication for Fp12 * 02345 ∈ Fp2; this is likely not the most efficient implementation
+        // c00 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4)
+        // c01 = cs0co1 + cs1co0 + xi(cs2co2 + cs4co5 + cs5co4)
+        // c02 = cs0co2 + cs1co1 + cs2co0 + cs3co4 + xi(cs5co5)
+        // c10 = cs3co0 + xi(cs1co5 + cs2co4 + cs4co2 + cs5co1)
+        // c11 = cs0co4 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
+        // c12 = cs0co5 + cs1co4 + cs3co2 + cs4co1 + cs5co0
+        //   where cs*: self.c*
+        let c00 = s0 * o0 + xi * &(s1 * o2 + s2 * o1 + s3 * o5 + s4 * o4);
+        let c01 = s0 * o1 + s1 * o0 + xi * &(s2 * o2 + s4 * o5 + s5 * o4);
+        let c02 = s0 * o2 + s1 * o1 + s2 * o0 + s3 * o4 + xi * &(s5 * o5);
+        let c10 = s3 * o0 + xi * &(s1 * o5 + s2 * o4 + s4 * o2 + s5 * o1);
+        let c11 = s0 * o4 + s3 * o1 + s4 * o0 + xi * &(s2 * o5 + s5 * o2);
+        let c12 = s0 * o5 + s1 * o4 + s3 * o2 + s4 * o1 + s5 * o0;
 
-            Fp12::from_coeffs([c00, c10, c01, c11, c02, c12])
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<Fp12> = MaybeUninit::uninit();
-            custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<Bls12_381>(PairingBaseFunct7::MulBy02345),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In f as *const Fp12,
-                rs2 = In x as *const [Fp2; 5]
-            );
-            unsafe { uninit.assume_init() }
-        }
+        Fp12::from_coeffs([c00, c10, c01, c11, c02, c12])
     }
 }
 

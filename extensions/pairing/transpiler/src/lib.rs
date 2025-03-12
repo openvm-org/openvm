@@ -19,8 +19,9 @@ pub enum PairingOpcode {
     MILLER_DOUBLE_AND_ADD_STEP,
     EVALUATE_LINE,
     MUL_013_BY_013,
-    MUL_BY_01234,
     MUL_023_BY_023,
+    // NOTE: the following are enabled only in testing and not enabled in the VM Extension
+    MUL_BY_01234,
     MUL_BY_02345,
 }
 
@@ -113,33 +114,20 @@ impl<F: PrimeField32> TranspilerExtension<F> for PairingTranspilerExtension {
             Some(PairingBaseFunct7::MillerDoubleAndAddStep) => {
                 PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize + PairingOpcode::CLASS_OFFSET
             }
-            Some(PairingBaseFunct7::Fp12Mul) => Fp12Opcode::MUL as usize + Fp12Opcode::CLASS_OFFSET,
             Some(PairingBaseFunct7::EvaluateLine) => {
                 PairingOpcode::EVALUATE_LINE as usize + PairingOpcode::CLASS_OFFSET
             }
             Some(PairingBaseFunct7::Mul013By013) => {
                 PairingOpcode::MUL_013_BY_013 as usize + PairingOpcode::CLASS_OFFSET
             }
-            Some(PairingBaseFunct7::MulBy01234) => {
-                PairingOpcode::MUL_BY_01234 as usize + PairingOpcode::CLASS_OFFSET
-            }
             Some(PairingBaseFunct7::Mul023By023) => {
                 PairingOpcode::MUL_023_BY_023 as usize + PairingOpcode::CLASS_OFFSET
-            }
-            Some(PairingBaseFunct7::MulBy02345) => {
-                PairingOpcode::MUL_BY_02345 as usize + PairingOpcode::CLASS_OFFSET
             }
             _ => unimplemented!(),
         };
 
         assert!(PairingOpcode::COUNT < PairingBaseFunct7::PAIRING_MAX_KINDS as usize); // + 1 for Fp12Mul
-        let pairing_idx_shift =
-            if let Some(PairingBaseFunct7::Fp12Mul) = PairingBaseFunct7::from_repr(base_funct7) {
-                // SPECIAL CASE: Fp12Mul uses different enum Fp12Opcode
-                pairing_idx * Fp12Opcode::COUNT
-            } else {
-                pairing_idx * PairingOpcode::COUNT
-            };
+        let pairing_idx_shift = pairing_idx * PairingOpcode::COUNT;
         let global_opcode = global_opcode + pairing_idx_shift;
 
         Some(TranspilerOutput::one_to_one(from_r_type(

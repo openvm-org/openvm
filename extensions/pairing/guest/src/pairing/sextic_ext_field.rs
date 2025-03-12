@@ -65,28 +65,6 @@ impl<'a, F: Field> Sub<&'a SexticExtField<F>> for &SexticExtField<F> {
     }
 }
 
-/// SAFETY: `dst` must be a raw pointer to `&mut SexticExtField<F>`. It will be written to only at the very end .
-///
-/// When `target_os = "zkvm"`, this function calls an intrinsic instruction,
-/// which is assumed to be supported by the VM.
-#[allow(dead_code)]
-#[cfg(target_os = "zkvm")]
-#[inline(always)]
-pub(crate) fn sextic_tower_mul_intrinsic<P: super::PairingIntrinsics>(
-    dst: *mut u8,
-    lhs: *const u8,
-    rhs: *const u8,
-) {
-    custom_insn_r!(
-        opcode = OPCODE,
-        funct3 = PAIRING_FUNCT3,
-        funct7 = shifted_funct7::<P>(PairingBaseFunct7::Fp12Mul),
-        rd = In dst,
-        rs1 = In lhs,
-        rs2 = In rhs
-    );
-}
-
 pub(crate) fn sextic_tower_mul<F: Field>(
     lhs: &SexticExtField<F>,
     rhs: &SexticExtField<F>,

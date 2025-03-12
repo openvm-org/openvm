@@ -11,12 +11,9 @@ pub const PAIRING_FUNCT3: u8 = 0b011;
 pub enum PairingBaseFunct7 {
     MillerDoubleStep = 0,
     MillerDoubleAndAddStep,
-    Fp12Mul,
     EvaluateLine,
     Mul013By013,
-    MulBy01234,
     Mul023By023,
-    MulBy02345,
     HintFinalExp,
 }
 
