@@ -11,7 +11,7 @@ However, the assumption dfdfis taken too widely to fix. So we introduce a new me
 `builder.eval_expr` returns a **[right value](https://www.oreilly.com/library/view/c-in-a/059600298X/ch03s01.html#:~:text=The%20term%20rvalue%20is%20a,are%20close%20to%20the%20truth.)**,
 which is either a constant or a variable. An instruction can use a right value for reading a value directly.
 
-Currently `builder.eval_expr` only supports `SymbolicVar`.
+Currently `builder.eval_expr` only supports `SymbolicVar`.sdfdsfsd
 
 ## RVar
 
