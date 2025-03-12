@@ -4,12 +4,6 @@ use core::{
 };
 
 use openvm_algebra_guest::field::Field;
-#[cfg(target_os = "zkvm")]
-use {
-    super::shifted_funct7,
-    crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
-    openvm_platform::custom_insn_r,
-};
 
 /// Sextic extension field of `F` with irreducible polynomial `X^6 - \xi`.
 /// Elements are represented as `c0 + c1 * w + ... + c5 * w^5` where `w^6 = \xi`, where `\xi in F`.

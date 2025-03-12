@@ -206,12 +206,7 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | ------------- | ---------- | ------------- |
 | Pairing | `PairingOpcode::MILLER_DOUBLE_STEP` | MILLER_DOUBLE_STEP\<C\> |
 | Pairing | `PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP` | MILLER_DOUBLE_AND_ADD_STEP\<C\> |
-| Pairing | `Fp12Opcode::FP12_MUL` | FP12_MUL\<C\> |
 | Pairing | `PairingOpcode::EVALUATE_LINE` | EVALUATE_LINE\<C\> |
-| Pairing | `PairingOpcode::MUL_013_BY_013` | MUL_013_BY_013\<C\> |
-| Pairing | `PairingOpcode::MUL_BY_01234` | MUL_BY_01234\<C\> |
-| Pairing | `PairingOpcode::MUL_023_BY_023` | MUL_023_BY_023\<C\> |
-| Pairing | `PairingOpcode::MUL_BY_02345` | MUL_BY_02345\<C\> |
 
 #### Phantom Sub-Instructions
 

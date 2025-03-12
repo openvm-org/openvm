@@ -212,12 +212,7 @@ Each VM extension's behavior is specified below.
 | -------------------------- | ------------------------------------------------------------------------ |
 | miller_double_step         | MILLER_DOUBLE_STEP_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                |
 | miller_double_and_add_step | MILLER_DOUBLE_AND_ADD_STEP_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
-| fp12_mul                   | FP12_MUL_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                   |
 | evaluate_line              | EVALUATE_LINE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`              |
-| mul_013_by_013             | MUL_013_BY_013_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
-| mul_by_01234               | MUL_BY_01234_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| mul_023_by_023             | MUL_023_BY_023_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
-| mul_by_02345               | MUL_BY_02345_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
 | hint_final_exp             | PHANTOM `ind(rs1), ind(rs2), phantom_c(pairing_idx, HintFinalExp)`       |
 
 ## OpenVM Kernel Code Transpilation
@@ -242,7 +237,7 @@ Note that the `vri` code block does not conform to RISC-V instruction naming con
 We specify a format in which an arbitrary sequence of OpenVM instructions can be serialized into a 32-bit aligned code block
 which can be inserted into the RISC-V ELF. The transpiler is then able to recognize this code block and transpile it (effectively deserializing) back into the original OpenVM instructions.
 
-To do this, suppose we have a sequence of OpenVM instructions `[i_1, ..., i_l]`. These will be serialized into the 
+To do this, suppose we have a sequence of OpenVM instructions `[i_1, ..., i_l]`. These will be serialized into the
 concatenation of the code blocks:
 
 ```
@@ -256,11 +251,11 @@ This will be an overall code block of `32 * m` bits, where `m > l`, which will b
 If the starting program address of the RISC-V code block is `a` (in bytes), then the OpenVM instructions `i_1, ..., i_l` will be at addresses `[a, a + 4, ..., a + 4 * (l - 1)]` in the OpenVM program ROM. The addresses `[a + 4 * l, ..., a + 4 * (m - 1)]` will be left empty in the OpenVM program ROM to maintain compatibility with RISC-V program addresses. The _gap_ between `l` and `m` is encoded by the [gap encoding](#gap-encoding).
 
 ### OpenVM Instruction Encoding
-An OpenVM instruction is encoded to a RISC-V code block as follows. 
-We identify the 31-bit field `F` with `{0, ..., p - 1}` where `p` is the prime modulus. 
+An OpenVM instruction is encoded to a RISC-V code block as follows.
+We identify the 31-bit field `F` with `{0, ..., p - 1}` where `p` is the prime modulus.
 We encode `u32` as 32-bits in little-endian format.
 
-Let the instruction be `opcode operand_1 operand_2 ... operand_n` where each opcode and operand is a field element.  
+Let the instruction be `opcode operand_1 operand_2 ... operand_n` where each opcode and operand is a field element.
 Then to encode it into a 32-bit aligned code block, we first write `lfii`, followed by the number of operands `n` (as `u32`), followed by `opcode` (as `u32`).
 We then encode each operand, which can happen in one of two ways:
 - The operand is encoded as field element in 32-bits.
@@ -269,7 +264,7 @@ then an I-Type instruction with only `rs1` and `imm` being nonzero,
 such that the value of the operand is `(LIMBS * rs1) + imm`.
 `LIMBS` is the number of limbs in a register, i.e., 4 on a 32-bit architecture.
 
-The first encoding method is preferred. 
+The first encoding method is preferred.
 The second encoding method is used when the operand is a register being referenced from e.g. Rust,
 where we do not know the exact value of the register but are allowed to reference the register in an assembly instruction,
 but only by specifying it as one of `rs1`, `rs2`, `rd`.

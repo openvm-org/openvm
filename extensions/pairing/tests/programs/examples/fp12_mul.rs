@@ -19,8 +19,13 @@ mod bn254 {
         "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
     }
 
+    openvm_algebra_complex_macros::complex_init! {
+        Bn254Fp2 { mod_idx = 0 },
+    }
+
     pub fn test_fp12_mul(io: &[u8]) {
         setup_0();
+        setup_all_complex_extensions();
         assert_eq!(io.len(), 32 * 36);
 
         let f0 = &io[0..32 * 12];
