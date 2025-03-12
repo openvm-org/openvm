@@ -464,12 +464,39 @@ impl ExpressionContainer {
         }
     }
 
-    fn children(&self) -> Vec<ExpressionContainer> {
+    pub fn children(&self) -> Vec<&ExpressionContainer> {
         match self.expression.as_ref() {
-            Expression::Algebraic { fields, .. } => fields.to_vec(),
-            Expression::Arithmetic { left, right, .. } => vec![left.clone(), right.clone()],
-            Expression::Dematerialized { value, .. } => vec![value.clone()],
-            _ => vec![],
+            Expression::Constant { .. } => vec![],
+            Expression::Variable { .. } => vec![],
+            Expression::Algebraic { fields, .. } => fields.iter().collect(),
+            Expression::Arithmetic { left, right, .. } => vec![left, right],
+            Expression::Dematerialized { value } => vec![value],
+            Expression::ConstArray { elements } => elements.iter().collect(),
+            Expression::ConstArrayAccess { array, .. } => vec![array],
+            Expression::ConstArraySlice { array, .. } => vec![array],
+            Expression::ConstArrayConcatenation { left, right } => vec![left, right],
+            Expression::Eq { left, right } => vec![left, right],
+            Expression::EmptyConstArray { .. } => vec![],
+            Expression::ConstArrayRepeated { element, .. } => vec![element],
+            //_ => vec![],
+        }
+    }
+
+    pub fn children_mut(&mut self) -> Vec<&mut ExpressionContainer> {
+        match self.expression.as_mut() {
+            Expression::Constant { .. } => vec![],
+            Expression::Variable { .. } => vec![],
+            Expression::Algebraic { fields, .. } => fields.iter_mut().collect(),
+            Expression::Arithmetic { left, right, .. } => vec![left, right],
+            Expression::Dematerialized { value } => vec![value],
+            Expression::ConstArray { elements } => elements.iter_mut().collect(),
+            Expression::ConstArrayAccess { array, .. } => vec![array],
+            Expression::ConstArraySlice { array, .. } => vec![array],
+            Expression::ConstArrayConcatenation { left, right } => vec![left, right],
+            Expression::Eq { left, right } => vec![left, right],
+            Expression::EmptyConstArray { .. } => vec![],
+            Expression::ConstArrayRepeated { element, .. } => vec![element],
+            //_ => vec![],
         }
     }
 

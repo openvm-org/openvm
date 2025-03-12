@@ -356,56 +356,13 @@ impl Atom {
 impl ExpressionContainer {
     fn inline(&mut self, renamer: &Renamer) {
         match self.expression.as_mut() {
-            Expression::Constant { .. } => {}
             Expression::Variable { name, .. } => {
                 renamer.rename(name);
             }
-            Expression::Algebraic {
-                constructor: _,
-                fields,
-            } => {
-                for field in fields.iter_mut() {
-                    field.inline(renamer);
-                }
-            }
-            Expression::Arithmetic {
-                operator: _,
-                left,
-                right,
-            } => {
-                left.inline(renamer);
-                right.inline(renamer);
-            }
-            Expression::Dematerialized { value } => {
-                value.inline(renamer);
-            }
-            Expression::Eq { left, right } => {
-                left.inline(renamer);
-                right.inline(renamer);
-            }
-            Expression::EmptyConstArray { elem_type: _ } => {}
-            Expression::ConstArray { elements } => {
-                for element in elements.iter_mut() {
-                    element.inline(renamer);
-                }
-            }
-            Expression::ConstArrayConcatenation { left, right } => {
-                left.inline(renamer);
-                right.inline(renamer);
-            }
-            Expression::ConstArrayAccess { array, index: _ } => {
-                array.inline(renamer);
-            }
-            Expression::ConstArraySlice {
-                array,
-                from: _,
-                to: _,
-            } => {
-                array.inline(renamer);
-            }
-            Expression::ConstArrayRepeated { element, length: _ } => {
-                element.inline(renamer);
-            }
+            _ => self
+                .children_mut()
+                .iter_mut()
+                .for_each(|child| child.inline(renamer)),
         };
     }
 }
