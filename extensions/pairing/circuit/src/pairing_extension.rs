@@ -18,7 +18,7 @@ use openvm_pairing_guest::{
     bn254::{BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::{PairingOpcode, PairingPhantom};
-use openvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip};
+use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, FromRepr};
@@ -141,25 +141,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                                 + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
                         )],
                     )?;
-                    let eval_line = EvaluateLineChip::new(
-                        Rv32VecHeapTwoReadsAdapterChip::<F, 4, 2, 4, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bn_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::EvaluateLineRv32_32(eval_line),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::EVALUATE_LINE as usize,
-                        )],
-                    )?;
                 }
                 PairingCurve::Bls12_381 => {
                     let bls_config = ExprBuilderConfig {
@@ -187,25 +168,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         [VmOpcode::from_usize(
                             pairing_class_offset
                                 + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
-                        )],
-                    )?;
-                    let eval_line = EvaluateLineChip::new(
-                        Rv32VecHeapTwoReadsAdapterChip::<F, 12, 6, 12, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bls_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::EvaluateLineRv32_48(eval_line),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::EVALUATE_LINE as usize,
                         )],
                     )?;
                 }

@@ -710,15 +710,9 @@ classes of pairing friendly elliptic curves. For a curve `C` to be supported, th
 curves are BN254 and BLS12-381. The extension operates on address spaces `1` and `2`, meaning all memory cells are
 constrained to be bytes.
 
-We lay out `Fp12` in memory as `c0, ..., c5` where `c_i: Fp2` and the `Fp12` element is `c0 + c1 w + ... + c5 w^5` where
-`w^6 = C::XI` in `Fp2`, where `C::Xi: Fp2` is an associated constant. Both `UnevaluatedLine<Fp2>` and
-`EvaluatedLine<Fp2>` are laid out in memory the same as `[Fp2; 2]`. For more detailed descriptions of the instructions,
-refer to [the detailed spec](https://hackmd.io/NjMhWt1HTDOB7TIKmTOMFw?view).
-
 | Name                            | Operands    | Description                                                                                                                                                                                                                                                                                                                |
 | ------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MILLER_DOUBLE_AND_ADD_STEP\<C\> | `a,b,c,1,2` | Let `S: EcPoint<Fp2>` be read starting from `[r32{0}(b)]_2` and `Q: EcPoint<Fp2>` be read starting from `[r32{0}(c)]_2`. The output `miller_double_and_add_step(S, Q): (EcPoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>)` is written contiguously to memory starting at `[r32{0}(a)]_2`.                          |
-| EVALUATE_LINE\<C\>              | `a,b,c,1,2` | Let `line: UnevaluatedLine<Fp2>` be read starting from `[r32{0}(b)]_2` and `(x_over_y, x_inv): (Fp, Fp)` be read starting from `[r32{0}(c)]_2`. The output `evaluate_line(line, x_over_y, x_inv): EvaluatedLine<Fp2>` is written contiguously to memory starting at `[r32{0}(a)]_2`.                                       |
 
 #### Phantom Sub-Instructions
 

@@ -5,7 +5,6 @@ use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
 use openvm_ecc_guest::AffinePoint;
 #[cfg(target_os = "zkvm")]
 use {
-    crate::pairing::shifted_funct7,
     crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
     core::mem::MaybeUninit,
     openvm_platform::custom_insn_r,
@@ -29,26 +28,10 @@ use crate::{
 
 impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
     fn evaluate(&self, xy_frac: &(Fp, Fp)) -> EvaluatedLine<Fp2> {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            let (x_over_y, y_inv) = xy_frac;
-            EvaluatedLine {
-                b: self.b.mul_base(x_over_y),
-                c: self.c.mul_base(y_inv),
-            }
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<EvaluatedLine<Fp2>> = MaybeUninit::uninit();
-            custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<Bn254>(PairingBaseFunct7::EvaluateLine),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In self as *const UnevaluatedLine<Fp2>,
-                rs2 = In xy_frac as *const (Fp, Fp)
-            );
-            unsafe { uninit.assume_init() }
+        let (x_over_y, y_inv) = xy_frac;
+        EvaluatedLine {
+            b: self.b.mul_base(x_over_y),
+            c: self.c.mul_base(y_inv),
         }
     }
 }
