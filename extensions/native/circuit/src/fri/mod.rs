@@ -244,11 +244,6 @@ impl FriReducedOpeningAir {
             let mut when_transition = builder.when_transition();
             let mut builder = when_transition.when(local.prefix.general.is_workload_row);
             // ATTENTION: degree of builder is 2
-            // local.timestamp = next.timestamp + 2
-            builder.assert_eq(
-                local.prefix.general.timestamp,
-                start_timestamp + AB::Expr::TWO,
-            );
             // local.idx = next.idx + 1
             builder.assert_eq(local_data.idx + AB::Expr::ONE, next.data.idx);
             // local.alpha = next.alpha
