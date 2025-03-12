@@ -16,7 +16,7 @@ on:
         type: string
         required: false
         description: Memory allocator to use (mimalloc or jemalloc)
-        default: mimalloc
+        default: jemalloc
       app_log_blowup:
         type: number
         required: false
@@ -69,7 +69,7 @@ on:
         type: string
         required: false
         description: Memory allocator to use (mimalloc or jemalloc)
-        default: mimalloc
+        default: jemalloc
       app_log_blowup:
         type: number
         required: false
