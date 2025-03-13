@@ -571,6 +571,11 @@ where
             .collect()
     }
 
+    /// Verifies a single proof. This should be used for proof of VM without continuations.
+    ///
+    /// ## Note
+    /// This function does not check any public values or extract the starting pc or commitment
+    /// to the [VmCommittedExe].
     pub fn verify_single(
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
