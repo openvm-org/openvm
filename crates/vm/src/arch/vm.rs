@@ -577,11 +577,11 @@ where
     /// This function does not check any public values or extract the starting pc or commitment
     /// to the [VmCommittedExe].
     pub fn verify_single(
-        &self,
+        engine: &E,
         vk: &MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
     ) -> Result<(), VerificationError> {
-        self.engine.verify(vk, proof)
+        engine.verify(vk, proof)
     }
 
     /// Verify segment proofs, checking continuation boundary conditions between segments if VM memory is persistent
@@ -597,10 +597,10 @@ where
         Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
     {
         if self.config().system().continuation_enabled {
-            self.verify_segments(vk, proofs).map(|_| ())
+            Self::verify_segments(&self.engine, vk, proofs).map(|_| ())
         } else {
             assert_eq!(proofs.len(), 1);
-            self.verify_single(vk, &proofs.into_iter().next().unwrap())
+            Self::verify_single(&self.engine, vk, &proofs.into_iter().next().unwrap())
                 .map_err(VmVerificationError::StarkError)
         }
     }
@@ -618,8 +618,9 @@ where
     /// This function does not extract or verify any user public values from the final memory state.
     /// This verification requires an additional Merkle proof with respect to the Merkle root of
     /// the final memory state.
+    // @dev: This function doesn't need to be generic in `VC`.
     fn verify_segments(
-        &self,
+        engine: &E,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
     ) -> Result<Com<SC>, VmVerificationError>
@@ -637,7 +638,7 @@ where
         let mut program_commit = None;
 
         for (i, proof) in proofs.iter().enumerate() {
-            let res = self.engine.verify(vk, proof);
+            let res = engine.verify(vk, proof);
             match res {
                 Ok(_) => (),
                 Err(e) => return Err(VmVerificationError::StarkError(e)),

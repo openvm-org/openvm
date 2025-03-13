@@ -10,7 +10,7 @@ use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
 use openvm_circuit::{
-    arch::{instructions::exe::VmExe, ExecutionError, VmConfig, VmExecutor},
+    arch::{instructions::exe::VmExe, ExecutionError, VirtualMachine, VmConfig, VmExecutor},
     system::{memory::tree::public_values::extract_public_values, program::trace::VmCommittedExe},
 };
 use openvm_native_recursion::{
@@ -153,11 +153,14 @@ impl Sdk {
         Ok(proof)
     }
 
-    /// This function is for dev use and not for production verification.
-    /// In particular, it only verifies the individual proofs per segment, and none of the boundary conditions
-    /// or the execution final state.
+    /// Verifies the [ContinuationVmProof], which is a collection of STARK proofs as well as
+    /// additional Merkle proof for user public values.
     ///
-    /// The `VirtualMachine::verify` function does additional verifications.
+    /// This function verifies the STARK proofs and additional conditions to ensure that the
+    /// `proof` is a valid proof of guest VM execution that terminates successfully (exit code 0)
+    /// _with respect to_ a commitment to some VM executable.
+    /// It is the responsibility of the caller to check that the commitment matches the expected
+    /// VM executable.
     pub fn verify_app_proof(
         &self,
         app_vk: &AppVerifyingKey,
