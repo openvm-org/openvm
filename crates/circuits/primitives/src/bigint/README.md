@@ -6,7 +6,7 @@ In general we need to work with BigUints, which we say consist of representation
 
 The key optimization is to allow representations of BigInts as `OverflowInts` with `limbs[F; num_limbs]`
 where `limbs[i]` in $`[-2^{\texttt{overflow\_bits}}, 2^{\texttt{overflow\_bits}})`$.
-The integer equals $`\sum_{i=0}^{n-1} \texttt{limbs}[i] \cdot 2^{\texttt{limb\_bits} \cdot i}`$. We must have $`\texttt{overflow\_bits} \leq \lfloor\log_2(p)\rfloor - 1`$ where p is the field modulus to ensure each overflow limb has a unique representation in the field.
+The integer equals $`\sum_{i=0}^{n-1} \texttt{limbs}[i] \cdot 2^{\texttt{limb\_bits} \cdot i}`$.
 
 The core functionality that is needed is `check_carry_to_zero`: which is the constraint that given OverflowInt limbs, you can constrain the corresponding integer equals 0. This is done by a sequence of carries to get the overflow integer into canonical form (and check it's zero). The carries must be range checked to be limb_bits.
 
@@ -103,7 +103,7 @@ This is to avoid duplicating the `is_valid` boolean check every time we use thes
 
 ## SubAir Constraint Details
 
-#### CheckCarryToZeroSubAir
+### CheckCarryToZeroSubAir
 
 This SubAir constrains that a given overflow limb representation of an integer is zero by taking the carries as hint, range-checking that they are valid, verifying they are correct, and ensuring the final carry is zero.
 
@@ -134,7 +134,7 @@ c_{N-1} &= 0 & &\hspace{2em} (3)
 
 What this is demonstrating is that there exists an array of carries $`[c_0, c_1, \ldots, c_{n-1}]`$ which represent the carries for converting overflow limbs to canonical representation such that the canonical representation of the integer is zero.
 
-#### CheckCarryModToZeroSubAir
+### CheckCarryModToZeroSubAir
 
 This SubAir constrains that a given overflow limb representation of an integer equals zero modulo another integer (i.e., x - q * m = 0).
 

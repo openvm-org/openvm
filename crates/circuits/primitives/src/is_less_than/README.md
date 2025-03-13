@@ -1,6 +1,6 @@
 # IsLessThan
 
-Less than comparison for outputting a boolean indicating `x` < `y`
+This chip outputs a boolean value `out` that equals 1 if and only if `x` < `y`.
 
 **Assumptions:**
 - Input values `x` and `y` have a maximum bit length of `max_bits`
