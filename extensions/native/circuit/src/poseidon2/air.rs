@@ -201,14 +201,15 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         // handle exhausted cells on next row
 
-        for i in 0..CHUNK {
+        // Can skip i = 0 since first cell is never exhausted.
+        for i in 1..CHUNK {
             builder
                 .when(inside_row - end_inside_row)
-                .when(next.is_exhausted[i])
+                .when(next.is_exhausted[i - 1])
                 .assert_eq(next_left_input[i], left_output[i]);
             builder
                 .when(end.clone())
-                .when(next.is_exhausted[i])
+                .when(next.is_exhausted[i - 1])
                 .assert_zero(next_left_input[i]);
         }
 
@@ -219,20 +220,27 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             } else {
                 cells[i + 1]
             };
+            // Whether the next cell is exhausted.
             let next_is_exhausted = if i + 1 == CHUNK {
-                next.is_exhausted[0]
+                AB::Expr::ZERO
             } else {
-                is_exhausted[i + 1]
+                is_exhausted[i].into()
             };
-            let is_exhausted = is_exhausted[i];
+            // Whether this cell is exhausted.
+            let is_exhausted = if i == 0 {
+                AB::Expr::ZERO
+            } else {
+                is_exhausted[i - 1].into()
+            };
 
             builder.when(inside_row).assert_bool(cell.is_first_in_row);
-            builder.assert_bool(is_exhausted);
+            builder.assert_bool(is_exhausted.clone());
             builder
                 .when(inside_row)
-                .assert_bool(cell.is_first_in_row + is_exhausted);
+                .assert_bool(cell.is_first_in_row + is_exhausted.clone());
 
-            let next_is_normal = AB::Expr::ONE - next_cell.is_first_in_row - next_is_exhausted;
+            let next_is_normal =
+                AB::Expr::ONE - next_cell.is_first_in_row - next_is_exhausted.clone();
             self.memory_bridge
                 .read(
                     MemoryAddress::new(self.address_space, cell.row_pointer),
@@ -240,7 +248,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                     start_timestamp + AB::F::from_canonical_usize((2 * i) + 1),
                     &cell.read,
                 )
-                .eval(builder, inside_row * not(is_exhausted));
+                .eval(builder, inside_row * (AB::Expr::ONE - is_exhausted.clone()));
 
             let mut when_inside_row_not_last = if i == CHUNK - 1 {
                 builder.when(inside_row - end_inside_row)
@@ -285,12 +293,12 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                 .assert_eq(next_cell.opened_index, cell.opened_index + AB::F::ONE);
 
             when_inside_row_not_last
-                .when(next_is_exhausted)
+                .when(next_is_exhausted.clone())
                 .assert_eq(next_cell.opened_index, cell.opened_index);
 
             when_inside_row_not_last
-                .when(is_exhausted)
-                .assert_eq(next_is_exhausted, AB::F::ONE);
+                .when(is_exhausted.clone())
+                .assert_eq(next_is_exhausted.clone(), AB::F::ONE);
 
             let is_last_in_row = if i == CHUNK - 1 {
                 end_inside_row.into()

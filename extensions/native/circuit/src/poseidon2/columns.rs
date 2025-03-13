@@ -55,9 +55,9 @@ pub struct NativePoseidon2Cols<T, const SBOX_REGISTERS: usize> {
     /// Pointer to the beginning of the `opened_values` array.
     pub opened_base_pointer: T,
 
-    /// For rows that are not inside-row, this field should be 0. Otherwise, it indicates whether
-    /// inside-row cells are exhausted.
-    pub is_exhausted: [T; CHUNK],
+    /// For rows that are not inside-row, this field should be 0. Otherwise, `is_exhausted[i]`
+    /// indicates that cell `i + 1` inside a chunk is exhausted.
+    pub is_exhausted: [T; CHUNK - 1],
 
     pub specific: [T; max3(
         TopLevelSpecificCols::<usize>::width(),
