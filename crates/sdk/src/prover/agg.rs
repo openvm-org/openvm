@@ -83,24 +83,27 @@ impl AggStarkProver {
     }
 
     /// Generate a proof to aggregate app proofs.
-    pub fn generate_agg_proof(&self, app_proofs: ContinuationVmProof<SC>) -> Proof<RootSC> {
-        let root_verifier_input = self.generate_root_verifier_input(app_proofs);
+    pub fn generate_agg_proof(
+        &self,
+        app_proofs: ContinuationVmProof<SC>,
+    ) -> eyre::Result<Proof<RootSC>> {
+        let root_verifier_input = self.generate_root_verifier_input(app_proofs)?;
         self.generate_root_proof_impl(root_verifier_input)
     }
 
     pub fn generate_root_verifier_input(
         &self,
         app_proofs: ContinuationVmProof<SC>,
-    ) -> RootVmVerifierInput<SC> {
+    ) -> eyre::Result<RootVmVerifierInput<SC>> {
         let leaf_proofs = self
             .leaf_controller
-            .generate_proof(&self.leaf_prover, &app_proofs);
+            .generate_proof(&self.leaf_prover, &app_proofs)?;
         let public_values = app_proofs.user_public_values.public_values;
         let internal_proof = self.generate_internal_proof_impl(leaf_proofs, &public_values);
-        RootVmVerifierInput {
+        Ok(RootVmVerifierInput {
             proofs: vec![internal_proof],
             public_values,
-        }
+        })
     }
 
     fn generate_internal_proof_impl(
@@ -166,13 +169,17 @@ impl AggStarkProver {
         proofs.pop().unwrap()
     }
 
-    fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<RootSC> {
+    fn generate_root_proof_impl(
+        &self,
+        root_input: RootVmVerifierInput<SC>,
+    ) -> eyre::Result<Proof<RootSC>> {
         info_span!("agg_layer", group = "root", idx = 0).in_scope(|| {
             let input = root_input.write();
             #[cfg(feature = "bench-metrics")]
             metrics::counter!("fri.log_blowup")
                 .absolute(self.root_prover.fri_params().log_blowup as u64);
-            SingleSegmentVmProver::prove(&self.root_prover, input)
+            let proof = SingleSegmentVmProver::prove(&self.root_prover, input);
+            Ok(proof)
         })
     }
 }
@@ -187,7 +194,7 @@ impl LeafProvingController {
         &self,
         prover: &VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
         app_proofs: &ContinuationVmProof<SC>,
-    ) -> Vec<Proof<SC>> {
+    ) -> eyre::Result<Vec<Proof<SC>>> {
         info_span!("agg_layer", group = "leaf").in_scope(|| {
             #[cfg(feature = "bench-metrics")]
             {
@@ -200,11 +207,15 @@ impl LeafProvingController {
             leaf_inputs
                 .into_iter()
                 .enumerate()
-                .map(|(leaf_node_idx, input)| {
-                    info_span!("single_leaf_agg", idx = leaf_node_idx)
-                        .in_scope(|| SingleSegmentVmProver::prove(prover, input.write_to_stream()))
+                .map(|(leaf_node_idx, input)| -> eyre::Result<_> {
+                    let proof = info_span!("single_leaf_agg", idx = leaf_node_idx)
+                        .in_scope(|| SingleSegmentVmProver::prove(prover, input.write_to_stream()));
+                    prover
+                        .create_vm()
+                        .verify_single(&prover.get_vm_vk(), &proof)?;
+                    Ok(proof)
                 })
-                .collect::<Vec<_>>()
+                .collect::<eyre::Result<Vec<_>>>()
         })
     }
 }

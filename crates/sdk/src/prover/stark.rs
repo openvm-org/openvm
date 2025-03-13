@@ -42,23 +42,31 @@ impl<VC> StarkProver<VC> {
         self.app_prover.set_program_name(program_name);
         self
     }
-    pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> Proof<RootSC>
+    pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> eyre::Result<Proof<RootSC>>
     where
         VC: VmConfig<F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
         let app_proof = self.app_prover.generate_app_proof(input);
-        self.agg_prover.generate_agg_proof(app_proof)
+        // Verify the app proof to prevent further proving if there is an error
+        self.app_prover.verify_app_proof(app_proof.clone())?;
+        let root_proof = self.agg_prover.generate_agg_proof(app_proof)?;
+        Ok(root_proof)
     }
 
-    pub fn generate_root_verifier_input(&self, input: StdIn) -> RootVmVerifierInput<SC>
+    pub fn generate_root_verifier_input(
+        &self,
+        input: StdIn,
+    ) -> eyre::Result<RootVmVerifierInput<SC>>
     where
         VC: VmConfig<F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
         let app_proof = self.app_prover.generate_app_proof(input);
+        // Verify the app proof to prevent further proving if there is an error
+        self.app_prover.verify_app_proof(app_proof.clone())?;
         self.agg_prover.generate_root_verifier_input(app_proof)
     }
 }

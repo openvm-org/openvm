@@ -56,13 +56,16 @@ impl<VC> ContinuationProver<VC> {
         self
     }
 
-    pub fn generate_proof_for_evm(&self, input: StdIn) -> EvmProof
+    pub fn generate_proof_for_evm(&self, input: StdIn) -> eyre::Result<EvmProof>
     where
         VC: VmConfig<F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let root_proof = self.stark_prover.generate_proof_for_outer_recursion(input);
-        self.halo2_prover.prove_for_evm(&root_proof)
+        let root_proof = self
+            .stark_prover
+            .generate_proof_for_outer_recursion(input)?;
+        let evm_proof = self.halo2_prover.prove_for_evm(&root_proof);
+        Ok(evm_proof)
     }
 }

@@ -10,6 +10,7 @@ use openvm_circuit::{
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    keygen::types::MultiStarkVerifyingKey,
     p3_field::PrimeField32,
     proof::Proof,
     Chip,
@@ -59,6 +60,26 @@ impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
     pub fn vm_config(&self) -> &VC {
         &self.pk.vm_config
     }
+
+    pub fn create_vm(&self) -> VirtualMachine<SC, E, VC>
+    where
+        Val<SC>: PrimeField32,
+        VC: VmConfig<Val<SC>>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let e = E::new(self.pk.fri_params);
+        VirtualMachine::new_with_overridden_trace_heights(
+            e,
+            self.pk.vm_config.clone(),
+            self.overridden_heights.clone(),
+        )
+    }
+
+    pub fn get_vm_vk(&self) -> MultiStarkVerifyingKey<SC> {
+        self.pk.vm_pk.get_vk()
+    }
+
     #[allow(dead_code)]
     pub(crate) fn fri_params(&self) -> &FriParameters {
         &self.pk.fri_params
@@ -74,12 +95,7 @@ where
 {
     fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> ContinuationVmProof<SC> {
         assert!(self.pk.vm_config.system().continuation_enabled);
-        let e = E::new(self.pk.fri_params);
-        let vm = VirtualMachine::new_with_overridden_trace_heights(
-            e,
-            self.pk.vm_config.clone(),
-            self.overridden_heights.clone(),
-        );
+        let vm = self.create_vm();
         let mut final_memory = None;
         let VmCommittedExe {
             exe,

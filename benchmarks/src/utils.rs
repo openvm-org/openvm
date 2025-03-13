@@ -248,7 +248,7 @@ where
         let leaf_controller = LeafProvingController {
             num_children: DEFAULT_NUM_CHILDREN_LEAF,
         };
-        leaf_controller.generate_proof(&leaf_prover, &app_proof);
+        leaf_controller.generate_proof(&leaf_prover, &app_proof)?;
     }
     Ok(())
 }

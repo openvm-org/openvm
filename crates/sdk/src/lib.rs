@@ -201,7 +201,7 @@ impl Sdk {
         VC::Periphery: Chip<SC>,
     {
         let stark_prover = StarkProver::new(app_pk, app_exe, agg_stark_pk);
-        let proof = stark_prover.generate_root_verifier_input(inputs);
+        let proof = stark_prover.generate_root_verifier_input(inputs)?;
         Ok(proof)
     }
 
@@ -218,7 +218,7 @@ impl Sdk {
         VC::Periphery: Chip<SC>,
     {
         let e2e_prover = ContinuationProver::new(reader, app_pk, app_exe, agg_pk);
-        let proof = e2e_prover.generate_proof_for_evm(inputs);
+        let proof = e2e_prover.generate_proof_for_evm(inputs)?;
         Ok(proof)
     }
 

@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use getset::Getters;
-use openvm_circuit::arch::VmConfig;
+use openvm_circuit::arch::{VirtualMachine, VmConfig, VmVerificationError};
 use openvm_stark_backend::{proof::Proof, Chip};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+};
 use tracing::info_span;
 
 use super::vm::SingleSegmentVmProver;
@@ -70,6 +72,20 @@ impl<VC> AppProver<VC> {
                 .absolute(self.app_prover.pk.fri_params.log_blowup as u64);
             ContinuationVmProver::prove(&self.app_prover, input)
         })
+    }
+
+    pub fn verify_app_proof(
+        &self,
+        proof: ContinuationVmProof<SC>,
+    ) -> Result<(), VmVerificationError>
+    where
+        VC: VmConfig<F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let e = BabyBearPoseidon2Engine::new(self.app_prover.pk.fri_params);
+        let vm = VirtualMachine::new(e, self.vm_config().clone());
+        vm.verify(&self.app_prover.get_vm_vk(), proof.per_segment)
     }
 
     pub fn generate_app_proof_without_continuations(&self, input: StdIn) -> Proof<SC>
