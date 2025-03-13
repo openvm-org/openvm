@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use itertools::Itertools;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -110,16 +109,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
             return Err(UserPublicValuesProofError::FinalMemoryRootMismatch);
         }
         // 2. Compute merkle root of public values
-        let mut digests = pvs
-            .chunks_exact(CHUNK)
-            .map(|chunk| hasher.hash(chunk.try_into().unwrap()))
-            .collect_vec();
-        for i in (0..pv_height).rev() {
-            for j in 0..(1 << i) {
-                digests[j] = hasher.compress(&digests[2 * j], &digests[2 * j + 1])
-            }
-        }
-        if digests[0] != pv_commit {
+        if hasher.merkle_root(pvs) != pv_commit {
             return Err(UserPublicValuesProofError::UserPublicValuesCommitMismatch);
         }
 
