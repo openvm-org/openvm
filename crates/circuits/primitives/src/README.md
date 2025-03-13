@@ -5,20 +5,20 @@ This crate contains a collection of primitives for use when building circuits. T
 The following modules contain standalone `Air`'s:
 - [range](./range/README.md)
 - [range_gate](./range_gate/README.md)
-- [range_tuple](./range_tuple/mod.rs)
-- [var_range](./var_range/mod.rs)
+- [range_tuple](./range_tuple/README.md)
+- [var_range](./var_range/README.md)
 - [xor](./xor/README.md)
-- [bitwise_op_lookup](./bitwise_op_lookup/mod.rs)
+- [bitwise_op_lookup](./bitwise_op_lookup/README.md)
 
 The following modules contain `SubAir`'s:
-- [assert_less_than](./assert_less_than/mod.rs)
+- [assert_less_than](./assert_less_than/README.md)
 - [bigint](./bigint/README.md)
-- [encoder](./encoder/mod.rs)
-- [is_equal](./is_equal/mod.rs)
-- [is_equal_array](./is_equal_array/mod.rs)
-- [is_less_than](./is_less_than/mod.rs)
-- [is_less_than_array](./is_less_than_array/mod.rs)
-- [is_zero](./is_zero/mod.rs)
+- [encoder](./encoder/README.md)
+- [is_equal](./is_equal/README.md)
+- [is_equal_array](./is_equal_array/README.md)
+- [is_less_than](./is_less_than/README.md)
+- [is_less_than_array](./is_less_than_array/README.md)
+- [is_zero](./is_zero/README.md)
 
 ## SubAir
 
@@ -27,8 +27,8 @@ Trait with associated types intended to allow reuse of constraint logic inside o
 A `SubAir` is **not** an `Air` itself.
 It is a struct that holds the means to generate a particular set of constraints, meant to be reusable within other AIRs.
 
-The trait is designed to be maximally flexible, but typical implementations will separate the `AirContext` into two parts: `Io` and `AuxCols`. 
-The `Io` part will consist of expressions (built using `AB::Expr`) that the `SubAir` does not own, while the `AuxCols` are any internal columns that the `SubAir` requires to generate its constraints. 
+The trait is designed to be maximally flexible, but typical implementations will separate the `AirContext` into two parts: `Io` and `AuxCols`.
+The `Io` part will consist of expressions (built using `AB::Expr`) that the `SubAir` does not own, while the `AuxCols` are any internal columns that the `SubAir` requires to generate its constraints.
 The `AuxCols` are columns that the `SubAir` fully owns and should be internally determined by the `SubAir` from the `Io` part. These `AuxCols` are typically just slices of `AB::Var`.
 
 This trait only owns the constraints, but it is expected that the `TraceSubRowGenerator` trait

@@ -377,6 +377,12 @@ pub fn find_unique_executable<P: AsRef<Path>, Q: AsRef<Path>>(
         .targets
         .into_iter()
         .filter(move |target| {
+            // always filter out build script target
+            if target.kind.iter().any(|k| k == "custom-build")
+                && target.name == "build-script-build"
+            {
+                return false;
+            }
             if let Some(target_filter) = target_filter {
                 return target.kind.iter().any(|k| k == &target_filter.kind)
                     && target.name == target_filter.name;
