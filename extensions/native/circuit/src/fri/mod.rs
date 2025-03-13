@@ -302,6 +302,11 @@ impl FriReducedOpeningAir {
                 next_ins.when_ne(local.prefix.general.is_ins_row, AB::Expr::ONE);
             // The row after a workload row can only be the first instruction row.
             local_non_ins.assert_one(next.a_or_is_first);
+
+            // A workload row cannot be followed by a disabled row.
+            builder
+                .when(local.prefix.general.is_workload_row)
+                .assert_one(next.general.is_ins_row + next.general.is_workload_row);
         }
         {
             let mut when_first_row = builder.when_first_row();
