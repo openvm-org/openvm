@@ -576,6 +576,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             write_data_2,
         } = simple_permute_specific;
 
+        builder.when(simple).assert_bool(is_compress);
         let is_permute = AB::Expr::ONE - is_compress;
 
         self.execution_bridge
