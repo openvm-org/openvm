@@ -1,8 +1,9 @@
 use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
 
+use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig, Val},
+    config::{Com, Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
@@ -16,11 +17,14 @@ use openvm_stark_backend::{
 use thiserror::Error;
 use tracing::info_span;
 
-use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
+use super::{
+    ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
+    PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+};
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::segment::ExecutionSegment,
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, segment::ExecutionSegment},
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{merkle::MemoryMerklePvs, paged_vec::AddressMap, MemoryImage, CHUNK},
@@ -429,6 +433,12 @@ where
 
 #[derive(Error, Debug)]
 pub enum VmVerificationError {
+    #[error("no proof is provided")]
+    ProofNotFound,
+
+    #[error("program commit mismatch (index of mismatch proof: {index}")]
+    ProgramCommitMismatch { index: usize },
+
     #[error("initial pc mismatch (initial: {initial}, prev_final: {prev_final})")]
     InitialPcMismatch { initial: u32, prev_final: u32 },
 
@@ -441,11 +451,11 @@ pub enum VmVerificationError {
     #[error("exit code mismatch")]
     ExitCodeMismatch { expected: u32, actual: u32 },
 
-    #[error("unexpected public values (expected: {expected}, actual: {actual})")]
+    #[error("AIR has unexpected public values (expected: {expected}, actual: {actual})")]
     UnexpectedPvs { expected: usize, actual: usize },
 
-    #[error("number of public values mismatch (expected: {expected}, actual: {actual})")]
-    NumPublicValuesMismatch { expected: usize, actual: usize },
+    #[error("missing system AIR with ID {air_id}")]
+    SystemAirMissing { air_id: usize },
 
     #[error("stark verification error: {0}")]
     StarkError(#[from] VerificationError),
@@ -577,9 +587,10 @@ where
     ) -> Result<(), VmVerificationError>
     where
         Val<SC>: PrimeField32,
+        Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
     {
         if self.config().system().continuation_enabled {
-            self.verify_segments(vk, proofs)
+            self.verify_segments(vk, proofs).map(|_| ())
         } else {
             assert_eq!(proofs.len(), 1);
             self.verify_single(vk, &proofs.into_iter().next().unwrap())
@@ -588,16 +599,28 @@ where
     }
 
     /// Verify segment proofs with boundary condition checks for continuation between segments
+    ///
+    /// Assumption:
+    /// - vk is a valid verify key of a VM.
+    ///
+    /// Return exe commit extracted from `proofs`.
     fn verify_segments(
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
-    ) -> Result<(), VmVerificationError>
+    ) -> Result<Com<SC>, VmVerificationError>
     where
         Val<SC>: PrimeField32,
+        Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
     {
+        if proofs.is_empty() {
+            return Err(VmVerificationError::ProofNotFound);
+        }
         let mut prev_final_memory_root = None;
         let mut prev_final_pc = None;
+        let mut start_pc = None;
+        let mut initial_memory_root = None;
+        let mut program_commit = None;
 
         for (i, proof) in proofs.iter().enumerate() {
             let res = self.engine.verify(vk, proof);
@@ -606,12 +629,26 @@ where
                 Err(e) => return Err(VmVerificationError::StarkError(e)),
             };
 
+            let mut program_air_present = false;
+            let mut connector_air_present = false;
+            let mut merkle_air_present = false;
+
             // Check public values.
             for air_proof_data in proof.per_air.iter() {
                 let pvs = &air_proof_data.public_values;
                 let air_vk = &vk.per_air[air_proof_data.air_id];
-
-                if air_proof_data.air_id == CONNECTOR_AIR_ID {
+                if air_proof_data.air_id == PROGRAM_AIR_ID {
+                    program_air_present = true;
+                    if i == 0 {
+                        program_commit =
+                            Some(proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref());
+                    } else if program_commit.unwrap()
+                        != proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref()
+                    {
+                        return Err(VmVerificationError::ProgramCommitMismatch { index: i });
+                    }
+                } else if air_proof_data.air_id == CONNECTOR_AIR_ID {
+                    connector_air_present = true;
                     let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
 
                     if i != 0 {
@@ -623,7 +660,7 @@ where
                             });
                         }
                     } else {
-                        // TODO: Fetch initial pc from program
+                        start_pc = Some(pvs.initial_pc);
                     }
                     prev_final_pc = Some(pvs.final_pc);
 
@@ -647,11 +684,16 @@ where
                         });
                     }
                 } else if air_proof_data.air_id == MERKLE_AIR_ID {
+                    merkle_air_present = true;
                     let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
 
                     // Check that initial root matches the previous final root.
-                    if i != 0 && pvs.initial_root != prev_final_memory_root.unwrap() {
-                        return Err(VmVerificationError::InitialMemoryRootMismatch);
+                    if i != 0 {
+                        if pvs.initial_root != prev_final_memory_root.unwrap() {
+                            return Err(VmVerificationError::InitialMemoryRootMismatch);
+                        }
+                    } else {
+                        initial_memory_root = Some(pvs.initial_root);
                     }
                     prev_final_memory_root = Some(pvs.final_root);
                 } else {
@@ -661,15 +703,31 @@ where
                             actual: pvs.len(),
                         });
                     }
-                    if air_vk.params.num_public_values != 0 {
-                        return Err(VmVerificationError::NumPublicValuesMismatch {
-                            expected: 0,
-                            actual: air_vk.params.num_public_values,
-                        });
-                    }
+                    debug_assert_eq!(air_vk.params.num_public_values, 0);
                 }
             }
+            if !program_air_present {
+                return Err(VmVerificationError::SystemAirMissing {
+                    air_id: PROGRAM_AIR_ID,
+                });
+            }
+            if !connector_air_present {
+                return Err(VmVerificationError::SystemAirMissing {
+                    air_id: CONNECTOR_AIR_ID,
+                });
+            }
+            if !merkle_air_present {
+                return Err(VmVerificationError::SystemAirMissing {
+                    air_id: MERKLE_AIR_ID,
+                });
+            }
         }
-        Ok(())
+        let exe_commit = compute_exe_commit(
+            &vm_poseidon2_hasher(),
+            program_commit.unwrap(),
+            initial_memory_root.as_ref().unwrap(),
+            start_pc.unwrap(),
+        );
+        Ok(Com::<SC>::from(exe_commit))
     }
 }

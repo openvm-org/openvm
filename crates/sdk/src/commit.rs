@@ -1,15 +1,8 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{
-        hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        instructions::exe::VmExe,
-        VmConfig,
-    },
-    system::{
-        memory::{paged_vec::AddressMap, tree::MemoryNode},
-        program::trace::VmCommittedExe,
-    },
+    arch::{instructions::exe::VmExe, VmConfig},
+    system::program::trace::VmCommittedExe,
 };
 use openvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
 use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
@@ -53,35 +46,15 @@ impl AppExecutionCommit<F> {
         assert!(
             app_exe.exe.program.max_num_public_values <= app_vm_config.system().num_public_values
         );
-        let hasher = vm_poseidon2_hasher();
-        let memory_dimensions = app_vm_config.system().memory_config.memory_dimensions();
-        let app_program_commit: [F; DIGEST_SIZE] = app_exe.committed_program.commitment.into();
-        let leaf_verifier_program_commit: [F; DIGEST_SIZE] =
+        let exe_commit = app_exe
+            .compute_exe_commit(&app_vm_config.system().memory_config)
+            .into();
+        let leaf_vm_verifier_commit: [F; DIGEST_SIZE] =
             leaf_vm_verifier_exe.committed_program.commitment.into();
 
-        let mem_config = app_vm_config.system().memory_config;
-        let init_memory_commit = MemoryNode::tree_from_memory(
-            memory_dimensions,
-            &AddressMap::from_iter(
-                mem_config.as_offset,
-                1 << mem_config.as_height,
-                1 << mem_config.pointer_max_bits,
-                app_exe.exe.init_memory.clone(),
-            ),
-            &hasher,
-        )
-        .hash();
-        let mut padded_pc_start = [F::ZERO; DIGEST_SIZE];
-        padded_pc_start[0] = F::from_canonical_u32(app_exe.exe.pc_start);
-        let app_hash = hasher.hash(&app_program_commit);
-        let init_memory_hash = hasher.hash(&init_memory_commit);
-        let pc_start_hash = hasher.hash(&padded_pc_start);
-        let compress_1 = hasher.compress(&app_hash, &init_memory_hash);
-        let user_commit = hasher.compress(&compress_1, &pc_start_hash);
-
         Self {
-            leaf_vm_verifier_commit: leaf_verifier_program_commit,
-            exe_commit: user_commit,
+            leaf_vm_verifier_commit,
+            exe_commit,
         }
     }
 

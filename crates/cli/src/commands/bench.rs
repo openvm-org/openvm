@@ -3,14 +3,17 @@ use std::{path::PathBuf, time::Instant};
 use anstyle::*;
 use clap::Parser;
 use eyre::Result;
-use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
+use openvm_circuit::{
+    arch::{instructions::exe::VmExe, VirtualMachine, VmConfig},
+    system::memory::CHUNK,
+};
 use openvm_keccak256_circuit::Keccak256Rv32Config;
 use openvm_sdk::fs::read_exe_from_file;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
     engine::StarkFriEngine,
     openvm_stark_backend::{
-        config::{StarkGenericConfig, Val},
+        config::{Com, StarkGenericConfig, Val},
         p3_field::PrimeField32,
         Chip,
     },
@@ -80,6 +83,7 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC>,
     Val<SC>: PrimeField32,
+    Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
     VC: VmConfig<Val<SC>>,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
