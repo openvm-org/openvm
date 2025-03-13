@@ -9,12 +9,13 @@ use crate::{
         file3::{FlatFunctionCall, FlatMatch, FlatStatement},
         function_resolution::Stage,
         ir::{
-            ArithmeticOperator, BooleanOperator, Expression, Material, Statement,
+            ArithmeticOperator, BooleanOperator, Expression, Material, StatementVariant,
             FALSE_CONSTRUCTOR_NAME, TRUE_CONSTRUCTOR_NAME,
         },
         stage1::Stage2Program,
         type_resolution::TypeSet,
     },
+    parser::metadata::ParserMetadata,
 };
 
 pub struct FieldNamer<'a> {
@@ -131,8 +132,11 @@ impl ExpressionContainer {
                 } else if constructor == FALSE_CONSTRUCTOR_NAME {
                     quote! { false }
                 } else {
-                    let type_name =
-                        type_name(&type_set.get_constructor_type_name(constructor).unwrap());
+                    let type_name = type_name(
+                        &type_set
+                            .get_constructor_type_name(constructor, &ParserMetadata::default())
+                            .unwrap(),
+                    );
                     let fields = fields
                         .iter()
                         .map(|field| field.transpile_defined(scope, namer, type_set));
@@ -178,14 +182,14 @@ impl ExpressionContainer {
             Expression::ConstArrayConcatenation { left, right } => {
                 let (_, left_len) = left
                     .get_type()
-                    .get_const_array_type(Material::Dematerialized)
+                    .get_const_array_type(Material::Dematerialized, &ParserMetadata::default())
                     .unwrap();
                 let left_indices = 0..left_len;
                 let left = left.transpile_defined(scope, namer, type_set);
 
                 let (_, right_len) = right
                     .get_type()
-                    .get_const_array_type(Material::Dematerialized)
+                    .get_const_array_type(Material::Dematerialized, &ParserMetadata::default())
                     .unwrap();
                 let right_indices = 0..right_len;
                 let right = right.transpile_defined(scope, namer, type_set);
@@ -266,8 +270,11 @@ impl ExpressionContainer {
                 constructor,
                 fields,
             } => {
-                let type_name =
-                    type_name(&type_set.get_constructor_type_name(constructor).unwrap());
+                let type_name = type_name(
+                    &type_set
+                        .get_constructor_type_name(constructor, &ParserMetadata::default())
+                        .unwrap(),
+                );
                 let names = (0..fields.len())
                     .map(|_| namer.new_temporary_name())
                     .collect::<Vec<_>>();
@@ -320,12 +327,12 @@ impl FlatStatement {
         let scope = &self.scope;
         let material = self.material;
         let block = match &self.statement {
-            Statement::VariableDeclaration { .. } => quote! {},
-            Statement::Equality { left, right } => {
+            StatementVariant::VariableDeclaration { .. } => quote! {},
+            StatementVariant::Equality { left, right } => {
                 let right = right.transpile_defined(scope, &namer, type_set);
                 left.transpile_top_down(scope, &right, namer, type_set)
             }
-            Statement::Reference {
+            StatementVariant::Reference {
                 reference: reference_expression,
                 data,
             } => {
@@ -359,7 +366,7 @@ impl FlatStatement {
                     #following
                 }
             }
-            Statement::Dereference {
+            StatementVariant::Dereference {
                 data: data_expression,
                 reference,
             } => {
@@ -372,14 +379,14 @@ impl FlatStatement {
                     type_set,
                 )
             }
-            Statement::EmptyUnderConstructionArray { array, elem_type } => array
+            StatementVariant::EmptyUnderConstructionArray { array, elem_type } => array
                 .transpile_top_down(
                     scope,
                     &create_empty_under_construction_array(elem_type),
                     namer,
                     type_set,
                 ),
-            Statement::UnderConstructionArrayPrepend {
+            StatementVariant::UnderConstructionArrayPrepend {
                 new_array,
                 elem,
                 old_array,
@@ -394,7 +401,7 @@ impl FlatStatement {
                     type_set,
                 )
             }
-            Statement::ArrayFinalization {
+            StatementVariant::ArrayFinalization {
                 finalized: finalized_expression,
                 under_construction,
             } => {
@@ -429,7 +436,7 @@ impl FlatStatement {
                     #following
                 }
             }
-            Statement::ArrayAccess { elem, array, index } => {
+            StatementVariant::ArrayAccess { elem, array, index } => {
                 let tipo = elem.get_type();
                 let array = array.transpile_defined(scope, &namer, type_set);
                 let index = index.transpile_defined(scope, &namer, type_set);
@@ -500,22 +507,23 @@ impl FlatMatch {
         let type_name = type_to_rust(self.value.get_type());
 
         let mut arms = vec![];
-        for (constructor, components) in self.branches.iter() {
-            let scope = self.scope.then(self.index, constructor.clone());
+        for branch in self.branches.iter() {
+            let scope = self.scope.then(self.index, branch.constructor.clone());
             let scope_name = namer.scope_name(&scope);
-            let arm = if constructor == TRUE_CONSTRUCTOR_NAME {
+            let arm = if branch.constructor == TRUE_CONSTRUCTOR_NAME {
                 quote! { true => #scope_name = true, }
-            } else if constructor == FALSE_CONSTRUCTOR_NAME {
+            } else if branch.constructor == FALSE_CONSTRUCTOR_NAME {
                 quote! { false => #scope_name = true, }
             } else {
-                let temps = (0..components.len())
+                let temps = (0..branch.components.len())
                     .map(|_| namer.new_temporary_name())
                     .collect::<Vec<_>>();
-                let scope = self.scope.then(self.index, constructor.clone());
-                let fields = components
+                let scope = self.scope.then(self.index, branch.constructor.clone());
+                let fields = branch
+                    .components
                     .iter()
                     .map(|component| namer.variable_name(&scope, &component.name));
-                let constructor = ident(&constructor);
+                let constructor = ident(&branch.constructor);
                 quote! {
                     #type_name::#constructor(#(#temps),*) => {
                         #(#fields = #temps;)*

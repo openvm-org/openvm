@@ -1,7 +1,7 @@
 use std::{ops::BitAndAssign, sync::Arc};
 
 use super::file2_tree::ExpressionContainer;
-use crate::folder1::error::CompilationError;
+use crate::{folder1::error::CompilationError, parser::metadata::ParserMetadata};
 
 #[derive(Clone, Debug)]
 pub enum Type {
@@ -149,7 +149,7 @@ pub enum Expression {
 } // components of an algebraic value can be extracted using match, don’t need to have an expression for them
 
 #[derive(Clone, Debug)]
-pub enum Statement {
+pub enum StatementVariant {
     VariableDeclaration {
         name: String,
         tipo: Type,
@@ -188,9 +188,18 @@ pub enum Statement {
 }
 
 #[derive(Clone, Debug)]
+pub struct Statement {
+    pub variant: StatementVariant,
+    pub material: Material,
+    pub parser_metadata: ParserMetadata,
+}
+
+#[derive(Clone, Debug)]
 pub struct FunctionCall {
     pub function: String,
     pub arguments: Vec<ExpressionContainer>,
+    pub material: Material,
+    pub parser_metadata: ParserMetadata,
 }
 
 #[derive(Clone, Debug)]
@@ -204,6 +213,7 @@ pub struct Branch {
     pub constructor: String,
     pub components: Vec<BranchComponent>,
     pub body: Body,
+    pub parser_metadata: ParserMetadata,
 }
 
 #[derive(Clone, Debug)]
@@ -211,14 +221,15 @@ pub struct Match {
     pub value: ExpressionContainer,
     pub check_material: Material,
     pub branches: Vec<Branch>,
+    pub parser_metadata: ParserMetadata,
 }
 
 #[derive(Clone, Debug)]
 pub struct Body {
     //bool equals whether statement is materialized or not
-    pub statements: Vec<(Material, Statement)>,
+    pub statements: Vec<Statement>,
     pub matches: Vec<Match>,
-    pub function_calls: Vec<(Material, FunctionCall)>,
+    pub function_calls: Vec<FunctionCall>,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -233,6 +244,7 @@ pub struct Argument {
     pub(crate) tipo: Type,
     pub(crate) name: String,
     pub(crate) represents: bool,
+    pub(crate) parser_metadata: ParserMetadata,
 }
 
 #[derive(Clone, Debug)]
@@ -241,6 +253,7 @@ pub struct Function {
     pub arguments: Vec<Argument>,
     pub body: Body,
     pub inline: bool,
+    pub parser_metadata: ParserMetadata,
 }
 
 #[derive(Clone, Debug)]
@@ -253,6 +266,7 @@ pub struct AlgebraicTypeVariant {
 pub struct AlgebraicTypeDeclaration {
     pub name: String,
     pub variants: Vec<AlgebraicTypeVariant>,
+    pub parser_metadata: ParserMetadata,
 }
 
 #[derive(Clone, Debug)]
@@ -275,9 +289,15 @@ impl Material {
         }
     }
 
-    pub fn assert_type(&self, type1: &Type, type2: &Type) -> Result<(), CompilationError> {
+    pub fn assert_type(
+        &self,
+        type1: &Type,
+        type2: &Type,
+        parser_metadata: &ParserMetadata,
+    ) -> Result<(), CompilationError> {
         if !self.same_type(type1, type2) {
             Err(CompilationError::UnexpectedType(
+                parser_metadata.clone(),
                 type1.clone(),
                 type2.clone(),
             ))

@@ -7,6 +7,7 @@ use super::{
     error::CompilationError,
     ir::{ArgumentBehavior, Body, Function, Type},
 };
+use crate::parser::metadata::ParserMetadata;
 
 pub struct FunctionSet {
     pub(crate) functions: HashMap<String, FunctionContainer>,
@@ -32,7 +33,7 @@ impl FunctionSet {
                         .iter()
                         .all(|name| defined_functions.contains(name))
                 })
-                .ok_or(CompilationError::InlineFunctionsSelfReferential())?;
+                .ok_or(CompilationError::InlineFunctionsSelfReferential)?;
             let function = functions.remove(i);
             function_order.push(function.name.clone());
             defined_functions.insert(function.name.clone());
@@ -46,7 +47,7 @@ impl FunctionSet {
     }
     fn body_referenced_functions(body: &Body) -> Vec<String> {
         let mut result = Vec::new();
-        for (_, function_call) in body.function_calls.iter() {
+        for function_call in body.function_calls.iter() {
             result.push(function_call.function.clone());
         }
         for matchi in body.matches.iter() {
@@ -56,11 +57,18 @@ impl FunctionSet {
         }
         result
     }
-    pub fn get_function(&self, name: &String) -> Result<&FunctionContainer, CompilationError> {
+    pub fn get_function(
+        &self,
+        name: &String,
+        parser_metadata: &ParserMetadata,
+    ) -> Result<&FunctionContainer, CompilationError> {
         if let Some(function) = self.functions.get(name) {
             Ok(function)
         } else {
-            Err(CompilationError::UndefinedFunction(name.clone()))
+            Err(CompilationError::UndefinedFunction(
+                parser_metadata.clone(),
+                name.clone(),
+            ))
         }
     }
 }

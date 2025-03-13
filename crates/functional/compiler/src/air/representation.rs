@@ -11,10 +11,12 @@ use crate::{
         file2_tree::{DeclarationSet, ExpressionContainer, ScopePath},
         file3::{FlatFunctionCall, FlatMatch, FlatStatement},
         function_resolution::Stage,
-        ir::{ArithmeticOperator, BooleanOperator, Expression, Material, Statement, Type},
+        ir::{ArithmeticOperator, BooleanOperator, Expression, Material, StatementVariant, Type},
         type_resolution::TypeSet,
     },
+    parser::metadata::ParserMetadata,
 };
+
 #[derive(Default)]
 pub struct Representation {
     pub expressions: Vec<AirExpression>,
@@ -225,7 +227,7 @@ impl ExpressionContainer {
                     array.calc_representation(type_set, representation_table, scope);
                 let (elem_type, _) = array
                     .get_type()
-                    .get_const_array_type(Material::Materialized)
+                    .get_const_array_type(Material::Materialized, &ParserMetadata::default())
                     .unwrap();
                 let elem_size = type_set.calc_type_size(elem_type);
                 array_representation[from * elem_size..to * elem_size].to_vec()
@@ -370,7 +372,7 @@ impl ExpressionContainer {
             Expression::ConstArray { elements } => {
                 let (elem_type, _) = self
                     .get_type()
-                    .get_const_array_type(Material::Materialized)
+                    .get_const_array_type(Material::Materialized, &ParserMetadata::default())
                     .unwrap();
                 let elem_size = type_set.calc_type_size(elem_type);
                 for (i, element) in elements.iter().enumerate() {
@@ -444,25 +446,26 @@ impl FlatMatch {
         representation_table: &mut RepresentationTable,
         air_constructor: &mut AirConstructor,
     ) {
-        if self.material == Material::Materialized {
+        if self.check_material == Material::Materialized {
             let type_name = self
                 .value
                 .get_type()
-                .get_named_type(Material::Materialized)
+                .get_named_type(Material::Materialized, &ParserMetadata::default())
                 .unwrap();
             let tipo = &type_set.algebraic_types[type_name];
 
             // make representation of matched value uniform other than variant if possible
-            if self
-                .branches
-                .iter()
-                .all(|(_, components)| components.iter().all(|component| component.represents))
-            {
+            if self.branches.iter().all(|branch| {
+                branch
+                    .components
+                    .iter()
+                    .all(|component| component.represents)
+            }) {
                 let mut representation = vec![None; type_set.calc_type_size(self.value.get_type())];
                 if tipo.variants.len() != 1 {
                     let mut variant_number = AirExpression::zero();
-                    for (i, (constructor, _)) in self.branches.iter().enumerate() {
-                        let scope = self.scope.then(self.index, constructor.clone());
+                    for (i, branch) in self.branches.iter().enumerate() {
+                        let scope = self.scope.then(self.index, branch.constructor.clone());
                         variant_number = variant_number.plus(
                             &air_constructor
                                 .get_scope_expression(&scope)
@@ -481,8 +484,8 @@ impl FlatMatch {
                 );
                 let mut representation =
                     representation.into_iter().map(Option::unwrap).collect_vec();
-                for (i, (constructor, components)) in self.branches.iter().enumerate() {
-                    let scope = self.scope.then(self.index, constructor.clone());
+                for (i, branch) in self.branches.iter().enumerate() {
+                    let scope = self.scope.then(self.index, branch.constructor.clone());
                     if tipo.variants.len() == 1 {
                         representation[0] = AirExpression::constant(i as isize);
                         self.value.represent_top_down(
@@ -498,10 +501,11 @@ impl FlatMatch {
                     let type_components = &tipo
                         .variants
                         .iter()
-                        .find(|variant| &variant.name == constructor)
+                        .find(|variant| variant.name == branch.constructor)
                         .unwrap()
                         .components;
-                    for (component, tipo) in components.iter().zip_eq(type_components.iter()) {
+                    for (component, tipo) in branch.components.iter().zip_eq(type_components.iter())
+                    {
                         let type_size = type_set.calc_type_size(tipo);
                         if component.represents {
                             representation_table.add_representation(
@@ -519,28 +523,29 @@ impl FlatMatch {
                     );
                 }
             } else {
-                for (constructor, components) in self.branches.iter() {
-                    let scope = self.scope.then(self.index, constructor.clone());
+                for branch in self.branches.iter() {
+                    let scope = self.scope.then(self.index, branch.constructor.clone());
                     let mut representation =
                         vec![None; type_set.calc_type_size(self.value.get_type())];
                     if tipo.variants.len() != 1 {
                         let variant_index = tipo
                             .variants
                             .iter()
-                            .position(|variant| &variant.name == constructor)
+                            .position(|variant| variant.name == branch.constructor)
                             .unwrap();
                         representation[0] = Some(AirExpression::constant(variant_index as isize));
                     }
                     let type_components = &tipo
                         .variants
                         .iter()
-                        .find(|variant| &variant.name == constructor)
+                        .find(|variant| variant.name == branch.constructor)
                         .unwrap()
                         .components;
 
                     // get from ones that are represented elsewhere
                     let mut offset = if tipo.variants.len() == 1 { 0 } else { 1 };
-                    for (component, tipo) in components.iter().zip_eq(type_components.iter()) {
+                    for (component, tipo) in branch.components.iter().zip_eq(type_components.iter())
+                    {
                         if !component.represents {
                             let component_representation =
                                 representation_table.get_representation(&scope, &component.name);
@@ -564,7 +569,8 @@ impl FlatMatch {
                         representation.into_iter().map(|x| x.unwrap()).collect();
 
                     let mut offset = if tipo.variants.len() == 1 { 0 } else { 1 };
-                    for (component, tipo) in components.iter().zip_eq(type_components.iter()) {
+                    for (component, tipo) in branch.components.iter().zip_eq(type_components.iter())
+                    {
                         let type_size = type_set.calc_type_size(tipo);
                         if component.represents {
                             representation_table.add_representation(
@@ -626,7 +632,7 @@ impl FlatStatement {
     ) {
         if self.material == Material::Materialized {
             match &self.statement {
-                Statement::VariableDeclaration {
+                StatementVariant::VariableDeclaration {
                     name,
                     tipo,
                     represents,
@@ -640,7 +646,7 @@ impl FlatStatement {
                         );
                     }
                 }
-                Statement::Equality { left, right } => {
+                StatementVariant::Equality { left, right } => {
                     let representation =
                         right.calc_representation(type_set, representation_table, &self.scope);
                     let mut representation: Vec<_> = representation.into_iter().map(Some).collect();
@@ -653,7 +659,7 @@ impl FlatStatement {
                         false,
                     );
                 }
-                Statement::Reference { reference, data } => {
+                StatementVariant::Reference { reference, data } => {
                     let data_representation =
                         data.calc_representation(type_set, representation_table, &self.scope);
                     let reference_representation = reference.create_representation_top_down(
@@ -677,7 +683,7 @@ impl FlatStatement {
                         },
                     );
                 }
-                Statement::Dereference { data, reference } => {
+                StatementVariant::Dereference { data, reference } => {
                     let reference_representation =
                         reference.calc_representation(type_set, representation_table, &self.scope);
                     let data_representation = data.create_representation_top_down(
@@ -699,7 +705,7 @@ impl FlatStatement {
                         },
                     );
                 }
-                Statement::EmptyUnderConstructionArray { array, .. } => {
+                StatementVariant::EmptyUnderConstructionArray { array, .. } => {
                     let mut representation = vec![None, Some(AirExpression::zero())];
                     array.represent_top_down(
                         type_set,
@@ -710,7 +716,7 @@ impl FlatStatement {
                         false,
                     );
                 }
-                Statement::UnderConstructionArrayPrepend {
+                StatementVariant::UnderConstructionArrayPrepend {
                     new_array,
                     elem,
                     old_array,
@@ -747,7 +753,7 @@ impl FlatStatement {
                         },
                     );
                 }
-                Statement::ArrayFinalization {
+                StatementVariant::ArrayFinalization {
                     finalized,
                     under_construction,
                 } => {
@@ -772,7 +778,7 @@ impl FlatStatement {
                         AirExpression::single_cell(*after),
                     );
                 }
-                Statement::ArrayAccess { array, index, elem } => {
+                StatementVariant::ArrayAccess { array, index, elem } => {
                     let array_representation =
                         array.calc_representation(type_set, representation_table, &self.scope);
                     let index_representation =

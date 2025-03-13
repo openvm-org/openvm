@@ -10,7 +10,7 @@ use crate::{
     folder1::{
         file2_tree::ScopePath,
         file3::{Atom, FlatStatement, FlattenedFunction, RepresentationOrder, Tree},
-        ir::{Material, Statement, Type},
+        ir::{Material, StatementVariant, Type},
         stage1::Stage2Program,
         type_resolution::TypeSet,
     },
@@ -229,7 +229,7 @@ impl AirTree {
     pub fn find_timestamp_usages(&mut self, function: &FlattenedFunction, program: &Stage2Program) {
         for (i, statement) in function.statements.iter().enumerate() {
             if statement.material == Material::Materialized {
-                if let Statement::ArrayFinalization { .. } = statement.statement {
+                if let StatementVariant::ArrayFinalization { .. } = statement.statement {
                     self.timestamp_usages_here
                         .push(TimestampUsage::FinalizeArray(i));
                 }
@@ -306,7 +306,7 @@ impl FlattenedFunction {
 
         for statement in self.statements.iter() {
             if statement.material == Material::Materialized {
-                if let Statement::Equality { left: _, right } = &statement.statement {
+                if let StatementVariant::Equality { left: _, right } = &statement.statement {
                     if program.types.calc_type_size(right.get_type()) > 0 {
                         relevant_scopes.push(statement.scope.clone());
                     }
@@ -321,9 +321,10 @@ impl FlattenedFunction {
             }
         }
         for matchi in self.matches.iter() {
-            if matchi.material == Material::Materialized {
-                for (constructor, _) in matchi.branches.iter() {
-                    relevant_scopes.push(matchi.scope.then(matchi.index, constructor.clone()));
+            if matchi.check_material == Material::Materialized {
+                for branch in matchi.branches.iter() {
+                    relevant_scopes
+                        .push(matchi.scope.then(matchi.index, branch.constructor.clone()));
                 }
             }
         }
@@ -339,7 +340,7 @@ impl FlattenedFunction {
             for (i, statement) in self.statements.iter().enumerate() {
                 if let FlatStatement {
                     material: Material::Materialized,
-                    statement: Statement::Reference { .. },
+                    statement: StatementVariant::Reference { .. },
                     ..
                 } = statement
                 {

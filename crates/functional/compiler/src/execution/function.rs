@@ -8,7 +8,7 @@ use crate::{
     },
     folder1::{
         file3::{Atom, FlattenedFunction},
-        ir::{Material, Statement, Type},
+        ir::{Material, StatementVariant, Type},
         stage1::Stage2Program,
     },
 };
@@ -25,8 +25,8 @@ impl FlattenedFunction {
             });
         }
         for matchi in self.matches.iter() {
-            for (constructor, _) in matchi.branches.iter() {
-                let scope = matchi.scope.then(matchi.index, constructor.clone());
+            for branch in matchi.branches.iter() {
+                let scope = matchi.scope.then(matchi.index, branch.constructor.clone());
                 let name = field_namer.scope_name(&scope);
                 fields.push(quote! {
                     pub #name: bool,
@@ -38,13 +38,13 @@ impl FlattenedFunction {
         for (i, statement) in self.statements.iter().enumerate() {
             if statement.material == Material::Materialized {
                 match statement.statement {
-                    Statement::Reference { .. } => {
+                    StatementVariant::Reference { .. } => {
                         let name = field_namer.reference_name(i);
                         fields.push(quote! {
                             pub #name: #ref_type,
                         })
                     }
-                    Statement::ArrayFinalization { .. } => {
+                    StatementVariant::ArrayFinalization { .. } => {
                         let name = field_namer.finalized_array_name(i);
                         fields.push(quote! {
                             pub #name: #array_type,
@@ -122,10 +122,10 @@ impl FlattenedFunction {
         let mut result = Vec::new();
         for statement in self.statements.iter() {
             match &statement.statement {
-                Statement::Reference { data, .. } => {
+                StatementVariant::Reference { data, .. } => {
                     result.push(data.get_type().clone());
                 }
-                Statement::EmptyUnderConstructionArray { elem_type, .. } => {
+                StatementVariant::EmptyUnderConstructionArray { elem_type, .. } => {
                     result.push(elem_type.clone());
                 }
                 _ => {}

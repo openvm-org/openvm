@@ -11,12 +11,16 @@ use super::{
     ir::{Expression, Type},
     type_resolution::TypeSet,
 };
-use crate::folder1::ir::{ArithmeticOperator, Material};
+use crate::{
+    folder1::ir::{ArithmeticOperator, Material},
+    parser::metadata::ParserMetadata,
+};
 
 #[derive(Clone, Debug)]
 pub struct ExpressionContainer {
     pub(crate) expression: Box<Expression>,
     pub(crate) tipo: Option<Type>,
+    pub(crate) parser_metadata: ParserMetadata,
 }
 
 impl ExpressionContainer {
@@ -110,17 +114,21 @@ impl ScopeContainer {
         path: &ScopePath,
         path_index: usize,
         name: &String,
+        parser_metadata: &ParserMetadata,
     ) -> Result<(), CompilationError> {
         if path_index == path.0.len() {
             if self.definitions.contains(name) {
-                return Err(CompilationError::DuplicateDefinition(name.clone()));
+                return Err(CompilationError::DuplicateDefinition(
+                    parser_metadata.clone(),
+                    name.clone(),
+                ));
             }
             self.definitions.insert(name.clone());
         } else {
             let (i, constructor) = &path.0[path_index];
             let branches = &mut self.children[*i];
             let branch = branches.get_mut(constructor).unwrap();
-            branch.define(path, path_index + 1, name)?;
+            branch.define(path, path_index + 1, name, parser_metadata)?;
 
             let mut present_in_all_branches = true;
             for (_, branch) in branches.iter() {
@@ -133,7 +141,10 @@ impl ScopeContainer {
                     branch.definitions.remove(name);
                 }
                 if self.definitions.contains(name) {
-                    return Err(CompilationError::DuplicateDefinition(name.clone()));
+                    return Err(CompilationError::DuplicateDefinition(
+                        parser_metadata.clone(),
+                        name.clone(),
+                    ));
                 }
                 self.definitions.insert(name.clone());
             }
@@ -145,17 +156,21 @@ impl ScopeContainer {
         path: &ScopePath,
         path_index: usize,
         name: &String,
+        parser_metadata: &ParserMetadata,
     ) -> Result<(), CompilationError> {
         if path_index == path.0.len() {
             if self.representations.contains(name) {
-                return Err(CompilationError::DuplicateRepresentation(name.clone()));
+                return Err(CompilationError::DuplicateRepresentation(
+                    parser_metadata.clone(),
+                    name.clone(),
+                ));
             }
             self.representations.insert(name.clone());
         } else {
             let (i, constructor) = &path.0[path_index];
             let branches = &mut self.children[*i];
             let branch = branches.get_mut(constructor).unwrap();
-            branch.represent(path, path_index + 1, name)?;
+            branch.represent(path, path_index + 1, name, parser_metadata)?;
 
             let mut present_in_all_branches = true;
             for (_, branch) in branches.iter() {
@@ -168,7 +183,10 @@ impl ScopeContainer {
                     branch.representations.remove(name);
                 }
                 if self.representations.contains(name) {
-                    return Err(CompilationError::DuplicateRepresentation(name.clone()));
+                    return Err(CompilationError::DuplicateRepresentation(
+                        parser_metadata.clone(),
+                        name.clone(),
+                    ));
                 }
                 self.representations.insert(name.clone());
             }
@@ -246,10 +264,12 @@ impl ScopeContainer {
         path: &ScopePath,
         path_index: usize,
         name: &String,
+        parser_metadata: &ParserMetadata,
     ) -> Result<(), CompilationError> {
         if path_index == path.0.len() {
             if self.under_construction_array_usages.contains(name) {
                 return Err(CompilationError::DuplicateUnderConstructionArrayUsage(
+                    parser_metadata.clone(),
                     name.clone(),
                 ));
             }
@@ -258,7 +278,7 @@ impl ScopeContainer {
             let (i, constructor) = &path.0[path_index];
             let branches = &mut self.children[*i];
             let branch = branches.get_mut(constructor).unwrap();
-            branch.define(path, path_index + 1, name)?;
+            branch.define(path, path_index + 1, name, parser_metadata)?;
 
             let mut present_in_all_branches = true;
             for (_, branch) in branches.iter() {
@@ -272,6 +292,7 @@ impl ScopeContainer {
                 }
                 if self.under_construction_array_usages.contains(name) {
                     return Err(CompilationError::DuplicateUnderConstructionArrayUsage(
+                        parser_metadata.clone(),
                         name.clone(),
                     ));
                 }
@@ -295,18 +316,28 @@ impl ScopeContainer {
         }
     }
 
-    pub fn verify_completeness(&self, type_set: &TypeSet) -> Result<(), CompilationError> {
+    pub fn verify_completeness(
+        &self,
+        type_set: &TypeSet,
+        parser_metadata: &ParserMetadata,
+    ) -> Result<(), CompilationError> {
         for (name, tipo) in self.declarations.iter() {
             if !self.definitions.contains(name) {
-                return Err(CompilationError::UndeclaredVariable(name.clone()));
+                return Err(CompilationError::UndeclaredVariable(
+                    parser_metadata.clone(),
+                    name.clone(),
+                ));
             }
             if type_set.calc_type_size(tipo) > 0 && !self.representations.contains(name) {
-                return Err(CompilationError::UnrepresentedVariable(name.clone()));
+                return Err(CompilationError::UnrepresentedVariable(
+                    parser_metadata.clone(),
+                    name.clone(),
+                ));
             }
         }
         for matchi in self.children.iter() {
             for child in matchi.values() {
-                child.verify_completeness(type_set)?;
+                child.verify_completeness(type_set, parser_metadata)?;
             }
         }
         Ok(())
@@ -387,6 +418,7 @@ impl RootContainer {
         &self,
         path: &ScopePath,
         name: &String,
+        parser_metadata: &ParserMetadata,
     ) -> Result<Type, CompilationError> {
         let mut scope = &self.root_scope;
         let mut depth = 0;
@@ -395,7 +427,10 @@ impl RootContainer {
                 return Ok(tipo.clone());
             }
             if depth == path.0.len() {
-                return Err(CompilationError::UndeclaredVariable(name.clone()));
+                return Err(CompilationError::UndeclaredVariable(
+                    parser_metadata.clone(),
+                    name.clone(),
+                ));
             }
             let (x, constructor) = &path.0[depth];
             scope = &scope.children[*x][constructor];
@@ -409,9 +444,16 @@ impl RootContainer {
         path: &ScopePath,
         name: &String,
         tipo: Type,
+        parser_metadata: &ParserMetadata,
     ) -> Result<(), CompilationError> {
-        if self.get_declaration_type(path, name).is_ok() {
-            return Err(CompilationError::DuplicateDeclaration(name.clone()));
+        if self
+            .get_declaration_type(path, name, &ParserMetadata::default())
+            .is_ok()
+        {
+            return Err(CompilationError::DuplicateDeclaration(
+                parser_metadata.clone(),
+                name.clone(),
+            ));
         }
 
         let mut scope = &mut self.root_scope;
@@ -421,27 +463,42 @@ impl RootContainer {
         }
 
         if scope.banned_declarations.contains(name) {
-            return Err(CompilationError::DuplicateDeclaration(name.clone()));
+            return Err(CompilationError::DuplicateDeclaration(
+                parser_metadata.clone(),
+                name.clone(),
+            ));
         }
 
         scope.declarations.insert(name.clone(), tipo);
         Ok(())
     }
 
-    pub fn define(&mut self, path: &ScopePath, name: &String) -> Result<(), CompilationError> {
-        self.root_scope.define(path, 0, name)
+    pub fn define(
+        &mut self,
+        path: &ScopePath,
+        name: &String,
+        parser_metadata: &ParserMetadata,
+    ) -> Result<(), CompilationError> {
+        self.root_scope.define(path, 0, name, parser_metadata)
     }
 
-    pub fn represent(&mut self, path: &ScopePath, name: &String) -> Result<(), CompilationError> {
-        self.root_scope.represent(path, 0, name)
+    pub fn represent(
+        &mut self,
+        path: &ScopePath,
+        name: &String,
+        parser_metadata: &ParserMetadata,
+    ) -> Result<(), CompilationError> {
+        self.root_scope.represent(path, 0, name, parser_metadata)
     }
 
     fn use_under_construction_array(
         &mut self,
         path: &ScopePath,
         name: &String,
+        parser_metadata: &ParserMetadata,
     ) -> Result<(), CompilationError> {
-        self.root_scope.use_under_construction_array(path, 0, name)
+        self.root_scope
+            .use_under_construction_array(path, 0, name, parser_metadata)
     }
 
     fn type_set(&self) -> Arc<TypeSet> {
@@ -461,6 +518,7 @@ impl ExpressionContainer {
         Self {
             expression: Box::new(expression),
             tipo: None,
+            parser_metadata: Default::default(),
         }
     }
 
@@ -569,20 +627,34 @@ impl ExpressionContainer {
                 represents,
             } => {
                 if *defines {
-                    return Err(CompilationError::CannotAssignHere(name.clone()));
+                    return Err(CompilationError::CannotAssignHere(
+                        self.parser_metadata.clone(),
+                        name.clone(),
+                    ));
                 }
                 if *represents && !can_represent {
-                    return Err(CompilationError::CannotRepresentHere(name.clone()));
+                    return Err(CompilationError::CannotRepresentHere(
+                        self.parser_metadata.clone(),
+                        name.clone(),
+                    ));
                 }
                 assert!(!*declares);
-                self.tipo = Some(function_container.get_declaration_type(path, name)?);
+                self.tipo = Some(function_container.get_declaration_type(
+                    path,
+                    name,
+                    &self.parser_metadata,
+                )?);
                 if self
                     .tipo
                     .as_ref()
                     .unwrap()
-                    .contains_under_construction_array(&function_container.type_set())?
+                    .contains_under_construction_array(&function_container.type_set())
                 {
-                    function_container.use_under_construction_array(path, name)?;
+                    function_container.use_under_construction_array(
+                        path,
+                        name,
+                        &self.parser_metadata,
+                    )?;
                 }
             }
             Expression::Algebraic {
@@ -591,9 +663,10 @@ impl ExpressionContainer {
             } => {
                 let expected_component_types = function_container
                     .type_set()
-                    .get_component_types(constructor)?;
+                    .get_component_types(constructor, &self.parser_metadata)?;
                 if fields.len() != expected_component_types.len() {
                     return Err(CompilationError::IncorrectNumberOfComponents(
+                        self.parser_metadata.clone(),
                         constructor.clone(),
                         fields.len(),
                         expected_component_types.len(),
@@ -607,6 +680,7 @@ impl ExpressionContainer {
                     field.resolve_defined(function_container, path, material, can_represent)?;
                     if !material.same_type(&field.tipo.clone().unwrap(), expected_type) {
                         return Err(CompilationError::IncorrectTypeInComponent(
+                            self.parser_metadata.clone(),
                             constructor.clone(),
                             index,
                             field.tipo.clone().unwrap(),
@@ -618,7 +692,7 @@ impl ExpressionContainer {
                 self.tipo = Some(
                     function_container
                         .type_set()
-                        .get_constructor_type(constructor)?,
+                        .get_constructor_type(constructor, &self.parser_metadata)?,
                 );
             }
             Expression::Arithmetic {
@@ -627,17 +701,21 @@ impl ExpressionContainer {
                 right,
             } => {
                 if *operator == ArithmeticOperator::Div && material == Material::Materialized {
-                    return Err(CompilationError::DivMustBeDematerialized());
+                    return Err(CompilationError::DivMustBeDematerialized(
+                        self.parser_metadata.clone(),
+                    ));
                 }
                 left.resolve_defined(function_container, path, material, false)?;
                 if !material.same_type(&left.tipo.clone().unwrap(), &Type::Field) {
                     return Err(CompilationError::IncorrectTypeInArithmetic(
+                        left.parser_metadata.clone(),
                         left.tipo.clone().unwrap(),
                     ));
                 }
                 right.resolve_defined(function_container, path, material, false)?;
                 if !material.same_type(&right.tipo.clone().unwrap(), &Type::Field) {
                     return Err(CompilationError::IncorrectTypeInArithmetic(
+                        right.parser_metadata.clone(),
                         right.tipo.clone().unwrap(),
                     ));
                 }
@@ -654,14 +732,15 @@ impl ExpressionContainer {
             }
             Expression::Eq { left, right } => {
                 if material == Material::Materialized {
-                    return Err(CompilationError::EqMustBeDematerialized());
+                    return Err(CompilationError::EqMustBeDematerialized(
+                        self.parser_metadata.clone(),
+                    ));
                 }
                 left.resolve_defined(function_container, path, Material::Dematerialized, false)?;
                 right.resolve_defined(function_container, path, Material::Dematerialized, false)?;
-                if !Material::Dematerialized
-                    .same_type(&left.tipo.clone().unwrap(), &right.tipo.clone().unwrap())
-                {
+                if !left.get_type().eq_unmaterialized(right.get_type()) {
                     return Err(CompilationError::MismatchedTypes(
+                        self.parser_metadata.clone(),
                         left.tipo.clone().unwrap(),
                         right.tipo.clone().unwrap(),
                     ));
@@ -669,20 +748,25 @@ impl ExpressionContainer {
                 if left
                     .get_type()
                     .contains_reference(&function_container.type_set, false)
-                    .unwrap()
                 {
                     return Err(CompilationError::CannotEquateReferences(
+                        self.parser_metadata.clone(),
                         left.get_type().clone(),
                     ));
                 }
                 self.tipo = Some(Type::boolean());
             }
             Expression::EmptyConstArray { elem_type } => {
+                function_container
+                    .type_set
+                    .check_type_exists(elem_type, &self.parser_metadata)?;
                 self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), 0));
             }
             Expression::ConstArray { elements } => {
                 if elements.is_empty() {
-                    return Err(CompilationError::CannotInferEmptyConstArrayType());
+                    return Err(CompilationError::CannotInferEmptyConstArrayType(
+                        self.parser_metadata.clone(),
+                    ));
                 }
                 for element in elements.iter_mut() {
                     element.resolve_defined(function_container, path, material, can_represent)?;
@@ -691,6 +775,7 @@ impl ExpressionContainer {
                 for (i, element) in elements.iter().enumerate() {
                     if !material.same_type(&elem_type, &element.tipo.clone().unwrap()) {
                         return Err(CompilationError::ElementTypesInconsistentInConstArray(
+                            self.parser_metadata.clone(),
                             elem_type.clone(),
                             element.tipo.clone().unwrap(),
                             0,
@@ -703,11 +788,16 @@ impl ExpressionContainer {
             Expression::ConstArrayConcatenation { left, right } => {
                 left.resolve_defined(function_container, path, material, false)?;
                 right.resolve_defined(function_container, path, material, false)?;
-                let (elem_type_1, len_1) = left.get_type().get_const_array_type(material)?;
-                let (elem_type_2, len_2) = right.get_type().get_const_array_type(material)?;
+                let (elem_type_1, len_1) = left
+                    .get_type()
+                    .get_const_array_type(material, &left.parser_metadata)?;
+                let (elem_type_2, len_2) = right
+                    .get_type()
+                    .get_const_array_type(material, &right.parser_metadata)?;
                 if !material.same_type(&elem_type_1, &elem_type_2) {
                     return Err(
                         CompilationError::ElementTypesInconsistentInConstArrayConcatenation(
+                            self.parser_metadata.clone(),
                             elem_type_1.clone(),
                             elem_type_2.clone(),
                         ),
@@ -717,18 +807,29 @@ impl ExpressionContainer {
             }
             Expression::ConstArrayAccess { array, index } => {
                 array.resolve_defined(function_container, path, material, false)?;
-                let (elem_type, len) = array.get_type().get_const_array_type(material)?;
+                let (elem_type, len) = array
+                    .get_type()
+                    .get_const_array_type(material, &array.parser_metadata)?;
                 if *index >= len {
-                    return Err(CompilationError::OutOfBoundsConstArrayAccess(*index, len));
+                    return Err(CompilationError::OutOfBoundsConstArrayAccess(
+                        self.parser_metadata.clone(),
+                        *index,
+                        len,
+                    ));
                 }
                 self.tipo = Some(elem_type.clone());
             }
             Expression::ConstArraySlice { array, from, to } => {
                 array.resolve_defined(function_container, path, material, false)?;
-                let (elem_type, len) = array.get_type().get_const_array_type(material)?;
+                let (elem_type, len) = array
+                    .get_type()
+                    .get_const_array_type(material, &array.parser_metadata)?;
                 if *from > *to || *to > len {
                     return Err(CompilationError::OutOfBoundsConstArraySlice(
-                        *from, *to, len,
+                        self.parser_metadata.clone(),
+                        *from,
+                        *to,
+                        len,
                     ));
                 }
                 self.tipo = Some(Type::ConstArray(elem_type.clone().into(), *to - *from));
@@ -736,11 +837,12 @@ impl ExpressionContainer {
             Expression::ConstArrayRepeated { element, length } => {
                 element.resolve_defined(function_container, path, material, false)?;
                 let elem_type = element.get_type();
-                if elem_type
-                    .contains_under_construction_array(&function_container.type_set)
-                    .unwrap()
-                {
-                    return Err(CompilationError::DuplicateUnderConstructionArrayUsageInConstArray);
+                if elem_type.contains_under_construction_array(&function_container.type_set) {
+                    return Err(
+                        CompilationError::DuplicateUnderConstructionArrayUsageInConstArray(
+                            element.parser_metadata.clone(),
+                        ),
+                    );
                 }
 
                 self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), *length));
@@ -748,18 +850,27 @@ impl ExpressionContainer {
             Expression::BooleanNot { value } => {
                 value.resolve_defined(function_container, path, material, false)?;
                 if !material.same_type(value.get_type(), &Type::boolean()) {
-                    return Err(CompilationError::ExpectedBoolean(value.get_type().clone()));
+                    return Err(CompilationError::ExpectedBoolean(
+                        self.parser_metadata.clone(),
+                        value.get_type().clone(),
+                    ));
                 }
                 self.tipo = Some(Type::boolean());
             }
             Expression::BooleanBinary { left, right, .. } => {
                 left.resolve_defined(function_container, path, material, false)?;
                 if !material.same_type(left.get_type(), &Type::boolean()) {
-                    return Err(CompilationError::ExpectedBoolean(left.get_type().clone()));
+                    return Err(CompilationError::ExpectedBoolean(
+                        left.parser_metadata.clone(),
+                        left.get_type().clone(),
+                    ));
                 }
                 right.resolve_defined(function_container, path, material, false)?;
                 if !material.same_type(right.get_type(), &Type::boolean()) {
-                    return Err(CompilationError::ExpectedBoolean(right.get_type().clone()));
+                    return Err(CompilationError::ExpectedBoolean(
+                        right.parser_metadata.clone(),
+                        right.get_type().clone(),
+                    ));
                 }
                 self.tipo = Some(Type::boolean());
             }
@@ -771,6 +882,7 @@ impl ExpressionContainer {
                 condition.resolve_defined(function_container, path, material, false)?;
                 if !material.same_type(condition.get_type(), &Type::boolean()) {
                     return Err(CompilationError::ExpectedBoolean(
+                        condition.parser_metadata.clone(),
                         condition.get_type().clone(),
                     ));
                 }
@@ -778,6 +890,7 @@ impl ExpressionContainer {
                 false_value.resolve_defined(function_container, path, material, false)?;
                 if !material.same_type(true_value.get_type(), false_value.get_type()) {
                     return Err(CompilationError::MismatchedTypes(
+                        self.parser_metadata.clone(),
                         true_value.get_type().clone(),
                         false_value.get_type().clone(),
                     ));
@@ -809,8 +922,8 @@ impl ExpressionContainer {
                         Type::Unmaterialized(Arc::new(expected_type.clone()))
                     }
                 };
-                function_container.declare(path, name, declaration_type)?;
-                function_container.define(path, name)?;
+                function_container.declare(path, name, declaration_type, &self.parser_metadata)?;
+                function_container.define(path, name, &self.parser_metadata)?;
             }
             Expression::Variable {
                 name,
@@ -819,17 +932,19 @@ impl ExpressionContainer {
                 ..
             } => {
                 material.assert_type(
-                    &function_container.get_declaration_type(path, name)?,
+                    &function_container.get_declaration_type(path, name, &self.parser_metadata)?,
                     expected_type,
+                    &self.parser_metadata,
                 )?;
                 if material == Material::Dematerialized
-                    && expected_type.contains_reference(&function_container.type_set(), true)?
+                    && expected_type.contains_reference(&function_container.type_set(), true)
                 {
                     return Err(CompilationError::ReferenceDefinitionMustBeMaterialized(
+                        self.parser_metadata.clone(),
                         name.clone(),
                     ));
                 }
-                function_container.define(path, name)?;
+                function_container.define(path, name, &self.parser_metadata)?;
             }
             Expression::Algebraic {
                 constructor,
@@ -837,9 +952,10 @@ impl ExpressionContainer {
             } => {
                 let expected_component_types = function_container
                     .type_set()
-                    .get_component_types(constructor)?;
+                    .get_component_types(constructor, &self.parser_metadata)?;
                 if fields.len() != expected_component_types.len() {
                     return Err(CompilationError::IncorrectNumberOfComponents(
+                        self.parser_metadata.clone(),
                         constructor.clone(),
                         fields.len(),
                         expected_component_types.len(),
@@ -859,14 +975,17 @@ impl ExpressionContainer {
                 material.assert_type(
                     &function_container
                         .type_set()
-                        .get_constructor_type(constructor)?,
+                        .get_constructor_type(constructor, &self.parser_metadata)?,
                     expected_type,
+                    &self.parser_metadata,
                 )?;
             }
             Expression::ConstArray { elements } => {
-                let (elem_type, len) = expected_type.get_const_array_type(material)?;
+                let (elem_type, len) =
+                    expected_type.get_const_array_type(material, &self.parser_metadata)?;
                 if elements.len() != len {
                     return Err(CompilationError::IncorrectNumberOfElementsInConstArray(
+                        self.parser_metadata.clone(),
                         elements.len(),
                         len,
                     ));
@@ -886,6 +1005,7 @@ impl ExpressionContainer {
                         Type::Unmaterialized(_) => {}
                         _ => {
                             return Err(CompilationError::UnexpectedUnmaterialized(
+                                self.parser_metadata.clone(),
                                 expected_type.clone(),
                             ))
                         }
@@ -899,14 +1019,16 @@ impl ExpressionContainer {
                 )?;
             }
             _ => {
-                if expected_type.contains_reference(&function_container.type_set(), false)? {
+                if expected_type.contains_reference(&function_container.type_set(), false) {
                     return Err(CompilationError::CannotEquateReferences(
+                        self.parser_metadata.clone(),
                         expected_type.clone(),
                     ));
                 }
                 self.resolve_defined(function_container, path, material, true)?;
                 if !material.same_type(&self.tipo.clone().unwrap(), &expected_type) {
                     return Err(CompilationError::UnexpectedType(
+                        self.parser_metadata.clone(),
                         self.tipo.clone().unwrap(),
                         expected_type.clone(),
                     ));
@@ -928,7 +1050,7 @@ impl ExpressionContainer {
                 name, represents, ..
             } => {
                 if *represents {
-                    function_container.represent(path, name)?;
+                    function_container.represent(path, name, &self.parser_metadata)?;
                 }
             }
             Expression::Algebraic { fields, .. } => {

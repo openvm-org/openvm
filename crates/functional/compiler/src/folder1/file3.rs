@@ -6,13 +6,16 @@ use super::{
     error::CompilationError,
     file2_tree::{DeclarationSet, ExpressionContainer, RootContainer, ScopePath},
     function_resolution::{FunctionContainer, FunctionSet},
-    ir::{Body, Statement, Type},
+    ir::{Body, StatementVariant, Type},
     type_resolution::TypeSet,
 };
-use crate::folder1::{
-    file2_tree::DependencyType,
-    function_resolution::Stage,
-    ir::{Argument, BranchComponent, FunctionCall, Material},
+use crate::{
+    folder1::{
+        file2_tree::DependencyType,
+        function_resolution::Stage,
+        ir::{Argument, Branch, BranchComponent, FunctionCall, Material, Statement},
+    },
+    parser::metadata::ParserMetadata,
 };
 
 #[derive(Clone, Debug)]
@@ -46,22 +49,33 @@ pub struct FlattenedFunction {
     pub(crate) name: String,
     pub(crate) uses_timestamp: bool,
     pub(crate) function_id: usize,
+
+    pub(crate) parser_metadata: ParserMetadata,
 }
 
 #[derive(Clone, Debug)]
 pub struct FlatStatement {
     pub material: Material,
     pub scope: ScopePath,
-    pub statement: Statement,
+    pub statement: StatementVariant,
+    pub parser_metadata: ParserMetadata,
 }
 
 #[derive(Clone, Debug)]
 pub struct FlatMatch {
-    pub material: Material,
+    pub check_material: Material,
     pub scope: ScopePath,
     pub index: usize,
     pub value: ExpressionContainer,
-    pub branches: Vec<(String, Vec<BranchComponent>)>,
+    pub branches: Vec<FlatBranch>,
+    pub parser_metadata: ParserMetadata,
+}
+
+#[derive(Clone, Debug)]
+pub struct FlatBranch {
+    pub constructor: String,
+    pub components: Vec<BranchComponent>,
+    pub parser_metadata: ParserMetadata,
 }
 
 #[derive(Clone, Debug)]
@@ -70,15 +84,17 @@ pub struct FlatFunctionCall {
     pub scope: ScopePath,
     pub function_name: String,
     pub arguments: Vec<ExpressionContainer>,
+    pub parser_metadata: ParserMetadata,
 }
 
 impl FlatFunctionCall {
-    pub fn new(material: Material, scope: ScopePath, function_call: FunctionCall) -> Self {
+    pub fn new(scope: ScopePath, function_call: FunctionCall) -> Self {
         Self {
-            material,
+            material: function_call.material,
             scope,
             function_name: function_call.function,
             arguments: function_call.arguments,
+            parser_metadata: function_call.parser_metadata,
         }
     }
 }
@@ -127,6 +143,9 @@ impl FlattenedFunction {
         function_id: usize,
     ) -> Result<Self, CompilationError> {
         let arguments = function.function.arguments.clone();
+        for argument in arguments.iter() {
+            type_set.check_type_exists(&argument.tipo, &argument.parser_metadata)?;
+        }
         let stages = function.stages.clone();
 
         let mut statements = Vec::new();
@@ -146,8 +165,8 @@ impl FlattenedFunction {
         let mut uses_timestamp = false;
         for statement in statements.iter() {
             match statement.statement {
-                Statement::Reference { .. } => uses_timestamp = true,
-                Statement::ArrayFinalization { .. } => uses_timestamp = true,
+                StatementVariant::Reference { .. } => uses_timestamp = true,
+                StatementVariant::ArrayFinalization { .. } => uses_timestamp = true,
                 _ => {}
             }
         }
@@ -170,14 +189,16 @@ impl FlattenedFunction {
             declaration_set: DeclarationSet::new(),
             uses_timestamp,
             function_id,
+            parser_metadata: function.function.parser_metadata.clone(),
         };
 
         let mut root_container = RootContainer::new(type_set, function_set, function);
         flattened_function.order_for_execution(&mut root_container)?;
         flattened_function.order_for_representation(&mut root_container)?;
-        root_container
-            .root_scope
-            .verify_completeness(root_container.type_set.as_ref())?;
+        root_container.root_scope.verify_completeness(
+            root_container.type_set.as_ref(),
+            &flattened_function.parser_metadata,
+        )?;
         root_container
             .root_scope
             .unpack(&mut flattened_function.declaration_set);
@@ -194,27 +215,45 @@ impl FlattenedFunction {
         body: &Body,
         function_set: &FunctionSet,
     ) -> Result<(), CompilationError> {
-        for (material, statement) in body.statements.clone() {
+        for Statement {
+            variant,
+            material,
+            parser_metadata,
+        } in body.statements.clone()
+        {
             statements.push(FlatStatement {
                 material,
                 scope: path.clone(),
-                statement,
+                statement: variant,
+                parser_metadata,
             });
         }
-        for (material, function_call) in body.function_calls.clone() {
-            function_calls.push(FlatFunctionCall::new(material, path.clone(), function_call));
+        for function_call in body.function_calls.clone() {
+            function_calls.push(FlatFunctionCall::new(path.clone(), function_call));
         }
         for (i, matchi) in body.matches.iter().enumerate() {
             let branches = matchi
                 .branches
                 .iter()
-                .map(|branch| (branch.constructor.clone(), branch.components.clone()))
+                .map(
+                    |Branch {
+                         constructor,
+                         components,
+                         body: _,
+                         parser_metadata,
+                     }| FlatBranch {
+                        constructor: constructor.clone(),
+                        components: components.clone(),
+                        parser_metadata: parser_metadata.clone(),
+                    },
+                )
                 .collect();
             matches.push(FlatMatch {
-                material: matchi.check_material,
+                check_material: matchi.check_material,
                 scope: path.clone(),
                 index: i,
                 value: matchi.value.clone(),
+                parser_metadata: matchi.parser_metadata.clone(),
                 branches,
             });
             let mut these_children = HashMap::new();
@@ -262,13 +301,22 @@ impl FlattenedFunction {
             ));
         }
         for argument in self.arguments.iter() {
-            root_container.declare(&ScopePath::empty(), &argument.name, argument.tipo.clone())?;
+            root_container.declare(
+                &ScopePath::empty(),
+                &argument.name,
+                argument.tipo.clone(),
+                &argument.parser_metadata,
+            )?;
         }
 
         for stage in root_container.current_function.stages.clone() {
             let mut ordered_atoms = Vec::new();
             for argument_index in stage.start..stage.mid {
-                root_container.define(&ScopePath::empty(), &self.arguments[argument_index].name)?;
+                root_container.define(
+                    &ScopePath::empty(),
+                    &self.arguments[argument_index].name,
+                    &self.arguments[argument_index].parser_metadata,
+                )?;
             }
             loop {
                 let i = disp_atoms
@@ -283,7 +331,10 @@ impl FlattenedFunction {
                         function_calls_current_stage[index] += 1;
                         let callee = root_container
                             .function_set
-                            .get_function(&self.function_calls[index].function_name)
+                            .get_function(
+                                &self.function_calls[index].function_name,
+                                &self.function_calls[index].parser_metadata,
+                            )
                             .unwrap();
                         if function_calls_current_stage[index] < callee.stages.len() {
                             disp_atoms.push(Atom::PartialFunctionCall(
@@ -301,13 +352,17 @@ impl FlattenedFunction {
                     .root_scope
                     .is_defined(&ScopePath::empty(), &self.arguments[argument_index].name)
                 {
-                    return Err(CompilationError::CannotOrderStatementsForDefinition());
+                    return Err(CompilationError::CannotOrderStatementsForDefinition(
+                        self.parser_metadata.clone(),
+                    ));
                 }
             }
             self.atoms_staged.push(ordered_atoms);
         }
         if !disp_atoms.is_empty() {
-            return Err(CompilationError::CannotOrderStatementsForDefinition());
+            return Err(CompilationError::CannotOrderStatementsForDefinition(
+                self.parser_metadata.clone(),
+            ));
         }
         Ok(())
     }
@@ -327,7 +382,10 @@ impl FlattenedFunction {
         for i in 0..self.function_calls.len() {
             let callee = root_container
                 .function_set
-                .get_function(&self.function_calls[i].function_name)
+                .get_function(
+                    &self.function_calls[i].function_name,
+                    &self.function_calls[i].parser_metadata,
+                )
                 .unwrap();
             if callee.function.inline {
                 disp_atoms.push(Atom::PartialFunctionCall(
@@ -347,7 +405,11 @@ impl FlattenedFunction {
                 let mut ordered_atoms = Vec::new();
                 for i in stage.start..stage.mid {
                     if self.arguments[i].represents {
-                        root_container.represent(&ScopePath::empty(), &self.arguments[i].name)?;
+                        root_container.represent(
+                            &ScopePath::empty(),
+                            &self.arguments[i].name,
+                            &self.arguments[i].parser_metadata,
+                        )?;
                     }
                 }
                 loop {
@@ -362,7 +424,10 @@ impl FlattenedFunction {
                         if let Atom::PartialFunctionCall(index, _) = atom {
                             let callee = root_container
                                 .function_set
-                                .get_function(&self.function_calls[index].function_name)
+                                .get_function(
+                                    &self.function_calls[index].function_name,
+                                    &self.function_calls[index].parser_metadata,
+                                )
                                 .unwrap();
                             if callee.function.inline {
                                 function_calls_current_stage[index] += 1;
@@ -378,13 +443,15 @@ impl FlattenedFunction {
                         break;
                     }
                 }
-                for argument_index in stage.mid..stage.end {
+                for argument_index in stage.start..stage.end {
                     if !root_container.root_scope.is_represented(
                         &ScopePath::empty(),
                         &self.arguments[argument_index].name,
                         &root_container.type_set,
                     ) {
-                        return Err(CompilationError::CannotOrderStatementsForRepresentation());
+                        return Err(CompilationError::CannotOrderStatementsForRepresentation(
+                            self.parser_metadata.clone(),
+                        ));
                     }
                 }
                 atoms_staged.push(ordered_atoms);
@@ -393,7 +460,11 @@ impl FlattenedFunction {
         } else {
             for argument in self.arguments.iter() {
                 if argument.represents {
-                    root_container.represent(&ScopePath::empty(), &argument.name)?;
+                    root_container.represent(
+                        &ScopePath::empty(),
+                        &argument.name,
+                        &argument.parser_metadata,
+                    )?;
                 }
             }
 
@@ -410,7 +481,10 @@ impl FlattenedFunction {
                     if let Atom::PartialFunctionCall(index, _) = atom {
                         let callee = root_container
                             .function_set
-                            .get_function(&self.function_calls[index].function_name)
+                            .get_function(
+                                &self.function_calls[index].function_name,
+                                &self.function_calls[index].parser_metadata,
+                            )
                             .unwrap();
                         if callee.function.inline {
                             function_calls_current_stage[index] += 1;
@@ -426,10 +500,23 @@ impl FlattenedFunction {
                     break;
                 }
             }
+            for argument in self.arguments.iter() {
+                if !root_container.root_scope.is_represented(
+                    &ScopePath::empty(),
+                    &argument.name,
+                    &root_container.type_set,
+                ) {
+                    return Err(CompilationError::CannotOrderStatementsForRepresentation(
+                        self.parser_metadata.clone(),
+                    ));
+                }
+            }
             self.representation_order = RepresentationOrder::NotInline(ordered_atoms);
         }
         if !disp_atoms.is_empty() {
-            return Err(CompilationError::CannotOrderStatementsForRepresentation());
+            return Err(CompilationError::CannotOrderStatementsForRepresentation(
+                self.parser_metadata.clone(),
+            ));
         }
         Ok(())
     }
@@ -457,9 +544,9 @@ impl FlattenedFunction {
     }
     fn viable_for_representation(&self, root_container: &RootContainer, atom: Atom) -> bool {
         if let Atom::Match(index) = atom {
-            for (constructor, components) in self.matches[index].branches.iter() {
-                let scope_here = self.scope(atom).then(index, constructor.clone());
-                for component in components.iter() {
+            for branch in self.matches[index].branches.iter() {
+                let scope_here = self.scope(atom).then(index, branch.constructor.clone());
+                for component in branch.components.iter() {
                     if !component.represents
                         && !root_container.root_scope.is_represented(
                             &scope_here,
@@ -493,26 +580,26 @@ impl FlattenedFunction {
                     .collect()
             }
             Atom::Statement(index) => match &self.statements[index].statement {
-                Statement::VariableDeclaration { .. } => vec![],
-                Statement::Equality { left, right } => left
+                StatementVariant::VariableDeclaration { .. } => vec![],
+                StatementVariant::Equality { left, right } => left
                     .dependencies(dependency_type)
                     .into_iter()
                     .chain(right.dependencies(dependency_type))
                     .collect(),
-                Statement::Reference { reference, data } => reference
+                StatementVariant::Reference { reference, data } => reference
                     .dependencies(dependency_type)
                     .into_iter()
                     .chain(data.dependencies(dependency_type))
                     .collect(),
-                Statement::Dereference { data, reference } => data
+                StatementVariant::Dereference { data, reference } => data
                     .dependencies(dependency_type)
                     .into_iter()
                     .chain(reference.dependencies(dependency_type))
                     .collect(),
-                Statement::EmptyUnderConstructionArray { array, .. } => {
+                StatementVariant::EmptyUnderConstructionArray { array, .. } => {
                     array.dependencies(dependency_type).into_iter().collect()
                 }
-                Statement::UnderConstructionArrayPrepend {
+                StatementVariant::UnderConstructionArrayPrepend {
                     new_array,
                     elem,
                     old_array,
@@ -522,7 +609,7 @@ impl FlattenedFunction {
                     .chain(elem.dependencies(dependency_type))
                     .chain(old_array.dependencies(dependency_type))
                     .collect(),
-                Statement::ArrayFinalization {
+                StatementVariant::ArrayFinalization {
                     finalized,
                     under_construction,
                 } => finalized
@@ -530,7 +617,7 @@ impl FlattenedFunction {
                     .into_iter()
                     .chain(under_construction.dependencies(dependency_type))
                     .collect(),
-                Statement::ArrayAccess { elem, array, index } => elem
+                StatementVariant::ArrayAccess { elem, array, index } => elem
                     .dependencies(dependency_type)
                     .into_iter()
                     .chain(array.dependencies(dependency_type))
@@ -548,36 +635,55 @@ impl FlattenedFunction {
         match atom {
             Atom::Match(flat_index) => {
                 let FlatMatch {
-                    material,
+                    check_material: material,
                     scope,
                     index,
                     value,
                     branches,
+                    parser_metadata,
                 } = &mut self.matches[flat_index];
                 let material = *material;
                 value.resolve_defined(root_container, scope, material, true)?;
                 root_container.root_scope.define_new_scopes(
                     scope,
                     *index,
-                    branches.iter().map(|branch| branch.0.clone()).collect(),
+                    branches
+                        .iter()
+                        .map(|branch| branch.constructor.clone())
+                        .collect(),
                 );
-                let type_name = value.get_type().get_named_type(material)?;
+                let type_name = value
+                    .get_type()
+                    .get_named_type(material, &value.parser_metadata)?;
                 let type_definition = root_container
                     .type_set
-                    .get_algebraic_type(type_name)?
+                    .get_algebraic_type(type_name, parser_metadata)?
                     .clone();
-                for (constructor, components) in branches {
+                for branch in branches {
                     let component_types = type_definition
                         .variants
                         .iter()
-                        .find(|variant| &variant.name == constructor)
-                        .ok_or(CompilationError::UndefinedConstructor(constructor.clone()))?
+                        .find(|variant| variant.name == branch.constructor)
+                        .ok_or(CompilationError::UndefinedConstructor(
+                            branch.parser_metadata.clone(),
+                            branch.constructor.clone(),
+                        ))?
                         .components
                         .clone();
-                    let new_path = scope.then(*index, constructor.clone());
-                    for (component, tipo) in components.iter().zip_eq(component_types.iter()) {
-                        root_container.declare(&new_path, &component.name, material.wrap(tipo))?;
-                        root_container.define(&new_path, &component.name)?;
+                    let new_path = scope.then(*index, branch.constructor.clone());
+                    for (component, tipo) in branch.components.iter().zip_eq(component_types.iter())
+                    {
+                        root_container.declare(
+                            &new_path,
+                            &component.name,
+                            material.wrap(tipo),
+                            &branch.parser_metadata,
+                        )?;
+                        root_container.define(
+                            &new_path,
+                            &component.name,
+                            &branch.parser_metadata,
+                        )?;
                     }
                 }
             }
@@ -586,13 +692,17 @@ impl FlattenedFunction {
                     material,
                     scope: path,
                     statement,
+                    parser_metadata,
                 } = &mut self.statements[index];
                 let material = *material;
                 match statement {
-                    Statement::VariableDeclaration { name, tipo, .. } => {
-                        root_container.declare(path, name, tipo.clone())?;
+                    StatementVariant::VariableDeclaration { name, tipo, .. } => {
+                        root_container
+                            .type_set
+                            .check_type_exists(tipo, parser_metadata)?;
+                        root_container.declare(path, name, tipo.clone(), parser_metadata)?;
                     }
-                    Statement::Equality { left, right } => {
+                    StatementVariant::Equality { left, right } => {
                         right.resolve_defined(root_container, path, material, false)?;
                         left.resolve_definition_top_down(
                             right.get_type(),
@@ -601,7 +711,7 @@ impl FlattenedFunction {
                             material,
                         )?;
                     }
-                    Statement::Reference { reference, data } => {
+                    StatementVariant::Reference { reference, data } => {
                         data.resolve_defined(root_container, path, material, false)?;
                         reference.resolve_definition_top_down(
                             &Type::Reference(Arc::new(data.get_type().clone())),
@@ -610,16 +720,18 @@ impl FlattenedFunction {
                             material,
                         )?;
                     }
-                    Statement::Dereference { data, reference } => {
+                    StatementVariant::Dereference { data, reference } => {
                         reference.resolve_defined(root_container, path, material, false)?;
                         data.resolve_definition_top_down(
-                            reference.get_type().get_reference_type(material)?,
+                            reference
+                                .get_type()
+                                .get_reference_type(material, &reference.parser_metadata)?,
                             root_container,
                             path,
                             material,
                         )?;
                     }
-                    Statement::EmptyUnderConstructionArray { array, elem_type } => {
+                    StatementVariant::EmptyUnderConstructionArray { array, elem_type } => {
                         array.resolve_definition_top_down(
                             &Type::UnderConstructionArray(Arc::new(elem_type.clone())),
                             root_container,
@@ -627,7 +739,7 @@ impl FlattenedFunction {
                             material,
                         )?;
                     }
-                    Statement::UnderConstructionArrayPrepend {
+                    StatementVariant::UnderConstructionArrayPrepend {
                         new_array,
                         elem,
                         old_array,
@@ -639,6 +751,7 @@ impl FlattenedFunction {
                             &Type::UnderConstructionArray(Arc::new(elem.get_type().clone())),
                         ) {
                             return Err(CompilationError::UnexpectedType(
+                                parser_metadata.clone(),
                                 old_array.get_type().clone(),
                                 Type::UnderConstructionArray(Arc::new(elem.get_type().clone())),
                             ));
@@ -650,7 +763,7 @@ impl FlattenedFunction {
                             material,
                         )?;
                     }
-                    Statement::ArrayFinalization {
+                    StatementVariant::ArrayFinalization {
                         finalized,
                         under_construction,
                     } => {
@@ -664,7 +777,10 @@ impl FlattenedFunction {
                             &Type::Array(Arc::new(
                                 under_construction
                                     .get_type()
-                                    .get_under_construction_array_type(material)?
+                                    .get_under_construction_array_type(
+                                        material,
+                                        &under_construction.parser_metadata,
+                                    )?
                                     .clone(),
                             )),
                             root_container,
@@ -672,14 +788,19 @@ impl FlattenedFunction {
                             material,
                         )?;
                     }
-                    Statement::ArrayAccess { elem, array, index } => {
+                    StatementVariant::ArrayAccess { elem, array, index } => {
                         index.resolve_defined(root_container, path, material, false)?;
                         if !material.same_type(index.get_type(), &Type::Field) {
-                            return Err(CompilationError::NotAnIndex(elem.get_type().clone()));
+                            return Err(CompilationError::NotAnIndex(
+                                elem.parser_metadata.clone(),
+                                elem.get_type().clone(),
+                            ));
                         }
                         array.resolve_defined(root_container, path, material, false)?;
                         elem.resolve_definition_top_down(
-                            array.get_type().get_array_type(material)?,
+                            array
+                                .get_type()
+                                .get_array_type(material, &array.parser_metadata)?,
                             root_container,
                             &path,
                             material,
@@ -693,43 +814,32 @@ impl FlattenedFunction {
                     scope: path,
                     function_name,
                     arguments,
+                    parser_metadata,
                 } = &mut self.function_calls[index];
                 let material = *material;
 
-                let inline = root_container
+                let callee = root_container
                     .function_set
-                    .get_function(function_name)?
-                    .function
-                    .inline;
+                    .get_function(function_name, parser_metadata)?
+                    .clone();
+
+                let inline = callee.function.inline;
 
                 for i in stage.start..stage.mid {
                     let argument = &mut arguments[i];
                     argument.resolve_defined(root_container, path, material, inline)?;
-                    if !material.same_type(
-                        argument.get_type(),
-                        root_container
-                            .function_set
-                            .get_function(function_name)?
-                            .argument_type(i),
-                    ) {
+                    if !material.same_type(argument.get_type(), callee.argument_type(i)) {
                         return Err(CompilationError::IncorrectTypeForArgument(
+                            argument.parser_metadata.clone(),
                             function_name.clone(),
                             i,
                             argument.get_type().clone(),
-                            root_container
-                                .function_set
-                                .get_function(function_name)?
-                                .argument_type(i)
-                                .clone(),
+                            callee.argument_type(i).clone(),
                         ));
                     }
                 }
                 for i in stage.mid..stage.end {
-                    let expected_type = root_container
-                        .function_set
-                        .get_function(function_name)?
-                        .argument_type(i)
-                        .clone();
+                    let expected_type = callee.argument_type(i).clone();
                     let argument = &mut arguments[i];
                     argument.resolve_definition_top_down(
                         &expected_type,
@@ -751,19 +861,24 @@ impl FlattenedFunction {
         match atom {
             Atom::Match(flat_index) => {
                 let FlatMatch {
-                    material: _,
+                    check_material: _,
                     scope,
                     index,
                     value,
                     branches,
+                    parser_metadata: _,
                 } = &self.matches[flat_index];
 
                 value.resolve_representation(root_container, scope)?;
-                for (constructor, components) in branches {
-                    let new_path = scope.then(*index, constructor.clone());
-                    for component in components.iter() {
+                for branch in branches {
+                    let new_path = scope.then(*index, branch.constructor.clone());
+                    for component in branch.components.iter() {
                         if component.represents {
-                            root_container.represent(&new_path, &component.name)?;
+                            root_container.represent(
+                                &new_path,
+                                &component.name,
+                                &branch.parser_metadata,
+                            )?;
                         }
                     }
                 }
@@ -773,41 +888,42 @@ impl FlattenedFunction {
                     material: _,
                     scope: path,
                     statement,
+                    parser_metadata,
                 } = &self.statements[index];
                 match statement {
-                    Statement::VariableDeclaration {
+                    StatementVariant::VariableDeclaration {
                         name, represents, ..
                     } => {
                         if *represents {
-                            root_container.represent(path, name)?;
+                            root_container.represent(path, name, parser_metadata)?;
                         }
                     }
-                    Statement::Equality { left, right: _ } => {
+                    StatementVariant::Equality { left, right: _ } => {
                         left.resolve_representation(root_container, path)?;
                     }
-                    Statement::Reference { reference, data: _ } => {
+                    StatementVariant::Reference { reference, data: _ } => {
                         reference.resolve_representation(root_container, path)?;
                     }
-                    Statement::Dereference { data, reference: _ } => {
+                    StatementVariant::Dereference { data, reference: _ } => {
                         data.resolve_representation(root_container, path)?;
                     }
-                    Statement::EmptyUnderConstructionArray { array, .. } => {
+                    StatementVariant::EmptyUnderConstructionArray { array, .. } => {
                         array.resolve_representation(root_container, path)?;
                     }
-                    Statement::UnderConstructionArrayPrepend {
+                    StatementVariant::UnderConstructionArrayPrepend {
                         new_array,
                         elem: _,
                         old_array: _,
                     } => {
                         new_array.resolve_representation(root_container, path)?;
                     }
-                    Statement::ArrayFinalization {
+                    StatementVariant::ArrayFinalization {
                         finalized,
                         under_construction: _,
                     } => {
                         finalized.resolve_representation(root_container, path)?;
                     }
-                    Statement::ArrayAccess {
+                    StatementVariant::ArrayAccess {
                         elem,
                         array: _,
                         index: _,
@@ -822,10 +938,11 @@ impl FlattenedFunction {
                     scope: path,
                     function_name,
                     arguments,
+                    parser_metadata,
                 } = &self.function_calls[index];
                 let inline = root_container
                     .function_set
-                    .get_function(function_name)?
+                    .get_function(function_name, parser_metadata)?
                     .function
                     .inline;
 

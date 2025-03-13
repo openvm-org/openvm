@@ -3,11 +3,14 @@ use std::{collections::HashMap, mem::take};
 use super::{
     file2_tree::{ExpressionContainer, ScopePath},
     file3::{Atom, FlattenedFunction},
-    ir::{Expression, Statement},
+    ir::{Expression, StatementVariant},
 };
-use crate::folder1::{
-    file3::{FlatFunctionCall, FlatMatch, FlatStatement, RepresentationOrder},
-    ir::Material,
+use crate::{
+    folder1::{
+        file3::{FlatFunctionCall, FlatMatch, FlatStatement, RepresentationOrder},
+        ir::Material,
+    },
+    parser::metadata::ParserMetadata,
 };
 
 pub struct Renamer {
@@ -39,6 +42,7 @@ impl FlattenedFunction {
                 scope,
                 function_name,
                 arguments,
+                parser_metadata: _,
             } = &function_call;
             // hacky, would be nice some other way
             if function_name == &self.name {
@@ -171,10 +175,11 @@ impl FlattenedFunction {
                 self.statements.push(FlatStatement {
                     material,
                     scope: path_prefix.clone(),
-                    statement: Statement::Equality {
+                    statement: StatementVariant::Equality {
                         left: argument_expression,
                         right: argument_fulfillments[i].clone(),
                     },
+                    parser_metadata: ParserMetadata::default(),
                 });
                 self.atoms_staged[stage.index].insert(0, Atom::Statement(index));
                 atoms_staged_representation[stage.index].insert(0, Atom::Statement(index));
@@ -188,11 +193,12 @@ impl FlattenedFunction {
                 self.statements.push(FlatStatement {
                     material,
                     scope: path_prefix.clone(),
-                    statement: Statement::VariableDeclaration {
+                    statement: StatementVariant::VariableDeclaration {
                         name: self.arguments[i].name.clone(),
                         tipo: self.arguments[i].tipo.clone(),
                         represents: false,
                     },
+                    parser_metadata: ParserMetadata::default(),
                 });
                 let mut argument_expression = ExpressionContainer::new(Expression::Variable {
                     name: self.arguments[i].name.clone(),
@@ -224,29 +230,30 @@ impl FlatStatement {
             material,
             scope,
             statement,
+            parser_metadata: _,
         } = self;
         *material &= imposed_material;
         scope.prepend(path_prefix, path_offset);
         match statement {
-            Statement::VariableDeclaration { name, .. } => {
+            StatementVariant::VariableDeclaration { name, .. } => {
                 renamer.rename(name);
             }
-            Statement::Equality { left, right } => {
+            StatementVariant::Equality { left, right } => {
                 left.inline(renamer);
                 right.inline(renamer);
             }
-            Statement::Reference { reference, data } => {
+            StatementVariant::Reference { reference, data } => {
                 reference.inline(renamer);
                 data.inline(renamer);
             }
-            Statement::Dereference { data, reference } => {
+            StatementVariant::Dereference { data, reference } => {
                 data.inline(renamer);
                 reference.inline(renamer);
             }
-            Statement::EmptyUnderConstructionArray { array, .. } => {
+            StatementVariant::EmptyUnderConstructionArray { array, .. } => {
                 array.inline(renamer);
             }
-            Statement::UnderConstructionArrayPrepend {
+            StatementVariant::UnderConstructionArrayPrepend {
                 new_array,
                 elem,
                 old_array,
@@ -255,14 +262,14 @@ impl FlatStatement {
                 elem.inline(renamer);
                 old_array.inline(renamer);
             }
-            Statement::ArrayFinalization {
+            StatementVariant::ArrayFinalization {
                 finalized,
                 under_construction,
             } => {
                 finalized.inline(renamer);
                 under_construction.inline(renamer);
             }
-            Statement::ArrayAccess { elem, array, index } => {
+            StatementVariant::ArrayAccess { elem, array, index } => {
                 elem.inline(renamer);
                 array.inline(renamer);
                 index.inline(renamer);
@@ -280,19 +287,20 @@ impl FlatMatch {
         imposed_material: Material,
     ) {
         let FlatMatch {
-            material,
+            check_material: material,
             scope,
             index,
             value,
             branches,
+            parser_metadata: _,
         } = self;
         scope.prepend(path_prefix, path_offset);
         *material &= imposed_material;
         value.inline(renamer);
         *index += path_offset;
 
-        for (_, components) in branches.iter_mut() {
-            for component in components.iter_mut() {
+        for branch in branches.iter_mut() {
+            for component in branch.components.iter_mut() {
                 renamer.rename(&mut component.name);
             }
         }
@@ -312,6 +320,7 @@ impl FlatFunctionCall {
             scope,
             function_name: _,
             arguments,
+            parser_metadata: _,
         } = self;
         *material &= imposed_material;
         scope.prepend(path_prefix, path_offset);

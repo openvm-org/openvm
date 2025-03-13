@@ -8,6 +8,7 @@ use crate::{
         stage1::Stage2Program,
         type_resolution::TypeSet,
     },
+    parser::metadata::ParserMetadata,
 };
 
 pub fn rust_tracker(types_in_memory: Vec<Type>) -> TokenStream {
@@ -54,10 +55,7 @@ impl AlgebraicTypeDeclaration {
             });
         }
 
-        let eq_derive = if Type::NamedType(self.name.clone())
-            .contains_reference(type_set, false)
-            .unwrap()
-        {
+        let eq_derive = if Type::NamedType(self.name.clone()).contains_reference(type_set, false) {
             quote! {}
         } else {
             quote! {PartialEq, Eq, }
