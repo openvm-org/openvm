@@ -26,7 +26,7 @@ impl Default for CompilerOptions {
     fn default() -> Self {
         CompilerOptions {
             word_size: 8,
-            enable_cycle_tracker: false,
+            enable_cycle_tracker: true,
         }
     }
 }

@@ -48,17 +48,10 @@ where
 {
     builder.cycle_tracker_start("verify-query");
 
-    println!("index_bits");
-    builder
-        .range(0, index_bits.len())
-        .for_each(|i_vec, builder| {
-            let i = i_vec[0];
-            let bit = builder.get(&index_bits, i);
-            builder.print_v(bit);
-        });
-
     let folded_eval: Ext<C::F, C::EF> = builder.eval(C::F::ZERO);
-    let two_adic_generator_f = config.get_two_adic_generator(builder, log_max_height);
+    let subgroup_size: Var<C::N> =
+        builder.eval(log_max_height + RVar::from(config.arity_bits) - C::N::ONE);
+    let two_adic_generator_f = config.get_two_adic_generator(builder, subgroup_size);
 
     let two_adic_gen_ext = two_adic_generator_f.to_operand().symbolic();
     let two_adic_generator_ef: Ext<_, _> = builder.eval(two_adic_gen_ext);
@@ -67,7 +60,7 @@ where
 
     let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
 
-    let log_folded_height = builder.eval_expr(log_max_height);
+    let log_folded_height: Var<C::N> = builder.eval(log_max_height);
 
     let get_idx = |builder: &mut Builder<C>, start: Var<C::N>, end: Var<C::N>| {
         let idx: Var<C::N> = builder.eval(C::N::ZERO);
@@ -95,7 +88,6 @@ where
     let add_one = |builder: &mut Builder<C>, counter: &Array<C, Var<C::N>>| {
         let zero = builder.eval(C::N::ZERO);
         let one = builder.eval(C::N::ONE);
-        // let two = builder.eval(C::N::TWO);
 
         let carry_over: Var<C::N> = builder.eval(C::N::ONE);
         builder.range(0, counter.len()).for_each(|k_vec, builder| {
@@ -129,17 +121,67 @@ where
         ret
     };
 
+    // This returns 1 if the provided value is between [-log_blowup - log_final_poly_len, 0)
+    let check_if_negative = |builder: &mut Builder<C>, val: Var<C::N>| {
+        let threshold: Var<C::N> =
+            builder.eval(RVar::from(config.log_blowup + config.log_final_poly_len));
+        let ret: Var<C::N> = builder.eval(C::N::ZERO);
+        builder.range(0, threshold).for_each(|i_vec, builder| {
+            builder.assign(&val, val + C::N::ONE);
+            builder.if_eq(val, C::N::ZERO).then(|builder| {
+                builder.assign(&ret, C::N::ONE);
+            });
+        });
+        ret
+    };
+
+    // Returns base ^ (ls_part || ms_part), where both parts are big endian
+    let get_power = |builder: &mut Builder<C>,
+                     base: Ext<C::F, C::EF>,
+                     ls_part: &Array<C, Var<C::N>>,
+                     ms_part: &Array<C, Var<C::N>>,
+                     ms_len: Var<C::N>| {
+        let result: Ext<C::F, C::EF> = builder.eval(C::F::ONE);
+        let power_f: Ext<C::F, C::EF> = builder.eval(base);
+        let one_var: Ext<C::F, C::EF> = builder.eval(C::F::ONE);
+
+        iter_zip!(builder, ls_part).for_each(|ptr_vec, builder| {
+            let bit = builder.iter_ptr_get(ls_part, ptr_vec[0]);
+            builder.assign(&result, result * result);
+            let mul = builder.select_ef(bit, power_f, one_var);
+            builder.assign(&result, result * mul);
+        });
+
+        builder.range(0, ms_len).for_each(|i_vec, builder| {
+            let i = i_vec[0];
+            let bit = builder.get(ms_part, i);
+            builder.assign(&result, result * result);
+            let mul = builder.select_ef(bit, power_f, one_var);
+            builder.assign(&result, result * mul);
+        });
+
+        result
+    };
+
     let index_bits_offset: Var<C::N> = builder.eval(C::N::ZERO);
 
     builder
         .range(0, commit_phase_commits.len())
         .for_each(|i_vec, builder| {
             let i = i_vec[0];
+            let i_var: Var<C::N> = builder.eval(i);
+
             let cur_arity_bits: Var<C::N> = builder.eval(RVar::from(config.arity_bits));
 
             let last_round_idx: Var<C::N> = builder.eval(commit_phase_commits.len() - C::N::ONE);
             builder.if_eq(i, last_round_idx).then(|builder| {
-                builder.assign(&cur_arity_bits, log_folded_height);
+                // Here, we want to minimize cur_arity_bits with log_folded_height
+                let next_log_folded_height: Var<C::N> =
+                    builder.eval(log_folded_height - cur_arity_bits);
+                let is_negative = check_if_negative(builder, next_log_folded_height);
+                builder.if_eq(is_negative, C::N::ONE).then(|builder| {
+                    builder.assign(&cur_arity_bits, log_folded_height);
+                });
             });
 
             let beta = builder.get(betas, i);
@@ -230,28 +272,24 @@ where
                 builder.assign(&cur_len, cur_len + cur_len);
             });
 
-            builder.range(1, cur_arity_bits).for_each(|i_vec, builder| {
+            builder.range(0, cur_arity_bits).for_each(|i_vec, builder| {
                 let i = i_vec[0];
 
-                let log_new_folded_row_len: Var<C::N> = builder.eval(cur_arity_bits - i);
+                builder.assign(&log_folded_height, log_folded_height - C::N::ONE);
+
+                let log_new_folded_row_len: Var<C::N> =
+                    builder.eval(cur_arity_bits - i - C::N::ONE);
                 let counter = builder.dyn_array(log_new_folded_row_len);
 
                 let new_folded_row_len = builder.get(&folded_lens, i);
                 let new_folded_row = builder.dyn_array(new_folded_row_len);
-
-                // TODO[osama]: you might need to move this to the bottom
-                builder.assign(&base, base * base);
 
                 builder
                     .range(0, new_folded_row_len)
                     .for_each(|j_vec, builder| {
                         let j = j_vec[0];
 
-                        // calculate power
-                        let x: Ext<C::F, C::EF> = builder.eval(C::F::ONE);
-                        let x = builder.exp_bits_big_endian(x, &counter);
-                        // TODO[osama]: factor this out
-                        let x = builder.exp_bits_big_endian(x, &index_row);
+                        let x = get_power(builder, base, &counter, &index_row, log_folded_height);
 
                         let k_0: Var<C::N> = builder.eval(j.clone() + j.clone());
                         let k_1: Var<C::N> = builder.eval(k_0 + C::N::ONE);
@@ -271,6 +309,8 @@ where
                         // increment counter
                         add_one(builder, &counter);
                     });
+
+                builder.assign(&base, base * base);
 
                 builder.assign(&folded_row, new_folded_row);
                 builder.assign(&beta, beta * beta);
@@ -295,6 +335,9 @@ where
                             })
                     });
             });
+
+            let new_folded_eval = builder.get(&folded_row, 0);
+            builder.assign(&folded_eval, new_folded_eval);
 
             // TODO[osama]: maybe figure out how to move this
             verify_batch::<C>(

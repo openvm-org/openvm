@@ -488,6 +488,7 @@ fn air_test_with_compress_poseidon2(
             log_final_poly_len: 0,
             num_queries: 2,
             proof_of_work_bits: 0,
+            arity_bits: 1,
         }
     } else {
         standard_fri_params_with_100_bits_conjectured_security(3)
