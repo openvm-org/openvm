@@ -4,7 +4,7 @@ use derivative::Derivative;
 use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
     arch::{VirtualMachine, VmConfig},
-    system::program::trace::VmCommittedExe,
+    system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
@@ -54,6 +54,7 @@ pub struct AppProvingKey<VC> {
 pub struct AppVerifyingKey {
     pub fri_params: FriParameters,
     pub app_vm_vk: MultiStarkVerifyingKey<SC>,
+    pub memory_dimensions: MemoryDimensions,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -129,6 +130,12 @@ where
         AppVerifyingKey {
             fri_params: self.app_vm_pk.fri_params,
             app_vm_vk: self.app_vm_pk.vm_pk.get_vk(),
+            memory_dimensions: self
+                .app_vm_pk
+                .vm_config
+                .system()
+                .memory_config
+                .memory_dimensions(),
         }
     }
 

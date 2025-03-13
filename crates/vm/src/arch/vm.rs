@@ -27,7 +27,10 @@ use crate::{
     arch::{hasher::poseidon2::vm_poseidon2_hasher, segment::ExecutionSegment},
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{merkle::MemoryMerklePvs, paged_vec::AddressMap, MemoryImage, CHUNK},
+        memory::{
+            merkle::MemoryMerklePvs, paged_vec::AddressMap,
+            tree::public_values::UserPublicValuesProofError, MemoryImage, CHUNK,
+        },
         program::trace::VmCommittedExe,
     },
 };
@@ -459,6 +462,9 @@ pub enum VmVerificationError {
 
     #[error("stark verification error: {0}")]
     StarkError(#[from] VerificationError),
+
+    #[error("user public values proof error: {0}")]
+    UserPublicValuesError(#[from] UserPublicValuesProofError),
 }
 
 pub struct VirtualMachine<SC: StarkGenericConfig, E, VC> {

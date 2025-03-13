@@ -3,9 +3,7 @@ use std::{fs::read, path::PathBuf};
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use openvm_circuit::arch::{
-    instructions::exe::VmExe, DefaultSegmentationStrategy, VirtualMachine, VmConfig,
-};
+use openvm_circuit::arch::{instructions::exe::VmExe, DefaultSegmentationStrategy, VmConfig};
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
@@ -18,7 +16,7 @@ use openvm_sdk::{
     prover::{
         vm::local::VmLocalProver, AppProver, LeafProvingController, DEFAULT_NUM_CHILDREN_LEAF,
     },
-    StdIn,
+    Sdk, StdIn,
 };
 use openvm_stark_backend::utils::metrics_span;
 use openvm_stark_sdk::{
@@ -26,7 +24,6 @@ use openvm_stark_sdk::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         FriParameters,
     },
-    engine::StarkFriEngine,
     openvm_stark_backend::Chip,
     p3_baby_bear::BabyBear,
 };
@@ -216,8 +213,6 @@ where
     VC::Periphery: Chip<SC>,
 {
     let bench_name = bench_name.to_string();
-    let engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params.fri_params);
-    let vm = VirtualMachine::new(engine, app_config.app_vm_config.clone());
     // 1. Generate proving key from config.
     let app_pk = info_span!("keygen", group = &bench_name).in_scope(|| {
         metrics_span("keygen_time_ms", || {
@@ -233,11 +228,12 @@ where
     // 3. Executes runtime
     // 4. Generate trace
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
-    let vk = app_pk.app_vm_pk.vm_pk.get_vk();
+    let app_vk = app_pk.get_app_vk();
     let prover = AppProver::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name);
     let app_proof = prover.generate_app_proof(input_stream);
     // 6. Verify STARK proofs, including boundary conditions.
-    vm.verify(&vk, app_proof.per_segment.clone())
+    let sdk = Sdk;
+    sdk.verify_app_proof(&app_vk, &app_proof)
         .expect("Verification failed");
     if let Some(leaf_vm_config) = leaf_vm_config {
         let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);

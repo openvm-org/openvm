@@ -11,10 +11,13 @@ use openvm_build::{
 };
 use openvm_circuit::{
     arch::{
-        instructions::exe::VmExe, verify_segments, ExecutionError, VmConfig, VmExecutor,
-        VmVerificationError,
+        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, verify_segments,
+        ExecutionError, VerifiedExecutionPayload, VmConfig, VmExecutor, VmVerificationError,
     },
-    system::{memory::tree::public_values::extract_public_values, program::trace::VmCommittedExe},
+    system::{
+        memory::{tree::public_values::extract_public_values, CHUNK},
+        program::trace::VmCommittedExe,
+    },
 };
 use openvm_native_recursion::{
     halo2::{
@@ -67,6 +70,20 @@ pub type C = InnerConfig;
 pub type F = BabyBear;
 pub type RootSC = BabyBearPoseidon2RootConfig;
 pub type NonRootCommittedExe = VmCommittedExe<SC>;
+
+/// The payload of a verified guest VM execution with user public values extracted and
+/// verified.
+pub struct VerifiedContinuationVmPayload {
+    /// The Merklelized hash of:
+    /// - Program code commitment (commitment of the cached trace)
+    /// - Merkle root of the initial memory
+    /// - Starting program counter (`pc_start`)
+    ///
+    /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
+    /// and a cryptographic compression function (for internal nodes).
+    pub exe_commit: [F; CHUNK],
+    pub user_public_values: Vec<F>,
+}
 
 pub struct Sdk;
 
@@ -168,10 +185,22 @@ impl Sdk {
         &self,
         app_vk: &AppVerifyingKey,
         proof: &ContinuationVmProof<SC>,
-    ) -> Result<(), VmVerificationError> {
+    ) -> Result<VerifiedContinuationVmPayload, VmVerificationError> {
         let engine = BabyBearPoseidon2Engine::new(app_vk.fri_params);
-        let exe_commit = verify_segments(&engine, &app_vk.app_vm_vk, &proof.per_segment)?;
-        Ok(())
+        let VerifiedExecutionPayload {
+            exe_commit,
+            final_memory_root,
+        } = verify_segments(&engine, &app_vk.app_vm_vk, &proof.per_segment)?;
+
+        let hasher = vm_poseidon2_hasher();
+        proof
+            .user_public_values
+            .verify(&hasher, app_vk.memory_dimensions, final_memory_root)?;
+
+        Ok(VerifiedContinuationVmPayload {
+            exe_commit,
+            user_public_values: proof.user_public_values.public_values.clone(),
+        })
     }
 
     pub fn verify_app_proof_without_continuations(

@@ -61,12 +61,7 @@ impl<SC: StarkGenericConfig> LeafVmVerifierInput<SC> {
 impl<F: Clone> UserPublicValuesRootProof<F> {
     pub fn extract(pvs_proof: &UserPublicValuesProof<{ DIGEST_SIZE }, F>) -> Self {
         Self {
-            sibling_hashes: pvs_proof
-                .proof
-                .clone()
-                .into_iter()
-                .map(|(_, hash)| hash)
-                .collect(),
+            sibling_hashes: pvs_proof.proof.clone(),
             public_values_commit: pvs_proof.public_values_commit.clone(),
         }
     }
