@@ -43,6 +43,8 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC>
 where
     Val<SC>: PrimeField32,
 {
+    /// Creates [VmCommittedExe] from [VmExe] by using `pcs` to commit to the
+    /// program code as a _cached trace_ matrix.
     pub fn commit(exe: VmExe<Val<SC>>, pcs: &SC::Pcs) -> Self {
         let cached_trace = generate_cached_trace(&exe.program);
         let domain = pcs.natural_domain_for_degree(cached_trace.height());
@@ -60,6 +62,18 @@ where
         self.committed_program.commitment.clone()
     }
 
+    /// Computes a commitment to [VmCommittedExe]. This is a Merklelized hash of:
+    /// - Program code commitment (commitment of the cached trace)
+    /// - Merkle root of the initial memory
+    /// - Starting program counter (`pc_start`)
+    ///
+    /// The program code commitment is itself a commitment (via the proof system PCS) to
+    /// the program code.
+    ///
+    /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
+    /// and a cryptographic compression function (for internal nodes).
+    ///
+    /// **Note**: This function recomputes the Merkle tree for the initial memory image.
     pub fn compute_exe_commit(&self, memory_config: &MemoryConfig) -> Com<SC>
     where
         Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
@@ -123,6 +137,13 @@ impl<F: PrimeField64> ProgramChip<F> {
     }
 }
 
+/// Computes a Merklelized hash of:
+/// - Program code commitment (commitment of the cached trace)
+/// - Merkle root of the initial memory
+/// - Starting program counter (`pc_start`)
+///
+/// The Merklelization uses [Poseidon2Hasher] as a cryptographic hash function (for the leaves)
+/// and a cryptographic compression function (for internal nodes).
 pub fn compute_exe_commit<F: PrimeField32>(
     hasher: &Poseidon2Hasher<F>,
     program_commit: &[F; CHUNK],
