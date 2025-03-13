@@ -610,14 +610,30 @@ where
     engine.verify(vk, proof)
 }
 
+/// The payload of a verified guest VM execution.
+pub struct VerifiedExecutionPayload<F> {
+    /// The Merklelized hash of:
+    /// - Program code commitment (commitment of the cached trace)
+    /// - Merkle root of the initial memory
+    /// - Starting program counter (`pc_start`)
+    ///
+    /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
+    /// and a cryptographic compression function (for internal nodes).
+    pub exe_commit: [F; CHUNK],
+    /// The Merkle root of the final memory state.
+    pub final_memory_root: [F; CHUNK],
+}
+
 /// Verify segment proofs with boundary condition checks for continuation between segments.
 ///
 /// Assumption:
 /// - `vk` is a valid verifying key of a VM circuit.
 ///
-/// Return the commitment to the [VmCommittedExe] extracted from `proofs`.
-/// It is the responsibility of the caller to check that the returned commitment matches
-/// the VM executable that the VM was supposed to execute.
+/// Returns:
+/// - The commitment to the [VmCommittedExe] extracted from `proofs`.
+///   It is the responsibility of the caller to check that the returned commitment matches
+///   the VM executable that the VM was supposed to execute.
+/// - The Merkle root of the final memory state.
 ///
 /// ## Note
 /// This function does not extract or verify any user public values from the final memory state.
@@ -628,12 +644,12 @@ pub fn verify_segments<SC, E>(
     engine: &E,
     vk: &MultiStarkVerifyingKey<SC>,
     proofs: &[Proof<SC>],
-) -> Result<Com<SC>, VmVerificationError>
+) -> Result<VerifiedExecutionPayload<Val<SC>>, VmVerificationError>
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC>,
     Val<SC>: PrimeField32,
-    Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
+    Com<SC>: AsRef<[Val<SC>; CHUNK]>,
 {
     if proofs.is_empty() {
         return Err(VmVerificationError::ProofNotFound);
@@ -751,5 +767,8 @@ where
         initial_memory_root.as_ref().unwrap(),
         start_pc.unwrap(),
     );
-    Ok(Com::<SC>::from(exe_commit))
+    Ok(VerifiedExecutionPayload {
+        exe_commit,
+        final_memory_root: prev_final_memory_root.unwrap(),
+    })
 }

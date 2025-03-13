@@ -11,8 +11,8 @@ use openvm_build::{
 };
 use openvm_circuit::{
     arch::{
-        instructions::exe::VmExe, verify_segments, ExecutionError, VirtualMachine, VmConfig,
-        VmExecutor, VmVerificationError,
+        instructions::exe::VmExe, verify_segments, ExecutionError, VmConfig, VmExecutor,
+        VmVerificationError,
     },
     system::{memory::tree::public_values::extract_public_values, program::trace::VmCommittedExe},
 };
@@ -168,11 +168,7 @@ impl Sdk {
         &self,
         app_vk: &AppVerifyingKey,
         proof: &ContinuationVmProof<SC>,
-    ) -> Result<(), VmVerificationError>
-    where
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
-    {
+    ) -> Result<(), VmVerificationError> {
         let engine = BabyBearPoseidon2Engine::new(app_vk.fri_params);
         let exe_commit = verify_segments(&engine, &app_vk.app_vm_vk, &proof.per_segment)?;
         Ok(())
