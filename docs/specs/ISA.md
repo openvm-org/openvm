@@ -34,7 +34,7 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | `as_offset`         | The index of the first writable address space.                     | Fixed to 1.                                                           |
 | `as_height`         | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `as_height <= F::bits() - 2`               |
 | `pointer_max_bits`  | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`        |
-| `num_public_values` | The number of user public values.                                  | Configurable.                                                         |
+| `num_public_values` | The number of user public values.                                  | Configurable, must equal `8` times a power of two. In particular, it must be nonzero. |
 
 We explain these parameters in subsequent sections.
 
