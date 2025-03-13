@@ -7,11 +7,11 @@ use crate::{folder1::error::CompilationError, parser::metadata::ParserMetadata};
 pub enum Type {
     Field,
     NamedType(String),
-    Reference(Arc<Type>),
-    Array(Arc<Type>),
-    UnderConstructionArray(Arc<Type>),
-    Unmaterialized(Arc<Type>),
-    ConstArray(Arc<Type>, usize),
+    Reference(Box<Type>),
+    Array(Box<Type>),
+    UnderConstructionArray(Box<Type>),
+    Unmaterialized(Box<Type>),
+    ConstArray(Box<Type>, usize),
 }
 
 pub const BOOLEAN_TYPE_NAME: &str = "Bool";
@@ -309,7 +309,7 @@ impl Material {
     pub fn wrap(&self, tipo: &Type) -> Type {
         match self {
             Material::Materialized => tipo.clone(),
-            Material::Dematerialized => Type::Unmaterialized(Arc::new(tipo.clone())),
+            Material::Dematerialized => Type::Unmaterialized(Box::new(tipo.clone())),
         }
     }
 }

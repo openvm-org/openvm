@@ -714,7 +714,7 @@ impl FlattenedFunction {
                     StatementVariant::Reference { reference, data } => {
                         data.resolve_defined(root_container, path, material, false)?;
                         reference.resolve_definition_top_down(
-                            &Type::Reference(Arc::new(data.get_type().clone())),
+                            &Type::Reference(Box::new(data.get_type().clone())),
                             root_container,
                             path,
                             material,
@@ -733,7 +733,7 @@ impl FlattenedFunction {
                     }
                     StatementVariant::EmptyUnderConstructionArray { array, elem_type } => {
                         array.resolve_definition_top_down(
-                            &Type::UnderConstructionArray(Arc::new(elem_type.clone())),
+                            &Type::UnderConstructionArray(Box::new(elem_type.clone())),
                             root_container,
                             path,
                             material,
@@ -748,12 +748,12 @@ impl FlattenedFunction {
                         elem.resolve_defined(root_container, path, material, false)?;
                         if !material.same_type(
                             old_array.get_type(),
-                            &Type::UnderConstructionArray(Arc::new(elem.get_type().clone())),
+                            &Type::UnderConstructionArray(Box::new(elem.get_type().clone())),
                         ) {
                             return Err(CompilationError::UnexpectedType(
                                 parser_metadata.clone(),
                                 old_array.get_type().clone(),
-                                Type::UnderConstructionArray(Arc::new(elem.get_type().clone())),
+                                Type::UnderConstructionArray(Box::new(elem.get_type().clone())),
                             ));
                         }
                         new_array.resolve_definition_top_down(
@@ -774,7 +774,7 @@ impl FlattenedFunction {
                             false,
                         )?;
                         finalized.resolve_definition_top_down(
-                            &Type::Array(Arc::new(
+                            &Type::Array(Box::new(
                                 under_construction
                                     .get_type()
                                     .get_under_construction_array_type(

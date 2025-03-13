@@ -7,8 +7,8 @@ use crate::{
             Program, Statement, StatementVariant, Type,
         },
         stage1::stage1,
-    },
-    parser::metadata::ParserMetadata,
+    }
+    ,
     transpiled_fibonacci::{isize_to_field_elem, TLFunction_fibonacci, Tracker},
 };
 
@@ -20,12 +20,12 @@ pub mod transpiled_fibonacci;
 
 fn main() {
     println!("Hello, world!");
-    // compile_and_transpile_fibonacci();
-    test_fibonacci();
+    compile_and_transpile_fibonacci();
+    // test_fibonacci();
 
-    let x = true;
+    /*let x = true;
     let y = false;
-    let z = x | y;
+    let z = x | y;*/
 
     //let mut x = Box::new(Some(vec![]));
     //x.as_mut().as_mut().unwrap().push(1);

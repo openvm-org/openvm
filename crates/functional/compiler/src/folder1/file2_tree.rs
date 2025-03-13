@@ -728,7 +728,7 @@ impl ExpressionContainer {
                     Material::Dematerialized,
                     can_represent,
                 )?;
-                self.tipo = Some(Type::Unmaterialized(Arc::new(value.tipo.clone().unwrap())));
+                self.tipo = Some(Type::Unmaterialized(Box::new(value.tipo.clone().unwrap())));
             }
             Expression::Eq { left, right } => {
                 if material == Material::Materialized {
@@ -760,7 +760,7 @@ impl ExpressionContainer {
                 function_container
                     .type_set
                     .check_type_exists(elem_type, &self.parser_metadata)?;
-                self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), 0));
+                self.tipo = Some(Type::ConstArray(Box::new(elem_type.clone()), 0));
             }
             Expression::ConstArray { elements } => {
                 if elements.is_empty() {
@@ -783,7 +783,7 @@ impl ExpressionContainer {
                         ));
                     }
                 }
-                self.tipo = Some(Type::ConstArray(Arc::new(elem_type), elements.len()));
+                self.tipo = Some(Type::ConstArray(Box::new(elem_type), elements.len()));
             }
             Expression::ConstArrayConcatenation { left, right } => {
                 left.resolve_defined(function_container, path, material, false)?;
@@ -845,7 +845,7 @@ impl ExpressionContainer {
                     );
                 }
 
-                self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), *length));
+                self.tipo = Some(Type::ConstArray(Box::new(elem_type.clone()), *length));
             }
             Expression::BooleanNot { value } => {
                 value.resolve_defined(function_container, path, material, false)?;
@@ -919,7 +919,7 @@ impl ExpressionContainer {
                 let declaration_type = match material {
                     Material::Materialized => expected_type.clone(),
                     Material::Dematerialized => {
-                        Type::Unmaterialized(Arc::new(expected_type.clone()))
+                        Type::Unmaterialized(Box::new(expected_type.clone()))
                     }
                 };
                 function_container.declare(path, name, declaration_type, &self.parser_metadata)?;
