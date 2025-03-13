@@ -580,6 +580,8 @@ where
     }
 
     /// Verify segment proofs, checking continuation boundary conditions between segments if VM memory is persistent
+    /// The behavior of this function differs depending on whether continuations is enabled or not.
+    /// We recommend to call the functions [`Self::verify_segments`] or [`Self::verify_single`] directly instead.
     pub fn verify(
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
@@ -598,12 +600,19 @@ where
         }
     }
 
-    /// Verify segment proofs with boundary condition checks for continuation between segments
+    /// Verify segment proofs with boundary condition checks for continuation between segments.
     ///
     /// Assumption:
-    /// - vk is a valid verify key of a VM.
+    /// - `vk` is a valid verifying key of a VM circuit.
     ///
-    /// Return exe commit extracted from `proofs`.
+    /// Return the commitment to the [VmCommittedExe] extracted from `proofs`.
+    /// It is the responsibility of the caller to check that the returned commitment matches
+    /// the VM executable that the VM was supposed to execute.
+    ///
+    /// ## Note
+    /// This function does not extract or verify any user public values from the final memory state.
+    /// This verification requires an additional Merkle proof with respect to the Merkle root of
+    /// the final memory state.
     fn verify_segments(
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
@@ -703,6 +712,7 @@ where
                             actual: pvs.len(),
                         });
                     }
+                    // We assume the vk is valid, so this is only a debug assert.
                     debug_assert_eq!(air_vk.params.num_public_values, 0);
                 }
             }
