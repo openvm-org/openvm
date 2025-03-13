@@ -112,7 +112,7 @@ This SubAir constrains that a given overflow limb representation of an integer i
 - `limbs`: Array of overflow limbs representing a big integer $`[a_0, a_1, \ldots, a_{n-1}]`$
 
 **Aux Columns:**
-- `carries`: Array of carries for converting overflow limbs to canonical representation $`[c_0, c_1, \ldots, c_{n-1}]`$, allowed to be negative and within the range $`[-2^{\texttt{overflow\_bits} - \texttt{limb\_bits}}, 2^{\texttt{overflow\_bits} - \texttt{limb\_bits}})`$
+- `carries`: Array of carries $`[c_0, c_1, \ldots, c_{n-1}]`$ for converting overflow limbs to canonical representation, allowed to be negative and within the range $`[-2^{\texttt{overflow\_bits} - \texttt{limb\_bits}}, 2^{\texttt{overflow\_bits} - \texttt{limb\_bits}})`$
 
 **Constraints:**
 

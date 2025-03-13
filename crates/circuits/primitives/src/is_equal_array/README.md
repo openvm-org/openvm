@@ -3,8 +3,8 @@
 This chip outputs a boolean value `out` that equals 1 if and only if arrays `x` and `y` are equal.
 
 **IO Columns:**
-- `x`: Array of input values `[x_0, x_1, ..., x_{n-1}]`
-- `y`: Array of input values `[y_0, y_1, ..., y_{n-1}]`
+- `x`: Array of input values $`[x_0, x_1, ..., x_{n-1}]`$
+- `y`: Array of input values $`[y_0, y_1, ..., y_{n-1}]`$
 - `out`: Boolean output indicating whether `x = y`
 - `condition`: Activation flag `s` (constraints only apply when `s != 0`)
 
