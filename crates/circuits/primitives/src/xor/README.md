@@ -1,9 +1,16 @@
 # XOR Chip
 
-This chip gets requests to compute the xor of two numbers `x` and `y` of at most `M` bits.
+This chip gets requests to compute the xor of two numbers `x` and `y` of at most `M` bits
 
-It generates a preprocessed table with a row for each possible triple `(x, y, x^y)`
-and keeps count of the number of times each triple is requested for the single main trace column.
+It generates a preprocessed table with a row for each possible triple `(x, y, x^y)` and keeps count of the number of times each triple is requested in the main trace column.
+
+**Preprocessed Columns:**
+- `x`: First input value
+- `y`: Second input value
+- `z`: XOR result ($x \oplus y$)
+
+**IO Columns:**
+- `mult`: Multiplicity counter tracking the number of XOR operations requested for each triple
 
 The `XorLookupAir` adds interaction constraints for each triple `(x, y, x^y)` requested.
 ```rust

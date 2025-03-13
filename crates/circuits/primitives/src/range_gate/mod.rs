@@ -25,7 +25,9 @@ mod tests;
 
 #[derive(Copy, Clone, Default, AlignedBorrow)]
 pub struct RangeGateCols<T> {
+    /// Column with sequential values from 0 to range_max-1
     pub counter: T,
+    /// Number of range checks requested for each value
     pub mult: T,
 }
 
@@ -62,13 +64,16 @@ impl<AB: InteractionBuilder> Air<AB> for RangeCheckerGateAir {
         let local: &RangeGateCols<AB::Var> = (*local).borrow();
         let next: &RangeGateCols<AB::Var> = (*next).borrow();
 
+        // Ensure counter starts at 0
         builder
             .when_first_row()
             .assert_eq(local.counter, AB::Expr::ZERO);
+        // Ensure counter increments by 1 in each row
         builder
             .when_transition()
             .assert_eq(local.counter + AB::Expr::ONE, next.counter);
-        // The trace height is not part of the vkey, so we must enforce it here.
+        // Constrain the last counter value to ensure trace height equals range_max
+        // This is critical as the trace height is not part of the verification key
         builder.when_last_row().assert_eq(
             local.counter,
             AB::F::from_canonical_u32(self.bus.range_max - 1),

@@ -14,6 +14,7 @@ use crate::SubAir;
 
 #[derive(Clone)]
 pub struct CheckCarryModToZeroCols<T> {
+    /// Carries for converting the remainder to canonical form
     pub carries: Vec<T>,
 
     // We will check that expr - quotient * modulus = 0, which imples expr is 0 mod modulus.

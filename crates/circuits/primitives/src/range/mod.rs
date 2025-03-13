@@ -28,12 +28,14 @@ pub use bus::*;
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]
 pub struct RangeCols<T> {
+    /// Number of range checks for each value
     pub mult: T,
 }
 
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]
 pub struct RangePreprocessedCols<T> {
+    /// Contains all possible values within range [0, max)
     pub counter: T,
 }
 
@@ -59,6 +61,7 @@ impl<F: Field> BaseAir<F> for RangeCheckerAir {
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
+        // Create lookup table with all values 0..range_max
         let column = (0..self.range_max()).map(F::from_canonical_u32).collect();
         Some(RowMajorMatrix::new_col(column))
     }
@@ -81,6 +84,7 @@ impl<AB: InteractionBuilder + PairBuilder> Air<AB> for RangeCheckerAir {
 
 pub struct RangeCheckerChip {
     pub air: RangeCheckerAir,
+    /// Tracks multiplicity of each value in range
     count: Vec<AtomicU32>,
 }
 
@@ -106,6 +110,7 @@ impl RangeCheckerChip {
     }
 
     pub fn add_count(&self, val: u32) {
+        // Increment the count for this value when range checked
         let val_atomic = &self.count[val as usize];
         val_atomic.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
@@ -114,6 +119,7 @@ impl RangeCheckerChip {
         let mut rows = F::zero_vec(self.air.range_max() as usize * NUM_RANGE_COLS);
         for (n, row) in rows.chunks_exact_mut(NUM_RANGE_COLS).enumerate() {
             let cols: &mut RangeCols<F> = (*row).borrow_mut();
+            // Set multiplicity for each value in range
             cols.mult =
                 F::from_canonical_u32(self.count[n].load(std::sync::atomic::Ordering::SeqCst));
         }

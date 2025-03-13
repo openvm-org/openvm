@@ -25,7 +25,9 @@ pub use bus::*;
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]
 pub struct BitwiseOperationLookupCols<T> {
+    /// Number of range check operations requested for each (x, y) pair
     pub mult_range: T,
+    /// Number of XOR operations requested for each (x, y) pair
     pub mult_xor: T,
 }
 
@@ -34,6 +36,7 @@ pub struct BitwiseOperationLookupCols<T> {
 pub struct BitwiseOperationLookupPreprocessedCols<T> {
     pub x: T,
     pub y: T,
+    /// XOR result of x and y (x ⊕ y)
     pub z_xor: T,
 }
 

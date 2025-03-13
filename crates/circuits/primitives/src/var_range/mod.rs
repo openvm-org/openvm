@@ -31,13 +31,16 @@ pub use bus::*;
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]
 pub struct VariableRangeCols<T> {
+    /// Number of range checks requested for each (value, max_bits) pair
     pub mult: T,
 }
 
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]
 pub struct VariableRangePreprocessedCols<T> {
+    /// The value being range checked
     pub value: T,
+    /// The maximum number of bits for this value
     pub max_bits: T,
 }
 
