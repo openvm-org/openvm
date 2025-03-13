@@ -51,11 +51,11 @@ pub fn isize_to_field_elem(x: isize) -> F {
 }
 #[derive(Default, Debug)]
 pub struct TLFunction_fibonacci {
-    pub y_0_False: F,
-    pub x_0_False: F,
-    pub n: F,
-    pub b: F,
     pub a: F,
+    pub y_0_False: F,
+    pub n: F,
+    pub x_0_False: F,
+    pub b: F,
     pub scope_0_True: bool,
     pub scope_0_False: bool,
     pub callee_0: Box<Option<TLFunction_fibonacci>>,

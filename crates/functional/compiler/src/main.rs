@@ -7,8 +7,7 @@ use crate::{
             Program, Statement, StatementVariant, Type,
         },
         stage1::stage1,
-    }
-    ,
+    },
     transpiled_fibonacci::{isize_to_field_elem, TLFunction_fibonacci, Tracker},
 };
 
@@ -20,8 +19,8 @@ pub mod transpiled_fibonacci;
 
 fn main() {
     println!("Hello, world!");
-    compile_and_transpile_fibonacci();
-    // test_fibonacci();
+    // compile_and_transpile_fibonacci();
+    test_fibonacci();
 
     /*let x = true;
     let y = false;

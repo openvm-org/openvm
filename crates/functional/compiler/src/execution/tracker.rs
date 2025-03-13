@@ -8,7 +8,6 @@ use crate::{
         stage1::Stage2Program,
         type_resolution::TypeSet,
     },
-    parser::metadata::ParserMetadata,
 };
 
 pub fn rust_tracker(types_in_memory: Vec<Type>) -> TokenStream {

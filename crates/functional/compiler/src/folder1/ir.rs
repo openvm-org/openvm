@@ -1,4 +1,4 @@
-use std::{ops::BitAndAssign, sync::Arc};
+use std::ops::BitAndAssign;
 
 use super::file2_tree::ExpressionContainer;
 use crate::{folder1::error::CompilationError, parser::metadata::ParserMetadata};

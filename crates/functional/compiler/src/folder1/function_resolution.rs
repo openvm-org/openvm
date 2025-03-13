@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::collections::{HashMap, HashSet};
 
 use super::{
     error::CompilationError,
@@ -76,7 +73,7 @@ impl FunctionSet {
 #[derive(Clone)]
 pub struct FunctionContainer {
     pub stages: Vec<Stage>,
-    pub function: Arc<Function>,
+    pub function: Function,
 }
 
 impl FunctionContainer {
@@ -102,10 +99,7 @@ impl FunctionContainer {
                 end: changes[2 * i + 2],
             });
         }
-        Self {
-            stages,
-            function: Arc::new(function),
-        }
+        Self { stages, function }
     }
 
     pub fn argument_type(&self, index: usize) -> &Type {
