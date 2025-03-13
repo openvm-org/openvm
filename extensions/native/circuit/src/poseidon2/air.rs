@@ -415,6 +415,11 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             )
             .eval(builder, end_top_level);
 
+        builder.when(start_top_level).assert_eq(
+            very_first_timestamp + AB::F::from_canonical_usize(NUM_INITIAL_READS),
+            start_timestamp,
+        );
+
         let mut when_top_level_not_end =
             builder.when(incorporate_row + incorporate_sibling - end_top_level);
         when_top_level_not_end
@@ -425,6 +430,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             next_top_level_specific.index_base_pointer,
             index_base_pointer,
         );
+        when_top_level_not_end.assert_eq(next.very_first_timestamp, very_first_timestamp);
         when_top_level_not_end.assert_eq(next.start_timestamp, end_timestamp);
         when_top_level_not_end.assert_eq(next_top_level_specific.opened_length, opened_length);
         when_top_level_not_end.assert_eq(next.opened_element_size_inv, opened_element_size_inv);
