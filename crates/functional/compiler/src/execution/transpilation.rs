@@ -8,7 +8,10 @@ use crate::{
         file2_tree::{DeclarationSet, ExpressionContainer, ScopePath},
         file3::{FlatFunctionCall, FlatMatch, FlatStatement},
         function_resolution::Stage,
-        ir::{ArithmeticOperator, Expression, Material, Statement},
+        ir::{
+            ArithmeticOperator, BooleanOperator, Expression, Material, Statement,
+            FALSE_CONSTRUCTOR_NAME, TRUE_CONSTRUCTOR_NAME,
+        },
         stage1::Stage2Program,
         type_resolution::TypeSet,
     },
@@ -123,13 +126,19 @@ impl ExpressionContainer {
                 constructor,
                 fields,
             } => {
-                let type_name =
-                    type_name(&type_set.get_constructor_type_name(constructor).unwrap());
-                let fields = fields
-                    .iter()
-                    .map(|field| field.transpile_defined(scope, namer, type_set));
-                quote! {
-                    #type_name(#(#fields),*)
+                if constructor == TRUE_CONSTRUCTOR_NAME {
+                    quote! { true }
+                } else if constructor == FALSE_CONSTRUCTOR_NAME {
+                    quote! { false }
+                } else {
+                    let type_name =
+                        type_name(&type_set.get_constructor_type_name(constructor).unwrap());
+                    let fields = fields
+                        .iter()
+                        .map(|field| field.transpile_defined(scope, namer, type_set));
+                    quote! {
+                        #type_name(#(#fields),*)
+                    }
                 }
             }
             Expression::Arithmetic {
@@ -147,10 +156,11 @@ impl ExpressionContainer {
                 }
             }
             Expression::Dematerialized { value } => value.transpile_defined(scope, namer, type_set),
-            Expression::Eq { left, right } => eq_to_bool(
-                left.transpile_defined(scope, namer, type_set),
-                right.transpile_defined(scope, namer, type_set),
-            ),
+            Expression::Eq { left, right } => {
+                let left = left.transpile_defined(scope, namer, type_set);
+                let right = right.transpile_defined(scope, namer, type_set);
+                quote! { #left == #right }
+            }
             Expression::EmptyConstArray { elem_type } => {
                 let elem_type = type_to_rust(elem_type);
                 quote! {
@@ -203,6 +213,33 @@ impl ExpressionContainer {
                 quote! {
                     [#element; #length]
                 }
+            }
+            Expression::BooleanNot { value } => {
+                let value = value.transpile_defined(scope, namer, type_set);
+                quote! { !#value }
+            }
+            Expression::BooleanBinary {
+                left,
+                right,
+                operator,
+            } => {
+                let left = left.transpile_defined(scope, namer, type_set);
+                let right = right.transpile_defined(scope, namer, type_set);
+                match *operator {
+                    BooleanOperator::And => quote! { #left && #right },
+                    BooleanOperator::Or => quote! { #left || #right },
+                    BooleanOperator::Xor => quote! { #left ^ #right },
+                }
+            }
+            Expression::Ternary {
+                condition,
+                true_value,
+                false_value,
+            } => {
+                let condition = condition.transpile_defined(scope, namer, type_set);
+                let true_value = true_value.transpile_defined(scope, namer, type_set);
+                let false_value = false_value.transpile_defined(scope, namer, type_set);
+                quote! { if #condition { #true_value } else { #false_value } }
             }
         }
     }
@@ -466,17 +503,24 @@ impl FlatMatch {
         for (constructor, components) in self.branches.iter() {
             let scope = self.scope.then(self.index, constructor.clone());
             let scope_name = namer.scope_name(&scope);
-            let temps = (0..components.len())
-                .map(|_| namer.new_temporary_name())
-                .collect::<Vec<_>>();
-            let fields = components
-                .iter()
-                .map(|component| namer.variable_name(&scope, &component.name));
-            let constructor = ident(&constructor);
-            let arm = quote! {
-                #type_name::#constructor(#(#temps),*) => {
-                    #(#fields = #temps;)*
-                    #scope_name = true;
+            let arm = if constructor == TRUE_CONSTRUCTOR_NAME {
+                quote! { true => #scope_name = true, }
+            } else if constructor == FALSE_CONSTRUCTOR_NAME {
+                quote! { false => #scope_name = true, }
+            } else {
+                let temps = (0..components.len())
+                    .map(|_| namer.new_temporary_name())
+                    .collect::<Vec<_>>();
+                let scope = self.scope.then(self.index, constructor.clone());
+                let fields = components
+                    .iter()
+                    .map(|component| namer.variable_name(&scope, &component.name));
+                let constructor = ident(&constructor);
+                quote! {
+                    #type_name::#constructor(#(#temps),*) => {
+                        #(#fields = #temps;)*
+                        #scope_name = true;
+                    }
                 }
             };
             arms.push(arm);

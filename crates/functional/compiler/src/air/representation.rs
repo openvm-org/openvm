@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env::var};
+use std::collections::HashMap;
 
 use itertools::Itertools;
 
@@ -11,11 +11,10 @@ use crate::{
         file2_tree::{DeclarationSet, ExpressionContainer, ScopePath},
         file3::{FlatFunctionCall, FlatMatch, FlatStatement},
         function_resolution::Stage,
-        ir::{ArithmeticOperator, Expression, Material, Statement, Type},
+        ir::{ArithmeticOperator, BooleanOperator, Expression, Material, Statement, Type},
         type_resolution::TypeSet,
     },
 };
-
 #[derive(Default)]
 pub struct Representation {
     pub expressions: Vec<AirExpression>,
@@ -241,6 +240,54 @@ impl ExpressionContainer {
                     result.extend(element_representation.clone());
                 }
                 result
+            }
+            Expression::BooleanNot { value } => {
+                let value_representation =
+                    value.calc_representation(type_set, representation_table, scope);
+                vec![AirExpression::one().minus(&value_representation[0])]
+            }
+            Expression::BooleanBinary {
+                left,
+                right,
+                operator,
+            } => {
+                let left_representation =
+                    left.calc_representation(type_set, representation_table, scope);
+                let right_representation =
+                    right.calc_representation(type_set, representation_table, scope);
+                let x = &left_representation[0];
+                let y = &right_representation[0];
+                vec![match *operator {
+                    BooleanOperator::And => x.times(y),
+                    BooleanOperator::Or => x.plus(y).minus(&x.times(y)),
+                    BooleanOperator::Xor => x
+                        .plus(y)
+                        .minus(&AirExpression::constant(2).times(x).times(y)),
+                }]
+            }
+            Expression::Ternary {
+                condition,
+                true_value,
+                false_value,
+            } => {
+                let condition_representation =
+                    condition.calc_representation(type_set, representation_table, scope);
+                let condition_expression = &condition_representation[0];
+                let true_representation =
+                    true_value.calc_representation(type_set, representation_table, scope);
+                let false_representation =
+                    false_value.calc_representation(type_set, representation_table, scope);
+                true_representation
+                    .into_iter()
+                    .zip_eq(false_representation.into_iter())
+                    .map(|(true_expression, false_expression)| {
+                        condition_expression.times(&true_expression).plus(
+                            &AirExpression::one()
+                                .minus(condition_expression)
+                                .times(&false_expression),
+                        )
+                    })
+                    .collect()
             }
         }
     }

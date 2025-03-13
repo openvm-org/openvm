@@ -14,6 +14,15 @@ pub enum Type {
     ConstArray(Arc<Type>, usize),
 }
 
+pub const BOOLEAN_TYPE_NAME: &str = "Bool";
+pub const TRUE_CONSTRUCTOR_NAME: &str = "True";
+pub const FALSE_CONSTRUCTOR_NAME: &str = "False";
+impl Type {
+    pub fn boolean() -> Self {
+        Self::NamedType(BOOLEAN_TYPE_NAME.to_string())
+    }
+}
+
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -67,6 +76,13 @@ pub enum ArithmeticOperator {
     Div,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BooleanOperator {
+    And,
+    Or,
+    Xor,
+}
+
 #[derive(Clone, Debug)]
 pub enum Expression {
     Constant {
@@ -116,6 +132,19 @@ pub enum Expression {
     ConstArrayRepeated {
         element: ExpressionContainer,
         length: usize,
+    },
+    BooleanNot {
+        value: ExpressionContainer,
+    },
+    BooleanBinary {
+        left: ExpressionContainer,
+        right: ExpressionContainer,
+        operator: BooleanOperator,
+    },
+    Ternary {
+        condition: ExpressionContainer,
+        true_value: ExpressionContainer,
+        false_value: ExpressionContainer,
     },
 } // components of an algebraic value can be extracted using match, don’t need to have an expression for them
 

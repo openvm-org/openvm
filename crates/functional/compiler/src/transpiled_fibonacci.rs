@@ -49,43 +49,22 @@ pub fn isize_to_field_elem(x: isize) -> F {
         base.neg()
     }
 }
-pub fn eq_to_bool<T: Eq>(x: T, y: T) -> TL_Bool {
-    if x == y {
-        TL_Bool::True()
-    } else {
-        TL_Bool::False()
-    }
-}
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum TL_Bool {
-    True(),
-    False(),
-}
-impl Default for TL_Bool {
-    fn default() -> Self {
-        Self::True()
-    }
-}
 #[derive(Default, Debug)]
 pub struct TLFunction_fibonacci {
+    pub y_0_False: F,
+    pub a: F,
+    pub x_0_False: F,
     pub n: F,
     pub b: F,
-    pub x_0_False: F,
-    pub a: F,
-    pub y_0_False: F,
     pub scope_0_True: bool,
     pub scope_0_False: bool,
     pub callee_0: Box<Option<TLFunction_fibonacci>>,
 }
 impl TLFunction_fibonacci {
     pub fn stage_0(&mut self, tracker: &mut Tracker) {
-        match eq_to_bool(self.n, isize_to_field_elem(0isize)) {
-            TL_Bool::True() => {
-                self.scope_0_True = true;
-            }
-            TL_Bool::False() => {
-                self.scope_0_False = true;
-            }
+        match self.n == isize_to_field_elem(0isize) {
+            true => self.scope_0_True = true,
+            false => self.scope_0_False = true,
         }
         if self.scope_0_True {
             assert_eq!(isize_to_field_elem(0isize), self.n);

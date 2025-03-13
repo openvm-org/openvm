@@ -1,7 +1,7 @@
 use proc_macro2::{Ident, Span, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 
-use crate::folder1::ir::Type;
+use crate::folder1::ir::{Type, BOOLEAN_TYPE_NAME};
 
 pub fn ident(s: &str) -> TokenStream {
     TokenStream::from(TokenTree::Ident(Ident::new(s, Span::call_site())))
@@ -26,7 +26,11 @@ pub fn under_construction_array_type() -> TokenStream {
 }
 
 pub fn type_name(name: &str) -> TokenStream {
-    ident(&format!("TL_{}", name))
+    if name == BOOLEAN_TYPE_NAME {
+        quote! { bool }
+    } else {
+        ident(&format!("TL_{}", name))
+    }
 }
 
 pub fn type_to_rust(tipo: &Type) -> TokenStream {
@@ -74,7 +78,6 @@ pub fn tracker_struct_name() -> TokenStream {
 // functions
 
 pub const ISIZE_TO_FIELD_ELEM: &str = "isize_to_field_elem";
-pub const EQ_TO_BOOL: &str = "eq_to_bool";
 pub const TRACKER: &str = "tracker";
 pub const MEMORY: &str = "memory";
 pub const CREATE_REF: &str = "create_ref";
@@ -89,13 +92,6 @@ pub fn isize_to_field_elem(x: impl ToTokens) -> TokenStream {
     let function_name = ident(ISIZE_TO_FIELD_ELEM);
     quote! {
         #function_name(#x)
-    }
-}
-
-pub fn eq_to_bool(left: impl ToTokens, right: impl ToTokens) -> TokenStream {
-    let function_name = ident(EQ_TO_BOOL);
-    quote! {
-        #function_name(#left, #right)
     }
 }
 

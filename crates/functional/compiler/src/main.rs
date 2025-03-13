@@ -22,6 +22,10 @@ fn main() {
     // compile_and_transpile_fibonacci();
     test_fibonacci();
 
+    let x = true;
+    let y = false;
+    let z = x | y;
+
     //let mut x = Box::new(Some(vec![]));
     //x.as_mut().as_mut().unwrap().push(1);
 }
@@ -30,9 +34,10 @@ fn test_fibonacci() {
     let mut tracker = Tracker::default();
     let mut fibonacci = TLFunction_fibonacci::default();
     fibonacci.n = isize_to_field_elem(12);
+    println!("calculating {}th fibonacci number", fibonacci.n);
     fibonacci.stage_0(&mut tracker);
     assert_eq!(fibonacci.a, isize_to_field_elem(144));
-    println!("success")
+    println!("success: {}", fibonacci.a)
 }
 
 fn compile_and_transpile_fibonacci() {

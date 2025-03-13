@@ -478,7 +478,13 @@ impl ExpressionContainer {
             Expression::Eq { left, right } => vec![left, right],
             Expression::EmptyConstArray { .. } => vec![],
             Expression::ConstArrayRepeated { element, .. } => vec![element],
-            //_ => vec![],
+            Expression::BooleanNot { value } => vec![value],
+            Expression::BooleanBinary { left, right, .. } => vec![left, right],
+            Expression::Ternary {
+                condition,
+                true_value,
+                false_value,
+            } => vec![condition, true_value, false_value],
         }
     }
 
@@ -496,7 +502,13 @@ impl ExpressionContainer {
             Expression::Eq { left, right } => vec![left, right],
             Expression::EmptyConstArray { .. } => vec![],
             Expression::ConstArrayRepeated { element, .. } => vec![element],
-            //_ => vec![],
+            Expression::BooleanNot { value } => vec![value],
+            Expression::BooleanBinary { left, right, .. } => vec![left, right],
+            Expression::Ternary {
+                condition,
+                true_value,
+                false_value,
+            } => vec![condition, true_value, false_value],
         }
     }
 
@@ -649,7 +661,7 @@ impl ExpressionContainer {
                 if !Material::Dematerialized
                     .same_type(&left.tipo.clone().unwrap(), &right.tipo.clone().unwrap())
                 {
-                    return Err(CompilationError::IncorrectTypesInEquality(
+                    return Err(CompilationError::MismatchedTypes(
                         left.tipo.clone().unwrap(),
                         right.tipo.clone().unwrap(),
                     ));
@@ -663,7 +675,7 @@ impl ExpressionContainer {
                         left.get_type().clone(),
                     ));
                 }
-                self.tipo = Some(Type::NamedType("Bool".to_string()));
+                self.tipo = Some(Type::boolean());
             }
             Expression::EmptyConstArray { elem_type } => {
                 self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), 0));
@@ -732,6 +744,45 @@ impl ExpressionContainer {
                 }
 
                 self.tipo = Some(Type::ConstArray(Arc::new(elem_type.clone()), *length));
+            }
+            Expression::BooleanNot { value } => {
+                value.resolve_defined(function_container, path, material, false)?;
+                if !material.same_type(value.get_type(), &Type::boolean()) {
+                    return Err(CompilationError::ExpectedBoolean(value.get_type().clone()));
+                }
+                self.tipo = Some(Type::boolean());
+            }
+            Expression::BooleanBinary { left, right, .. } => {
+                left.resolve_defined(function_container, path, material, false)?;
+                if !material.same_type(left.get_type(), &Type::boolean()) {
+                    return Err(CompilationError::ExpectedBoolean(left.get_type().clone()));
+                }
+                right.resolve_defined(function_container, path, material, false)?;
+                if !material.same_type(right.get_type(), &Type::boolean()) {
+                    return Err(CompilationError::ExpectedBoolean(right.get_type().clone()));
+                }
+                self.tipo = Some(Type::boolean());
+            }
+            Expression::Ternary {
+                condition,
+                true_value,
+                false_value,
+            } => {
+                condition.resolve_defined(function_container, path, material, false)?;
+                if !material.same_type(condition.get_type(), &Type::boolean()) {
+                    return Err(CompilationError::ExpectedBoolean(
+                        condition.get_type().clone(),
+                    ));
+                }
+                true_value.resolve_defined(function_container, path, material, false)?;
+                false_value.resolve_defined(function_container, path, material, false)?;
+                if !material.same_type(true_value.get_type(), false_value.get_type()) {
+                    return Err(CompilationError::MismatchedTypes(
+                        true_value.get_type().clone(),
+                        false_value.get_type().clone(),
+                    ));
+                }
+                self.tipo = Some(true_value.get_type().clone());
             }
         }
         Ok(())

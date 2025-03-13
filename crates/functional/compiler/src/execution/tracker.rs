@@ -4,7 +4,7 @@ use quote::quote;
 use crate::{
     execution::{constants::*, helpers::rust_helpers, memory::rust_memory},
     folder1::{
-        ir::{AlgebraicTypeDeclaration, Type},
+        ir::{AlgebraicTypeDeclaration, Type, BOOLEAN_TYPE_NAME},
         stage1::Stage2Program,
         type_resolution::TypeSet,
     },
@@ -42,6 +42,9 @@ pub fn rust_tracker(types_in_memory: Vec<Type>) -> TokenStream {
 
 impl AlgebraicTypeDeclaration {
     pub fn transpile(&self, type_set: &TypeSet) -> TokenStream {
+        if self.name == BOOLEAN_TYPE_NAME {
+            return quote! {};
+        }
         let mut variants = vec![];
         for variant in self.variants.iter() {
             let name = ident(&variant.name);
