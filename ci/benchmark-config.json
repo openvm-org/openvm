@@ -99,7 +99,8 @@
           "app_log_blowup": 1,
           "leaf_log_blowup": 1,
           "internal_log_blowup": 2,
-          "root_log_blowup": 3
+          "root_log_blowup": 3,
+          "max_segment_length": 4194204
         }
       ]
     }
