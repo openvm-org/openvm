@@ -2,11 +2,11 @@
 
 ## Context
 
-In general we need to work with BigUints, which we say consist of representations via `limbs: [F; num_limbs]` where the unsigned integer equals $`\sum_{i=0}^{n-1} limbs[i] \cdot 2^{limb\_bits \cdot i}`$. In the canonical form we assume `limbs[i]` in $`[0, 2^{limb\_bits})`$ (unsigned `limb_bits` bits).
+In general we need to work with BigUints, which we say consist of representations via `limbs: [F; num_limbs]` where the unsigned integer equals $`\sum_{i=0}^{n-1} \texttt{limbs}[i] \cdot 2^{\texttt{limb\_bits} \cdot i}`$. In the canonical form we assume `limbs[i]` in $`[0, 2^{\texttt{limb\_bits}})`$ (unsigned `limb_bits` bits).
 
 The key optimization is to allow representations of BigInts as `OverflowInts` with `limbs[F; num_limbs]`
-where `limbs[i]` in $`[-2^{overflow\_bits}, 2^{overflow\_bits})`$.
-The integer equals $`\sum_{i=0}^{n-1} limbs[i] \cdot 2^{limb\_bits \cdot i}`$. We must have $`overflow\_bits \leq \lfloor\log_2(p)\rfloor - 1`$ where p is the field modulus to ensure each overflow limb has a unique representation in the field.
+where `limbs[i]` in $`[-2^{\texttt{overflow\_bits}}, 2^{\texttt{overflow\_bits}})`$.
+The integer equals $`\sum_{i=0}^{n-1} \texttt{limbs}[i] \cdot 2^{\texttt{limb\_bits} \cdot i}`$. We must have $`\texttt{overflow\_bits} \leq \lfloor\log_2(p)\rfloor - 1`$ where p is the field modulus to ensure each overflow limb has a unique representation in the field.
 
 The core functionality that is needed is `check_carry_to_zero`: which is the constraint that given OverflowInt limbs, you can constrain the corresponding integer equals 0. This is done by a sequence of carries to get the overflow integer into canonical form (and check it's zero). The carries must be range checked to be limb_bits.
 
@@ -101,7 +101,7 @@ They assume the parent air already does this.
 
 This is to avoid duplicating the `is_valid` boolean check every time we use these subair's, since we may call `CheckCarryModToZeroSubAir::eval` multiple times in the parent air's `eval` method.
 
-### SubAir Constraint Details
+## SubAir Constraint Details
 
 #### CheckCarryToZeroSubAir
 
