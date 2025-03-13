@@ -82,7 +82,7 @@ pub struct TopLevelSpecificCols<T> {
 
     /// Operand `a` from the instruction. Pointer to the `dimensions` array.
     pub dim_register: T,
-    /// Operand `b` from the insruction. Pointer to the pointer of the `opened_values` array.
+    /// Operand `b` from the instruction. Pointer to the pointer of the `opened_values` array.
     pub opened_register: T,
     /// Operand `c` from the instruction. Pointer to the length of the `opened_values` array.
     pub opened_length_register: T,
@@ -147,23 +147,28 @@ pub struct TopLevelSpecificCols<T> {
 #[derive(AlignedBorrow)]
 pub struct InsideRowSpecificCols<T> {
     /// The columns to constrain a sequence of consecutive opened values (possibly cross-matrix).
+    /// For an inside-row row, if `i == 0` or `is_exhausted[i - 1] != 0`, then `cells[i]` contains
+    /// the information about which array the opened-value came from.
     pub cells: [VerifyBatchCellCols<T>; CHUNK],
 }
 
+/// Information about an opened value. We refer to `opened_values` as the two-dimensional array of
+/// opened values; `opened_values[idx]` is an array of opened values.
 #[repr(C)]
 #[derive(AlignedBorrow, Copy, Clone)]
 pub struct VerifyBatchCellCols<T> {
     /// Memory aux columns for the opened value.
     pub read: MemoryReadAuxCols<T>,
-    /// The current index into the `opened_values` array.
+    /// The index into the `opened_values` array that this opened value came from.
     pub opened_index: T,
-    /// Memory aux columns for reading `row_pointer_and_length`.
+    /// Memory aux columns for reading `row_pointer` and length determining `row_end`; only used
+    /// when `is_first_in_row = 1`.
     pub read_row_pointer_and_length: MemoryReadAuxCols<T>,
-    /// Pointer to the row given by `opened_values[opened_index]`.
+    /// Pointer to the opened value itself.
     pub row_pointer: T,
     /// Pointer just after the row given by `opened_values[opened_index]`.
     pub row_end: T,
-    /// Whether this cell is the first opened value in its row.
+    /// Whether this cell corresponds to `opened_values[opened_index][0]`.
     pub is_first_in_row: T,
 }
 
