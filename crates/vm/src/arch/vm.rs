@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
-    p3_field::PrimeField32,
+    p3_field::{FieldAlgebra, PrimeField32},
     proof::Proof,
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
@@ -571,19 +571,6 @@ where
             .collect()
     }
 
-    /// Verifies a single proof. This should be used for proof of VM without continuations.
-    ///
-    /// ## Note
-    /// This function does not check any public values or extract the starting pc or commitment
-    /// to the [VmCommittedExe].
-    pub fn verify_single(
-        engine: &E,
-        vk: &MultiStarkVerifyingKey<SC>,
-        proof: &Proof<SC>,
-    ) -> Result<(), VerificationError> {
-        engine.verify(vk, proof)
-    }
-
     /// Verify segment proofs, checking continuation boundary conditions between segments if VM memory is persistent
     /// The behavior of this function differs depending on whether continuations is enabled or not.
     /// We recommend to call the functions [`Self::verify_segments`] or [`Self::verify_single`] directly instead.
@@ -597,153 +584,172 @@ where
         Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
     {
         if self.config().system().continuation_enabled {
-            Self::verify_segments(&self.engine, vk, proofs).map(|_| ())
+            verify_segments(&self.engine, vk, &proofs).map(|_| ())
         } else {
             assert_eq!(proofs.len(), 1);
-            Self::verify_single(&self.engine, vk, &proofs.into_iter().next().unwrap())
+            verify_single(&self.engine, vk, &proofs.into_iter().next().unwrap())
                 .map_err(VmVerificationError::StarkError)
         }
     }
+}
 
-    /// Verify segment proofs with boundary condition checks for continuation between segments.
-    ///
-    /// Assumption:
-    /// - `vk` is a valid verifying key of a VM circuit.
-    ///
-    /// Return the commitment to the [VmCommittedExe] extracted from `proofs`.
-    /// It is the responsibility of the caller to check that the returned commitment matches
-    /// the VM executable that the VM was supposed to execute.
-    ///
-    /// ## Note
-    /// This function does not extract or verify any user public values from the final memory state.
-    /// This verification requires an additional Merkle proof with respect to the Merkle root of
-    /// the final memory state.
-    // @dev: This function doesn't need to be generic in `VC`.
-    fn verify_segments(
-        engine: &E,
-        vk: &MultiStarkVerifyingKey<SC>,
-        proofs: Vec<Proof<SC>>,
-    ) -> Result<Com<SC>, VmVerificationError>
-    where
-        Val<SC>: PrimeField32,
-        Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
-    {
-        if proofs.is_empty() {
-            return Err(VmVerificationError::ProofNotFound);
-        }
-        let mut prev_final_memory_root = None;
-        let mut prev_final_pc = None;
-        let mut start_pc = None;
-        let mut initial_memory_root = None;
-        let mut program_commit = None;
+/// Verifies a single proof. This should be used for proof of VM without continuations.
+///
+/// ## Note
+/// This function does not check any public values or extract the starting pc or commitment
+/// to the [VmCommittedExe].
+pub fn verify_single<SC, E>(
+    engine: &E,
+    vk: &MultiStarkVerifyingKey<SC>,
+    proof: &Proof<SC>,
+) -> Result<(), VerificationError>
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC>,
+{
+    engine.verify(vk, proof)
+}
 
-        for (i, proof) in proofs.iter().enumerate() {
-            let res = engine.verify(vk, proof);
-            match res {
-                Ok(_) => (),
-                Err(e) => return Err(VmVerificationError::StarkError(e)),
-            };
-
-            let mut program_air_present = false;
-            let mut connector_air_present = false;
-            let mut merkle_air_present = false;
-
-            // Check public values.
-            for air_proof_data in proof.per_air.iter() {
-                let pvs = &air_proof_data.public_values;
-                let air_vk = &vk.per_air[air_proof_data.air_id];
-                if air_proof_data.air_id == PROGRAM_AIR_ID {
-                    program_air_present = true;
-                    if i == 0 {
-                        program_commit =
-                            Some(proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref());
-                    } else if program_commit.unwrap()
-                        != proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref()
-                    {
-                        return Err(VmVerificationError::ProgramCommitMismatch { index: i });
-                    }
-                } else if air_proof_data.air_id == CONNECTOR_AIR_ID {
-                    connector_air_present = true;
-                    let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
-
-                    if i != 0 {
-                        // Check initial pc matches the previous final pc.
-                        if pvs.initial_pc != prev_final_pc.unwrap() {
-                            return Err(VmVerificationError::InitialPcMismatch {
-                                initial: pvs.initial_pc.as_canonical_u32(),
-                                prev_final: prev_final_pc.unwrap().as_canonical_u32(),
-                            });
-                        }
-                    } else {
-                        start_pc = Some(pvs.initial_pc);
-                    }
-                    prev_final_pc = Some(pvs.final_pc);
-
-                    let expected_is_terminate = i == proofs.len() - 1;
-                    if pvs.is_terminate != Val::<SC>::from_bool(expected_is_terminate) {
-                        return Err(VmVerificationError::IsTerminateMismatch {
-                            expected: expected_is_terminate,
-                            actual: pvs.is_terminate.as_canonical_u32() != 0,
-                        });
-                    }
-
-                    let expected_exit_code = if expected_is_terminate {
-                        ExitCode::Success as u32
-                    } else {
-                        DEFAULT_SUSPEND_EXIT_CODE
-                    };
-                    if pvs.exit_code != Val::<SC>::from_canonical_u32(expected_exit_code) {
-                        return Err(VmVerificationError::ExitCodeMismatch {
-                            expected: expected_exit_code,
-                            actual: pvs.exit_code.as_canonical_u32(),
-                        });
-                    }
-                } else if air_proof_data.air_id == MERKLE_AIR_ID {
-                    merkle_air_present = true;
-                    let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
-
-                    // Check that initial root matches the previous final root.
-                    if i != 0 {
-                        if pvs.initial_root != prev_final_memory_root.unwrap() {
-                            return Err(VmVerificationError::InitialMemoryRootMismatch);
-                        }
-                    } else {
-                        initial_memory_root = Some(pvs.initial_root);
-                    }
-                    prev_final_memory_root = Some(pvs.final_root);
-                } else {
-                    if !pvs.is_empty() {
-                        return Err(VmVerificationError::UnexpectedPvs {
-                            expected: 0,
-                            actual: pvs.len(),
-                        });
-                    }
-                    // We assume the vk is valid, so this is only a debug assert.
-                    debug_assert_eq!(air_vk.params.num_public_values, 0);
-                }
-            }
-            if !program_air_present {
-                return Err(VmVerificationError::SystemAirMissing {
-                    air_id: PROGRAM_AIR_ID,
-                });
-            }
-            if !connector_air_present {
-                return Err(VmVerificationError::SystemAirMissing {
-                    air_id: CONNECTOR_AIR_ID,
-                });
-            }
-            if !merkle_air_present {
-                return Err(VmVerificationError::SystemAirMissing {
-                    air_id: MERKLE_AIR_ID,
-                });
-            }
-        }
-        let exe_commit = compute_exe_commit(
-            &vm_poseidon2_hasher(),
-            program_commit.unwrap(),
-            initial_memory_root.as_ref().unwrap(),
-            start_pc.unwrap(),
-        );
-        Ok(Com::<SC>::from(exe_commit))
+/// Verify segment proofs with boundary condition checks for continuation between segments.
+///
+/// Assumption:
+/// - `vk` is a valid verifying key of a VM circuit.
+///
+/// Return the commitment to the [VmCommittedExe] extracted from `proofs`.
+/// It is the responsibility of the caller to check that the returned commitment matches
+/// the VM executable that the VM was supposed to execute.
+///
+/// ## Note
+/// This function does not extract or verify any user public values from the final memory state.
+/// This verification requires an additional Merkle proof with respect to the Merkle root of
+/// the final memory state.
+// @dev: This function doesn't need to be generic in `VC`.
+pub fn verify_segments<SC, E>(
+    engine: &E,
+    vk: &MultiStarkVerifyingKey<SC>,
+    proofs: &[Proof<SC>],
+) -> Result<Com<SC>, VmVerificationError>
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC>,
+    Val<SC>: PrimeField32,
+    Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
+{
+    if proofs.is_empty() {
+        return Err(VmVerificationError::ProofNotFound);
     }
+    let mut prev_final_memory_root = None;
+    let mut prev_final_pc = None;
+    let mut start_pc = None;
+    let mut initial_memory_root = None;
+    let mut program_commit = None;
+
+    for (i, proof) in proofs.iter().enumerate() {
+        let res = engine.verify(vk, proof);
+        match res {
+            Ok(_) => (),
+            Err(e) => return Err(VmVerificationError::StarkError(e)),
+        };
+
+        let mut program_air_present = false;
+        let mut connector_air_present = false;
+        let mut merkle_air_present = false;
+
+        // Check public values.
+        for air_proof_data in proof.per_air.iter() {
+            let pvs = &air_proof_data.public_values;
+            let air_vk = &vk.per_air[air_proof_data.air_id];
+            if air_proof_data.air_id == PROGRAM_AIR_ID {
+                program_air_present = true;
+                if i == 0 {
+                    program_commit =
+                        Some(proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref());
+                } else if program_commit.unwrap()
+                    != proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref()
+                {
+                    return Err(VmVerificationError::ProgramCommitMismatch { index: i });
+                }
+            } else if air_proof_data.air_id == CONNECTOR_AIR_ID {
+                connector_air_present = true;
+                let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
+
+                if i != 0 {
+                    // Check initial pc matches the previous final pc.
+                    if pvs.initial_pc != prev_final_pc.unwrap() {
+                        return Err(VmVerificationError::InitialPcMismatch {
+                            initial: pvs.initial_pc.as_canonical_u32(),
+                            prev_final: prev_final_pc.unwrap().as_canonical_u32(),
+                        });
+                    }
+                } else {
+                    start_pc = Some(pvs.initial_pc);
+                }
+                prev_final_pc = Some(pvs.final_pc);
+
+                let expected_is_terminate = i == proofs.len() - 1;
+                if pvs.is_terminate != FieldAlgebra::from_bool(expected_is_terminate) {
+                    return Err(VmVerificationError::IsTerminateMismatch {
+                        expected: expected_is_terminate,
+                        actual: pvs.is_terminate.as_canonical_u32() != 0,
+                    });
+                }
+
+                let expected_exit_code = if expected_is_terminate {
+                    ExitCode::Success as u32
+                } else {
+                    DEFAULT_SUSPEND_EXIT_CODE
+                };
+                if pvs.exit_code != FieldAlgebra::from_canonical_u32(expected_exit_code) {
+                    return Err(VmVerificationError::ExitCodeMismatch {
+                        expected: expected_exit_code,
+                        actual: pvs.exit_code.as_canonical_u32(),
+                    });
+                }
+            } else if air_proof_data.air_id == MERKLE_AIR_ID {
+                merkle_air_present = true;
+                let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
+
+                // Check that initial root matches the previous final root.
+                if i != 0 {
+                    if pvs.initial_root != prev_final_memory_root.unwrap() {
+                        return Err(VmVerificationError::InitialMemoryRootMismatch);
+                    }
+                } else {
+                    initial_memory_root = Some(pvs.initial_root);
+                }
+                prev_final_memory_root = Some(pvs.final_root);
+            } else {
+                if !pvs.is_empty() {
+                    return Err(VmVerificationError::UnexpectedPvs {
+                        expected: 0,
+                        actual: pvs.len(),
+                    });
+                }
+                // We assume the vk is valid, so this is only a debug assert.
+                debug_assert_eq!(air_vk.params.num_public_values, 0);
+            }
+        }
+        if !program_air_present {
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: PROGRAM_AIR_ID,
+            });
+        }
+        if !connector_air_present {
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: CONNECTOR_AIR_ID,
+            });
+        }
+        if !merkle_air_present {
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: MERKLE_AIR_ID,
+            });
+        }
+    }
+    let exe_commit = compute_exe_commit(
+        &vm_poseidon2_hasher(),
+        program_commit.unwrap(),
+        initial_memory_root.as_ref().unwrap(),
+        start_pc.unwrap(),
+    );
+    Ok(Com::<SC>::from(exe_commit))
 }

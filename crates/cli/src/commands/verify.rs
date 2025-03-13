@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use eyre::Result;
 use openvm_sdk::{
+    config::SdkVmConfig,
     fs::{
         read_app_proof_from_file, read_app_vk_from_file, read_evm_proof_from_file,
         read_evm_verifier_from_file,
@@ -42,7 +43,7 @@ impl VerifyCmd {
             VerifySubCommand::App { app_vk, proof } => {
                 let app_vk = read_app_vk_from_file(app_vk)?;
                 let app_proof = read_app_proof_from_file(proof)?;
-                Sdk.verify_app_proof(&app_vk, &app_proof)?;
+                Sdk.verify_app_proof::<SdkVmConfig>(&app_vk, &app_proof)?;
             }
             VerifySubCommand::Evm { proof } => {
                 let evm_verifier = read_evm_verifier_from_file(DEFAULT_VERIFIER_PATH).map_err(|e| {

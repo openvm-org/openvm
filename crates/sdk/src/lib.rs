@@ -10,7 +10,10 @@ use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
 use openvm_circuit::{
-    arch::{instructions::exe::VmExe, ExecutionError, VirtualMachine, VmConfig, VmExecutor},
+    arch::{
+        instructions::exe::VmExe, verify_segments, ExecutionError, VirtualMachine, VmConfig,
+        VmExecutor, VmVerificationError,
+    },
     system::{memory::tree::public_values::extract_public_values, program::trace::VmCommittedExe},
 };
 use openvm_native_recursion::{
@@ -165,11 +168,13 @@ impl Sdk {
         &self,
         app_vk: &AppVerifyingKey,
         proof: &ContinuationVmProof<SC>,
-    ) -> Result<(), VerificationError> {
-        let e = BabyBearPoseidon2Engine::new(app_vk.fri_params);
-        for seg_proof in &proof.per_segment {
-            e.verify(&app_vk.app_vm_vk, seg_proof)?
-        }
+    ) -> Result<(), VmVerificationError>
+    where
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let engine = BabyBearPoseidon2Engine::new(app_vk.fri_params);
+        let exe_commit = verify_segments(&engine, &app_vk.app_vm_vk, &proof.per_segment)?;
         Ok(())
     }
 
