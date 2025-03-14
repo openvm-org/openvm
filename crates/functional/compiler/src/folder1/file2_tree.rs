@@ -44,7 +44,7 @@ pub struct ScopeContainer {
 
     definitions: HashSet<String>,
     representations: HashSet<String>,
-    under_construction_array_usages: HashSet<String>,
+    under_construction_array_consumptions: HashSet<String>,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -81,7 +81,7 @@ impl ScopeContainer {
             banned_declarations: HashSet::new(),
             definitions: HashSet::new(),
             representations: HashSet::new(),
-            under_construction_array_usages: HashSet::new(),
+            under_construction_array_consumptions: HashSet::new(),
         }
     }
     pub fn scope_exists(&self, path: &ScopePath) -> bool {
@@ -267,13 +267,13 @@ impl ScopeContainer {
         parser_metadata: &ParserMetadata,
     ) -> Result<(), CompilationError> {
         if path_index == path.0.len() {
-            if self.under_construction_array_usages.contains(name) {
-                return Err(CompilationError::DuplicateUnderConstructionArrayUsage(
+            if self.under_construction_array_consumptions.contains(name) {
+                return Err(CompilationError::DuplicateUnderConstructionArrayConsumption(
                     parser_metadata.clone(),
                     name.clone(),
                 ));
             }
-            self.under_construction_array_usages.insert(name.clone());
+            self.under_construction_array_consumptions.insert(name.clone());
         } else {
             let (i, constructor) = &path.0[path_index];
             let branches = &mut self.children[*i];
@@ -282,21 +282,21 @@ impl ScopeContainer {
 
             let mut present_in_all_branches = true;
             for (_, branch) in branches.iter() {
-                if !branch.under_construction_array_usages.contains(name) {
+                if !branch.under_construction_array_consumptions.contains(name) {
                     present_in_all_branches = false;
                 }
             }
             if present_in_all_branches {
                 for (_, branch) in branches.iter_mut() {
-                    branch.under_construction_array_usages.remove(name);
+                    branch.under_construction_array_consumptions.remove(name);
                 }
-                if self.under_construction_array_usages.contains(name) {
-                    return Err(CompilationError::DuplicateUnderConstructionArrayUsage(
+                if self.under_construction_array_consumptions.contains(name) {
+                    return Err(CompilationError::DuplicateUnderConstructionArrayConsumption(
                         parser_metadata.clone(),
                         name.clone(),
                     ));
                 }
-                self.under_construction_array_usages.insert(name.clone());
+                self.under_construction_array_consumptions.insert(name.clone());
             }
         }
         Ok(())
@@ -328,6 +328,11 @@ impl ScopeContainer {
                     name.clone(),
                 ));
             }
+            
+            if tipo.contains_under_construction_array(type_set) && !self.under_construction_array_consumptions.contains(name) {
+                return Err(CompilationError::UnconsumedUnderConstructionArray(parser_metadata.clone(), name.clone()))
+            }
+            
             if type_set.calc_type_size(tipo) > 0 && !self.representations.contains(name) {
                 return Err(CompilationError::UnrepresentedVariable(
                     parser_metadata.clone(),
@@ -839,7 +844,7 @@ impl ExpressionContainer {
                 let elem_type = element.get_type();
                 if elem_type.contains_under_construction_array(&function_container.type_set) {
                     return Err(
-                        CompilationError::DuplicateUnderConstructionArrayUsageInConstArray(
+                        CompilationError::DuplicateUnderConstructionArrayConsumptionInConstArray(
                             element.parser_metadata.clone(),
                         ),
                     );

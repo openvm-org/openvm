@@ -20,7 +20,8 @@ pub enum CompilationError {
     DuplicateDeclaration(ParserMetadata, String),
     DuplicateDefinition(ParserMetadata, String),
     DuplicateRepresentation(ParserMetadata, String),
-    DuplicateUnderConstructionArrayUsage(ParserMetadata, String),
+    DuplicateUnderConstructionArrayConsumption(ParserMetadata, String),
+    UnconsumedUnderConstructionArray(ParserMetadata, String),
     UndefinedType(ParserMetadata, String),
     UndefinedConstructor(ParserMetadata, String),
 
@@ -47,7 +48,7 @@ pub enum CompilationError {
     OutOfBoundsConstArrayAccess(ParserMetadata, usize, usize),
     OutOfBoundsConstArraySlice(ParserMetadata, usize, usize, usize),
     IncorrectNumberOfElementsInConstArray(ParserMetadata, usize, usize),
-    DuplicateUnderConstructionArrayUsageInConstArray(ParserMetadata),
+    DuplicateUnderConstructionArrayConsumptionInConstArray(ParserMetadata),
 
     EqMustBeDematerialized(ParserMetadata),
     DivMustBeDematerialized(ParserMetadata),
