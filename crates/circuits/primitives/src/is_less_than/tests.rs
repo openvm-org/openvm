@@ -13,6 +13,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
 };
 
 use super::IsLessThanIo;
@@ -30,6 +31,7 @@ pub struct IsLessThanCols<T> {
     pub x: T,
     pub y: T,
     pub out: T,
+    pub count: T,
     pub lower_decomp: Vec<T>,
 }
 
@@ -43,7 +45,7 @@ impl<F: Field> PartitionedBaseAir<F> for IsLtTestAir {}
 impl<F: Field> BaseAir<F> for IsLtTestAir {
     fn width(&self) -> usize {
         // Cannot use size_of because Cols has Vec<T> which is stored on the heap
-        3 + self.0.decomp_limbs
+        4 + self.0.decomp_limbs
     }
 }
 impl<AB: InteractionBuilder> Air<AB> for IsLtTestAir {
@@ -51,10 +53,10 @@ impl<AB: InteractionBuilder> Air<AB> for IsLtTestAir {
         let main = builder.main();
 
         let local = main.row_slice(0);
-        let (io, lower_decomp) = local.split_at(3);
-        let [x, y, out] = [io[0], io[1], io[2]];
+        let (io, lower_decomp) = local.split_at(4);
+        let [x, y, out, count] = [io[0], io[1], io[2], io[3]];
 
-        let io = IsLessThanIo::new(x, y, out, AB::F::ONE);
+        let io = IsLessThanIo::new(x, y, out, count);
         self.0.eval(builder, (io, lower_decomp));
     }
 }
@@ -85,6 +87,7 @@ impl IsLessThanChip {
                 let row = IsLessThanColsMut::from_mut_slice(row);
                 *row.x = F::from_canonical_u32(x);
                 *row.y = F::from_canonical_u32(y);
+                *row.count = F::ONE;
                 self.air
                     .0
                     .generate_subrow((&self.range_checker, x, y), (row.lower_decomp, row.out));
@@ -99,18 +102,20 @@ pub struct IsLessThanColsMut<'a, T> {
     pub x: &'a mut T,
     pub y: &'a mut T,
     pub out: &'a mut T,
+    pub count: &'a mut T,
     pub lower_decomp: &'a mut [T],
 }
 
 impl<'a, T> IsLessThanColsMut<'a, T> {
     pub fn from_mut_slice(slc: &'a mut [T]) -> Self {
-        let (io, lower_decomp) = slc.split_at_mut(3);
+        let (io, lower_decomp) = slc.split_at_mut(4);
         let mut io = io.iter_mut();
 
         Self {
             x: io.next().unwrap(),
             y: io.next().unwrap(),
             out: io.next().unwrap(),
+            count: io.next().unwrap(),
             lower_decomp,
         }
     }
@@ -161,6 +166,56 @@ fn test_is_less_than_negative() {
     let range_trace = range_checker.generate_trace();
 
     trace.values[2] = FieldAlgebra::from_canonical_u64(0);
+
+    disable_debug_builder();
+    assert_eq!(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace],).err(),
+        Some(VerificationError::OodEvaluationMismatch),
+        "Expected verification to fail, but it passed"
+    );
+}
+
+#[test]
+fn test_is_less_than_with_negative_count() {
+    let max_bits: usize = 29;
+    let decomp: usize = 8;
+    let bus = VariableRangeCheckerBus::new(0, decomp);
+
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
+    let chip = IsLessThanChip::new(max_bits, range_checker.clone());
+
+    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+
+    let num_rows = 2;
+    let width = 8;
+
+    let mut trace = RowMajorMatrix::new(vec![BabyBear::ZERO; num_rows * width], width);
+    let range_trace = range_checker.generate_trace();
+
+    // Make valid decomposition of y - x - 1 but where limbs are out of range
+    let row0 = IsLessThanColsMut::from_mut_slice(trace.row_mut(0));
+
+    *row0.x = BabyBear::from_canonical_u32(1);
+    *row0.y = BabyBear::from_canonical_u32(0);
+    *row0.out = BabyBear::from_canonical_u32(1);
+    *row0.count = BabyBear::from_canonical_u32(1);
+
+    row0.lower_decomp[0] = -BabyBear::from_canonical_u32(2);
+    row0.lower_decomp[1] = BabyBear::from_canonical_u32(0);
+    row0.lower_decomp[2] = BabyBear::from_canonical_u32(0);
+    row0.lower_decomp[3] = BabyBear::from_canonical_u32(0);
+
+    let row1 = IsLessThanColsMut::from_mut_slice(trace.row_mut(1));
+
+    *row1.x = BabyBear::from_canonical_u32(1);
+    *row1.y = BabyBear::from_canonical_u32(0);
+    *row1.out = BabyBear::from_canonical_u32(1);
+    *row1.count = -BabyBear::from_canonical_u32(1);
+
+    row1.lower_decomp[0] = -BabyBear::from_canonical_u32(2);
+    row1.lower_decomp[1] = BabyBear::from_canonical_u32(0);
+    row1.lower_decomp[2] = BabyBear::from_canonical_u32(0);
+    row1.lower_decomp[3] = BabyBear::from_canonical_u32(0);
 
     disable_debug_builder();
     assert_eq!(

@@ -25,7 +25,7 @@ pub struct AssertLessThanIo<T> {
     /// Will only apply constraints when `count != 0`.
     /// Range checks are done with multiplicity `count`.
     /// If `count == 0` then no range checks are done.
-    /// In practice `count` is always boolean.
+    /// `count` is constrained to be boolean.
     ///
     /// N.B.: in fact range checks could always be done, if the aux
     /// subrow values are set to 0 when `count == 0`. This would slightly
@@ -119,9 +119,6 @@ impl AssertLtSubAir {
         // deg(intermed_val) = deg(io)
         let intermed_val = io.y - io.x - AB::Expr::ONE;
 
-        // `count` must be a boolean
-        builder.assert_bool(io.count.clone());
-
         // Construct lower from lower_decomp:
         // - each limb of lower_decomp will be range checked
         // deg(lower) = 1
@@ -147,6 +144,10 @@ impl AssertLtSubAir {
         count: impl Into<AB::Expr>,
     ) {
         let count = count.into();
+
+        // `count` must be a boolean
+        builder.assert_bool(count.clone());
+
         let mut bits_remaining = self.max_bits;
         // we range check the limbs of the lower_decomp so that we know each element
         // of lower_decomp has the correct number of bits

@@ -27,8 +27,7 @@ pub struct IsLessThanIo<T> {
     pub out: T,
     /// Range checks are done with multiplicity `count`.
     /// If `count == 0` then no range checks are done.
-    /// In practice `count` is always boolean, although this is not enforced
-    /// by the subair.
+    /// `count` is constrained to be boolean.
     ///
     /// N.B.: in fact range checks could always be done, if the aux
     /// subrow values are set to 0 when `count == 0`. This would slightly
@@ -39,6 +38,7 @@ pub struct IsLessThanIo<T> {
     /// we currently use this more complex constraint.
     pub count: T,
 }
+
 impl<T> IsLessThanIo<T> {
     pub fn new(x: impl Into<T>, y: impl Into<T>, out: impl Into<T>, count: impl Into<T>) -> Self {
         Self {
@@ -148,6 +148,10 @@ impl IsLtSubAir {
         count: impl Into<AB::Expr>,
     ) {
         let count = count.into();
+
+        // `count` must be a boolean
+        builder.assert_bool(count.clone());
+
         let mut bits_remaining = self.max_bits;
         // we range check the limbs of the lower_decomp so that we know each element
         // of lower_decomp has the correct number of bits
