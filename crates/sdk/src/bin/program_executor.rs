@@ -4,7 +4,7 @@ use clap::Parser;
 
 #[derive(Debug, Parser)]
 struct ExecutorArgs {
-    #[clap(long)]
+    #[arg(long)]
     program_dir: PathBuf,
     // input -> what type?
 }
