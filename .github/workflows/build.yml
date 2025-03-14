@@ -27,4 +27,5 @@ jobs:
 
       - name: Run build
         run: |
+          cargo clean
           cargo build --verbose
