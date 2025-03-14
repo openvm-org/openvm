@@ -1,5 +1,3 @@
-extern crate core;
-
 use std::{fs::read, path::Path, sync::Arc};
 
 use commit::commit_app_exe;
@@ -10,27 +8,31 @@ use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
 use openvm_circuit::{
-    arch::{instructions::exe::VmExe, ExecutionError, VmConfig, VmExecutor},
-    system::{memory::tree::public_values::extract_public_values, program::trace::VmCommittedExe},
-};
-use openvm_native_recursion::{
-    halo2::{
-        utils::Halo2ParamsReader,
-        wrapper::{EvmVerifier, Halo2WrapperProvingKey},
-        EvmProof,
+    arch::{
+        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, verify_segments,
+        ContinuationVmProof, ExecutionError, VerifiedExecutionPayload, VmConfig, VmExecutor,
+        VmVerificationError,
     },
-    types::InnerConfig,
+    system::{
+        memory::{tree::public_values::extract_public_values, CHUNK},
+        program::trace::VmCommittedExe,
+    },
+};
+use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+pub use openvm_continuations::{
+    static_verifier::{DefaultStaticVerifierPvHandler, StaticVerifierPvHandler},
+    RootSC, C, F, SC,
+};
+use openvm_native_recursion::halo2::{
+    utils::Halo2ParamsReader,
+    wrapper::{EvmVerifier, Halo2WrapperProvingKey},
+    EvmProof,
 };
 use openvm_stark_backend::{engine::StarkEngine, proof::Proof};
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
-        FriParameters,
-    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
     openvm_stark_backend::{verifier::VerificationError, Chip},
-    p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{
     elf::Elf,
@@ -38,20 +40,6 @@ use openvm_transpiler::{
     transpiler::{Transpiler, TranspilerError},
     FromElf,
 };
-use prover::vm::ContinuationVmProof;
-use verifier::root::types::RootVmVerifierInput;
-
-pub mod commit;
-pub mod config;
-pub mod keygen;
-pub mod prover;
-pub mod static_verifier;
-pub mod verifier;
-
-mod stdin;
-use static_verifier::StaticVerifierPvHandler;
-pub use stdin::*;
-pub mod fs;
 
 use crate::{
     config::AggConfig,
@@ -59,11 +47,30 @@ use crate::{
     prover::{AppProver, ContinuationProver, StarkProver},
 };
 
-pub type SC = BabyBearPoseidon2Config;
-pub type C = InnerConfig;
-pub type F = BabyBear;
-pub type RootSC = BabyBearPoseidon2RootConfig;
+pub mod commit;
+pub mod config;
+pub mod keygen;
+pub mod prover;
+
+mod stdin;
+pub use stdin::*;
+pub mod fs;
+
 pub type NonRootCommittedExe = VmCommittedExe<SC>;
+
+/// The payload of a verified guest VM execution with user public values extracted and
+/// verified.
+pub struct VerifiedContinuationVmPayload {
+    /// The Merklelized hash of:
+    /// - Program code commitment (commitment of the cached trace)
+    /// - Merkle root of the initial memory
+    /// - Starting program counter (`pc_start`)
+    ///
+    /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
+    /// and a cryptographic compression function (for internal nodes).
+    pub exe_commit: [F; CHUNK],
+    pub user_public_values: Vec<F>,
+}
 
 pub struct Sdk;
 
@@ -153,21 +160,34 @@ impl Sdk {
         Ok(proof)
     }
 
-    /// This function is for dev use and not for production verification.
-    /// In particular, it only verifies the individual proofs per segment, and none of the boundary conditions
-    /// or the execution final state.
+    /// Verifies the [ContinuationVmProof], which is a collection of STARK proofs as well as
+    /// additional Merkle proof for user public values.
     ///
-    /// The `VirtualMachine::verify` function does additional verifications.
+    /// This function verifies the STARK proofs and additional conditions to ensure that the
+    /// `proof` is a valid proof of guest VM execution that terminates successfully (exit code 0)
+    /// _with respect to_ a commitment to some VM executable.
+    /// It is the responsibility of the caller to check that the commitment matches the expected
+    /// VM executable.
     pub fn verify_app_proof(
         &self,
         app_vk: &AppVerifyingKey,
         proof: &ContinuationVmProof<SC>,
-    ) -> Result<(), VerificationError> {
-        let e = BabyBearPoseidon2Engine::new(app_vk.fri_params);
-        for seg_proof in &proof.per_segment {
-            e.verify(&app_vk.app_vm_vk, seg_proof)?
-        }
-        Ok(())
+    ) -> Result<VerifiedContinuationVmPayload, VmVerificationError> {
+        let engine = BabyBearPoseidon2Engine::new(app_vk.fri_params);
+        let VerifiedExecutionPayload {
+            exe_commit,
+            final_memory_root,
+        } = verify_segments(&engine, &app_vk.app_vm_vk, &proof.per_segment)?;
+
+        let hasher = vm_poseidon2_hasher();
+        proof
+            .user_public_values
+            .verify(&hasher, app_vk.memory_dimensions, final_memory_root)?;
+
+        Ok(VerifiedContinuationVmPayload {
+            exe_commit,
+            user_public_values: proof.user_public_values.public_values.clone(),
+        })
     }
 
     pub fn verify_app_proof_without_continuations(
@@ -183,7 +203,7 @@ impl Sdk {
         &self,
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
-        pv_handler: Option<&impl StaticVerifierPvHandler>,
+        pv_handler: &impl StaticVerifierPvHandler,
     ) -> Result<AggProvingKey> {
         let agg_pk = AggProvingKey::keygen(config, reader, pv_handler);
         Ok(agg_pk)

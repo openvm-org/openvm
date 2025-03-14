@@ -331,6 +331,9 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
     fn should_segment(&mut self) -> bool {
+        if !self.system_config().continuation_enabled {
+            return false;
+        }
         // Avoid checking segment too often.
         if self.since_last_segment_check != SEGMENT_CHECK_INTERVAL {
             self.since_last_segment_check += 1;

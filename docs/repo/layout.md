@@ -10,6 +10,7 @@ The main components of the repository are:
   - [CLI](#cli)
   - [SDK](#sdk)
   - [Toolchain](#toolchain)
+  - [Continuations](#continuations)
   - [Circuit Framework](#circuit-framework)
   - [Circuit Foundations](#circuit-foundations)
   - [Examples](#examples)
@@ -44,7 +45,7 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 
 ### SDK
 
-- [`openvm-sdk`](../../crates/sdk): The developer SDK for the VM. It includes the OpenVM aggregation programs to support continuations for all VMs in the framework, and well as a local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. The SDK includes functionality to generate the final onchain SNARK verifier contract.
+- [`openvm-sdk`](../../crates/sdk): The developer SDK for the VM. It provides the final interface for proving an arbitrary program for a target VM, including a local aggregation scheduling implementation for continuations. The SDK includes functionality to generate the final onchain SNARK verifier contract.
 
 ### Toolchain
 
@@ -57,6 +58,9 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 - [`openvm-macros-common`](../../crates/toolchain/macros): Common library for parsing utilities shared across procedural macros used for custom instruction setup in guest programs.
 - [`openvm-toolchain-tests`](../../crates/toolchain/tests): Includes all official RISC-V 32-bit IM test vectors and transpiler tests. Also, provides utilities for writing integration tests for custom extensions.
 - [`openvm-custom-insn`](../../crates/toolchain/custom_insn): Custom instruction macros for use in guest programs.
+
+### Continuations
+- [`openvm-continuations`](../../crates/continuations): The OpenVM aggregation programs, written using [Native Recursion](#native-recursion), to support continuations for all VMs in the framework.
 
 ### Circuit Framework
 

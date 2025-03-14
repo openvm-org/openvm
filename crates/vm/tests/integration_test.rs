@@ -232,7 +232,8 @@ fn test_vm_1_optional_air() {
             "Expect less used AIRs"
         );
         let proofs = vm.prove(&pk, result);
-        vm.verify_single(&pk.get_vk(), &proofs[0])
+        assert_eq!(proofs.len(), 1);
+        vm.verify(&pk.get_vk(), proofs)
             .expect("Verification failed");
     }
 }

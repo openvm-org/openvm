@@ -25,6 +25,7 @@ members = [
     "crates/toolchain/macros",
     "crates/toolchain/platform",
     "crates/toolchain/tests",
+    "crates/continuations",
     "crates/vm",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
@@ -104,8 +105,8 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "9f7368b3c73fc559a92684b2ecf6c7d9ed00368b", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "9f7368b3c73fc559a92684b2ecf6c7d9ed00368b", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "fdb808bec40ff21dce7e462c2c18dbb997207adb", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "fdb808bec40ff21dce7e462c2c18dbb997207adb", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
@@ -122,10 +123,11 @@ openvm-instructions-derive = { path = "crates/toolchain/instructions/derive", de
 openvm-macros-common = { path = "crates/toolchain/macros", default-features = false }
 openvm-platform = { path = "crates/toolchain/platform", default-features = false }
 openvm-transpiler = { path = "crates/toolchain/transpiler", default-features = false }
-openvm-circuit = { path = "crates/vm", default-features = false }
-openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 openvm-toolchain-tests = { path = "crates/toolchain/tests", default-features = false }
 openvm-custom-insn = { path = "crates/toolchain/custom_insn", default-features = false }
+openvm-circuit = { path = "crates/vm", default-features = false }
+openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
+openvm-continuations = { path = "crates/continuations", default-features = false }
 
 # Extensions
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
@@ -233,7 +235,7 @@ serde-big-array = "0.5.1"
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
 bincode = { version = "2.0.0-rc.3", default-features = false }
-bitcode = { version = "0.6.3", default-features = false, features = ["serde"] }
+bitcode = { version = "0.6.5", default-features = false, features = ["serde"] }
 serde = { version = "1.0.201", default-features = false, features = ["derive"] }
 hex-literal = { version = "0.4.1", default-features = false }
 bytemuck = { version = "1.20.0", default-features = false }

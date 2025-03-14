@@ -1,3 +1,8 @@
+//! A chip which uses preprocessed trace to provide a lookup table for XOR operations
+//! between two numbers `x` and `y` of at most `M` bits.
+//! It generates a preprocessed table with a row for each possible triple `(x, y, x^y)`
+//! and keeps count of the number of times each triple is requested.
+
 use std::{
     borrow::Borrow,
     mem::size_of,
@@ -24,17 +29,21 @@ use super::bus::XorBus;
 #[cfg(test)]
 mod tests;
 
+/// Columns for the main trace of the XOR lookup
 #[repr(C)]
 #[derive(Copy, Clone, Debug, AlignedBorrow)]
 pub struct XorLookupCols<T> {
+    /// Multiplicity counter tracking the number of XOR operations requested for each triple
     pub mult: T,
 }
 
+/// Columns for the preprocessed table of the XOR lookup
 #[repr(C)]
 #[derive(Copy, Clone, Debug, AlignedBorrow)]
 pub struct XorLookupPreprocessedCols<T> {
     pub x: T,
     pub y: T,
+    /// XOR result (x ⊕ y)
     pub z: T,
 }
 
@@ -54,6 +63,7 @@ impl<F: Field, const M: usize> BaseAir<F> for XorLookupAir<M> {
         NUM_XOR_LOOKUP_COLS
     }
 
+    /// Generates a preprocessed table with a row for each possible triple (x, y, x^y)
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
         let rows: Vec<_> = (0..(1 << M) * (1 << M))
             .flat_map(|i| {
@@ -93,6 +103,7 @@ where
 #[derive(Debug)]
 pub struct XorLookupChip<const M: usize> {
     pub air: XorLookupAir<M>,
+    /// Tracks the count of each (x,y) pair requested
     pub count: Vec<Vec<AtomicU32>>,
 }
 
@@ -121,6 +132,8 @@ impl<const M: usize> XorLookupChip<M> {
         x ^ y
     }
 
+    /// Request an XOR operation for inputs x and y
+    /// Increments the count for this (x,y) pair and returns x ⊕ y
     pub fn request(&self, x: u32, y: u32) -> u32 {
         let val_atomic = &self.count[x as usize][y as usize];
         val_atomic.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -128,6 +141,7 @@ impl<const M: usize> XorLookupChip<M> {
         self.calc_xor(x, y)
     }
 
+    /// Resets all request counters to zero
     pub fn clear(&self) {
         for i in 0..(1 << M) {
             for j in 0..(1 << M) {
@@ -136,6 +150,7 @@ impl<const M: usize> XorLookupChip<M> {
         }
     }
 
+    /// Generates the multiplicity trace based on requests
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
         debug_assert_eq!(self.count.len(), 1 << M);
         let multiplicities: Vec<_> = self

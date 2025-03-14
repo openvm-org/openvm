@@ -28,11 +28,13 @@ pub use bus::*;
 
 #[derive(Default, Copy, Clone)]
 pub struct RangeTupleCols<T> {
+    /// Number of range checks requested for each tuple combination
     pub mult: T,
 }
 
 #[derive(Default, Clone)]
 pub struct RangeTuplePreprocessedCols<T> {
+    /// Contains all possible tuple combinations within specified ranges
     pub tuple: Vec<T>,
 }
 

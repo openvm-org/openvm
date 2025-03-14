@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
-    Streams, VirtualMachine,
+    verify_single, Streams, VirtualMachine,
 };
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
 use openvm_native_compiler::{
@@ -505,8 +505,7 @@ fn air_test_with_compress_poseidon2(
     let result = vm.execute_and_generate(program, vec![]).unwrap();
     let proofs = vm.prove(&pk, result);
     for proof in proofs {
-        vm.verify_single(&pk.get_vk(), &proof)
-            .expect("Verification failed");
+        verify_single(&vm.engine, &pk.get_vk(), &proof).expect("Verification failed");
     }
 }
 

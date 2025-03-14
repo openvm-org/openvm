@@ -25,16 +25,16 @@ the opcodes below [here](./isa-table.md).
 
 OpenVM depends on the following parameters, some of which are fixed and some of which are configurable:
 
-| Name                | Description                                                        | Constraints                                                           |
-| ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `F`                 | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field. |
-| `PC_BITS`           | The number of bits in the program counter.                         | Fixed to 30.                                                          |
-| `DEFAULT_PC_STEP`   | The default program counter step size.                             | Fixed to 4.                                                           |
-| `LIMB_BITS`         | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                           |
-| `as_offset`         | The index of the first writable address space.                     | Fixed to 1.                                                           |
-| `as_height`         | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `as_height <= F::bits() - 2`               |
-| `pointer_max_bits`  | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`        |
-| `num_public_values` | The number of user public values.                                  | Configurable.                                                         |
+| Name                | Description                                                        | Constraints                                                                                         |
+| ------------------- | ------------------------------------------------------------------ |-----------------------------------------------------------------------------------------------------|
+| `F`                 | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field.                               |
+| `PC_BITS`           | The number of bits in the program counter.                         | Fixed to 30.                                                                                        |
+| `DEFAULT_PC_STEP`   | The default program counter step size.                             | Fixed to 4.                                                                                         |
+| `LIMB_BITS`         | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                                                         |
+| `as_offset`         | The index of the first writable address space.                     | Fixed to 1.                                                                                         |
+| `as_height`         | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `as_height <= F::bits() - 2`                                             |
+| `pointer_max_bits`  | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`                                      |
+| `num_public_values` | The number of user public values.                                  | Configurable. If continuation is enabled, it must equal `8` times a power of two(which is nonzero). |
 
 We explain these parameters in subsequent sections.
 

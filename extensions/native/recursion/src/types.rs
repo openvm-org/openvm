@@ -68,6 +68,7 @@ pub struct MultiStarkVerificationAdvice<C: Config> {
     pub num_challenges_to_sample: Vec<usize>,
     pub trace_height_constraints: Vec<LinearConstraint>,
     pub log_up_pow_bits: usize,
+    pub pre_hash: DigestVal<C>,
 }
 
 /// Create MultiStarkVerificationAdvice for an inner config.
@@ -80,13 +81,15 @@ where
     let num_challenges_to_sample = vk.num_challenges_per_phase();
     MultiStarkVerificationAdvice {
         per_air: vk
+            .inner
             .per_air
             .iter()
             .map(|vk| new_from_inner_vk::<SC, C>(vk.clone()))
             .collect(),
         num_challenges_to_sample,
-        trace_height_constraints: vk.trace_height_constraints.clone(),
-        log_up_pow_bits: vk.log_up_pow_bits,
+        trace_height_constraints: vk.inner.trace_height_constraints.clone(),
+        log_up_pow_bits: vk.inner.log_up_pow_bits,
+        pre_hash: DigestVal::F(vk.pre_hash.clone().into().to_vec()),
     }
 }
 

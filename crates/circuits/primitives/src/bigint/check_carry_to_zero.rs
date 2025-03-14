@@ -5,7 +5,9 @@ use openvm_stark_backend::{
 
 use super::{utils::range_check, OverflowInt};
 use crate::SubAir;
+
 pub struct CheckCarryToZeroCols<T> {
+    /// Carries for converting overflow limbs to canonical representation,
     pub carries: Vec<T>,
 }
 

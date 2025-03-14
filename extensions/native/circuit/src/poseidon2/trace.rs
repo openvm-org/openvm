@@ -285,7 +285,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
             cell.opened_index = F::from_canonical_usize(parent.final_opened_index);
         }
 
-        cols.is_exhausted = std::array::from_fn(|i| F::from_bool(i >= cells.len()));
+        cols.is_exhausted = std::array::from_fn(|i| F::from_bool(i + 1 >= cells.len()));
 
         cols.initial_opened_index = F::from_canonical_usize(parent.initial_opened_index);
         cols.opened_base_pointer = grandparent.opened_base_pointer;
@@ -401,7 +401,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         cols.simple = F::ONE;
         cols.end_inside_row = F::ZERO;
         cols.end_top_level = F::ZERO;
-        cols.is_exhausted = [F::ZERO; CHUNK];
+        cols.is_exhausted = [F::ZERO; CHUNK - 1];
 
         cols.start_timestamp = F::from_canonical_u32(from_state.timestamp);
         let specific: &mut SimplePoseidonSpecificCols<F> =
