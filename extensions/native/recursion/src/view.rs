@@ -87,8 +87,11 @@ pub fn get_advice_per_air<C: Config>(
         } else {
             OptionalVar {
                 is_some: Usize::from(1),
-                value: builder
-                    .constant(C::N::from_canonical_u32(C::F::ORDER_U32 / max_coefficient)),
+                // Because `C::F::ORDER_U32 / max_coefficient * max_coefficient < C::F::ORDER_U32`,
+                // `height * max_coefficient` cannot overflow `C::F`.
+                value: builder.constant(C::N::from_canonical_u32(
+                    C::F::ORDER_U32 / max_coefficient + 1,
+                )),
             }
         };
         builder.set(&height_maxes, i, height_max);

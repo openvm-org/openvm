@@ -58,6 +58,7 @@ pub struct TraceHeightConstraintSystem<C: Config> {
     pub height_constraints: Vec<LinearConstraintVariable<C>>,
     /// Optional hard constraints on the height of each trace, derived from the above
     /// `height_constraints` to ensure that c_{ij} * a_j does not overflow the field.
+    /// `height` should be less than `height_max`.
     pub height_maxes: Array<C, OptionalVar<C>>,
 }
 
