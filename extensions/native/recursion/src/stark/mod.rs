@@ -135,6 +135,8 @@ where
         C::F: TwoAdicField,
         C::EF: TwoAdicField,
     {
+        let pre_hash = builder.constant(m_advice.pre_hash.clone());
+        challenger.observe_digest(builder, pre_hash);
         let air_ids = proof.get_air_ids(builder);
         let m_advice_var = get_advice_per_air(builder, m_advice, &air_ids);
         let StarkProofVariable::<C> {

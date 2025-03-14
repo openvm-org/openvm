@@ -68,6 +68,7 @@ pub struct MultiStarkVerificationAdvice<C: Config> {
     pub num_challenges_to_sample: Vec<usize>,
     pub trace_height_constraints: Vec<LinearConstraint>,
     pub log_up_pow_bits: usize,
+    pub pre_hash: DigestVal<C>,
 }
 
 /// Create MultiStarkVerificationAdvice for an inner config.
@@ -87,6 +88,7 @@ where
         num_challenges_to_sample,
         trace_height_constraints: vk.trace_height_constraints.clone(),
         log_up_pow_bits: vk.log_up_pow_bits,
+        pre_hash: DigestVal::F(vk.pre_hash.clone().into().to_vec()),
     }
 }
 

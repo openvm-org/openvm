@@ -104,8 +104,8 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "090e3dfc8f9e10a7283405dee2f412b5f7d4e451", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "090e3dfc8f9e10a7283405dee2f412b5f7d4e451", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "6bae895bede341bff6c467da9803ef5b4694c026", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "6bae895bede341bff6c467da9803ef5b4694c026", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
@@ -233,7 +233,7 @@ serde-big-array = "0.5.1"
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
 bincode = { version = "2.0.0-rc.3", default-features = false }
-bitcode = { version = "0.6.3", default-features = false, features = ["serde"] }
+bitcode = { version = "0.6.5", default-features = false, features = ["serde"] }
 serde = { version = "1.0.201", default-features = false, features = ["derive"] }
 hex-literal = { version = "0.4.1", default-features = false }
 bytemuck = { version = "1.20.0", default-features = false }
