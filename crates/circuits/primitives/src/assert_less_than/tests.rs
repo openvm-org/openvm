@@ -263,6 +263,10 @@ fn test_assert_less_than_with_negative_count() {
     row1.aux.lower_decomp[2] = BabyBear::from_canonical_u32(0);
     row1.aux.lower_decomp[3] = BabyBear::from_canonical_u32(0);
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
-        .expect("Verification failed");
+    disable_debug_builder();
+    assert_eq!(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace],).err(),
+        Some(VerificationError::OodEvaluationMismatch),
+        "Expected verification to fail, but it passed"
+    );
 }
