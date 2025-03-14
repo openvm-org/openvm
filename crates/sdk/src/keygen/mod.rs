@@ -6,6 +6,12 @@ use openvm_circuit::{
     arch::{VirtualMachine, VmConfig},
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
+use openvm_continuations::{
+    static_verifier::StaticVerifierPvHandler,
+    verifier::{
+        internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
+    },
+};
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::halo2::{
@@ -33,15 +39,12 @@ use crate::{
     config::{AggConfig, AggStarkConfig, AppConfig},
     keygen::perm::AirIdPermutation,
     prover::vm::types::VmProvingKey,
-    static_verifier::StaticVerifierPvHandler,
-    verifier::{
-        internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
-    },
     NonRootCommittedExe, RootSC, F, SC,
 };
 
 pub(crate) mod dummy;
 pub mod perm;
+pub mod static_verifier;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AppProvingKey<VC> {
@@ -308,7 +311,7 @@ impl AggProvingKey {
     pub fn keygen(
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
-        pv_handler: Option<&impl StaticVerifierPvHandler>,
+        pv_handler: &impl StaticVerifierPvHandler,
     ) -> Self {
         let AggConfig {
             agg_stark_config,

@@ -1,5 +1,7 @@
 use derivative::Derivative;
-use openvm_circuit::system::memory::tree::public_values::UserPublicValuesProof;
+use openvm_circuit::{
+    arch::ContinuationVmProof, system::memory::tree::public_values::UserPublicValuesProof,
+};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
@@ -11,8 +13,6 @@ use openvm_stark_sdk::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use static_assertions::assert_impl_all;
-
-use crate::prover::vm::ContinuationVmProof;
 
 /// Input for the leaf VM verifier.
 #[derive(Serialize, Deserialize, Derivative)]

@@ -7,8 +7,7 @@ use openvm_build::GuestOptions;
 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
     config::{AggConfig, AppConfig, SdkVmConfig},
-    keygen::RootVerifierProvingKey,
-    Sdk, StdIn,
+    DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
 use openvm_stark_sdk::config::FriParameters;
 use openvm_transpiler::elf::Elf;
@@ -93,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agg_pk = sdk.agg_keygen(
         agg_config,
         &halo2_params_reader,
-        None::<&RootVerifierProvingKey>,
+        &DefaultStaticVerifierPvHandler,
     )?;
 
     // 9. Generate the SNARK verifier smart contract

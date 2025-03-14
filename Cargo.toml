@@ -25,6 +25,7 @@ members = [
     "crates/toolchain/macros",
     "crates/toolchain/platform",
     "crates/toolchain/tests",
+    "crates/continuations",
     "crates/vm",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
@@ -122,10 +123,11 @@ openvm-instructions-derive = { path = "crates/toolchain/instructions/derive", de
 openvm-macros-common = { path = "crates/toolchain/macros", default-features = false }
 openvm-platform = { path = "crates/toolchain/platform", default-features = false }
 openvm-transpiler = { path = "crates/toolchain/transpiler", default-features = false }
-openvm-circuit = { path = "crates/vm", default-features = false }
-openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 openvm-toolchain-tests = { path = "crates/toolchain/tests", default-features = false }
 openvm-custom-insn = { path = "crates/toolchain/custom_insn", default-features = false }
+openvm-circuit = { path = "crates/vm", default-features = false }
+openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
+openvm-continuations = { path = "crates/continuations", default-features = false }
 
 # Extensions
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }

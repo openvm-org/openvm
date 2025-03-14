@@ -1,5 +1,5 @@
 [package]
-name = "openvm-sdk"
+name = "openvm-continuations"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -30,7 +30,6 @@ openvm-transpiler = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
-openvm-continuations = { workspace = true }
 openvm = { workspace = true }
 
 bitcode = { workspace = true }

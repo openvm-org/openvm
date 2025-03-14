@@ -4,13 +4,12 @@ use std::{
 };
 
 use eyre::Result;
-use openvm_circuit::arch::{instructions::exe::VmExe, VmConfig};
+use openvm_circuit::arch::{instructions::exe::VmExe, ContinuationVmProof, VmConfig};
 use openvm_native_recursion::halo2::{wrapper::EvmVerifier, EvmProof};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
     keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey},
-    prover::vm::ContinuationVmProof,
     F, SC,
 };
 

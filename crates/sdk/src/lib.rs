@@ -1,5 +1,3 @@
-extern crate core;
-
 use std::{fs::read, path::Path, sync::Arc};
 
 use commit::commit_app_exe;
@@ -12,31 +10,29 @@ use openvm_build::{
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, verify_segments,
-        ExecutionError, VerifiedExecutionPayload, VmConfig, VmExecutor, VmVerificationError,
+        ContinuationVmProof, ExecutionError, VerifiedExecutionPayload, VmConfig, VmExecutor,
+        VmVerificationError,
     },
     system::{
         memory::{tree::public_values::extract_public_values, CHUNK},
         program::trace::VmCommittedExe,
     },
 };
-use openvm_native_recursion::{
-    halo2::{
-        utils::Halo2ParamsReader,
-        wrapper::{EvmVerifier, Halo2WrapperProvingKey},
-        EvmProof,
-    },
-    types::InnerConfig,
+use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+pub use openvm_continuations::{
+    static_verifier::{DefaultStaticVerifierPvHandler, StaticVerifierPvHandler},
+    RootSC, C, F, SC,
+};
+use openvm_native_recursion::halo2::{
+    utils::Halo2ParamsReader,
+    wrapper::{EvmVerifier, Halo2WrapperProvingKey},
+    EvmProof,
 };
 use openvm_stark_backend::{engine::StarkEngine, proof::Proof};
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
-        FriParameters,
-    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
     openvm_stark_backend::{verifier::VerificationError, Chip},
-    p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{
     elf::Elf,
@@ -44,20 +40,6 @@ use openvm_transpiler::{
     transpiler::{Transpiler, TranspilerError},
     FromElf,
 };
-use prover::vm::ContinuationVmProof;
-use verifier::root::types::RootVmVerifierInput;
-
-pub mod commit;
-pub mod config;
-pub mod keygen;
-pub mod prover;
-pub mod static_verifier;
-pub mod verifier;
-
-mod stdin;
-use static_verifier::StaticVerifierPvHandler;
-pub use stdin::*;
-pub mod fs;
 
 use crate::{
     config::AggConfig,
@@ -65,10 +47,15 @@ use crate::{
     prover::{AppProver, ContinuationProver, StarkProver},
 };
 
-pub type SC = BabyBearPoseidon2Config;
-pub type C = InnerConfig;
-pub type F = BabyBear;
-pub type RootSC = BabyBearPoseidon2RootConfig;
+pub mod commit;
+pub mod config;
+pub mod keygen;
+pub mod prover;
+
+mod stdin;
+pub use stdin::*;
+pub mod fs;
+
 pub type NonRootCommittedExe = VmCommittedExe<SC>;
 
 /// The payload of a verified guest VM execution with user public values extracted and
@@ -216,7 +203,7 @@ impl Sdk {
         &self,
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
-        pv_handler: Option<&impl StaticVerifierPvHandler>,
+        pv_handler: &impl StaticVerifierPvHandler,
     ) -> Result<AggProvingKey> {
         let agg_pk = AggProvingKey::keygen(config, reader, pv_handler);
         Ok(agg_pk)

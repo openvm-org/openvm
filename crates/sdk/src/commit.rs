@@ -4,6 +4,7 @@ use openvm_circuit::{
     arch::{instructions::exe::VmExe, VmConfig},
     system::program::trace::VmCommittedExe,
 };
+use openvm_continuations::verifier::leaf::LeafVmVerifierConfig;
 use openvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
 use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
 use openvm_stark_sdk::{
@@ -14,9 +15,7 @@ use openvm_stark_sdk::{
     p3_bn254_fr::Bn254Fr,
 };
 
-use crate::{
-    keygen::AppProvingKey, verifier::leaf::LeafVmVerifierConfig, NonRootCommittedExe, F, SC,
-};
+use crate::{keygen::AppProvingKey, NonRootCommittedExe, F, SC};
 
 /// `AppExecutionCommit` has all the commitments users should check against the final proof.
 pub struct AppExecutionCommit<T> {

@@ -8,6 +8,15 @@ use openvm_circuit::{
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
+use openvm_continuations::{
+    static_verifier::StaticVerifierPvHandler,
+    verifier::{
+        common::types::{SpecialAirIds, VmVerifierPvs},
+        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
+        root::types::RootVmVerifierPvs,
+        utils::compress_babybear_var_to_bn254,
+    },
+};
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use openvm_native_recursion::{
@@ -18,15 +27,8 @@ use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtensio
 use openvm_sdk::{
     commit::AppExecutionCommit,
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
-    keygen::{AppProvingKey, RootVerifierProvingKey},
-    static_verifier::StaticVerifierPvHandler,
-    verifier::{
-        common::types::{SpecialAirIds, VmVerifierPvs},
-        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
-        root::types::RootVmVerifierPvs,
-        utils::compress_babybear_var_to_bn254,
-    },
-    Sdk, StdIn,
+    keygen::AppProvingKey,
+    DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
 use openvm_stark_sdk::{
     config::{
@@ -273,7 +275,6 @@ fn test_static_verifier_custom_pv_handler() {
             &self,
             builder: &mut Builder<OuterConfig>,
             input: &StarkProofVariable<OuterConfig>,
-            _root_verifier_pk: &RootVerifierProvingKey,
             special_air_ids: &SpecialAirIds,
         ) -> usize {
             let pv_air = builder.get(&input.per_air, special_air_ids.public_values_air_id);
@@ -330,7 +331,7 @@ fn test_static_verifier_custom_pv_handler() {
         leaf_verifier_commit,
     };
     let agg_pk = Sdk
-        .agg_keygen(agg_config_for_test(), &params_reader, Some(&pv_handler))
+        .agg_keygen(agg_config_for_test(), &params_reader, &pv_handler)
         .unwrap();
 
     // Generate verifier contract
@@ -363,7 +364,7 @@ fn test_e2e_proof_generation_and_verification() {
         .agg_keygen(
             agg_config_for_test(),
             &params_reader,
-            None::<&RootVerifierProvingKey>,
+            &DefaultStaticVerifierPvHandler,
         )
         .unwrap();
     let evm_verifier = Sdk

@@ -1,5 +1,10 @@
 use std::sync::Arc;
 
+use openvm_circuit::arch::ContinuationVmProof;
+use openvm_continuations::verifier::{
+    internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
+    root::types::RootVmVerifierInput,
+};
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{
@@ -10,12 +15,8 @@ use tracing::info_span;
 use crate::{
     keygen::AggStarkProvingKey,
     prover::{
-        vm::{local::VmLocalProver, ContinuationVmProof, SingleSegmentVmProver},
+        vm::{local::VmLocalProver, SingleSegmentVmProver},
         RootVerifierLocalProver,
-    },
-    verifier::{
-        internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
-        root::types::RootVmVerifierInput,
     },
     NonRootCommittedExe, RootSC, F, SC,
 };

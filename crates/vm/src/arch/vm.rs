@@ -14,6 +14,7 @@ use openvm_stark_backend::{
     verifier::VerificationError,
     Chip,
 };
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::info_span;
 
@@ -28,8 +29,10 @@ use crate::{
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
-            merkle::MemoryMerklePvs, paged_vec::AddressMap,
-            tree::public_values::UserPublicValuesProofError, MemoryImage, CHUNK,
+            merkle::MemoryMerklePvs,
+            paged_vec::AddressMap,
+            tree::public_values::{UserPublicValuesProof, UserPublicValuesProofError},
+            MemoryImage, CHUNK,
         },
         program::trace::VmCommittedExe,
     },
@@ -777,4 +780,26 @@ where
         exe_commit,
         final_memory_root: prev_final_memory_root.unwrap(),
     })
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "Com<SC>: Serialize",
+    deserialize = "Com<SC>: Deserialize<'de>"
+))]
+pub struct ContinuationVmProof<SC: StarkGenericConfig> {
+    pub per_segment: Vec<Proof<SC>>,
+    pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
+}
+
+impl<SC: StarkGenericConfig> Clone for ContinuationVmProof<SC>
+where
+    Com<SC>: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            per_segment: self.per_segment.clone(),
+            user_public_values: self.user_public_values.clone(),
+        }
+    }
 }

@@ -3812,6 +3812,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-continuations"
+version = "1.0.0-rc.2"
+dependencies = [
+ "async-trait",
+ "bitcode",
+ "bon",
+ "clap",
+ "derivative",
+ "derive_more 1.0.0",
+ "eyre",
+ "getset",
+ "itertools 0.14.0",
+ "metrics",
+ "openvm",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-bigint-circuit",
+ "openvm-bigint-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-ecc-circuit",
+ "openvm-ecc-transpiler",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-native-circuit",
+ "openvm-native-compiler",
+ "openvm-native-recursion",
+ "openvm-pairing-circuit",
+ "openvm-pairing-transpiler",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-sha256-circuit",
+ "openvm-sha256-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-transpiler",
+ "serde",
+ "static_assertions",
+ "tracing",
+]
+
+[[package]]
 name = "openvm-custom-insn"
 version = "0.1.0"
 dependencies = [
@@ -4435,6 +4477,7 @@ dependencies = [
  "openvm-bigint-transpiler",
  "openvm-build",
  "openvm-circuit",
+ "openvm-continuations",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
