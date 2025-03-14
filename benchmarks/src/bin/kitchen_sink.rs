@@ -9,8 +9,8 @@ use openvm_ecc_circuit::{WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG};
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
 use openvm_sdk::{
-    commit::commit_app_exe, config::SdkVmConfig, keygen::RootVerifierProvingKey,
-    prover::ContinuationProver, Sdk, StdIn,
+    commit::commit_app_exe, config::SdkVmConfig, prover::ContinuationProver,
+    DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
 use openvm_stark_sdk::bench::run_with_metric_collection;
 use openvm_transpiler::FromElf;
@@ -70,7 +70,7 @@ fn main() -> Result<()> {
     let full_agg_pk = sdk.agg_keygen(
         agg_config,
         &halo2_params_reader,
-        None::<&RootVerifierProvingKey>,
+        &DefaultStaticVerifierPvHandler,
     )?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
