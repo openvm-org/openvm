@@ -13,7 +13,6 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
 };
 
 use super::IsLessThanIo;
@@ -166,56 +165,6 @@ fn test_is_less_than_negative() {
     let range_trace = range_checker.generate_trace();
 
     trace.values[2] = FieldAlgebra::from_canonical_u64(0);
-
-    disable_debug_builder();
-    assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace],).err(),
-        Some(VerificationError::OodEvaluationMismatch),
-        "Expected verification to fail, but it passed"
-    );
-}
-
-#[test]
-fn test_is_less_than_with_negative_count() {
-    let max_bits: usize = 29;
-    let decomp: usize = 8;
-    let bus = VariableRangeCheckerBus::new(0, decomp);
-
-    let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
-    let chip = IsLessThanChip::new(max_bits, range_checker.clone());
-
-    let airs = any_rap_arc_vec![chip.air, range_checker.air];
-
-    let num_rows = 2;
-    let width = 8;
-
-    let mut trace = RowMajorMatrix::new(vec![BabyBear::ZERO; num_rows * width], width);
-    let range_trace = range_checker.generate_trace();
-
-    // Make valid decomposition of y - x - 1 but where limbs are out of range
-    let row0 = IsLessThanColsMut::from_mut_slice(trace.row_mut(0));
-
-    *row0.x = BabyBear::from_canonical_u32(1);
-    *row0.y = BabyBear::from_canonical_u32(0);
-    *row0.out = BabyBear::from_canonical_u32(1);
-    *row0.count = BabyBear::from_canonical_u32(1);
-
-    row0.lower_decomp[0] = -BabyBear::from_canonical_u32(2);
-    row0.lower_decomp[1] = BabyBear::from_canonical_u32(0);
-    row0.lower_decomp[2] = BabyBear::from_canonical_u32(0);
-    row0.lower_decomp[3] = BabyBear::from_canonical_u32(0);
-
-    let row1 = IsLessThanColsMut::from_mut_slice(trace.row_mut(1));
-
-    *row1.x = BabyBear::from_canonical_u32(1);
-    *row1.y = BabyBear::from_canonical_u32(0);
-    *row1.out = BabyBear::from_canonical_u32(1);
-    *row1.count = -BabyBear::from_canonical_u32(1);
-
-    row1.lower_decomp[0] = -BabyBear::from_canonical_u32(2);
-    row1.lower_decomp[1] = BabyBear::from_canonical_u32(0);
-    row1.lower_decomp[2] = BabyBear::from_canonical_u32(0);
-    row1.lower_decomp[3] = BabyBear::from_canonical_u32(0);
 
     disable_debug_builder();
     assert_eq!(
