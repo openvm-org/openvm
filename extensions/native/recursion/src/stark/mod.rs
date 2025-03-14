@@ -805,7 +805,7 @@ where
         };
 
         // Will index by log_air_height. Max value is assumed to be MAX_TWO_ADICITY - 1 because
-        // `log_blowup > 1`.
+        // `log_blowup >= 1`.
         let pows_of_two: Array<C, Var<C::N>> = builder.array(MAX_TWO_ADICITY);
         let cur: Var<C::N> = builder.constant(C::N::ONE);
         iter_zip!(builder, pows_of_two).for_each(|ptr_vec, builder| {
