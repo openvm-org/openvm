@@ -41,3 +41,8 @@ jobs:
         working-directory: extensions/native/recursion
         run: |
           cargo nextest run --features parallel,static-verifier
+
+      - name: Run continuations verifier crate tests
+        working-directory: crates/continuations
+        run: |
+          cargo nextest run --no-tests=pass

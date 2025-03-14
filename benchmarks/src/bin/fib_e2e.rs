@@ -10,8 +10,7 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::{
-    commit::commit_app_exe, keygen::RootVerifierProvingKey, prover::ContinuationProver,
-    DefaultStaticVerifierPvHandler, Sdk, StdIn,
+    commit::commit_app_exe, prover::ContinuationProver, DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
 use openvm_stark_sdk::bench::run_with_metric_collection;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
