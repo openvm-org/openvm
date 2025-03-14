@@ -137,12 +137,12 @@ where
     {
         let air_ids = proof.get_air_ids(builder);
         let m_advice_var = get_advice_per_air(builder, m_advice, &air_ids);
+        // (T01a): `air_ids` is a subsequence of `0..(m_advice.per_air.len())`.
+
         let StarkProofVariable::<C> {
             commitments,
             opening,
             per_air: air_proofs,
-            // Extra checking for air_perm_by_height is unnecessary because only a valid permutation
-            // can pass the FRI verification.
             air_perm_by_height,
             log_up_pow_witness,
         } = proof;
@@ -154,6 +154,8 @@ where
         let num_airs = RVar::from(air_proofs.len());
         let num_challenges_to_sample = m_advice_var.num_challenges_to_sample(builder);
         // Currently only support 0 or 1 phase is supported.
+        // (T01b): `num_challenges_to_sample.len() < 2`.
+
         let num_phases = RVar::from(num_challenges_to_sample.len());
         assert_cumulative_sums(builder, air_proofs, &num_challenges_to_sample);
 
@@ -174,7 +176,8 @@ where
             });
             // Check that each index of mask was set, i.e., that `air_perm_by_height` is a permutation.
             // Also check that permutation is decreasing by height.
-            let prev_log_height_plus_one: Usize<_> = builder.eval(RVar::from(MAX_TWO_ADICITY + 1));
+            let prev_log_height_plus_one: Usize<_> =
+                builder.eval(RVar::from(MAX_TWO_ADICITY - pcs.config.log_blowup + 1));
             iter_zip!(builder, air_perm_by_height).for_each(|ptr_vec, builder| {
                 let perm_i = builder.iter_ptr_get(air_perm_by_height, ptr_vec[0]);
                 let mask_i = builder.get(&mask, perm_i.clone());
@@ -192,6 +195,8 @@ where
             });
             air_perm_by_height
         };
+        // (T02a): `air_perm_by_height` is a valid permutation of `0..num_airs`.
+        // (T02b): For all `i`, `air_proofs[i].log_degree <= MAX_TWO_ADICITY - log_blowup`.
 
         // OK: trace_height_constraint_system comes from vkey so requirements of
         // `check_trace_height_constraints` are met.
@@ -780,6 +785,7 @@ where
     /// The caller must ensure the following is met:
     /// * `constraint_system.constraints.len() == num_airs`
     /// * `constraint_system.constraints[air_proofs[i].air_id]` is valid for all `i`
+    /// * For all `i`, `air_proofs[i].log_degree < MAX_TWO_ADICITY`
     fn check_trace_height_constraints(
         builder: &mut Builder<C>,
         constraint_system: &TraceHeightConstraintSystem<C>,
@@ -798,7 +804,8 @@ where
             }
         };
 
-        // Will index by log_air_height. Max value is assumed to be MAX_TWO_ADICITY - 1.
+        // Will index by log_air_height. Max value is assumed to be MAX_TWO_ADICITY - 1 because
+        // `log_blowup > 1`.
         let pows_of_two: Array<C, Var<C::N>> = builder.array(MAX_TWO_ADICITY);
         let cur: Var<C::N> = builder.constant(C::N::ONE);
         iter_zip!(builder, pows_of_two).for_each(|ptr_vec, builder| {
