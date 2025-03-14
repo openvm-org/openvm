@@ -1,6 +1,6 @@
 use openvm_native_compiler::prelude::*;
 
-use crate::{digest::DigestVariable, fri::TwoAdicMultiplicativeCosetVariable};
+use crate::{digest::DigestVariable, fri::TwoAdicMultiplicativeCosetVariable, vars::HintSlice};
 
 #[derive(Clone)]
 pub struct FriConfigVariable<C: Config> {
@@ -48,7 +48,7 @@ pub struct FriQueryProofVariable<C: Config> {
 #[derive(DslVariable, Clone)]
 pub struct FriCommitPhaseProofStepVariable<C: Config> {
     pub sibling_value: Ext<C::F, C::EF>,
-    pub opening_proof: Array<C, DigestVariable<C>>,
+    pub opening_proof: HintSlice<C>,
 }
 
 #[derive(DslVariable, Clone)]
@@ -59,20 +59,13 @@ pub struct FriChallengesVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct DimensionsVariable<C: Config> {
-    pub height: Usize<C::N>,
-}
-
-#[derive(DslVariable, Clone)]
-pub struct TwoAdicPcsProofVariable<C: Config> {
-    pub fri_proof: FriProofVariable<C>,
-    pub query_openings: Array<C, Array<C, BatchOpeningVariable<C>>>,
+    pub log_height: Usize<C::N>,
 }
 
 #[derive(DslVariable, Clone)]
 pub struct BatchOpeningVariable<C: Config> {
-    #[allow(clippy::type_complexity)]
-    pub opened_values: Array<C, Array<C, Felt<C::F>>>,
-    pub opening_proof: Array<C, DigestVariable<C>>,
+    pub opened_values: HintSlice<C>,
+    pub opening_proof: HintSlice<C>,
 }
 
 #[derive(DslVariable, Clone)]

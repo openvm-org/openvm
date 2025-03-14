@@ -23,7 +23,6 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
-use rustc_hash::FxHashSet;
 
 use super::TimestampedEquipartition;
 use crate::system::memory::{
@@ -132,13 +131,12 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
 
 pub struct VolatileBoundaryChip<F> {
     pub air: VolatileBoundaryAir,
-    touched_addresses: FxHashSet<(u32, u32)>,
     range_checker: SharedVariableRangeCheckerChip,
     overridden_height: Option<usize>,
     final_memory: Option<TimestampedEquipartition<F, 1>>,
 }
 
-impl<F: Field> VolatileBoundaryChip<F> {
+impl<F> VolatileBoundaryChip<F> {
     pub fn new(
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
@@ -153,19 +151,10 @@ impl<F: Field> VolatileBoundaryChip<F> {
                 pointer_max_bits,
                 range_bus,
             ),
-            touched_addresses: FxHashSet::default(),
             range_checker,
             overridden_height: None,
             final_memory: None,
         }
-    }
-
-    pub fn touch_address(&mut self, addr_space: u32, pointer: u32) {
-        self.touched_addresses.insert((addr_space, pointer));
-    }
-
-    pub fn all_addresses(&self) -> Vec<(u32, u32)> {
-        self.touched_addresses.iter().cloned().collect()
     }
 }
 
@@ -269,7 +258,11 @@ impl<F: PrimeField32> ChipUsageGetter for VolatileBoundaryChip<F> {
     }
 
     fn current_trace_height(&self) -> usize {
-        self.touched_addresses.len()
+        if let Some(final_memory) = &self.final_memory {
+            final_memory.len()
+        } else {
+            0
+        }
     }
 
     fn trace_width(&self) -> usize {

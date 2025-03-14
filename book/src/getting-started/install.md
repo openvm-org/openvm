@@ -15,7 +15,7 @@ rustup toolchain install nightly
 Then, begin the installation.
 
 ```bash
-cargo +nightly install --git http://github.com/openvm-org/openvm.git cargo-openvm
+cargo +nightly install --locked --git http://github.com/openvm-org/openvm.git cargo-openvm
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:
@@ -37,7 +37,7 @@ Then, clone the repository and begin the installation.
 ```bash
 git clone https://github.com/openvm-org/openvm.git
 cd openvm
-cargo +nightly install --force --path crates/cli
+cargo +nightly install --locked --force --path crates/cli
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:

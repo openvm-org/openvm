@@ -4,7 +4,13 @@ use derivative::Derivative;
 use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
     arch::{VirtualMachine, VmConfig},
-    system::program::trace::VmCommittedExe,
+    system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
+};
+use openvm_continuations::{
+    static_verifier::StaticVerifierPvHandler,
+    verifier::{
+        internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
+    },
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
@@ -33,15 +39,12 @@ use crate::{
     config::{AggConfig, AggStarkConfig, AppConfig},
     keygen::perm::AirIdPermutation,
     prover::vm::types::VmProvingKey,
-    static_verifier::StaticVerifierPvHandler,
-    verifier::{
-        internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
-    },
     NonRootCommittedExe, RootSC, F, SC,
 };
 
 pub(crate) mod dummy;
 pub mod perm;
+pub mod static_verifier;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AppProvingKey<VC> {
@@ -54,6 +57,7 @@ pub struct AppProvingKey<VC> {
 pub struct AppVerifyingKey {
     pub fri_params: FriParameters,
     pub app_vm_vk: MultiStarkVerifyingKey<SC>,
+    pub memory_dimensions: MemoryDimensions,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -129,6 +133,12 @@ where
         AppVerifyingKey {
             fri_params: self.app_vm_pk.fri_params,
             app_vm_vk: self.app_vm_pk.vm_pk.get_vk(),
+            memory_dimensions: self
+                .app_vm_pk
+                .vm_config
+                .system()
+                .memory_config
+                .memory_dimensions(),
         }
     }
 
@@ -301,7 +311,7 @@ impl AggProvingKey {
     pub fn keygen(
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
-        pv_handler: Option<&impl StaticVerifierPvHandler>,
+        pv_handler: &impl StaticVerifierPvHandler,
     ) -> Self {
         let AggConfig {
             agg_stark_config,

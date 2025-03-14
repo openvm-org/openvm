@@ -6,27 +6,25 @@ use std::{
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
-#[allow(unused_imports)]
-use openvm_stark_backend::p3_maybe_rayon::prelude::IndexedParallelIterator;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    interaction::InteractionBuilder,
+    interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, BaseAir},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut},
+    p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashSet;
 
-use super::merkle::DirectCompressionBus;
+use super::merkle::SerialReceiver;
 use crate::{
-    arch::hasher::HasherChip,
+    arch::hasher::Hasher,
     system::memory::{
-        dimensions::MemoryDimensions, merkle::MemoryMerkleBus, offline_checker::MemoryBus,
-        MemoryAddress, MemoryImage, TimestampedEquipartition, INITIAL_TIMESTAMP,
+        dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
+        TimestampedEquipartition, INITIAL_TIMESTAMP,
     },
 };
 
@@ -56,8 +54,8 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
 pub struct PersistentBoundaryAir<const CHUNK: usize> {
     pub memory_dims: MemoryDimensions,
     pub memory_bus: MemoryBus,
-    pub merkle_bus: MemoryMerkleBus,
-    pub compression_bus: DirectCompressionBus,
+    pub merkle_bus: PermutationCheckBus,
+    pub compression_bus: PermutationCheckBus,
 }
 
 impl<const CHUNK: usize, F> BaseAir<F> for PersistentBoundaryAir<CHUNK> {
@@ -90,14 +88,11 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             local.leaf_label.into(),
         ];
         expand_fields.extend(local.hash.map(Into::into));
-        builder.push_send(
-            self.merkle_bus.0,
-            expand_fields,
-            local.expand_direction.into(),
-        );
+        self.merkle_bus
+            .interact(builder, expand_fields, local.expand_direction.into());
 
-        builder.push_send(
-            self.compression_bus.0,
+        self.compression_bus.interact(
+            builder,
             iter::empty()
                 .chain(local.values.map(Into::into))
                 .chain(iter::repeat(AB::Expr::ZERO).take(CHUNK))
@@ -168,8 +163,8 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     pub fn new(
         memory_dimensions: MemoryDimensions,
         memory_bus: MemoryBus,
-        merkle_bus: MemoryMerkleBus,
-        compression_bus: DirectCompressionBus,
+        merkle_bus: PermutationCheckBus,
+        compression_bus: PermutationCheckBus,
     ) -> Self {
         Self {
             air: PersistentBoundaryAir {
@@ -187,21 +182,26 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         self.overridden_height = Some(overridden_height);
     }
 
-    pub fn touch_address(&mut self, address_space: u32, pointer: u32) {
-        let label = pointer / CHUNK as u32;
-        self.touched_labels.touch(address_space, label);
+    pub fn touch_range(&mut self, address_space: u32, pointer: u32, len: u32) {
+        let start_label = pointer / CHUNK as u32;
+        let end_label = (pointer + len - 1) / CHUNK as u32;
+        for label in start_label..=end_label {
+            self.touched_labels.touch(address_space, label);
+        }
     }
 
-    pub fn finalize(
+    pub fn finalize<H>(
         &mut self,
         initial_memory: &MemoryImage<F>,
         final_memory: &TimestampedEquipartition<F, CHUNK>,
-        hasher: &mut impl HasherChip<CHUNK, F>,
-    ) {
+        hasher: &mut H,
+    ) where
+        H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
+    {
         match &mut self.touched_labels {
             TouchedLabels::Running(touched_labels) => {
-                let final_touched_labels = touched_labels
-                    .iter()
+                let final_touched_labels: Vec<_> = touched_labels
+                    .par_iter()
                     .map(|&(address_space, label)| {
                         let pointer = label * CHUNK as u32;
                         let init_values = array::from_fn(|i| {
@@ -209,9 +209,9 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                                 .get(&(address_space, pointer + i as u32))
                                 .unwrap_or(&F::ZERO)
                         });
-                        let initial_hash = hasher.hash_and_record(&init_values);
+                        let initial_hash = hasher.hash(&init_values);
                         let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
-                        let final_hash = hasher.hash_and_record(&timestamped_values.values);
+                        let final_hash = hasher.hash(&timestamped_values.values);
                         FinalTouchedLabel {
                             address_space,
                             label,
@@ -223,6 +223,10 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                         }
                     })
                     .collect();
+                for l in &final_touched_labels {
+                    hasher.receive(&l.init_values);
+                    hasher.receive(&l.final_values);
+                }
                 self.touched_labels = TouchedLabels::Final(final_touched_labels);
             }
             _ => panic!("Cannot finalize after finalization"),

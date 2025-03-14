@@ -15,10 +15,10 @@ use crate::{
 #[derive(Parser)]
 #[command(name = "keygen", about = "Generate an application proving key")]
 pub struct KeygenCmd {
-    #[clap(long, action, help = "Path to app config TOML file", default_value = DEFAULT_APP_CONFIG_PATH)]
+    #[arg(long, action, help = "Path to app config TOML file", default_value = DEFAULT_APP_CONFIG_PATH)]
     config: PathBuf,
 
-    #[clap(
+    #[arg(
         long,
         action,
         help = "Path to output app proving key file",
@@ -26,7 +26,7 @@ pub struct KeygenCmd {
     )]
     output: PathBuf,
 
-    #[clap(
+    #[arg(
         long,
         action,
         help = "Path to output app verifying key file",

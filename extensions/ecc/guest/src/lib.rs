@@ -5,6 +5,7 @@ extern crate alloc;
 
 #[cfg(feature = "halo2curves")]
 pub use halo2curves_axiom as halo2curves;
+pub use once_cell;
 pub use openvm_algebra_guest as algebra;
 pub use openvm_ecc_sw_macros as sw_macros;
 use strum_macros::FromRepr;
@@ -29,6 +30,9 @@ pub mod k256;
 #[cfg(feature = "p256")]
 pub mod p256;
 
+#[cfg(all(test, feature = "k256", feature = "p256", not(target_os = "zkvm")))]
+mod tests;
+
 /// This is custom-1 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x2b;
 pub const SW_FUNCT3: u8 = 0b001;
@@ -42,6 +46,7 @@ pub enum SwBaseFunct7 {
     SwDouble,
     SwSetup,
     HintDecompress,
+    HintNonQr,
 }
 
 impl SwBaseFunct7 {

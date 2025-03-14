@@ -4,7 +4,8 @@ use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, prover::types::AirProofInput, Chip,
+    interaction::BusIndex, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
+    prover::types::AirProofInput, Chip,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -27,13 +28,13 @@ type Val = BabyBear;
 fn boundary_air_test() {
     let mut rng = create_seeded_rng();
 
-    const MEMORY_BUS: usize = 1;
-    const RANGE_CHECKER_BUS: usize = 3;
+    const MEMORY_BUS: BusIndex = 1;
+    const RANGE_CHECKER_BUS: BusIndex = 3;
     const MAX_ADDRESS_SPACE: u32 = 4;
     const LIMB_BITS: usize = 15;
     const MAX_VAL: u32 = 1 << LIMB_BITS;
     const DECOMP: usize = 8;
-    let memory_bus = MemoryBus(MEMORY_BUS);
+    let memory_bus = MemoryBus::new(MEMORY_BUS);
 
     let num_addresses = 10;
     let mut distinct_addresses = HashSet::new();
@@ -65,8 +66,8 @@ fn boundary_air_test() {
 
     let diff_height = num_addresses.next_power_of_two() - num_addresses;
 
-    let init_memory_dummy_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
-    let final_memory_dummy_air = DummyInteractionAir::new(5, true, MEMORY_BUS);
+    let init_memory_dummy_air = DummyInteractionAir::new(4, false, MEMORY_BUS);
+    let final_memory_dummy_air = DummyInteractionAir::new(4, true, MEMORY_BUS);
 
     let init_memory_trace = RowMajorMatrix::new(
         distinct_addresses
@@ -78,12 +79,11 @@ fn boundary_air_test() {
                     Val::from_canonical_u32(*pointer),
                     Val::ZERO,
                     Val::ZERO,
-                    Val::ONE,
                 ]
             })
-            .chain(iter::repeat(Val::ZERO).take(6 * diff_height))
+            .chain(iter::repeat(Val::ZERO).take(5 * diff_height))
             .collect(),
-        6,
+        5,
     );
 
     let final_memory_trace = RowMajorMatrix::new(
@@ -98,12 +98,11 @@ fn boundary_air_test() {
                     Val::from_canonical_u32(*pointer),
                     timestamped_value.values[0],
                     Val::from_canonical_u32(timestamped_value.timestamp),
-                    Val::ONE,
                 ]
             })
-            .chain(iter::repeat(Val::ZERO).take(6 * diff_height))
+            .chain(iter::repeat(Val::ZERO).take(5 * diff_height))
             .collect(),
-        6,
+        5,
     );
 
     boundary_chip.finalize(final_memory.clone());

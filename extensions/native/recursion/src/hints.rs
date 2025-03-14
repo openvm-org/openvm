@@ -97,7 +97,11 @@ impl Hintable<InnerConfig> for InnerChallenge {
     }
 
     fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        vec![self.as_base_slice().to_vec()]
+        self.as_base_slice()
+            .iter()
+            .copied()
+            .map(|x| vec![x])
+            .collect()
     }
 }
 
@@ -276,12 +280,14 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
         let raw_air_perm_by_height = Vec::<usize>::read(builder);
         // A hacky way to transmute from Array of Var to Array of Usize.
         let air_perm_by_height = unsafe_array_transmute(raw_air_perm_by_height);
+        let log_up_pow_witness = builder.hint_felt();
 
         StarkProofVariable {
             commitments,
             opening,
             per_air,
             air_perm_by_height,
+            log_up_pow_witness,
         }
     }
 
@@ -297,6 +303,13 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
             .sorted_by_key(|i| Reverse(self.per_air[*i].degree))
             .collect();
         stream.extend(air_perm_by_height.write());
+        stream.extend(
+            self.rap_phase_seq_proof
+                .as_ref()
+                .map(|p| p.logup_pow_witness)
+                .unwrap_or_default()
+                .write(),
+        );
 
         stream
     }
@@ -334,8 +347,12 @@ impl Hintable<InnerConfig> for OpeningProof<PcsProof<BabyBearPoseidon2Config>, I
     type HintVariable = OpeningProofVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+        builder.cycle_tracker_start("HintOpeningProof");
         let proof = InnerFriProof::read(builder);
+        builder.cycle_tracker_end("HintOpeningProof");
+        builder.cycle_tracker_start("HintOpeningValues");
         let values = OpenedValues::read(builder);
+        builder.cycle_tracker_end("HintOpeningValues");
 
         OpeningProofVariable { proof, values }
     }

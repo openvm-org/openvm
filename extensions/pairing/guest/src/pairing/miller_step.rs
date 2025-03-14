@@ -2,13 +2,6 @@ use core::ops::{Add, Mul, Neg, Sub};
 
 use openvm_algebra_guest::{DivUnsafe, Field};
 use openvm_ecc_guest::AffinePoint;
-#[cfg(target_os = "zkvm")]
-use {
-    crate::pairing::shifted_funct7,
-    crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
-    core::mem::MaybeUninit,
-    openvm_platform::custom_insn_r,
-};
 
 use super::{PairingIntrinsics, UnevaluatedLine};
 
@@ -56,47 +49,29 @@ where
     fn miller_double_step(
         s: &AffinePoint<Self::Fp2>,
     ) -> (AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp2>) {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            let one = &Self::Fp2::ONE;
-            let two = &(one + one);
-            let three = &(one + two);
+        let two: &Self::Fp2 = &<P as PairingIntrinsics>::FP2_TWO;
+        let three: &Self::Fp2 = &<P as PairingIntrinsics>::FP2_THREE;
 
-            let x = &s.x;
-            let y = &s.y;
-            // λ = (3x^2) / (2y)
-            let lambda = &((three * x * x).div_unsafe(&(two * y)));
-            // x_2s = λ^2 - 2x
-            let x_2s = lambda * lambda - two * x;
-            // y_2s = λ(x - x_2s) - y
-            let y_2s = lambda * &(x - &x_2s) - y;
-            let two_s = AffinePoint { x: x_2s, y: y_2s };
+        let x = &s.x;
+        let y = &s.y;
+        // λ = (3x^2) / (2y)
+        let lambda = &((three * x * x).div_unsafe(&(two * y)));
+        // x_2s = λ^2 - 2x
+        let x_2s = lambda * lambda - two * x;
+        // y_2s = λ(x - x_2s) - y
+        let y_2s = lambda * &(x - &x_2s) - y;
+        let two_s = AffinePoint { x: x_2s, y: y_2s };
 
-            // Tangent line
-            //   1 + b' (x_P / y_P) w^-1 + c' (1 / y_P) w^-3
-            // where
-            //   l_{\Psi(S),\Psi(S)}(P) = (λ * x_S - y_S) (1 / y_P)  - λ (x_P / y_P) w^2 + w^3
-            // x0 = λ * x_S - y_S
-            // x2 = - λ
-            let b = Self::Fp2::ZERO - lambda;
-            let c = lambda * x - y;
+        // Tangent line
+        //   1 + b' (x_P / y_P) w^-1 + c' (1 / y_P) w^-3
+        // where
+        //   l_{\Psi(S),\Psi(S)}(P) = (λ * x_S - y_S) (1 / y_P)  - λ (x_P / y_P) w^2 + w^3
+        // x0 = λ * x_S - y_S
+        // x2 = - λ
+        let b = Self::Fp2::ZERO - lambda;
+        let c = lambda * x - y;
 
-            (two_s, UnevaluatedLine { b, c })
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<(AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp2>)> =
-                MaybeUninit::uninit();
-            custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<P>(PairingBaseFunct7::MillerDoubleStep),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In s as *const _,
-                rs2 = Const "x0"
-            );
-            unsafe { uninit.assume_init() }
-        }
+        (two_s, UnevaluatedLine { b, c })
     }
 
     /// Miller add step
@@ -138,61 +113,40 @@ where
         UnevaluatedLine<Self::Fp2>,
         UnevaluatedLine<Self::Fp2>,
     ) {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            let one = &Self::Fp2::ONE;
-            let two = &(one + one);
+        let two = &Self::FP2_TWO;
 
-            let x_s = &s.x;
-            let y_s = &s.y;
-            let x_q = &q.x;
-            let y_q = &q.y;
+        let x_s = &s.x;
+        let y_s = &s.y;
+        let x_q = &q.x;
+        let y_q = &q.y;
 
-            // λ1 = (y_s - y_q) / (x_s - x_q)
-            let lambda1 = &((y_s - y_q).div_unsafe(&(x_s - x_q)));
-            let x_s_plus_q = lambda1 * lambda1 - x_s - x_q;
+        // λ1 = (y_s - y_q) / (x_s - x_q)
+        let lambda1 = &((y_s - y_q).div_unsafe(&(x_s - x_q)));
+        let x_s_plus_q = lambda1 * lambda1 - x_s - x_q;
 
-            // λ2 = -λ1 - 2y_s / (x_{s+q} - x_s)
-            let lambda2 =
-                &(Self::Fp2::ZERO - lambda1.clone() - (two * y_s).div_unsafe(&(&x_s_plus_q - x_s)));
-            let x_s_plus_q_plus_s = lambda2 * lambda2 - x_s - &x_s_plus_q;
-            let y_s_plus_q_plus_s = lambda2 * &(x_s - &x_s_plus_q_plus_s) - y_s;
+        // λ2 = -λ1 - 2y_s / (x_{s+q} - x_s)
+        let lambda2 =
+            &(Self::Fp2::ZERO - lambda1.clone() - (two * y_s).div_unsafe(&(&x_s_plus_q - x_s)));
+        let x_s_plus_q_plus_s = lambda2 * lambda2 - x_s - &x_s_plus_q;
+        let y_s_plus_q_plus_s = lambda2 * &(x_s - &x_s_plus_q_plus_s) - y_s;
 
-            let s_plus_q_plus_s = AffinePoint {
-                x: x_s_plus_q_plus_s,
-                y: y_s_plus_q_plus_s,
-            };
+        let s_plus_q_plus_s = AffinePoint {
+            x: x_s_plus_q_plus_s,
+            y: y_s_plus_q_plus_s,
+        };
 
-            // l_{\Psi(S),\Psi(Q)}(P) = (λ_1 * x_S - y_S) (1 / y_P) - λ_1 (x_P / y_P) w^2 + w^3
-            let b0 = Self::Fp2::ZERO - lambda1;
-            let c0 = lambda1 * x_s - y_s;
+        // l_{\Psi(S),\Psi(Q)}(P) = (λ_1 * x_S - y_S) (1 / y_P) - λ_1 (x_P / y_P) w^2 + w^3
+        let b0 = Self::Fp2::ZERO - lambda1;
+        let c0 = lambda1 * x_s - y_s;
 
-            // l_{\Psi(S+Q),\Psi(S)}(P) = (λ_2 * x_S - y_S) (1 / y_P) - λ_2 (x_P / y_P) w^2 + w^3
-            let b1 = Self::Fp2::ZERO - lambda2;
-            let c1 = lambda2 * x_s - y_s;
+        // l_{\Psi(S+Q),\Psi(S)}(P) = (λ_2 * x_S - y_S) (1 / y_P) - λ_2 (x_P / y_P) w^2 + w^3
+        let b1 = Self::Fp2::ZERO - lambda2;
+        let c1 = lambda2 * x_s - y_s;
 
-            (
-                s_plus_q_plus_s,
-                UnevaluatedLine { b: b0, c: c0 },
-                UnevaluatedLine { b: b1, c: c1 },
-            )
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<(
-                AffinePoint<Self::Fp2>,
-                UnevaluatedLine<Self::Fp2>,
-                UnevaluatedLine<Self::Fp2>,
-            )> = MaybeUninit::uninit();
-            custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<P>(PairingBaseFunct7::MillerDoubleAndAddStep),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In s as *const _,
-                rs2 = In q as *const _
-            );
-            unsafe { uninit.assume_init() }
-        }
+        (
+            s_plus_q_plus_s,
+            UnevaluatedLine { b: b0, c: c0 },
+            UnevaluatedLine { b: b1, c: c1 },
+        )
     }
 }

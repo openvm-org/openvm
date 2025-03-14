@@ -105,6 +105,34 @@ impl<const NUM: usize, const AUX_LEN: usize> IsLtArrayChip<NUM, AUX_LEN> {
             });
         RowMajorMatrix::new(rows, width)
     }
+
+    pub fn generate_wrong_trace<F: PrimeField32>(self) -> RowMajorMatrix<F> {
+        assert!(self.pairs.len().is_power_of_two());
+        let width = BaseAir::<F>::width(&self.air);
+        let mut rows = F::zero_vec(width * self.pairs.len());
+        rows.par_chunks_mut(width)
+            .zip(self.pairs)
+            .for_each(|(row, (x, y))| {
+                let row: &mut IsLtArrayCols<_, NUM, AUX_LEN> = row.borrow_mut();
+                row.x = x.map(F::from_canonical_u32);
+                row.y = y.map(F::from_canonical_u32);
+                row.out = F::ZERO;
+                let aux: IsLtArrayAuxColsMut<_> = (&mut row.aux).into();
+                aux.diff_marker
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i, diff_marker)| {
+                        *diff_marker = if i == 0 { F::ONE } else { F::ZERO };
+                    });
+                *aux.diff_inv = F::ZERO;
+                self.range_checker.decompose(
+                    (1 << self.air.0.max_bits()) - 1,
+                    self.air.0.max_bits(),
+                    aux.lt_decomp,
+                );
+            });
+        RowMajorMatrix::new(rows, width)
+    }
 }
 
 fn get_range_bus() -> VariableRangeCheckerBus {
@@ -150,6 +178,28 @@ fn test_is_less_than_tuple_chip_negative() {
     let range_checker_trace = range_checker.generate_trace();
 
     trace.values[2] = FieldAlgebra::from_canonical_u64(0);
+
+    disable_debug_builder();
+    assert_eq!(
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+            any_rap_arc_vec![air, range_checker.air],
+            vec![trace, range_checker_trace]
+        )
+        .err(),
+        Some(VerificationError::OodEvaluationMismatch),
+        "Expected verification to fail, but it passed"
+    );
+}
+
+#[test]
+fn test_is_less_than_tuple_chip_nonzero_diff() {
+    let range_checker = get_tester_range_chip();
+    let mut chip = IsLtArrayChip::<N, LIMBS>::new(16, range_checker.clone());
+    let air = chip.air;
+    chip.pairs = vec![([0, 0], [0, 1])];
+
+    let trace = chip.generate_wrong_trace();
+    let range_checker_trace = range_checker.generate_trace();
 
     disable_debug_builder();
     assert_eq!(

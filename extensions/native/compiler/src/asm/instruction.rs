@@ -116,8 +116,8 @@ pub enum AsmInstruction<F, EF> {
     /// (a, b, c) are memory pointers to (dst, lhs, rhs)
     Poseidon2Compress(i32, i32, i32),
 
-    /// (a, b, res, len, alpha)
-    FriReducedOpening(i32, i32, i32, i32, i32),
+    /// (a, b, res, alpha, hint_id, hint_offset, is_init)
+    FriReducedOpening(i32, i32, i32, i32, i32, i32, i32),
 
     /// (dim, opened, opened_length, sibling, index, commit)
     /// opened values are field elements
@@ -126,6 +126,10 @@ pub enum AsmInstruction<F, EF> {
     /// (dim, opened, opened_length, sibling, index, commit)
     /// opened values are extension field elements
     VerifyBatchExt(i32, i32, i32, i32, i32, i32),
+
+    /// (v, x_bit, y_bit)
+    /// Assert that v = x + y * 2^16 where x < 2^x_bit and y < 2^y_bit.
+    RangeCheck(i32, i32, i32),
 
     /// Print a variable.
     PrintV(i32),
@@ -138,11 +142,15 @@ pub enum AsmInstruction<F, EF> {
 
     /// Add next input vector to hint stream.
     HintInputVec(),
+    /// Add next felt to hint stream,
+    HintFelt(),
 
     /// HintBits(src, len).
     ///
     /// Bit decompose the field element at pointer `src` to the first `len` little endian bits and add to hint stream.
     HintBits(i32, u32),
+
+    HintLoad(),
 
     /// Stores the next hint stream word into value stored at addr + value.
     StoreHintWordI(i32, F),
@@ -343,12 +351,14 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(f, "print_e ({})fp", dst)
             }
             AsmInstruction::HintInputVec() => write!(f, "hint_vec"),
+            AsmInstruction::HintFelt() => write!(f, "hint_felt"),
             AsmInstruction::StoreHintWordI(dst, offset) => {
                 write!(f, "shintw ({})fp {}", dst, offset)
             }
             AsmInstruction::StoreHintExtI(dst, offset) => {
                 write!(f, "shinte ({})fp {}", dst, offset)
             }
+            AsmInstruction::HintLoad() => write!(f, "hint_load"),
             AsmInstruction::Publish(val, index) => {
                 write!(f, "commit ({})fp ({})fp", val, index)
             }
@@ -358,11 +368,11 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::CycleTrackerEnd() => {
                 write!(f, "cycle_tracker_end")
             }
-            AsmInstruction::FriReducedOpening(a, b, res, len, alpha) => {
+            AsmInstruction::FriReducedOpening(a, b, length, alpha, res, hint_id, is_init) => {
                 write!(
                     f,
-                    "fri_mat_opening ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
-                    a, b, res, len, alpha
+                    "fri_mat_opening ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
+                    a, b, length, alpha, res, hint_id, is_init
                 )
             }
             AsmInstruction::VerifyBatchFelt(dim, opened, opened_length, sibling, index, commit) => {
@@ -378,6 +388,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                     "verify_batch_ext ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
                     dim, opened, opened_length, sibling, index, commit
                 )
+            }
+            AsmInstruction::RangeCheck(fp, lo_bits, hi_bits) => {
+                write!(f, "range_check_fp ({})fp, ({}), ({})", fp, lo_bits, hi_bits)
             }
         }
     }

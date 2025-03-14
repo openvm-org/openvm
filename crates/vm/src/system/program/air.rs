@@ -60,6 +60,8 @@ impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for ProgramAir {
         let exec_freq = common_trace.row_slice(0)[0];
         let exec_cols = cached_trace.row_slice(0).to_vec();
 
-        builder.push_receive(self.bus.0, exec_cols, exec_freq);
+        self.bus
+            .inner
+            .add_key_with_lookups(builder, exec_cols, exec_freq);
     }
 }

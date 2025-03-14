@@ -23,13 +23,13 @@ We are also given the siblings encountered in the path to the root with whom we 
 
 More precisely, we are given the following inputs. Assume that the original matrices `M_1, ..., M_n` are specified in decreasing order of height.
 
-| Name         | Abstract type                   | Type in eDSL                                                        | Meaning                                                                                         |
-|--------------|---------------------------------|---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
-| `dimensions` | `Vec<F>`                        | `Array<C, Usize<C::F>>`                                             | `dimensions[i]` is the height of `M_i`                                                          |
-| `opened_values` | `Vec<Vec<F>>` or `Vec<Vec<EF>>` | `Array<C, Array<C, Felt<C::F>>>` or `Array<C, Array<C, Ext<C::F>>>` | `opened_values[i]` is row `floor(index * dimensions[i]/h_max)` of `M_i`                         |
-| `siblings` | `Vec<[F; CHUNK]`                | `Array<C, Array<C, Felt<C::F>>>` | The siblings with which we must apply Poseidon2 compression, in the order in which this is done |
-| `index_bits` | `Vec<bit>`                      | `Array<C, Var<C::N>>` | The bits of `index` described above |
-| `commit` | `[F; CHUNK]`                    | `Array<C, Felt<C::F>>` | The commitment we are verifying |
+| Name            | Abstract type                   | Type in eDSL                                                        | Meaning                                                                                                                                                                  |
+|-----------------|---------------------------------|---------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `dimensions`    | `Vec<F>`                        | `Array<C, Usize<C::F>>`                                             | `dimensions[i]` is the height of `M_i`                                                                                                                                   |
+| `opened_values` | `Vec<Vec<F>>` or `Vec<Vec<EF>>` | `Array<C, Array<C, Felt<C::F>>>` or `Array<C, Array<C, Ext<C::F>>>` | `opened_values[i]` is row `floor(index * dimensions[i]/h_max)` of `M_i`                                                                                                  |
+| `proof_id`      | `Vec<[F; CHUNK]`                | `Var<C::N>`                                                         | The siblings with which we must apply Poseidon2 compression, in the order in which this is done. It's only read once so we hint it directly instead of read from memory. |
+| `index_bits`    | `Vec<bit>`                      | `Array<C, Var<C::N>>`                                               | The bits of `index` described above                                                                                                                                      |
+| `commit`        | `[F; CHUNK]`                    | `Array<C, Felt<C::F>>`                                              | The commitment we are verifying                                                                                                                                          |
 
 A `VERIFY_BATCH` instruction does the following:
 - It maintains a node `node : [F; CHUNK]` in the Merkle tree.
@@ -44,15 +44,15 @@ A `VERIFY_BATCH` instruction does the following:
 
 The instruction uses the following seven operands. As seven is the current maximum number of operands, the address space for all reads is fixed to be `AS::Native = 4`.
 
-| Operand | Name | Meaning                                                                                                                                                                                                                          |
-|---------|------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `a` | `dim` | Pointer to the start pointer of the `dimensions` array                                                                                                                                                                           |
-| `b` | `opened_values` | Pointer to the start pointer of the `opened_values` array                                                                                                                                                                        |
-| `c` | `opened_values_len` | Pointer to the length of the `opened_values` array                                                                                                                                                                               |
-| `d` | `siblings` | Pointer to the start pointer of the `siblings` array                                                                                                                                                                             |
-| `e` | `index_bits` | Pointer to the start pointer of the `index_bits` array                                                                                                                                                                           |
-| `f` | `commit` | Pointer to the start pointer of the `commit` array                                                                                                                                                                               |
-| `g` | `opened_value_size_inv` | The inverse of the size of an opened value. If the elements of the original matrices, and therefore the opened values, are field elements, then this should be 1. If they are extension field elements, then this should be 1/4. |
+| Operand | Name                    | Meaning                                                                                                                                                                                                                          |
+|---------|-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `a`     | `dim`                   | Pointer to the start pointer of the `dimensions` array                                                                                                                                                                           |
+| `b`     | `opened_values`         | Pointer to the start pointer of the `opened_values` array                                                                                                                                                                        |
+| `c`     | `opened_values_len`     | Pointer to the length of the `opened_values` array                                                                                                                                                                               |
+| `d`     | `proof_id`              | Specifies the hint ID of the Merkle proof; used by run-time only                                                                                                                                                                 |
+| `e`     | `index_bits`            | Pointer to the start pointer of the `index_bits` array                                                                                                                                                                           |
+| `f`     | `commit`                | Pointer to the start pointer of the `commit` array                                                                                                                                                                               |
+| `g`     | `opened_value_size_inv` | The inverse of the size of an opened value. If the elements of the original matrices, and therefore the opened values, are field elements, then this should be 1. If they are extension field elements, then this should be 1/4. |
 
 It is assumed that the `opened_values` array consists of elements of size 2 field elements, with the first field element being the pointer to the start of the row, and the second field element being the length of the row.
 
@@ -79,7 +79,6 @@ In addition, `NativePoseidon2Cols` contains a `specific` field whose type is sim
 - `SimplePoseidonSpecificCols`
 
 `specific` then has length equal to the maximum width of the above three, so that it can be cast to each one.
-
 
 ## Layout of Rows in the Matrix
 

@@ -8,7 +8,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-openvm-platform = { workspace = true }
+openvm-custom-insn = { workspace = true }
 strum_macros = { workspace = true }
 
 [features]

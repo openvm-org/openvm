@@ -3,12 +3,12 @@ use std::{iter::Zip, vec::IntoIter};
 use backtrace::Backtrace;
 use itertools::izip;
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra};
 use serde::{Deserialize, Serialize};
 
 use super::{
     Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,
-    SymbolicFelt, SymbolicVar, Usize, Var, Variable,
+    SymbolicFelt, SymbolicVar, Usize, Var, Variable, WitnessRef,
 };
 use crate::ir::{collections::ArrayLike, Ptr};
 
@@ -104,6 +104,7 @@ pub struct Builder<C: Config> {
     pub(crate) witness_var_count: u32,
     pub(crate) witness_felt_count: u32,
     pub(crate) witness_ext_count: u32,
+    pub(crate) witness_space: Vec<Vec<WitnessRef>>,
     pub flags: BuilderFlags,
     pub is_sub_builder: bool,
 }
@@ -120,6 +121,7 @@ impl<C: Config> Builder<C> {
             witness_var_count: 0,
             witness_felt_count: 0,
             witness_ext_count: 0,
+            witness_space: Default::default(),
             operations: Default::default(),
             nb_public_values: self.nb_public_values,
             flags: self.flags,
@@ -233,6 +235,14 @@ impl<C: Config> Builder<C> {
         self.assert_eq::<Ext<C::F, C::EF>>(lhs, rhs);
     }
 
+    pub fn assert_usize_eq<LhsExpr: Into<SymbolicVar<C::N>>, RhsExpr: Into<SymbolicVar<C::N>>>(
+        &mut self,
+        lhs: LhsExpr,
+        rhs: RhsExpr,
+    ) {
+        self.assert_eq::<Usize<C::N>>(lhs, rhs);
+    }
+
     /// Assert that two arrays are equal.
     pub fn assert_var_array_eq(&mut self, lhs: &Array<C, Var<C::N>>, rhs: &Array<C, Var<C::N>>) {
         self.assert_var_eq(lhs.len(), rhs.len());
@@ -269,6 +279,59 @@ impl<C: Config> Builder<C> {
             is_eq: false,
             builder: self,
         }
+    }
+
+    /// Asserts that lhs is less than rhs in time O(rhs).
+    pub fn assert_less_than_slow_small_rhs<
+        LhsExpr: Into<SymbolicVar<C::N>>,
+        RhsExpr: Into<SymbolicVar<C::N>>,
+    >(
+        &mut self,
+        lhs: LhsExpr,
+        rhs: RhsExpr,
+    ) {
+        let lhs: Usize<_> = self.eval(lhs.into());
+        let rhs: Usize<_> = self.eval(rhs.into());
+        let product: Usize<_> = self.eval(lhs.clone());
+        self.range(1, rhs).for_each(|i_vec, builder| {
+            let i = i_vec[0];
+            let diff: Usize<_> = builder.eval(lhs.clone() - i);
+            builder.assign(&product, product.clone() * diff);
+        });
+        self.assert_usize_eq(product, RVar::from(0));
+    }
+
+    /// Asserts that lhs is less than rhs in time O(log(lhs) + log(rhs)).
+    ///
+    /// Only works for Felt == BabyBear and in the VM.
+    ///
+    /// Uses bit decomposition hint, which has large constant factor overhead, so prefer
+    /// [assert_less_than_slow_small_rhs] when rhs is small.
+    pub fn assert_less_than_slow_bit_decomp(&mut self, lhs: Var<C::N>, rhs: Var<C::N>) {
+        let lhs = self.unsafe_cast_var_to_felt(lhs);
+        let rhs = self.unsafe_cast_var_to_felt(rhs);
+
+        let lhs_bits = self.num2bits_f(lhs, C::N::bits() as u32);
+        let rhs_bits = self.num2bits_f(rhs, C::N::bits() as u32);
+
+        let is_lt: Var<_> = self.eval(C::N::ZERO);
+
+        iter_zip!(self, lhs_bits, rhs_bits).for_each(|ptr_vec, builder| {
+            let lhs_bit = builder.iter_ptr_get(&lhs_bits, ptr_vec[0]);
+            let rhs_bit = builder.iter_ptr_get(&rhs_bits, ptr_vec[1]);
+
+            builder.if_ne(lhs_bit, rhs_bit).then(|builder| {
+                builder.assign(&is_lt, rhs_bit);
+            });
+        });
+        self.assert_var_eq(is_lt, C::N::ONE);
+    }
+
+    /// asserts that x has at most num_bits bits
+    pub fn range_check_var(&mut self, x: Var<C::N>, num_bits: usize) {
+        assert!(!self.flags.static_only, "range_check_var is dynamic");
+        assert!(num_bits <= 30);
+        self.trace_push(DslIr::RangeCheckV(x, num_bits));
     }
 
     /// Evaluate a block of operations over a range from start to end.
@@ -353,18 +416,44 @@ impl<C: Config> Builder<C> {
     }
 
     pub fn hint_var(&mut self) -> Var<C::N> {
-        let arr = self.hint_vars();
-        self.get(&arr, RVar::zero())
+        let ptr = self.alloc(RVar::one(), 1);
+        // Prepare data for hinting.
+        self.operations.push(DslIr::HintFelt());
+        let index = MemIndex {
+            index: RVar::zero(),
+            offset: 0,
+            size: 1,
+        };
+        self.operations.push(DslIr::StoreHintWord(ptr, index));
+        let v: Var<C::N> = self.uninit();
+        self.load(v, ptr, index);
+        v
     }
 
     pub fn hint_felt(&mut self) -> Felt<C::F> {
-        let arr = self.hint_felts();
-        self.get(&arr, RVar::zero())
+        let ptr = self.alloc(RVar::one(), 1);
+        // Prepare data for hinting.
+        self.operations.push(DslIr::HintFelt());
+        let index = MemIndex {
+            index: RVar::zero(),
+            offset: 0,
+            size: 1,
+        };
+        self.operations.push(DslIr::StoreHintWord(ptr, index));
+        let f: Felt<C::F> = self.uninit();
+        self.load(f, ptr, index);
+        f
     }
 
     pub fn hint_ext(&mut self) -> Ext<C::F, C::EF> {
-        let arr = self.hint_exts();
-        self.get(&arr, RVar::zero())
+        let flattened = self.hint_felts_fixed(C::EF::D);
+
+        // Simply recast memory as Array<Ext>.
+        let array: Array<C, Ext<_, _>> = match flattened {
+            Array::Fixed(_) => unreachable!(),
+            Array::Dyn(ptr, _) => Array::Dyn(ptr, Usize::from(1)),
+        };
+        self.get(&array, 0)
     }
 
     /// Hint a vector of variables.
@@ -377,6 +466,10 @@ impl<C: Config> Builder<C> {
     /// Hint a vector of felts.
     pub fn hint_felts(&mut self) -> Array<C, Felt<C::F>> {
         self.hint_words()
+    }
+
+    pub fn hint_felts_fixed(&mut self, len: impl Into<RVar<C::N>>) -> Array<C, Felt<C::F>> {
+        self.hint_words_fixed(len)
     }
 
     /// Hints an array of V and assumes V::size_of() == 1.
@@ -400,7 +493,6 @@ impl<C: Config> Builder<C> {
 
         let vlen: Var<C::N> = self.uninit();
         self.load(vlen, ptr, index);
-
         let arr = self.dyn_array(vlen);
 
         // Write the content hints directly into the array memory.
@@ -412,15 +504,34 @@ impl<C: Config> Builder<C> {
             };
             builder.operations.push(DslIr::StoreHintWord(
                 Ptr {
-                    address: match ptr_vec[0] {
-                        RVar::Const(_) => unreachable!(),
-                        RVar::Val(v) => v,
-                    },
+                    address: ptr_vec[0].variable(),
                 },
                 index,
             ));
         });
+        arr
+    }
 
+    /// Hints an array of V and assumes V::size_of() == 1.
+    fn hint_words_fixed<V: MemVariable<C>>(&mut self, len: impl Into<RVar<C::N>>) -> Array<C, V> {
+        assert_eq!(V::size_of(), 1);
+
+        let arr = self.dyn_array(len.into());
+        // Write the content hints directly into the array memory.
+        iter_zip!(self, arr).for_each(|ptr_vec, builder| {
+            let index = MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: 1,
+            };
+            builder.operations.push(DslIr::HintFelt());
+            builder.operations.push(DslIr::StoreHintWord(
+                Ptr {
+                    address: ptr_vec[0].variable(),
+                },
+                index,
+            ));
+        });
         arr
     }
 
@@ -433,13 +544,30 @@ impl<C: Config> Builder<C> {
         let flattened = self.hint_felts();
 
         let size = <Ext<C::F, C::EF> as MemVariable<C>>::size_of();
-        self.assert_eq::<Usize<_>>(flattened.len(), len * C::N::from_canonical_usize(size));
+        self.assert_usize_eq(flattened.len(), len * C::N::from_canonical_usize(size));
 
         // Simply recast memory as Array<Ext>.
         match flattened {
             Array::Fixed(_) => unreachable!(),
             Array::Dyn(ptr, _) => Array::Dyn(ptr, Usize::Var(len)),
         }
+    }
+
+    /// Move data from input stream into hint space. Return an ID which can be used to load the
+    /// data at runtime.
+    pub fn hint_load(&mut self) -> Var<C::N> {
+        self.trace_push(DslIr::HintLoad());
+        let ptr = self.alloc(RVar::one(), 1);
+        let index = MemIndex {
+            index: RVar::zero(),
+            offset: 0,
+            size: 1,
+        };
+        // MemIndex.index share the same pointer, but it doesn't matter.
+        self.operations.push(DslIr::StoreHintWord(ptr, index));
+        let id: Var<C::N> = self.uninit();
+        self.load(id, ptr, index);
+        id
     }
 
     pub fn witness_var(&mut self) -> Var<C::N> {
@@ -457,7 +585,7 @@ impl<C: Config> Builder<C> {
     pub fn witness_felt(&mut self) -> Felt<C::F> {
         assert!(
             !self.is_sub_builder,
-            "Cannot create a witness var with a sub builder"
+            "Cannot create a witness felt with a sub builder"
         );
         let witness = self.uninit();
         self.operations
@@ -469,13 +597,27 @@ impl<C: Config> Builder<C> {
     pub fn witness_ext(&mut self) -> Ext<C::F, C::EF> {
         assert!(
             !self.is_sub_builder,
-            "Cannot create a witness var with a sub builder"
+            "Cannot create a witness ext with a sub builder"
         );
         let witness = self.uninit();
         self.operations
             .push(DslIr::WitnessExt(witness, self.witness_ext_count));
         self.witness_ext_count += 1;
         witness
+    }
+
+    pub fn witness_load(&mut self, witness_refs: Vec<WitnessRef>) -> Usize<C::N> {
+        assert!(
+            !self.is_sub_builder,
+            "Cannot load witness refs with a sub builder"
+        );
+        let ret = self.witness_space.len();
+        self.witness_space.push(witness_refs);
+        ret.into()
+    }
+
+    pub fn get_witness_refs(&self, id: Usize<C::N>) -> &[WitnessRef] {
+        self.witness_space.get(id.value()).unwrap()
     }
 
     /// Throws an error.

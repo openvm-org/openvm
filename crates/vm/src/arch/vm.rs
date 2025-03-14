@@ -1,29 +1,39 @@
 use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
 
+use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig, Val},
+    config::{Com, Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
-    p3_field::PrimeField32,
+    p3_field::{FieldAlgebra, PrimeField32},
     proof::Proof,
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
     verifier::VerificationError,
     Chip,
 };
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::info_span;
 
-use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
+use super::{
+    ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
+    PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+};
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::segment::ExecutionSegment,
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, segment::ExecutionSegment},
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{merkle::MemoryMerklePvs, paged_vec::AddressMap, MemoryImage, CHUNK},
+        memory::{
+            merkle::MemoryMerklePvs,
+            paged_vec::AddressMap,
+            tree::public_values::{UserPublicValuesProof, UserPublicValuesProofError},
+            MemoryImage, CHUNK,
+        },
         program::trace::VmCommittedExe,
     },
 };
@@ -135,14 +145,20 @@ where
         self.config.system().continuation_enabled
     }
 
-    pub fn execute_segments(
+    /// Executes the program in segments.
+    /// After each segment is executed, call the provided closure on the execution result.
+    /// Returns the results from each closure, one per segment.
+    ///
+    /// The closure takes `f(segment_idx, segment) -> R`.
+    pub fn execute_and_then<R>(
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
+        mut f: impl FnMut(usize, ExecutionSegment<F, VC>) -> R,
+    ) -> Result<Vec<R>, ExecutionError> {
         let mem_config = self.config.system().memory_config;
         let exe = exe.into();
-        let mut segments = vec![];
+        let mut segment_results = vec![];
         let memory = AddressMap::from_iter(
             mem_config.as_offset,
             1 << mem_config.as_height,
@@ -156,16 +172,26 @@ where
         loop {
             let _span = info_span!("execute_segment", segment = segment_idx).entered();
             let one_segment_result = self.execute_until_segment(exe.clone(), state)?;
-            segments.push(one_segment_result.segment);
+            segment_results.push(f(segment_idx, one_segment_result.segment));
             if one_segment_result.next_state.is_none() {
                 break;
             }
             state = one_segment_result.next_state.unwrap();
             segment_idx += 1;
         }
-        tracing::debug!("Number of continuation segments: {}", segments.len());
+        tracing::debug!("Number of continuation segments: {}", segment_results.len());
+        #[cfg(feature = "bench-metrics")]
+        metrics::counter!("num_segments").absolute(segment_results.len() as u64);
 
-        Ok(segments)
+        Ok(segment_results)
+    }
+
+    pub fn execute_segments(
+        &self,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
+    ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
+        self.execute_and_then(exe, input, |_, seg| seg)
     }
 
     /// Executes a program until a segmentation happens.
@@ -187,7 +213,6 @@ where
         #[cfg(feature = "bench-metrics")]
         {
             segment.metrics = from_state.metrics;
-            segment.metrics.clear();
         }
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
@@ -215,7 +240,7 @@ where
             .expect("final memory should be set in continuations segment");
         let streams = segment.chip_complex.take_streams();
         #[cfg(feature = "bench-metrics")]
-        let metrics = mem::take(&mut segment.metrics);
+        let metrics = segment.metrics.partial_take();
         Ok(VmExecutorOneSegmentResult {
             segment,
             next_state: Some(VmExecutorNextSegmentState {
@@ -233,9 +258,10 @@ where
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
-        let mut results = self.execute_segments(exe, input)?;
-        let last = results.last_mut().unwrap();
-        let final_memory = mem::take(&mut last.final_memory);
+        let mut last = None;
+        self.execute_and_then(exe, input, |_, seg| last = Some(seg))?;
+        let last = last.expect("at least one segment must be executed");
+        let final_memory = last.final_memory;
         let end_state =
             last.chip_complex.connector_chip().boundary_states[1].expect("end state must be set");
         if end_state.is_terminate != 1 {
@@ -276,6 +302,7 @@ where
             input,
         )
     }
+
     fn execute_and_generate_impl<SC: StarkGenericConfig>(
         &self,
         exe: VmExe<F>,
@@ -287,18 +314,15 @@ where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let mut segments = self.execute_segments(exe, input)?;
-        let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
+        let mut final_memory = None;
+        let per_segment = self.execute_and_then(exe, input, |seg_idx, mut seg| {
+            final_memory = mem::take(&mut seg.final_memory);
+            tracing::info_span!("trace_gen", segment = seg_idx)
+                .in_scope(|| seg.generate_proof_input(committed_program.clone()))
+        })?;
 
         Ok(VmExecutorResult {
-            per_segment: segments
-                .into_iter()
-                .enumerate()
-                .map(|(seg_idx, seg)| {
-                    tracing::info_span!("trace_gen", segment = seg_idx)
-                        .in_scope(|| seg.generate_proof_input(committed_program.clone()))
-                })
-                .collect(),
+            per_segment,
             final_memory,
         })
     }
@@ -415,6 +439,12 @@ where
 
 #[derive(Error, Debug)]
 pub enum VmVerificationError {
+    #[error("no proof is provided")]
+    ProofNotFound,
+
+    #[error("program commit mismatch (index of mismatch proof: {index}")]
+    ProgramCommitMismatch { index: usize },
+
     #[error("initial pc mismatch (initial: {initial}, prev_final: {prev_final})")]
     InitialPcMismatch { initial: u32, prev_final: u32 },
 
@@ -427,14 +457,17 @@ pub enum VmVerificationError {
     #[error("exit code mismatch")]
     ExitCodeMismatch { expected: u32, actual: u32 },
 
-    #[error("unexpected public values (expected: {expected}, actual: {actual})")]
+    #[error("AIR has unexpected public values (expected: {expected}, actual: {actual})")]
     UnexpectedPvs { expected: usize, actual: usize },
 
-    #[error("number of public values mismatch (expected: {expected}, actual: {actual})")]
-    NumPublicValuesMismatch { expected: usize, actual: usize },
+    #[error("missing system AIR with ID {air_id}")]
+    SystemAirMissing { air_id: usize },
 
     #[error("stark verification error: {0}")]
     StarkError(#[from] VerificationError),
+
+    #[error("user public values proof error: {0}")]
+    UserPublicValuesError(#[from] UserPublicValuesProofError),
 }
 
 pub struct VirtualMachine<SC: StarkGenericConfig, E, VC> {
@@ -536,8 +569,6 @@ where
         pk: &MultiStarkProvingKey<SC>,
         results: VmExecutorResult<SC>,
     ) -> Vec<Proof<SC>> {
-        #[cfg(feature = "bench-metrics")]
-        metrics::counter!("num_segments").absolute(results.per_segment.len() as u64);
         results
             .per_segment
             .into_iter()
@@ -549,15 +580,9 @@ where
             .collect()
     }
 
-    pub fn verify_single(
-        &self,
-        vk: &MultiStarkVerifyingKey<SC>,
-        proof: &Proof<SC>,
-    ) -> Result<(), VerificationError> {
-        self.engine.verify(vk, proof)
-    }
-
     /// Verify segment proofs, checking continuation boundary conditions between segments if VM memory is persistent
+    /// The behavior of this function differs depending on whether continuations is enabled or not.
+    /// We recommend to call the functions [`Self::verify_segments`] or [`Self::verify_single`] directly instead.
     pub fn verify(
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
@@ -565,99 +590,216 @@ where
     ) -> Result<(), VmVerificationError>
     where
         Val<SC>: PrimeField32,
+        Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
     {
         if self.config().system().continuation_enabled {
-            self.verify_segments(vk, proofs)
+            verify_segments(&self.engine, vk, &proofs).map(|_| ())
         } else {
             assert_eq!(proofs.len(), 1);
-            self.verify_single(vk, &proofs.into_iter().next().unwrap())
+            verify_single(&self.engine, vk, &proofs.into_iter().next().unwrap())
                 .map_err(VmVerificationError::StarkError)
         }
     }
+}
 
-    /// Verify segment proofs with boundary condition checks for continuation between segments
-    fn verify_segments(
-        &self,
-        vk: &MultiStarkVerifyingKey<SC>,
-        proofs: Vec<Proof<SC>>,
-    ) -> Result<(), VmVerificationError>
-    where
-        Val<SC>: PrimeField32,
-    {
-        let mut prev_final_memory_root = None;
-        let mut prev_final_pc = None;
+/// Verifies a single proof. This should be used for proof of VM without continuations.
+///
+/// ## Note
+/// This function does not check any public values or extract the starting pc or commitment
+/// to the [VmCommittedExe].
+pub fn verify_single<SC, E>(
+    engine: &E,
+    vk: &MultiStarkVerifyingKey<SC>,
+    proof: &Proof<SC>,
+) -> Result<(), VerificationError>
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC>,
+{
+    engine.verify(vk, proof)
+}
 
-        for (i, proof) in proofs.iter().enumerate() {
-            let res = self.engine.verify(vk, proof);
-            match res {
-                Ok(_) => (),
-                Err(e) => return Err(VmVerificationError::StarkError(e)),
-            };
+/// The payload of a verified guest VM execution.
+pub struct VerifiedExecutionPayload<F> {
+    /// The Merklelized hash of:
+    /// - Program code commitment (commitment of the cached trace)
+    /// - Merkle root of the initial memory
+    /// - Starting program counter (`pc_start`)
+    ///
+    /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
+    /// and a cryptographic compression function (for internal nodes).
+    pub exe_commit: [F; CHUNK],
+    /// The Merkle root of the final memory state.
+    pub final_memory_root: [F; CHUNK],
+}
 
-            // Check public values.
-            for air_proof_data in proof.per_air.iter() {
-                let pvs = &air_proof_data.public_values;
-                let air_vk = &vk.per_air[air_proof_data.air_id];
+/// Verify segment proofs with boundary condition checks for continuation between segments.
+///
+/// Assumption:
+/// - `vk` is a valid verifying key of a VM circuit.
+///
+/// Returns:
+/// - The commitment to the [VmCommittedExe] extracted from `proofs`.
+///   It is the responsibility of the caller to check that the returned commitment matches
+///   the VM executable that the VM was supposed to execute.
+/// - The Merkle root of the final memory state.
+///
+/// ## Note
+/// This function does not extract or verify any user public values from the final memory state.
+/// This verification requires an additional Merkle proof with respect to the Merkle root of
+/// the final memory state.
+// @dev: This function doesn't need to be generic in `VC`.
+pub fn verify_segments<SC, E>(
+    engine: &E,
+    vk: &MultiStarkVerifyingKey<SC>,
+    proofs: &[Proof<SC>],
+) -> Result<VerifiedExecutionPayload<Val<SC>>, VmVerificationError>
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC>,
+    Val<SC>: PrimeField32,
+    Com<SC>: AsRef<[Val<SC>; CHUNK]>,
+{
+    if proofs.is_empty() {
+        return Err(VmVerificationError::ProofNotFound);
+    }
+    let mut prev_final_memory_root = None;
+    let mut prev_final_pc = None;
+    let mut start_pc = None;
+    let mut initial_memory_root = None;
+    let mut program_commit = None;
 
-                if air_proof_data.air_id == CONNECTOR_AIR_ID {
-                    let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
+    for (i, proof) in proofs.iter().enumerate() {
+        let res = engine.verify(vk, proof);
+        match res {
+            Ok(_) => (),
+            Err(e) => return Err(VmVerificationError::StarkError(e)),
+        };
 
-                    if i != 0 {
-                        // Check initial pc matches the previous final pc.
-                        if pvs.initial_pc != prev_final_pc.unwrap() {
-                            return Err(VmVerificationError::InitialPcMismatch {
-                                initial: pvs.initial_pc.as_canonical_u32(),
-                                prev_final: prev_final_pc.unwrap().as_canonical_u32(),
-                            });
-                        }
-                    } else {
-                        // TODO: Fetch initial pc from program
-                    }
-                    prev_final_pc = Some(pvs.final_pc);
+        let mut program_air_present = false;
+        let mut connector_air_present = false;
+        let mut merkle_air_present = false;
 
-                    let expected_is_terminate = i == proofs.len() - 1;
-                    if pvs.is_terminate != Val::<SC>::from_bool(expected_is_terminate) {
-                        return Err(VmVerificationError::IsTerminateMismatch {
-                            expected: expected_is_terminate,
-                            actual: pvs.is_terminate.as_canonical_u32() != 0,
+        // Check public values.
+        for air_proof_data in proof.per_air.iter() {
+            let pvs = &air_proof_data.public_values;
+            let air_vk = &vk.inner.per_air[air_proof_data.air_id];
+            if air_proof_data.air_id == PROGRAM_AIR_ID {
+                program_air_present = true;
+                if i == 0 {
+                    program_commit =
+                        Some(proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref());
+                } else if program_commit.unwrap()
+                    != proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref()
+                {
+                    return Err(VmVerificationError::ProgramCommitMismatch { index: i });
+                }
+            } else if air_proof_data.air_id == CONNECTOR_AIR_ID {
+                connector_air_present = true;
+                let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
+
+                if i != 0 {
+                    // Check initial pc matches the previous final pc.
+                    if pvs.initial_pc != prev_final_pc.unwrap() {
+                        return Err(VmVerificationError::InitialPcMismatch {
+                            initial: pvs.initial_pc.as_canonical_u32(),
+                            prev_final: prev_final_pc.unwrap().as_canonical_u32(),
                         });
                     }
+                } else {
+                    start_pc = Some(pvs.initial_pc);
+                }
+                prev_final_pc = Some(pvs.final_pc);
 
-                    let expected_exit_code = if expected_is_terminate {
-                        ExitCode::Success as u32
-                    } else {
-                        DEFAULT_SUSPEND_EXIT_CODE
-                    };
-                    if pvs.exit_code != Val::<SC>::from_canonical_u32(expected_exit_code) {
-                        return Err(VmVerificationError::ExitCodeMismatch {
-                            expected: expected_exit_code,
-                            actual: pvs.exit_code.as_canonical_u32(),
-                        });
-                    }
-                } else if air_proof_data.air_id == MERKLE_AIR_ID {
-                    let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
+                let expected_is_terminate = i == proofs.len() - 1;
+                if pvs.is_terminate != FieldAlgebra::from_bool(expected_is_terminate) {
+                    return Err(VmVerificationError::IsTerminateMismatch {
+                        expected: expected_is_terminate,
+                        actual: pvs.is_terminate.as_canonical_u32() != 0,
+                    });
+                }
 
-                    // Check that initial root matches the previous final root.
-                    if i != 0 && pvs.initial_root != prev_final_memory_root.unwrap() {
+                let expected_exit_code = if expected_is_terminate {
+                    ExitCode::Success as u32
+                } else {
+                    DEFAULT_SUSPEND_EXIT_CODE
+                };
+                if pvs.exit_code != FieldAlgebra::from_canonical_u32(expected_exit_code) {
+                    return Err(VmVerificationError::ExitCodeMismatch {
+                        expected: expected_exit_code,
+                        actual: pvs.exit_code.as_canonical_u32(),
+                    });
+                }
+            } else if air_proof_data.air_id == MERKLE_AIR_ID {
+                merkle_air_present = true;
+                let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
+
+                // Check that initial root matches the previous final root.
+                if i != 0 {
+                    if pvs.initial_root != prev_final_memory_root.unwrap() {
                         return Err(VmVerificationError::InitialMemoryRootMismatch);
                     }
-                    prev_final_memory_root = Some(pvs.final_root);
                 } else {
-                    if !pvs.is_empty() {
-                        return Err(VmVerificationError::UnexpectedPvs {
-                            expected: 0,
-                            actual: pvs.len(),
-                        });
-                    }
-                    if air_vk.params.num_public_values != 0 {
-                        return Err(VmVerificationError::NumPublicValuesMismatch {
-                            expected: 0,
-                            actual: air_vk.params.num_public_values,
-                        });
-                    }
+                    initial_memory_root = Some(pvs.initial_root);
                 }
+                prev_final_memory_root = Some(pvs.final_root);
+            } else {
+                if !pvs.is_empty() {
+                    return Err(VmVerificationError::UnexpectedPvs {
+                        expected: 0,
+                        actual: pvs.len(),
+                    });
+                }
+                // We assume the vk is valid, so this is only a debug assert.
+                debug_assert_eq!(air_vk.params.num_public_values, 0);
             }
         }
-        Ok(())
+        if !program_air_present {
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: PROGRAM_AIR_ID,
+            });
+        }
+        if !connector_air_present {
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: CONNECTOR_AIR_ID,
+            });
+        }
+        if !merkle_air_present {
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: MERKLE_AIR_ID,
+            });
+        }
+    }
+    let exe_commit = compute_exe_commit(
+        &vm_poseidon2_hasher(),
+        program_commit.unwrap(),
+        initial_memory_root.as_ref().unwrap(),
+        start_pc.unwrap(),
+    );
+    Ok(VerifiedExecutionPayload {
+        exe_commit,
+        final_memory_root: prev_final_memory_root.unwrap(),
+    })
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "Com<SC>: Serialize",
+    deserialize = "Com<SC>: Deserialize<'de>"
+))]
+pub struct ContinuationVmProof<SC: StarkGenericConfig> {
+    pub per_segment: Vec<Proof<SC>>,
+    pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
+}
+
+impl<SC: StarkGenericConfig> Clone for ContinuationVmProof<SC>
+where
+    Com<SC>: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            per_segment: self.per_segment.clone(),
+            user_public_values: self.user_public_values.clone(),
+        }
     }
 }

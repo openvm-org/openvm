@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     asm::{AsmInstruction, AssemblyCode},
     FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
-    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom, Poseidon2Opcode,
-    VerifyBatchOpcode,
+    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom,
+    NativeRangeCheckOpcode, Poseidon2Opcode, VerifyBatchOpcode,
 };
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -273,6 +273,15 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             .collect(),
         AsmInstruction::Trap => vec![
             Instruction::phantom(PhantomDiscriminant(SysPhantom::DebugPanic as u16), F::ZERO, F::ZERO, 0),
+            // Ensure that the program terminates unsuccessfully.
+            inst(
+                options.opcode_with_offset(SystemOpcode::TERMINATE),
+                F::ZERO,
+                F::ZERO,
+                F::ONE,
+                AS::Immediate,
+                AS::Immediate,
+            ),
         ],
         AsmInstruction::Halt => vec![
             // terminate
@@ -288,8 +297,14 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::HintInputVec() => vec![
             Instruction::phantom(PhantomDiscriminant(NativePhantom::HintInput as u16), F::ZERO, F::ZERO, 0)
         ],
+        AsmInstruction::HintFelt() => vec![
+            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintFelt as u16), F::ZERO, F::ZERO, 0)
+        ],
         AsmInstruction::HintBits(src, len) => vec![
             Instruction::phantom(PhantomDiscriminant(NativePhantom::HintBits as u16), i32_f(src), F::from_canonical_u32(len), AS::Native as u16)
+        ],
+        AsmInstruction::HintLoad() => vec![
+            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintLoad as u16), F::ZERO, F::ZERO, 0)
         ],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             options.opcode_with_offset(NativeLoadStoreOpcode::HINT_STOREW),
@@ -464,15 +479,15 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Native,
             AS::Native,
         )],
-        AsmInstruction::FriReducedOpening(a, b, res, len, alpha) => vec![Instruction {
+        AsmInstruction::FriReducedOpening(a, b, length, alpha, res, hint_id, is_init) => vec![Instruction {
             opcode: options.opcode_with_offset(FriOpcode::FRI_REDUCED_OPENING),
             a: i32_f(a),
             b: i32_f(b),
-            c: i32_f(res),
-            d: AS::Native.to_field(),
-            e: i32_f(len),
-            f: i32_f(alpha),
-            g: F::ZERO,
+            c: i32_f(length),
+            d: i32_f(alpha),
+            e: i32_f(res),
+            f: i32_f(hint_id),
+            g: i32_f(is_init),
         }],
         AsmInstruction::VerifyBatchFelt(dim, opened, opened_length, sibling, index, commit) => vec![Instruction {
             opcode: options.opcode_with_offset(VerifyBatchOpcode::VERIFY_BATCH),
@@ -494,6 +509,20 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             f: i32_f(commit),
             g: F::from_canonical_usize(4).inverse(),
         }],
+        AsmInstruction::RangeCheck(v, x_bit, y_bit) => {
+            assert!((0..=16).contains(&x_bit));
+            assert!((0..=14).contains(&y_bit));
+            vec!
+            [inst(
+                options.opcode_with_offset(NativeRangeCheckOpcode::RANGE_CHECK),
+                i32_f(v),
+                i32_f(x_bit),
+                i32_f(y_bit),
+                AS::Native,
+                // Here it just requires a 0
+                AS::Immediate,
+            )]
+        }
     };
 
     let debug_infos = vec![debug_info; instructions.len()];

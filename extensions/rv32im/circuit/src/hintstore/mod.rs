@@ -17,7 +17,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    utils::next_power_of_two_or_zero,
+    utils::{next_power_of_two_or_zero, not},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -38,7 +38,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter, Stateful,
+    Chip, ChipUsageGetter,
 };
 use serde::{Deserialize, Serialize};
 
@@ -76,6 +76,7 @@ pub struct Rv32HintStoreAir {
     pub memory_bridge: MemoryBridge,
     pub bitwise_operation_lookup_bus: BitwiseOperationLookupBus,
     pub offset: usize,
+    pointer_max_bits: usize,
 }
 
 impl<F: Field> BaseAir<F> for Rv32HintStoreAir {
@@ -112,8 +113,10 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
 
         let is_valid = local_cols.is_single + local_cols.is_buffer;
         let is_start = local_cols.is_single + local_cols.is_buffer_start;
-        // should only be used when is_buffer is true
-        let is_end = AB::Expr::ONE - next_cols.is_buffer + next_cols.is_buffer_start;
+        // `is_end` is false iff the next row is a buffer row that is not buffer start
+        // This is boolean because is_buffer_start == 1 => is_buffer == 1
+        // Note: every non-valid row has `is_end == 1`
+        let is_end = not::<AB::Expr>(next_cols.is_buffer) + next_cols.is_buffer_start;
 
         let mut rem_words = AB::Expr::ZERO;
         let mut next_rem_words = AB::Expr::ZERO;
@@ -129,6 +132,20 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             next_mem_ptr = next_mem_ptr * AB::F::from_canonical_u32(1 << RV32_CELL_BITS)
                 + next_cols.mem_ptr_limbs[i];
         }
+
+        // Constrain that if local is invalid, then the next state is invalid as well
+        builder
+            .when_transition()
+            .when(not::<AB::Expr>(is_valid.clone()))
+            .assert_zero(next_cols.is_single + next_cols.is_buffer);
+
+        // Constrain that when we start a buffer, the is_buffer_start is set to 1
+        builder
+            .when(local_cols.is_single)
+            .assert_one(is_end.clone());
+        builder
+            .when_first_row()
+            .assert_one(not::<AB::Expr>(local_cols.is_buffer) + local_cols.is_buffer_start);
 
         // read mem_ptr
         self.memory_bridge
@@ -156,24 +173,6 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             )
             .eval(builder, local_cols.is_buffer_start);
 
-        builder
-            .when(local_cols.is_single)
-            .assert_one(rem_words.clone());
-
-        for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
-            // preventing mem_ptr overflow
-            self.bitwise_operation_lookup_bus
-                .send_range(
-                    local_cols.mem_ptr_limbs[2 * i],
-                    local_cols.mem_ptr_limbs[(2 * i) + 1],
-                )
-                .eval(builder, is_valid.clone());
-            // checking that hint is bytes
-            self.bitwise_operation_lookup_bus
-                .send_range(local_cols.data[2 * i], local_cols.data[(2 * i) + 1])
-                .eval(builder, is_valid.clone());
-        }
-
         // write hint
         self.memory_bridge
             .write(
@@ -188,9 +187,9 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             * AB::F::from_canonical_usize(HINT_STOREW as usize + self.offset))
             + (local_cols.is_buffer
                 * AB::F::from_canonical_usize(HINT_BUFFER as usize + self.offset));
-        let to_pc = local_cols.from_state.pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP);
+
         self.execution_bridge
-            .execute(
+            .execute_and_increment_pc(
                 expected_opcode,
                 [
                     local_cols.is_buffer * (local_cols.num_words_ptr),
@@ -200,24 +199,56 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
                     AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
                 ],
                 local_cols.from_state,
-                ExecutionState {
-                    pc: to_pc,
-                    timestamp: timestamp
-                        + (rem_words.clone() * AB::F::from_canonical_usize(timestamp_delta)),
-                },
+                rem_words.clone() * AB::F::from_canonical_usize(timestamp_delta),
             )
             .eval(builder, is_start.clone());
 
-        // buffer transition
+        // Preventing mem_ptr and rem_words overflow
+        // Constraining mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1] < 2^(pointer_max_bits - (RV32_REGISTER_NUM_LIMBS - 1)*RV32_CELL_BITS)
+        // which implies mem_ptr <= 2^pointer_max_bits
+        // Similarly for rem_words <= 2^pointer_max_bits
+        self.bitwise_operation_lookup_bus
+            .send_range(
+                local_cols.mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1]
+                    * AB::F::from_canonical_usize(
+                        1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits),
+                    ),
+                local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1]
+                    * AB::F::from_canonical_usize(
+                        1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits),
+                    ),
+            )
+            .eval(builder, is_start.clone());
 
+        // Checking that hint is bytes
+        for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
+            self.bitwise_operation_lookup_bus
+                .send_range(local_cols.data[2 * i], local_cols.data[(2 * i) + 1])
+                .eval(builder, is_valid.clone());
+        }
+
+        // buffer transition
+        // `is_end` implies that the next row belongs to a new instruction,
+        // which could be one of empty, hint_single, or hint_buffer
+        // Constrains that when the current row is not empty and `is_end == 1`, then `rem_words` is 1
         builder
-            .when(local_cols.is_buffer)
+            .when(is_valid)
             .when(is_end.clone())
             .assert_one(rem_words.clone());
 
-        let mut when_buffer_transition =
-            builder.when(local_cols.is_buffer * (AB::Expr::ONE - is_end.clone()));
+        let mut when_buffer_transition = builder.when(not::<AB::Expr>(is_end.clone()));
+        // Notes on `rem_words`: we constrain that `rem_words` doesn't overflow when we first read it and
+        // that on each row it decreases by one (below). We also constrain that when the current instruction ends then `rem_words` is 1.
+        // However, we don't constrain that when `rem_words` is 1 then we have to end the current instruction.
+        // The only way to exploit this if we to do some multiple of `p` number of additional illegal `buffer` rows where `p` is the modulus of `F`.
+        // However, when doing `p` additional `buffer` rows we will always increment `mem_ptr` to an illegal memory address at some point,
+        // which prevents this exploit.
         when_buffer_transition.assert_one(rem_words.clone() - next_rem_words.clone());
+        // Note: we only care about the `next_mem_ptr = compose(next_mem_ptr_limb)` and not the individual limbs:
+        // the limbs do not need to be in the range, they can be anything to make `next_mem_ptr` correct --
+        // this is just a way to not have to have another column for `mem_ptr`.
+        // The constraint we care about is `next.mem_ptr == local.mem_ptr + 4`.
+        // Finally, since we increment by `4` each time, any out of bounds memory access will be rejected by the memory bus before we overflow the field.
         when_buffer_transition.assert_eq(
             next_mem_ptr.clone() - mem_ptr.clone(),
             AB::F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS),
@@ -258,6 +289,7 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         memory_bridge: MemoryBridge,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+        pointer_max_bits: usize,
         offset: usize,
     ) -> Self {
         let air = Rv32HintStoreAir {
@@ -265,6 +297,7 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
             memory_bridge,
             bitwise_operation_lookup_bus: bitwise_lookup_chip.bus(),
             offset,
+            pointer_max_bits,
         };
         Self {
             records: vec![],
@@ -310,10 +343,14 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
             (compose(num_words_limbs), Some(num_words_read))
         };
         debug_assert_ne!(num_words, 0);
+        debug_assert!(num_words <= (1 << self.air.pointer_max_bits));
+
         let mem_ptr = compose(mem_ptr_limbs);
 
+        debug_assert!(mem_ptr <= (1 << self.air.pointer_max_bits));
+
         let mut streams = self.streams.get().unwrap().lock().unwrap();
-        if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS {
+        if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
             return Err(ExecutionError::HintOutOfBounds { pc: from_state.pc });
         }
 
@@ -386,6 +423,7 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         slice: &mut [F],
         memory: &OfflineMemory<F>,
         bitwise_lookup_chip: &SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        pointer_max_bits: usize,
     ) -> usize {
         let width = Rv32HintStoreCols::<F>::width();
         let cols: &mut Rv32HintStoreCols<F> = slice[..width].borrow_mut();
@@ -412,13 +450,15 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         let mut mem_ptr = record.mem_ptr;
         let mut rem_words = record.num_words;
         let mut used_u32s = 0;
+
+        let mem_ptr_msl = mem_ptr >> ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS);
+        let rem_words_msl = rem_words >> ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS);
+        bitwise_lookup_chip.request_range(
+            mem_ptr_msl << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits),
+            rem_words_msl << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits),
+        );
         for (i, &(data, write)) in record.hints.iter().enumerate() {
             for half in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
-                let mem_ptr_limbs = decompose::<F>(mem_ptr);
-                bitwise_lookup_chip.request_range(
-                    mem_ptr_limbs[2 * half].as_canonical_u32(),
-                    mem_ptr_limbs[(2 * half) + 1].as_canonical_u32(),
-                );
                 bitwise_lookup_chip.request_range(
                     data[2 * half].as_canonical_u32(),
                     data[2 * half + 1].as_canonical_u32(),
@@ -460,6 +500,7 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
                 &mut flat_trace[used_u32s..],
                 &memory,
                 &self.bitwise_lookup_chip,
+                self.air.pointer_max_bits,
             );
         }
         // padding rows can just be all zeros
@@ -476,16 +517,5 @@ where
     }
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         AirProofInput::simple_no_pis(self.generate_trace())
-    }
-}
-
-impl<F: PrimeField32> Stateful<Vec<u8>> for Rv32HintStoreChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap();
-        self.height = self.records.iter().map(|record| record.hints.len()).sum();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
     }
 }

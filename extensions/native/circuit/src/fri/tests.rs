@@ -1,5 +1,10 @@
+use std::sync::{Arc, Mutex};
+
 use itertools::Itertools;
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, VmChipTestBuilder},
+    Streams,
+};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FriOpcode::FRI_REDUCED_OPENING;
 use openvm_stark_backend::{
@@ -32,16 +37,19 @@ fn compute_fri_mat_opening<F: Field>(
 
 #[test]
 fn fri_mat_opening_air_test() {
-    let num_ops = 3; // non-power-of-2 to also test padding
+    let num_ops = 14; // non-power-of-2 to also test padding
     let elem_range = || 1..=100;
     let length_range = || 1..=49;
 
     let mut tester = VmChipTestBuilder::default();
+
+    let streams = Arc::new(Mutex::new(Streams::default()));
     let mut chip = FriReducedOpeningChip::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
         tester.offline_memory_mutex_arc(),
+        streams.clone(),
     );
 
     let mut rng = create_seeded_rng();
@@ -53,6 +61,8 @@ fn fri_mat_opening_air_test() {
             })
         };
     }
+
+    streams.lock().unwrap().hint_space = vec![vec![]];
 
     for _ in 0..num_ops {
         let alpha = gen_ext!();
@@ -71,6 +81,7 @@ fn fri_mat_opening_air_test() {
         let result_pointer = gen_pointer(&mut rng, 4);
         let a_pointer = gen_pointer(&mut rng, 1);
         let b_pointer = gen_pointer(&mut rng, 4);
+        let is_init_ptr = gen_pointer(&mut rng, 1);
 
         let address_space = 4usize;
 
@@ -95,9 +106,22 @@ fn fri_mat_opening_air_test() {
             b_pointer_pointer,
             BabyBear::from_canonical_usize(b_pointer),
         );
-        for i in 0..length {
-            tester.write_cell(address_space, a_pointer + i, a[i]);
-            tester.write(address_space, b_pointer + (4 * i), b[i]);
+        let is_init = rng.gen_range(0..2);
+        tester.write_cell(
+            address_space,
+            is_init_ptr,
+            BabyBear::from_canonical_u32(is_init),
+        );
+
+        if is_init == 0 {
+            streams.lock().unwrap().hint_space[0].extend_from_slice(&a);
+        } else {
+            for (i, ai) in a.iter().enumerate() {
+                tester.write_cell(address_space, a_pointer + i, *ai);
+            }
+        }
+        for (i, bi) in b.iter().enumerate() {
+            tester.write(address_space, b_pointer + (4 * i), *bi);
         }
 
         tester.execute(
@@ -107,14 +131,20 @@ fn fri_mat_opening_air_test() {
                 [
                     a_pointer_pointer,
                     b_pointer_pointer,
-                    result_pointer,
-                    address_space,
                     length_pointer,
                     alpha_pointer,
+                    result_pointer,
+                    0, // hint id
+                    is_init_ptr,
                 ],
             ),
         );
         assert_eq!(result, tester.read(address_space, result_pointer));
+        // Check that `a` was populated.
+        for (i, ai) in a.iter().enumerate() {
+            let found = tester.read_cell(address_space, a_pointer + i);
+            assert_eq!(*ai, found);
+        }
     }
 
     let mut tester = tester.build().load(chip).finalize();

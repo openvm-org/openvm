@@ -1,6 +1,4 @@
 use alloc::vec::Vec;
-#[cfg(target_os = "zkvm")]
-use core::mem::MaybeUninit;
 use core::ops::{Mul, MulAssign, Neg};
 
 use openvm_algebra_guest::{
@@ -129,18 +127,7 @@ impl ComplexConjugate for Fp12 {
 impl<'a> MulAssign<&'a Fp12> for Fp12 {
     #[inline(always)]
     fn mul_assign(&mut self, other: &'a Fp12) {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            *self = crate::pairing::sextic_tower_mul_host(self, other, &Bn254::XI);
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            crate::pairing::sextic_tower_mul_intrinsic::<Bn254>(
-                self as *mut Fp12 as *mut u8,
-                self as *const Fp12 as *const u8,
-                other as *const Fp12 as *const u8,
-            );
-        }
+        *self = crate::pairing::sextic_tower_mul(self, other, &Bn254::XI);
     }
 }
 
@@ -148,20 +135,7 @@ impl<'a> Mul<&'a Fp12> for &'a Fp12 {
     type Output = Fp12;
     #[inline(always)]
     fn mul(self, other: &'a Fp12) -> Self::Output {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            crate::pairing::sextic_tower_mul_host(self, other, &Bn254::XI)
-        }
-        #[cfg(target_os = "zkvm")]
-        unsafe {
-            let mut uninit: MaybeUninit<Self::Output> = MaybeUninit::uninit();
-            crate::pairing::sextic_tower_mul_intrinsic::<Bn254>(
-                uninit.as_mut_ptr() as *mut u8,
-                self as *const Fp12 as *const u8,
-                other as *const Fp12 as *const u8,
-            );
-            uninit.assume_init()
-        }
+        crate::pairing::sextic_tower_mul(self, other, &Bn254::XI)
     }
 }
 

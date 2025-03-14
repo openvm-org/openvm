@@ -148,6 +148,7 @@ fn rand_hintstore_test() {
         bitwise_chip.clone(),
         tester.memory_bridge(),
         tester.offline_memory_mutex_arc(),
+        tester.address_bits(),
         0,
     );
     chip.set_streams(Arc::new(Mutex::new(Streams::default())));
@@ -194,6 +195,7 @@ fn run_negative_hintstore_test(
         bitwise_chip.clone(),
         tester.memory_bridge(),
         tester.offline_memory_mutex_arc(),
+        tester.address_bits(),
         0,
     );
     chip.set_streams(Arc::new(Mutex::new(Streams::default())));
@@ -246,6 +248,7 @@ fn execute_roundtrip_sanity_test() {
         bitwise_chip.clone(),
         tester.memory_bridge(),
         tester.offline_memory_mutex_arc(),
+        tester.address_bits(),
         0,
     );
     chip.set_streams(Arc::new(Mutex::new(Streams::default())));

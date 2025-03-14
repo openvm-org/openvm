@@ -1,5 +1,5 @@
 use openvm_stark_backend::{
-    interaction::{InteractionBuilder, InteractionType},
+    interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -35,13 +35,7 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for DummyAir {
         let main = builder.main();
         let local = main.row_slice(0);
         self.bus
-            .push(
-                local[0],
-                local[1],
-                local[2],
-                local[3],
-                InteractionType::Send,
-            )
+            .push(local[0], local[1], local[2], local[3], true)
             .eval(builder, AB::F::ONE);
     }
 }

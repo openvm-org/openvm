@@ -100,8 +100,7 @@ fn test_vm_1() {
 
 #[test]
 fn test_vm_override_executor_height() {
-    let fri_params = FriParameters::standard_fast();
-    let e = BabyBearPoseidon2Engine::new(fri_params);
+    let e = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let program = Program::<BabyBear>::from_instructions(&[
         Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 4, 0, 0, 0),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -233,7 +232,8 @@ fn test_vm_1_optional_air() {
             "Expect less used AIRs"
         );
         let proofs = vm.prove(&pk, result);
-        vm.verify_single(&pk.get_vk(), &proofs[0])
+        assert_eq!(proofs.len(), 1);
+        vm.verify(&pk.get_vk(), proofs)
             .expect("Verification failed");
     }
 }
@@ -321,7 +321,7 @@ fn test_vm_initial_memory() {
 fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 10, 6, 64, 1024), 0),
+        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 64, 1024), 0),
         native: Default::default(),
     }
     .with_continuations();
@@ -622,7 +622,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
 
     let program = Program::from_instructions(&instructions);
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 10, 6, 64, 1024), 0)
+        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 64, 1024), 0)
             .with_continuations(),
         native: Default::default(),
     };
@@ -729,6 +729,7 @@ fn test_hint_load_2() {
             F::ZERO,
             0,
         ),
+        Instruction::from_isize(HINT_STOREW.global_opcode(), 32, 0, 0, 4, 4),
         Instruction::phantom(
             PhantomDiscriminant(NativePhantom::HintLoad as u16),
             F::ZERO,
@@ -748,6 +749,13 @@ fn test_hint_load_2() {
         Default::default(),
     );
     segment.execute_from_pc(0).unwrap();
+    assert_eq!(
+        segment
+            .chip_complex
+            .memory_controller()
+            .unsafe_read_cell(F::from_canonical_usize(4), F::from_canonical_usize(32)),
+        F::ZERO
+    );
     let streams = segment.chip_complex.take_streams();
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ONE]));

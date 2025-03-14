@@ -68,7 +68,7 @@ pub fn main() {
     for i in 0..N {
         for j in 0..N {
             if c[i][j] != two_to_200 {
-                print("FAIL: the resulting matrix is incorect");
+                print("FAIL: the resulting matrix is incorrect");
                 panic!();
             }
         }

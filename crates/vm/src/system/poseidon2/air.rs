@@ -6,7 +6,7 @@ use openvm_poseidon2_air::{
 };
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
-    interaction::InteractionBuilder,
+    interaction::{InteractionBuilder, LookupBus},
     p3_air::{Air, BaseAir},
     p3_field::Field,
     p3_matrix::Matrix,
@@ -22,7 +22,7 @@ use super::columns::Poseidon2PeripheryCols;
 #[derive(Clone, new, Debug)]
 pub struct Poseidon2PeripheryAir<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
-    pub(super) bus: usize,
+    pub(super) bus: LookupBus,
 }
 
 impl<F: Field, const SBOX_REGISTERS: usize> BaseAirWithPublicValues<F>
@@ -66,6 +66,6 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                 output[i - POSEIDON2_WIDTH]
             }
         });
-        builder.push_receive(self.bus, fields, cols.mult);
+        self.bus.add_key_with_lookups(builder, fields, cols.mult);
     }
 }

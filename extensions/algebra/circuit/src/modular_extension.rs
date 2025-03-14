@@ -10,7 +10,7 @@ use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip};
@@ -30,7 +30,7 @@ pub struct ModularExtension {
     pub supported_modulus: Vec<BigUint>,
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From)]
 pub enum ModularExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     ModularAddSubRv32_32(ModularAddSubChip<F, 1, 32>),
@@ -42,7 +42,7 @@ pub enum ModularExtensionExecutor<F: PrimeField32> {
     ModularIsEqualRv32_48(ModularIsEqualChip<F, 3, 16, 48>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum ModularExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     // We put this only to get the <F> generic to work

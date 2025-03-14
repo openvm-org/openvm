@@ -1,5 +1,3 @@
-extern crate core;
-
 use std::{fs::read, path::Path, sync::Arc};
 
 use commit::commit_app_exe;
@@ -10,27 +8,31 @@ use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
 use openvm_circuit::{
-    arch::{instructions::exe::VmExe, ExecutionError, VmConfig, VmExecutor},
-    system::{memory::tree::public_values::extract_public_values, program::trace::VmCommittedExe},
-};
-use openvm_native_recursion::{
-    halo2::{
-        utils::Halo2ParamsReader,
-        wrapper::{EvmVerifier, Halo2WrapperProvingKey},
-        EvmProof,
+    arch::{
+        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, verify_segments,
+        ContinuationVmProof, ExecutionError, VerifiedExecutionPayload, VmConfig, VmExecutor,
+        VmVerificationError,
     },
-    types::InnerConfig,
+    system::{
+        memory::{tree::public_values::extract_public_values, CHUNK},
+        program::trace::VmCommittedExe,
+    },
+};
+use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+pub use openvm_continuations::{
+    static_verifier::{DefaultStaticVerifierPvHandler, StaticVerifierPvHandler},
+    RootSC, C, F, SC,
+};
+use openvm_native_recursion::halo2::{
+    utils::Halo2ParamsReader,
+    wrapper::{EvmVerifier, Halo2WrapperProvingKey},
+    EvmProof,
 };
 use openvm_stark_backend::{engine::StarkEngine, proof::Proof};
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
-        FriParameters,
-    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
     openvm_stark_backend::{verifier::VerificationError, Chip},
-    p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{
     elf::Elf,
@@ -38,21 +40,7 @@ use openvm_transpiler::{
     transpiler::{Transpiler, TranspilerError},
     FromElf,
 };
-use prover::vm::ContinuationVmProof;
-use tracing::{span, Level};
-use verifier::root::types::RootVmVerifierInput;
-
-pub mod commit;
-pub mod config;
-pub mod keygen;
-pub mod prover;
-pub mod static_verifier;
-pub mod verifier;
-
-mod stdin;
-use static_verifier::StaticVerifierPvHandler;
-pub use stdin::*;
-pub mod fs;
+use tracing::instrument;
 
 use crate::{
     config::AggConfig,
@@ -60,24 +48,41 @@ use crate::{
     prover::{AppProver, ContinuationProver, StarkProver},
 };
 
-pub type SC = BabyBearPoseidon2Config;
-pub type C = InnerConfig;
-pub type F = BabyBear;
-pub type RootSC = BabyBearPoseidon2RootConfig;
+pub mod commit;
+pub mod config;
+pub mod keygen;
+pub mod prover;
+
+mod stdin;
+pub use stdin::*;
+pub mod fs;
+
 pub type NonRootCommittedExe = VmCommittedExe<SC>;
+
+/// The payload of a verified guest VM execution with user public values extracted and
+/// verified.
+pub struct VerifiedContinuationVmPayload {
+    /// The Merklelized hash of:
+    /// - Program code commitment (commitment of the cached trace)
+    /// - Merkle root of the initial memory
+    /// - Starting program counter (`pc_start`)
+    ///
+    /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
+    /// and a cryptographic compression function (for internal nodes).
+    pub exe_commit: [F; CHUNK],
+    pub user_public_values: Vec<F>,
+}
 
 pub struct Sdk;
 
 impl Sdk {
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn build<P: AsRef<Path>>(
         &self,
         guest_opts: GuestOptions,
         pkg_dir: P,
         target_filter: &Option<TargetFilter>,
     ) -> Result<Elf> {
-        let span = span!(Level::TRACE, "sdk_methods", method = "build");
-        let _guard = span.enter();
-
         let pkg = get_package(pkg_dir.as_ref());
         let target_dir = match build_guest_package(&pkg, &guest_opts, None, target_filter) {
             Ok(target_dir) => target_dir,
@@ -96,17 +101,16 @@ impl Sdk {
         Elf::decode(&data, MEM_SIZE as u32)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn transpile(
         &self,
         elf: Elf,
         transpiler: Transpiler<F>,
     ) -> Result<VmExe<F>, TranspilerError> {
-        let span = span!(Level::TRACE, "sdk_methods", method = "transpile");
-        let _guard = span.enter();
-
         VmExe::from_elf(elf, transpiler)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn execute<VC: VmConfig<F>>(
         &self,
         exe: VmExe<F>,
@@ -117,9 +121,6 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let span = span!(Level::TRACE, "sdk_methods", method = "execute");
-        let _guard = span.enter();
-
         let vm = VmExecutor::new(vm_config);
         let final_memory = vm.execute(exe, inputs)?;
         let public_values = extract_public_values(
@@ -130,30 +131,27 @@ impl Sdk {
         Ok(public_values)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn commit_app_exe(
         &self,
         app_fri_params: FriParameters,
         exe: VmExe<F>,
     ) -> Result<Arc<NonRootCommittedExe>> {
-        let span = span!(Level::TRACE, "sdk_methods", method = "commit_app_exe");
-        let _guard = span.enter();
-
         let committed_exe = commit_app_exe(app_fri_params, exe);
         Ok(committed_exe)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn app_keygen<VC: VmConfig<F>>(&self, config: AppConfig<VC>) -> Result<AppProvingKey<VC>>
     where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let span = span!(Level::TRACE, "sdk_methods", method = "app_keygen");
-        let _guard = span.enter();
-
         let app_pk = AppProvingKey::keygen(config);
         Ok(app_pk)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn generate_app_proof<VC: VmConfig<F>>(
         &self,
         app_pk: Arc<AppProvingKey<VC>>,
@@ -164,63 +162,64 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let span = span!(Level::TRACE, "sdk_methods", method = "generate_app_proof");
-        let _guard = span.enter();
-
         let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe);
         let proof = app_prover.generate_app_proof(inputs);
         Ok(proof)
     }
 
-    /// This function is for dev use and not for production verification.
-    /// In particular, it only verifies the individual proofs per segment, and none of the boundary conditions
-    /// or the execution final state.
+    /// Verifies the [ContinuationVmProof], which is a collection of STARK proofs as well as
+    /// additional Merkle proof for user public values.
     ///
-    /// The `VirtualMachine::verify` function does additional verifications.
+    /// This function verifies the STARK proofs and additional conditions to ensure that the
+    /// `proof` is a valid proof of guest VM execution that terminates successfully (exit code 0)
+    /// _with respect to_ a commitment to some VM executable.
+    /// It is the responsibility of the caller to check that the commitment matches the expected
+    /// VM executable.
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn verify_app_proof(
         &self,
         app_vk: &AppVerifyingKey,
         proof: &ContinuationVmProof<SC>,
-    ) -> Result<(), VerificationError> {
-        let span = span!(Level::TRACE, "sdk_methods", method = "verify_app_proof");
-        let _guard = span.enter();
+    ) -> Result<VerifiedContinuationVmPayload, VmVerificationError> {
+        let engine = BabyBearPoseidon2Engine::new(app_vk.fri_params);
+        let VerifiedExecutionPayload {
+            exe_commit,
+            final_memory_root,
+        } = verify_segments(&engine, &app_vk.app_vm_vk, &proof.per_segment)?;
 
-        let e = BabyBearPoseidon2Engine::new(app_vk.fri_params);
-        for seg_proof in &proof.per_segment {
-            e.verify(&app_vk.app_vm_vk, seg_proof)?
-        }
-        Ok(())
+        let hasher = vm_poseidon2_hasher();
+        proof
+            .user_public_values
+            .verify(&hasher, app_vk.memory_dimensions, final_memory_root)?;
+
+        Ok(VerifiedContinuationVmPayload {
+            exe_commit,
+            user_public_values: proof.user_public_values.public_values.clone(),
+        })
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn verify_app_proof_without_continuations(
         &self,
         app_vk: &AppVerifyingKey,
         proof: &Proof<SC>,
     ) -> Result<(), VerificationError> {
-        let span = span!(
-            Level::TRACE,
-            "sdk_methods",
-            method = "verify_app_proof_without_continuations"
-        );
-        let _guard = span.enter();
-
         let e = BabyBearPoseidon2Engine::new(app_vk.fri_params);
         e.verify(&app_vk.app_vm_vk, proof)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn agg_keygen(
         &self,
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
-        pv_handler: Option<&impl StaticVerifierPvHandler>,
+        pv_handler: &impl StaticVerifierPvHandler,
     ) -> Result<AggProvingKey> {
-        let span = span!(Level::TRACE, "sdk_methods", method = "agg_keygen");
-        let _guard = span.enter();
-
         let agg_pk = AggProvingKey::keygen(config, reader, pv_handler);
         Ok(agg_pk)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn generate_root_verifier_input<VC: VmConfig<F>>(
         &self,
         app_pk: Arc<AppProvingKey<VC>>,
@@ -232,18 +231,12 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let span = span!(
-            Level::TRACE,
-            "sdk_methods",
-            method = "generate_root_verifier_input"
-        );
-        let _guard = span.enter();
-
         let stark_prover = StarkProver::new(app_pk, app_exe, agg_stark_pk);
         let proof = stark_prover.generate_root_verifier_input(inputs);
         Ok(proof)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn generate_evm_proof<VC: VmConfig<F>>(
         &self,
         reader: &impl Halo2ParamsReader,
@@ -256,39 +249,28 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let span = span!(Level::TRACE, "sdk_methods", method = "generate_evm_proof");
-        let _guard = span.enter();
-
         let e2e_prover = ContinuationProver::new(reader, app_pk, app_exe, agg_pk);
         let proof = e2e_prover.generate_proof_for_evm(inputs);
         Ok(proof)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn generate_snark_verifier_contract(
         &self,
         reader: &impl Halo2ParamsReader,
         agg_pk: &AggProvingKey,
     ) -> Result<EvmVerifier> {
-        let span = span!(
-            Level::TRACE,
-            "sdk_methods",
-            method = "generate_snark_verifier_contract"
-        );
-        let _guard = span.enter();
-
         let params = reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
         let evm_verifier = agg_pk.halo2_pk.wrapper.generate_evm_verifier(&params);
         Ok(evm_verifier)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn verify_evm_proof(
         &self,
         evm_verifier: &EvmVerifier,
         evm_proof: &EvmProof,
     ) -> Result<u64> {
-        let span = span!(Level::TRACE, "sdk_methods", method = "verify_evm_proof");
-        let _guard = span.enter();
-
         let gas_cost = Halo2WrapperProvingKey::evm_verify(evm_verifier, evm_proof)
             .map_err(|reason| eyre::eyre!("Sdk::verify_evm_proof: {reason:?}"))?;
         Ok(gas_cost)

@@ -25,36 +25,36 @@ use crate::{
 #[derive(Parser)]
 #[command(name = "prove", about = "Generate a program proof")]
 pub struct ProveCmd {
-    #[clap(subcommand)]
+    #[command(subcommand)]
     command: ProveSubCommand,
 }
 
 #[derive(Parser)]
 enum ProveSubCommand {
     App {
-        #[clap(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
+        #[arg(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
         app_pk: PathBuf,
 
-        #[clap(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
+        #[arg(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
         exe: PathBuf,
 
-        #[clap(long, value_parser, help = "Input to OpenVM program")]
+        #[arg(long, value_parser, help = "Input to OpenVM program")]
         input: Option<Input>,
 
-        #[clap(long, action, help = "Path to output proof", default_value = DEFAULT_APP_PROOF_PATH)]
+        #[arg(long, action, help = "Path to output proof", default_value = DEFAULT_APP_PROOF_PATH)]
         output: PathBuf,
     },
     Evm {
-        #[clap(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
+        #[arg(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
         app_pk: PathBuf,
 
-        #[clap(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
+        #[arg(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
         exe: PathBuf,
 
-        #[clap(long, value_parser, help = "Input to OpenVM program")]
+        #[arg(long, value_parser, help = "Input to OpenVM program")]
         input: Option<Input>,
 
-        #[clap(long, action, help = "Path to output proof", default_value = DEFAULT_EVM_PROOF_PATH)]
+        #[arg(long, action, help = "Path to output proof", default_value = DEFAULT_EVM_PROOF_PATH)]
         output: PathBuf,
     },
 }

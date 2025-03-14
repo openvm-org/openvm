@@ -12,6 +12,7 @@ on:
       - "crates/toolchain/build/**"
       - "crates/toolchain/macros/**"
       - "crates/toolchain/tests/**"
+      - ".github/workflows/riscv.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -32,7 +33,9 @@ jobs:
     steps:
       - uses: runs-on/action@v1
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2024-10-30
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true

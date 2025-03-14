@@ -7,7 +7,7 @@ use std::{
 };
 
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
-use openvm_stark_backend::{p3_field::PrimeField32, Stateful};
+use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use tiny_keccak::{Hasher, Keccak};
@@ -281,15 +281,5 @@ impl Default for KeccakInputBlock {
             reads: Vec::new(),
             src: 0,
         }
-    }
-}
-
-impl<F: PrimeField32> Stateful<Vec<u8>> for KeccakVmChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
     }
 }

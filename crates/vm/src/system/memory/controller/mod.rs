@@ -17,6 +17,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
+    interaction::PermutationCheckBus,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
@@ -28,7 +29,6 @@ use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{
-    merkle::DirectCompressionBus,
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
 };
@@ -37,7 +37,7 @@ use crate::{
     system::memory::{
         adapter::AccessAdapterInventory,
         dimensions::MemoryDimensions,
-        merkle::{MemoryMerkleBus, MemoryMerkleChip},
+        merkle::{MemoryMerkleChip, SerialReceiver},
         offline::{MemoryRecord, OfflineMemory, INITIAL_TIMESTAMP},
         offline_checker::{
             MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
@@ -268,8 +268,8 @@ impl<F: PrimeField32> MemoryController<F> {
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: SharedVariableRangeCheckerChip,
-        merkle_bus: MemoryMerkleBus,
-        compression_bus: DirectCompressionBus,
+        merkle_bus: PermutationCheckBus,
+        compression_bus: PermutationCheckBus,
     ) -> Self {
         let memory_dims = MemoryDimensions {
             as_height: mem_config.as_height,
@@ -471,9 +471,9 @@ impl<F: PrimeField32> MemoryController<F> {
         entry: MemoryLogEntry<F>,
         offline_memory: &mut OfflineMemory<F>,
         interface_chip: &mut MemoryInterface<F>,
-        access_adapters: &mut AccessAdapterInventory<F>,
+        adapter_records: &mut AccessAdapterInventory<F>,
     ) {
-        let records = match entry {
+        match entry {
             MemoryLogEntry::Read {
                 address_space,
                 pointer,
@@ -482,7 +482,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 if address_space != 0 {
                     interface_chip.touch_range(address_space, pointer, len as u32);
                 }
-                offline_memory.read(address_space, pointer, len)
+                offline_memory.read(address_space, pointer, len, adapter_records);
             }
             MemoryLogEntry::Write {
                 address_space,
@@ -492,18 +492,19 @@ impl<F: PrimeField32> MemoryController<F> {
                 if address_space != 0 {
                     interface_chip.touch_range(address_space, pointer, data.len() as u32);
                 }
-                offline_memory.write(address_space, pointer, data)
+                offline_memory.write(address_space, pointer, data, adapter_records);
             }
             MemoryLogEntry::IncrementTimestampBy(amount) => {
                 offline_memory.increment_timestamp_by(amount);
-                Vec::new()
             }
         };
-        access_adapters.extend_records(records);
     }
 
     /// Returns the final memory state if persistent.
-    pub fn finalize(&mut self, hasher: Option<&mut impl HasherChip<CHUNK, F>>) {
+    pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
+    where
+        H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
+    {
         if self.final_state.is_some() {
             return;
         }
@@ -513,9 +514,7 @@ impl<F: PrimeField32> MemoryController<F> {
 
         match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                let (final_memory, records) = offline_memory.finalize::<1>();
-                self.access_adapters.extend_records(records);
-
+                let final_memory = offline_memory.finalize::<1>(&mut self.access_adapters);
                 boundary_chip.finalize(final_memory);
                 self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
             }
@@ -525,9 +524,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 initial_memory,
             } => {
                 let hasher = hasher.unwrap();
-
-                let (final_partition, records) = offline_memory.finalize::<CHUNK>();
-                self.access_adapters.extend_records(records);
+                let final_partition = offline_memory.finalize::<CHUNK>(&mut self.access_adapters);
 
                 boundary_chip.finalize(initial_memory, &final_partition, hasher);
                 let final_memory_values = final_partition
@@ -805,11 +802,10 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
 
 #[cfg(test)]
 mod tests {
-
     use openvm_circuit_primitives::var_range::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
     };
-    use openvm_stark_backend::p3_field::FieldAlgebra;
+    use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
@@ -819,13 +815,13 @@ mod tests {
         system::memory::offline_checker::MemoryBus,
     };
 
-    const RANGE_CHECKER_BUS: usize = 3;
+    const RANGE_CHECKER_BUS: BusIndex = 3;
 
     #[test]
     fn test_no_adapter_records_for_singleton_accesses() {
         type F = BabyBear;
 
-        let memory_bus = MemoryBus(MEMORY_BUS);
+        let memory_bus = MemoryBus::new(MEMORY_BUS);
         let memory_config = MemoryConfig::default();
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
         let range_checker = SharedVariableRangeCheckerChip::new(range_bus);

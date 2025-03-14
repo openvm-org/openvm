@@ -1,5 +1,5 @@
 use cargo_openvm::{
-    commands::{BenchCmd, BuildCmd, EvmProvingSetupCmd, KeygenCmd, ProveCmd, RunCmd, VerifyCmd},
+    commands::{BuildCmd, EvmProvingSetupCmd, KeygenCmd, ProveCmd, RunCmd, VerifyCmd},
     OPENVM_VERSION_MESSAGE,
 };
 use clap::{Parser, Subcommand};
@@ -17,13 +17,12 @@ pub enum Cargo {
 #[derive(clap::Args)]
 #[command(author, about, long_about = None, args_conflicts_with_subcommands = true, version = OPENVM_VERSION_MESSAGE)]
 pub struct VmCli {
-    #[clap(subcommand)]
+    #[command(subcommand)]
     pub command: VmCliCommands,
 }
 
 #[derive(Subcommand)]
 pub enum VmCliCommands {
-    Bench(BenchCmd),
     Build(BuildCmd),
     Keygen(KeygenCmd),
     Prove(ProveCmd),
@@ -38,7 +37,6 @@ async fn main() -> Result<()> {
     let command = args.command;
     setup_tracing_with_log_level(Level::WARN);
     match command {
-        VmCliCommands::Bench(cmd) => cmd.run(),
         VmCliCommands::Build(cmd) => cmd.run(),
         VmCliCommands::Run(cmd) => cmd.run(),
         VmCliCommands::Keygen(cmd) => cmd.run(),

@@ -17,7 +17,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -52,7 +52,7 @@ pub trait VmAdapterChip<F> {
     /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
     /// This is called at the start of instruction execution.
     ///
-    /// The implementor may choose to store data in the `Self::ReadRecord` struct, for example in
+    /// The implementer may choose to store data in the `Self::ReadRecord` struct, for example in
     /// an [Option], which will later be sent to the `postprocess` method.
     #[allow(clippy::type_complexity)]
     fn preprocess(
@@ -222,18 +222,6 @@ where
             records: Vec::with_capacity(DEFAULT_RECORDS_CAPACITY),
             offline_memory,
         }
-    }
-}
-
-impl<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> Stateful<Vec<u8>>
-    for VmChipWrapper<F, A, C>
-{
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
     }
 }
 
@@ -540,7 +528,7 @@ pub struct MinimalInstruction<T> {
     pub opcode: T,
 }
 
-// This ProcessedInstruction is used by rv32_jalr and rv32_rdwrite
+// This ProcessedInstruction is used by rv32_rdwrite
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct ImmInstruction<T> {
@@ -548,6 +536,18 @@ pub struct ImmInstruction<T> {
     /// Absolute opcode number
     pub opcode: T,
     pub immediate: T,
+}
+
+// This ProcessedInstruction is used by rv32_jalr
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct SignedImmInstruction<T> {
+    pub is_valid: T,
+    /// Absolute opcode number
+    pub opcode: T,
+    pub immediate: T,
+    /// Sign of the immediate (1 if negative, 0 if positive)
+    pub imm_sign: T,
 }
 
 // =================================================================================================

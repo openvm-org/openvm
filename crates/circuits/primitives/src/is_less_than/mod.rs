@@ -27,11 +27,11 @@ pub struct IsLessThanIo<T> {
     pub out: T,
     /// Range checks are done with multiplicity `count`.
     /// If `count == 0` then no range checks are done.
-    /// In practice `count` is always boolean, although this is not enforced
-    /// by the subair.
+    /// `count` is **assumed** to be boolean and must be constrained as such by
+    /// the caller.
     ///
     /// N.B.: in fact range checks could always be done, if the aux
-    /// subrow values are set to 0 when `count == 0`. This woud slightly
+    /// subrow values are set to 0 when `count == 0`. This would slightly
     /// simplify the range check interactions, although usually doesn't change
     /// the overall constraint degree. It however leads to the annoyance that
     /// you must update the RangeChecker's multiplicities even on dummy padding
@@ -58,7 +58,7 @@ impl<T> IsLessThanIo<T> {
 /// into limbs of size `bus.range_max_bits`, and interacts with a
 /// `VariableRangeCheckerBus` to range check the decompositions.
 ///
-/// The SubAir will own auxilliary columns to store the decomposed limbs.
+/// The SubAir will own auxiliary columns to store the decomposed limbs.
 /// The number of limbs is `max_bits.div_ceil(bus.range_max_bits)`.
 ///
 /// The expected max constraint degree of `eval` is
@@ -85,6 +85,7 @@ pub struct IsLtSubAir {
 
 impl IsLtSubAir {
     pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
+        assert!(max_bits <= 29); // see soundness requirement above
         let decomp_limbs = max_bits.div_ceil(bus.range_max_bits);
         Self {
             bus,
@@ -140,7 +141,7 @@ impl IsLtSubAir {
     }
 
     #[inline(always)]
-    pub fn eval_range_checks<AB: InteractionBuilder>(
+    pub(crate) fn eval_range_checks<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         lower_decomp: &[AB::Var],

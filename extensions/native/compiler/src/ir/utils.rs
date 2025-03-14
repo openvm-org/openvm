@@ -13,8 +13,8 @@ pub const LIMB_BITS: usize = 8;
 
 /// Converts a prime field element to a usize.
 pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
-    let bu = x.as_canonical_biguint();
-    let digits = bu.to_u64_digits();
+    let biguint = x.as_canonical_biguint();
+    let digits = biguint.to_u64_digits();
     if digits.is_empty() {
         return 0;
     }

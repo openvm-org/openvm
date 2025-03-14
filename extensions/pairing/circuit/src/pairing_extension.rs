@@ -2,26 +2,22 @@ use derive_more::derive::From;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
-    arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
+    arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
-};
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_circuit::CurveConfig;
-use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
-use openvm_mod_circuit_builder::ExprBuilderConfig;
+use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
     bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER, BLS12_381_XI_ISIZE},
     bn254::{BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
-use openvm_pairing_transpiler::{Fp12Opcode, PairingOpcode, PairingPhantom};
-use openvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip};
+use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, FromRepr};
+use strum::FromRepr;
 
 use super::*;
 
@@ -64,25 +60,17 @@ pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, BytesStateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]
 pub enum PairingExtensionExecutor<F: PrimeField32> {
     // bn254 (32 limbs)
-    MillerDoubleStepRv32_32(MillerDoubleStepChip<F, 4, 8, 32>),
     MillerDoubleAndAddStepRv32_32(MillerDoubleAndAddStepChip<F, 4, 12, 32>),
     EvaluateLineRv32_32(EvaluateLineChip<F, 4, 2, 4, 32>),
-    Fp12MulRv32_32(Fp12MulChip<F, 12, 32>),
-    EcLineMul013By013(EcLineMul013By013Chip<F, 4, 10, 32>),
-    EcLineMulBy01234(EcLineMulBy01234Chip<F, 12, 10, 12, 32>),
     // bls12-381 (48 limbs)
-    MillerDoubleStepRv32_48(MillerDoubleStepChip<F, 12, 24, 16>),
     MillerDoubleAndAddStepRv32_48(MillerDoubleAndAddStepChip<F, 12, 36, 16>),
     EvaluateLineRv32_48(EvaluateLineChip<F, 12, 6, 12, 16>),
-    Fp12MulRv32_48(Fp12MulChip<F, 36, 16>),
-    EcLineMul023By023(EcLineMul023By023Chip<F, 12, 30, 16>),
-    EcLineMulBy02345(EcLineMulBy02345Chip<F, 36, 30, 36, 16>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum PairingExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),
@@ -96,288 +84,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
         &self,
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
-        let mut inventory = VmInventory::new();
-        let SystemPort {
-            execution_bus,
-            program_bus,
-            memory_bridge,
-        } = builder.system_port();
-        let bitwise_lu_chip = if let Some(&chip) = builder
-            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-            .first()
-        {
-            chip.clone()
-        } else {
-            let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
-            inventory.add_periphery_chip(chip.clone());
-            chip
-        };
-        let range_checker = builder.system_base().range_checker_chip.clone();
-        let offline_memory = builder.system_base().offline_memory();
-        let address_bits = builder.system_config().memory_config.pointer_max_bits;
-        for curve in self.supported_curves.iter() {
-            let pairing_idx = *curve as usize;
-            let pairing_class_offset =
-                PairingOpcode::CLASS_OFFSET + pairing_idx * PairingOpcode::COUNT;
-            let fp12_class_offset = Fp12Opcode::CLASS_OFFSET + pairing_idx * Fp12Opcode::COUNT;
-            match curve {
-                PairingCurve::Bn254 => {
-                    let bn_config = ExprBuilderConfig {
-                        modulus: curve.curve_config().modulus.clone(),
-                        num_limbs: 32,
-                        limb_bits: 8,
-                    };
-                    let miller_double = MillerDoubleStepChip::new(
-                        Rv32VecHeapAdapterChip::<F, 1, 4, 8, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bn_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::MillerDoubleStepRv32_32(miller_double),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                        )],
-                    )?;
-                    let miller_double_and_add = MillerDoubleAndAddStepChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 4, 12, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bn_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::MillerDoubleAndAddStepRv32_32(
-                            miller_double_and_add,
-                        ),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset
-                                + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
-                        )],
-                    )?;
-                    let eval_line = EvaluateLineChip::new(
-                        Rv32VecHeapTwoReadsAdapterChip::<F, 4, 2, 4, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bn_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::EvaluateLineRv32_32(eval_line),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::EVALUATE_LINE as usize,
-                        )],
-                    )?;
-                    let mul013 = EcLineMul013By013Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 4, 10, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        range_checker.clone(),
-                        bn_config.clone(),
-                        curve.xi(),
-                        pairing_class_offset,
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::EcLineMul013By013(mul013),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::MUL_013_BY_013 as usize,
-                        )],
-                    )?;
-                    let mul01234 = EcLineMulBy01234Chip::new(
-                        Rv32VecHeapTwoReadsAdapterChip::<F, 12, 10, 12, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bn_config.clone(),
-                        curve.xi(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::EcLineMulBy01234(mul01234),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::MUL_BY_01234 as usize,
-                        )],
-                    )?;
-                    let fp12_mul = Fp12MulChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 12, 12, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bn_config.clone(),
-                        curve.xi(),
-                        fp12_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::Fp12MulRv32_32(fp12_mul),
-                        [VmOpcode::from_usize(
-                            fp12_class_offset + Fp12Opcode::MUL as usize,
-                        )],
-                    )?;
-                }
-                PairingCurve::Bls12_381 => {
-                    let bls_config = ExprBuilderConfig {
-                        modulus: curve.curve_config().modulus.clone(),
-                        num_limbs: 48,
-                        limb_bits: 8,
-                    };
-                    let miller_double = MillerDoubleStepChip::new(
-                        Rv32VecHeapAdapterChip::<F, 1, 12, 24, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bls_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::MillerDoubleStepRv32_48(miller_double),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                        )],
-                    )?;
-                    let miller_double_and_add = MillerDoubleAndAddStepChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 12, 36, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bls_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::MillerDoubleAndAddStepRv32_48(
-                            miller_double_and_add,
-                        ),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset
-                                + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
-                        )],
-                    )?;
-                    let eval_line = EvaluateLineChip::new(
-                        Rv32VecHeapTwoReadsAdapterChip::<F, 12, 6, 12, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bls_config.clone(),
-                        pairing_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::EvaluateLineRv32_48(eval_line),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::EVALUATE_LINE as usize,
-                        )],
-                    )?;
-                    let mul023 = EcLineMul023By023Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 12, 30, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        range_checker.clone(),
-                        bls_config.clone(),
-                        curve.xi(),
-                        pairing_class_offset,
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::EcLineMul023By023(mul023),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::MUL_023_BY_023 as usize,
-                        )],
-                    )?;
-                    let mul02345 = EcLineMulBy02345Chip::new(
-                        Rv32VecHeapTwoReadsAdapterChip::<F, 36, 30, 36, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        range_checker.clone(),
-                        bls_config.clone(),
-                        curve.xi(),
-                        pairing_class_offset,
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::EcLineMulBy02345(mul02345),
-                        [VmOpcode::from_usize(
-                            pairing_class_offset + PairingOpcode::MUL_BY_02345 as usize,
-                        )],
-                    )?;
-                    let fp12_mul = Fp12MulChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 36, 36, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_bridge,
-                            address_bits,
-                            bitwise_lu_chip.clone(),
-                        ),
-                        bls_config.clone(),
-                        curve.xi(),
-                        fp12_class_offset,
-                        range_checker.clone(),
-                        offline_memory.clone(),
-                    );
-                    inventory.add_executor(
-                        PairingExtensionExecutor::Fp12MulRv32_48(fp12_mul),
-                        [VmOpcode::from_usize(
-                            fp12_class_offset + Fp12Opcode::MUL as usize,
-                        )],
-                    )?;
-                }
-            }
-        }
+        let inventory = VmInventory::new();
 
         builder.add_phantom_sub_executor(
             phantom::PairingHintSubEx,

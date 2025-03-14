@@ -11,16 +11,11 @@ use crate::commit::PolynomialSpaceVariable;
 #[derive(DslVariable, Clone)]
 pub struct TwoAdicMultiplicativeCosetVariable<C: Config> {
     pub log_n: Usize<C::N>,
-    pub size: Usize<C::N>,
     pub shift: Felt<C::F>,
     pub g: Felt<C::F>,
 }
 
 impl<C: Config> TwoAdicMultiplicativeCosetVariable<C> {
-    pub fn size(&self) -> RVar<C::N> {
-        self.size.clone().into()
-    }
-
     pub fn first_point(&self) -> Felt<C::F> {
         self.shift
     }
@@ -41,7 +36,6 @@ where
         TwoAdicMultiplicativeCosetVariable::<C> {
             // builder.eval is necessary to assign a variable in the dynamic mode.
             log_n: builder.eval(RVar::from(value.log_n)),
-            size: builder.eval(RVar::from(1 << value.log_n)),
             shift: builder.eval(value.shift),
             g: builder.eval(g_val),
         }
@@ -99,7 +93,6 @@ where
         let log_num_chunks = log_num_chunks.into();
         let num_chunks = num_chunks.into();
         let log_n = builder.eval_expr(self.log_n.clone() - log_num_chunks);
-        let size: Usize<_> = builder.sll(RVar::one(), log_n);
 
         let g_dom = self.gen();
         let g = builder.exp_power_of_2_v::<Felt<C::F>>(g_dom, log_num_chunks);
@@ -112,7 +105,6 @@ where
             let log_n = builder.eval(log_n);
             let domain = TwoAdicMultiplicativeCosetVariable {
                 log_n,
-                size: size.clone(),
                 shift: builder.eval(self.shift * domain_power),
                 g,
             };
@@ -129,7 +121,6 @@ where
         let num_chunks = 1 << log_num_chunks;
         let log_n: Usize<_> =
             builder.eval(self.log_n.clone() - C::N::from_canonical_usize(log_num_chunks));
-        let size: Usize<_> = builder.sll(RVar::one(), RVar::from(log_n.clone()));
 
         let g_dom = self.gen();
         let g = builder.exp_power_of_2_v::<Felt<C::F>>(g_dom, log_num_chunks);
@@ -140,7 +131,6 @@ where
         for _ in 0..num_chunks {
             domains.push(TwoAdicMultiplicativeCosetVariable {
                 log_n: log_n.clone(),
-                size: size.clone(),
                 shift: builder.eval(self.shift * domain_power),
                 g,
             });
@@ -158,7 +148,6 @@ where
         let domain = config.unwrap().get_subgroup(builder, log_degree);
         TwoAdicMultiplicativeCosetVariable {
             log_n: domain.log_n,
-            size: domain.size,
             shift: builder.eval(self.shift * C::F::GENERATOR),
             g: domain.g,
         }
@@ -176,7 +165,7 @@ pub(crate) mod tests {
     };
     use openvm_stark_sdk::config::{
         baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
-        FriParameters,
+        fri_params::SecurityParameters,
     };
     use rand::{thread_rng, Rng};
 
@@ -193,10 +182,6 @@ pub(crate) mod tests {
         builder.assert_var_eq(
             domain.log_n.clone(),
             F::from_canonical_usize(domain_val.log_n),
-        );
-        builder.assert_var_eq(
-            domain.size.clone(),
-            F::from_canonical_usize(1 << domain_val.log_n),
         );
         builder.assert_felt_eq(domain.shift, domain_val.shift);
 
@@ -223,8 +208,8 @@ pub(crate) mod tests {
         type ScPcs = <SC as StarkGenericConfig>::Pcs;
 
         let mut rng = thread_rng();
-        let fri_params = FriParameters::standard_fast();
-        let config = config_from_perm(&default_perm(), fri_params);
+        let security_params = SecurityParameters::standard_fast();
+        let config = config_from_perm(&default_perm(), security_params.clone());
         let pcs = config.pcs();
         let natural_domain_for_degree = |degree: usize| -> Domain<SC> {
             <ScPcs as Pcs<EF, Challenger>>::natural_domain_for_degree(pcs, degree)
@@ -234,13 +219,13 @@ pub(crate) mod tests {
         let mut builder = AsmBuilder::<F, EF>::default();
         builder.flags.static_only = static_only;
 
-        let config_var = const_fri_config(&mut builder, &fri_params);
+        let config_var = const_fri_config(&mut builder, &security_params.fri_params);
         for i in 0..5 {
             let log_d_val = 10 + i;
 
             let log_quotient_degree = 2;
 
-            // Initialize a reference doamin.
+            // Initialize a reference domain.
             let domain_val = natural_domain_for_degree(1 << log_d_val);
             let domain = builder.constant(domain_val);
 
@@ -272,7 +257,7 @@ pub(crate) mod tests {
                 zeta_val,
             );
 
-            // Now try splited domains
+            // Now try split domains
             let qc_domains_val = disjoint_domain_val.split_domains(1 << log_quotient_degree);
             for dom_val in qc_domains_val.iter() {
                 let dom = builder.constant(*dom_val);

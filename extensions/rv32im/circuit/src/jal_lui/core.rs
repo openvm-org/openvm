@@ -100,12 +100,14 @@ where
                 acc + val * AB::Expr::from_canonical_u32(1 << (i * RV32_CELL_BITS))
             });
 
+        // Constrain that imm * 2^4 is the correct composition of intermed_val in case of LUI
         builder.when(is_lui).assert_eq(
             intermed_val.clone(),
             imm * AB::F::from_canonical_u32(1 << (12 - RV32_CELL_BITS)),
         );
 
         let intermed_val = rd[0] + intermed_val * AB::Expr::from_canonical_u32(1 << RV32_CELL_BITS);
+        // Constrain that from_pc + DEFAULT_PC_STEP is the correct composition of intermed_val in case of JAL
         builder.when(is_jal).assert_eq(
             intermed_val,
             from_pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP),

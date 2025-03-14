@@ -3,12 +3,17 @@ use openvm_native_compiler::{
     ir::{Builder, Config},
     prelude::*,
 };
-use openvm_stark_backend::{keygen::types::TraceWidth, p3_util::log2_strict_usize};
+use openvm_stark_backend::{
+    keygen::types::TraceWidth,
+    p3_field::{FieldAlgebra, PrimeField32},
+    p3_util::log2_strict_usize,
+};
 
 use crate::{
     types::{MultiStarkVerificationAdvice, StarkVerificationAdvice},
     vars::{
-        MultiStarkVerificationAdviceVariable, StarkVerificationAdviceVariable, TraceWidthVariable,
+        LinearConstraintVariable, MultiStarkVerificationAdviceVariable, OptionalVar,
+        StarkVerificationAdviceVariable, TraceHeightConstraintSystem, TraceWidthVariable,
     },
 };
 
@@ -26,19 +31,79 @@ pub fn get_advice_per_air<C: Config>(
 
     let idx: Usize<_> = builder.eval(RVar::zero());
     for (air_id, advice) in m_advice.per_air.iter().enumerate() {
-        let curr_air_id = builder.get(air_ids, idx.clone());
-        let air_id = Usize::from(air_id);
-        builder.if_eq(air_id, curr_air_id).then(|builder| {
-            let advice_var =
-                constant_advice_and_update_mask(builder, advice, &num_challenges_to_sample_mask);
-            builder.set_value(&advice_per_air, idx.clone(), advice_var);
-            builder.inc(&idx);
+        builder.if_ne(idx.clone(), air_ids.len()).then(|builder| {
+            let curr_air_id = builder.get(air_ids, idx.clone());
+            let air_id = Usize::from(air_id);
+            builder.if_eq(air_id, curr_air_id).then(|builder| {
+                let advice_var = constant_advice_and_update_mask(
+                    builder,
+                    advice,
+                    &num_challenges_to_sample_mask,
+                );
+                builder.set_value(&advice_per_air, idx.clone(), advice_var);
+                builder.inc(&idx);
+            });
         });
+    }
+    // Assert that all AIRs in air_ids are covered.
+    // This will ensure that
+    // - `air_ids` are in increasing order and that
+    // - `air_ids.len() <= m_advice.per_air.len()`.
+    builder.assert_var_eq(idx, air_ids.len());
+
+    let trace_height_constraints = m_advice
+        .trace_height_constraints
+        .iter()
+        .map(|constraint| {
+            let coefficients = builder.array(constraint.coefficients.len());
+            for (i, coeff) in constraint.coefficients.iter().enumerate() {
+                let coefficient: Var<_> = builder.constant(C::N::from_canonical_u32(*coeff));
+                builder.set(&coefficients, i, coefficient);
+            }
+            assert!(constraint.threshold <= C::F::ORDER_U32);
+            let threshold: Var<_> = builder.constant(C::N::from_wrapped_u32(constraint.threshold));
+            let is_threshold_at_p = constraint.threshold == C::F::ORDER_U32;
+            LinearConstraintVariable {
+                coefficients,
+                threshold,
+                is_threshold_at_p,
+            }
+        })
+        .collect();
+
+    let height_maxes = builder.array(m_advice.per_air.len());
+    for i in 0..m_advice.per_air.len() {
+        let max_coefficient = m_advice
+            .trace_height_constraints
+            .iter()
+            .map(|constraint| constraint.coefficients[i])
+            .max()
+            .unwrap();
+        let height_max = if max_coefficient <= 1 {
+            OptionalVar {
+                is_some: Usize::from(0),
+                value: builder.constant(C::N::ZERO),
+            }
+        } else {
+            OptionalVar {
+                is_some: Usize::from(1),
+                // Because `C::F::ORDER_U32` is prime and `max_coefficient > 1`, `floor(C::F::ORDER_U32 / max_coefficient) * max_coefficient < C::F::ORDER_U32`,
+                // `height * max_coefficient` cannot overflow `C::F`.
+                value: builder.constant(C::N::from_canonical_u32(
+                    C::F::ORDER_U32 / max_coefficient + 1,
+                )),
+            }
+        };
+        builder.set(&height_maxes, i, height_max);
     }
 
     MultiStarkVerificationAdviceVariable {
         per_air: advice_per_air,
         num_challenges_to_sample_mask,
+        trace_height_constraint_system: TraceHeightConstraintSystem {
+            height_constraints: trace_height_constraints,
+            height_maxes,
+        },
     }
 }
 

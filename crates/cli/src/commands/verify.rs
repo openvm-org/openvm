@@ -17,21 +17,21 @@ use crate::default::{
 #[derive(Parser)]
 #[command(name = "verify", about = "Verify a proof")]
 pub struct VerifyCmd {
-    #[clap(subcommand)]
+    #[command(subcommand)]
     command: VerifySubCommand,
 }
 
 #[derive(Parser)]
 enum VerifySubCommand {
     App {
-        #[clap(long, action, help = "Path to app verifying key", default_value = DEFAULT_APP_VK_PATH)]
+        #[arg(long, action, help = "Path to app verifying key", default_value = DEFAULT_APP_VK_PATH)]
         app_vk: PathBuf,
 
-        #[clap(long, action, help = "Path to app proof", default_value = DEFAULT_APP_PROOF_PATH)]
+        #[arg(long, action, help = "Path to app proof", default_value = DEFAULT_APP_PROOF_PATH)]
         proof: PathBuf,
     },
     Evm {
-        #[clap(long, action, help = "Path to EVM proof", default_value = DEFAULT_EVM_PROOF_PATH)]
+        #[arg(long, action, help = "Path to EVM proof", default_value = DEFAULT_EVM_PROOF_PATH)]
         proof: PathBuf,
     },
 }

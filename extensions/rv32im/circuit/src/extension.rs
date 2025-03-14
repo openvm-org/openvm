@@ -11,7 +11,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
@@ -128,7 +128,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 // ============ Executor and Periphery Enums for Extension ============
 
 /// RISC-V 32-bit Base (RV32I) Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum Rv32IExecutor<F: PrimeField32> {
     // Rv32 (for standard 32-bit integers):
     BaseAlu(Rv32BaseAluChip<F>),
@@ -144,7 +144,7 @@ pub enum Rv32IExecutor<F: PrimeField32> {
 }
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum Rv32MExecutor<F: PrimeField32> {
     Multiplication(Rv32MultiplicationChip<F>),
     MultiplicationHigh(Rv32MulHChip<F>),
@@ -152,19 +152,19 @@ pub enum Rv32MExecutor<F: PrimeField32> {
 }
 
 /// RISC-V 32-bit Io Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum Rv32IoExecutor<F: PrimeField32> {
     HintStore(Rv32HintStoreChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum Rv32IPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     // We put this only to get the <F> generic to work
     Phantom(PhantomChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum Rv32MPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     /// Only needed for multiplication extension
@@ -173,7 +173,7 @@ pub enum Rv32MPeriphery<F: PrimeField32> {
     Phantom(PhantomChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum Rv32IoPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     // We put this only to get the <F> generic to work
@@ -214,7 +214,12 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         };
 
         let base_alu_chip = Rv32BaseAluChip::new(
-            Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_bridge),
+            Rv32BaseAluAdapterChip::new(
+                execution_bus,
+                program_bus,
+                memory_bridge,
+                bitwise_lu_chip.clone(),
+            ),
             BaseAluCoreChip::new(bitwise_lu_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
@@ -224,14 +229,24 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         let lt_chip = Rv32LessThanChip::new(
-            Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_bridge),
+            Rv32BaseAluAdapterChip::new(
+                execution_bus,
+                program_bus,
+                memory_bridge,
+                bitwise_lu_chip.clone(),
+            ),
             LessThanCoreChip::new(bitwise_lu_chip.clone(), LessThanOpcode::CLASS_OFFSET),
             offline_memory.clone(),
         );
         inventory.add_executor(lt_chip, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
         let shift_chip = Rv32ShiftChip::new(
-            Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_bridge),
+            Rv32BaseAluAdapterChip::new(
+                execution_bus,
+                program_bus,
+                memory_bridge,
+                bitwise_lu_chip.clone(),
+            ),
             ShiftCoreChip::new(
                 bitwise_lu_chip.clone(),
                 range_checker.clone(),
@@ -453,6 +468,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             bitwise_lu_chip.clone(),
             memory_bridge,
             offline_memory.clone(),
+            builder.system_config().memory_config.pointer_max_bits,
             Rv32HintStoreOpcode::CLASS_OFFSET,
         );
         hintstore_chip.set_streams(builder.streams().clone());

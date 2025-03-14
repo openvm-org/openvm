@@ -5,13 +5,9 @@
 
 use std::{
     mem::size_of,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc,
-    },
+    sync::{atomic::AtomicU32, Arc},
 };
 
-use itertools::Itertools;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -20,7 +16,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 mod bus;
@@ -32,11 +28,13 @@ pub use bus::*;
 
 #[derive(Default, Copy, Clone)]
 pub struct RangeTupleCols<T> {
+    /// Number of range checks requested for each tuple combination
     pub mult: T,
 }
 
 #[derive(Default, Clone)]
 pub struct RangeTuplePreprocessedCols<T> {
+    /// Contains all possible tuple combinations within specified ranges
     pub tuple: Vec<T>,
 }
 
@@ -237,18 +235,5 @@ impl<const N: usize> ChipUsageGetter for SharedRangeTupleCheckerChip<N> {
 
     fn trace_width(&self) -> usize {
         self.0.trace_width()
-    }
-}
-
-impl<const N: usize> Stateful<Vec<u8>> for SharedRangeTupleCheckerChip<N> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        let vals: Vec<u32> = bitcode::deserialize(&state).unwrap();
-        for (x, v) in self.0.count.iter().zip_eq(vals) {
-            x.store(v, Ordering::Relaxed);
-        }
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.0.count).unwrap()
     }
 }

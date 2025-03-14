@@ -1,8 +1,11 @@
-use std::cmp::min;
+use std::{
+    cmp::min,
+    sync::{Arc, Mutex},
+};
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
-    VirtualMachine,
+    verify_single, Streams, VirtualMachine,
 };
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
 use openvm_native_compiler::{
@@ -35,22 +38,22 @@ use crate::{
     NativeConfig,
 };
 
-const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus(7);
+const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
 
 fn compute_commit<F: Field>(
     dim: &[usize],
     opened: &[Vec<F>],
     proof: &[[F; CHUNK]],
-    root_is_on_right: &[bool],
+    sibling_is_on_right: &[bool],
     hash_function: impl Fn([F; CHUNK], [F; CHUNK]) -> ([F; CHUNK], [F; CHUNK]),
 ) -> [F; CHUNK] {
-    let mut height = dim[0];
+    let mut log_height = dim[0] as isize;
     let mut proof_index = 0;
     let mut opened_index = 0;
     let mut root = [F::ZERO; CHUNK];
-    while height >= 1 {
+    while log_height >= 0 {
         let mut concat = vec![];
-        while opened_index < opened.len() && dim[opened_index] == height {
+        while opened_index < opened.len() && dim[opened_index] == log_height as usize {
             concat.extend(opened[opened_index].clone());
             opened_index += 1;
         }
@@ -62,22 +65,22 @@ fn compute_commit<F: Field>(
                     .copy_from_slice(&concat[i..min(i + CHUNK, concat.len())]);
                 (left, right) = hash_function(left, right);
             }
-            root = if height == dim[0] {
+            root = if log_height as usize == dim[0] {
                 left
             } else {
                 hash_function(root, left).0
             }
         }
-        if height > 1 {
+        if log_height > 0 {
             let sibling = proof[proof_index];
-            let (left, right) = if root_is_on_right[proof_index] {
+            let (left, right) = if sibling_is_on_right[proof_index] {
                 (sibling, root)
             } else {
                 (root, sibling)
             };
             root = hash_function(left, right).0;
         }
-        height /= 2;
+        log_height -= 1;
         proof_index += 1;
     }
     root
@@ -90,7 +93,7 @@ struct VerifyBatchInstance {
     dim: Vec<usize>,
     opened: Vec<Vec<F>>,
     proof: Vec<[F; CHUNK]>,
-    root_is_on_right: Vec<bool>,
+    sibling_is_on_right: Vec<bool>,
     commit: [F; CHUNK],
 }
 
@@ -103,35 +106,34 @@ fn random_instance(
     let mut dims = vec![];
     let mut opened = vec![];
     let mut proof = vec![];
-    let mut root_is_on_right = vec![];
-    for (lg_height, row_lengths) in row_lengths.iter().enumerate() {
-        let height = 1 << lg_height;
+    let mut sibling_is_on_right = vec![];
+    for (log_height, row_lengths) in row_lengths.iter().enumerate() {
         for &row_length in row_lengths {
-            dims.push(height);
+            dims.push(log_height);
             let mut opened_row = vec![];
             for _ in 0..opened_element_size * row_length {
                 opened_row.push(rng.gen());
             }
             opened.push(opened_row);
         }
-        if height > 1 {
+        if log_height > 0 {
             proof.push(std::array::from_fn(|_| rng.gen()));
-            root_is_on_right.push(rng.gen());
+            sibling_is_on_right.push(rng.gen());
         }
     }
 
     dims.reverse();
     opened.reverse();
     proof.reverse();
-    root_is_on_right.reverse();
+    sibling_is_on_right.reverse();
 
-    let commit = compute_commit(&dims, &opened, &proof, &root_is_on_right, hash_function);
+    let commit = compute_commit(&dims, &opened, &proof, &sibling_is_on_right, hash_function);
 
     VerifyBatchInstance {
         dim: dims,
         opened,
         proof,
-        root_is_on_right,
+        sibling_is_on_right,
         commit,
     }
 }
@@ -152,11 +154,13 @@ fn test<const N: usize>(cases: [Case; N]) {
     let address_space = AS::Native as usize;
 
     let mut tester = VmChipTestBuilder::default();
+    let streams = Arc::new(Mutex::new(Streams::default()));
     let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
         tester.system_port(),
         tester.offline_memory_mutex_arc(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
+        streams.clone(),
     );
 
     let mut rng = create_seeded_rng();
@@ -165,6 +169,7 @@ fn test<const N: usize>(cases: [Case; N]) {
         opened_element_size,
     } in cases
     {
+        let mut streams = streams.lock().unwrap();
         let instance =
             random_instance(&mut rng, row_lengths, opened_element_size, |left, right| {
                 let concatenated =
@@ -179,27 +184,26 @@ fn test<const N: usize>(cases: [Case; N]) {
             dim,
             opened,
             proof,
-            root_is_on_right,
+            sibling_is_on_right,
             commit,
         } = instance;
 
         let dim_register = gen_pointer(&mut rng, 1);
         let opened_register = gen_pointer(&mut rng, 1);
         let opened_length_register = gen_pointer(&mut rng, 1);
-        let sibling_register = gen_pointer(&mut rng, 1);
+        let proof_id = gen_pointer(&mut rng, 1);
         let index_register = gen_pointer(&mut rng, 1);
         let commit_register = gen_pointer(&mut rng, 1);
 
         let dim_base_pointer = gen_pointer(&mut rng, 1);
         let opened_base_pointer = gen_pointer(&mut rng, 2);
-        let sibling_base_pointer = gen_pointer(&mut rng, 1);
         let index_base_pointer = gen_pointer(&mut rng, 1);
         let commit_pointer = gen_pointer(&mut rng, 1);
 
         tester.write_usize(address_space, dim_register, [dim_base_pointer]);
         tester.write_usize(address_space, opened_register, [opened_base_pointer]);
         tester.write_usize(address_space, opened_length_register, [opened.len()]);
-        tester.write_usize(address_space, sibling_register, [sibling_base_pointer]);
+        tester.write_usize(address_space, proof_id, [streams.hint_space.len()]);
         tester.write_usize(address_space, index_register, [index_base_pointer]);
         tester.write_usize(address_space, commit_register, [commit_pointer]);
 
@@ -217,16 +221,11 @@ fn test<const N: usize>(cases: [Case; N]) {
                 tester.write_cell(address_space, row_pointer + j, opened_value);
             }
         }
-        for (i, &sibling) in proof.iter().enumerate() {
-            let row_pointer = gen_pointer(&mut rng, 1);
-            tester.write_usize(
-                address_space,
-                sibling_base_pointer + (2 * i),
-                [row_pointer, CHUNK],
-            );
-            tester.write(address_space, row_pointer, sibling);
-        }
-        for (i, &bit) in root_is_on_right.iter().enumerate() {
+        streams
+            .hint_space
+            .push(proof.iter().flatten().copied().collect());
+        drop(streams);
+        for (i, &bit) in sibling_is_on_right.iter().enumerate() {
             tester.write_cell(address_space, index_base_pointer + i, F::from_bool(bit));
         }
         tester.write(address_space, commit_pointer, commit);
@@ -242,7 +241,7 @@ fn test<const N: usize>(cases: [Case; N]) {
                     dim_register,
                     opened_register,
                     opened_length_register,
-                    sibling_register,
+                    proof_id,
                     index_register,
                     commit_register,
                     opened_element_size_inv,
@@ -385,11 +384,13 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
     let elem_range = || 1..=100;
 
     let mut tester = VmChipTestBuilder::default();
+    let streams = Arc::new(Mutex::new(Streams::default()));
     let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
         tester.system_port(),
         tester.offline_memory_mutex_arc(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
+        streams.clone(),
     );
 
     let mut rng = create_seeded_rng();
@@ -454,7 +455,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
 }
 
 fn get_engine() -> BabyBearBlake3Engine {
-    BabyBearBlake3Engine::new(standard_fri_params_with_100_bits_conjectured_security(3))
+    BabyBearBlake3Engine::new(FriParameters::new_for_testing(3))
 }
 
 #[test]
@@ -504,8 +505,7 @@ fn air_test_with_compress_poseidon2(
     let result = vm.execute_and_generate(program, vec![]).unwrap();
     let proofs = vm.prove(&pk, result);
     for proof in proofs {
-        vm.verify_single(&pk.get_vk(), &proof)
-            .expect("Verification failed");
+        verify_single(&vm.engine, &pk.get_vk(), &proof).expect("Verification failed");
     }
 }
 

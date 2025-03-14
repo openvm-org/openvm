@@ -60,18 +60,15 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         parent: &VerifyBatchRecord<F>,
         proof_index: usize,
         opened_index: usize,
-        height: usize,
+        log_height: usize,
     ) {
         let &IncorporateSiblingRecord {
-            read_sibling_array_start,
-            read_root_is_on_right,
-            root_is_on_right,
-            reads,
+            read_sibling_is_on_right,
+            sibling_is_on_right,
             p2_input,
         } = record;
 
-        let read_root_is_on_right = memory.record_by_id(read_root_is_on_right);
-        let read_sibling_array_start = memory.record_by_id(read_sibling_array_start);
+        let read_sibling_is_on_right = memory.record_by_id(read_sibling_is_on_right);
 
         self.generate_subair_cols(p2_input, slice);
         let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = slice.borrow_mut();
@@ -85,36 +82,27 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         cols.opened_element_size_inv = parent.opened_element_size_inv();
         cols.very_first_timestamp = F::from_canonical_u32(parent.from_state.timestamp);
         cols.start_timestamp =
-            F::from_canonical_u32(read_root_is_on_right.timestamp - NUM_INITIAL_READS as u32);
+            F::from_canonical_u32(read_sibling_is_on_right.timestamp - NUM_INITIAL_READS as u32);
 
         let specific: &mut TopLevelSpecificCols<F> =
             cols.specific[..TopLevelSpecificCols::<F>::width()].borrow_mut();
 
         specific.end_timestamp =
-            F::from_canonical_usize(read_root_is_on_right.timestamp as usize + (2 + CHUNK));
-        for (i, read) in reads.iter().enumerate() {
-            aux_cols_factory.generate_read_aux(memory.record_by_id(*read), &mut specific.reads[i]);
-        }
+            F::from_canonical_usize(read_sibling_is_on_right.timestamp as usize + 1);
         cols.initial_opened_index = F::from_canonical_usize(opened_index);
         specific.final_opened_index = F::from_canonical_usize(opened_index - 1);
-        specific.height = F::from_canonical_usize(height);
+        specific.log_height = F::from_canonical_usize(log_height);
         specific.opened_length = F::from_canonical_usize(parent.opened_length);
         specific.dim_base_pointer = parent.dim_base_pointer;
         cols.opened_base_pointer = parent.opened_base_pointer;
-        specific.sibling_base_pointer = parent.sibling_base_pointer;
         specific.index_base_pointer = parent.index_base_pointer;
 
         specific.proof_index = F::from_canonical_usize(proof_index);
         aux_cols_factory.generate_read_aux(
-            read_root_is_on_right,
-            &mut specific.read_initial_height_or_root_is_on_right,
+            read_sibling_is_on_right,
+            &mut specific.read_initial_height_or_sibling_is_on_right,
         );
-        aux_cols_factory.generate_read_aux(
-            read_sibling_array_start,
-            &mut specific.read_final_height_or_sibling_array_start,
-        );
-        specific.root_is_on_right = F::from_bool(root_is_on_right);
-        specific.sibling_array_start = read_sibling_array_start.data_at(0);
+        specific.sibling_is_on_right = F::from_bool(sibling_is_on_right);
     }
     fn correct_last_top_level_row(
         &self,
@@ -129,7 +117,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
             dim_base_pointer_read,
             opened_base_pointer_read,
             opened_length_read,
-            sibling_base_pointer_read,
             index_base_pointer_read,
             commit_pointer_read,
             commit_read,
@@ -146,7 +133,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         specific.dim_register = instruction.a;
         specific.opened_register = instruction.b;
         specific.opened_length_register = instruction.c;
-        specific.sibling_register = instruction.d;
+        specific.proof_id = instruction.d;
         specific.index_register = instruction.e;
         specific.commit_register = instruction.f;
         specific.commit_pointer = commit_pointer;
@@ -161,10 +148,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         aux_cols_factory.generate_read_aux(
             memory.record_by_id(opened_length_read),
             &mut specific.opened_length_read,
-        );
-        aux_cols_factory.generate_read_aux(
-            memory.record_by_id(sibling_base_pointer_read),
-            &mut specific.sibling_base_pointer_read,
         );
         aux_cols_factory.generate_read_aux(
             memory.record_by_id(index_base_pointer_read),
@@ -186,7 +169,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         memory: &OfflineMemory<F>,
         parent: &VerifyBatchRecord<F>,
         proof_index: usize,
-        height: usize,
+        log_height: usize,
     ) {
         let &IncorporateRowRecord {
             initial_opened_index,
@@ -228,22 +211,18 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
 
         cols.initial_opened_index = F::from_canonical_usize(initial_opened_index);
         specific.final_opened_index = F::from_canonical_usize(final_opened_index);
-        specific.height = F::from_canonical_usize(height);
+        specific.log_height = F::from_canonical_usize(log_height);
         specific.opened_length = F::from_canonical_usize(parent.opened_length);
         specific.dim_base_pointer = parent.dim_base_pointer;
         cols.opened_base_pointer = parent.opened_base_pointer;
-        specific.sibling_base_pointer = parent.sibling_base_pointer;
         specific.index_base_pointer = parent.index_base_pointer;
 
         specific.proof_index = F::from_canonical_usize(proof_index);
         aux_cols_factory.generate_read_aux(
             initial_height_read,
-            &mut specific.read_initial_height_or_root_is_on_right,
+            &mut specific.read_initial_height_or_sibling_is_on_right,
         );
-        aux_cols_factory.generate_read_aux(
-            final_height_read,
-            &mut specific.read_final_height_or_sibling_array_start,
-        );
+        aux_cols_factory.generate_read_aux(final_height_read, &mut specific.read_final_height);
     }
     #[allow(clippy::too_many_arguments)]
     fn inside_row_record_to_row(
@@ -306,7 +285,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
             cell.opened_index = F::from_canonical_usize(parent.final_opened_index);
         }
 
-        cols.is_exhausted = std::array::from_fn(|i| F::from_bool(i >= cells.len()));
+        cols.is_exhausted = std::array::from_fn(|i| F::from_bool(i + 1 >= cells.len()));
 
         cols.initial_opened_index = F::from_canonical_usize(parent.initial_opened_index);
         cols.opened_base_pointer = grandparent.opened_base_pointer;
@@ -322,9 +301,9 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         let width = NativePoseidon2Cols::<F, SBOX_REGISTERS>::width();
         let mut used_cells = 0;
 
-        let mut height = record.initial_height;
         let mut opened_index = 0;
         for (proof_index, top_level) in record.top_level.iter().enumerate() {
+            let log_height = record.initial_log_height - proof_index;
             if let Some(incorporate_row) = &top_level.incorporate_row {
                 self.incorporate_row_record_to_row(
                     incorporate_row,
@@ -333,7 +312,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
                     memory,
                     record,
                     proof_index,
-                    height,
+                    log_height,
                 );
                 opened_index = incorporate_row.final_opened_index + 1;
                 used_cells += width;
@@ -347,11 +326,10 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
                     record,
                     proof_index,
                     opened_index,
-                    height,
+                    log_height,
                 );
                 used_cells += width;
             }
-            height /= 2;
         }
         self.correct_last_top_level_row(
             record,
@@ -423,7 +401,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         cols.simple = F::ONE;
         cols.end_inside_row = F::ZERO;
         cols.end_top_level = F::ZERO;
-        cols.is_exhausted = [F::ZERO; CHUNK];
+        cols.is_exhausted = [F::ZERO; CHUNK - 1];
 
         cols.start_timestamp = F::from_canonical_u32(from_state.timestamp);
         let specific: &mut SimplePoseidonSpecificCols<F> =

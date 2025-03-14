@@ -1,9 +1,7 @@
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
 use crate::system::memory::{
-    merkle::{DirectCompressionBus, MemoryMerkleChip},
-    persistent::PersistentBoundaryChip,
-    volatile::VolatileBoundaryChip,
+    merkle::MemoryMerkleChip, persistent::PersistentBoundaryChip, volatile::VolatileBoundaryChip,
     MemoryImage, CHUNK,
 };
 
@@ -20,43 +18,21 @@ pub enum MemoryInterface<F> {
 }
 
 impl<F: PrimeField32> MemoryInterface<F> {
-    pub fn touch_address(&mut self, addr_space: u32, pointer: u32) {
-        match self {
-            MemoryInterface::Volatile { boundary_chip } => {
-                boundary_chip.touch_address(addr_space, pointer);
-            }
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                ..
-            } => {
-                boundary_chip.touch_address(addr_space, pointer);
-                merkle_chip.touch_address(addr_space, pointer);
-            }
-        }
-    }
-
     pub fn touch_range(&mut self, addr_space: u32, pointer: u32, len: u32) {
         match self {
-            MemoryInterface::Volatile { boundary_chip } => {
-                for offset in 0..len {
-                    boundary_chip.touch_address(addr_space, pointer + offset);
-                }
-            }
+            MemoryInterface::Volatile { .. } => {}
             MemoryInterface::Persistent {
                 boundary_chip,
                 merkle_chip,
                 ..
             } => {
-                for offset in 0..len {
-                    boundary_chip.touch_address(addr_space, pointer + offset);
-                    merkle_chip.touch_address(addr_space, pointer + offset);
-                }
+                boundary_chip.touch_range(addr_space, pointer, len);
+                merkle_chip.touch_range(addr_space, pointer, len);
             }
         }
     }
 
-    pub fn compression_bus(&self) -> Option<DirectCompressionBus> {
+    pub fn compression_bus(&self) -> Option<PermutationCheckBus> {
         match self {
             MemoryInterface::Volatile { .. } => None,
             MemoryInterface::Persistent { merkle_chip, .. } => {

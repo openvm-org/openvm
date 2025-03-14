@@ -111,12 +111,17 @@ where
             builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
             builder.when(marker[i]).assert_eq(cols.diff_val, diff);
         }
+        // - If x != y, then prefix_sum = 1 so marker[i] must be 1 iff i is the first index where diff != 0.
+        //   Constrains that diff == diff_val where diff_val is non-zero.
+        // - If x == y, then prefix_sum = 0 and cmp_result = 0.
+        //   Here, prefix_sum cannot be 1 because all diff are zero, making diff == diff_val fails.
 
         builder.assert_bool(prefix_sum.clone());
         builder
             .when(not::<AB::Expr>(prefix_sum.clone()))
             .assert_zero(cols.cmp_result);
 
+        // Check if b_msb_f and c_msb_f are in [-128, 127) if signed, [0, 256) if unsigned.
         self.bus
             .send_range(
                 cols.b_msb_f
@@ -125,6 +130,8 @@ where
                     + AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag,
             )
             .eval(builder, is_valid.clone());
+
+        // Range check to ensure diff_val is non-zero.
         self.bus
             .send_range(cols.diff_val - AB::Expr::ONE, AB::F::ZERO)
             .eval(builder, prefix_sum);

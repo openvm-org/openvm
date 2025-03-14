@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::VmConfig;
+use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_stark_backend::{proof::Proof, Chip};
 
 use crate::{
     keygen::{AggStarkProvingKey, AppProvingKey},
     prover::{agg::AggStarkProver, app::AppProver},
-    verifier::root::types::RootVmVerifierInput,
     NonRootCommittedExe, RootSC, StdIn, F, SC,
 };
 

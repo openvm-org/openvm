@@ -1,11 +1,12 @@
 use derive_new::new;
 use openvm_stark_backend::p3_util::log2_strict_usize;
+use serde::{Deserialize, Serialize};
 
 use crate::{arch::MemoryConfig, system::memory::CHUNK};
 
 // indicates that there are 2^`as_height` address spaces numbered starting from `as_offset`,
 // and that each address space has 2^`address_height` addresses numbered starting from 0
-#[derive(Clone, Copy, Debug, new)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, new)]
 pub struct MemoryDimensions {
     /// Address space height
     pub as_height: usize,

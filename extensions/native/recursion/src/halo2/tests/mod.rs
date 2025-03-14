@@ -94,28 +94,6 @@ fn test_publish() {
 }
 
 #[test]
-fn test_num2bits_v_circuit() {
-    let mut builder = Builder::<OuterConfig>::default();
-    builder.flags.static_only = true;
-    let mut value_u32 = 1345237507;
-    let value = builder.eval(Bn254Fr::from_canonical_u32(value_u32));
-    let result = builder.num2bits_v_circuit(value, 32);
-    for r in result {
-        builder.assert_var_eq(r, Bn254Fr::from_canonical_u32(value_u32 & 1));
-        value_u32 >>= 1;
-    }
-
-    Halo2Prover::mock::<OuterConfig>(
-        10,
-        DslOperations {
-            operations: builder.operations,
-            num_public_values: 0,
-        },
-        Witness::default(),
-    );
-}
-
-#[test]
 fn test_reduce_32() {
     let value_1 = BabyBear::from_canonical_u32(1345237507);
     let value_2 = BabyBear::from_canonical_u32(1000001);
@@ -140,27 +118,32 @@ fn test_reduce_32() {
 
 #[test]
 fn test_split_32() {
-    let value = Bn254Fr::from_canonical_u32(1345237507);
-    let gt: Vec<BabyBear> = split_32_gt(value, 3);
-    dbg!(&gt);
+    let f = |value| {
+        let gt: Vec<BabyBear> = split_32_gt(value, 3);
+        dbg!(&gt);
 
-    let mut builder = Builder::<OuterConfig>::default();
-    builder.flags.static_only = true;
-    let value = builder.eval(value);
-    let result = split_32(&mut builder, value, 3);
+        let mut builder = Builder::<OuterConfig>::default();
+        builder.flags.static_only = true;
+        let value = builder.eval(value);
+        let result = split_32(&mut builder, value, 3);
 
-    builder.assert_felt_eq(result[0], gt[0]);
-    builder.assert_felt_eq(result[1], gt[1]);
-    builder.assert_felt_eq(result[2], gt[2]);
+        builder.assert_felt_eq(result[0], gt[0]);
+        builder.assert_felt_eq(result[1], gt[1]);
+        builder.assert_felt_eq(result[2], gt[2]);
 
-    Halo2Prover::mock::<OuterConfig>(
-        10,
-        DslOperations {
-            operations: builder.operations,
-            num_public_values: 0,
-        },
-        Witness::default(),
-    );
+        Halo2Prover::mock::<OuterConfig>(
+            10,
+            DslOperations {
+                operations: builder.operations,
+                num_public_values: 0,
+            },
+            Witness::default(),
+        );
+    };
+    let modulus = Bn254Fr::ZERO - Bn254Fr::ONE;
+    f(Bn254Fr::from_canonical_u32(1345237507));
+    f(Bn254Fr::ZERO);
+    f(modulus);
 }
 
 #[test]

@@ -7,7 +7,7 @@ use openvm_native_compiler::{
     prelude::MemVariable,
 };
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::{Field, FieldAlgebra, TwoAdicField};
+use openvm_stark_backend::p3_field::{FieldAlgebra, TwoAdicField};
 pub use two_adic_pcs::*;
 
 use self::types::{DimensionsVariable, FriConfigVariable, FriQueryProofVariable};
@@ -15,7 +15,7 @@ use crate::{
     digest::{CanPoseidon2Digest, DigestVariable},
     outer_poseidon2::Poseidon2CircuitBuilder,
     utils::cond_eval,
-    vars::OuterDigestVariable,
+    vars::{HintSlice, OuterDigestVariable},
 };
 
 pub mod domain;
@@ -55,6 +55,10 @@ where
     let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
     let x = builder.exp_bits_big_endian(two_adic_generator_ef, &index_bits_truncated);
 
+    builder.assert_usize_eq(
+        proof.commit_phase_openings.len(),
+        commit_phase_commits.len(),
+    );
     builder
         .range(0, commit_phase_commits.len())
         .for_each(|i_vec, builder| {
@@ -96,7 +100,7 @@ where
             }
 
             let dims = DimensionsVariable::<C> {
-                height: builder.sll(C::N::ONE, log_folded_height),
+                log_height: builder.eval(log_folded_height),
             };
             let dims_slice: Array<C, DimensionsVariable<C>> = builder.array(1);
             builder.set_value(&dims_slice, 0, dims);
@@ -150,10 +154,8 @@ pub fn verify_batch<C: Config>(
     dimensions: Array<C, DimensionsVariable<C>>,
     index_bits: Array<C, Var<C::N>>,
     opened_values: &NestedOpenedValues<C>,
-    proof: &Array<C, DigestVariable<C>>,
+    proof: &HintSlice<C>,
 ) {
-    //println!("poseidon2");
-    //panic!();
     if builder.flags.static_only {
         verify_batch_static(
             builder,
@@ -170,21 +172,25 @@ pub fn verify_batch<C: Config>(
         Array::Dyn(ptr, len) => Array::Dyn(ptr, len.clone()),
         _ => panic!("Expected a dynamic array of felts"),
     };
-    let proof = match proof {
-        Array::Dyn(ptr, len) => Array::Dyn(*ptr, len.clone()),
-        _ => panic!("Expected a dynamic array of felts"),
-    };
     let commit = match commit {
         DigestVariable::Felt(arr) => arr,
         _ => panic!("Expected a dynamic array of felts"),
     };
     match opened_values {
-        NestedOpenedValues::Felt(opened_values) => {
-            builder.verify_batch_felt(&dimensions, opened_values, &proof, &index_bits, commit)
-        }
-        NestedOpenedValues::Ext(opened_values) => {
-            builder.verify_batch_ext(&dimensions, opened_values, &proof, &index_bits, commit)
-        }
+        NestedOpenedValues::Felt(opened_values) => builder.verify_batch_felt(
+            &dimensions,
+            opened_values,
+            proof.id.get_var(),
+            &index_bits,
+            commit,
+        ),
+        NestedOpenedValues::Ext(opened_values) => builder.verify_batch_ext(
+            &dimensions,
+            opened_values,
+            proof.id.get_var(),
+            &index_bits,
+            commit,
+        ),
     };
 }
 
@@ -201,7 +207,7 @@ pub fn verify_batch_static<C: Config>(
     dimensions: Array<C, DimensionsVariable<C>>,
     index_bits: Array<C, Var<C::N>>,
     opened_values: &NestedOpenedValues<C>,
-    proof: &Array<C, DigestVariable<C>>,
+    proof: &HintSlice<C>,
 ) {
     let commit: OuterDigestVariable<C> = if let DigestVariable::Var(commit) = commit {
         commit.vec().try_into().unwrap()
@@ -211,7 +217,7 @@ pub fn verify_batch_static<C: Config>(
     // The index of which table to process next.
     let index: Usize<C::N> = builder.eval(C::N::ZERO);
     // The height of the current layer (padded).
-    let current_height = builder.get(&dimensions, index.clone()).height;
+    let mut current_log_height = builder.get(&dimensions, index.clone()).log_height.value();
     // Reduce all the tables that have the same height to a single root.
     let reducer = opened_values.create_reducer(builder);
     let mut root = reducer
@@ -219,49 +225,41 @@ pub fn verify_batch_static<C: Config>(
             builder,
             index.clone(),
             &dimensions,
-            current_height.clone(),
+            current_log_height,
             opened_values,
         )
         .into_outer_digest();
 
     // For each sibling in the proof, reconstruct the root.
-    builder.range(0, proof.len()).for_each(|i_vec, builder| {
-        let i = i_vec[0];
-        let sibling: OuterDigestVariable<C> = if let DigestVariable::Var(d) = builder.get(proof, i)
-        {
-            d.vec().try_into().unwrap()
-        } else {
-            panic!("Expected a Var commitment");
-        };
+    let witness_refs = builder.get_witness_refs(proof.id.clone()).to_vec();
+    for (i, &witness_ref) in witness_refs.iter().enumerate() {
+        let sibling: OuterDigestVariable<C> = [witness_ref.into()];
         let bit = builder.get(&index_bits, i);
 
         let [left, right]: [Var<_>; 2] = cond_eval(builder, bit, root[0], sibling[0]);
         root = builder.p2_compress([[left], [right]]);
-        builder.assign(
-            &current_height,
-            current_height.clone() * (C::N::TWO.inverse()),
-        );
+        current_log_height -= 1;
 
         builder
             .if_ne(index.clone(), dimensions.len())
             .then(|builder| {
-                let next_height = builder.get(&dimensions, index.clone()).height;
+                let next_log_height = builder.get(&dimensions, index.clone()).log_height;
                 builder
-                    .if_eq(next_height, current_height.clone())
+                    .if_eq(next_log_height, Usize::from(current_log_height))
                     .then(|builder| {
                         let next_height_openings_digest = reducer
                             .reduce_fast(
                                 builder,
                                 index.clone(),
                                 &dimensions,
-                                current_height.clone(),
+                                current_log_height,
                                 opened_values,
                             )
                             .into_outer_digest();
                         root = builder.p2_compress([root, next_height_openings_digest]);
                     });
             })
-    });
+    }
 
     builder.assert_var_eq(root[0], commit[0]);
 }
@@ -271,7 +269,7 @@ fn reduce_fast<C: Config, V: MemVariable<C>>(
     builder: &mut Builder<C>,
     dim_idx: Usize<C::N>,
     dims: &Array<C, DimensionsVariable<C>>,
-    curr_height_padded: Usize<C::N>,
+    cur_log_height: usize,
     opened_values: &Array<C, Array<C, V>>,
     nested_opened_values_buffer: &Array<C, Array<C, V>>,
 ) -> DigestVariable<C>
@@ -297,9 +295,9 @@ where
     let dims_shifted = dims.shift(builder, start_dim_idx.clone());
     let opened_values_shifted = opened_values.shift(builder, start_dim_idx);
     iter_zip!(builder, dims_shifted, opened_values_shifted).for_each(|ptr_vec, builder| {
-        let height = builder.iter_ptr_get(&dims_shifted, ptr_vec[0]).height;
+        let log_height = builder.iter_ptr_get(&dims_shifted, ptr_vec[0]).log_height;
         builder
-            .if_eq(height, curr_height_padded.clone())
+            .if_eq(log_height, Usize::from(cur_log_height))
             .then(|builder| {
                 let opened_values = builder.iter_ptr_get(&opened_values_shifted, ptr_vec[1]);
                 builder.set_value(
@@ -328,7 +326,7 @@ impl<C: Config> NestedOpenedValuesReducerVar<C> {
         builder: &mut Builder<C>,
         dim_idx: Usize<C::N>,
         dims: &Array<C, DimensionsVariable<C>>,
-        curr_height: Usize<C::N>,
+        cur_log_height: usize,
         nested_opened_values: &NestedOpenedValues<C>,
     ) -> DigestVariable<C> {
         match nested_opened_values {
@@ -337,14 +335,28 @@ impl<C: Config> NestedOpenedValuesReducerVar<C> {
                     NestedOpenedValues::Felt(buffer) => buffer,
                     NestedOpenedValues::Ext(_) => unreachable!(),
                 };
-                reduce_fast(builder, dim_idx, dims, curr_height, opened_values, buffer)
+                reduce_fast(
+                    builder,
+                    dim_idx,
+                    dims,
+                    cur_log_height,
+                    opened_values,
+                    buffer,
+                )
             }
             NestedOpenedValues::Ext(opened_values) => {
                 let buffer = match &self.buffer {
                     NestedOpenedValues::Felt(_) => unreachable!(),
                     NestedOpenedValues::Ext(buffer) => buffer,
                 };
-                reduce_fast(builder, dim_idx, dims, curr_height, opened_values, buffer)
+                reduce_fast(
+                    builder,
+                    dim_idx,
+                    dims,
+                    cur_log_height,
+                    opened_values,
+                    buffer,
+                )
             }
         }
     }

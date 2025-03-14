@@ -9,16 +9,19 @@ use std::{
 use itertools::Itertools;
 #[cfg(feature = "bench-metrics")]
 use openvm_circuit::metrics::cycle_tracker::CycleTracker;
-use openvm_stark_backend::p3_field::{ExtensionField, PrimeField};
+use openvm_stark_backend::p3_field::{ExtensionField, Field, FieldAlgebra, PrimeField};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
-        gates::{circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip},
+        gates::{
+            circuit::builder::BaseCircuitBuilder, GateChip, GateInstructions, RangeChip,
+            RangeInstructions,
+        },
         halo2_proofs::halo2curves::bn256::Fr,
-        utils::{biguint_to_fe, ScalarField},
-        Context,
+        utils::{biguint_to_fe, decompose_fe_to_u64_limbs, ScalarField},
+        AssignedValue, Context, QuantumCell,
     },
-    util::arithmetic::PrimeField as _,
+    util::arithmetic::{Field as _, PrimeField as _},
 };
 
 use super::stats::Halo2Stats;
@@ -172,8 +175,12 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         vars.insert(a.0, x);
                     }
                     DslIr::AddVI(a, b, c) => {
-                        let tmp = ctx.load_constant(convert_fr(&c));
-                        let x = gate.add(ctx, vars[&b.0], tmp);
+                        let x = if c.is_zero() {
+                            vars[&b.0]
+                        } else {
+                            let tmp = ctx.load_constant(convert_fr(&c));
+                            gate.add(ctx, vars[&b.0], tmp)
+                        };
                         vars.insert(a.0, x);
                     }
                     DslIr::AddF(a, b, c) => {
@@ -181,8 +188,12 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         felts.insert(a.0, x);
                     }
                     DslIr::AddFI(a, b, c) => {
-                        let tmp = f_chip.load_constant(ctx, c);
-                        let x = f_chip.add(ctx, felts[&b.0], tmp);
+                        let x = if c.is_zero() {
+                            felts[&b.0]
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, c);
+                            f_chip.add(ctx, felts[&b.0], tmp)
+                        };
                         felts.insert(a.0, x);
                     }
                     DslIr::AddE(a, b, c) => {
@@ -195,14 +206,23 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         exts.insert(a.0, x);
                     }
                     DslIr::AddEFI(a, b, c) => {
-                        let tmp = f_chip.load_constant(ctx, c);
-                        let mut x = exts[&b.0];
-                        x.0[0] = f_chip.add(ctx, x.0[0], tmp);
+                        let x = if c.is_zero() {
+                            exts[&b.0]
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, c);
+                            let mut x = exts[&b.0];
+                            x.0[0] = f_chip.add(ctx, x.0[0], tmp);
+                            x
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::AddEI(a, b, c) => {
-                        let tmp = ext_chip.load_constant(ctx, c);
-                        let x = ext_chip.add(ctx, exts[&b.0], tmp);
+                        let x = if c.is_zero() {
+                            exts[&b.0]
+                        } else {
+                            let tmp = ext_chip.load_constant(ctx, c);
+                            ext_chip.add(ctx, exts[&b.0], tmp)
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::AddEFFI(a, b, c) => {
@@ -228,8 +248,12 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         exts.insert(a.0, x);
                     }
                     DslIr::SubEI(a, b, c) => {
-                        let tmp = ext_chip.load_constant(ctx, c);
-                        let x = ext_chip.sub(ctx, exts[&b.0], tmp);
+                        let x = if c.is_zero() {
+                            exts[&b.0]
+                        } else {
+                            let tmp = ext_chip.load_constant(ctx, c);
+                            ext_chip.sub(ctx, exts[&b.0], tmp)
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::SubVIN(a, b, c) => {
@@ -243,9 +267,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         exts.insert(a.0, x);
                     }
                     DslIr::SubEFI(a, b, c) => {
-                        let tmp = f_chip.load_constant(ctx, c);
-                        let mut x = exts[&b.0];
-                        x.0[0] = f_chip.sub(ctx, x.0[0], tmp);
+                        let x = if c.is_zero() {
+                            exts[&b.0]
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, c);
+                            let mut x = exts[&b.0];
+                            x.0[0] = f_chip.sub(ctx, x.0[0], tmp);
+                            x
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::MulV(a, b, c) => {
@@ -253,8 +282,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         vars.insert(a.0, x);
                     }
                     DslIr::MulVI(a, b, c) => {
-                        let tmp = ctx.load_constant(convert_fr(&c));
-                        let x = gate.mul(ctx, vars[&b.0], tmp);
+                        let x = if c.is_one() {
+                            vars[&b.0]
+                        } else if c.is_zero() {
+                            ctx.load_zero()
+                        } else {
+                            let tmp = ctx.load_constant(convert_fr(&c));
+                            gate.mul(ctx, vars[&b.0], tmp)
+                        };
                         vars.insert(a.0, x);
                     }
                     DslIr::MulF(a, b, c) => {
@@ -262,8 +297,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         felts.insert(a.0, x);
                     }
                     DslIr::MulFI(a, b, c) => {
-                        let tmp = f_chip.load_constant(ctx, c);
-                        let x = f_chip.mul(ctx, felts[&b.0], tmp);
+                        let x = if c.is_one() {
+                            felts[&b.0]
+                        } else if c.is_zero() {
+                            f_chip.load_constant(ctx, BabyBear::ZERO)
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, c);
+                            f_chip.mul(ctx, felts[&b.0], tmp)
+                        };
                         felts.insert(a.0, x);
                     }
                     DslIr::MulE(a, b, c) => {
@@ -271,8 +312,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         exts.insert(a.0, x);
                     }
                     DslIr::MulEI(a, b, c) => {
-                        let tmp = ext_chip.load_constant(ctx, c);
-                        let x = ext_chip.mul(ctx, exts[&b.0], tmp);
+                        let x = if c.is_one() {
+                            exts[&b.0]
+                        } else if c.is_zero() {
+                            ext_chip.load_constant(ctx, BabyBearExt4::ZERO)
+                        } else {
+                            let tmp = ext_chip.load_constant(ctx, c);
+                            ext_chip.mul(ctx, exts[&b.0], tmp)
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::MulEF(a, b, c) => {
@@ -280,8 +327,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         exts.insert(a.0, x);
                     }
                     DslIr::MulEFI(a, b, c) => {
-                        let tmp = f_chip.load_constant(ctx, c);
-                        let x = ext_chip.scalar_mul(ctx, exts[&b.0], tmp);
+                        let x = if c.is_one() {
+                            exts[&b.0]
+                        } else if c.is_zero() {
+                            ext_chip.load_constant(ctx, BabyBearExt4::ZERO)
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, c);
+                            ext_chip.scalar_mul(ctx, exts[&b.0], tmp)
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::DivF(a, b, c) => {
@@ -291,7 +344,11 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     DslIr::DivFIN(a, b, c) => {
                         // a = b / c
                         let tmp = f_chip.load_constant(ctx, b);
-                        let x = f_chip.div(ctx, tmp, felts[&c.0]);
+                        let x = if b.is_zero() {
+                            tmp
+                        } else {
+                            f_chip.div(ctx, tmp, felts[&c.0])
+                        };
                         felts.insert(a.0, x);
                     }
                     DslIr::DivE(a, b, c) => {
@@ -300,7 +357,11 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     }
                     DslIr::DivEIN(a, b, c) => {
                         let tmp = ext_chip.load_constant(ctx, b);
-                        let x = ext_chip.div(ctx, tmp, exts[&c.0]);
+                        let x = if b.is_zero() {
+                            tmp
+                        } else {
+                            ext_chip.div(ctx, tmp, exts[&c.0])
+                        };
                         exts.insert(a.0, x);
                     }
                     DslIr::NegE(a, b) => {
@@ -312,21 +373,19 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         let reduced_felt = f_chip.reduce(ctx, felt);
                         vars.insert(a.0, reduced_felt.value);
                     }
-                    DslIr::CircuitNum2BitsV(value, bits, output) => {
-                        let shortened_bits = bits.min(Fr::NUM_BITS as usize);
-                        let mut x = gate.num_to_bits(ctx, vars[&value.0], shortened_bits);
-                        let zero = ctx.load_zero();
-                        x.resize(bits, zero);
-                        for (o, x) in output.into_iter().zip_eq(x) {
-                            vars.insert(o.0, x);
-                        }
-                    }
                     DslIr::CircuitNum2BitsF(value, output) => {
                         let val = f_chip.reduce(ctx, felts[&value.0]);
                         let x = gate.num_to_bits(ctx, val.value, 32); // C::F::bits());
                         assert!(output.len() <= x.len());
                         for (o, x) in output.into_iter().zip(x) {
                             vars.insert(o.0, x);
+                        }
+                    }
+                    DslIr::CircuitVarTo64BitsF(value, output) => {
+                        let x = vars[&value.0];
+                        let limbs = var_to_u64_limbs(ctx, &range, gate, x);
+                        for (o, l) in output.into_iter().zip(limbs) {
+                            felts.insert(o.0, l);
                         }
                     }
                     DslIr::CircuitPoseidon2Permute(state_vars) => {
@@ -364,15 +423,25 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         f_chip.assert_equal(ctx, felts[&a.0], felts[&b.0]);
                     }
                     DslIr::AssertEqFI(a, b) => {
-                        let tmp = f_chip.load_constant(ctx, b);
-                        f_chip.assert_equal(ctx, felts[&a.0], tmp);
+                        if b.is_zero() {
+                            f_chip.assert_zero(ctx, felts[&a.0]);
+                        } else {
+                            let tmp = f_chip.load_constant(ctx, b);
+                            f_chip.assert_equal(ctx, felts[&a.0], tmp);
+                        }
                     }
                     DslIr::AssertEqE(a, b) => {
                         ext_chip.assert_equal(ctx, exts[&a.0], exts[&b.0]);
                     }
                     DslIr::AssertEqEI(a, b) => {
-                        let tmp = ext_chip.load_constant(ctx, b);
-                        ext_chip.assert_equal(ctx, exts[&a.0], tmp);
+                        // Note: we could check if each coordinate of `b` is zero separately for a little more efficiency,
+                        // but omitting to simplify the code
+                        if b.is_zero() {
+                            ext_chip.assert_zero(ctx, exts[&a.0]);
+                        } else {
+                            let tmp = ext_chip.load_constant(ctx, b);
+                            ext_chip.assert_equal(ctx, exts[&a.0], tmp);
+                        }
                     }
                     DslIr::PrintV(a) => {
                         println!("PrintV: {:?}", vars[&a.0].value());
@@ -415,6 +484,11 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     DslIr::CircuitExtReduce(a) => {
                         let x = ext_chip.reduce_max_bits(ctx, exts[&a.0]);
                         exts.insert(a.0, x);
+                    }
+                    DslIr::CircuitLessThan(a, b) => {
+                        range.range_check(ctx, vars[&a.0], C::F::bits());
+                        range.range_check(ctx, vars[&b.0], C::F::bits());
+                        range.check_less_than(ctx, vars[&a.0], vars[&b.0], C::F::bits());
                     }
                     DslIr::CycleTrackerStart(_name) => {
                         #[cfg(feature = "bench-metrics")]
@@ -492,6 +566,7 @@ fn is_babybear_ir<C: Config>(ir: &DslIr<C>) -> bool {
             | DslIr::CircuitFelts2Ext(_, _)
             | DslIr::CircuitFeltReduce(_)
             | DslIr::CircuitExtReduce(_)
+            | DslIr::CircuitLessThan(..)
             | DslIr::ImmE(_, _)
             | DslIr::AddE(_, _, _)
             | DslIr::AddEF(_, _, _)
@@ -518,10 +593,79 @@ fn is_babybear_ir<C: Config>(ir: &DslIr<C>) -> bool {
     )
 }
 
-#[allow(dead_code)]
-fn is_num2bits_ir<C: Config>(ir: &DslIr<C>) -> bool {
-    matches!(
-        ir,
-        DslIr::CircuitNum2BitsV(_, _, _) | DslIr::CircuitNum2BitsF(_, _)
-    )
+fn fr_to_u64_limbs(fr: &Fr) -> [u64; 4] {
+    // We need 64-bit limbs but `decompose_fe_to_u64_limbs` only support `bit_len < 64`.
+    let limbs = decompose_fe_to_u64_limbs(fr, 8, 32);
+    std::array::from_fn(|i| limbs[2 * i] + limbs[2 * i + 1] * (1 << 32))
 }
+
+fn var_to_u64_limbs(
+    ctx: &mut Context<Fr>,
+    range: &RangeChip<Fr>,
+    gate: &GateChip<Fr>,
+    x: AssignedValue<Fr>,
+) -> [AssignedBabyBear; 4] {
+    let limbs = fr_to_u64_limbs(x.value()).map(|limb| ctx.load_witness(Fr::from(limb)));
+    let factors = [
+        Fr::from([1, 0, 0, 0]),
+        Fr::from([0, 1, 0, 0]),
+        Fr::from([0, 0, 1, 0]),
+        Fr::from([0, 0, 0, 1]),
+    ];
+    let sum = gate.inner_product(ctx, limbs, factors.map(QuantumCell::Constant));
+    ctx.constrain_equal(&sum, &x);
+    let fr_bound_limbs = fr_to_u64_limbs(&(Fr::ZERO - Fr::ONE));
+    let ret = std::array::from_fn(|i| {
+        let limb = limbs[i];
+        let bits = if i < 3 {
+            range.range_check(ctx, limb, 64);
+            64
+        } else {
+            range.check_less_than_safe(ctx, limbs[3], fr_bound_limbs[3] + 1);
+            (Fr::NUM_BITS - 3 * 64) as usize
+        };
+        AssignedBabyBear {
+            value: limb,
+            max_bits: bits,
+        }
+    });
+    // Constraint decomposition doesn't overflow.
+    // Whether limbs[i] == fr_bound_limbs[i] so far
+    let mut on_bound = gate.is_equal(
+        ctx,
+        limbs[3],
+        QuantumCell::Constant(Fr::from(fr_bound_limbs[3])),
+    );
+    for i in (0..3).rev() {
+        // limbs[i] > fr_bound_limbs[i]
+        let li_gt_bd = range.is_less_than(
+            ctx,
+            QuantumCell::Constant(Fr::from(fr_bound_limbs[i])),
+            limbs[i],
+            64,
+        );
+        let li_out_bd = gate.add(ctx, on_bound, li_gt_bd);
+        // on_bound  li_gt_bd  result
+        //    1         1       fail
+        //    1         0       pass
+        //    0         1       pass
+        //    0         0       pass
+        gate.assert_bit(ctx, li_out_bd);
+        // Update on_bound except the last limb
+        if i > 0 {
+            debug_assert_ne!(fr_bound_limbs[i], 0, "This should never happen for Bn254Fr");
+            // on_bound && limbs[i] - fr_bound_limbs[i] == 0
+            let diff = gate.sub_mul(
+                ctx,
+                QuantumCell::Constant(Fr::from(fr_bound_limbs[i])),
+                on_bound,
+                limbs[i],
+            );
+            on_bound = gate.is_zero(ctx, diff);
+        }
+    }
+    ret
+}
+
+#[test]
+fn test_var_to_u64_limbs() {}

@@ -93,7 +93,7 @@ where
         // For ADD, define carry[i] = (b[i] + c[i] + carry[i - 1] - a[i]) / 2^LIMB_BITS. If
         // each carry[i] is boolean and 0 <= a[i] < 2^LIMB_BITS, it can be proven that
         // a[i] = (b[i] + c[i]) % 2^LIMB_BITS as necessary. The same holds for SUB when
-        // carry[i] is (a[i] + b[i] - c[i] + carry[i - 1]) / 2^LIMB_BITS.
+        // carry[i] is (a[i] + c[i] - b[i] + carry[i - 1]) / 2^LIMB_BITS.
         let mut carry_add: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let mut carry_sub: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let carry_divide = AB::F::from_canonical_usize(1 << LIMB_BITS).inverse();

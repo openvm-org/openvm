@@ -134,7 +134,7 @@ impl ExprBuilder {
         // We don't support multi-op chip that doesn't need setup right now.
         assert!(needs_setup || self.num_flags == 0);
 
-        // setup the defalut flag if needed
+        // setup the default flag if needed
         if needs_setup && self.num_flags == 0 {
             self.new_flag();
         }
@@ -242,7 +242,7 @@ impl FieldExpr {
         let subair = CheckCarryModToZeroSubAir::new(
             builder.prime.clone(),
             builder.limb_bits,
-            range_bus.index,
+            range_bus.inner.index,
             range_bus.range_max_bits,
         );
         FieldExpr {
@@ -318,6 +318,8 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             flags,
         } = self.load_vars(local);
 
+        builder.assert_bool(is_valid);
+
         if self.builder.needs_setup() {
             let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
             builder.assert_bool(is_setup.clone());
@@ -388,7 +390,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             for limb in var.limbs().iter() {
                 range_check(
                     builder,
-                    self.range_bus.index,
+                    self.range_bus.inner.index,
                     self.range_bus.range_max_bits,
                     self.limb_bits,
                     limb.clone(),
@@ -421,7 +423,6 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
     ) {
         assert!(self.builder.is_finalized());
         assert_eq!(inputs.len(), self.num_input);
-        // Remove this if this is no longer the case in the future.
         assert_eq!(self.num_variables, self.constraints.len());
 
         assert_eq!(flags.len(), self.builder.num_flags);

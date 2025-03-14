@@ -24,6 +24,7 @@ pub enum SymbolicExpr {
     Sub(Box<SymbolicExpr>, Box<SymbolicExpr>),
     Mul(Box<SymbolicExpr>, Box<SymbolicExpr>),
     // Division is not allowed in "constraints", but can only be used in "computes"
+    // Note that division by zero in "computes" will panic.
     Div(Box<SymbolicExpr>, Box<SymbolicExpr>),
     // Add integer
     IntAdd(Box<SymbolicExpr>, isize),
@@ -149,6 +150,7 @@ impl Mul<SymbolicExpr> for &SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div for SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -157,6 +159,7 @@ impl Div for SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div<&SymbolicExpr> for SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -165,6 +168,7 @@ impl Div<&SymbolicExpr> for SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div for &SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -173,6 +177,7 @@ impl Div for &SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div<SymbolicExpr> for &SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -182,8 +187,9 @@ impl Div<SymbolicExpr> for &SymbolicExpr {
 }
 
 impl SymbolicExpr {
-    // Maximum absolute positive and negative value of the expression.
-    // Needed in constraint_limbs to estimate the number of limbs of q.
+    /// Returns maximum absolute positive and negative value of the expression.
+    /// That is, if `(r, l) = expr.max_abs(p)` then `l,r >= 0` and `-l <= expr <= r`.
+    /// Needed in `constraint_limbs` to estimate the number of limbs of q.
     fn max_abs(&self, prime: &BigUint) -> (BigUint, BigUint) {
         match self {
             SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => {
@@ -236,9 +242,10 @@ impl SymbolicExpr {
         }
     }
 
-    // Self should be a constraint expr.
-    // This is already tracked in FieldVariable.
-    // However in some cases (checking auto save in div), we need to know it from expr only.
+    /// Returns the maximum possible size, in bits, of each limb in `self.expr`.
+    /// This is already tracked in `FieldVariable`. However when auto saving in `FieldVariable::div`,
+    /// we need to know it from the `SymbolicExpr` only.
+    /// self should be a constraint expr.
     pub fn constraint_limb_max_abs(&self, limb_bits: usize, num_limbs: usize) -> usize {
         let canonical_limb_max_abs = (1 << limb_bits) - 1;
         match self {
@@ -272,8 +279,8 @@ impl SymbolicExpr {
         }
     }
 
-    // Self should be a constraint expr.
-    // This returns the carry bits of self.expr - q * p.
+    /// Returns the maximum possible size, in bits, of each carry in `self.expr - q * p`.
+    /// self should be a constraint expr.
     pub fn constraint_carry_bits_with_pq(
         &self,
         prime: &BigUint,
@@ -290,8 +297,8 @@ impl SymbolicExpr {
         carry_bits
     }
 
-    // Number of limbs to represent the expression.
-    // num_limbs is the number of limbs of a canonical field element.
+    /// Returns the number of limbs needed to represent the expression.
+    /// The parameter `num_limbs` is the number of limbs of a canonical field element.
     pub fn expr_limbs(&self, num_limbs: usize) -> usize {
         match self {
             SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => num_limbs,
@@ -316,9 +323,10 @@ impl SymbolicExpr {
         }
     }
 
-    // If the expression is equal to q * p.
-    // How many limbs does q have?
-    // How many carry_limbs does it need to constrain expr - q * p = 0?
+    /// Let `q` be such that `self.expr = q * p`.
+    /// Returns (q_limbs, carry_limbs) where q_limbs is the number of limbs in q
+    /// and carry_limbs is the number of limbs in the carry of the constraint self.expr - q * p = 0.
+    /// self should be a constraint expression.
     pub fn constraint_limbs(
         &self,
         prime: &BigUint,
@@ -339,7 +347,8 @@ impl SymbolicExpr {
         (q_limbs, carry_limbs)
     }
 
-    // Used in trace gen to compute q.
+    /// Used in trace gen to compute `q``.
+    /// self should be a constraint expression.
     pub fn evaluate_bigint(
         &self,
         inputs: &[BigInt],
@@ -385,7 +394,8 @@ impl SymbolicExpr {
         }
     }
 
-    // Used in trace gen to compute carries.
+    /// Used in trace gen to compute carries.
+    /// self should be a constraint expression.
     pub fn evaluate_overflow_isize(
         &self,
         inputs: &[OverflowInt<isize>],
@@ -447,7 +457,8 @@ impl SymbolicExpr {
         }
     }
 
-    // Used in AIR eval.
+    /// Used in AIR eval.
+    /// self should be a constraint expression.
     pub fn evaluate_overflow_expr<AB: AirBuilder>(
         &self,
         inputs: &[OverflowInt<AB::Expr>],
@@ -509,7 +520,9 @@ impl SymbolicExpr {
         }
     }
 
-    // Result will be within [0, prime).
+    /// Result will be within [0, prime).
+    /// self should be a compute expression.
+    /// Note that division by zero will panic.
     pub fn compute(
         &self,
         inputs: &[BigUint],

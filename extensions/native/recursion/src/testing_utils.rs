@@ -67,7 +67,9 @@ pub mod inner {
         fri_params: FriParameters,
     ) {
         let vparams = test_proof_input
-            .run_test(&BabyBearPoseidon2Engine::new(FriParameters::standard_fast()))
+            .run_test(&BabyBearPoseidon2Engine::new(
+                FriParameters::new_for_testing(1),
+            ))
             .unwrap();
 
         recursive_stark_test(

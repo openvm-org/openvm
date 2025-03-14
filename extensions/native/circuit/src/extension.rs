@@ -2,23 +2,22 @@ use air::VerifyBatchBus;
 use alu_native_adapter::AluNativeAdapterChip;
 use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
-use jal_native_adapter::JalNativeAdapterChip;
 use loadstore_native_adapter::NativeLoadStoreAdapterChip;
 use native_vectorized_adapter::NativeVectorizedAdapterChip;
 use openvm_circuit::{
     arch::{
-        MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex,
-        VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, SystemPort,
+        VmChipComplex, VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
-    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom, Poseidon2Opcode,
-    VerifyBatchOpcode, BLOCK_LOAD_STORE_SIZE,
+    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom,
+    NativeRangeCheckOpcode, Poseidon2Opcode, VerifyBatchOpcode, BLOCK_LOAD_STORE_SIZE,
 };
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::{
@@ -78,19 +77,19 @@ impl NativeConfig {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum NativeExecutor<F: PrimeField32> {
     LoadStore(NativeLoadStoreChip<F, 1>),
     BlockLoadStore(NativeLoadStoreChip<F, 4>),
     BranchEqual(NativeBranchEqChip<F>),
-    Jal(NativeJalChip<F>),
+    Jal(JalRangeCheckChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
     FriReducedOpening(FriReducedOpeningChip<F>),
     VerifyBatch(NativePoseidon2Chip<F, 1>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum NativePeriphery<F: PrimeField32> {
     Phantom(PhantomChip<F>),
 }
@@ -157,12 +156,18 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             NativeBranchEqualOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let jal_chip = NativeJalChip::new(
-            JalNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_bridge),
-            JalCoreChip::new(),
+        let jal_chip = JalRangeCheckChip::new(
+            ExecutionBridge::new(execution_bus, program_bus),
             offline_memory.clone(),
+            builder.system_base().range_checker_chip.clone(),
         );
-        inventory.add_executor(jal_chip, NativeJalOpcode::iter().map(|x| x.global_opcode()))?;
+        inventory.add_executor(
+            jal_chip,
+            [
+                NativeJalOpcode::JAL.global_opcode(),
+                NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(),
+            ],
+        )?;
 
         let field_arithmetic_chip = FieldArithmeticChip::new(
             AluNativeAdapterChip::<F>::new(execution_bus, program_bus, memory_bridge),
@@ -189,6 +194,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             program_bus,
             memory_bridge,
             offline_memory.clone(),
+            builder.streams().clone(),
         );
         inventory.add_executor(
             fri_reduced_opening_chip,
@@ -199,7 +205,8 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             builder.system_port(),
             offline_memory.clone(),
             Poseidon2Config::default(),
-            VerifyBatchBus(builder.new_bus_idx()),
+            VerifyBatchBus::new(builder.new_bus_idx()),
+            builder.streams().clone(),
         );
         inventory.add_executor(
             poseidon2_chip,
@@ -213,6 +220,11 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         builder.add_phantom_sub_executor(
             NativeHintInputSubEx,
             PhantomDiscriminant(NativePhantom::HintInput as u16),
+        )?;
+
+        builder.add_phantom_sub_executor(
+            NativeHintSliceSubEx::<1>,
+            PhantomDiscriminant(NativePhantom::HintFelt as u16),
         )?;
 
         builder.add_phantom_sub_executor(
@@ -244,6 +256,7 @@ pub(crate) mod phantom {
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
     pub struct NativeHintInputSubEx;
+    pub struct NativeHintSliceSubEx<const N: usize>;
     pub struct NativePrintSubEx;
     pub struct NativeHintBitsSubEx;
     pub struct NativeHintLoadSubEx;
@@ -264,11 +277,34 @@ pub(crate) mod phantom {
                     bail!("EndOfInputStream");
                 }
             };
-            streams.hint_stream.clear();
+            assert!(streams.hint_stream.is_empty());
             streams
                 .hint_stream
                 .push_back(F::from_canonical_usize(hint.len()));
             streams.hint_stream.extend(hint);
+            Ok(())
+        }
+    }
+
+    impl<F: Field, const N: usize> PhantomSubExecutor<F> for NativeHintSliceSubEx<N> {
+        fn phantom_execute(
+            &mut self,
+            _: &MemoryController<F>,
+            streams: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            _: F,
+            _: F,
+            _: u16,
+        ) -> eyre::Result<()> {
+            let hint = match streams.input_stream.pop_front() {
+                Some(hint) => hint,
+                None => {
+                    bail!("EndOfInputStream");
+                }
+            };
+            assert!(streams.hint_stream.is_empty());
+            assert_eq!(hint.len(), N);
+            streams.hint_stream = hint.into();
             Ok(())
         }
     }
@@ -305,7 +341,7 @@ pub(crate) mod phantom {
             let mut val = val.as_canonical_u32();
 
             let len = b.as_canonical_u32();
-            streams.hint_stream.clear();
+            assert!(streams.hint_stream.is_empty());
             for _ in 0..len {
                 streams
                     .hint_stream
@@ -334,7 +370,8 @@ pub(crate) mod phantom {
             };
             let id = streams.hint_space.len();
             streams.hint_space.push(payload);
-            streams.hint_stream.clear();
+            // Hint stream should have already been consumed.
+            assert!(streams.hint_stream.is_empty());
             streams.hint_stream.push_back(F::from_canonical_usize(id));
             Ok(())
         }
@@ -344,12 +381,12 @@ pub(crate) mod phantom {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct CastFExtension;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum CastFExtensionExecutor<F: PrimeField32> {
     CastF(CastFChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum CastFExtensionPeriphery<F: PrimeField32> {
     Placeholder(CastFChip<F>),
 }

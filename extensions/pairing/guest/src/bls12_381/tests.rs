@@ -2,11 +2,13 @@ use group::ff::Field;
 use halo2curves_axiom::bls12_381::{
     Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, MillerLoopResult, FROBENIUS_COEFF_FQ12_C1,
 };
+use num_bigint::BigUint;
+use num_traits::One;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
 use rand::{rngs::StdRng, SeedableRng};
 
-use super::{Fp, Fp12, Fp2};
+use super::{Fp, Fp12, Fp2, BLS12_381_MODULUS, BLS12_381_ORDER};
 use crate::{
     bls12_381::{
         utils::{
@@ -294,4 +296,10 @@ fn test_bls12381_pairing_check_hint_host() {
 
     assert_eq!(c, c_cmp);
     assert_eq!(s, s_cmp);
+}
+
+#[test]
+fn test_bls12381_final_exponent() {
+    let final_exp = (BLS12_381_MODULUS.pow(12) - BigUint::one()) / BLS12_381_ORDER.clone();
+    assert_eq!(Bls12_381::FINAL_EXPONENT.to_vec(), final_exp.to_bytes_be());
 }

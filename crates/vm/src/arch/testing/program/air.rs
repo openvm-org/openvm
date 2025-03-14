@@ -27,8 +27,8 @@ impl<AB: InteractionBuilder> Air<AB> for ProgramDummyAir {
         let main = builder.main();
         let local = main.row_slice(0);
         let local = local.iter().map(|x| (*x).into()).collect::<Vec<AB::Expr>>();
-        builder.push_receive(
-            self.bus.0,
+        self.bus.inner.add_key_with_lookups(
+            builder,
             local[..local.len() - 1].iter().cloned(),
             local[local.len() - 1].clone(),
         );

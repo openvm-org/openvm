@@ -11,6 +11,7 @@ repository.workspace = true
 stability = "0.2"
 strum_macros.workspace = true
 openvm-custom-insn.workspace = true
+openvm-rv32im-guest.workspace = true
 
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.
@@ -51,4 +52,5 @@ heap-embedded-alloc = [
 panic-handler = []
 # Build a rust runtime
 rust-runtime = ["export-libm"]
+std = []
 unstable = []

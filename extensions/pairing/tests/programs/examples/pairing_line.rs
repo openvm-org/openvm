@@ -20,6 +20,10 @@ mod bn254 {
         "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
     }
 
+    openvm_algebra_complex_macros::complex_init! {
+        Bn254Fp2 { mod_idx = 0 },
+    }
+
     pub fn test_mul_013_by_013(io: &[u8]) {
         assert_eq!(io.len(), 32 * 18);
         let l0 = &io[..32 * 4];
@@ -72,6 +76,10 @@ mod bls12_381 {
         "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
     }
 
+    openvm_algebra_complex_macros::complex_init! {
+        Bls12_381Fp2 { mod_idx = 0 },
+    }
+
     pub fn test_mul_023_by_023(io: &[u8]) {
         assert_eq!(io.len(), 48 * 18);
         let l0 = &io[..48 * 4];
@@ -120,11 +128,13 @@ pub fn main() {
     cfg_match! {
         cfg(feature = "bn254") => {
             bn254::setup_0();
+            bn254::setup_all_complex_extensions();
             bn254::test_mul_013_by_013(&io[..32 * 18]);
             bn254::test_mul_by_01234(&io[32 * 18..32 * 52]);
         }
         cfg(feature = "bls12_381") => {
             bls12_381::setup_0();
+            bls12_381::setup_all_complex_extensions();
             bls12_381::test_mul_023_by_023(&io[..48 * 18]);
             bls12_381::test_mul_by_02345(&io[48 * 18..48 * 52]);
         }

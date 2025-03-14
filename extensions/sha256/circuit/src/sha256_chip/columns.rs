@@ -42,7 +42,7 @@ pub struct Sha256VmDigestCols<T> {
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct Sha256VmControlCols<T> {
     /// Note: We will use the buffer in `inner.message_schedule` as the message data
-    /// This is the length of the entire message
+    /// This is the length of the entire message in bytes
     pub len: T,
     /// Need to keep timestamp and read_ptr since block reads don't have the necessary information
     pub cur_timestamp: T,

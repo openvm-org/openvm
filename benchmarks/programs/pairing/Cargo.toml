@@ -1,0 +1,28 @@
+[workspace]
+[package]
+name = "openvm-pairing-program"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../crates/toolchain/openvm", default-features = false }
+openvm-algebra-guest = { path = "../../../extensions/algebra/guest", default-features = false }
+openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false }
+openvm-pairing-guest = { path = "../../../extensions/pairing/guest", default-features = false, features = [
+    "bn254",
+] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+
+[features]
+default = []
+std = ["openvm/std", "openvm-pairing-guest/std"]
+halo2curves = ["std", "openvm-pairing-guest/halo2curves"]
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # faster compile time
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false

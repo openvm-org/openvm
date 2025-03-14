@@ -11,7 +11,7 @@ use openvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
     },
-    circuit_derive::{BytesStateful, Chip, ChipUsageGetter},
+    circuit_derive::{Chip, ChipUsageGetter},
     derive::{AnyEnum, InstructionExecutor},
 };
 use openvm_ecc_circuit::{
@@ -53,6 +53,7 @@ pub struct SdkVmConfig {
     pub keccak: Option<UnitStruct>,
     pub sha256: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
+    pub castf: Option<UnitStruct>,
 
     pub rv32m: Option<Rv32M>,
     pub bigint: Option<Int256>,
@@ -60,10 +61,9 @@ pub struct SdkVmConfig {
     pub fp2: Option<Fp2Extension>,
     pub pairing: Option<PairingExtension>,
     pub ecc: Option<WeierstrassExtension>,
-    pub castf: Option<CastFExtension>,
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum SdkVmConfigExecutor<F: PrimeField32> {
     #[any_enum]
     System(SystemExecutor<F>),
@@ -93,7 +93,7 @@ pub enum SdkVmConfigExecutor<F: PrimeField32> {
     CastF(CastFExtensionExecutor<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum SdkVmConfigPeriphery<F: PrimeField32> {
     #[any_enum]
     System(SystemPeriphery<F>),
@@ -192,6 +192,9 @@ impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
         if self.native.is_some() {
             complex = complex.extend(&Native)?;
         }
+        if self.castf.is_some() {
+            complex = complex.extend(&CastFExtension)?;
+        }
 
         if let Some(rv32m) = self.rv32m {
             let mut rv32m = rv32m;
@@ -224,9 +227,6 @@ impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
         }
         if let Some(ref ecc) = self.ecc {
             complex = complex.extend(ecc)?;
-        }
-        if let Some(ref castf) = self.castf {
-            complex = complex.extend(castf)?;
         }
 
         Ok(complex)
@@ -283,6 +283,12 @@ impl From<Sha256> for UnitStruct {
 
 impl From<Native> for UnitStruct {
     fn from(_: Native) -> Self {
+        UnitStruct {}
+    }
+}
+
+impl From<CastFExtension> for UnitStruct {
+    fn from(_: CastFExtension) -> Self {
         UnitStruct {}
     }
 }

@@ -39,7 +39,7 @@ See the [Book](https://book.openvm.dev) for more information on how to use OpenV
 
 ## For Contributors
 
-See the [Contributor Docs](./docs) for more information on the project. A good starting point is [Project Layout](./docs/repo/layout.md).
+See the [Contributor Docs](./docs) for more information on the project. A good starting point is [Project Layout](./docs/repo/layout.md). See the [Assets](https://github.com/openvm-org/openvm/tree/main/assets) folder for OpenVM's logo and favicon. 
 
 ## Acknowledgements
 

@@ -1,5 +1,4 @@
 use std::{
-    fmt::Display,
     fs::{read, read_to_string},
     path::{Path, PathBuf},
     str::FromStr,
@@ -55,14 +54,6 @@ pub(crate) fn is_valid_hex_string(s: &str) -> bool {
     // All hex digits with optional 0x prefix
     s.starts_with("0x") && s[2..].chars().all(|c| c.is_ascii_hexdigit())
         || s.chars().all(|c| c.is_ascii_hexdigit())
-}
-
-pub(crate) fn write_status(style: &dyn Display, status: &str, msg: &str) {
-    println!("{style}{status:>12}{style:#} {msg}");
-}
-
-pub(crate) fn classical_exe_path(elf_path: &Path) -> PathBuf {
-    elf_path.with_extension("vmexe")
 }
 
 pub(crate) fn read_to_struct_toml<T: DeserializeOwned>(path: &PathBuf) -> Result<T> {

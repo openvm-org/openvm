@@ -43,23 +43,62 @@ pub struct Witness<C: Config> {
     pub vars: Vec<C::N>,
     pub felts: Vec<C::F>,
     pub exts: Vec<C::EF>,
-    pub vkey_hash: C::N,
-    pub committed_values_digest: C::N,
 }
 
 impl<C: Config> Witness<C> {
     pub fn size(&self) -> usize {
         self.vars.len() + self.felts.len() + self.exts.len() + 2
     }
+}
 
-    pub fn write_vkey_hash(&mut self, vkey_hash: C::N) {
-        self.vars.push(vkey_hash);
-        self.vkey_hash = vkey_hash;
+#[derive(Debug, Clone, Copy)]
+pub enum WitnessRef {
+    Var(u32),
+    Felt(u32),
+    Ext(u32),
+}
+
+impl<N> From<Var<N>> for WitnessRef {
+    fn from(var: Var<N>) -> Self {
+        Self::Var(var.0)
     }
+}
 
-    pub fn write_committed_values_digest(&mut self, committed_values_digest: C::N) {
-        self.vars.push(committed_values_digest);
-        self.committed_values_digest = committed_values_digest
+impl<F> From<Felt<F>> for WitnessRef {
+    fn from(felt: Felt<F>) -> Self {
+        Self::Felt(felt.0)
+    }
+}
+
+impl<F, EF> From<Ext<F, EF>> for WitnessRef {
+    fn from(ext: Ext<F, EF>) -> Self {
+        Self::Ext(ext.0)
+    }
+}
+
+impl<N> From<WitnessRef> for Var<N> {
+    fn from(witness_ref: WitnessRef) -> Self {
+        match witness_ref {
+            WitnessRef::Var(id) => Var(id, Default::default()),
+            _ => panic!("Type doesn't match!"),
+        }
+    }
+}
+impl<F> From<WitnessRef> for Felt<F> {
+    fn from(witness_ref: WitnessRef) -> Self {
+        match witness_ref {
+            WitnessRef::Felt(id) => Felt(id, Default::default()),
+            _ => panic!("Type doesn't match!"),
+        }
+    }
+}
+
+impl<F, EF> From<WitnessRef> for Ext<F, EF> {
+    fn from(witness_ref: WitnessRef) -> Self {
+        match witness_ref {
+            WitnessRef::Ext(id) => Ext(id, Default::default()),
+            _ => panic!("Type doesn't match!"),
+        }
     }
 }
 
@@ -172,7 +211,11 @@ impl<C: Config> Variable<C> for Usize<C::N> {
     type Expression = SymbolicVar<C::N>;
 
     fn uninit(builder: &mut Builder<C>) -> Self {
-        builder.uninit::<Var<C::N>>().into()
+        if builder.flags.static_only {
+            Usize::Const(Rc::new(RefCell::new(C::N::ZERO)))
+        } else {
+            builder.uninit::<Var<C::N>>().into()
+        }
     }
 
     fn assign(&self, src: Self::Expression, builder: &mut Builder<C>) {
@@ -1018,7 +1061,7 @@ impl<F: Field, EF: ExtensionField<F>> Ext<F, EF> {
                     lhs_value.assign_with_caches(lhs.clone(), builder, ext_cache, base_cache);
                     ext_cache.insert(lhs.clone(), lhs_value);
                     let rhs_value = Self::uninit(builder);
-                    rhs_value.assign(rhs.clone(), builder);
+                    rhs_value.assign_with_caches(rhs.clone(), builder, ext_cache, base_cache);
                     builder.push(DslIr::SubE(*self, lhs_value, rhs_value));
                 }
             },

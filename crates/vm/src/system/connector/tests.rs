@@ -13,7 +13,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        FriParameters,
     },
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
@@ -68,8 +68,7 @@ fn test_impl(
     f: impl FnOnce(&mut AirProofInput<BabyBearPoseidon2Config>),
 ) {
     let vm_config = SystemConfig::default();
-    let engine =
-        BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
     let vm = VirtualMachine::new(engine, vm_config.clone());
     let pk = vm.keygen();
 

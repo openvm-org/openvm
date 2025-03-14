@@ -3,6 +3,8 @@ use std::{cell::RefCell, rc::Rc};
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr};
 
+// Assumes that (x1, y1), (x2, y2) both lie on the curve and are not the identity point.
+// Further assumes that x1, x2 are not equal in the coordinate field.
 pub fn ec_add_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,

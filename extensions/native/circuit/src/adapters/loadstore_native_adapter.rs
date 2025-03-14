@@ -144,11 +144,16 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
 
         let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
 
+        let ptr = ctx.reads.0;
+        // Here we ignore ctx.reads.1 and we use `ctx.writes` as the data for both the write and the
+        // second read (in the case of load/store when it exists).
+        let data = ctx.writes;
+
         // first pointer read is always [c]_d
         self.memory_bridge
             .read(
                 MemoryAddress::new(native_as.clone(), cols.c),
-                [ctx.reads.0.clone()],
+                [ptr.clone()],
                 timestamp + timestamp_delta.clone(),
                 &cols.pointer_read_aux_cols,
             )
@@ -159,9 +164,9 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
             .read(
                 MemoryAddress::new(
                     native_as.clone(),
-                    is_storew.clone() * cols.a + is_loadw.clone() * (ctx.reads.0.clone() + cols.b),
+                    is_storew.clone() * cols.a + is_loadw.clone() * (ptr.clone() + cols.b),
                 ),
-                ctx.reads.1.clone(),
+                data.clone(),
                 timestamp + timestamp_delta.clone(),
                 &cols.data_read_aux_cols,
             )
@@ -171,12 +176,13 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         builder.assert_eq(
             is_valid.clone() * cols.data_write_pointer,
             is_loadw.clone() * cols.a
-                + (is_storew.clone() + is_hint_storew.clone()) * (ctx.reads.0.clone() + cols.b),
+                + (is_storew.clone() + is_hint_storew.clone()) * (ptr.clone() + cols.b),
         );
+
         self.memory_bridge
             .write(
                 MemoryAddress::new(native_as.clone(), cols.data_write_pointer),
-                ctx.writes.clone(),
+                data.clone(),
                 timestamp + timestamp_delta.clone(),
                 &cols.data_write_aux_cols,
             )

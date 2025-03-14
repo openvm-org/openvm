@@ -31,8 +31,7 @@ pub struct NativeLoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub is_hint_storew: T,
 
     pub pointer_read: T,
-    pub data_read: [T; NUM_CELLS],
-    pub data_write: [T; NUM_CELLS],
+    pub data: [T; NUM_CELLS],
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -41,9 +40,7 @@ pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
 
     pub pointer_read: F,
     #[serde(with = "BigArray")]
-    pub data_read: [F; NUM_CELLS],
-    #[serde(with = "BigArray")]
-    pub data_write: [F; NUM_CELLS],
+    pub data: [F; NUM_CELLS],
 }
 
 #[derive(Clone, Debug)]
@@ -97,8 +94,8 @@ where
 
         AdapterAirContext {
             to_pc: None,
-            reads: (cols.pointer_read.into(), cols.data_read.map(Into::into)).into(),
-            writes: cols.data_write.map(Into::into).into(),
+            reads: (cols.pointer_read.into(), cols.data.map(Into::into)).into(),
+            writes: cols.data.map(Into::into).into(),
             instruction: NativeLoadStoreInstruction {
                 is_valid,
                 opcode: expected_opcode,
@@ -159,7 +156,7 @@ where
             NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
         let (pointer_read, data_read) = reads.into();
 
-        let data_write = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
+        let data = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
             let mut streams = self.streams.get().unwrap().lock().unwrap();
             if streams.hint_stream.len() < NUM_CELLS {
                 return Err(ExecutionError::HintOutOfBounds { pc: from_pc });
@@ -169,12 +166,11 @@ where
             data_read
         };
 
-        let output = AdapterRuntimeContext::without_pc(data_write);
+        let output = AdapterRuntimeContext::without_pc(data);
         let record = NativeLoadStoreCoreRecord {
             opcode: NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
             pointer_read,
-            data_read,
-            data_write,
+            data,
         };
         Ok((output, record))
     }
@@ -193,8 +189,7 @@ where
         cols.is_hint_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::HINT_STOREW);
 
         cols.pointer_read = record.pointer_read;
-        cols.data_read = record.data_read;
-        cols.data_write = record.data_write.map(Into::into);
+        cols.data = record.data;
     }
 
     fn air(&self) -> &Self::Air {

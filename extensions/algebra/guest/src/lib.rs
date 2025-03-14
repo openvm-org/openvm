@@ -212,14 +212,13 @@ pub trait IntMod:
     ///
     /// Note that this is done automatically in [PartialEq] and [Eq] implementations.
     ///
-    /// ## Panics
-    /// If assertion fails.
+    /// If `self` is not in its canonical form, the proof will fail to verify.
     fn assert_unique(&self) {
         // This must not be optimized out
         let _ = core::hint::black_box(PartialEq::eq(self, self));
     }
 
-    /// This function is mostly for internal use in other internal implemntations.
+    /// This function is mostly for internal use in other internal implementations.
     /// Normal users are not advised to use it.
     ///
     /// If `self` was directly constructed from a raw representation

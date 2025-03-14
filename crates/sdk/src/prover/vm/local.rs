@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, mem, sync::Arc};
 
 use async_trait::async_trait;
 use openvm_circuit::{
@@ -15,6 +15,7 @@ use openvm_stark_backend::{
     Chip,
 };
 use openvm_stark_sdk::{config::FriParameters, engine::StarkFriEngine};
+use tracing::info_span;
 
 use crate::prover::vm::{
     types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
@@ -79,16 +80,27 @@ where
             self.pk.vm_config.clone(),
             self.overridden_heights.clone(),
         );
-        let results = vm
-            .execute_and_generate_with_cached_program(self.committed_exe.clone(), input)
+        let mut final_memory = None;
+        let VmCommittedExe {
+            exe,
+            committed_program,
+        } = self.committed_exe.as_ref();
+        let per_segment = vm
+            .executor
+            .execute_and_then(exe.clone(), input, |seg_idx, mut seg| {
+                final_memory = mem::take(&mut seg.final_memory);
+                let proof_input = info_span!("trace_gen", segment = seg_idx)
+                    .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())));
+                info_span!("prove_segment", segment = seg_idx)
+                    .in_scope(|| vm.engine.prove(&self.pk.vm_pk, proof_input))
+            })
             .unwrap();
         let user_public_values = UserPublicValuesProof::compute(
             self.pk.vm_config.system().memory_config.memory_dimensions(),
             self.pk.vm_config.system().num_public_values,
             &vm_poseidon2_hasher(),
-            results.final_memory.as_ref().unwrap(),
+            final_memory.as_ref().unwrap(),
         );
-        let per_segment = vm.prove(&self.pk.vm_pk, results);
         ContinuationVmProof {
             per_segment,
             user_public_values,

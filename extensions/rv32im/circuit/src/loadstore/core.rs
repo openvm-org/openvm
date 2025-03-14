@@ -40,7 +40,7 @@ use InstructionOpcode::*;
 /// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
 /// This chip uses read_data and prev_data to constrain the write_data
 /// It also handles the shifting in case of not 4 byte aligned instructions
-/// This chips treats each (opcode, shift) pair as a seperate instruction
+/// This chips treats each (opcode, shift) pair as a separate instruction
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
@@ -137,20 +137,23 @@ where
             })
         };
 
-        // constrain that is_load matches the opcode
+        // Constrain that is_load matches the opcode
         builder.assert_eq(
             is_load,
             opcode_when(&[LoadW0, LoadHu0, LoadHu2, LoadBu0, LoadBu1, LoadBu2, LoadBu3]),
         );
+        builder.when(is_load).assert_one(is_valid);
 
-        // there are three parts to write_data:
-        // 1st limb is always read_data
-        // 2nd to (NUM_CELLS/2)th limbs are read_data if loadw/loadhu/storew/storeh
-        //                                  prev_data if storeb
-        //                                  zero if loadbu
-        // (NUM_CELLS/2 + 1)th to last limbs are read_data if loadw/storew
-        //                                  prev_data if storeb/storeh
-        //                                  zero if loadbu/loadhu
+        // There are three parts to write_data:
+        // - 1st limb is always read_data
+        // - 2nd to (NUM_CELLS/2)th limbs are:
+        //   - read_data if loadw/loadhu/storew/storeh
+        //   - prev_data if storeb
+        //   - zero if loadbu
+        // - (NUM_CELLS/2 + 1)th to last limbs are:
+        //   - read_data if loadw/storew
+        //   - prev_data if storeb/storeh
+        //   - zero if loadbu/loadhu
         // Shifting needs to be carefully handled in case by case basis
         // refer to [run_write_data] for the expected behavior in each case
         for (i, cell) in write_data.iter().enumerate() {
@@ -194,7 +197,7 @@ where
                             prev_data[i]
                         }
                     + opcode_when(&[StoreH2])
-                        * if i + 2 < NUM_CELLS / 2 {
+                        * if i - 2 < NUM_CELLS / 2 {
                             read_data[i - 2]
                         } else {
                             prev_data[i]

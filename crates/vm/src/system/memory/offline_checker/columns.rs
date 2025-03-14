@@ -50,6 +50,10 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
     pub fn get_base(self) -> MemoryBaseAuxCols<T> {
         self.base
     }
+
+    pub fn prev_data(&self) -> &[T; N] {
+        &self.prev_data
+    }
 }
 
 /// The auxiliary columns for a memory read operation with block size `N`.
@@ -74,6 +78,10 @@ impl<F: PrimeField32> MemoryReadAuxCols<F> {
             },
         }
     }
+
+    pub fn get_base(self) -> MemoryBaseAuxCols<F> {
+        self.base
+    }
 }
 
 #[repr(C)]
@@ -82,4 +90,13 @@ pub struct MemoryReadOrImmediateAuxCols<T> {
     pub(crate) base: MemoryBaseAuxCols<T>,
     pub(crate) is_immediate: T,
     pub(crate) is_zero_aux: T,
+}
+
+impl<T, const N: usize> AsRef<MemoryReadAuxCols<T>> for MemoryWriteAuxCols<T, N> {
+    fn as_ref(&self) -> &MemoryReadAuxCols<T> {
+        // Safety:
+        //  - `MemoryReadAuxCols<T>` is repr(C) and its only field is the first field of `MemoryWriteAuxCols<T, N>`.
+        //  - Thus, the memory layout of `MemoryWriteAuxCols<T, N>` begins with a valid `MemoryReadAuxCols<T>`.
+        unsafe { &*(self as *const MemoryWriteAuxCols<T, N> as *const MemoryReadAuxCols<T>) }
+    }
 }

@@ -1,21 +1,20 @@
 use std::{borrow::Borrow, iter};
 
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
+    interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
-use super::{DirectCompressionBus, MemoryMerkleBus};
 use crate::system::memory::merkle::{MemoryDimensions, MemoryMerkleCols, MemoryMerklePvs};
 
 #[derive(Clone, Debug)]
 pub struct MemoryMerkleAir<const CHUNK: usize> {
     pub memory_dimensions: MemoryDimensions,
-    pub merkle_bus: MemoryMerkleBus,
-    pub compression_bus: DirectCompressionBus,
+    pub merkle_bus: PermutationCheckBus,
+    pub compression_bus: PermutationCheckBus,
 }
 
 impl<const CHUNK: usize, F: Field> PartitionedBaseAir<F> for MemoryMerkleAir<CHUNK> {}
@@ -130,8 +129,8 @@ impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
     ) {
         // interaction does not occur for first two rows;
         // for those, parent hash value comes from public values
-        builder.push_send(
-            self.merkle_bus.0,
+        self.merkle_bus.interact(
+            builder,
             [
                 local.expand_direction.into(),
                 local.parent_height.into(),
@@ -144,8 +143,8 @@ impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
             (AB::Expr::ONE - local.is_root) * local.expand_direction,
         );
 
-        builder.push_receive(
-            self.merkle_bus.0,
+        self.merkle_bus.interact(
+            builder,
             [
                 local.expand_direction + (local.left_direction_different * AB::F::TWO),
                 local.parent_height - AB::F::ONE,
@@ -154,11 +153,11 @@ impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
             ]
             .into_iter()
             .chain(local.left_child_hash.into_iter().map(Into::into)),
-            local.expand_direction.into(),
+            -local.expand_direction.into(),
         );
 
-        builder.push_receive(
-            self.merkle_bus.0,
+        self.merkle_bus.interact(
+            builder,
             [
                 local.expand_direction + (local.right_direction_different * AB::F::TWO),
                 local.parent_height - AB::F::ONE,
@@ -169,15 +168,15 @@ impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
             ]
             .into_iter()
             .chain(local.right_child_hash.into_iter().map(Into::into)),
-            local.expand_direction.into(),
+            -local.expand_direction.into(),
         );
 
         let compress_fields = iter::empty()
             .chain(local.left_child_hash)
             .chain(local.right_child_hash)
             .chain(local.parent_hash);
-        builder.push_send(
-            self.compression_bus.0,
+        self.compression_bus.interact(
+            builder,
             compress_fields,
             local.expand_direction * local.expand_direction,
         );

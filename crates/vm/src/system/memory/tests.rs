@@ -11,7 +11,7 @@ use openvm_circuit_primitives::var_range::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
+    interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, BaseAir},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -28,7 +28,7 @@ use rand::{
     Rng,
 };
 
-use super::{merkle::DirectCompressionBus, MemoryController};
+use super::MemoryController;
 use crate::{
     arch::{
         testing::{memory::gen_pointer, MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
@@ -36,7 +36,6 @@ use crate::{
     },
     system::{
         memory::{
-            merkle::MemoryMerkleBus,
             offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, OfflineMemory, RecordId,
         },
@@ -45,7 +44,7 @@ use crate::{
 };
 
 const MAX: usize = 64;
-const RANGE_CHECKER_BUS: usize = 3;
+const RANGE_CHECKER_BUS: BusIndex = 3;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -204,7 +203,7 @@ fn generate_trace<F: PrimeField32>(
 /// which sends reads/writes over [MemoryBridge].
 #[test]
 fn test_memory_controller() {
-    let memory_bus = MemoryBus(MEMORY_BUS);
+    let memory_bus = MemoryBus::new(MEMORY_BUS);
     let memory_config = MemoryConfig::default();
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
@@ -238,9 +237,9 @@ fn test_memory_controller() {
 
 #[test]
 fn test_memory_controller_persistent() {
-    let memory_bus = MemoryBus(MEMORY_BUS);
-    let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
-    let compression_bus = DirectCompressionBus(POSEIDON2_DIRECT_BUS);
+    let memory_bus = MemoryBus::new(MEMORY_BUS);
+    let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
+    let compression_bus = PermutationCheckBus::new(POSEIDON2_DIRECT_BUS);
     let memory_config = MemoryConfig::default();
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
