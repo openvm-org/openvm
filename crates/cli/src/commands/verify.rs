@@ -17,7 +17,7 @@ use crate::default::{
 #[derive(Parser)]
 #[command(name = "verify", about = "Verify a proof")]
 pub struct VerifyCmd {
-    #[arg(subcommand)]
+    #[command(subcommand)]
     command: VerifySubCommand,
 }
 
