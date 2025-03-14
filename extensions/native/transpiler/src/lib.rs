@@ -1,4 +1,4 @@
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, VmOpcode};
+use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_transpiler::{TranspilerExtension, TranspilerOutput};
 use p3_field::PrimeField32;
 
@@ -9,16 +9,11 @@ use p3_field::PrimeField32;
  *
  * `LONG_FORM_INSTRUCTION_INDICATOR` has funct7 = 0b0.
  * `GAP_INDICATOR` has funct7 = 0b1.
- *
- * `VARIABLE_REGISTER_INDICATOR` does not need to conform to RISC_V format,
- * because it occurs only within a block already prefixed with `LONG_FORM_INSTRUCTION_INDICATOR`.
- * Thus, we make its value larger than 2^31 to ensure that it is not equal to a possible field element.
  */
 const OPCODE: u32 = 0x0b;
 const FUNCT3: u32 = 0b111;
 pub const LONG_FORM_INSTRUCTION_INDICATOR: u32 = (FUNCT3 << 12) + OPCODE;
 pub const GAP_INDICATOR: u32 = (1 << 25) + (FUNCT3 << 12) + OPCODE;
-pub const VARIABLE_REGISTER_INDICATOR: u32 = (1 << 31) + 116;
 
 pub struct LongFormTranspilerExtension;
 
@@ -30,19 +25,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for LongFormTranspilerExtension {
             let mut operands = vec![];
             let mut j = 3;
             for _ in 0..num_operands {
-                if instruction_stream[j] == VARIABLE_REGISTER_INDICATOR {
-                    let register = (instruction_stream[j + 1] >> 7) & 0x1f;
-                    let offset = instruction_stream[j + 1] >> 20;
-                    let mut operand = (RV32_REGISTER_NUM_LIMBS as u32 * register) + offset;
-                    if offset >= 1 << 12 {
-                        operand -= 1 << 12;
-                    }
-                    operands.push(F::from_canonical_u32(operand));
-                    j += 2;
-                } else {
-                    operands.push(F::from_canonical_u32(instruction_stream[j]));
-                    j += 1;
-                }
+                operands.push(F::from_canonical_u32(instruction_stream[j]));
+                j += 1;
             }
             while operands.len() < 7 {
                 operands.push(F::ZERO);

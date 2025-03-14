@@ -254,20 +254,7 @@ We encode `u32` as 32-bits in little-endian format.
 
 Let the instruction be `opcode operand_1 operand_2 ... operand_n` where each opcode and operand is a field element.
 Then to encode it into a 32-bit aligned code block, we first write `lfii`, followed by the number of operands `n` (as `u32`), followed by `opcode` (as `u32`).
-We then encode each operand, which can happen in one of two ways:
-- The operand is encoded as field element in 32-bits.
-- The operand is encoded as first `vri`,
-then an I-Type instruction with only `rs1` and `imm` being nonzero,
-such that the value of the operand is `(LIMBS * rs1) + imm`.
-`LIMBS` is the number of limbs in a register, i.e., 4 on a 32-bit architecture.
-
-The first encoding method is preferred.
-The second encoding method is used when the operand is a register being referenced from e.g. Rust,
-where we do not know the exact value of the register but are allowed to reference the register in an assembly instruction,
-but only by specifying it as one of `rs1`, `rs2`, `rd`.
-
-The two methods of encoding an operand are unambiguous for a 31-bit prime field `F`,
-as `vri` is chosen to be larger than `2^31`.
+We then encode each operand simply by its canonical 32-bit representation.
 
 ### Gap Encoding
 The transpiler also allows for the transpilation of gaps, i.e., addresses in the RISC-V program memory that do not map to OpenVM instructions.
