@@ -222,3 +222,47 @@ fn test_assert_less_than_with_non_power_of_two_pairs() {
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
         .expect("Verification failed");
 }
+
+#[test]
+fn test_assert_less_than_with_negative_count() {
+    let max_bits: usize = 29;
+    let decomp: usize = 8;
+    let bus = VariableRangeCheckerBus::new(0, decomp);
+    const AUX_LEN: usize = 4;
+
+    let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
+    let chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker.clone());
+    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+
+    let num_rows = 2;
+    let num_cols = AssertLessThanCols::<usize, AUX_LEN>::width();
+
+    let mut trace = RowMajorMatrix::new(vec![BabyBear::ZERO; num_rows * num_cols], num_cols);
+    let range_trace: DenseMatrix<BabyBear> = range_checker.generate_trace();
+
+    // Make valid decomposition of y - x - 1 but where limbs are out of range
+    let row0: &mut AssertLessThanCols<_, AUX_LEN> = trace.row_mut(0).borrow_mut();
+
+    row0.x = BabyBear::from_canonical_u32(1);
+    row0.y = BabyBear::from_canonical_u32(0);
+    row0.count = BabyBear::from_canonical_u32(1);
+
+    row0.aux.lower_decomp[0] = -BabyBear::from_canonical_u32(2);
+    row0.aux.lower_decomp[1] = BabyBear::from_canonical_u32(0);
+    row0.aux.lower_decomp[2] = BabyBear::from_canonical_u32(0);
+    row0.aux.lower_decomp[3] = BabyBear::from_canonical_u32(0);
+
+    let row1: &mut AssertLessThanCols<_, AUX_LEN> = trace.row_mut(1).borrow_mut();
+
+    row1.x = BabyBear::from_canonical_u32(1);
+    row1.y = BabyBear::from_canonical_u32(0);
+    row1.count = -BabyBear::from_canonical_u32(1);
+
+    row1.aux.lower_decomp[0] = -BabyBear::from_canonical_u32(2);
+    row1.aux.lower_decomp[1] = BabyBear::from_canonical_u32(0);
+    row1.aux.lower_decomp[2] = BabyBear::from_canonical_u32(0);
+    row1.aux.lower_decomp[3] = BabyBear::from_canonical_u32(0);
+
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
+        .expect("Verification failed");
+}
