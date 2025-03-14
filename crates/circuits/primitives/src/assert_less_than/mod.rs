@@ -25,8 +25,7 @@ pub struct AssertLessThanIo<T> {
     /// Will only apply constraints when `count != 0`.
     /// Range checks are done with multiplicity `count`.
     /// If `count == 0` then no range checks are done.
-    /// In practice `count` is always boolean, although this is not enforced
-    /// by the subair.
+    /// In practice `count` is always boolean.
     ///
     /// N.B.: in fact range checks could always be done, if the aux
     /// subrow values are set to 0 when `count == 0`. This would slightly
@@ -119,6 +118,9 @@ impl AssertLtSubAir {
         // this is the desired intermediate value (i.e. y - x - 1)
         // deg(intermed_val) = deg(io)
         let intermed_val = io.y - io.x - AB::Expr::ONE;
+
+        // `count` must be a boolean
+        builder.assert_bool(io.count.clone());
 
         // Construct lower from lower_decomp:
         // - each limb of lower_decomp will be range checked
