@@ -26,6 +26,7 @@ pub struct IsLtArrayIo<T, const NUM: usize> {
     pub out: T,
     /// Constraints only hold when `count != 0`. When `count == 0`, setting all trace values
     /// to zero still passes the constraints.
+    /// `count` is **assumed** to be boolean and must be constrained as such by the caller.
     pub count: T,
 }
 

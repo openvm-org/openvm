@@ -2,6 +2,11 @@
 
 This chip outputs a boolean value `out` that equals 1 if and only if array `x` is lexicographically less than array `y`.
 
+**Assumptions:**
+- Input array elements `x[i]` and `y[i]` have a maximum bit length of `max_bits`
+- `max_bits` ≤ 29
+- `count` is boolean
+
 **IO Columns:**
 - `x`: Array of input values $`[x_0, x_1, \ldots, x_{n-1}]`$
 - `y`: Array of input values $`[y_0, y_1, \ldots, y_{n-1}]`$

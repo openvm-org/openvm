@@ -5,6 +5,7 @@ This chip outputs a boolean value `out` that equals 1 if and only if `x` < `y`.
 **Assumptions:**
 - Input values `x` and `y` have a maximum bit length of `max_bits`
 - `max_bits` ≤ 29
+- `count` is boolean
 
 This SubAir outputs a boolean value `out` that equals 1 if and only if `x < y`. It operates similarly to `assert_less_than` but includes an additional output column.
 The verification is accomplished by computing a shifted difference value, taking its limb decomposition, and range checking the limbs while constraining their reconstruction.

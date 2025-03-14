@@ -5,6 +5,7 @@ This chip verifies if an input value $`x`$ is less than another value $`y`$.
 **Assumptions:**
 - Input values `x` and `y` have a maximum bit length of `max_bits`
 - `max_bits` ≤ 29
+- `count` is boolean
 
 This SubAir asserts that `x < y` by range checking that the difference `y - x - 1` has a maximum bit length of `max_bits`.
 This is accomplished by taking the limb decomposition of `y - x - 1`, range checking that each limb is valid and constraining that the reconstruction is equal to `y - x - 1`.
