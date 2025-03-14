@@ -43,23 +43,6 @@
       ]
     },
     {
-      "name": "fib_e2e",
-      "id": "fib_e2e",
-      "working_directory": "benchmarks",
-      "e2e_bench": true,
-      "run_params": [
-        {
-          "instance_type": "64cpu-linux-arm64",
-          "memory_allocator": "jemalloc",
-          "app_log_blowup": 1,
-          "leaf_log_blowup": 1,
-          "internal_log_blowup": 2,
-          "root_log_blowup": 3,
-          "max_segment_length": 1048476
-        }
-      ]
-    },
-    {
       "name": "ecrecover",
       "id": "ecrecover",
       "working_directory": "benchmarks",
@@ -84,6 +67,40 @@
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1
+        }
+      ]
+    },
+    {
+      "name": "fib_e2e",
+      "id": "fib_e2e",
+      "working_directory": "benchmarks",
+      "e2e_bench": true,
+      "run_params": [
+        {
+          "instance_type": "64cpu-linux-arm64",
+          "memory_allocator": "jemalloc",
+          "app_log_blowup": 1,
+          "leaf_log_blowup": 1,
+          "internal_log_blowup": 2,
+          "root_log_blowup": 3,
+          "max_segment_length": 1048476
+        }
+      ]
+    },
+    {
+      "name": "kitchen_sink",
+      "id": "kitchen_sink",
+      "working_directory": "benchmarks",
+      "e2e_bench": true,
+      "run_params": [
+        {
+          "instance_type": "64cpu-linux-arm64",
+          "memory_allocator": "jemalloc",
+          "app_log_blowup": 1,
+          "leaf_log_blowup": 1,
+          "internal_log_blowup": 2,
+          "root_log_blowup": 3,
+          "max_segment_length": 4194204
         }
       ]
     }
