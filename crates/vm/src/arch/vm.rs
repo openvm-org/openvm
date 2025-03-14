@@ -680,7 +680,7 @@ where
         // Check public values.
         for air_proof_data in proof.per_air.iter() {
             let pvs = &air_proof_data.public_values;
-            let air_vk = &vk.per_air[air_proof_data.air_id];
+            let air_vk = &vk.inner.per_air[air_proof_data.air_id];
             if air_proof_data.air_id == PROGRAM_AIR_ID {
                 program_air_present = true;
                 if i == 0 {
