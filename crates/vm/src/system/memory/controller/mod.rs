@@ -697,6 +697,10 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {
         self.memory.log = logs;
     }
+
+    pub fn prev_reads_writes(&mut self) -> (usize, usize) {
+        self.memory.prev_reads_writes()
+    }
 }
 
 pub struct MemoryAuxColsFactory<T> {
