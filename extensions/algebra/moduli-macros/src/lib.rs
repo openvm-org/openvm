@@ -106,6 +106,17 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let module_name = format_ident!("algebra_impl_{}", mod_idx);
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
+            /// An element of the ring of integers modulo a positive integer.
+            /// The element is internally represented as a fixed size array of bytes.
+            ///
+            /// ## Caution
+            /// It is not guaranteed that the integer representation is less than the modulus.
+            /// After any arithmetic operation, the honest host should normalize the result
+            /// to its canonical representation less than the modulus, but guest execution does not
+            /// require it.
+            ///
+            /// See [`assert_unique`](openvm_algebra_guest::IntMod::assert_unique) and
+            /// [`reduce`](openvm_algebra_guest::IntMod::reduce).
             #[derive(Clone, Eq, serde::Serialize, serde::Deserialize)]
             #[repr(C, align(#block_size))]
             pub struct #struct_name(#[serde(with = "openvm_algebra_guest::BigArray")] [u8; #limbs]);
@@ -126,6 +137,8 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     Self(bytes)
                 }
 
+                /// Constructor from little-endian bytes. Does not enforce the integer value of `bytes`
+                /// must be less than the modulus.
                 pub const fn from_const_bytes(bytes: [u8; #limbs]) -> Self {
                     Self(bytes)
                 }
@@ -429,6 +442,22 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                     fn cube(&self) -> Self {
                         &self.square() * self
+                    }
+
+                    /// If `self` is not in its canonical form, the proof will fail to verify.
+                    /// This means guest execution will never terminate (either successfully or
+                    /// unsuccessfully) if `self` is not in its canonical form.
+                    // is_eq_mod enforces `self` is less than `modulus`
+                    fn assert_unique(&self) {
+                        // This must not be optimized out
+                        let _ = core::hint::black_box(PartialEq::eq(self, self));
+                    }
+
+                    fn reduce(&mut self) {
+                        // Honest host will set the value to its canonical form after addition
+                        self.add_assign(&Self::ZERO);
+                        // Guest execution will never terminate for a dishonest host
+                        self.assert_unique();
                     }
                 }
 
