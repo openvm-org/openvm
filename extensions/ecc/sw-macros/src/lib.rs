@@ -310,7 +310,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                                 }
                             }
                         }
-                   }
+                    }
 
                     fn hint_decompress(x: &#intmod_type, rec_id: &u8) -> Option<DecompressionHint<#intmod_type>> {
                         #[cfg(not(target_os = "zkvm"))]
