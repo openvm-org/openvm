@@ -140,21 +140,27 @@ pub trait IntMod:
     const ONE: Self;
 
     /// Creates a new IntMod from an instance of Repr.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_repr(repr: Self::Repr) -> Self;
 
     /// Creates a new IntMod from an array of bytes, little endian.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_le_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from an array of bytes, big endian.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_be_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from a u8.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_u8(val: u8) -> Self;
 
     /// Creates a new IntMod from a u32.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_u32(val: u32) -> Self;
 
     /// Creates a new IntMod from a u64.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_u64(val: u64) -> Self;
 
     /// Value of this IntMod as an array of bytes, little endian.
@@ -204,31 +210,17 @@ pub trait IntMod:
         ret
     }
 
-    /// zkVM specific concept: the in-memory values of `Self` will normally
-    /// be in their canonical unique form (e.g., less than modulus) but the
-    /// zkVM circuit does not constrain it. In cases where uniqueness is
-    /// essential for security, this function should be called to constrain
-    /// uniqueness.
+    /// VM specific concept: during guest execution, it is not enforced that the representation
+    /// of `Self` must be the unique integer less than the modulus. The guest code may sometimes
+    /// want to enforce that the representation is the canonical one less than the modulus.
+    /// the host to an honest host to provide the canonical representation less than the modulus.
     ///
-    /// Note that this is done automatically in [PartialEq] and [Eq] implementations.
-    ///
-    /// If `self` is not in its canonical form, the proof will fail to verify.
-    fn assert_unique(&self) {
-        // This must not be optimized out
-        let _ = core::hint::black_box(PartialEq::eq(self, self));
-    }
+    /// This function should enforce that guest execution proceeds **if and only if** `self`
+    /// is in the unique representation less than the modulus.
+    fn assert_reduced(&self);
 
-    /// This function is mostly for internal use in other internal implementations.
-    /// Normal users are not advised to use it.
-    ///
-    /// If `self` was directly constructed from a raw representation
-    /// and not in its canonical unique form (e.g., less than the modulus),
-    /// this function will "reduce" `self` to its canonical form and also
-    /// call `assert_unique`.
-    fn reduce(&mut self) {
-        self.add_assign(&Self::ZERO);
-        self.assert_unique();
-    }
+    /// Is the integer representation of `self` less than the modulus?
+    fn is_reduced(&self) -> bool;
 }
 
 // Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/ops/trait.Reduce.html

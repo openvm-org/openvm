@@ -36,4 +36,15 @@ pub fn main() {
         res += res.clone();
     }
     assert_eq!(res, Mersenne61::from_u32(1));
+
+    let mut non_reduced = Mersenne61::from_le_bytes(&[0xff; 32]);
+    assert!(!non_reduced.is_reduced());
+
+    non_reduced = Mersenne61::from_le_bytes(&Mersenne61::MODULUS);
+    assert!(!non_reduced.is_reduced());
+
+    let mut bytes = [0u8; 32];
+    bytes[7] = 1 << 5; // 2^61 = 2^{8*7 + 5} = modulus + 1
+    non_reduced = Mersenne61::from_le_bytes(&bytes);
+    assert!(!non_reduced.is_reduced());
 }

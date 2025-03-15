@@ -347,7 +347,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
 
                         if hint.possible {
                             // ensure y < modulus
-                            hint.sqrt.assert_unique();
+                            hint.sqrt.assert_reduced();
 
                             if hint.sqrt.as_le_bytes()[0] & 1 != *rec_id & 1 {
                                 None
@@ -357,7 +357,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                             }
                         } else {
                             // ensure sqrt < modulus
-                            hint.sqrt.assert_unique();
+                            hint.sqrt.assert_reduced();
 
                             let alpha = (x * x * x) + (x * &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A) + &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_B;
                             if &hint.sqrt * &hint.sqrt == alpha * Self::get_non_qr() {
@@ -386,11 +386,11 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                                 non_qr = non_qr_uninit.assume_init();
                             }
                             // ensure non_qr < modulus
-                            non_qr.assert_unique();
+                            non_qr.assert_reduced();
 
                             // construct exp = (p-1)/2 as an integer by first constraining exp = (p-1)/2 (mod p) and then exp < p
                             let exp = -<#intmod_type as openvm_algebra_guest::IntMod>::ONE.div_unsafe(#intmod_type::from_const_u8(2));
-                            exp.assert_unique();
+                            exp.assert_reduced();
 
                             if non_qr.exp_bytes(true, &exp.to_be_bytes()) != -<#intmod_type as openvm_algebra_guest::IntMod>::ONE
                             {
