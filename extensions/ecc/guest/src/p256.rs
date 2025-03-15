@@ -12,6 +12,7 @@ use crate::weierstrass::{CachedMulTable, IntrinsicCurve};
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
+    // The constants are taken from: https://neuromancer.sk/std/secg/secp256r1
     pub static ref P256_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
         "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
     ));
@@ -56,7 +57,9 @@ impl Field for P256Coord {
 }
 
 impl CyclicGroup for P256Point {
+    // The constants are taken from: https://neuromancer.sk/std/secg/secp256r1
     const GENERATOR: Self = P256Point {
+        // from_const_bytes takes a little endian byte string
         x: P256Coord::from_const_bytes(hex!(
             "96c298d84539a1f4a033eb2d817d0377f240a463e5e6bcf847422ce1f2d1176b"
         )),

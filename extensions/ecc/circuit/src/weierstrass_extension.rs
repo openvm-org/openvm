@@ -316,6 +316,12 @@ pub(crate) mod phantom {
     }
 
     impl DecompressHintSubEx {
+        /// Given `x` in the coordinate field of the curve, and the recovery id,
+        /// return the unique `y` such that `(x, y)` is a point on the curve and
+        /// `y` has the same parity as the recovery id.
+        ///
+        /// If no such `y` exists, return the square root of `(x^3 + ax + b) * non_qr`
+        /// where `non_qr` is a quadratic nonresidue of the field.
         fn decompress_point(
             &self,
             x: BigUint,
@@ -359,6 +365,8 @@ pub(crate) mod phantom {
         }
     }
 
+    /// Find the square root of `x` modulo `modulus` with `non_qr` is a
+    /// quadratic nonresidue of the field.
     pub fn mod_sqrt(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigUint> {
         if modulus % 4u32 == BigUint::from_u8(3).unwrap() {
             // x^(1/2) = x^((p+1)/4) when p = 3 mod 4
@@ -473,12 +481,14 @@ pub(crate) mod phantom {
     // Returns a non-quadratic residue in the field
     fn find_non_qr(modulus: &BigUint) -> BigUint {
         if modulus % 4u32 == BigUint::from(3u8) {
+            // p = 3 mod 4 then -1 is a quadratic residue
             modulus - BigUint::one()
         } else if modulus % 8u32 == BigUint::from(5u8) {
+            // p = 5 mod 8 then 2 is a non-quadratic residue
+            // since 2^((p-1)/2) = (-1)^((p^2-1)/8)
             BigUint::from_u8(2u8).unwrap()
         } else {
             let mut rng = StdRng::from_entropy();
-            // let mut rand = RandomBits::new(modulus.bits());
             let mut non_qr = rng.gen_biguint_range(
                 &BigUint::from_u8(2).unwrap(),
                 &(modulus - BigUint::from_u8(1).unwrap()),

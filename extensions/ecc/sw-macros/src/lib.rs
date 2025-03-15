@@ -18,7 +18,7 @@ use syn::{
 /// }
 /// ```
 ///
-/// For this macro to work, you must import the `elliptic_curve` crate and the `openvm_ecc_guest` crate..
+/// For this macro to work, you must import the `elliptic_curve` crate and the `openvm_ecc_guest` crate.
 #[proc_macro]
 pub fn sw_declare(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);

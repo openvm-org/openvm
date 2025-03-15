@@ -16,6 +16,7 @@ use crate::weierstrass::{CachedMulTable, IntrinsicCurve};
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
+    // The constants are taken from: https://en.bitcoin.it/wiki/Secp256k1
     pub static ref SECP256K1_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
         "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
     ));
@@ -59,7 +60,9 @@ impl Field for Secp256k1Coord {
 }
 
 impl CyclicGroup for Secp256k1Point {
+    // The constants are taken from: https://en.bitcoin.it/wiki/Secp256k1
     const GENERATOR: Self = Secp256k1Point {
+        // from_const_bytes takes a little endian byte string
         x: Secp256k1Coord::from_const_bytes(hex!(
             "9817F8165B81F259D928CE2DDBFC9B02070B87CE9562A055ACBBDCF97E66BE79"
         )),

@@ -205,6 +205,7 @@ Each VM extension's behavior is specified below.
 | sw_double\<C\>  | EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                                                                                                                  |
 | setup\<C\>      | SETUP_EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) != 0`, SETUP_EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) = 0` |
 | hint_decompress | PHANTOM `ind(rs1), ind(rs2), phantom_c(curve_idx, HintDecompress)`                                                                                                |
+| hint_non_qr     | PHANTOM `0, 0, phantom_c(curve_idx, HintNonQr)`                                                                                                |
 
 ### Pairing Extension
 
@@ -213,6 +214,7 @@ Each VM extension's behavior is specified below.
 | hint_final_exp             | PHANTOM `ind(rs1), ind(rs2), phantom_c(pairing_idx, HintFinalExp)`       |
 
 ## OpenVM Kernel Code Transpilation
+
 This section specifies the transpilation of custom RISC-V [kernel code](./RISCV.md#classification-of-custom-risc-v-machine-code) to OpenVM instructions.
 This transpilation differs from the ones described above in that a custom RISC-V code block of more than 32-bits is used to specify a single OpenVM instruction,
 and a single 32-bit RISC-V instruction is also used to specify multiple (nonexistent) instructions.
@@ -244,10 +246,12 @@ lfii [i_2 encoding]
 lfii [i_l encoding]
 gi [gap encoding]
 ```
+
 This will be an overall code block of `32 * m` bits, where `m > l`, which will be transpiled to only `l` OpenVM instructions. The instructions are encoded as described [below](#openvm-instruction-encoding).
 If the starting program address of the RISC-V code block is `a` (in bytes), then the OpenVM instructions `i_1, ..., i_l` will be at addresses `[a, a + 4, ..., a + 4 * (l - 1)]` in the OpenVM program ROM. The addresses `[a + 4 * l, ..., a + 4 * (m - 1)]` will be left empty in the OpenVM program ROM to maintain compatibility with RISC-V program addresses. The _gap_ between `l` and `m` is encoded by the [gap encoding](#gap-encoding).
 
 ### OpenVM Instruction Encoding
+
 An OpenVM instruction is encoded to a RISC-V code block as follows.
 We identify the 31-bit field `F` with `{0, ..., p - 1}` where `p` is the prime modulus.
 We encode `u32` as 32-bits in little-endian format.
@@ -257,6 +261,7 @@ Then to encode it into a 32-bit aligned code block, we first write `lfii`, follo
 We then encode each operand simply by its canonical 32-bit representation.
 
 ### Gap Encoding
+
 The transpiler also allows for the transpilation of gaps, i.e., addresses in the RISC-V program memory that do not map to OpenVM instructions.
 The purpose of this is to maintain the validity of `pc` offsets when using the above encoding of OpenVM instructions.
 

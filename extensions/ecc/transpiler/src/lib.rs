@@ -69,6 +69,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
             }
             if let Some(SwBaseFunct7::HintNonQr) = SwBaseFunct7::from_repr(base_funct7) {
                 assert_eq!(dec_insn.rd, 0);
+                assert_eq!(dec_insn.rs1, 0);
+                assert_eq!(dec_insn.rs2, 0);
                 return Some(TranspilerOutput::one_to_one(Instruction::phantom(
                     PhantomDiscriminant(EccPhantom::HintNonQr as u16),
                     F::ZERO,

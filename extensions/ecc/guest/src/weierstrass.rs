@@ -296,7 +296,7 @@ macro_rules! impl_sw_affine {
             fn double_nonidentity(&self) -> Self {
                 use ::openvm_algebra_guest::DivUnsafe;
                 // lambda = (3*x1^2+a)/(2*y1)
-                // for bls12-381, a = 0
+                // assume a = 0
                 let lambda = (&THREE * self.x() * self.x()).div_unsafe(self.y() + self.y());
                 // x3 = lambda^2-x1-x1
                 let x3 = &lambda * &lambda - self.x() - self.x();
