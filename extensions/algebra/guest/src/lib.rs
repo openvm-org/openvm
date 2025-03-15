@@ -140,21 +140,27 @@ pub trait IntMod:
     const ONE: Self;
 
     /// Creates a new IntMod from an instance of Repr.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_repr(repr: Self::Repr) -> Self;
 
     /// Creates a new IntMod from an array of bytes, little endian.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_le_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from an array of bytes, big endian.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_be_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from a u8.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_u8(val: u8) -> Self;
 
     /// Creates a new IntMod from a u32.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_u32(val: u32) -> Self;
 
     /// Creates a new IntMod from a u64.
+    /// Does not enforce the integer value of `bytes` must be less than the modulus.
     fn from_u64(val: u64) -> Self;
 
     /// Value of this IntMod as an array of bytes, little endian.
