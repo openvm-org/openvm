@@ -365,7 +365,7 @@ pub(crate) mod phantom {
         }
     }
 
-    /// Find the square root of `x` modulo `modulus` with `non_qr` is a
+    /// Find the square root of `x` modulo `modulus` with `non_qr` a
     /// quadratic nonresidue of the field.
     pub fn mod_sqrt(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigUint> {
         if modulus % 4u32 == BigUint::from_u8(3).unwrap() {
