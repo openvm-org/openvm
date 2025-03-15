@@ -18,6 +18,8 @@ Chips in the VM need to perform memory read and write operations. The goal of me
 
 Our memory is split into **online** and **offline** memory. Online memory provides actual data and generates access records during the program execution, and offline memory uses those records to verify memory consistency. Below we describe how offline memory works. First we look at the interactions on the memory bus and why they are sound in our ecosystem. Next we discuss two different memory models, namely, **volatile** and **persistent** memory.
 
+We use the offline memory checking argument of [BEGKN92](https://www.cs.ubc.ca/~will/papers/memcheck.pdf).
+
 ## Basic performed interactions
 
 We say an address is _accessed_ when it's initialized, finalized, read from, or written to. An address is initialized at timestamp $0$ and is finalized at the same timestamp it was last read from or written to (or $0$ if there were no operations involving it).

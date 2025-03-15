@@ -53,228 +53,219 @@ The chips that get to execute instructions are _instruction executors_. These ch
 This modularity helps to separate the functionalities, reduce space for error and also reuse the same adapters for various chips with similar instruction signatures.
 Note that technically these are parts of the same chip and therefore generate one trace, although both adapter and core have AIRs to deal with different parts of the trace.
 
-> [!NOTE]
+> [!IMPORTANT]
 > It is a burden of the instruction executor (more specifically, the adapter) to update the execution state. It is also its burden to constrain that the time increases. If any of these is not done correctly, the proof of correctness will fail to be generated.
 
----
----
----
----
----
+## Adapter-core interface
 
-### Our no-CPU design
+The adapter-core interface is defined by the `VmAdapterInterface` trait.
 
-The main motivation is that the existence of a CPU forces the existence of a trace matrix with rows growing with the total number of clock cycles of the program execution. We claim that the no-CPU design gives the minimum lower bound on the number of required trace cells added per opcode execution.
-
-Traditionally, the CPU is in charge of reading/writing from memory and forwarding that information to the appropriate chip. We have switched to a model where each chip directly accesses memory itself. Traditionally this is also inefficient because the CPU uses physical general purpose registers for instruction execution, whereas in our architecture, registers are emulated as memory in a dedicated address space.
-
-Each chip has IO columns `(timestamp, pc, instruction)` where `instruction` is `(opcode, operands)`.
-The chip receives `(pc, instruction)` on the PROGRAM_BUS to ensure it is reading the correct line of the program code.
-There is a maximum length to `operands` defined by the PROGRAM_BUS, but each chip can receive only a subset of the
-operands (setting the rest to zero) without paying the cost for the unused operands.
-
-**Note:** each chip receives an _offset_ on construction, and this offset basically means "where does the class of
-operations which this chip supports start". For example, if a `FieldArithmeticChip` has offset `0x100`, then its `SUB`
-operation would be encoded with opcode `0x100 + 1` and not just `1`.
-See [ISA spec](./ISA.md) for
-details.
-
-Each chip receives `(timestamp, pc)` on EXECUTION_BUS and "after"
-executing an instruction, sends `(new_timestamp, new_pc)` on the same bus (here `new_pc` is `pc + 1` most of the time,
-but not always).
-The chip is in charge of constraining that `new_timestamp` is consistent with `timestamp`. In
-particular, `new_timestamp` must be (almost always strictly) greater than `timestamp`, but not by a lot (so that the
-timestamps do not overflow the field characteristic).
-The bus enforces that each timestamp transition corresponds to a particular instruction being executed.
-
-There is an `ExecutionBridge` for more convenient communicating with these two buses.
-
-The chip must constrain that `opcode` is one of the opcodes the chip itself owns. The chip then constrains the rest of
-the validity of the opcode execution, according to the opcode spec.
-
-There is also another very simple "connector" chip with a 2 row trace that sends out `(1, 0)` on EXECUTION_BUS and
-receives `(final_timestamp, final_pc)` on EXECUTION_BUS. These four values are public values of the program. With
-continuations, the start and end timestamp/pc will need to be constrained with respect to the pre/post-states.
-
-The vm design is so that the core chip is just one of such chips. The instructions directed at managing the execution
-flow are passed to the core chip. Such design is modular enough in the sense that it allows us to treat the control flow
-instructions similarly to most of the other opcodes. Also, instead of having the execution protocol in a single matrix
-and duplicate the instructions with the chips that actually execute them, we have each step of execution only generating
-one new row in the machine chip (and maybe more lines in other primitive chips that it uses for execution).
-
-### Offline Memory
-
-In the no-CPU design, each chip receives the opcode instruction directly, and memory access (read or write) is
-constrained by the chip itself.
-
-The VM supports a read/write memory, which is constrained via offline memory checking. We use the offline memory
-checking argument of [BEGKN92](https://www.cs.ubc.ca/~will/papers/memcheck.pdf).
-
-Any offline memory checking aims to have a transcript consisting of `(a, v, t)` with address `a`, value `v`,
-timestamp `t` (in our ISA `a = (address_space, address)` but we omit this distinction here for brevity). The timestamp
-here is a single field element. As far as we know, the timestamp **must** be global and match what is used by the
-`EXECUTION_BUS` to ensure that the temporal sequencing of memory accesses matches the temporal sequencing of instruction
-execution.
-
-<!--
-[JPW] Lasso uses a per-address timestamp (renamed counter) but in a different setting. We did not see a way to use this argument because it did not allow constraining instruction execution matched memory access ordering.
--->
-
-Memory aims to support two operations: read and write.
-
-- A read of `(a, v)` at time `t` means that if we look through the transcript focusing on only entries with address `a`,
-  the entry with timestamp immediately preceding `t` must have value also equal `v`.
-
-- A write of `(a, v)` at time `t` means a new entry `(a, v, t)` must be introduced to the transcript.
-
-The main distinction of [BEGKN92] is that the transcript does not need to be materialized explicitly in a single AIR
-matrix. The particular entries of the transcript are materialized on a per-access basis (in whatever chip needs it).
-This materialization is avoided by using the MEMORY_BUS and chip constraints to constrain the correctness of the
-transcript:
-
-We have an offline checking MEMORY_BUS, where message fields consist of `(a, v, t)`. The bus then has two sets (send vs
-receive) that must be equal at the end. To match the literature, let send (resp. receive) correspond to Write (resp.
-Read) sets. Any memory access in a chip must add one entry into each set and constrain a relation between them:
-
-- A read of $(a, v)$ at time $t$ must add $(a, v, t_{prev})$ to Read set and $(a, v, t)$ to Write set. It must constrain
-  $t_{prev} < t$.
-- A write of $(a, v)$ at time $t$ must add $(a,v_{prev},t_{prev})$ to Read set and $(a,v,t)$ to Write set, where $v_
-  {prev}$ is the previous value before the write. It must constrain $t_{prev} < t$.
-
-To balance the Read and Write sets, an additional chip must ensure that every accessed address has an initial $(a, v_
-{init}, 0)$ added to the Write set, and $(a, v_{final}, t_{last})$ added to Read set.
-
-<!--
-For the offline checking to be sound, it must be constrained that the list of accessed addresses in the initial Write
-list are all **unique**. Uniqueness of the initial address list implies, together with the bus argument, that the final
-address list is also unique (vice versa, uniqueness of final set implies uniqueness of initial set). The key observation
-of [OLB24](https://eprint.iacr.org/2024/979.pdf) is that only _uniqueness_ is necessary and not sorted-ness of the
-address list. The traditional approach prior to OLB24 to enforce uniqueness is to enforce the list of addresses is
-sorted, which uses logup lookups for range checks necessary to constrain `IsLessThan`. OLB24 shows that one can
-implement an AIR with in-circuit randomness to constrain that all entries in a trace column are unique (with an
-extension to conditional uniqueness).
--->
-
-The initial and final memory accesses are constrained different when the VM has continuations.
-See [Continuations](./continuations.md) for full details. In summary, because the initial and final memory states are
-committed to in a **trie**, the uniqueness of the addresses is constrained by the trie, so the arguments of the previous
-paragraph are not used.
-
-### Memory Model With Variable Word Size
-
-In traditional machine memory models, memory is stored as a sequence of cells (typically bytes), chunked into words by a
-fixed **word size**.
-This word size then governs all memory load/store operations.
-This model was governed by the constraints of physical hardware, and
-we now discuss why it is unnecessary in the STARK architecture.
-
-For efficient vectorization of memory accesses, we allow each
-chip to perform "batch" read/writes of $\{(a + i, v_i, t)\}_{i \in [0,w)}$ where $w$ is any multiple of a
-fixed `WORD_BLOCK_SIZE` (set to `4` in practice).
-
-The main idea is that in the offline checking memory argument [above](#offline-memory), the MEMORY_BUS can hold $(a, v,
-t)$ where the length of $v$ is variable. The difference in word sizes only needs to be resolved when there is a sequence
-of read+write or write+read involving different word sizes.
-
-We introduce chips `AccessAdapterChip<N>` that can:
-
-- read $(a, v_0 || ... || v_{N-1}, t)$ and write $(a, v_0 || ... || v_{N/2 - 1}, t)$ and $(a + N/2, v_{N/2} || ... || v_{N-1}, t)$
-- read $(a, v_0 || ... || v_{N/2 - 1}, t_0)$ and $(a + N / 2, v_{N/2} || ... || v_{N-1}, t_1)$ and write $(a, v_0 || .. || v_{N-1}, max(t_0, t_1))$
-
-where we allow `N` to be different powers of two.
-
-The values of $a, v_i$ that appear in the trace of the access adapter chip are generated on-demand based on the needs of the
-runtime memory access. In other words, the converter inserts additional writes into the MEMORY_BUS when needed in order
-to link up accesses of different word sizes.
-
-### Timestamp Range Assertions
-
-The execution and memory buses both contain a field for **timestamp** as a way to chronologically order instruction execution and the VM state accesses therein.
-The timestamp is a global variable shared across all chips within a single VM circuit that is monotonically increasing across VM execution.
-For the offline memory checking argument described above to work, we require that the `timestamp` always remains in the range `[0, 2^timestamp_max_bits)`, where
-`timestamp_max_bits` is a configurable parameter of the VM, but we require `timestamp_max_bits <= 29` when the proof system base field is 31 bits.
-In order for the VM circuit to maintain this invariant, we **require** that each VM chip that interacts with the execution and memory buses must satisfy the following condition:
-
-> [!IMPORTANT]
-> In the AIR, the amount that the timestamp is constrained to increase during execution of a single instruction is at most `num_interactions * num_rows_per_execution`.
-
-Here `num_interactions` is the number of interactions in the AIR: this is a static property of the AIR.
-The number of interactions does not depend on the number of trace rows, and it doesn't depend on whether messages are actually sent or not. In general, the trace for the execution of a single instruction can
-use multiple rows in the chip's trace matrix: this is represented by `num_rows_per_execution`. In summary
-we bound the integer amount that the timestamp should increment in a single instruction execution based on the number of interactions and the number of rows in the trace.
-
-Let us explain how this condition aids in the timestamp range bound.
-As part of the LogUp soundness checks, the verifier always checks the inequality:
+```rust
+/// The interface between primitive AIR and machine adapter AIR.
+pub trait VmAdapterInterface<T> {
+    /// The memory read data that should be exposed for downstream use
+    type Reads;
+    /// The memory write data that are expected to be provided by the integrator
+    type Writes;
+    /// The parts of the instruction that should be exposed to the integrator.
+    /// This will typically include `is_valid`, which indicates whether the trace row
+    /// is being used and `opcode` to indicate which opcode is being executed if the
+    /// VmChip supports multiple opcodes.
+    type ProcessedInstruction;
+}
 ```
-sum_i height[i] * num_interactions[i] < p
+
+Here, `Reads` is some type that describes the memory reads required for the chip, and `Writes` is similar but about writes. The `VmAdapterChip` defines what the adapter needs to be able to do:
+
+```rust
+/// The adapter owns all memory accesses and timestamp changes.
+/// The adapter AIR should also own `ExecutionBridge` and `MemoryBridge`.
+pub trait VmAdapterChip<F> {
+    /// Records generated by adapter before main instruction execution
+    type ReadRecord: Send + Serialize + DeserializeOwned;
+    /// Records generated by adapter after main instruction execution
+    type WriteRecord: Send + Serialize + DeserializeOwned;
+    /// AdapterAir should not have public values
+    type Air: BaseAir<F> + Clone;
+
+    type Interface: VmAdapterInterface<F>;
+
+    /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
+    /// This is called at the start of instruction execution.
+    ///
+    /// The implementer may choose to store data in the `Self::ReadRecord` struct, for example in
+    /// an [Option], which will later be sent to the `postprocess` method.
+    #[allow(clippy::type_complexity)]
+    fn preprocess(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        instruction: &Instruction<F>,
+    ) -> Result<(
+        <Self::Interface as VmAdapterInterface<F>>::Reads,
+        Self::ReadRecord,
+    )>;
+
+    /// Given instruction and the data to write, perform memory writes and return the `(record, timestamp_delta)`
+    /// of the full adapter record for this instruction. This is guaranteed to be called after `preprocess`.
+    fn postprocess(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        instruction: &Instruction<F>,
+        from_state: ExecutionState<u32>,
+        output: AdapterRuntimeContext<F, Self::Interface>,
+        read_record: &Self::ReadRecord,
+    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)>;
+
+    /// Populates `row_slice` with values corresponding to `record`.
+    /// The provided `row_slice` will have length equal to `self.air().width()`.
+    /// This function will be called for each row in the trace which is being used, and all other
+    /// rows in the trace will be filled with zeroes.
+    fn generate_trace_row(
+        &self,
+        row_slice: &mut [F],
+        read_record: Self::ReadRecord,
+        write_record: Self::WriteRecord,
+        memory: &OfflineMemory<F>,
+    );
+
+    fn air(&self) -> &Self::Air;
+}
 ```
-where the sum is over all AIRs in the STARK proof, `height[i]` is the trace height of AIR `i`, and `num_interactions[i]` is the number of interactions in AIR `i`. The sum is taken over the integers and checked to be less than the modulus `p` of the base field.
 
-Given the condition on instruction execution above, we deduce from this inequality the inequality
+On the other hand, the `VmCoreChip` trait defines the core logic of the chip.
+
+```rust
+
+/// Trait to be implemented on primitive chip to integrate with the machine.
+pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
+    /// Minimum data that must be recorded to be able to generate trace for one row of `PrimitiveAir`.
+    type Record: Send + Serialize + DeserializeOwned;
+    /// The primitive AIR with main constraints that do not depend on memory and other architecture-specifics.
+    type Air: BaseAirWithPublicValues<F> + Clone;
+
+    #[allow(clippy::type_complexity)]
+    fn execute_instruction(
+        &self,
+        instruction: &Instruction<F>,
+        from_pc: u32,
+        reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)>;
+
+    fn get_opcode_name(&self, opcode: usize) -> String;
+
+    /// Populates `row_slice` with values corresponding to `record`.
+    /// The provided `row_slice` will have length equal to `self.air().width()`.
+    /// This function will be called for each row in the trace which is being used, and all other
+    /// rows in the trace will be filled with zeroes.
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record);
+
+    /// Returns a list of public values to publish.
+    fn generate_public_values(&self) -> Vec<F> {
+        vec![]
+    }
+
+    fn air(&self) -> &Self::Air;
+
+    /// Finalize the trace, especially the padded rows if the all-zero rows don't satisfy the constraints.
+    /// This is done **after** records are consumed and the trace matrix is generated.
+    /// Most implementations should just leave the default implementation if padding with rows of all 0s satisfies the constraints.
+    fn finalize(&self, _trace: &mut RowMajorMatrix<F>, _num_records: usize) {
+        // do nothing by default
+    }
+}
 ```
-sum_{instruction_execution} timestamp_delta < p - 1
+
+Here, `AdapterRuntimeContext` is a struct that contains the `to_pc` field, which is the program counter to which the instruction is being executed, and the writes to perform.
+
+```rust
+pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
+    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
+    pub to_pc: Option<u32>,
+    pub writes: I::Writes,
+}
 ```
-where the sum is over all instruction executions and `timestamp_delta` is the integer amount the timestamp increased in that execution. The change from `p` to `p - 1` is because the sum of AIRs includes the Connector AIR, which does not increment timestamp and has trace height 2 and at least one interaction (in fact it has 5).
-Within a VM circuit, the timestamp is always initialized to `1` and then advanced only during
-instruction execution. Thus from our discussion above, we deduce that the `end_timestamp`,
-defined as the timestamp the Connector Chip receives to signal either execution should be suspended
-or terminated, does not overflow the base field. Thus all intermediate timestamps also do not overflow.
-Given this, to constrain that all timestamps throughout the course of instruction execution are in
-the range `[0, 2^timestamp_max_bits)`, it suffices to range check the `end_timestamp`.
-This is done by the Connector AIR.
 
-#### Inspection of VM Chip Timestamp Increments
-Below we perform a survey on all VM chips contained in the OpenVM system and the standard VM extensions
-to justify that they all satisfy the condition on timestamp increments.
+The workflow is as follows:
 
-In all AIRs for instruction executors, the timestamp delta of a single instruction execution
-is constrained via the `ExecutionBridge` as the difference between the timestamps in the two
-interactions on the execution bus for the "from" and "to" states. In most AIRs, the `timestamp_delta`
-is a constant which is computed by starting at `0` and incrementing by `1` on each memory access.
-The memory access constraint is done via the `MemoryBridge` interface.
-Any use of `read` or `write` via `MemoryBridge` uses `4` interactions: 2 on memory bus, 2 for range checks.
-Therefore for chips where instruction execution uses only 1 row of the trace and timestamp increments
-once per memory access as above, we actually have that `timestamp_delta <= num_interactions / 4`.
-This includes all chips that use the integration API and `VmChipWrapper`.
+1. The adapter calls `preprocess` to get the reads and the read record. It then passes the reads to the core part of the chip.
+2. The core calls `execute_instruction` to get the new execution state and the record.
+3. The adapter calls `postprocess` on the core output to get the new execution state and the record.
 
-Therefore it remains to examine:
+The generated records are used later to fill the trace.
 
-1. All chips that compute the timestamp delta via incrementing by 1 per memory access but where single instruction execution may use multiple trace rows.
-2. All cases where the timestamp delta is manually set in a custom way.
+Here is the code that executes this mechanism:
 
-The chips that fall into these categories are:
+```rust
+impl<F, A, M> InstructionExecutor<F> for VmChipWrapper<F, A, M>
+where
+    F: PrimeField32,
+    A: VmAdapterChip<F> + Send + Sync,
+    M: VmCoreChip<F, A::Interface> + Send + Sync,
+{
+    fn execute(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        instruction: &Instruction<F>,
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        let (reads, read_record) = self.adapter.preprocess(memory, instruction)?;
+        let (output, core_record) =
+            self.core
+                .execute_instruction(instruction, from_state.pc, reads)?;
+        let (to_state, write_record) =
+            self.adapter
+                .postprocess(memory, instruction, from_state, output, &read_record)?;
+        self.records.push((read_record, write_record, core_record));
+        Ok(to_state)
+    }
 
-| Name                  | timestamp_delta | # of interactions | Comment                                                                                                                  |
-| --------------------- | --------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| PhantomChip           | 1               | 3 | Case 2. No memory accesses, 3 interactions from program bus and execution bus. |
-| KeccakVmChip          | -               | -                 | Case 2. Special timestamp jump. |
-| FriReducedOpeningChip | –               | –                 | Case 1. |
-| NativePoseidon2Chip   | –               | –                 | Case 1. |
-| Rv32HintStoreChip     | –               | –                 | Case 1. |
-| Sha256VmChip          | –               | –                 | Case 1. |
-
-The PhantomChip satisfies the condition because `1 < 3`.
-
-All the chips in Case 1 can use a variable number of trace rows to execute a single instruction, but
-the AIR constraints all maintain that the timestamp increments by 1 per memory access and this accounts for all increments of the timestamp. Therefore we have `timestamp_delta <= num_interactions * num_rows_per_execution / 4` in these cases.
-
-##### KeccakVmChip
-
-It remains to analyze KeccakVmChip. Here the `KeccakVmAir::timestamp_change` is `len + 45` where `len`
-refers to the length of the input in bytes. This is an overestimate used to simplify AIR constraints
-because the AIR cannot compute the non-algebraic expression `ceil(len / 136) * 20`.
-
-In the AIR constraints :
-
-- `constrain_absorb` adds at least `min(68, sponge.block_bytes.len())` interactions on the XOR bus.
-- `eval_instruction` does an `execute_and_increment_pc` (3), 3 memory reads (12) and 2 lookups (2), giving a total of `17` interactions.
-- `constrain_input_read` does 34 memory reads (136),
-- `constrain_output_write` does 8 memory writes (32)
-
-In total, there are at least 253 interactions.
-
-A single KECCAK256_RV32 instruction uses `ceil((len + 1) / 136) * 24` rows (where `NUM_ROUNDS = 24`).
-We have shown that
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        self.core.get_opcode_name(opcode)
+    }
+}
 ```
-len + 45 < 253 * ceil((len + 1) / 136) * 24 <= num_interactions * num_rows_per_execution
+
+> [!NOTE]
+> For most of the adapters we have, the corresponding adapter AIR verifies that the timestamp changes by a constant amount. If you want to create your own adapter, take this into account -- see [Memory](./memory.md#what-to-take-into-account-when-adding-a-new-chip) for more detailed description of what to be careful about in this regard. Although we have some set of adapters that should cover most of the cases -- e.g., for execution an instruction with given number of reads and writes:
+
+```rust
+/// R reads(R<=2), W writes(W<=1).
+/// Operands: b for the first read, c for the second read, a for the first write.
+/// If an operand is not used, its address space and pointer should be all 0.
+#[derive(Debug)]
+pub struct NativeAdapterChip<F, const R: usize, const W: usize> {
+    pub air: NativeAdapterAir<R, W>,
+    _phantom: PhantomData<F>,
+}
 ```
+
+> [!WARNING]
+> While the adapter uses the execution bridge and the memory bridge, the `is_valid` field that serves as the multiplicity in all the corresponding interactions is **not** constrained to be boolean by the adapter. It comes from the core, and it is responsibility of the core AIR to verify its booleanness.
+
+## How to add a new chip to the circuit
+
+1. **Define the chip’s functionality and constraints:**
+   - Decide what operation your chip implements (arithmetic, memory, branching, etc.) and write down its semantic rules.
+   - Identify the state transitions (e.g. how program counter and timestamp change) and any invariants you need to enforce.
+   - Identify the memory reads and writes that your chip performs.
+
+2. **Implement the chip’s core module:**
+   Write the circuit-level implementation that enforces your constraints.
+
+3. **Implement an adapter (if necessary):**
+   If you need a new adapter, implement it based on the establidhed communication with the core and the number of reads and writes. However, we suggest you to use one of ours whenever possible, for the sake of soundness guarantees.
+
+4. **Merge these two components using `VmChipWrapper`:**
+   ```rust
+   // In your chip's lib.rs
+   pub type YourChip<F> = VmChipWrapper<F, YourAdapterChip<F, N, M>, YourChipCore>;
+   ```
+
+5. **Implement a Transpiler Extension:**  
+   Implement a type that implements `TranspilerExtension<F>`, so that when your new instruction is encountered in the ELF, it is mapped to your chip’s operations. See [Transpiler](./transpiler.md) for more details.
+
+### What to take into account when adding a new chip
+
+- [Ensure memory consistency](./memory.md#what-to-take-into-account-when-adding-a-new-chip)
+- Do not forget to constrain that `is_valid` is boolean in your core.
+- If your chip generates some number of trace rows, and this number is not a power of two, the trace is padded with all-zero rows. It should correspond to a legitimate operation, most likely invalid though. For example, if your AIR asserts that the value in the first column is 1 less than the value in the second column, you cannot just write `builder.assert_eq(local.x + 1, local.y)`, because this is not the case for the padding rows.
