@@ -87,7 +87,6 @@ impl<T: FieldAlgebra> MemoryBusInteraction<T> {
     where
         AB: InteractionBuilder<Expr = T>,
     {
-        // Chain 1 at the end to ensure that different length interactions are always distinct.
         let fields = iter::empty()
             .chain(iter::once(self.address.address_space))
             .chain(iter::once(self.address.pointer))

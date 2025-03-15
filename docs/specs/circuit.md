@@ -3,53 +3,70 @@
 We build our virtual machines in a STARK proving system with a multi-matrix commitment scheme and shared verifier
 randomness between AIR matrices to enable permutation arguments such as log-up.
 
-In the following, we will refer to a circuit as a collection of AIR matrices (also referred to as chips) of possibly
-different heights, which may communicate with one another over buses using a log-up permutation argument. We refer to
-messages sent to such a bus as [interactions](https://github.com/openvm-org/stark-backend/tree/main/crates/stark-backend/src/interaction).
+In the following, we will refer to a circuit as a collection of chips, which communicate with one another over buses using a LogUp permutation argument. We refer to messages sent to such a bus as [interactions](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md). Every _chip_ is an entity responsible for a certain operation (or set of operations), and it has an AIR to check the correctness of its execution.
 
-Our framework is modular and allows the creation of custom VM circuits to support different instruction sets that follow
-our overall ISA framework.
+> [!NOTE]
+> A bus itself doesn't have any logic. It is just an index, and all related functionality is purely on the backend side.
+
+Usually we have _bridges_ which are basically APIs for buses. Using a bridge is preferred over communicating with a bus directly since bridges may enforce some special type of communication (for example, sending messages in pairs or communicating with different buses at once, thus synchronizing these communications).
+
+Our framework is modular and allows the creation of custom VM circuits to support different instruction sets that follow our overall ISA framework.
 
 ## Motivation
 
-We want to make the VM modular, so that adding new instructions and chips involves minimal to no changes to any
-centralized chip (commonly the CPU chip). We also want to avoid increasing the columns/interactions/buses of the CPU
-when we add new instructions/chips.
+We want to make the VM modular, so that adding new instructions and chips is completely isolated from the existing components.
 
 ## Design
 
 The following must exist in any VM circuit:
 
-- The program chip
-- The core chip
-- A set of memory-related chips (different depending on the persistence type)
-- A program bus
-- An execution bus
-- A memory bus
 
-Notably, there is no CPU chip where the full transcript of executed instructions is materialized in a single trace
-matrix. The transcript of memory accesses is also not materialized in a single trace matrix. We discuss reasons for
-these choices below.
+- **Range checker chip** and **range checker bus**. Every time an AIR needs to constrain that some expression is less than some power of two, they communicate with the range checker bus using the range checker chip. The range checker chip keeps track of all accesses to later balance out the interactions.
+- **Program chip** and **program bus**. The program chip's trace matrix simply consists of the program code, one instruction per row, as a cached trace. A cached trace is used so that the commitment to the program code is the proof system trace commitment. Every time an instruction executor (to be defined later) executes an instruction, it sends this instruction, along with the `pc`, to the program bus via the program chip. The program chip keeps track of all accesses to later balance out the interactions.
+- **Connector chip**. If we only had the above interactions with the execution bus, then the initial execution state would have only been sent and the final one would have only been received. The connector chip publishes the initial and the final states and balances this out (in particular, its trace is a matrix with two rows -- because it has a preprocessed trace).
+- **Phantom chip**. We call an instruction _phantom_ if it doesn't mutate execution state (and, of course, the state of the memory). Phantom instructions are sent to the phantom chip.
+- A set of memory-related chips and a bus (different depending on the persistence type -- see [Memory](./memory.md)),
+- **Execution bus**. Every time an instruction executor executes an instruction, they send the execution state before the instruction to the execution bus (with multiplicity $1$) and receive the execution state after the instruction from it. It has a convenient **execution bridge** that provide functions which do these two interactions at once.
 
-### Program Chip
+Notably, there is no CPU chip where the full transcript of executed instructions is materialized in a single trace matrix. The transcript of memory accesses is also not materialized in a single trace matrix.
 
-We follow the Harvard architecture where the program code (ROM) is stored separately from memory. The program chip's
-trace matrix simply consists of the program code, one instruction per row, as a cached trace, together with interactions
-on the PROGRAM_BUS.
+## Program execution
 
-A cached trace is used so that the commitment to the program code is the proof system trace commitment. This commitment
-could be changed to a flat hash, likely with worse performance.
+When the program is being run, in the simple scenario, the following happens at the very highest level:
+- There is an _execution state_, which consists of two numbers: _timestamp_ and _program counter_ corresponding to the instruction that is currently being executed.
+- While not finished:
+  - The next instruction is drawn,
+  - It is passed to the _instruction executor_ (which is a special kind of chip, we define it later) responsible for executing this instruction,
+  - This instruction executor returns the new execution state (and maybe reports that the execution is finished). The timestamp and program counter change accordingly.
+
+There are limitations to how many interactions/trace rows/etc we can have in total, see [soundness criteria](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf). If executing the full program would lead us to overflowing these limits, the program needs to be executed in several segments. Then the process is slightly different:
+- After executing an instruction, we may decide (based on `SegmentationStrategy`, which looks at the traces) to _segment_ our execution at this point. In this case the execution will be split into several segments.
+- The timestamp resets on segmentation.
+- Each segment is going to be proven separately. Of course, this means that adjacent segments need to agree on some things (mainly memory state). See [Continuations](./continuations.md) for full details.
+
+## Instruction executors
+
+The chips that get to execute instructions are _instruction executors_. These chips can be split into two parts:
+- **Adapter:** communicates with the program and execution buses. Also communicates with memory to read inputs and write output from/to the required locations.
+- **Core:** performs chip's intended logic on the raw data. Is mostly isolated and doesn't have to bother about the other parts of the circuit, although can if it wants, for example, to talk to the range checker.
+
+This modularity helps to separate the functionalities, reduce space for error and also reuse the same adapters for various chips with similar instruction signatures.
+Note that technically these are parts of the same chip and therefore generate one trace, although both adapter and core have AIRs to deal with different parts of the trace.
+
+> [!NOTE]
+> It is a burden of the instruction executor (more specifically, the adapter) to update the execution state. It is also its burden to constrain that the time increases. If any of these is not done correctly, the proof of correctness will fail to be generated.
+
+---
+---
+---
+---
+---
 
 ### Our no-CPU design
 
-The main motivation is that the existence of a CPU forces the existence of a trace matrix with rows growing with the
-total number of clock cycles of the program execution. We claim that the no-CPU design gives the minimum lower bound on
-the number of required trace cells added per opcode execution.
+The main motivation is that the existence of a CPU forces the existence of a trace matrix with rows growing with the total number of clock cycles of the program execution. We claim that the no-CPU design gives the minimum lower bound on the number of required trace cells added per opcode execution.
 
-Traditionally, the CPU is in charge of reading/writing from memory and forwarding that information to the appropriate
-chip. We have switched to a model where each chip directly accesses memory itself. Traditionally this is also
-inefficient because the CPU uses physical general purpose registers for instruction execution, whereas in our
-architecture, registers are emulated as memory in a dedicated address space.
+Traditionally, the CPU is in charge of reading/writing from memory and forwarding that information to the appropriate chip. We have switched to a model where each chip directly accesses memory itself. Traditionally this is also inefficient because the CPU uses physical general purpose registers for instruction execution, whereas in our architecture, registers are emulated as memory in a dedicated address space.
 
 Each chip has IO columns `(timestamp, pc, instruction)` where `instruction` is `(opcode, operands)`.
 The chip receives `(pc, instruction)` on the PROGRAM_BUS to ensure it is reading the correct line of the program code.
