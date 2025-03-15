@@ -115,8 +115,8 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
             /// to its canonical representation less than the modulus, but guest execution does not
             /// require it.
             ///
-            /// See [`assert_unique`](openvm_algebra_guest::IntMod::assert_unique) and
-            /// [`reduce`](openvm_algebra_guest::IntMod::reduce).
+            /// See [`assert_reduced`](openvm_algebra_guest::IntMod::assert_reduced) and
+            /// [`is_reduced`](openvm_algebra_guest::IntMod::is_reduced).
             #[derive(Clone, Eq, serde::Serialize, serde::Deserialize)]
             #[repr(C, align(#block_size))]
             pub struct #struct_name(#[serde(with = "openvm_algebra_guest::BigArray")] [u8; #limbs]);
@@ -448,16 +448,22 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     /// This means guest execution will never terminate (either successfully or
                     /// unsuccessfully) if `self` is not in its canonical form.
                     // is_eq_mod enforces `self` is less than `modulus`
-                    fn assert_unique(&self) {
+                    fn assert_reduced(&self) {
                         // This must not be optimized out
                         let _ = core::hint::black_box(PartialEq::eq(self, self));
                     }
 
-                    fn reduce(&mut self) {
-                        // Honest host will set the value to its canonical form after addition
-                        self.add_assign(&Self::ZERO);
-                        // Guest execution will never terminate for a dishonest host
-                        self.assert_unique();
+                    fn is_reduced(&self) -> bool {
+                        // limbs are little endian
+                        for (x_limb, p_limb) in self.0.iter().rev().zip(Self::MODULUS.iter().rev()) {
+                            if x_limb < p_limb {
+                                return true;
+                            } else if x_limb > p_limb {
+                                return false;
+                            }
+                        }
+                        // At this point, all limbs are equal
+                        false
                     }
                 }
 

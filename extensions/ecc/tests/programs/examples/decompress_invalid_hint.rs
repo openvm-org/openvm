@@ -107,7 +107,7 @@ impl Secp256k1PointWrapper {
 
         if hint.possible {
             // ensure y < modulus
-            hint.sqrt.assert_unique();
+            hint.sqrt.assert_reduced();
 
             if hint.sqrt.as_le_bytes()[0] & 1 != *rec_id & 1 {
                 None
@@ -117,7 +117,7 @@ impl Secp256k1PointWrapper {
             }
         } else {
             // ensure sqrt < modulus
-            hint.sqrt.assert_unique();
+            hint.sqrt.assert_reduced();
 
             let alpha = (x * x * x) + (x * &Secp256k1Point::CURVE_A) + &Secp256k1Point::CURVE_B;
             if &hint.sqrt * &hint.sqrt == alpha * Secp256k1Point::get_non_qr() {
@@ -184,7 +184,7 @@ impl MyCurvePointWrapper {
 
         if hint.possible {
             // ensure proof fails if y >= modulus
-            hint.sqrt.assert_unique();
+            hint.sqrt.assert_reduced();
 
             if hint.sqrt.as_le_bytes()[0] & 1 != *rec_id & 1 {
                 None
@@ -194,7 +194,7 @@ impl MyCurvePointWrapper {
             }
         } else {
             // ensure proof fails if sqrt * sqrt != alpha * non_qr
-            hint.sqrt.assert_unique();
+            hint.sqrt.assert_reduced();
 
             let alpha = (x * x * x) + (x * &MyCurvePoint::CURVE_A) + &MyCurvePoint::CURVE_B;
             if &hint.sqrt * &hint.sqrt == alpha * MyCurvePoint::get_non_qr() {

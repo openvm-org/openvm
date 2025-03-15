@@ -75,6 +75,27 @@ pub fn main() {
 
     // Test verification
     recovered_key
+        .clone()
         .verify_prehashed(&prehash, &signature)
         .unwrap();
+
+    // Test bad signature
+    let mut bad_sig1 = signature;
+    bad_sig1[..32].copy_from_slice(&[0u8; 32]);
+    let mut bad_sig2 = signature;
+    bad_sig2[32..].copy_from_slice(&[0u8; 32]);
+    let mut bad_sig3 = signature;
+    bad_sig3[..32].copy_from_slice(&[0xff; 32]);
+    let mut bad_sig4 = signature;
+    bad_sig4[32..].copy_from_slice(&[0xff; 32]);
+    for bad_sig in [bad_sig1, bad_sig2, bad_sig3, bad_sig4] {
+        assert!(VerifyingKey::<Secp256k1>::recover_from_prehash_noverify(
+            &prehash, &bad_sig, recid
+        )
+        .is_err());
+        assert!(recovered_key
+            .clone()
+            .verify_prehashed(&prehash, &bad_sig)
+            .is_err());
+    }
 }

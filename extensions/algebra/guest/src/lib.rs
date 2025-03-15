@@ -211,16 +211,10 @@ pub trait IntMod:
     ///
     /// This function should enforce that guest execution proceeds **if and only if** `self`
     /// is in the unique representation less than the modulus.
-    fn assert_unique(&self);
+    fn assert_reduced(&self);
 
-    /// This function is mostly for internal use in other internal implementations.
-    /// Normal users are not advised to use it.
-    ///
-    /// If `self` was directly constructed from a raw representation
-    /// and not in its canonical unique form (e.g., less than the modulus),
-    /// this function will "reduce" `self` to its canonical form and also
-    /// call `assert_unique`.
-    fn reduce(&mut self);
+    /// Is the integer representation of `self` less than the modulus?
+    fn is_reduced(&self) -> bool;
 }
 
 // Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/ops/trait.Reduce.html

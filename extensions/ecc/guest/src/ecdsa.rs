@@ -167,10 +167,12 @@ where
         // Note: Scalar internally stores using little endian
         let r = Scalar::<C>::from_be_bytes(r_be);
         let s = Scalar::<C>::from_be_bytes(s_be);
-        // The PartialEq implementation of Scalar: IntMod will constrain `r, s`
-        // are in the canonical unique form (i.e., less than the modulus).
-        assert_ne!(r, Scalar::<C>::ZERO);
-        assert_ne!(s, Scalar::<C>::ZERO);
+        if !r.is_reduced() || !s.is_reduced() {
+            return Err(Error::new());
+        }
+        if r == Scalar::<C>::ZERO || s == Scalar::<C>::ZERO {
+            return Err(Error::new());
+        }
 
         // Perf: don't use bits2field from ::ecdsa
         let z = Scalar::<C>::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
@@ -212,10 +214,12 @@ where
         // Note: Scalar internally stores using little endian
         let r = Scalar::<C>::from_be_bytes(r_be);
         let s = Scalar::<C>::from_be_bytes(s_be);
-        // The PartialEq implementation of Scalar: IntMod will constrain `r, s`
-        // are in the canonical unique form (i.e., less than the modulus).
-        assert_ne!(r, Scalar::<C>::ZERO);
-        assert_ne!(s, Scalar::<C>::ZERO);
+        if !r.is_reduced() || !s.is_reduced() {
+            return Err(Error::new());
+        }
+        if r == Scalar::<C>::ZERO || s == Scalar::<C>::ZERO {
+            return Err(Error::new());
+        }
 
         // Perf: don't use bits2field from ::ecdsa
         let z = <C as IntrinsicCurve>::Scalar::from_be_bytes(
@@ -233,6 +237,7 @@ where
             return Err(Error::new());
         }
         let (x_1, _) = R.into_coords();
+        // Scalar and Coordinate may be different byte lengths, so we use an inefficient reduction
         let x_mod_n = Scalar::<C>::reduce_le_bytes(x_1.as_le_bytes());
         if x_mod_n == r {
             Ok(())
