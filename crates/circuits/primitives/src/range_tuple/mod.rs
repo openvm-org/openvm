@@ -8,6 +8,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -26,7 +27,8 @@ pub mod tests;
 
 pub use bus::*;
 
-#[derive(Default, Copy, Clone)]
+#[repr(C)]
+#[derive(Default, Copy, Clone, AlignedBorrow)]
 pub struct RangeTupleCols<T> {
     /// Number of range checks requested for each tuple combination
     pub mult: T,

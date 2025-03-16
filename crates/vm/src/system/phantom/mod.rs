@@ -46,6 +46,7 @@ pub struct PhantomAir {
     pub phantom_opcode: VmOpcode,
 }
 
+#[repr(C)]
 #[derive(AlignedBorrow, Copy, Clone, Serialize, Deserialize)]
 pub struct PhantomCols<T> {
     pub pc: T,

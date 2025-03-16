@@ -23,6 +23,7 @@ pub use crate::range::RangeCheckBus;
 #[cfg(test)]
 mod tests;
 
+#[repr(C)]
 #[derive(Copy, Clone, Default, AlignedBorrow)]
 pub struct RangeGateCols<T> {
     /// Column with sequential values from 0 to range_max-1
