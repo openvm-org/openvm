@@ -20,8 +20,8 @@ pub mod transpiled_fibonacci;
 
 fn main() {
     println!("Hello, world!");
-    compile_and_transpile_fibonacci();
-    // test_fibonacci();
+    // compile_and_transpile_fibonacci();
+    test_fibonacci();
 
     /*let x = true;
     let y = false;

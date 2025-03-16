@@ -7,7 +7,7 @@ pub struct Tracker {}
 #[derive(Clone, Copy, Default, Debug)]
 pub struct TLRef(usize);
 #[derive(Clone, Copy, Default, Debug)]
-pub struct TLArray(usize);
+pub struct TLArray(usize, usize);
 #[derive(Default, Debug)]
 pub struct Memory<T: Copy + Clone> {
     pub references: Vec<T>,
@@ -29,13 +29,11 @@ impl<T: Copy + Clone> Memory<T> {
         let index = self.arrays.len();
         self.arrays.push(vec![]);
         self.array_timestamps.push(0);
-        TLArray(index)
+        TLArray(index, 0)
     }
-    pub fn append_under_construction_array(&mut self, array: TLArray, value: T) {
+    pub fn append_under_construction_array(&mut self, array: TLArray, value: T) -> TLArray {
         self.arrays[array.0].push(value);
-    }
-    pub fn finalize_array(&mut self, array: TLArray) -> TLArray {
-        array
+        TLArray(array.0, array.1 + 1)
     }
     pub fn array_access(&self, array: TLArray, index: usize) -> T {
         self.arrays[array.0][index]
@@ -51,11 +49,11 @@ pub fn isize_to_field_elem(x: isize) -> F {
 }
 #[derive(Default, Debug)]
 pub struct TLFunction_fibonacci {
-    pub a: F,
-    pub y_0_False: F,
-    pub n: F,
     pub x_0_False: F,
+    pub y_0_False: F,
     pub b: F,
+    pub a: F,
+    pub n: F,
     pub scope_0_True: bool,
     pub scope_0_False: bool,
     pub callee_0: Box<Option<TLFunction_fibonacci>>,

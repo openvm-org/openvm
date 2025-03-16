@@ -175,13 +175,19 @@ impl ScopeContainer {
         }
         scope.active
     }
-    pub fn activate_scopes(&mut self, path: &ScopePath, index: usize, constructors: Vec<String>) {
+    pub fn activate(&mut self) {
+        self.active = true;
+    }
+    pub fn activate_children(&mut self, path: &ScopePath, index: usize, constructors: Vec<String>) {
         let mut scope = self;
         for (i, name) in path.0.iter() {
             scope = scope.children.get_mut(*i).unwrap().get_mut(name).unwrap();
         }
         for constructor in constructors {
-            scope.children[index].get_mut(&constructor).unwrap().active = true;
+            scope.children[index]
+                .get_mut(&constructor)
+                .unwrap()
+                .activate();
         }
     }
     pub fn define(

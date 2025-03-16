@@ -27,7 +27,7 @@ impl FlattenedFunction {
             let FlatMatch {
                 index, branches, ..
             } = &self.matches[flat_index];
-            root_container.root_scope.activate_scopes(
+            root_container.root_scope.activate_children(
                 scope,
                 *index,
                 branches

@@ -346,9 +346,10 @@ impl FlattenedFunction {
         for i in 0..self.function_calls.len() {
             disp_atoms.push(Atom::PartialFunctionCall(
                 i,
-                root_container.current_function.stages[0].clone(),
+                root_container.current_function.stages[0],
             ));
         }
+        root_container.root_scope.activate();
 
         for stage in root_container.current_function.stages.clone() {
             let mut ordered_atoms = Vec::new();

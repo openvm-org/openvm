@@ -100,7 +100,13 @@ impl ExpressionContainer {
                     vec![name.clone()]
                 }
             }
-            Expression::EmptyConstArray { elem_type } => elem_type.variable_dependencies(),
+            Expression::EmptyConstArray { elem_type } => {
+                if dependency_type == DependencyType::Declaration {
+                    elem_type.variable_dependencies()
+                } else {
+                    vec![]
+                }
+            }
             _ => self
                 .children()
                 .iter()
@@ -237,7 +243,7 @@ impl FlattenedFunction {
             && self
                 .children(atom)
                 .into_iter()
-                .flat_map(|child| child.dependencies(DependencyType::Declaration))
+                .flat_map(|child| child.dependencies(DependencyType::Definition))
                 .all(|dependency| root_container.root_scope.is_defined(scope, &dependency))
             && self.declared_names(atom).into_iter().all(|declared_name| {
                 declared_name.defines
@@ -250,7 +256,7 @@ impl FlattenedFunction {
         let scope = self.scope(atom);
         self.children(atom)
             .into_iter()
-            .flat_map(|child| child.dependencies(DependencyType::Declaration))
+            .flat_map(|child| child.dependencies(DependencyType::Representation))
             .all(|dependency| {
                 root_container.root_scope.is_represented(
                     scope,
