@@ -22,7 +22,7 @@ jobs:
   tests:
     runs-on:
       - runs-on=${{ github.run_id }}
-      - family=m7a.48xlarge
+      - family=m7a.24xlarge
       - disk=large
       - extras=s3-cache
 
