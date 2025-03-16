@@ -732,6 +732,9 @@ impl FlattenedFunction {
                         )?;
                     }
                     StatementVariant::EmptyUnderConstructionArray { array, elem_type } => {
+                        root_container
+                            .type_set
+                            .check_type_exists(elem_type, parser_metadata)?;
                         array.resolve_definition_top_down(
                             &Type::UnderConstructionArray(Box::new(elem_type.clone())),
                             root_container,
