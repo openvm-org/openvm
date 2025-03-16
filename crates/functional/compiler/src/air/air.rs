@@ -71,7 +71,8 @@ pub struct Constraint {
 #[derive(Clone, Copy)]
 pub enum Bus {
     Function,
-    Memory,
+    Reference,
+    Array,
 }
 
 #[derive(Clone, Copy)]

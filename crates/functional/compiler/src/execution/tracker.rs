@@ -2,12 +2,12 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 use crate::{
-    execution::{constants::*, helpers::rust_helpers, memory::rust_memory},
-    folder1::{
+    core::{
         ir::{AlgebraicTypeDeclaration, Type, BOOLEAN_TYPE_NAME},
         stage1::Stage2Program,
         type_resolution::TypeSet,
     },
+    execution::{constants::*, helpers::rust_helpers, memory::rust_memory},
 };
 
 pub fn rust_tracker(types_in_memory: Vec<Type>) -> TokenStream {

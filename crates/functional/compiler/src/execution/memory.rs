@@ -12,14 +12,13 @@ pub fn rust_memory() -> TokenStream {
     let dereference = ident(DEREFERENCE);
     let create_empty_under_construction_array = ident(CREATE_EMPTY_UNDER_CONSTRUCTION_ARRAY);
     let append_under_construction_array = ident(APPEND_UNDER_CONSTRUCTION_ARRAY);
-    let finalize_array = ident(FINALIZE_ARRAY);
     let array_access = ident(ARRAY_ACCESS);
 
     quote! {
         #[derive(Clone, Copy, Default, Debug)]
         pub struct #reference_struct(usize);
         #[derive(Clone, Copy, Default, Debug)]
-        pub struct #array_struct(usize);
+        pub struct #array_struct(usize, usize);
 
         #[derive(Default, Debug)]
         pub struct #memory_struct<T: Copy + Clone> {
@@ -45,15 +44,12 @@ pub fn rust_memory() -> TokenStream {
                 let index = self.arrays.len();
                 self.arrays.push(vec![]);
                 self.array_timestamps.push(0);
-                #array_struct(index)
+                #array_struct(index, 0)
             }
 
-            pub fn #append_under_construction_array(&mut self, array: #array_struct, value: T) {
+            pub fn #append_under_construction_array(&mut self, array: #array_struct, value: T) -> #array_struct{
                 self.arrays[array.0].push(value);
-            }
-
-            pub fn #finalize_array(&mut self, array: #array_struct) -> #array_struct {
-                array
+                #array_struct(array.0, array.1 + 1)
             }
 
             pub fn #array_access(&self, array: #array_struct, index: usize) -> T {

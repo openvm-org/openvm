@@ -1,15 +1,14 @@
 use std::ops::BitAndAssign;
 
-use super::file2_tree::ExpressionContainer;
-use crate::{folder1::error::CompilationError, parser::metadata::ParserMetadata};
+use crate::{core::containers::ExpressionContainer, parser::metadata::ParserMetadata};
 
 #[derive(Clone, Debug)]
 pub enum Type {
     Field,
     NamedType(String),
     Reference(Box<Type>),
-    Array(Box<Type>),
-    UnderConstructionArray(Box<Type>),
+    AppendablePrefix(Box<Type>, Box<ExpressionContainer>),
+    ReadablePrefix(Box<Type>, Box<ExpressionContainer>),
     Unmaterialized(Box<Type>),
     ConstArray(Box<Type>, usize),
 }
@@ -29,10 +28,8 @@ impl PartialEq for Type {
             (Type::Field, Type::Field) => true,
             (Type::NamedType(left), Type::NamedType(right)) => left == right,
             (Type::Reference(left), Type::Reference(right)) => left.eq(right),
-            (Type::Array(left), Type::Array(right)) => left.eq(right),
-            (Type::UnderConstructionArray(left), Type::UnderConstructionArray(right)) => {
-                left.eq(right)
-            }
+            (Type::ReadablePrefix(left, _), Type::ReadablePrefix(right, _)) => left.eq(right),
+            (Type::AppendablePrefix(left, _), Type::AppendablePrefix(right, _)) => left.eq(right),
             (Type::Unmaterialized(left), Type::Unmaterialized(right)) => {
                 left.eq_unmaterialized(right)
             }
@@ -55,8 +52,10 @@ impl Type {
                 (Type::Field, Type::Field) => true,
                 (Type::NamedType(left), Type::NamedType(right)) => left == right,
                 (Type::Reference(left), Type::Reference(right)) => left.eq_unmaterialized(right),
-                (Type::Array(left), Type::Array(right)) => left.eq_unmaterialized(right),
-                (Type::UnderConstructionArray(left), Type::UnderConstructionArray(right)) => {
+                (Type::ReadablePrefix(left, _), Type::ReadablePrefix(right, _)) => {
+                    left.eq_unmaterialized(right)
+                }
+                (Type::AppendablePrefix(left, _), Type::AppendablePrefix(right, _)) => {
                     left.eq_unmaterialized(right)
                 }
                 (Type::ConstArray(left, len), Type::ConstArray(right, len2)) => {
@@ -105,6 +104,9 @@ pub enum Expression {
     },
     Dematerialized {
         value: ExpressionContainer,
+    },
+    ReadableViewOfPrefix {
+        appendable_prefix: ExpressionContainer,
     },
     Eq {
         left: ExpressionContainer,
@@ -167,22 +169,18 @@ pub enum StatementVariant {
         data: ExpressionContainer,
         reference: ExpressionContainer,
     },
-    EmptyUnderConstructionArray {
-        array: ExpressionContainer,
+    EmptyPrefix {
+        prefix: ExpressionContainer,
         elem_type: Type,
     },
-    UnderConstructionArrayPrepend {
-        new_array: ExpressionContainer,
+    PrefixAppend {
+        new_prefix: ExpressionContainer,
+        old_prefix: ExpressionContainer,
         elem: ExpressionContainer,
-        old_array: ExpressionContainer,
     },
-    ArrayFinalization {
-        finalized: ExpressionContainer,
-        under_construction: ExpressionContainer,
-    },
-    ArrayAccess {
+    PrefixAccess {
         elem: ExpressionContainer,
-        array: ExpressionContainer,
+        prefix: ExpressionContainer,
         index: ExpressionContainer,
     },
 }
@@ -286,23 +284,6 @@ impl Material {
         match self {
             Material::Materialized => type1.eq(type2),
             Material::Dematerialized => type1.eq_unmaterialized(type2),
-        }
-    }
-
-    pub fn assert_type(
-        &self,
-        type1: &Type,
-        type2: &Type,
-        parser_metadata: &ParserMetadata,
-    ) -> Result<(), CompilationError> {
-        if !self.same_type(type1, type2) {
-            Err(CompilationError::UnexpectedType(
-                parser_metadata.clone(),
-                type1.clone(),
-                type2.clone(),
-            ))
-        } else {
-            Ok(())
         }
     }
 

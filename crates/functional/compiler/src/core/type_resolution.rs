@@ -4,7 +4,10 @@ use super::{
     error::CompilationError,
     ir::{AlgebraicTypeDeclaration, Type},
 };
-use crate::{folder1::ir::Material, parser::metadata::ParserMetadata};
+use crate::{
+    core::{containers::ExpressionContainer, ir::Material},
+    parser::metadata::ParserMetadata,
+};
 
 #[derive(Clone, Debug)]
 pub struct TypeSet {
@@ -29,7 +32,7 @@ impl TypeSet {
                     type_declaration.variants.iter().all(|variant| {
                         variant.components.iter().all(|component| {
                             component
-                                .dependencies()
+                                .size_dependencies()
                                 .iter()
                                 .all(|dependency| defined_types.contains(dependency))
                         })
@@ -129,49 +132,22 @@ impl TypeSet {
             self.get_constructor_type_name(constructor, parser_metadata)?,
         ))
     }
-
-    pub fn check_type_exists(
-        &self,
-        tipo: &Type,
-        parser_metadata: &ParserMetadata,
-    ) -> Result<(), CompilationError> {
-        match tipo {
-            Type::Field => Ok(()),
-            Type::NamedType(name) => {
-                if self.algebraic_types.contains_key(name) {
-                    Ok(())
-                } else {
-                    Err(CompilationError::UndefinedType(
-                        parser_metadata.clone(),
-                        name.clone(),
-                    ))
-                }
-            }
-            Type::Reference(inside) => self.check_type_exists(&inside, parser_metadata),
-            Type::Array(inside) => self.check_type_exists(&inside, parser_metadata),
-            Type::UnderConstructionArray(inside) => {
-                self.check_type_exists(&inside, parser_metadata)
-            }
-            Type::Unmaterialized(inside) => self.check_type_exists(&inside, parser_metadata),
-            Type::ConstArray(inside, _) => self.check_type_exists(&inside, parser_metadata),
-        }
-    }
 }
 
 impl Type {
-    pub fn dependencies(&self) -> Vec<String> {
+    pub fn size_dependencies(&self) -> Vec<String> {
         match self {
             Type::NamedType(name) => vec![name.clone()],
-            Type::Unmaterialized(inside) => inside.dependencies(),
-            Type::ConstArray(inside, _) => inside.dependencies(),
+            Type::Unmaterialized(inside) => inside.size_dependencies(),
+            Type::ConstArray(inside, _) => inside.size_dependencies(),
             _ => vec![],
         }
     }
     pub fn contains_reference(&self, type_set: &TypeSet, only_materialized: bool) -> bool {
         match self {
             Type::Reference(_) => true,
-            Type::Array(_) => true,
-            Type::UnderConstructionArray(_) => true,
+            Type::ReadablePrefix(..) => true,
+            Type::AppendablePrefix(..) => true,
             Type::Field => false,
             Type::NamedType(name) => {
                 let algebraic_type = type_set
@@ -193,11 +169,11 @@ impl Type {
         }
     }
 
-    pub fn contains_under_construction_array(&self, type_set: &TypeSet) -> bool {
+    pub fn contains_appendable_prefix(&self, type_set: &TypeSet) -> bool {
         match self {
-            Type::UnderConstructionArray(_) => true,
-            Type::Reference(value) => value.contains_under_construction_array(type_set),
-            Type::Array(elem) => elem.contains_under_construction_array(type_set),
+            Type::AppendablePrefix(..) => true,
+            Type::Reference(value) => value.contains_appendable_prefix(type_set),
+            Type::ReadablePrefix(elem, _) => elem.contains_appendable_prefix(type_set),
             Type::Field => false,
             Type::NamedType(name) => {
                 let algebraic_type = type_set
@@ -205,15 +181,15 @@ impl Type {
                     .unwrap();
                 for variant in algebraic_type.variants.iter() {
                     for component in variant.components.iter() {
-                        if component.contains_under_construction_array(type_set) {
+                        if component.contains_appendable_prefix(type_set) {
                             return true;
                         }
                     }
                 }
                 false
             }
-            Type::ConstArray(inside, _) => inside.contains_under_construction_array(type_set),
-            Type::Unmaterialized(inside) => inside.contains_under_construction_array(type_set),
+            Type::ConstArray(inside, _) => inside.contains_appendable_prefix(type_set),
+            Type::Unmaterialized(inside) => inside.contains_appendable_prefix(type_set),
         }
     }
 
@@ -234,15 +210,15 @@ impl Type {
         }
     }
 
-    pub fn get_under_construction_array_type(
+    pub fn get_appendable_prefix_type(
         &self,
         material: Material,
         parser_metadata: &ParserMetadata,
-    ) -> Result<&Type, CompilationError> {
+    ) -> Result<(&Type, &ExpressionContainer), CompilationError> {
         match (self, material) {
-            (Type::UnderConstructionArray(value), _) => Ok(value),
+            (Type::AppendablePrefix(elem_type, length), _) => Ok((elem_type, length)),
             (Type::Unmaterialized(inside), Material::Dematerialized) => {
-                inside.get_under_construction_array_type(material, parser_metadata)
+                inside.get_appendable_prefix_type(material, parser_metadata)
             }
             _ => Err(CompilationError::NotAnUnderConstructionArray(
                 parser_metadata.clone(),
@@ -251,15 +227,15 @@ impl Type {
         }
     }
 
-    pub fn get_array_type(
+    pub fn get_readable_prefix_type(
         &self,
         material: Material,
         parser_metadata: &ParserMetadata,
-    ) -> Result<&Type, CompilationError> {
+    ) -> Result<(&Type, &ExpressionContainer), CompilationError> {
         match (self, material) {
-            (Type::Array(value), _) => Ok(value),
+            (Type::ReadablePrefix(elem_type, length), _) => Ok((elem_type, length)),
             (Type::Unmaterialized(inside), Material::Dematerialized) => {
-                inside.get_array_type(material, parser_metadata)
+                inside.get_readable_prefix_type(material, parser_metadata)
             }
             _ => Err(CompilationError::NotAnArray(
                 parser_metadata.clone(),

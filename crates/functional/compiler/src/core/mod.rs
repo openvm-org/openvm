@@ -1,0 +1,13 @@
+pub mod atom_resolution;
+pub mod containers;
+mod declaration_resolution;
+pub mod dependency;
+pub mod error;
+pub mod expression_resolution;
+pub mod file3;
+pub mod function_resolution;
+pub mod inlining;
+pub mod ir;
+pub mod scope;
+pub mod stage1;
+pub mod type_resolution;

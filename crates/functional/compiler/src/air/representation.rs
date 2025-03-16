@@ -5,13 +5,14 @@ use itertools::Itertools;
 use crate::{
     air::{
         air::{AirExpression, Bus, Direction, Interaction},
-        constructor::{AirConstructor, TimestampUsage},
+        constructor::AirConstructor,
     },
-    folder1::{
-        file2_tree::{DeclarationSet, ExpressionContainer, ScopePath},
+    core::{
+        containers::{DeclarationSet, ExpressionContainer},
         file3::{FlatFunctionCall, FlatMatch, FlatStatement},
         function_resolution::Stage,
         ir::{ArithmeticOperator, BooleanOperator, Expression, Material, StatementVariant, Type},
+        scope::ScopePath,
         type_resolution::TypeSet,
     },
     parser::metadata::ParserMetadata,
@@ -60,7 +61,7 @@ impl<'a> RepresentationTable<'a> {
             declaration_set,
         }
     }
-    fn get_representation(&mut self, scope: &ScopePath, name: &str) -> Vec<AirExpression> {
+    pub fn get_representation(&self, scope: &ScopePath, name: &str) -> Vec<AirExpression> {
         for prefix in scope.prefixes().rev() {
             let representation = self
                 .representations
@@ -151,7 +152,7 @@ impl ExpressionContainer {
     pub fn calc_representation(
         &self,
         type_set: &TypeSet,
-        representation_table: &mut RepresentationTable,
+        representation_table: &RepresentationTable,
         scope: &ScopePath,
     ) -> Vec<AirExpression> {
         match self.expression.as_ref() {
@@ -203,6 +204,9 @@ impl ExpressionContainer {
                 }]
             }
             Expression::Dematerialized { .. } => vec![],
+            Expression::ReadableViewOfPrefix { appendable_prefix } => {
+                appendable_prefix.calc_representation(type_set, representation_table, scope)
+            }
             Expression::Eq { .. } => unreachable!(),
             Expression::EmptyConstArray { .. } => vec![],
             Expression::ConstArray { elements } => elements
@@ -662,11 +666,14 @@ impl FlatStatement {
                 StatementVariant::Reference { reference, data } => {
                     let data_representation =
                         data.calc_representation(type_set, representation_table, &self.scope);
-                    let reference_representation = reference.create_representation_top_down(
+                    let reference_representation =
+                        vec![air_constructor.get_reference_address_expression(index)];
+                    reference.represent_top_down_fixed(
                         type_set,
                         representation_table,
                         air_constructor,
                         &self.scope,
+                        &reference_representation,
                     );
                     let multiplicity_cell =
                         air_constructor.new_multiplicity_cell(index, &self.scope);
@@ -676,7 +683,7 @@ impl FlatStatement {
                     air_constructor.add_scoped_interaction(
                         &self.scope,
                         Interaction {
-                            bus: Bus::Memory,
+                            bus: Bus::Reference,
                             direction: Direction::Receive,
                             multiplicity: AirExpression::single_cell(multiplicity_cell),
                             fields,
@@ -698,89 +705,48 @@ impl FlatStatement {
                     air_constructor.add_scoped_interaction(
                         &self.scope,
                         Interaction {
-                            bus: Bus::Memory,
+                            bus: Bus::Reference,
                             direction: Direction::Send,
                             multiplicity: AirExpression::one(),
                             fields,
                         },
                     );
                 }
-                StatementVariant::EmptyUnderConstructionArray { array, .. } => {
-                    let mut representation = vec![None, Some(AirExpression::zero())];
-                    array.represent_top_down(
+                StatementVariant::EmptyPrefix { prefix: array, .. } => {
+                    let representation =
+                        vec![air_constructor.get_reference_address_expression(index)];
+                    array.represent_top_down_fixed(
                         type_set,
                         representation_table,
                         air_constructor,
                         &self.scope,
-                        &mut representation,
-                        false,
+                        &representation,
                     );
                 }
-                StatementVariant::UnderConstructionArrayPrepend {
-                    new_array,
-                    elem,
-                    old_array,
+                StatementVariant::PrefixAppend {
+                    new_prefix,
+                    elem: _,
+                    old_prefix,
                 } => {
-                    let old_array_representation =
-                        old_array.calc_representation(type_set, representation_table, &self.scope);
-                    let elem_representation =
-                        elem.calc_representation(type_set, representation_table, &self.scope);
-                    let mut new_array_representation = vec![
-                        Some(old_array_representation[0].minus(&AirExpression::one())),
-                        Some(old_array_representation[1].plus(&AirExpression::one())),
-                    ];
-                    new_array.represent_top_down(
-                        type_set,
-                        representation_table,
-                        air_constructor,
-                        &self.scope,
-                        &mut new_array_representation,
-                        false,
-                    );
-
-                    let multiplicity_cell =
-                        air_constructor.new_multiplicity_cell(index, &self.scope);
-                    let mut fields = vec![];
-                    fields.push(new_array_representation[0].as_ref().unwrap().clone());
-                    fields.extend(elem_representation);
-                    air_constructor.add_scoped_interaction(
-                        &self.scope,
-                        Interaction {
-                            bus: Bus::Memory,
-                            direction: Direction::Receive,
-                            multiplicity: AirExpression::single_cell(multiplicity_cell),
-                            fields,
-                        },
-                    );
-                }
-                StatementVariant::ArrayFinalization {
-                    finalized,
-                    under_construction,
-                } => {
-                    let under_construction_representation = under_construction.calc_representation(
-                        type_set,
-                        representation_table,
-                        &self.scope,
-                    );
-                    finalized.represent_top_down_fixed(
-                        type_set,
-                        representation_table,
-                        air_constructor,
-                        &self.scope,
-                        &under_construction_representation,
-                    );
-                    let array_length = &under_construction_representation[1];
-                    let (before, after) = &air_constructor.timestamp_before_after
-                        [&TimestampUsage::FinalizeArray(index)];
-                    air_constructor.add_scoped_single_constraint(
-                        &self.scope,
-                        before.plus(array_length),
-                        AirExpression::single_cell(*after),
-                    );
-                }
-                StatementVariant::ArrayAccess { array, index, elem } => {
                     let array_representation =
-                        array.calc_representation(type_set, representation_table, &self.scope);
+                        old_prefix.calc_representation(type_set, representation_table, &self.scope);
+
+                    new_prefix.represent_top_down_fixed(
+                        type_set,
+                        representation_table,
+                        air_constructor,
+                        &self.scope,
+                        &array_representation,
+                    );
+                }
+                // TODO: check bounds (lower is automatic, upper is not checked) / add unsafe version
+                StatementVariant::PrefixAccess {
+                    prefix,
+                    index,
+                    elem,
+                } => {
+                    let prefix_representation =
+                        prefix.calc_representation(type_set, representation_table, &self.scope);
                     let index_representation =
                         index.calc_representation(type_set, representation_table, &self.scope);
                     let elem_representation = elem.create_representation_top_down(
@@ -789,13 +755,14 @@ impl FlatStatement {
                         air_constructor,
                         &self.scope,
                     );
-                    let pointer = array_representation[0].plus(&index_representation[0]);
-                    let mut fields = vec![pointer];
+                    let mut fields = vec![];
+                    fields.extend(prefix_representation);
+                    fields.extend(index_representation);
                     fields.extend(elem_representation);
                     air_constructor.add_scoped_interaction(
                         &self.scope,
                         Interaction {
-                            bus: Bus::Memory,
+                            bus: Bus::Array,
                             direction: Direction::Send,
                             multiplicity: AirExpression::one(),
                             fields,

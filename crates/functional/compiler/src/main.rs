@@ -1,6 +1,7 @@
+use core::containers::ExpressionContainer;
+
 use crate::{
-    folder1::{
-        file2_tree::ExpressionContainer,
+    core::{
         ir::{
             AlgebraicTypeDeclaration, AlgebraicTypeVariant, Argument, ArgumentBehavior,
             ArithmeticOperator, Body, Branch, Expression, Function, FunctionCall, Match, Material,
@@ -12,15 +13,15 @@ use crate::{
 };
 
 pub mod air;
+pub mod core;
 pub mod execution;
-pub mod folder1;
 pub mod parser;
 pub mod transpiled_fibonacci;
 
 fn main() {
     println!("Hello, world!");
-    // compile_and_transpile_fibonacci();
-    test_fibonacci();
+    compile_and_transpile_fibonacci();
+    // test_fibonacci();
 
     /*let x = true;
     let y = false;

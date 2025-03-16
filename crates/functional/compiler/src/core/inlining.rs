@@ -1,14 +1,15 @@
 use std::{collections::HashMap, mem::take};
 
 use super::{
-    file2_tree::{ExpressionContainer, ScopePath},
     file3::{Atom, FlattenedFunction},
     ir::{Expression, StatementVariant},
 };
 use crate::{
-    folder1::{
+    core::{
+        containers::{Assertion, ExpressionContainer},
         file3::{FlatFunctionCall, FlatMatch, FlatStatement, RepresentationOrder},
         ir::Material,
+        scope::ScopePath,
     },
     parser::metadata::ParserMetadata,
 };
@@ -72,9 +73,6 @@ impl FlattenedFunction {
                 self.matches.extend(inlined_callee.matches.clone());
                 self.function_calls
                     .extend(inlined_callee.function_calls.clone());
-                if *material == Material::Materialized && inlined_callee.uses_timestamp {
-                    self.uses_timestamp = true;
-                }
 
                 inline_results.push(InlineResult::Inlined(inlined_callee));
                 num_inlines += 1;
@@ -135,6 +133,9 @@ impl FlattenedFunction {
         }
         for function_call in self.function_calls.iter_mut() {
             function_call.inline(renamer, path_offset, path_prefix, material);
+        }
+        for assertion in self.assertions.iter_mut() {
+            assertion.inline(renamer, path_offset, path_prefix, material);
         }
 
         let mut atom_replacements = HashMap::new();
@@ -250,26 +251,23 @@ impl FlatStatement {
                 data.inline(renamer);
                 reference.inline(renamer);
             }
-            StatementVariant::EmptyUnderConstructionArray { array, .. } => {
+            StatementVariant::EmptyPrefix { prefix: array, .. } => {
                 array.inline(renamer);
             }
-            StatementVariant::UnderConstructionArrayPrepend {
-                new_array,
+            StatementVariant::PrefixAppend {
+                new_prefix: new_array,
                 elem,
-                old_array,
+                old_prefix: old_array,
             } => {
                 new_array.inline(renamer);
                 elem.inline(renamer);
                 old_array.inline(renamer);
             }
-            StatementVariant::ArrayFinalization {
-                finalized,
-                under_construction,
+            StatementVariant::PrefixAccess {
+                elem,
+                prefix: array,
+                index,
             } => {
-                finalized.inline(renamer);
-                under_construction.inline(renamer);
-            }
-            StatementVariant::ArrayAccess { elem, array, index } => {
                 elem.inline(renamer);
                 array.inline(renamer);
                 index.inline(renamer);
@@ -327,6 +325,27 @@ impl FlatFunctionCall {
         for argument in arguments.iter_mut() {
             argument.inline(renamer);
         }
+    }
+}
+
+impl Assertion {
+    pub fn inline(
+        &mut self,
+        renamer: &Renamer,
+        path_offset: usize,
+        path_prefix: &ScopePath,
+        imposed_material: Material,
+    ) {
+        let Assertion {
+            left,
+            right,
+            scope,
+            material,
+        } = self;
+        *material &= imposed_material;
+        scope.prepend(path_prefix, path_offset);
+        left.inline(renamer);
+        right.inline(renamer);
     }
 }
 

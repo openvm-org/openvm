@@ -12,7 +12,6 @@ pub enum CompilationError {
     ReferenceDefinitionMustBeMaterialized(ParserMetadata, String),
     IncorrectNumberOfComponents(ParserMetadata, String, usize, usize),
     IncorrectTypeInComponent(ParserMetadata, String, usize, Type, Type),
-    UnexpectedType(ParserMetadata, Type, Type),
     UnexpectedUnmaterialized(ParserMetadata, Type),
     IncorrectTypeInArithmetic(ParserMetadata, Type),
     ExpectedBoolean(ParserMetadata, Type),
@@ -20,8 +19,7 @@ pub enum CompilationError {
     DuplicateDeclaration(ParserMetadata, String),
     DuplicateDefinition(ParserMetadata, String),
     DuplicateRepresentation(ParserMetadata, String),
-    DuplicateUnderConstructionArrayConsumption(ParserMetadata, String),
-    UnconsumedUnderConstructionArray(ParserMetadata, String),
+    DuplicateAppendablePrefixConsumptions(ParserMetadata, String),
     UndefinedType(ParserMetadata, String),
     UndefinedConstructor(ParserMetadata, String),
 
@@ -37,6 +35,7 @@ pub enum CompilationError {
     IncorrectTypeForArgument(ParserMetadata, String, usize, Type, Type),
     IncorrectTypeForOutArgument(ParserMetadata, usize, Type, Type),
 
+    CannotOrderStatementsForDeclaration(ParserMetadata),
     CannotOrderStatementsForDefinition(ParserMetadata),
     CannotOrderStatementsForRepresentation(ParserMetadata),
     TypesSelfReferential,

@@ -2,14 +2,14 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 use crate::{
-    execution::{
-        constants::*,
-        transpilation::{FieldNamer, VariableNamer},
-    },
-    folder1::{
+    core::{
         file3::{Atom, FlattenedFunction},
         ir::{Material, StatementVariant, Type},
         stage1::Stage2Program,
+    },
+    execution::{
+        constants::*,
+        transpilation::{FieldNamer, VariableNamer},
     },
 };
 
@@ -44,8 +44,8 @@ impl FlattenedFunction {
                             pub #name: #ref_type,
                         })
                     }
-                    StatementVariant::ArrayFinalization { .. } => {
-                        let name = field_namer.finalized_array_name(i);
+                    StatementVariant::PrefixAppend { .. } => {
+                        let name = field_namer.appended_array_name(i);
                         fields.push(quote! {
                             pub #name: #array_type,
                         })
@@ -125,7 +125,7 @@ impl FlattenedFunction {
                 StatementVariant::Reference { data, .. } => {
                     result.push(data.get_type().clone());
                 }
-                StatementVariant::EmptyUnderConstructionArray { elem_type, .. } => {
+                StatementVariant::EmptyPrefix { elem_type, .. } => {
                     result.push(elem_type.clone());
                 }
                 _ => {}

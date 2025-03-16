@@ -1,7 +1,7 @@
 use proc_macro2::{Ident, Span, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 
-use crate::folder1::ir::{Type, BOOLEAN_TYPE_NAME};
+use crate::core::ir::{Type, BOOLEAN_TYPE_NAME};
 
 pub fn ident(s: &str) -> TokenStream {
     TokenStream::from(TokenTree::Ident(Ident::new(s, Span::call_site())))
@@ -21,10 +21,6 @@ pub fn array_type() -> TokenStream {
     ident("TLArray")
 }
 
-pub fn under_construction_array_type() -> TokenStream {
-    ident("UnderConstructionArray")
-}
-
 pub fn type_name(name: &str) -> TokenStream {
     if name == BOOLEAN_TYPE_NAME {
         quote! { bool }
@@ -37,8 +33,8 @@ pub fn type_to_rust(tipo: &Type) -> TokenStream {
     match tipo {
         Type::Field => field_type(),
         Type::Reference(_) => reference_type(),
-        Type::Array(_) => array_type(),
-        Type::UnderConstructionArray(_) => under_construction_array_type(),
+        Type::ReadablePrefix(..) => array_type(),
+        Type::AppendablePrefix(..) => array_type(),
         Type::NamedType(name) => type_name(name),
         Type::Unmaterialized(inner) => type_to_rust(inner),
         Type::ConstArray(elem, length) => {
@@ -53,8 +49,8 @@ pub fn type_to_identifier(tipo: &Type) -> String {
     match tipo {
         Type::Field => "F".to_string(),
         Type::Reference(inner) => format!("Ref_{}", type_to_identifier(inner)),
-        Type::Array(inner) => format!("Array_{}", type_to_identifier(inner)),
-        Type::UnderConstructionArray(inner) => {
+        Type::ReadablePrefix(inner, _) => format!("Array_{}", type_to_identifier(inner)),
+        Type::AppendablePrefix(inner, _) => {
             format!("UnderConstructionArray_{}", type_to_identifier(inner))
         }
         Type::NamedType(name) => name.clone(),
@@ -84,7 +80,6 @@ pub const CREATE_REF: &str = "create_ref";
 pub const DEREFERENCE: &str = "dereference";
 pub const CREATE_EMPTY_UNDER_CONSTRUCTION_ARRAY: &str = "create_empty_under_construction_array";
 pub const APPEND_UNDER_CONSTRUCTION_ARRAY: &str = "append_under_construction_array";
-pub const FINALIZE_ARRAY: &str = "finalize_array";
 pub const ARRAY_ACCESS: &str = "array_access";
 pub const STAGE: &str = "stage";
 
@@ -134,16 +129,6 @@ pub fn prepend_under_construction_array(
     let function_name = ident(APPEND_UNDER_CONSTRUCTION_ARRAY);
     quote! {
         #tracker.#memory.#function_name(#old_array, #elem)
-    }
-}
-
-pub fn finalize_array(tipo: &Type, under_construction: impl ToTokens) -> TokenStream {
-    let type_identifier = type_to_identifier(tipo);
-    let tracker = ident(TRACKER);
-    let memory = ident(&format!("{}_{}", MEMORY, type_identifier));
-    let function_name = ident(FINALIZE_ARRAY);
-    quote! {
-        #tracker.#memory.#function_name(#under_construction)
     }
 }
 

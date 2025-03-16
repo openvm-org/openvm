@@ -3,18 +3,19 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 use crate::{
-    execution::constants::*,
-    folder1::{
-        file2_tree::{DeclarationSet, ExpressionContainer, ScopePath},
+    core::{
+        containers::{DeclarationSet, ExpressionContainer},
         file3::{FlatFunctionCall, FlatMatch, FlatStatement},
         function_resolution::Stage,
         ir::{
             ArithmeticOperator, BooleanOperator, Expression, Material, StatementVariant,
             FALSE_CONSTRUCTOR_NAME, TRUE_CONSTRUCTOR_NAME,
         },
+        scope::ScopePath,
         stage1::Stage2Program,
         type_resolution::TypeSet,
     },
+    execution::constants::*,
     parser::metadata::ParserMetadata,
 };
 
@@ -52,8 +53,8 @@ impl<'a> FieldNamer<'a> {
     pub fn reference_name(&self, index: usize) -> TokenStream {
         ident(&format!("ref_{}", index))
     }
-    pub fn finalized_array_name(&self, index: usize) -> TokenStream {
-        ident(&format!("finalized_array_{}", index))
+    pub fn appended_array_name(&self, index: usize) -> TokenStream {
+        ident(&format!("appended_array_{}", index))
     }
     pub fn callee_name(&self, index: usize) -> TokenStream {
         ident(&format!("callee_{}", index))
@@ -102,8 +103,8 @@ impl<'a> VariableNamer<'a> {
     pub fn reference_name(&self, index: usize) -> TokenStream {
         self.refer_to_field(self.field_namer.reference_name(index))
     }
-    pub fn finalized_array_name(&self, index: usize) -> TokenStream {
-        self.refer_to_field(self.field_namer.finalized_array_name(index))
+    pub fn appended_array_name(&self, index: usize) -> TokenStream {
+        self.refer_to_field(self.field_namer.appended_array_name(index))
     }
     pub fn callee_name(&self, index: usize) -> TokenStream {
         self.refer_to_field(self.field_namer.callee_name(index))
@@ -160,6 +161,9 @@ impl ExpressionContainer {
                 }
             }
             Expression::Dematerialized { value } => value.transpile_defined(scope, namer, type_set),
+            Expression::ReadableViewOfPrefix { appendable_prefix } => {
+                appendable_prefix.transpile_defined(scope, namer, type_set)
+            }
             Expression::Eq { left, right } => {
                 let left = left.transpile_defined(scope, namer, type_set);
                 let right = right.transpile_defined(scope, namer, type_set);
@@ -379,64 +383,59 @@ impl FlatStatement {
                     type_set,
                 )
             }
-            StatementVariant::EmptyUnderConstructionArray { array, elem_type } => array
-                .transpile_top_down(
-                    scope,
-                    &create_empty_under_construction_array(elem_type),
-                    namer,
-                    type_set,
-                ),
-            StatementVariant::UnderConstructionArrayPrepend {
-                new_array,
+            StatementVariant::EmptyPrefix {
+                prefix: array,
+                elem_type,
+            } => array.transpile_top_down(
+                scope,
+                &create_empty_under_construction_array(elem_type),
+                namer,
+                type_set,
+            ),
+            StatementVariant::PrefixAppend {
+                new_prefix: new_array,
                 elem,
-                old_array,
+                old_prefix: old_array,
             } => {
                 let tipo = elem.get_type();
                 let old_array = old_array.transpile_defined(scope, &namer, type_set);
-                let elem = elem.transpile_defined(scope, &namer, type_set);
-                new_array.transpile_top_down(
-                    scope,
-                    &prepend_under_construction_array(tipo, old_array, elem),
-                    namer,
-                    type_set,
-                )
-            }
-            StatementVariant::ArrayFinalization {
-                finalized: finalized_expression,
-                under_construction,
-            } => {
-                let tipo = under_construction.get_type();
-                let under_construction =
-                    under_construction.transpile_defined(scope, &namer, type_set);
-                let finalized = finalize_array(tipo, under_construction);
                 let (init, this) = match material {
                     Material::Materialized => {
-                        let finalized_array_name = namer.finalized_array_name(index);
+                        let array_name = namer.appended_array_name(index);
                         (
                             quote! {
-                                #finalized_array_name = #finalized;
+                                #array_name = #old_array;
                             },
-                            finalized_array_name,
+                            array_name,
                         )
                     }
                     Material::Dematerialized => {
                         let temp_name = namer.new_temporary_name();
                         (
                             quote! {
-                                let #temp_name = #finalized;
+                                let #temp_name = #old_array;
                             },
                             temp_name,
                         )
                     }
                 };
-                let following =
-                    finalized_expression.transpile_top_down(scope, &this, namer, type_set);
+                let elem = elem.transpile_defined(scope, namer, type_set);
+                let following = new_array.transpile_top_down(
+                    scope,
+                    &prepend_under_construction_array(tipo, this, elem),
+                    namer,
+                    type_set,
+                );
                 quote! {
                     #init
                     #following
                 }
             }
-            StatementVariant::ArrayAccess { elem, array, index } => {
+            StatementVariant::PrefixAccess {
+                elem,
+                prefix: array,
+                index,
+            } => {
                 let tipo = elem.get_type();
                 let array = array.transpile_defined(scope, &namer, type_set);
                 let index = index.transpile_defined(scope, &namer, type_set);

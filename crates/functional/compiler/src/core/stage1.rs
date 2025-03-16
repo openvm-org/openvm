@@ -33,44 +33,8 @@ pub fn stage1(program: Program) -> Result<Stage2Program, CompilationError> {
         }
     }
 
-    loop {
-        let mut updated = false;
-        let function_names = functions.keys().cloned().collect::<Vec<_>>();
-        for name in function_names {
-            let mut function = functions.remove(&name).unwrap();
-            updated |= function.update_uses_timestamp(&functions);
-            functions.insert(name, function);
-        }
-        if !updated {
-            break;
-        }
-    }
-
     Ok(Stage2Program {
         types: (*types).clone(),
         functions,
     })
-}
-
-impl FlattenedFunction {
-    pub fn update_uses_timestamp(
-        &mut self,
-        functions: &HashMap<String, FlattenedFunction>,
-    ) -> bool {
-        if self.uses_timestamp {
-            return false;
-        }
-
-        for function_call in self.function_calls.iter() {
-            if function_call.function_name != self.name {
-                let callee = &functions[&function_call.function_name];
-                if callee.uses_timestamp {
-                    self.uses_timestamp = true;
-                    return true;
-                }
-            }
-        }
-
-        false
-    }
 }
