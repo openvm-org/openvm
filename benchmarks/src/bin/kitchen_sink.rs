@@ -1,7 +1,8 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use clap::Parser;
 use eyre::Result;
+use num_bigint::BigUint;
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use openvm_benchmarks::utils::BenchmarkCli;
 use openvm_circuit::arch::{instructions::exe::VmExe, SystemConfig};
@@ -30,6 +31,7 @@ fn main() -> Result<()> {
         .sha256(Default::default())
         .bigint(Default::default())
         .modular(ModularExtension::new(vec![
+            BigUint::from_str("1000000000000000003").unwrap(),
             SECP256K1_CONFIG.modulus.clone(),
             SECP256K1_CONFIG.scalar.clone(),
             P256_CONFIG.modulus.clone(),
@@ -38,6 +40,8 @@ fn main() -> Result<()> {
             bn_config.scalar.clone(),
             bls_config.modulus.clone(),
             bls_config.scalar.clone(),
+            BigUint::from(2u32).pow(61) - BigUint::from(1u32),
+            BigUint::from(7u32),
         ]))
         .fp2(Fp2Extension::new(vec![
             bn_config.modulus.clone(),

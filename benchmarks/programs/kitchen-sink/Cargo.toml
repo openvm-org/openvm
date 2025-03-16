@@ -21,6 +21,7 @@ openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest", default
 openvm-sha256-guest = { path = "../../../extensions/sha256/guest", default-features = false }
 openvm-bigint-guest = { path = "../../../extensions/bigint/guest", default-features = false }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+serde = "1.0"
 
 [features]
 default = []
