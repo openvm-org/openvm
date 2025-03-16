@@ -53,11 +53,13 @@ impl<F: PrimeField32> Rv32JalrAdapterChip<F> {
         }
     }
 }
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32JalrReadRecord {
     pub rs1: RecordId,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32JalrWriteRecord {
     pub from_state: ExecutionState<u32>,

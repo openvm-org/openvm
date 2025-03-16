@@ -74,6 +74,7 @@ impl<F: PrimeField32> Rv32CondRdWriteAdapterChip<F> {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32RdWriteWriteRecord {
     pub from_state: ExecutionState<u32>,

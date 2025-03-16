@@ -164,6 +164,7 @@ where
     }
 }
 
+#[repr(C)]
 #[serde_as]
 #[derive(Serialize, Deserialize)]
 pub struct FieldExpressionRecord {

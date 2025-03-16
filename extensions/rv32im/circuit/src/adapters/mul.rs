@@ -54,6 +54,7 @@ impl<F: PrimeField32> Rv32MultAdapterChip<F> {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Rv32MultReadRecord {
     /// Reads from operand registers
@@ -61,6 +62,7 @@ pub struct Rv32MultReadRecord {
     pub rs2: RecordId,
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Rv32MultWriteRecord {
     pub from_state: ExecutionState<u32>,

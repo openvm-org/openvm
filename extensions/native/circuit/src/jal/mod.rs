@@ -150,6 +150,7 @@ impl JalRangeCheckAir {
     }
 }
 
+#[repr(C)]
 #[derive(Serialize, Deserialize)]
 pub struct JalRangeCheckRecord {
     pub state: ExecutionState<u32>,

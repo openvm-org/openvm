@@ -54,6 +54,7 @@ impl<F: PrimeField32> Rv32BranchAdapterChip<F> {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Rv32BranchReadRecord {
     /// Read register value from address space d = 1
@@ -62,6 +63,7 @@ pub struct Rv32BranchReadRecord {
     pub rs2: RecordId,
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Rv32BranchWriteRecord {
     pub from_state: ExecutionState<u32>,
