@@ -24,7 +24,6 @@ use crate::poseidon2::{
     CHUNK,
 };
 
-#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct VerifyBatchRecord<F: Field> {
@@ -54,7 +53,6 @@ impl<F: PrimeField32> VerifyBatchRecord<F> {
     }
 }
 
-#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct TopLevelRecord<F: Field> {
@@ -73,7 +71,6 @@ pub struct IncorporateSiblingRecord<F: Field> {
     pub p2_input: [F; 2 * CHUNK],
 }
 
-#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct IncorporateRowRecord<F: Field> {
@@ -85,7 +82,6 @@ pub struct IncorporateRowRecord<F: Field> {
     pub p2_input: [F; 2 * CHUNK],
 }
 
-#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct InsideRowRecord<F: Field> {
@@ -124,7 +120,6 @@ pub struct SimplePoseidonRecord<F: Field> {
     pub p2_input: [F; 2 * CHUNK],
 }
 
-#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(bound = "F: Field")]
 pub struct NativePoseidon2RecordSet<F: Field> {
