@@ -18,6 +18,7 @@ use crate::{
 
 pub const INITIAL_TIMESTAMP: u32 = 0;
 
+#[repr(C)]
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 struct BlockData {
     pointer: u32,

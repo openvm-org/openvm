@@ -56,6 +56,7 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub write_data: [T; NUM_CELLS],
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Serialize + DeserializeOwned")]
 pub struct LoadStoreCoreRecord<F, const NUM_CELLS: usize> {

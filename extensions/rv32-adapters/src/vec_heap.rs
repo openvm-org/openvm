@@ -97,6 +97,7 @@ impl<
     }
 }
 
+#[repr(C)]
 #[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
@@ -118,6 +119,7 @@ pub struct Rv32VecHeapReadRecord<
     pub reads: [[RecordId; BLOCKS_PER_READ]; NUM_READS],
 }
 
+#[repr(C)]
 #[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Rv32VecHeapWriteRecord<const BLOCKS_PER_WRITE: usize, const WRITE_SIZE: usize> {

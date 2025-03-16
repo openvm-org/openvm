@@ -98,6 +98,7 @@ impl<AB: InteractionBuilder + AirBuilderWithPublicValues> VmCoreAir<AB, AdapterI
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PublicValuesRecord<F> {
     value: F,

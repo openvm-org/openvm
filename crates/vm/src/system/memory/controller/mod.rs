@@ -58,11 +58,13 @@ pub const MERKLE_AIR_OFFSET: usize = 1;
 /// The offset of the boundary AIR in AIRs of MemoryController.
 pub const BOUNDARY_AIR_OFFSET: usize = 0;
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct RecordId(pub usize);
 
 pub type MemoryImage<F> = AddressMap<F, PAGE_SIZE>;
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimestampedValues<T, const N: usize> {
     pub timestamp: u32,

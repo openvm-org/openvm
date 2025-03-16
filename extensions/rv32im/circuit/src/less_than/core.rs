@@ -163,10 +163,10 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "T: Serialize + DeserializeOwned")]
 pub struct LessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub opcode: LessThanOpcode,
     #[serde(with = "BigArray")]
     pub b: [T; NUM_LIMBS],
     #[serde(with = "BigArray")]
@@ -176,6 +176,7 @@ pub struct LessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     pub c_msb_f: T,
     pub diff_val: T,
     pub diff_idx: usize,
+    pub opcode: LessThanOpcode,
 }
 
 pub struct LessThanCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {

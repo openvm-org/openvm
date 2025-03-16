@@ -64,6 +64,7 @@ impl<F: PrimeField32> Rv32BaseAluAdapterChip<F> {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct Rv32BaseAluReadRecord<F: Field> {
@@ -77,6 +78,7 @@ pub struct Rv32BaseAluReadRecord<F: Field> {
     pub rs2_imm: F,
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct Rv32BaseAluWriteRecord<F: Field> {

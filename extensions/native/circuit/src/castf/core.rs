@@ -103,6 +103,7 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CastFRecord<F> {
     pub in_val: F,

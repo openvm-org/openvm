@@ -133,17 +133,18 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BranchEqualCoreRecord<T, const NUM_LIMBS: usize> {
-    pub opcode: BranchEqualOpcode,
     #[serde(with = "BigArray")]
     pub a: [T; NUM_LIMBS],
     #[serde(with = "BigArray")]
     pub b: [T; NUM_LIMBS],
     pub cmp_result: T,
     pub imm: T,
-    pub diff_idx: usize,
     pub diff_inv_val: T,
+    pub diff_idx: usize,
+    pub opcode: BranchEqualOpcode,
 }
 
 #[derive(Debug)]

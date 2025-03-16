@@ -45,16 +45,17 @@ pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
     pub prev_data: [T; NUM_CELLS],
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Serialize + DeserializeOwned")]
 pub struct LoadSignExtendCoreRecord<F, const NUM_CELLS: usize> {
-    pub opcode: Rv32LoadStoreOpcode,
-    pub most_sig_bit: bool,
     #[serde(with = "BigArray")]
     pub shifted_read_data: [F; NUM_CELLS],
     #[serde(with = "BigArray")]
     pub prev_data: [F; NUM_CELLS],
+    pub opcode: Rv32LoadStoreOpcode,
     pub shift_amount: u32,
+    pub most_sig_bit: bool,
 }
 
 #[derive(Debug, Clone)]

@@ -73,6 +73,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> NativeLoadStoreAdapterChip<F, NUM_
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct NativeLoadStoreReadRecord<F: Field, const NUM_CELLS: usize> {
@@ -88,6 +89,7 @@ pub struct NativeLoadStoreReadRecord<F: Field, const NUM_CELLS: usize> {
     pub e: F,
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct NativeLoadStoreWriteRecord<F: Field, const NUM_CELLS: usize> {

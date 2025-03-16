@@ -201,6 +201,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Rv32HeapBranchReadRecord<const NUM_READS: usize, const READ_SIZE: usize> {
     #[serde(with = "BigArray")]

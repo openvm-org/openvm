@@ -113,8 +113,8 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, Serialize, Deserialize)]
 #[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, Serialize, Deserialize)]
 pub struct ExecutionState<T> {
     pub pc: T,
     pub timestamp: T,

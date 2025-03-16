@@ -50,12 +50,14 @@ impl<F: PrimeField32, const N: usize> NativeVectorizedAdapterChip<F, N> {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NativeVectorizedReadRecord<const N: usize> {
     pub b: RecordId,
     pub c: RecordId,
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NativeVectorizedWriteRecord<const N: usize> {
     pub from_state: ExecutionState<u32>,

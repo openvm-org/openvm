@@ -271,9 +271,9 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModularIsEqualCoreRecord<T, const READ_LIMBS: usize> {
-    pub is_setup: bool,
     #[serde(with = "BigArray")]
     pub b: [T; READ_LIMBS],
     #[serde(with = "BigArray")]
@@ -283,6 +283,7 @@ pub struct ModularIsEqualCoreRecord<T, const READ_LIMBS: usize> {
     pub eq_marker: [T; READ_LIMBS],
     pub b_diff_idx: usize,
     pub c_diff_idx: usize,
+    pub is_setup: bool,
 }
 
 pub struct ModularIsEqualCoreChip<

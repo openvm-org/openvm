@@ -34,6 +34,7 @@ pub struct NativeLoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub data: [T; NUM_CELLS],
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub opcode: NativeLoadStoreOpcode,

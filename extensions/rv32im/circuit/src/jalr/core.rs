@@ -46,6 +46,7 @@ pub struct Rv32JalrCoreCols<T> {
     pub imm_sign: T,
 }
 
+#[repr(C)]
 #[derive(Serialize, Deserialize)]
 pub struct Rv32JalrCoreRecord<F> {
     pub imm: F,

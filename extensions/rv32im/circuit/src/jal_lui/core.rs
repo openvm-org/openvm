@@ -139,6 +139,7 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct Rv32JalLuiCoreRecord<F: Field> {

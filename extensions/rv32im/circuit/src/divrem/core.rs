@@ -379,10 +379,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCoreChip<NUM_LIMBS, L
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "T: Serialize + DeserializeOwned")]
 pub struct DivRemCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub opcode: DivRemOpcode,
     #[serde(with = "BigArray")]
     pub b: [T; NUM_LIMBS],
     #[serde(with = "BigArray")]
@@ -405,6 +405,7 @@ pub struct DivRemCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub r_inv: [T; NUM_LIMBS],
     pub lt_diff_val: T,
     pub lt_diff_idx: usize,
+    pub opcode: DivRemOpcode,
 }
 
 #[derive(Debug, Eq, PartialEq)]

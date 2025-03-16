@@ -179,6 +179,7 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32AuipcCoreRecord<F> {
     pub imm_limbs: [F; RV32_REGISTER_NUM_LIMBS - 1],
