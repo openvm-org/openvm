@@ -134,8 +134,12 @@ mod tests {
             hex!("0100000000000000000000000000000000000000000000000000000000000000");
         let q_y: [u8; 32] =
             hex!("0200000000000000000000000000000000000000000000000000000000000000");
+        let r_x: [u8; 32] =
+            hex!("211D5C11D68032342211C256D3C1034AB99013327FBFB46BBD0C0EB700000000");
+        let r_y: [u8; 32] =
+            hex!("347E00859981D5446447075AA07543CDE6DF224CFB23F7B5886337BD00000000");
 
-        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y]
+        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y, r_x, r_y]
             .concat()
             .into_iter()
             .map(FieldAlgebra::from_canonical_u8)
@@ -191,8 +195,12 @@ mod tests {
             hex!("0100000000000000000000000000000000000000000000000000000000000000");
         let q_y: [u8; 32] =
             hex!("0200000000000000000000000000000000000000000000000000000000000000");
+        let r_x: [u8; 32] =
+            hex!("211D5C11D68032342211C256D3C1034AB99013327FBFB46BBD0C0EB700000000");
+        let r_y: [u8; 32] =
+            hex!("347E00859981D5446447075AA07543CDE6DF224CFB23F7B5886337BD00000000");
 
-        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y]
+        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y, r_x, r_y]
             .concat()
             .into_iter()
             .map(FieldAlgebra::from_canonical_u8)
@@ -223,6 +231,18 @@ mod tests {
     #[test]
     fn test_decompress_invalid_hint_curvepoint5mod8_impossible() -> Result<()> {
         test_decompress_invalid_specific_test("test_curvepoint5mod8_impossible")
+    }
+
+    #[ignore = "expected to infinite loop"]
+    #[test]
+    fn test_decompress_invalid_hint_curvepoint1mod4_possible() -> Result<()> {
+        test_decompress_invalid_specific_test("test_curvepoint1mod4_possible")
+    }
+
+    #[ignore = "expected to infinite loop"]
+    #[test]
+    fn test_decompress_invalid_hint_curvepoint1mod4_impossible() -> Result<()> {
+        test_decompress_invalid_specific_test("test_curvepoint1mod4_impossible")
     }
 
     #[test]

@@ -18,11 +18,8 @@ openvm::entry!(main);
 openvm_algebra_moduli_macros::moduli_declare! {
     // a prime that is 5 mod 8
     Fp5mod8 { modulus = "115792089237316195423570985008687907853269984665640564039457584007913129639501" },
-    Scalar5mod8 { modulus = "1000000007" },
     // a prime that is 1 mod 4
     Fp1mod4 { modulus = "0xffffffffffffffffffffffffffffffff000000000000000000000001" },
-    Scalar1mod4 { modulus = "0xffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3d" },
-
 }
 
 openvm_algebra_moduli_macros::moduli_init! {
@@ -214,6 +211,7 @@ pub fn main() {
 
     test_p_3_mod_4(&bytes[..32], &bytes[32..64]);
     test_p_5_mod_8(&bytes[64..96], &bytes[96..128]);
+    test_p_1_mod_4(&bytes[128..160], &bytes[160..192]);
 }
 
 // Secp256k1 modulus is 3 mod 4
@@ -238,4 +236,16 @@ fn test_p_5_mod_8(x: &[u8], y: &[u8]) {
     let p = CurvePoint5mod8Wrapper::decompress(x.clone(), &1);
     #[cfg(feature = "test_curvepoint5mod8_impossible")]
     let p = CurvePoint5mod8Wrapper::decompress(x.clone(), &0);
+}
+
+// CurvePoint1mod4 modulus is 1 mod 4
+#[allow(unused_variables)]
+fn test_p_1_mod_4(x: &[u8], y: &[u8]) {
+    let x = <CurvePoint1mod4 as WeierstrassPoint>::Coordinate::from_le_bytes(x);
+    let _ = <CurvePoint1mod4 as WeierstrassPoint>::Coordinate::from_le_bytes(y);
+
+    #[cfg(feature = "test_curvepoint1mod4_possible")]
+    let p = CurvePoint1mod4Wrapper::decompress(x.clone(), &1);
+    #[cfg(feature = "test_curvepoint1mod4_impossible")]
+    let p = CurvePoint1mod4Wrapper::decompress(x.clone(), &0);
 }

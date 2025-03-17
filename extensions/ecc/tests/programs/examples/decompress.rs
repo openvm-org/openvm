@@ -18,11 +18,8 @@ openvm::entry!(main);
 openvm_algebra_moduli_macros::moduli_declare! {
     // a prime that is 5 mod 8
     Fp5mod8 { modulus = "115792089237316195423570985008687907853269984665640564039457584007913129639501" },
-    Scalar5mod8 { modulus = "1000000007" },
     // a prime that is 1 mod 4
     Fp1mod4 { modulus = "0xffffffffffffffffffffffffffffffff000000000000000000000001" },
-    Scalar1mod4 { modulus = "0xffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3d" },
-
 }
 
 openvm_algebra_moduli_macros::moduli_init! {
@@ -114,6 +111,14 @@ pub fn main() {
     test_possible_decompression::<CurvePoint5mod8>(&x, &y, rec_id);
     // x = 3 is not on the x-coordinate of any point on the CurvePoint5mod8 curve
     test_impossible_decompression_curvepoint5mod8(&Fp5mod8::from_u8(3), rec_id);
+
+    let x = Fp1mod4::from_le_bytes(&bytes[128..160]);
+    let y = Fp1mod4::from_le_bytes(&bytes[160..192]);
+    let rec_id = y.as_le_bytes()[0] & 1;
+
+    test_possible_decompression::<CurvePoint1mod4>(&x, &y, rec_id);
+    // x = 1 is not on the x-coordinate of any point on the CurvePoint1mod4 curve
+    test_impossible_decompression_curvepoint1mod4(&Fp1mod4::from_u8(1), rec_id);
 }
 
 fn test_possible_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinate>>(
@@ -163,5 +168,20 @@ fn test_impossible_decompression_secp256k1(x: &Secp256k1Coord, rec_id: u8) {
     }
 
     let p = Secp256k1Point::decompress(x.clone(), &rec_id);
+    assert!(p.is_none());
+}
+
+fn test_impossible_decompression_curvepoint1mod4(x: &Fp1mod4, rec_id: u8) {
+    let hint = CurvePoint1mod4::hint_decompress(x, &rec_id).expect("hint should be well-formed");
+    if hint.possible {
+        panic!("decompression should be impossible");
+    } else {
+        let rhs = x * x * x
+            + x * &<CurvePoint1mod4 as WeierstrassPoint>::CURVE_A
+            + &<CurvePoint1mod4 as WeierstrassPoint>::CURVE_B;
+        assert_eq!(&hint.sqrt * &hint.sqrt, rhs * CurvePoint1mod4::get_non_qr());
+    }
+
+    let p = CurvePoint1mod4::decompress(x.clone(), &rec_id);
     assert!(p.is_none());
 }
