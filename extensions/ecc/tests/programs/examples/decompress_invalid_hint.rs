@@ -4,6 +4,7 @@
 use core::ops::Neg;
 extern crate alloc;
 
+use hex_literal::hex;
 use openvm::io::read_vec;
 use openvm_ecc_guest::{
     algebra::{Field, IntMod},
@@ -17,13 +18,17 @@ openvm::entry!(main);
 openvm_algebra_moduli_macros::moduli_declare! {
     // a prime that is 5 mod 8
     Fp5mod8 { modulus = "115792089237316195423570985008687907853269984665640564039457584007913129639501" },
-}
+    // a prime that is 1 mod 4
+    Fp1mod4 { modulus = "0xffffffffffffffffffffffffffffffff000000000000000000000001" },
 
 openvm_algebra_moduli_macros::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F", // Secp256k1 modulus
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141", // Secp256k1 scalar
-    "115792089237316195423570985008687907853269984665640564039457584007913129639501",
+    "115792089237316195423570985008687907853269984665640564039457584007913129639501", // Fp5mod8 modulus
+    "0xffffffffffffffffffffffffffffffff000000000000000000000001", // Fp1mod4 modulus
 }
+
+const CURVE_B_5MOD8: Fp5mod8 = Fp5mod8::from_const_u8(3);
 
 impl Field for Fp5mod8 {
     const ZERO: Self = <Self as IntMod>::ZERO;
@@ -40,18 +45,40 @@ impl Field for Fp5mod8 {
     }
 }
 
-const MY_CURVE_B: Fp5mod8 = Fp5mod8::from_const_u8(3);
+const CURVE_A_1MOD4: Fp1mod4 = Fp1mod4::from_const_bytes(hex!("FEFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"));
+const CURVE_B_1MOD4: Fp1mod4 = Fp1mod4::from_const_bytes(hex!("B4FF552343390B27BAD8BFD7B7B04450563241F5ABB3040C850A05B4"));
+
+impl Field for Fp1mod4 {
+    const ZERO: Self = <Self as IntMod>::ZERO;
+    const ONE: Self = <Self as IntMod>::ONE;
+
+    type SelfRef<'a> = &'a Self;
+
+    fn double_assign(&mut self) {
+        IntMod::double_assign(self);
+    }
+
+    fn square_assign(&mut self) {
+        IntMod::square_assign(self);
+    }
+}
 
 openvm_ecc_sw_macros::sw_declare! {
     CurvePoint5mod8 {
         mod_type = Fp5mod8,
-        b = MY_CURVE_B,
-    }
+        b = CURVE_B_5MOD8,
+    },
+    CurvePoint1mod4 {
+        mod_type = Fp1mod4,
+        a = CURVE_A_1MOD4,
+        b = CURVE_B_1MOD4,
+    },
 }
 
 openvm_ecc_sw_macros::sw_init! {
     Secp256k1Point,
     CurvePoint5mod8,
+    CurvePoint1mod4,
 }
 // Wrapper to override hint_decompress
 #[allow(dead_code)] // clippy complains that the field is never read
