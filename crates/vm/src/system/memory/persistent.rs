@@ -9,7 +9,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{InteractionBuilder, PermutationCheckBus},
-    p3_air::{Air, BaseAir},
+    p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
@@ -78,6 +78,13 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             local.expand_direction,
             local.expand_direction * local.expand_direction * local.expand_direction,
         );
+
+        // Constrain that an "initial" row has timestamp zero.
+        // Since `direction` is constrained to be in {-1, 0, 1}, we can select `direction == 1`
+        // with the constraint below.
+        builder
+            .when(local.expand_direction * (local.expand_direction + AB::F::ONE))
+            .assert_zero(local.timestamp);
 
         let mut expand_fields = vec![
             // direction =  1 => is_final = 0
