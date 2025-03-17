@@ -25,7 +25,7 @@ pub const MAX_TWO_ADICITY: usize = 27;
 /// 1. FieldMerkleTreeMMCS sorts traces by height in descending order when committing data.
 /// 2. **Required** that `C::F` has two-adicity <= [MAX_TWO_ADICITY]. In particular this implies that all LDE matrices have
 ///    `log2(lde_height) <= MAX_TWO_ADICITY`.
-/// 3. **Required** that all trace heights are less than `2^log_max_height`
+/// 3. **Required** that the maximum trace height is `2^log_max_height - 1`.
 ///
 /// Reference:
 /// <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53>
