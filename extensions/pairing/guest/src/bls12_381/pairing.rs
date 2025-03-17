@@ -15,7 +15,7 @@ use {
     openvm_rv32im_guest::hint_buffer_u32,
 };
 
-use super::{Bls12_381, Fp, Fp12, Fp2};
+use super::{Bls12_381, Fp, Fp12, Fp2, BLS12_381_PSEUDO_BINARY_ENCODING, BLS12_381_SEED_ABS};
 use crate::pairing::{
     exp_check_fallback, Evaluatable, EvaluatedLine, FromLineMType, LineMulMType, MillerStep,
     MultiMillerLoop, PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
@@ -127,12 +127,8 @@ impl MultiMillerLoop for Bls12_381 {
     type Fp = Fp;
     type Fp12 = Fp12;
 
-    const SEED_ABS: u64 = 0xd201000000010000;
-    const PSEUDO_BINARY_ENCODING: &[i8] = &[
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
-        1, 0, 1, 1,
-    ];
+    const SEED_ABS: u64 = BLS12_381_SEED_ABS;
+    const PSEUDO_BINARY_ENCODING: &[i8] = &BLS12_381_PSEUDO_BINARY_ENCODING;
 
     fn evaluate_lines_vec(f: Self::Fp12, lines: Vec<EvaluatedLine<Self::Fp2>>) -> Self::Fp12 {
         let mut f = f;

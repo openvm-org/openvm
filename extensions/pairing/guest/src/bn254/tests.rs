@@ -1,7 +1,7 @@
 use group::{ff::Field, prime::PrimeCurveAffine};
 use halo2curves_axiom::bn256::{
     Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1,
-    FROBENIUS_COEFF_FQ6_C1,
+    FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2,
 };
 use num_bigint::BigUint;
 use num_traits::One;
@@ -18,6 +18,7 @@ use crate::{
             convert_g2_affine_halo2_to_openvm,
         },
         Bn254, G2Affine as OpenVmG2Affine, BN254_MODULUS, BN254_ORDER,
+        BN254_PSEUDO_BINARY_ENCODING, BN254_SEED,
     },
     pairing::{
         fp2_invert_assign, fp6_invert_assign, fp6_square_assign, FinalExp, MultiMillerLoop,
@@ -301,4 +302,24 @@ fn test_bn254_frobenius_coeffs_fq6() {
             i,
         )
     }
+}
+
+#[test]
+fn test_bn254_pseudo_binary_encoding() {
+    let mut x: i128 = 0;
+    let mut power_of_2 = 1;
+    for b in BN254_PSEUDO_BINARY_ENCODING.iter() {
+        x += (*b as i128) * power_of_2;
+        power_of_2 *= 2;
+    }
+    assert_eq!(x.unsigned_abs(), 6 * (BN254_SEED as u128) + 2);
+}
+
+#[test]
+fn test_bn254_xi_to_q_minus_1_over_2() {
+    assert_eq!(
+        Bn254::XI_TO_Q_MINUS_1_OVER_2,
+        convert_bn254_halo2_fq2_to_fp2(XI_TO_Q_MINUS_1_OVER_2),
+        "XI_TO_Q_MINUS_1_OVER_2 failed",
+    )
 }

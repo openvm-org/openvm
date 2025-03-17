@@ -132,6 +132,14 @@ mod g2 {
     );
     impl_sw_affine!(G2Affine, Fp2, THREE, B);
     impl_sw_group_ops!(G2Affine, Fp2);
+
+    #[test]
+    fn test_g2_curve_equation_b() {
+        use openvm_algebra_guest::DivUnsafe;
+        let b = Fp2::new(Fp::from_const_u8(3), Fp::ZERO)
+            .div_unsafe(Fp2::new(Fp::from_const_u8(9), Fp::ONE));
+        assert_eq!(b, B);
+    }
 }
 
 pub struct Bn254;

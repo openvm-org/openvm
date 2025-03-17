@@ -16,7 +16,8 @@ use crate::{
             convert_bls12381_halo2_fq2_to_fp2, convert_bls12381_halo2_fq_to_fp,
             convert_g2_affine_halo2_to_openvm,
         },
-        Bls12_381, G2Affine as OpenVmG2Affine,
+        Bls12_381, G2Affine as OpenVmG2Affine, BLS12_381_PSEUDO_BINARY_ENCODING,
+        BLS12_381_SEED_ABS,
     },
     pairing::{
         fp2_invert_assign, fp6_invert_assign, fp6_square_assign, FinalExp, MultiMillerLoop,
@@ -302,4 +303,15 @@ fn test_bls12381_pairing_check_hint_host() {
 fn test_bls12381_final_exponent() {
     let final_exp = (BLS12_381_MODULUS.pow(12) - BigUint::one()) / BLS12_381_ORDER.clone();
     assert_eq!(Bls12_381::FINAL_EXPONENT.to_vec(), final_exp.to_bytes_be());
+}
+
+#[test]
+fn test_bls12381_pseudo_binary_encoding() {
+    let mut x: i128 = 0;
+    let mut power_of_2 = 1;
+    for b in BLS12_381_PSEUDO_BINARY_ENCODING.iter() {
+        x += (*b as i128) * power_of_2;
+        power_of_2 *= 2;
+    }
+    assert_eq!(x.unsigned_abs(), BLS12_381_SEED_ABS as u128);
 }
