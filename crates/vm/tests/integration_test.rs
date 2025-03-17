@@ -321,7 +321,7 @@ fn test_vm_initial_memory() {
 fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 64, 1024), 0),
+        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 32, 1024), 0),
         native: Default::default(),
     }
     .with_continuations();
@@ -587,15 +587,15 @@ fn test_vm_max_access_adapter_8() {
         config.system.memory_config.max_access_adapter_n = 8;
         let chip_complex2 = config.create_chip_complex().unwrap();
         let mem_ctrl2 = chip_complex2.base.memory_controller;
-        // AccessAdapterAir with N=16/32/64 are disabled.
-        assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 3);
+        // AccessAdapterAir with N=16/32 are disabled.
+        assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 2);
         assert_eq!(
             mem_ctrl1.airs::<BabyBearPoseidon2Config>().len(),
-            mem_ctrl2.airs::<BabyBearPoseidon2Config>().len() + 3
+            mem_ctrl2.airs::<BabyBearPoseidon2Config>().len() + 2
         );
         assert_eq!(
             mem_ctrl1.current_trace_heights().len(),
-            mem_ctrl2.current_trace_heights().len() + 3
+            mem_ctrl2.current_trace_heights().len() + 2
         );
     }
     air_test(config, program);
@@ -622,7 +622,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
 
     let program = Program::from_instructions(&instructions);
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 64, 1024), 0)
+        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 32, 1024), 0)
             .with_continuations(),
         native: Default::default(),
     };

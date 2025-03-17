@@ -43,13 +43,13 @@ impl<F> AccessAdapterInventory<F> {
         let mb = memory_bus;
         let cmb = clk_max_bits;
         let maan = max_access_adapter_n;
+        assert!(matches!(maan, 2 | 4 | 8 | 16 | 32));
         let chips: Vec<_> = [
             Self::create_access_adapter_chip::<2>(rc.clone(), mb, cmb, maan),
             Self::create_access_adapter_chip::<4>(rc.clone(), mb, cmb, maan),
             Self::create_access_adapter_chip::<8>(rc.clone(), mb, cmb, maan),
             Self::create_access_adapter_chip::<16>(rc.clone(), mb, cmb, maan),
             Self::create_access_adapter_chip::<32>(rc.clone(), mb, cmb, maan),
-            Self::create_access_adapter_chip::<64>(rc.clone(), mb, cmb, maan),
         ]
         .into_iter()
         .flatten()
@@ -184,7 +184,6 @@ enum GenericAccessAdapterChip<F> {
     N8(AccessAdapterChip<F, 8>),
     N16(AccessAdapterChip<F, 16>),
     N32(AccessAdapterChip<F, 32>),
-    N64(AccessAdapterChip<F, 64>),
 }
 
 impl<F> GenericAccessAdapterChip<F> {
@@ -202,8 +201,7 @@ impl<F> GenericAccessAdapterChip<F> {
             8 => GenericAccessAdapterChip::N8(AccessAdapterChip::new(rc, mb, cmb)),
             16 => GenericAccessAdapterChip::N16(AccessAdapterChip::new(rc, mb, cmb)),
             32 => GenericAccessAdapterChip::N32(AccessAdapterChip::new(rc, mb, cmb)),
-            64 => GenericAccessAdapterChip::N64(AccessAdapterChip::new(rc, mb, cmb)),
-            _ => panic!("Only supports N in (2, 4, 8, 16, 32, 64)"),
+            _ => panic!("Only supports N in (2, 4, 8, 16, 32)"),
         }
     }
 
@@ -215,7 +213,6 @@ impl<F> GenericAccessAdapterChip<F> {
             GenericAccessAdapterChip::N8(chip) => &chip.records,
             GenericAccessAdapterChip::N16(chip) => &chip.records,
             GenericAccessAdapterChip::N32(chip) => &chip.records,
-            GenericAccessAdapterChip::N64(chip) => &chip.records,
         }
     }
 }

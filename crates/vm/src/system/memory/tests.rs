@@ -43,7 +43,7 @@ use crate::{
     },
 };
 
-const MAX: usize = 64;
+const MAX: usize = 32;
 const RANGE_CHECKER_BUS: BusIndex = 3;
 
 #[repr(C)]
