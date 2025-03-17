@@ -40,8 +40,10 @@ p256 = ["openvm-ecc-guest/p256"]
 # Note that these tests are expected to not terminate
 test_secp256k1_possible = []
 test_secp256k1_impossible = []
-test_mycurve_possible = []
-test_mycurve_impossible = []
+test_curvepoint5mod8_possible = []
+test_curvepoint5mod8_impossible = []
+test_curvepoint1mod4_possible = []
+test_curvepoint1mod4_impossible = []
 
 [profile.release]
 panic = "abort"
