@@ -47,7 +47,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     C::EF: TwoAdicField,
 {
     // Currently do not support other final poly len
-    builder.assert_var_eq(RVar::from(config.log_final_poly_len), RVar::zero());
+    assert_eq!(config.log_final_poly_len, 0);
     // The `proof.final_poly` length is in general `2^{log_final_poly_len + log_blowup}`.
     // We require `log_final_poly_len = 0`, so `proof.final_poly` has length `2^log_blowup`.
     // In fact, the FRI low-degree test requires that `proof.final_poly = [constant, 0, ..., 0]`.
@@ -108,6 +108,9 @@ pub fn verify_two_adic_pcs<C: Config>(
         let comm = builder.iter_ptr_get(&proof.commit_phase_commits, comm_ptr);
         challenger.observe_digest(builder, comm);
         let sample = challenger.sample_ext(builder);
+        if builder.flags.static_only {
+            builder.ext_reduce_circuit(sample);
+        }
         builder.iter_ptr_set(&betas, beta_ptr, sample);
     });
 
