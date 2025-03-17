@@ -159,6 +159,7 @@ where
         // (T01b): `num_challenges_to_sample.len() < 2`.
 
         let num_phases = RVar::from(num_challenges_to_sample.len());
+        // Here the shape of `exposed_values_after_challenge` is not verified. But it's verified later.
         assert_cumulative_sums(builder, air_proofs, &num_challenges_to_sample);
 
         let air_perm_by_height = if builder.flags.static_only {
@@ -218,12 +219,14 @@ where
             builder.assert_usize_eq(air_advice.num_public_values, pvs.len());
             challenger.observe_slice(builder, pvs);
         });
+        // (T03a): shapes of public values in `air_proofs` have been validated.
 
         builder.cycle_tracker_start("stage-c-build-rounds");
 
         // Count the number of main trace commitments together to save a loop.
         let num_cached_mains: Usize<_> = builder.eval(RVar::zero());
         let num_common_main_traces: Usize<_> = builder.eval(RVar::zero());
+        let num_after_challenge_traces: Usize<_> = builder.eval(RVar::zero());
         iter_zip!(builder, m_advice_var.per_air).for_each(|ptr_vec, builder| {
             let air_advice = builder.iter_ptr_get(&m_advice_var.per_air, ptr_vec[0]);
             builder
@@ -245,9 +248,21 @@ where
                         num_common_main_traces.clone() + RVar::one(),
                     );
                 });
+            builder
+                .if_ne(air_advice.width.after_challenge.len(), RVar::zero())
+                .then(|builder| {
+                    builder.assign(
+                        &num_after_challenge_traces,
+                        num_after_challenge_traces.clone() + RVar::one(),
+                    );
+                });
         });
+        let num_cached_mains = RVar::from(num_cached_mains);
+        let num_common_main_traces = RVar::from(num_common_main_traces);
+        let num_after_challenge_traces = RVar::from(num_after_challenge_traces);
 
-        let num_main_commits: Usize<_> = builder.eval(num_cached_mains.clone() + RVar::one());
+        let num_main_commits: Usize<_> = builder.eval(num_cached_mains + RVar::one());
+        let num_main_commits = RVar::from(num_main_commits);
 
         let CommitmentsVariable {
             main_trace: main_trace_commits,
@@ -256,7 +271,8 @@ where
         } = commitments;
 
         // Observe main trace commitments
-        builder.assert_usize_eq(main_trace_commits.len(), num_main_commits.clone());
+        builder.assert_usize_eq(main_trace_commits.len(), num_main_commits);
+        // (T04a): shapes of `main_trace_commits` have been validated.
         iter_zip!(builder, main_trace_commits).for_each(|ptr_vec, builder| {
             let main_commit = builder.iter_ptr_get(main_trace_commits, ptr_vec[0]);
             challenger.observe_digest(builder, main_commit);
@@ -270,16 +286,11 @@ where
                 builder.unsafe_cast_var_to_felt(air_proof.log_degree.get_var())
             };
             challenger.observe(builder, log_degree);
-
-            // Constrain that degree_bits is in [0, MAX_TWO_ADICITY].
-            builder.assert_less_than_slow_small_rhs(
-                air_proof.log_degree.clone(),
-                RVar::from(MAX_TWO_ADICITY + 1),
-            );
         });
 
         let challenges_per_phase = builder.array(num_phases);
 
+        // Assumption: (T01b) `num_phases` is 0 or 1.
         builder.if_eq(num_phases, RVar::one()).then(|builder| {
             // Proof of work phase.
             challenger.check_witness(builder, m_advice.log_up_pow_bits, *log_up_pow_witness);
@@ -351,6 +362,7 @@ where
             let log_degree: RVar<_> = air_proof.log_degree.clone().into();
             let advice = builder.get(&m_advice_var.per_air, i);
 
+            // Assumption: (T02b) `log_degree < MAX_TWO_ADICITY`
             let domain = pcs.natural_domain_for_log_degree(builder, log_degree);
 
             let trace_points = builder.array::<Ext<_, _>>(2);
@@ -362,6 +374,9 @@ where
             let quotient_degree =
                 RVar::from(builder.sll::<Usize<_>>(RVar::one(), log_quotient_degree));
             let log_quotient_size = builder.eval_expr(log_degree + log_quotient_degree);
+            // Assumption: (T02b) `log_degree <= MAX_TWO_ADICITY - low_blowup`
+            // Because the VK ensures `log_quotient_degree < log_blowup`, this won't access an out
+            // of bound index.
             let quotient_domain =
                 domain.create_disjoint_domain(builder, log_quotient_size, Some(pcs.config.clone()));
             builder.set_value(&quotient_domains, i, quotient_domain.clone());
@@ -389,9 +404,12 @@ where
 
         // <Number of main trace commitments> = <number of cached main traces> + 1
         // All common main traces are committed together.
-        let num_main_rounds = builder.eval_expr(num_cached_mains.clone() + RVar::one());
+        let num_main_rounds = builder.eval_expr(num_cached_mains + RVar::one());
         let num_challenge_rounds: RVar<_> = num_challenges_to_sample.len().into();
         let num_quotient_rounds = RVar::one();
+
+        builder.assert_usize_eq(opening.values.preprocessed.len(), num_prep_rounds.clone());
+        // T05a: The shape of `opening.values.preprocessed` has been validated.
 
         let total_rounds = builder.eval_expr(
             num_prep_rounds + num_main_rounds + num_challenge_rounds + num_quotient_rounds,
@@ -409,12 +427,17 @@ where
             builder
                 .if_eq(advice.preprocessed_data.len(), RVar::one())
                 .then(|builder| {
+                    // Assumption: (T05b) `opening.values.preprocessed` has been validated.
                     let prep = builder.get(&opening.values.preprocessed, round_idx.clone());
                     let batch_commit = builder.get(&advice.preprocessed_data, RVar::zero());
+                    let prep_width =
+                        RVar::from(builder.get(&advice.width.preprocessed, RVar::zero()));
 
                     let domain = builder.get(&domains, i);
                     let trace_points = builder.get(&trace_points_per_domain, i);
 
+                    builder.assert_usize_eq(prep_width, prep.local.len());
+                    builder.assert_usize_eq(prep_width, prep.next.len());
                     // Assumption: each AIR with preprocessed trace has its own commitment and opening values
                     let values = builder.array::<Array<C, _>>(2);
                     builder.set_value(&values, 0, prep.local);
@@ -440,14 +463,11 @@ where
                     builder.assign(&round_idx, round_idx.clone() + RVar::one());
                 });
         });
-        // Check that we weren't just indexing out of bounds.
-        builder.assert_usize_eq(opening.values.preprocessed.len(), round_idx.clone());
 
         // 2. Then the main trace openings.
         let main_commit_idx: Usize<_> = builder.eval(RVar::zero());
-        builder.assert_usize_eq(opening.values.main.len(), num_main_commits.clone());
-        let common_main_values_per_mat =
-            builder.get(&opening.values.main, num_cached_mains.clone());
+        builder.assert_usize_eq(opening.values.main.len(), num_main_commits);
+        let common_main_values_per_mat = builder.get(&opening.values.main, num_cached_mains);
         let common_main_mats = builder.array(num_common_main_traces);
         let common_main_matrix_idx: Usize<_> = builder.eval(RVar::zero());
         builder.range(0, num_airs).for_each(|i_vec, builder| {
@@ -537,20 +557,23 @@ where
             .for_each(|phase_idx_vec, builder| {
                 let phase_idx = phase_idx_vec[0];
                 let values_per_mat = builder.get(&opening.values.after_challenge, phase_idx);
+                builder.assert_usize_eq(values_per_mat.len(), num_after_challenge_traces);
                 let batch_commit = builder.get(after_challenge_commits, phase_idx);
 
                 let mat_idx: Usize<_> = builder.eval(RVar::zero());
-                let mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(values_per_mat.len());
+                let mats: Array<_, TwoAdicPcsMatsVariable<_>> =
+                    builder.array(num_after_challenge_traces);
                 builder.range(0, num_airs).for_each(|i_vec, builder| {
                     let i = i_vec[0];
                     let advice = builder.get(&m_advice_var.per_air, i);
                     builder
-                        .if_ne(advice.num_challenges_to_sample.len(), RVar::zero())
+                        .if_ne(advice.width.after_challenge.len(), RVar::zero())
                         .then(|builder| {
                             // Only 1 phase is supported.
-                            builder.assert_usize_eq(
-                                advice.num_challenges_to_sample.len(),
-                                RVar::one(),
+                            builder
+                                .assert_usize_eq(advice.width.after_challenge.len(), RVar::one());
+                            let after_challenge_width = RVar::from(
+                                builder.get(&advice.width.after_challenge, RVar::zero()),
                             );
                             let domain = builder.get(&domains, i);
                             let trace_points = builder.get(&trace_points_per_domain, i);
@@ -558,6 +581,14 @@ where
                             let after_challenge = builder.get(&values_per_mat, mat_idx.clone());
 
                             let values = builder.array::<Array<C, _>>(2);
+                            builder.assert_usize_eq(
+                                after_challenge.local.len(),
+                                after_challenge_width * RVar::from(C::EF::D),
+                            );
+                            builder.assert_usize_eq(
+                                after_challenge.next.len(),
+                                after_challenge.local.len(),
+                            );
                             builder.set_value(&values, 0, after_challenge.local);
                             builder.set_value(&values, 1, after_challenge.next);
                             let after_challenge_mat = TwoAdicPcsMatsVariable::<C> {
@@ -569,7 +600,7 @@ where
                             builder.inc(&mat_idx);
                         });
                 });
-                builder.assert_usize_eq(mat_idx, values_per_mat.len());
+                builder.assert_usize_eq(mat_idx, num_after_challenge_traces);
 
                 builder.set_value(
                     &rounds,
