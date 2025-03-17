@@ -493,7 +493,10 @@ pub(crate) mod phantom {
                 &BigUint::from_u8(2).unwrap(),
                 &(modulus - BigUint::from_u8(1).unwrap()),
             );
-            let exponent = (modulus - BigUint::one()) >> 2;
+            // To check if non_qr is a quadratic nonresidue, we compute non_qr^((p-1)/2)
+            // If the result is p-1, then non_qr is a quadratic nonresidue
+            // Otherwise, non_qr is a quadratic residue
+            let exponent = (modulus - BigUint::one()) >> 1;
             while non_qr.modpow(&exponent, modulus) != modulus - BigUint::one() {
                 non_qr = rng.gen_biguint_range(
                     &BigUint::from_u8(2).unwrap(),

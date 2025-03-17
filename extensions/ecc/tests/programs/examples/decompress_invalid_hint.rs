@@ -15,8 +15,8 @@ use openvm_ecc_guest::{
 openvm::entry!(main);
 
 openvm_algebra_moduli_macros::moduli_declare! {
-    // a prime that is 1 mod 4
-    Fp { modulus = "115792089237316195423570985008687907853269984665640564039457584007913129639501" },
+    // a prime that is 5 mod 8
+    Fp5mod8 { modulus = "115792089237316195423570985008687907853269984665640564039457584007913129639501" },
 }
 
 openvm_algebra_moduli_macros::moduli_init! {
@@ -25,7 +25,7 @@ openvm_algebra_moduli_macros::moduli_init! {
     "115792089237316195423570985008687907853269984665640564039457584007913129639501",
 }
 
-impl Field for Fp {
+impl Field for Fp5mod8 {
     const ZERO: Self = <Self as IntMod>::ZERO;
     const ONE: Self = <Self as IntMod>::ONE;
 
@@ -40,18 +40,18 @@ impl Field for Fp {
     }
 }
 
-const MY_CURVE_B: Fp = Fp::from_const_u8(3);
+const MY_CURVE_B: Fp5mod8 = Fp5mod8::from_const_u8(3);
 
 openvm_ecc_sw_macros::sw_declare! {
-    MyCurvePoint {
-        mod_type = Fp,
+    CurvePoint5mod8 {
+        mod_type = Fp5mod8,
         b = MY_CURVE_B,
     }
 }
 
 openvm_ecc_sw_macros::sw_init! {
     Secp256k1Point,
-    MyCurvePoint,
+    CurvePoint5mod8,
 }
 // Wrapper to override hint_decompress
 #[allow(dead_code)] // clippy complains that the field is never read
@@ -131,11 +131,14 @@ impl Secp256k1PointWrapper {
 
 // struct to override hint_decompress
 #[allow(dead_code)] // clippy complains that the field is never read
-struct MyCurvePointWrapper(MyCurvePoint);
+struct CurvePoint5mod8Wrapper(CurvePoint5mod8);
 
-impl FromCompressed<<MyCurvePoint as WeierstrassPoint>::Coordinate> for MyCurvePointWrapper {
-    // copied from MyCurvePoint::decompress implementation in sw-macros
-    fn decompress(x: <MyCurvePoint as WeierstrassPoint>::Coordinate, rec_id: &u8) -> Option<Self> {
+impl FromCompressed<<CurvePoint5mod8 as WeierstrassPoint>::Coordinate> for CurvePoint5mod8Wrapper {
+    // copied from CurvePoint5mod8::decompress implementation in sw-macros
+    fn decompress(
+        x: <CurvePoint5mod8 as WeierstrassPoint>::Coordinate,
+        rec_id: &u8,
+    ) -> Option<Self> {
         match Self::honest_host_decompress(&x, rec_id) {
             // successfully decompressed
             Some(Some(ret)) => Some(ret),
@@ -152,9 +155,9 @@ impl FromCompressed<<MyCurvePoint as WeierstrassPoint>::Coordinate> for MyCurveP
     // override hint_decompress to return a dummy value
     #[allow(unused_variables)]
     fn hint_decompress(
-        _x: &<MyCurvePoint as WeierstrassPoint>::Coordinate,
+        _x: &<CurvePoint5mod8 as WeierstrassPoint>::Coordinate,
         rec_id: &u8,
-    ) -> Option<DecompressionHint<<MyCurvePoint as WeierstrassPoint>::Coordinate>> {
+    ) -> Option<DecompressionHint<<CurvePoint5mod8 as WeierstrassPoint>::Coordinate>> {
         #[cfg(not(target_os = "zkvm"))]
         {
             unimplemented!()
@@ -164,23 +167,23 @@ impl FromCompressed<<MyCurvePoint as WeierstrassPoint>::Coordinate> for MyCurveP
             if *rec_id & 1 == 0 {
                 Some(DecompressionHint {
                     possible: false,
-                    sqrt: <MyCurvePoint as WeierstrassPoint>::Coordinate::from_u32(0),
+                    sqrt: <CurvePoint5mod8 as WeierstrassPoint>::Coordinate::from_u32(0),
                 })
             } else {
                 Some(DecompressionHint {
                     possible: true,
-                    sqrt: <MyCurvePoint as WeierstrassPoint>::Coordinate::from_u32(0),
+                    sqrt: <CurvePoint5mod8 as WeierstrassPoint>::Coordinate::from_u32(0),
                 })
             }
         }
     }
 }
-impl MyCurvePointWrapper {
+impl CurvePoint5mod8Wrapper {
     fn honest_host_decompress(
-        x: &<MyCurvePoint as WeierstrassPoint>::Coordinate,
+        x: &<CurvePoint5mod8 as WeierstrassPoint>::Coordinate,
         rec_id: &u8,
     ) -> Option<Option<Self>> {
-        let hint = MyCurvePointWrapper::hint_decompress(x, rec_id)?;
+        let hint = CurvePoint5mod8Wrapper::hint_decompress(x, rec_id)?;
 
         if hint.possible {
             // ensure proof fails if y >= modulus
@@ -189,15 +192,15 @@ impl MyCurvePointWrapper {
             if hint.sqrt.as_le_bytes()[0] & 1 != *rec_id & 1 {
                 None
             } else {
-                let ret = MyCurvePoint::from_xy_nonidentity(x.clone(), hint.sqrt)?;
-                Some(Some(MyCurvePointWrapper(ret)))
+                let ret = CurvePoint5mod8::from_xy_nonidentity(x.clone(), hint.sqrt)?;
+                Some(Some(CurvePoint5mod8Wrapper(ret)))
             }
         } else {
             // ensure proof fails if sqrt * sqrt != alpha * non_qr
             hint.sqrt.assert_reduced();
 
-            let alpha = (x * x * x) + (x * &MyCurvePoint::CURVE_A) + &MyCurvePoint::CURVE_B;
-            if &hint.sqrt * &hint.sqrt == alpha * MyCurvePoint::get_non_qr() {
+            let alpha = (x * x * x) + (x * &CurvePoint5mod8::CURVE_A) + &CurvePoint5mod8::CURVE_B;
+            if &hint.sqrt * &hint.sqrt == alpha * CurvePoint5mod8::get_non_qr() {
                 Some(None)
             } else {
                 None
@@ -215,7 +218,7 @@ pub fn main() {
     let bytes = read_vec();
 
     test_p_3_mod_4(&bytes[..32], &bytes[32..64]);
-    test_p_1_mod_4(&bytes[64..96], &bytes[96..128]);
+    test_p_5_mod_8(&bytes[64..96], &bytes[96..128]);
 }
 
 // Secp256k1 modulus is 3 mod 4
@@ -230,14 +233,14 @@ fn test_p_3_mod_4(x: &[u8], y: &[u8]) {
     let p = Secp256k1PointWrapper::decompress(x.clone(), &0);
 }
 
-// MyCurvePoint modulus is 1 mod 4
+// CurvePoint5mod8 modulus is 5 mod 8
 #[allow(unused_variables)]
-fn test_p_1_mod_4(x: &[u8], y: &[u8]) {
-    let x = <MyCurvePoint as WeierstrassPoint>::Coordinate::from_le_bytes(x);
-    let _ = <MyCurvePoint as WeierstrassPoint>::Coordinate::from_le_bytes(y);
+fn test_p_5_mod_8(x: &[u8], y: &[u8]) {
+    let x = <CurvePoint5mod8 as WeierstrassPoint>::Coordinate::from_le_bytes(x);
+    let _ = <CurvePoint5mod8 as WeierstrassPoint>::Coordinate::from_le_bytes(y);
 
-    #[cfg(feature = "test_mycurve_possible")]
-    let p = MyCurvePointWrapper::decompress(x.clone(), &1);
-    #[cfg(feature = "test_mycurve_impossible")]
-    let p = MyCurvePointWrapper::decompress(x.clone(), &0);
+    #[cfg(feature = "test_curvepoint5mod8_possible")]
+    let p = CurvePoint5mod8Wrapper::decompress(x.clone(), &1);
+    #[cfg(feature = "test_curvepoint5mod8_impossible")]
+    let p = CurvePoint5mod8Wrapper::decompress(x.clone(), &0);
 }
