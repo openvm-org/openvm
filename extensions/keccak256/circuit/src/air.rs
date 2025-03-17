@@ -132,6 +132,7 @@ impl KeccakVmAir {
         // then we want _parts_ of opcode instruction to stay the same
         // between blocks.
         let mut block_transition = builder.when(local.is_last_round() * not(next.is_new_start()));
+        block_transition.assert_eq(local.instruction.pc, next.instruction.pc);
         block_transition.assert_eq(local.instruction.is_enabled, next.instruction.is_enabled);
         // dst is only going to be used for writes in the last input block
         assert_array_eq(
