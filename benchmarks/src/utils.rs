@@ -170,9 +170,14 @@ impl BenchmarkCli {
 }
 
 fn get_programs_dir() -> PathBuf {
-    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    dir.push("programs");
-    dir
+    match option_env!("BENCH_DIR") {
+        Some(dir) => dir.into(),
+        None => {
+            let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            path.push("programs");
+            path
+        }
+    }
 }
 
 pub fn build_bench_program(program_name: &str, profile: impl ToString) -> Result<Elf> {
