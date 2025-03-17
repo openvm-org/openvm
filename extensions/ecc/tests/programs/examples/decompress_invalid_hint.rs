@@ -94,19 +94,19 @@ trait NonQr<P: WeierstrassPoint> {
 
 impl NonQr<Secp256k1Point> for Secp256k1Point {
     fn get_non_qr() -> &'static <Secp256k1Point as WeierstrassPoint>::Coordinate {
-        &Secp256k1Point::get_non_qr()
+        Secp256k1Point::get_non_qr()
     }
 }
 
 impl NonQr<CurvePoint5mod8> for CurvePoint5mod8 {
     fn get_non_qr() -> &'static <CurvePoint5mod8 as WeierstrassPoint>::Coordinate {
-        &CurvePoint5mod8::get_non_qr()
+        CurvePoint5mod8::get_non_qr()
     }
 }
 
 impl NonQr<CurvePoint1mod4> for CurvePoint1mod4 {
     fn get_non_qr() -> &'static <CurvePoint1mod4 as WeierstrassPoint>::Coordinate {
-        &CurvePoint1mod4::get_non_qr()
+        CurvePoint1mod4::get_non_qr()
     }
 }
 
@@ -196,8 +196,11 @@ where
 }
 
 // Create type aliases for each specific curve
+#[allow(dead_code)]
 type Secp256k1PointWrapper = CurvePointWrapper<Secp256k1Point>;
+#[allow(dead_code)]
 type CurvePoint5mod8Wrapper = CurvePointWrapper<CurvePoint5mod8>;
+#[allow(dead_code)]
 type CurvePoint1mod4Wrapper = CurvePointWrapper<CurvePoint1mod4>;
 
 // Check that decompress enters an infinite loop when hint_decompress returns an incorrect value.
