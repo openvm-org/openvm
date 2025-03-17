@@ -40,6 +40,10 @@ pub const BLS12_381_LIMB_BITS: usize = 8;
 pub const BLS12_381_BLOCK_SIZE: usize = 16;
 
 pub const BLS12_381_SEED_ABS: u64 = 0xd201000000010000;
+// Encodes the Bls12_381 seed, x.
+// x = sum_i BLS12_381_PSEUDO_BINARY_ENCODING[i] * 2^i
+// where BLS12_381_PSEUDO_BINARY_ENCODING[i] is in {-1, 0, 1}
+// Validated against BLS12_381_SEED_ABS by a test in tests.rs
 pub const BLS12_381_PSEUDO_BINARY_ENCODING: [i8; 64] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,
@@ -149,9 +153,14 @@ impl PairingIntrinsics for Bls12_381 {
     type Fp12 = Fp12;
 
     const PAIRING_IDX: usize = 1;
+    // The sextic extension `Fp12` is `Fp2[X] / (X^6 - \xi)`, where `\xi` is a non-residue.
     const XI: Fp2 = Fp2::new(Fp::from_const_u8(1), Fp::from_const_u8(1));
     const FP2_TWO: Fp2 = Fp2::new(Fp::from_const_u8(2), Fp::from_const_u8(0));
     const FP2_THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::from_const_u8(0));
+
+    // Multiplication constants for the Frobenius map for coefficients in Fp2 c1..=c5 for powers 0..12
+    // FROBENIUS_COEFFS\[i\]\[j\] = \xi^{(j + 1) * (p^i - 1)/6} when p = 1 (mod 6)
+    // These are validated against `halo2curves::bls12_381::FROBENIUS_COEFF_FQ12_C1` in tests.rs
     const FROBENIUS_COEFFS: [[Self::Fp2; 5]; 12] = [
         [
             Fp2 {

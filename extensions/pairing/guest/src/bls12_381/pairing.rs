@@ -33,6 +33,7 @@ use crate::{
 impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
     fn evaluate(&self, xy_frac: &(Fp, Fp)) -> EvaluatedLine<Fp2> {
         let (x_over_y, y_inv) = xy_frac;
+        // Represents the line L(x,y) = 1 + b (x/y) w^-1 + c (1/y) w^-3
         EvaluatedLine {
             b: self.b.mul_base(x_over_y),
             c: self.c.mul_base(y_inv),
@@ -41,6 +42,8 @@ impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
 }
 
 impl FromLineMType<Fp2> for Fp12 {
+    // Since multiplying by w^3 doesn't change the miller loop result, we transform the line
+    // into L_new(x,y) = w^3 L(x,y) = w^3 + b (x/y) w^2 + c (1/y)
     fn from_evaluated_line_m_type(line: EvaluatedLine<Fp2>) -> Fp12 {
         Fp12::from_coeffs([line.c, Fp2::ZERO, line.b, Fp2::ONE, Fp2::ZERO, Fp2::ZERO])
     }
@@ -50,8 +53,10 @@ impl FromLineMType<Fp2> for Fp12 {
 impl LineMulMType<Fp2, Fp12> for Bls12_381 {
     /// Multiplies two lines in 023-form to get an element in 02345-form
     fn mul_023_by_023(l0: &EvaluatedLine<Fp2>, l1: &EvaluatedLine<Fp2>) -> [Fp2; 5] {
+        // l0 = c0 + b0 w^2 + w^3
         let b0 = &l0.b;
         let c0 = &l0.c;
+        // l1 = c1 + b1 w^2 + w^3
         let b1 = &l1.b;
         let c1 = &l1.c;
 
@@ -69,6 +74,8 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
 
     /// Multiplies a line in 02345-form with a Fp12 element to get an Fp12 element
     fn mul_by_023(f: &Fp12, l: &EvaluatedLine<Fp2>) -> Fp12 {
+        // this is only used if the number of lines is odd, which doesn't happen for our applications
+        // right now, so we can use this suboptimal implementation
         Fp12::from_evaluated_line_m_type(l.clone()) * f
     }
 
@@ -160,7 +167,7 @@ impl MultiMillerLoop for Bls12_381 {
     ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>) {
         let mut f = if let Some(mut c) = c {
             // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
-            // will multiply by c again due to the last two values of the pseudo-binary encoding (BN12_381_PBE) being 1.
+            // will multiply by c again due to the last two values of the pseudo-binary encoding (BLS12_381_PSEUDO_BINARY_ENCODING) being 1.
             // Therefore, the final value of f at the end of this block is c^3.
             let mut c3 = c.clone();
             c.square_assign();
@@ -216,6 +223,7 @@ impl MultiMillerLoop for Bls12_381 {
         _xy_fracs: &[(Self::Fp, Self::Fp)],
     ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>) {
         // Conjugate for negative component of the seed
+        // By Lemma 1 from https://www.iacr.org/archive/eurocrypt2011/66320047/66320047.pdf f_{x,Q} = conjugate( f_{|x|,Q} )
         let mut f = f.clone();
         f.conjugate_assign();
         (f, Q_acc)
@@ -300,31 +308,33 @@ impl PairingCheck for Bls12_381 {
 
 #[allow(non_snake_case)]
 impl Bls12_381 {
+    // The paper only describes the implementation for Bn254, so we use the gnark implementation for Bls12_381.
+    // Adapted from the gnark implementation:
+    // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bls12381/e12_pairing.go#L394C1-L395C1
     fn try_honest_pairing_check(
         P: &[AffinePoint<<Self as PairingCheck>::Fp>],
         Q: &[AffinePoint<<Self as PairingCheck>::Fp2>],
     ) -> Option<Result<(), PairingCheckError>> {
         let (c, s) = Self::pairing_check_hint(P, Q);
 
-        // f * s = c^{q - x}
-        // f * s = c^q * c^-x
-        // f * c^x * c^-q * s = 1,
-        //   where fc = f * c'^x (embedded Miller loop with c conjugate inverse),
-        //   and the curve seed x = -0xd201000000010000
-        //   the miller loop computation includes a conjugation at the end because the value of the
-        //   seed is negative, so we need to conjugate the miller loop input c as c'. We then substitute
-        //   y = -x to get c^-y and finally compute c'^-y as input to the miller loop:
-        // f * c'^-y * c^-q * s = 1
+        // The gnark implementation checks that f * s = c^{q - x} where x is the curve seed.
+        // We check an equivalent condition: f * c^x * s = c^q.
+        // This is because we can compute f * c^x by embedding the c^x computation in the miller loop.
+
+        // We compute c^q before c is consumed by conjugate() below
         let c_q = FieldExtension::frobenius_map(&c, 1);
+
+        // Since the Bls12_381 curve has a negative seed, the miller loop for Bls12_381 is computed as
+        // f_{Miller,x,Q}(P) = conjugate( f_{Miller,-x,Q}(P) * c^{-x} ).
+        // We will pass in the conjugate inverse of c into the miller loop so that we compute
+        // fc = f_{Miller,x,Q}(P)
+        //    = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} )  (where c' is the conjugate inverse of c)
+        //    = f_{Miller,x,Q}(P) * c^x
         let c_conj = c.conjugate();
         if c_conj == Fp12::ZERO {
             return None;
         }
         let c_conj_inv = Fp12::ONE.div_unsafe(&c_conj);
-
-        // fc = f_{Miller,x,Q}(P) * c^{x}
-        // where
-        //   fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} ), with c' denoting the conjugate of c
         let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
 
         if fc * s == c_q {

@@ -21,17 +21,19 @@ impl FinalExp for Bn254 {
         let (c, u) = Self::final_exp_hint(f);
         let c_inv = c.invert().unwrap();
 
-        // f * u == c^λ
-        // f * u == c^{6x + 2 + q^3 - q^2 + q}
+        // We follow Theorem 3 of https://eprint.iacr.org/2024/640.pdf to check that the pairing equals 1
+        // By the theorem, it suffices to provide c and u such that f * u == c^λ.
+        // Since λ = 6x + 2 + q^3 - q^2 + q, we will check the equivalent condition:
         // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
-        // where fc == f * c^-{6x + 2}
+        // This is because we can compute f * c^-{6x+2} by embedding the c^-{6x+2} computation in the miller loop.
+
         // c_mul = c^-{q^3 - q^2 + q}
         let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
         let c_q2 = FieldExtension::frobenius_map(&c, 2);
         let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
         let c_mul = c_q3_inv * c_q2 * c_q_inv;
 
-        // Compute miller loop with c_inv
+        // Pass c inverse into the miller loop so that we compute fc == f * c^-{6x + 2}
         let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
 
         assert_eq!(fc * c_mul * u, Fq12::ONE);
@@ -40,6 +42,7 @@ impl FinalExp for Bn254 {
     // Adapted from the Gnark implementation:
     // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/sw_bn254/hints.go#L23
     // returns c (residueWitness) and u (cubicNonResiduePower)
+    // The Gnark implementation is based on https://eprint.iacr.org/2024/640.pdf
     fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
         // Residue witness
         let mut c;

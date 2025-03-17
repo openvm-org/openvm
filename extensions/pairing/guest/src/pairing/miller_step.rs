@@ -42,9 +42,12 @@ where
 {
     type Fp2 = <P as PairingIntrinsics>::Fp2;
 
-    /// Miller double step
-    /// Assumption: s is not point at infinity.
-    /// The case y = 0 does not happen as long as the curve satisfies that 0 = X^3 + c' has no solutions in Fp2.
+    /// Miller double step.
+    /// Returns 2S and a line in Fp12 tangent to \Psi(S).
+    /// Assumptions:
+    ///     - s is not point at infinity.
+    ///     - a in the curve equation is 0.
+    /// The case y = 0 does not happen as long as the curve satisfies that 0 = X^3 + b has no solutions in Fp2.
     /// The curve G1Affine and twist G2Affine are both chosen for bn254, bls12_381 so that this never happens.
     fn miller_double_step(
         s: &AffinePoint<Self::Fp2>,
@@ -62,19 +65,15 @@ where
         let y_2s = lambda * &(x - &x_2s) - y;
         let two_s = AffinePoint { x: x_2s, y: y_2s };
 
-        // Tangent line
-        //   1 + b' (x_P / y_P) w^-1 + c' (1 / y_P) w^-3
-        // where
-        //   l_{\Psi(S),\Psi(S)}(P) = (λ * x_S - y_S) (1 / y_P)  - λ (x_P / y_P) w^2 + w^3
-        // x0 = λ * x_S - y_S
-        // x2 = - λ
+        // l_{\Psi(S),\Psi(S)}(P)
         let b = Self::Fp2::ZERO - lambda;
         let c = lambda * x - y;
 
         (two_s, UnevaluatedLine { b, c })
     }
 
-    /// Miller add step
+    /// Miller add step.
+    /// Returns S+Q and a line in Fp12 passing through \Psi(S) and \Psi(Q).
     fn miller_add_step(
         s: &AffinePoint<Self::Fp2>,
         q: &AffinePoint<Self::Fp2>,
@@ -95,14 +94,15 @@ where
             y: y_s_plus_q,
         };
 
-        // l_{\Psi(S),\Psi(Q)}(P) = (λ_1 * x_S - y_S) (1 / y_P) - λ_1 (x_P / y_P) w^2 + w^3
+        // l_{\Psi(S),\Psi(Q)}(P)
         let b = Self::Fp2::ZERO - lambda;
         let c = lambda * x_s - y_s;
 
         (s_plus_q, UnevaluatedLine { b, c })
     }
 
-    /// Miller double and add step (2S + Q implemented as S + Q + S for efficiency)
+    /// Miller double and add step (2S + Q implemented as S + Q + S for efficiency).
+    /// Returns 2S+Q, a line in Fp12 passing through S and Q, and a line in Fp12 passing through S+Q and S
     /// Assumption: Q != +- S && (S+Q) != +-S, so that there is no division by zero.
     /// The way this is used in miller loop, this is always satisfied.
     fn miller_double_and_add_step(
@@ -135,11 +135,11 @@ where
             y: y_s_plus_q_plus_s,
         };
 
-        // l_{\Psi(S),\Psi(Q)}(P) = (λ_1 * x_S - y_S) (1 / y_P) - λ_1 (x_P / y_P) w^2 + w^3
+        // l_{\Psi(S),\Psi(Q)}(P)
         let b0 = Self::Fp2::ZERO - lambda1;
         let c0 = lambda1 * x_s - y_s;
 
-        // l_{\Psi(S+Q),\Psi(S)}(P) = (λ_2 * x_S - y_S) (1 / y_P) - λ_2 (x_P / y_P) w^2 + w^3
+        // l_{\Psi(S+Q),\Psi(S)}(P)
         let b1 = Self::Fp2::ZERO - lambda2;
         let c1 = lambda2 * x_s - y_s;
 

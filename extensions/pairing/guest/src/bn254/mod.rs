@@ -43,6 +43,10 @@ pub const BN254_LIMB_BITS: usize = 8;
 pub const BN254_BLOCK_SIZE: usize = 32;
 
 pub const BN254_SEED: u64 = 0x44e992b44a6909f1;
+// Encodes 6x+2 where x is the BN254 seed.
+// 6*x+2 = sum_i BN254_PSEUDO_BINARY_ENCODING[i] * 2^i
+// where BN254_PSEUDO_BINARY_ENCODING[i] is in {-1, 0, 1}
+// Validated against BN254_SEED_ABS by a test in tests.rs
 pub const BN254_PSEUDO_BINARY_ENCODING: [i8; 66] = [
     0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0,
     -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0, -1, 0,
@@ -122,6 +126,7 @@ mod g2 {
 
     const THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::ZERO);
     // 3 / (9 + u)
+    // validated by a test below
     const B: Fp2 = Fp2::new(
         Fp::from_const_bytes(hex!(
             "e538a124dce66732a3efdb59e5c5b4b5c36ae01b9918be81aeaab8ce409d142b"
@@ -137,6 +142,8 @@ mod g2 {
 pub struct Bn254;
 
 impl Bn254 {
+    // Same as the values from halo2curves_shims
+    // Validated by a test in tests.rs
     pub const FROBENIUS_COEFF_FQ6_C1: [Fp2; 3] = [
         Fp2 {
             c0: Bn254Fp(hex!(
@@ -164,6 +171,8 @@ impl Bn254 {
         },
     ];
 
+    // Same as the values from halo2curves_shims
+    // Validated by a test in tests.rs
     pub const XI_TO_Q_MINUS_1_OVER_2: Fp2 = Fp2 {
         c0: Bn254Fp(hex!(
             "5a13a071460154dc9859c9a9ede0aadbb9f9e2b698c65edcdcf59a4805f33c06"
@@ -206,9 +215,14 @@ impl PairingIntrinsics for Bn254 {
     type Fp12 = Fp12;
 
     const PAIRING_IDX: usize = 0;
+    // The sextic extension `Fp12` is `Fp2[X] / (X^6 - \xi)`, where `\xi` is a non-residue.
     const XI: Fp2 = Fp2::new(Fp::from_const_u8(9), Fp::from_const_u8(1));
     const FP2_TWO: Fp2 = Fp2::new(Fp::from_const_u8(2), Fp::from_const_u8(0));
     const FP2_THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::from_const_u8(0));
+    // Multiplication constants for the Frobenius map for coefficients in Fp2 c1..=c5 for powers 0..12
+    // FROBENIUS_COEFFS\[i\]\[j\] = \xi^{(j + 1) * (p^i - 1)/6} when p = 1 (mod 6)
+    // These are validated against `halo2curves::bn256::FROBENIUS_COEFF_FQ12_C1` in tests.rs
+    // (Note that bn256 here is another name for bn254)
     const FROBENIUS_COEFFS: [[Self::Fp2; 5]; 12] = [
         [
             Fp2 {

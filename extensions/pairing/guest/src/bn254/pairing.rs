@@ -29,6 +29,7 @@ use crate::{
 impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
     fn evaluate(&self, xy_frac: &(Fp, Fp)) -> EvaluatedLine<Fp2> {
         let (x_over_y, y_inv) = xy_frac;
+        // Represents the line L(x,y) = 1 + b (x/y) w^1 + c (1/y) w^3
         EvaluatedLine {
             b: self.b.mul_base(x_over_y),
             c: self.c.mul_base(y_inv),
@@ -153,6 +154,7 @@ impl MultiMillerLoop for Bn254 {
         f
     }
 
+    /// The expected output of this function when running the Miller loop with embedded exponent is c^2 * l_{2Q}
     fn pre_loop(
         Q_acc: Vec<AffinePoint<Self::Fp2>>,
         _Q: &[AffinePoint<Self::Fp2>],
@@ -160,6 +162,9 @@ impl MultiMillerLoop for Bn254 {
         xy_fracs: &[(Self::Fp, Self::Fp)],
     ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>) {
         let mut f = if let Some(mut c) = c {
+            // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
+            // will square c due to the last two values of the pseudo-binary encoding (BN254_PSEUDO_BINARY_ENCODING) being 0 and 1.
+            // Therefore, the final value of f at the end of this block is c^2.
             c.square_assign();
             c
         } else {
@@ -169,6 +174,8 @@ impl MultiMillerLoop for Bn254 {
         let mut Q_acc = Q_acc;
         let mut initial_lines = Vec::<EvaluatedLine<Self::Fp2>>::new();
 
+        // We don't need to special case the first iteration for Bn254, but since we are using the same Miller loop implementation
+        // for both Bn254 and Bls12_381, we need to do the first iteration separately here.
         let (Q_out_double, lines_2S) = Q_acc
             .into_iter()
             .map(|Q| Self::miller_double_step(&Q))
@@ -186,9 +193,10 @@ impl MultiMillerLoop for Bn254 {
         (f, Q_acc)
     }
 
+    /// Compute f_{Miller,Q}(P) from f_{6x+2,Q}(P)
     fn post_loop(
         f: &Self::Fp12,
-        Q_acc: Vec<AffinePoint<Self::Fp2>>,
+        Q_acc: Vec<AffinePoint<Self::Fp2>>, // at this point, Q_acc = (6x+2)Q
         Q: &[AffinePoint<Self::Fp2>],
         _c: Option<Self::Fp12>,
         xy_fracs: &[(Self::Fp, Self::Fp)],
@@ -199,7 +207,7 @@ impl MultiMillerLoop for Bn254 {
         let x_to_q_minus_1_over_3 = &Self::FROBENIUS_COEFF_FQ6_C1[1];
         let x_to_q_sq_minus_1_over_3 = &Self::FROBENIUS_COEFF_FQ6_C1[2];
 
-        // twisted frobenius calculation: `frob_p(twist(q)) = twist(q1)`
+        // For each q, compute q1 such that `frob_p(twist(q)) = twist(q1)`
         let q1_vec = Q
             .iter()
             .map(|Q| {
@@ -211,6 +219,7 @@ impl MultiMillerLoop for Bn254 {
             })
             .collect::<Vec<_>>();
 
+        // compute l_{(6x+2)\Psi(Q), \phi_p(\Psi(Q))} where \phi_p is the Frobenius map
         let (Q_out_add, lines_S_plus_Q) = Q_acc
             .iter()
             .zip(q1_vec.iter())
@@ -224,7 +233,7 @@ impl MultiMillerLoop for Bn254 {
             lines.push(line);
         }
 
-        // twisted frobenius calculation: `-frob_p^2(twist(q)) = twist(q2)`
+        // For each q, compute q2 such that `-frob_p^2(twist(q)) = twist(q2)`
         let q2_vec = Q
             .iter()
             .map(|Q| {
@@ -234,6 +243,7 @@ impl MultiMillerLoop for Bn254 {
             })
             .collect::<Vec<_>>();
 
+        // compute l_{(6x+2)\Psi(Q) + \phi_p(\Psi(Q)), -(\phi_p)^2(\Psi(Q))} where \phi_p is the Frobenius map
         let (Q_out_add, lines_S_plus_Q) = Q_acc
             .iter()
             .zip(q2_vec.iter())
@@ -342,17 +352,19 @@ impl Bn254 {
         }
         let c_inv = Fp12::ONE.div_unsafe(&c);
 
-        // f * u == c^λ
-        // f * u == c^{6x + 2 + q^3 - q^2 + q}
+        // We follow Theorem 3 of https://eprint.iacr.org/2024/640.pdf to check that the pairing equals 1
+        // By the theorem, it suffices to provide c and u such that f * u == c^λ.
+        // Since λ = 6x + 2 + q^3 - q^2 + q, we will check the equivalent condition:
         // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
-        // where fc == f * c^-{6x + 2}
+        // This is because we can compute f * c^-{6x+2} by embedding the c^-{6x+2} computation in the miller loop.
+
         // c_mul = c^-{q^3 - q^2 + q}
         let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
         let c_q2 = FieldExtension::frobenius_map(&c, 2);
         let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
         let c_mul = c_q3_inv * c_q2 * c_q_inv;
 
-        // Compute miller loop with c_inv
+        // Pass c inverse into the miller loop so that we compute fc == f * c^-{6x + 2}
         let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
 
         if fc * c_mul * u == Fp12::ONE {
