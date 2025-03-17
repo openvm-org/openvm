@@ -559,7 +559,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                         rs1 = In p1.as_ptr(),
                         rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE
                     );
-               }
+                }
             }
         });
 
