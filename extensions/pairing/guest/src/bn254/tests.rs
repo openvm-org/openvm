@@ -1,6 +1,7 @@
 use group::{ff::Field, prime::PrimeCurveAffine};
 use halo2curves_axiom::bn256::{
     Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1,
+    FROBENIUS_COEFF_FQ6_C1,
 };
 use num_bigint::BigUint;
 use num_traits::One;
@@ -287,4 +288,17 @@ fn test_bn254_pairing_check_hint_host() {
 fn test_bn254_final_exponent() {
     let final_exp = (BN254_MODULUS.pow(12) - BigUint::one()) / BN254_ORDER.clone();
     assert_eq!(Bn254::FINAL_EXPONENT.to_vec(), final_exp.to_bytes_be());
+}
+
+#[test]
+fn test_bn254_frobenius_coeffs_fq6() {
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..3 {
+        assert_eq!(
+            Bn254::FROBENIUS_COEFF_FQ6_C1[i],
+            convert_bn254_halo2_fq2_to_fp2(FROBENIUS_COEFF_FQ6_C1[i]),
+            "FROBENIUS_COEFFS_FQ6_C1[{}] failed",
+            i,
+        )
+    }
 }
