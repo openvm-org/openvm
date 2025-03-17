@@ -331,7 +331,11 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             //   only the first segment will have setup called
 
             let expected = iter::empty()
-                .chain(self.builder.prime_limbs.clone())
+                .chain({
+                    let mut prime_limbs = self.builder.prime_limbs.clone();
+                    prime_limbs.resize(self.builder.num_limbs, 0);
+                    prime_limbs
+                })
                 .chain(self.setup_values.iter().flat_map(|x| {
                     big_uint_to_num_limbs(x, self.builder.limb_bits, self.builder.num_limbs)
                         .into_iter()
