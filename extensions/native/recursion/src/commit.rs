@@ -54,6 +54,7 @@ pub trait PcsVariable<C: Config> {
         builder: &mut Builder<C>,
         rounds: Array<C, TwoAdicPcsRoundVariable<C>>,
         proof: Self::Proof,
+        log_max_height: RVar<C::N>,
         challenger: &mut impl ChallengerVariable<C>,
     );
 }

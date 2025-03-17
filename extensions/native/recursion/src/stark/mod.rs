@@ -200,6 +200,12 @@ where
         };
         // (T02a): `air_perm_by_height` is a valid permutation of `0..num_airs`.
         // (T02b): For all `i`, `air_proofs[i].log_degree <= MAX_TWO_ADICITY - log_blowup`.
+        // (T02c): For all `0<=i<num_air-1`, `air_proofs[air_perm_by_height[i]].log_degree <= air_proofs[air_perm_by_height[i+1]].log_degree`.
+        let log_max_height = {
+            let index = builder.get(air_perm_by_height, RVar::zero());
+            let air_proof = builder.get(air_proofs, index);
+            RVar::from(air_proof.log_degree.clone())
+        };
 
         // OK: trace_height_constraint_system comes from vkey so requirements of
         // `check_trace_height_constraints` are met.
@@ -683,7 +689,13 @@ where
 
         // Verify the pcs proof
         builder.cycle_tracker_start("stage-d-verify-pcs");
-        pcs.verify(builder, rounds, opening.proof.clone(), challenger);
+        pcs.verify(
+            builder,
+            rounds,
+            opening.proof.clone(),
+            log_max_height,
+            challenger,
+        );
         builder.cycle_tracker_end("stage-d-verify-pcs");
 
         builder.cycle_tracker_start("stage-e-verify-constraints");
