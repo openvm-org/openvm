@@ -16,7 +16,7 @@
 
 Chips in the VM need to perform memory read and write operations. The goal of memory checking is to ensure memory consistency across all chips. Every memory operation consists of an operation type (Read or Write), address (`address_space` and `pointer`), data, and timestamp. All memory operations across all chips should happen at distinct timestamps between $1$ and $2^{29}$. We assume that memory is initialized at timestamp $0$. For simplicity, we assume that all memory operations are enabled (there is a way to disable them in the implementation).
 
-Our memory is split into **online** and **offline** memory. Online memory provides actual data and generates access records during the program execution, and offline memory uses those records to verify memory consistency. Below we describe how offline memory works. First we look at the interactions on the memory bus and why they are sound in our ecosystem. Next we discuss two different memory models, namely, **volatile** and **persistent** memory.
+Our memory is split into **online** and **offline** memory. Online memory provides actual data and generates access records during program execution, while offline memory uses those records to verify memory consistency. Below we describe how offline memory works. First, we look at the interactions on the memory bus and why they are sound in our ecosystem. Next, we discuss two different memory models, namely, **volatile** and **persistent** memory.
 
 We use the offline memory checking argument of [BEGKN92](https://www.cs.ubc.ca/~will/papers/memcheck.pdf).
 
@@ -24,12 +24,12 @@ We use the offline memory checking argument of [BEGKN92](https://www.cs.ubc.ca/~
 
 We say an address is _accessed_ when it's initialized, finalized, read from, or written to. An address is initialized at timestamp $0$ and is finalized at the same timestamp it was last read from or written to (or $0$ if there were no operations involving it).
 
-To verify memory consistency, we use MEMORY_BUS to post information about all memory accesses through interactions. More specifically, we use **memory bridge** that **both** checks the timestamps inequality and does the necessary interactions:
+To verify memory consistency, we use MEMORY_BUS to post information about all memory accesses through interactions. More specifically, we use a **memory bridge** that **both** checks the timestamp inequality and performs the necessary interactions:
 
-- To verify Read (`address`, `data`, `new_timestamp`) operations, we need to know `prev_timestamp`, the previous timestamp when the address was accessed. We enforce that `prev_timestamp < new_timestamp`, and do the following interactions on MEMORY_BUS:
+- To verify Read (`address`, `data`, `new_timestamp`) operations, we need to know `prev_timestamp`, the previous timestamp when the address was accessed. We enforce that `prev_timestamp < new_timestamp`, and perform the following interactions on MEMORY_BUS:
   - Receive (`address`, `data`, `prev_timestamp`),
   - Send (`address`, `data`, `new_timestamp`).
-- To verify Write (`address`, `new_data`, `new_timestamp`) operations, we need to know `prev_timestamp` and `prev_data`, the previous timestamp when the address was accessed and the data stored at the address at that time. We enforce that `prev_timestamp < new_timestamp`, and do the following interactions on MEMORY_BUS:
+- To verify Write (`address`, `new_data`, `new_timestamp`) operations, we need to know `prev_timestamp` and `prev_data`, the previous timestamp when the address was accessed and the data stored at the address at that time. We enforce that `prev_timestamp < new_timestamp`, and perform the following interactions on MEMORY_BUS:
   - Receive (`address`, `prev_data`, `prev_timestamp`),
   - Send (`address`, `new_data`, `new_timestamp`).
 
