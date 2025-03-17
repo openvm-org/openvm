@@ -381,7 +381,7 @@ where
                 RVar::from(builder.sll::<Usize<_>>(RVar::one(), log_quotient_degree));
             let log_quotient_size = builder.eval_expr(log_degree + log_quotient_degree);
             // Assumption: (T02b) `log_degree <= MAX_TWO_ADICITY - low_blowup`
-            // Because the VK ensures `log_quotient_degree < log_blowup`, this won't access an out
+            // Because the VK ensures `log_quotient_degree <= log_blowup`, this won't access an out
             // of bound index.
             let quotient_domain =
                 domain.create_disjoint_domain(builder, log_quotient_size, Some(pcs.config.clone()));
