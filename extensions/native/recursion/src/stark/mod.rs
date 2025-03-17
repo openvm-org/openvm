@@ -200,7 +200,7 @@ where
         };
         // (T02a): `air_perm_by_height` is a valid permutation of `0..num_airs`.
         // (T02b): For all `i`, `air_proofs[i].log_degree <= MAX_TWO_ADICITY - log_blowup`.
-        // (T02c): For all `0<=i<num_air-1`, `air_proofs[air_perm_by_height[i]].log_degree <= air_proofs[air_perm_by_height[i+1]].log_degree`.
+        // (T02c): For all `0<=i<num_air-1`, `air_proofs[air_perm_by_height[i]].log_degree >= air_proofs[air_perm_by_height[i+1]].log_degree`.
         let log_max_height = {
             let index = builder.get(air_perm_by_height, RVar::zero());
             let air_proof = builder.get(air_proofs, index);

@@ -124,10 +124,10 @@ pub fn verify_two_adic_pcs<C: Config>(
 
     challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
 
-    let log_max_height_after_blowup = builder.eval_expr(log_max_height + RVar::from(log_blowup));
+    let log_max_lde_height = builder.eval_expr(log_max_height + RVar::from(log_blowup));
     // tag_exp is a shared buffer.
-    let tag_exp: Array<C, Felt<C::F>> = builder.array(log_max_height_after_blowup);
-    let w = config.get_two_adic_generator(builder, log_max_height_after_blowup);
+    let tag_exp: Array<C, Felt<C::F>> = builder.array(log_max_lde_height);
+    let w = config.get_two_adic_generator(builder, log_max_lde_height);
     let max_gen_pow = config.get_two_adic_generator(builder, 1);
     let one_var: Felt<C::F> = builder.eval(C::F::ONE);
 
@@ -155,7 +155,7 @@ pub fn verify_two_adic_pcs<C: Config>(
 
     iter_zip!(builder, proof.query_proofs).for_each(|ptr_vec, builder| {
         let query_proof = builder.iter_ptr_get(&proof.query_proofs, ptr_vec[0]);
-        let index_bits = challenger.sample_bits(builder, log_max_height_after_blowup);
+        let index_bits = challenger.sample_bits(builder, log_max_lde_height);
 
         // We reset the reduced opening accumulators at the start of each query.
         // We describe what `ro[log_height]` computes per query in pseduo-code, where `log_height` is log2 of the size of the LDE domain:
@@ -200,7 +200,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         builder.cycle_tracker_start("cache-generator-powers");
         {
             // truncate index_bits to log_max_height
-            let index_bits_truncated = index_bits.slice(builder, 0, log_max_height_after_blowup);
+            let index_bits_truncated = index_bits.slice(builder, 0, log_max_lde_height);
 
             // b = index_bits
             // w = generator of order 2^log_max_height
@@ -263,7 +263,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     let cur_alpha_pow = builder.get(&alpha_pow, log_height);
 
                     builder.cycle_tracker_start("exp-reverse-bits-len");
-                    let height_idx = builder.eval_expr(log_max_height_after_blowup - log_height);
+                    let height_idx = builder.eval_expr(log_max_lde_height - log_height);
                     let x = builder.get(&tag_exp, height_idx);
                     builder.cycle_tracker_end("exp-reverse-bits-len");
 
@@ -319,7 +319,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 builder.cycle_tracker_end("compute-reduced-opening");
 
                 let bits_reduced: Usize<_> =
-                    builder.eval(log_max_height_after_blowup - log_batch_max_height);
+                    builder.eval(log_max_lde_height - log_batch_max_height);
                 let index_bits_shifted_v1 = index_bits.shift(builder, bits_reduced);
 
                 builder.cycle_tracker_start("verify-batch");
@@ -343,7 +343,7 @@ pub fn verify_two_adic_pcs<C: Config>(
             &query_proof,
             &betas,
             &ro,
-            log_max_height_after_blowup,
+            log_max_lde_height,
         );
 
         builder.assert_ext_eq(folded_eval, final_poly_ct);
