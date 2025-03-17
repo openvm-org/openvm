@@ -693,11 +693,14 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
         self.offline_memory.clone()
     }
-    pub fn get_memory_logs(&self) -> Vec<MemoryLogEntry<F>> {
-        self.memory.log.clone()
+    pub fn get_memory_logs(&self) -> &Vec<MemoryLogEntry<F>> {
+        &self.memory.log
     }
     pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {
         self.memory.log = logs;
+    }
+    pub fn take_memory_logs(&mut self) -> Vec<MemoryLogEntry<F>> {
+        std::mem::take(&mut self.memory.log)
     }
 }
 
