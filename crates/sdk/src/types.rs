@@ -33,7 +33,6 @@ impl EvmProof {
 impl From<RawEvmProof> for EvmProof {
     fn from(evm_proof: RawEvmProof) -> Self {
         let RawEvmProof { instances, proof } = evm_proof;
-        assert_eq!(instances.len(), 1);
         assert!(NUM_BN254_ACCUMULATORS + 2 < instances.len());
         assert_eq!(proof.len(), NUM_BN254_PROOF * BN254_BYTES);
         let accumulators = instances[0..NUM_BN254_ACCUMULATORS]
