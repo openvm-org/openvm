@@ -57,12 +57,7 @@ the entire chip with the combined functionality of the adapter and core can be i
 > [!IMPORTANT]
 > It is a responsibility of the instruction executor (more specifically, the adapter) to update the execution state. It is also its responsibility to constrain that the timestamp increases. If any of these is not done correctly, the proof of correctness will fail to be generated.
 
-## What to take into account when adding a new chip
-
-- [Ensure memory consistency](./memory.md#what-to-take-into-account-when-adding-a-new-chip)
-- Do not forget to constrain that `is_valid` is boolean in your core AIR.
-- If your chip generates some number of trace rows, and this number is not a power of two, the trace is padded with all-zero rows. It should correspond to a legitimate operation, most likely `is_valid = 0` though. For example, if your AIR asserts that the value in the first column is 1 less than the value in the second column, you cannot just write `builder.assert_eq(local.x + 1, local.y)`, because this is not the case for the padding rows.
-- To prevent [timestamp overflow](./memory.md#time-goes-forward), we **require** that each instruction executor chip must satisfy the following condition:
+To prevent [timestamp overflow](./memory.md#time-goes-forward), we **require** that each instruction executor chip must satisfy the following condition:
 
 > [!IMPORTANT]
 > In the AIR, the amount that the timestamp is constrained to increase during execution of a single instruction is at most `num_interactions * num_rows_per_execution`.
@@ -71,6 +66,12 @@ Here `num_interactions` is the number of interactions in the AIR: this is a stat
 The number of AIR interactions does not depend on the number of trace rows, and it doesn't depend on whether messages are actually sent or not. In general, the trace for the execution of a single instruction can
 use multiple rows in the chip's trace matrix: this is represented by `num_rows_per_execution`. In summary
 we bound the integer amount that the timestamp should increment in a single instruction execution based on the number of interactions and the number of rows in the trace.
+
+## What to take into account when adding a new chip
+
+- [Ensure memory consistency](./memory.md#what-to-take-into-account-when-adding-a-new-chip)
+- Do not forget to constrain that `is_valid` is boolean in your core AIR.
+- If your chip generates some number of trace rows, and this number is not a power of two, the trace is padded with all-zero rows. It should correspond to a legitimate operation, most likely `is_valid = 0` though. For example, if your AIR asserts that the value in the first column is 1 less than the value in the second column, you cannot just write `builder.assert_eq(local.x + 1, local.y)`, because this is not the case for the padding rows.
 
 ### Inspection of VM Chip Timestamp Increments
 
