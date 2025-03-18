@@ -4488,6 +4488,7 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-transpiler",
  "serde",
+ "serde_json",
  "serde_with",
  "static_assertions",
  "tracing",

@@ -47,6 +47,7 @@ itertools.workspace = true
 getset.workspace = true
 clap = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["hex"] }
+serde_json.workspace = true
 
 [features]
 default = ["parallel"]
