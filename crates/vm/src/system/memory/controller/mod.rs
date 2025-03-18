@@ -106,6 +106,7 @@ pub struct MemoryController<F> {
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 
     access_adapters: AccessAdapterInventory<F>,
+    access_adapter_total_height_upper_bound: usize,
 
     // Filled during finalization.
     final_state: Option<FinalState<F>>,
@@ -263,6 +264,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 mem_config.clk_max_bits,
                 mem_config.max_access_adapter_n,
             ),
+            access_adapter_total_height_upper_bound: 0,
             range_checker,
             range_checker_bus,
             final_state: None,
@@ -314,6 +316,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 mem_config.clk_max_bits,
                 mem_config.max_access_adapter_n,
             ),
+            access_adapter_total_height_upper_bound: 0,
             range_checker,
             range_checker_bus,
             final_state: None,
@@ -380,6 +383,36 @@ impl<F: PrimeField32> MemoryController<F> {
         )
     }
 
+    fn adjust_adapter_row_bound<const N: usize>(&mut self, ptr: u32) {
+        self.access_adapter_total_height_upper_bound += match N {
+            1 => {
+                // const HEIGHT_UB_1: usize = 2;
+                6
+            }
+            2 => {
+                // const HEIGHT_UB_2: [usize; 8] = [2, 6, 2, 6, 2, 6, 2, 6];
+                const LUT_2: [usize; 8] = [4, 10, 4, 12, 4, 10, 4, 14];
+                LUT_2[(ptr & 3) as usize]
+            }
+            4 => {
+                // const HEIGHT_UB_4: [usize; 8] = [2, 10, 6, 10, 2, 10, 6, 10];
+                const LUT_4: [usize; 8] = [2, 18, 8, 18, 2, 20, 10, 20];
+                LUT_4[(ptr & 3) as usize]
+            }
+            8 => {
+                // const HEIGHT_UB_8: [usize; 8] = [0, 18, 10, 18, 6, 18, 10, 18];
+                const LUT_8: [usize; 8] = [0, 34, 16, 34, 6, 34, 16, 34];
+                LUT_8[(ptr & 3) as usize]
+            }
+            32 => {
+                // const HEIGHT_UB_32: [usize; 8] = [4, 66, 34, 66, 18, 66, 34, 66];
+                const LUT_32: [usize; 8] = [6, 124, 58, 124, 24, 124, 58, 124];
+                LUT_32[(ptr & 3) as usize]
+            }
+            _ => panic!("unexpected size: {N}"),
+        };
+    }
+
     pub fn read_cell(&mut self, address_space: F, pointer: F) -> (RecordId, F) {
         let (record_id, [data]) = self.read(address_space, pointer);
         (record_id, data)
@@ -392,6 +425,7 @@ impl<F: PrimeField32> MemoryController<F> {
             address_space == F::ZERO || ptr_u32 < (1 << self.mem_config.pointer_max_bits),
             "memory out of bounds: {ptr_u32:?}",
         );
+        self.adjust_adapter_row_bound::<N>(ptr_u32);
 
         let (record_id, values) = self.memory.read::<N>(address_space_u32, ptr_u32);
 
@@ -435,6 +469,7 @@ impl<F: PrimeField32> MemoryController<F> {
             ptr_u32 < (1 << self.mem_config.pointer_max_bits),
             "memory out of bounds: {ptr_u32:?}",
         );
+        self.adjust_adapter_row_bound::<N>(ptr_u32);
 
         self.memory.write(address_space_u32, ptr_u32, data)
     }
@@ -653,6 +688,21 @@ impl<F: PrimeField32> MemoryController<F> {
             }),
         }
     }
+
+    pub fn estimated_trace_heights(&self) -> Vec<usize> {
+        let mut access_adapter_heights = vec![0; self.access_adapters.num_access_adapters()];
+        access_adapter_heights[0] = self.access_adapter_total_height_upper_bound;
+        match &self.interface_chip {
+            MemoryInterface::Volatile { .. } => {
+                iter::once(0).chain(access_adapter_heights).collect()
+            }
+            MemoryInterface::Persistent { .. } => iter::once(0)
+                .chain(iter::once(0))
+                .chain(access_adapter_heights)
+                .collect(),
+        }
+    }
+
     pub fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
         let access_adapters = vec![1; self.access_adapters.num_access_adapters()];
         match &self.interface_chip {

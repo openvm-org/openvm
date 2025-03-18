@@ -236,6 +236,38 @@ fn test_memory_controller() {
 }
 
 #[test]
+fn test_memory_controller_2() {
+    let memory_bus = MemoryBus::new(MEMORY_BUS);
+    let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
+    let compression_bus = PermutationCheckBus::new(POSEIDON2_DIRECT_BUS);
+    let memory_config = MemoryConfig::default();
+    let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
+    let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
+    let mut poseidon_chip =
+        Poseidon2PeripheryChip::new(Poseidon2Config::default(), POSEIDON2_DIRECT_BUS, 3);
+
+    for pos in 0..8 {
+        let mut memory_controller = MemoryController::with_persistent_memory(
+            memory_bus,
+            memory_config,
+            range_checker.clone(),
+            merkle_bus,
+            compression_bus,
+        );
+
+        const LEN: usize = 4;
+        memory_controller.write(
+            BabyBear::ONE,
+            BabyBear::from_canonical_u32(pos),
+            [BabyBear::from_canonical_u32(5); LEN],
+        );
+        memory_controller.finalize(Some(&mut poseidon_chip));
+
+        println!("pos {pos}: {:?}", memory_controller.current_trace_heights());
+    }
+}
+
+#[test]
 fn test_memory_controller_persistent() {
     let memory_bus = MemoryBus::new(MEMORY_BUS);
     let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);

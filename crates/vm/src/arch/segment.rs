@@ -36,6 +36,8 @@ const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 //    its trace width is 36 and its after challenge trace width is 80.
 const DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT: usize = DEFAULT_MAX_SEGMENT_LEN * 120;
 
+const ADAPTER_ROWS_UPPER_BOUND_THRESHOLD: u32 = 1 << 30;
+
 pub trait SegmentationStrategy:
     std::fmt::Debug + Send + Sync + std::panic::UnwindSafe + std::panic::RefUnwindSafe
 {
@@ -52,6 +54,8 @@ pub trait SegmentationStrategy:
 pub struct DefaultSegmentationStrategy {
     max_segment_len: usize,
     max_cells_per_chip_in_segment: usize,
+    #[allow(dead_code)]
+    adapter_rows_upper_bound_threshold: u32,
 }
 
 impl Default for DefaultSegmentationStrategy {
@@ -59,6 +63,7 @@ impl Default for DefaultSegmentationStrategy {
         Self {
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             max_cells_per_chip_in_segment: DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT,
+            adapter_rows_upper_bound_threshold: ADAPTER_ROWS_UPPER_BOUND_THRESHOLD,
         }
     }
 }
@@ -68,6 +73,7 @@ impl DefaultSegmentationStrategy {
         Self {
             max_segment_len,
             max_cells_per_chip_in_segment: max_segment_len * 120,
+            adapter_rows_upper_bound_threshold: ADAPTER_ROWS_UPPER_BOUND_THRESHOLD,
         }
     }
 
@@ -75,6 +81,7 @@ impl DefaultSegmentationStrategy {
         Self {
             max_segment_len,
             max_cells_per_chip_in_segment,
+            adapter_rows_upper_bound_threshold: ADAPTER_ROWS_UPPER_BOUND_THRESHOLD,
         }
     }
 }
@@ -328,8 +335,6 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     }
 
     /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.
-    ///
-    /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
     fn should_segment(&mut self) -> bool {
         if !self.system_config().continuation_enabled {
             return false;
@@ -353,10 +358,5 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
 
     pub fn current_trace_cells(&self) -> Vec<usize> {
         self.chip_complex.current_trace_cells()
-    }
-    /// Gets current trace heights for each chip.
-    /// Includes constant trace heights.
-    pub fn current_trace_heights(&self) -> Vec<usize> {
-        self.chip_complex.current_trace_heights()
     }
 }
