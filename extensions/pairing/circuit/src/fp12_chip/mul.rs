@@ -60,7 +60,7 @@ pub fn fp12_mul_expr(
     xi: [isize; 2],
 ) -> FieldExpr {
     config.check_valid();
-    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
+    let builder = ExprBuilder::new(config);
     let builder = Rc::new(RefCell::new(builder));
 
     let mut x = Fp12::new(builder.clone());

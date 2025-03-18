@@ -7,7 +7,7 @@ use crate::Fp12;
 
 pub fn fp12_add_expr(config: ExprBuilderConfig, range_bus: VariableRangeCheckerBus) -> FieldExpr {
     config.check_valid();
-    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
+    let builder = ExprBuilder::new(config);
     let builder = Rc::new(RefCell::new(builder));
 
     let mut x = Fp12::new(builder.clone());

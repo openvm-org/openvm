@@ -63,7 +63,7 @@ pub fn fp2_addsub_expr(
     range_bus: VariableRangeCheckerBus,
 ) -> (FieldExpr, usize, usize) {
     config.check_valid();
-    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
+    let builder = ExprBuilder::new(config);
     let builder = Rc::new(RefCell::new(builder));
 
     let mut x = Fp2::new(builder.clone());
