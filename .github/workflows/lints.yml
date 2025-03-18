@@ -60,6 +60,8 @@ jobs:
               elif [[ "$crate_path" == *"extensions/pairing/tests/programs"* ]]; then
                 echo "Running cargo clippy with openvm_pairing_guest::bn254 feature for $crate_path"
                 cargo clippy --manifest-path "$crate_path/Cargo.toml" --all-targets --features "std bn254" -- -D warnings
+                echo "Running cargo clippy with openvm_pairing_guest::bls12_381 feature for $crate_path"
+                cargo clippy --manifest-path "$crate_path/Cargo.toml" --all-targets --features "std bls12_381" -- -D warnings
               else
                 echo "Running cargo clippy for $crate_path"
                 cargo clippy --manifest-path "$crate_path/Cargo.toml" --all-targets --features std -- -D warnings
