@@ -10,7 +10,7 @@ mod bn254 {
     use openvm_circuit::{arch::SystemConfig, utils::air_test_with_min_segments};
     use openvm_ecc_circuit::WeierstrassExtension;
     use openvm_ecc_guest::{
-        algebra::field::FieldExtension,
+        algebra::{field::FieldExtension, IntMod},
         halo2curves::{
             bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
             ff::Field,
@@ -22,7 +22,7 @@ mod bn254 {
     use openvm_pairing_guest::{
         bn254::BN254_MODULUS,
         halo2curves_shims::bn254::Bn254,
-        pairing::{EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop},
+        pairing::{EvaluatedLine, FinalExp, LineMulDType, MillerStep, MultiMillerLoop},
     };
     use openvm_pairing_transpiler::PairingTranspilerExtension;
     use openvm_rv32im_transpiler::{
@@ -344,6 +344,58 @@ mod bn254 {
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
         air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_bn254_final_exp_hint() -> Result<()> {
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "bn_final_exp_hint",
+            ["bn254"],
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        )?;
+
+        let P = G1Affine::generator();
+        let Q = G2Affine::generator();
+        let ps = vec![AffinePoint::new(P.x, P.y), AffinePoint::new(P.x, -P.y)];
+        let qs = vec![AffinePoint::new(Q.x, Q.y), AffinePoint::new(Q.x, Q.y)];
+        let f = Bn254::multi_miller_loop(&ps, &qs);
+        let (c, s) = Bn254::final_exp_hint(&f);
+        let ps = ps
+            .into_iter()
+            .map(|pt| {
+                let [x, y] = [pt.x, pt.y]
+                    .map(|x| openvm_pairing_guest::bn254::Fp::from_le_bytes(&x.to_bytes()));
+                AffinePoint::new(x, y)
+            })
+            .collect::<Vec<_>>();
+        let qs = qs
+            .into_iter()
+            .map(|pt| {
+                let [x, y] = [pt.x, pt.y]
+                    .map(|x| openvm_pairing_guest::bn254::Fp2::from_bytes(&x.to_bytes()));
+                AffinePoint::new(x, y)
+            })
+            .collect::<Vec<_>>();
+        let [c, s] = [c, s].map(|x| openvm_pairing_guest::bn254::Fp12::from_bytes(&x.to_bytes()));
+        let io = (ps, qs, (c, s));
+        let io = openvm::serde::to_vec(&io).unwrap();
+        let io = io
+            .into_iter()
+            .flat_map(|w| w.to_le_bytes())
+            .map(F::from_canonical_u8)
+            .collect();
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1);
         Ok(())
     }
 }
@@ -734,7 +786,7 @@ mod bls12_381 {
     fn test_bls12_381_final_exp_hint() -> Result<()> {
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
-            "final_exp_hint",
+            "bls_final_exp_hint",
             ["bls12_381"],
         )?;
         let openvm_exe = VmExe::from_elf(
