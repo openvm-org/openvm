@@ -54,7 +54,11 @@ pub mod prover;
 
 mod stdin;
 pub use stdin::*;
+
+use crate::types::EvmOpenvmProof;
+
 pub mod fs;
+pub mod types;
 
 pub type NonRootCommittedExe = VmCommittedExe<SC>;
 
@@ -232,7 +236,7 @@ impl Sdk {
         app_exe: Arc<NonRootCommittedExe>,
         agg_pk: AggProvingKey,
         inputs: StdIn,
-    ) -> Result<EvmProof>
+    ) -> Result<EvmOpenvmProof>
     where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
@@ -255,9 +259,10 @@ impl Sdk {
     pub fn verify_evm_proof(
         &self,
         evm_verifier: &EvmVerifier,
-        evm_proof: &EvmProof,
+        evm_openvm_proof: &EvmOpenvmProof,
     ) -> Result<u64> {
-        let gas_cost = Halo2WrapperProvingKey::evm_verify(evm_verifier, evm_proof)
+        let evm_proof: EvmProof = evm_openvm_proof.clone().into();
+        let gas_cost = Halo2WrapperProvingKey::evm_verify(evm_verifier, &evm_proof)
             .map_err(|reason| eyre::eyre!("Sdk::verify_evm_proof: {reason:?}"))?;
         Ok(gas_cost)
     }

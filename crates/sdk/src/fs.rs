@@ -5,11 +5,12 @@ use std::{
 
 use eyre::Result;
 use openvm_circuit::arch::{instructions::exe::VmExe, ContinuationVmProof, VmConfig};
-use openvm_native_recursion::halo2::{wrapper::EvmVerifier, EvmProof};
+use openvm_native_recursion::halo2::wrapper::EvmVerifier;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
     keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey},
+    types::EvmOpenvmProof,
     F, SC,
 };
 
@@ -61,11 +62,11 @@ pub fn write_agg_pk_to_file<P: AsRef<Path>>(agg_pk: AggProvingKey, path: P) -> R
     write_to_file_bitcode(path, agg_pk)
 }
 
-pub fn read_evm_proof_from_file<P: AsRef<Path>>(path: P) -> Result<EvmProof> {
+pub fn read_evm_proof_from_file<P: AsRef<Path>>(path: P) -> Result<EvmOpenvmProof> {
     read_from_file_bitcode(path)
 }
 
-pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmProof, path: P) -> Result<()> {
+pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmOpenvmProof, path: P) -> Result<()> {
     write_to_file_bitcode(path, proof)
 }
 

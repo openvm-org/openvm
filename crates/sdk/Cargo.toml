@@ -46,6 +46,7 @@ tracing.workspace = true
 itertools.workspace = true
 getset.workspace = true
 clap = { workspace = true, features = ["derive"] }
+serde-big-array.workspace = true
 
 [features]
 default = ["parallel"]

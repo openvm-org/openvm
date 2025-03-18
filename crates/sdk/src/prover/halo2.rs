@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use openvm_native_compiler::prelude::Witness;
 use openvm_native_recursion::{
-    halo2::{utils::Halo2ParamsReader, EvmProof, Halo2Params},
+    halo2::{utils::Halo2ParamsReader, Halo2Params},
     witness::Witnessable,
 };
 use openvm_stark_sdk::openvm_stark_backend::proof::Proof;
 use tracing::info_span;
 
-use crate::{keygen::Halo2ProvingKey, RootSC};
+use crate::{keygen::Halo2ProvingKey, types::EvmOpenvmProof, RootSC};
+
 pub struct Halo2Prover {
     halo2_pk: Halo2ProvingKey,
     verifier_srs: Arc<Halo2Params>,
@@ -27,7 +28,7 @@ impl Halo2Prover {
             wrapper_srs,
         }
     }
-    pub fn prove_for_evm(&self, root_proof: &Proof<RootSC>) -> EvmProof {
+    pub fn prove_for_evm(&self, root_proof: &Proof<RootSC>) -> EvmOpenvmProof {
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
         let snark = info_span!("prove", group = "halo2_outer").in_scope(|| {
@@ -39,6 +40,7 @@ impl Halo2Prover {
             self.halo2_pk
                 .wrapper
                 .prove_for_evm(&self.wrapper_srs, snark)
+                .into()
         })
     }
 }
