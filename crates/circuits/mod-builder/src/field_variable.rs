@@ -32,7 +32,7 @@ pub struct FieldVariable {
 
     // This is the same for all FieldVariable, but we might use different values at runtime,
     // so store it here for easy configuration.
-    pub range_checker_bits: usize,
+    pub max_carry_bits: usize,
 }
 
 impl FieldVariable {
@@ -108,7 +108,7 @@ impl FieldVariable {
 
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
         let (_, carry_bits) = get_carry_max_abs_and_bits(max_overflow_bits, canonical_limb_bits);
-        if carry_bits > a.range_checker_bits {
+        if carry_bits > a.max_carry_bits {
             a.save();
         }
     }
@@ -139,7 +139,7 @@ impl FieldVariable {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: max(self.expr_limbs, other.expr_limbs),
-            range_checker_bits: self.range_checker_bits,
+            max_carry_bits: self.max_carry_bits,
         }
     }
 
@@ -166,7 +166,7 @@ impl FieldVariable {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: max(self.expr_limbs, other.expr_limbs),
-            range_checker_bits: self.range_checker_bits,
+            max_carry_bits: self.max_carry_bits,
         }
     }
 
@@ -195,7 +195,7 @@ impl FieldVariable {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs + other.expr_limbs - 1,
-            range_checker_bits: self.range_checker_bits,
+            max_carry_bits: self.max_carry_bits,
         }
     }
 
@@ -215,7 +215,7 @@ impl FieldVariable {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs * 2 - 1,
-            range_checker_bits: self.range_checker_bits,
+            max_carry_bits: self.max_carry_bits,
         }
     }
 
@@ -235,7 +235,7 @@ impl FieldVariable {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs,
-            range_checker_bits: self.range_checker_bits,
+            max_carry_bits: self.max_carry_bits,
         }
     }
 
@@ -255,7 +255,7 @@ impl FieldVariable {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs,
-            range_checker_bits: self.range_checker_bits,
+            max_carry_bits: self.max_carry_bits,
         }
     }
 
@@ -284,7 +284,7 @@ impl FieldVariable {
         );
         let carry_bits =
             new_constraint.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
-        if carry_bits > self.range_checker_bits {
+        if carry_bits > self.max_carry_bits {
             self.save();
         }
         // Do it again to check if other needs to be saved.
@@ -297,7 +297,7 @@ impl FieldVariable {
         );
         let carry_bits =
             new_constraint.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
-        if carry_bits > self.range_checker_bits {
+        if carry_bits > self.max_carry_bits {
             other.save();
         }
 
@@ -321,7 +321,7 @@ impl FieldVariable {
 
     pub fn from_var(builder: Rc<RefCell<ExprBuilder>>, var: SymbolicExpr) -> FieldVariable {
         let borrowed_builder = builder.borrow();
-        let range_checker_bits = borrowed_builder.range_checker_bits;
+        let max_carry_bits = borrowed_builder.max_carry_bits;
         assert!(
             matches!(var, SymbolicExpr::Var(_)),
             "Expected var to be of type SymbolicExpr::Var"
@@ -335,7 +335,7 @@ impl FieldVariable {
             limb_max_abs: (1 << canonical_limb_bits) - 1,
             max_overflow_bits: canonical_limb_bits,
             expr_limbs: num_limbs,
-            range_checker_bits,
+            max_carry_bits,
         }
     }
 
@@ -350,7 +350,7 @@ impl FieldVariable {
             limb_max_abs,
             max_overflow_bits,
             expr_limbs,
-            range_checker_bits: a.range_checker_bits,
+            max_carry_bits: a.max_carry_bits,
         }
     }
 }

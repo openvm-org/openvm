@@ -69,25 +69,22 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
         AB::Expr: 'a,
     {
         assert_eq!(expr.limbs.len(), cols.carries.len());
-        let (carry_min_value_abs, carry_abs_bits) =
+        let (carry_min_value_abs, _) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
+        // It suffices to range check the carries to `modulus_bits - limb_bits - 1` because
+        // it guarantees that the carry constraints below don't overflow
+        let max_carry_bits = AB::F::bits() - self.limb_bits - 1;
         // 1. Constrain the limbs size of carries.
         for &carry in cols.carries.iter() {
             range_check(
                 builder,
                 self.range_checker_bus,
                 self.decomp,
-                carry_abs_bits,
+                max_carry_bits,
                 carry + AB::F::from_canonical_usize(carry_min_value_abs),
                 is_valid.clone(),
             );
         }
-
-        // Ensure that the carry constraints below don't overflow.
-        assert!(
-            self.decomp + self.limb_bits < AB::F::bits(),
-            "range_checker_bits + limb_bits >= modulus_bits"
-        );
 
         // 2. Constrain the carries and expr.
         let mut previous_carry = AB::Expr::ZERO;

@@ -98,13 +98,13 @@ impl Fp2 {
         let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
         let carry_bits =
             constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
-        if carry_bits > self.c0.range_checker_bits {
+        if carry_bits > self.c0.max_carry_bits {
             self.save();
         }
         let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
         let carry_bits =
             constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
-        if carry_bits > self.c0.range_checker_bits {
+        if carry_bits > self.c0.max_carry_bits {
             other.save();
         }
 
@@ -112,13 +112,13 @@ impl Fp2 {
         let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
         let carry_bits =
             constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
-        if carry_bits > self.c0.range_checker_bits {
+        if carry_bits > self.c0.max_carry_bits {
             self.save();
         }
         let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
         let carry_bits =
             constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
-        if carry_bits > self.c0.range_checker_bits {
+        if carry_bits > self.c0.max_carry_bits {
             other.save();
         }
 
