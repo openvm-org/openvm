@@ -22,7 +22,7 @@ pub mod vm;
 #[allow(unused_imports)]
 pub use stark::*;
 
-use crate::{keygen::AggProvingKey, prover::halo2::Halo2Prover, types::EvmOpenvmProof};
+use crate::{keygen::AggProvingKey, prover::halo2::Halo2Prover, types::EvmProof};
 
 pub struct ContinuationProver<VC> {
     stark_prover: StarkProver<VC>,
@@ -55,7 +55,7 @@ impl<VC> ContinuationProver<VC> {
         self
     }
 
-    pub fn generate_proof_for_evm(&self, input: StdIn) -> EvmOpenvmProof
+    pub fn generate_proof_for_evm(&self, input: StdIn) -> EvmProof
     where
         VC: VmConfig<F>,
         VC::Executor: Chip<SC>,

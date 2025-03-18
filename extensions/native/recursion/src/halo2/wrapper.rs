@@ -16,7 +16,7 @@ use snark_verifier_sdk::{
 
 use crate::halo2::{
     utils::{Halo2ParamsReader, KZG_PARAMS_FOR_SVK},
-    EvmProof, Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning,
+    Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, RawEvmProof,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,10 +78,10 @@ impl Halo2WrapperProvingKey {
         }
     }
     /// A helper function for testing to verify the proof of this circuit with evm verifier.
-    pub fn evm_verify(evm_verifier: &EvmVerifier, evm_proof: &EvmProof) -> Result<u64, String> {
+    pub fn evm_verify(evm_verifier: &EvmVerifier, evm_proof: &RawEvmProof) -> Result<u64, String> {
         evm_verify(
             evm_verifier.0.clone(),
-            evm_proof.instances.clone(),
+            vec![evm_proof.instances.clone()],
             evm_proof.proof.clone(),
         )
     }
@@ -99,18 +99,18 @@ impl Halo2WrapperProvingKey {
             None,
         ))
     }
-    pub fn prove_for_evm(&self, params: &Halo2Params, snark_to_verify: Snark) -> EvmProof {
+    pub fn prove_for_evm(&self, params: &Halo2Params, snark_to_verify: Snark) -> RawEvmProof {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
         let k = self.pinning.metadata.config_params.k;
         let prover_circuit = self.generate_circuit_object_for_proving(k, snark_to_verify);
-        let pvs = prover_circuit.instances();
+        let mut pvs = prover_circuit.instances();
         let proof = gen_evm_proof_shplonk(params, &self.pinning.pk, prover_circuit, pvs.clone());
         #[cfg(feature = "bench-metrics")]
         metrics::gauge!("total_proof_time_ms").set(start.elapsed().as_millis() as f64);
 
-        EvmProof {
-            instances: pvs,
+        RawEvmProof {
+            instances: pvs.pop().unwrap(),
             proof,
         }
     }

@@ -8,7 +8,7 @@ use openvm_native_recursion::{
 use openvm_stark_sdk::openvm_stark_backend::proof::Proof;
 use tracing::info_span;
 
-use crate::{keygen::Halo2ProvingKey, types::EvmOpenvmProof, RootSC};
+use crate::{keygen::Halo2ProvingKey, types::EvmProof, RootSC};
 
 pub struct Halo2Prover {
     halo2_pk: Halo2ProvingKey,
@@ -28,7 +28,7 @@ impl Halo2Prover {
             wrapper_srs,
         }
     }
-    pub fn prove_for_evm(&self, root_proof: &Proof<RootSC>) -> EvmOpenvmProof {
+    pub fn prove_for_evm(&self, root_proof: &Proof<RootSC>) -> EvmProof {
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
         let snark = info_span!("prove", group = "halo2_outer").in_scope(|| {
