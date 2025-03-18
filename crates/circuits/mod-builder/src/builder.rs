@@ -1,4 +1,4 @@
-use std::{cell::RefCell, iter, ops::Deref, rc::Rc};
+use std::{cell::RefCell, cmp::min, iter, ops::Deref, rc::Rc};
 
 use itertools::{zip_eq, Itertools};
 use num_bigint::{BigInt, BigUint, Sign};
@@ -57,6 +57,8 @@ pub struct ExprBuilder {
     /// Number of limbs in canonical representation of the bigint field element.
     pub num_limbs: usize,
     proper_max: BigUint,
+    // The max bits that we can range check.
+    pub range_checker_bits: usize,
     // The max bits that carries are allowed to have.
     pub max_carry_bits: usize,
 
@@ -88,12 +90,13 @@ pub struct ExprBuilder {
 }
 
 impl ExprBuilder {
-    pub fn new(config: ExprBuilderConfig) -> Self {
+    pub fn new(config: ExprBuilderConfig, range_checker_bits: usize) -> Self {
         let prime_bigint = BigInt::from_biguint(Sign::Plus, config.modulus.clone());
         let proper_max = (BigUint::one() << (config.num_limbs * config.limb_bits)) - BigUint::one();
         // modulus of the proof system (BabyBear)
         // we hardcode this now, but we can make it configurable in the future
         let modulus_bits = 31;
+        // Max carry bits to ensure constraints don't overflow
         let max_carry_bits = modulus_bits - config.limb_bits - 2;
         Self {
             prime: config.modulus.clone(),
@@ -104,7 +107,8 @@ impl ExprBuilder {
             limb_bits: config.limb_bits,
             num_limbs: config.num_limbs,
             proper_max,
-            max_carry_bits,
+            range_checker_bits,
+            max_carry_bits: min(max_carry_bits, range_checker_bits),
             num_variables: 0,
             constants: vec![],
             q_limbs: vec![],
