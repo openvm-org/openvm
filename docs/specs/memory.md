@@ -66,7 +66,7 @@ impl<T: FieldAlgebra, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<'_
 }
 ```
 
-Every instruction executor does this via the **memory controller** specifically designed for it. The memory controller communicates with the memory bus via the **access adapter inventory**, which consists of **access adapters**.
+Every instruction executor does this via the **memory controller** API. The memory controller communicates with the memory bus via the **access adapter inventory**, which consists of **access adapters**.
 
 ## Access adapters
 
@@ -84,14 +84,14 @@ Formally speaking, our memory model is as follows:
   - Every element of $S$ consists of consecutive integers (or _is a subsegment_),
   - Every element of $S$ has a power-of-two size (hence nonempty).
 - At any point of time, for each valid address space, we store a nice set of _memory segments_, and for each of them we remember the actual values there.
-- In our memory model, the chips are allowed to perform reads and writes from/to power-of-two subsegments of memory (more specifically, subsegments with length that is a power of two not exceeding 64).
+- In our memory model, the chips are allowed to perform reads and writes from/to power-of-two subsegments of memory (more specifically, subsegments with length that is a power of two not exceeding 32).
 - When we want to read from/write to a subsegment, **we transform the nice set for the corresponding address space,** so that our set contains the queried subsegment, using the following operations:
   - _Create_ a new aligned subsegment of length `CHUNK` (which is a power of two). It must not overlap with any other subsegment.
   - _Split_ an existing subsegment by replacing it with its halves.
   - _Merge_ two adjacent subsegments of equal length into one.
 - It is easy to see that the set remains nice after each operation.
 
-The _split_ and _merge_ operations for a subsegment of length `N` are handled by `AccessAdapterAir<N>` (and we only have 6 of them, hence up to 64). More specifically:
+The _split_ and _merge_ operations for a subsegment of length `N` are handled by `AccessAdapterAir<N>` (and we only have 5 of them, hence up to 32). More specifically:
 - We have a `timestamp` associated with each subsegment from our nice set -- basically the timestamp of last read/write of any part in this subsegment.
 - Of course, merging two halves creates a subsegment with the timestamp being the maximal of two timestamps for the halves.
 - Splitting, however, just makes all child timestamps equal to the former timestamp of the segment being split.
@@ -164,7 +164,7 @@ Assume that the MEMORY_BUS interactions and the constraints mentioned above are 
 
 ### Time goes forward
 
-In the connector chip, we constrain that the final timestamp is less than $2^{29}$. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interactions is less than $p$. In our current circuit set, all chips increase timestamp less than they do interactions, which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $2^{29}$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^29` guarantees that `prev_timestamp < timestamp` everywhere we check it.
+In the connector chip, we constrain that the final timestamp is less than $2^{29}$. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. In our current circuit set, all chips increase timestamp [less than they do interactions](./circuit.md#inspection-of-vm-chip-timestamp-increments), which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $2^{29}$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^29` guarantees that `prev_timestamp < timestamp` everywhere we check it.
 
 ### Memory consistency
 
@@ -189,13 +189,13 @@ There are two memory interfaces: **volatile** and **persistent**. From the memor
 
 ### Volatile Memory: `VolatileBoundaryChip`
 
-- **Purpose:**  
+- **Purpose:**
   In volatile memory, we assume that the initial memory is filled with zeros and that it is unconstrained. The `VolatileBoundaryChip` is used mainly for bookkeeping: it tracks the starting state of memory without enforcing a cryptographic commitment. This means that when a program begins execution, the chip simply "accepts" the initial (zeroed) memory without additional checks.
 
-- **Key Points:**  
-  - **No Commitment:**  
+- **Key Points:**
+  - **No Commitment:**
     The chip does not compute a Merkle tree root for the initial memory state. Instead, any memory value that gets revealed later comes directly from the execution trace.
-  - **Distinctness Check:**  
+  - **Distinctness Check:**
     It ensures that the addresses used are distinct by enforcing a sort order across boundary records.
 
 For instance, this is how distinctness is enforced:
@@ -216,24 +216,24 @@ self.addr_lt_air
 
 ### Persistent Memory: `PersistentBoundaryChip`
 
-- **Purpose:**  
+- **Purpose:**
   When operating in persistent memory mode, the final state of memory must be verifiable. The `PersistentBoundaryChip` commits not only to the final memory state but also to the initial state provided by the program. These commitments become part of the public values used later in proof aggregation, see [Continuations](./continuations.md).
 
-- **Key Points:**  
-  - **Commitments:**  
+- **Key Points:**
+  - **Commitments:**
     The chip takes the initial memory (which is provided as part of the program) and computes a commitment over it—typically by incorporating it into a Merkle tree. Later, when the segment finishes, the chip produces a final commitment (Merkle root) that reflects every change made during execution.
-  - **Field: Expand Direction:**  
+  - **Field: Expand Direction:**
     Each memory chunk is tagged with an `expand_direction` field:
     - `expand_direction = 1` indicates a boundary row representing the initial memory state.
     - `expand_direction = -1` indicates a boundary row representing the final memory state.
     - `expand_direction = 0` marks rows that are not relevant (for example, intermediary rows produced by splits/merges that cancel out).
-  - **Multiple Buses:**  
+  - **Multiple Buses:**
     To enforce these commitments, the PersistentBoundaryChip interacts with three buses:
-    - **Merkle Bus:**  
+    - **Merkle Bus:**
       For initial memory rows, it sends a record (for example, with a tag `0`), and for final memory rows, it receives a record (with a tag `1`). This allows the Merkle chip to build and later verify a full commitment over the memory.
-    - **Compression Bus:**  
+    - **Compression Bus:**
       It sends the values and hash arrays for each chunk. The multiplicity of these interactions is determined by the square of the `expand_direction` (so that both initial and final rows are treated uniformly in the compression process).
-    - **Memory Bus:**  
+    - **Memory Bus:**
       It performs the basic send/receive interactions that balance out each memory operation, similar to the ones described in the “Basic performed interactions” section.
 
 The uniqueness of the addresses is achieved by the interactions on the merkle bus. The other chip that does interactions there is the **merkle chip**, which build the merkle tree, and to balance everything out, the boundary chip's interactions must correspond to the leaves of the merkle tree, thus, all distinct.
@@ -248,5 +248,5 @@ When we use Volatile Memory as the Memory Interface (PersistentBoundaryAir in th
 
 Key points:
 - For all memory accesses, use memory bridge. It will ensure that all memory interactions are of a certain kind, which we already established soundness for.
-- Do not increase the timestamp more than necessary -- otherwise the timestamp may overflow. Ideally, the timestamp should be increased by 1 for every memory access and never else.
+- Do not increase the timestamp more than necessary -- otherwise the timestamp may overflow. Ideally, the timestamp should be increased by 1 for every memory access and never otherwise.
 - In general, do not communicate with system buses directly.

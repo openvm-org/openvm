@@ -45,21 +45,23 @@ There are limitations to how many interactions/trace rows/etc. we can have in to
 
 ## Instruction executors
 
-The chips that get to execute instructions are _instruction executors_. These chips can be split into two parts:
+The chips that get to execute instructions are _instruction executors_. While not required, most instruction executor chips are implemented in two parts:
 - **Adapter:** communicates with the program and execution buses. Also communicates with memory to read inputs and write output from/to the required locations.
 - **Core:** performs chip's intended logic on the raw data. Is mostly isolated and doesn't have to bother about the other parts of the circuit, although it can if it wants, for example, to talk to the range checker.
 
 This modularity helps to separate the functionalities, reduce space for error, and also reuse the same adapters for various chips with similar instruction signatures.
 Note that technically these are parts of the same chip and therefore generate one trace, although both adapter and core have AIRs to deal with different parts of the trace.
+As already mentioned, it is not required that an instruction executor must be implemented in two parts:
+the entire chip with the combined functionality of the adapter and core can be implemented all at once.
 
 > [!IMPORTANT]
-> It is a burden of the instruction executor (more specifically, the adapter) to update the execution state. It is also its burden to constrain that the time increases. If any of these is not done correctly, the proof of correctness will fail to be generated.
+> It is a responsibility of the instruction executor (more specifically, the adapter) to update the execution state. It is also its responsibility to constrain that the timestamp increases. If any of these is not done correctly, the proof of correctness will fail to be generated.
 
 ## What to take into account when adding a new chip
 
 - [Ensure memory consistency](./memory.md#what-to-take-into-account-when-adding-a-new-chip)
-- Do not forget to constrain that `is_valid` is boolean in your core.
-- If your chip generates some number of trace rows, and this number is not a power of two, the trace is padded with all-zero rows. It should correspond to a legitimate operation, most likely invalid though. For example, if your AIR asserts that the value in the first column is 1 less than the value in the second column, you cannot just write `builder.assert_eq(local.x + 1, local.y)`, because this is not the case for the padding rows.
+- Do not forget to constrain that `is_valid` is boolean in your core AIR.
+- If your chip generates some number of trace rows, and this number is not a power of two, the trace is padded with all-zero rows. It should correspond to a legitimate operation, most likely `is_valid = 0` though. For example, if your AIR asserts that the value in the first column is 1 less than the value in the second column, you cannot just write `builder.assert_eq(local.x + 1, local.y)`, because this is not the case for the padding rows.
 
 
 ### Inspection of VM Chip Timestamp Increments
