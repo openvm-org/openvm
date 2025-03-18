@@ -94,7 +94,7 @@ impl ExprBuilder {
         // modulus of the proof system (BabyBear)
         // we hardcode this now, but we can make it configurable in the future
         let modulus_bits = 31;
-        let max_carry_bits = modulus_bits - config.limb_bits - 1;
+        let max_carry_bits = modulus_bits - config.limb_bits - 2;
         Self {
             prime: config.modulus.clone(),
             prime_bigint,
