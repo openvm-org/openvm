@@ -67,6 +67,8 @@ The number of AIR interactions does not depend on the number of trace rows, and 
 use multiple rows in the chip's trace matrix: this is represented by `num_rows_per_execution`. In summary
 we bound the integer amount that the timestamp should increment in a single instruction execution based on the number of interactions and the number of rows in the trace.
 
+We check that all VM chips contained in the OpenVM system and the standard VM extensions satisfy this condition in the section [below](#inspection-of-vm-chip-timestamp-increments).
+
 ## What to take into account when adding a new chip
 
 - [Ensure memory consistency](./memory.md#what-to-take-into-account-when-adding-a-new-chip)
