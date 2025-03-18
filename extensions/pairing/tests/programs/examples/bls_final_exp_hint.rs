@@ -20,6 +20,7 @@ openvm_algebra_moduli_macros::moduli_init! {
 }
 
 pub fn main() {
+    #[allow(clippy::type_complexity)]
     let (p, q, expected): (Vec<AffinePoint<Fp>>, Vec<AffinePoint<Fp2>>, (Fp12, Fp12)) = read();
     let actual = Bls12_381::pairing_check_hint(&p, &q);
     assert_eq!(actual, expected);
