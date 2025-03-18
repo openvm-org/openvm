@@ -12,7 +12,7 @@ See the [examples section](#examples) for code examples to follow along with.
 1. Start by creating an `ExprBuilderConfig`.
    Use the `check_valid` method to assert its validity.
 
-2. Create an `ExprBuilder` with the config, let's say `let builder = ExprBuilder::new(config)`.
+2. Create an `ExprBuilder` with the config, let's say `let builder = ExprBuilder::new(config, range_checker_bits)`.
 
 3. Wrap the `ExprBuilder` in an `Rc<RefCell<ExprBuilder>>` so that it can be shared between multiple `FieldVariable`s.
    (You will be passing it into each `FieldVariable` that you create.)
