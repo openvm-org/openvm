@@ -89,15 +89,17 @@ pub struct ExprBuilder {
     needs_setup: bool,
 }
 
+// Number of bits in BabyBear modulus
+const MODULUS_BITS: usize = 31;
+
 impl ExprBuilder {
     pub fn new(config: ExprBuilderConfig, range_checker_bits: usize) -> Self {
         let prime_bigint = BigInt::from_biguint(Sign::Plus, config.modulus.clone());
         let proper_max = (BigUint::one() << (config.num_limbs * config.limb_bits)) - BigUint::one();
-        // modulus of the proof system (BabyBear)
-        // we hardcode this now, but we can make it configurable in the future
-        let modulus_bits = 31;
         // Max carry bits to ensure constraints don't overflow
-        let max_carry_bits = modulus_bits - config.limb_bits - 2;
+        let max_carry_bits = MODULUS_BITS - config.limb_bits - 2;
+        // sanity
+        assert!(config.limb_bits + 2 < MODULUS_BITS);
         Self {
             prime: config.modulus.clone(),
             prime_bigint,
