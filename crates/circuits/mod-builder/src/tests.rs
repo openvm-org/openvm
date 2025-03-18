@@ -1,6 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use num_bigint::BigUint;
+use num_traits::One;
 use openvm_circuit_primitives::{bigint::utils::*, TraceSubRowGenerator};
 use openvm_stark_backend::{
     p3_air::BaseAir, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
@@ -344,7 +345,12 @@ fn test_select2() {
 
 fn test_symbolic_limbs(expr: SymbolicExpr, expected_q: usize, expected_carry: usize) {
     let prime = secp256k1_coord_prime();
-    let (q, carry) = expr.constraint_limbs(&prime, LIMB_BITS, 32);
+    let (q, carry) = expr.constraint_limbs(
+        &prime,
+        LIMB_BITS,
+        32,
+        &((BigUint::one() << 256) - BigUint::one()),
+    );
     assert_eq!(q, expected_q);
     assert_eq!(carry, expected_carry);
 }

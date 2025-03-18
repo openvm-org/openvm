@@ -69,6 +69,7 @@ impl Fp2 {
         let prime = builder.prime.clone();
         let limb_bits = builder.limb_bits;
         let num_limbs = builder.num_limbs;
+        let proper_max = builder.proper_max().clone();
         drop(builder);
 
         // These are dummy variables, will be replaced later so the index within it doesn't matter.
@@ -95,24 +96,28 @@ impl Fp2 {
 
         // Constraint 1: x0 = y0*z0 - y1*z1
         let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
-        let carry_bits = constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        let carry_bits =
+            constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
         if carry_bits > self.c0.range_checker_bits {
             self.save();
         }
         let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
-        let carry_bits = constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        let carry_bits =
+            constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }
 
         // Constraint 2: x1 = y1*z0 + y0*z1
         let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
-        let carry_bits = constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        let carry_bits =
+            constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
         if carry_bits > self.c0.range_checker_bits {
             self.save();
         }
         let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
-        let carry_bits = constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        let carry_bits =
+            constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }

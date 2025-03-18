@@ -190,26 +190,26 @@ impl SymbolicExpr {
     /// Returns maximum absolute positive and negative value of the expression.
     /// That is, if `(r, l) = expr.max_abs(p)` then `l,r >= 0` and `-l <= expr <= r`.
     /// Needed in `constraint_limbs` to estimate the number of limbs of q.
-    fn max_abs(&self, prime: &BigUint) -> (BigUint, BigUint) {
+    ///
+    /// It is assumed that any `Input` or `Var` is a non-negative big integer with value
+    /// in the range `[0, proper_max]`.
+    fn max_abs(&self, proper_max: &BigUint) -> (BigUint, BigUint) {
         match self {
-            SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => {
-                // Input and variable are field elements so are in [0, p)
-                (prime.clone() - BigUint::one(), BigUint::zero())
-            }
+            SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => (proper_max.clone(), BigUint::zero()),
             SymbolicExpr::Const(_, val, _) => (val.clone(), BigUint::zero()),
             SymbolicExpr::Add(lhs, rhs) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
-                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
+                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(proper_max);
                 (lhs_max_pos + rhs_max_pos, lhs_max_neg + rhs_max_neg)
             }
             SymbolicExpr::Sub(lhs, rhs) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
-                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
+                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(proper_max);
                 (lhs_max_pos + rhs_max_neg, lhs_max_neg + rhs_max_pos)
             }
             SymbolicExpr::Mul(lhs, rhs) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
-                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
+                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(proper_max);
                 (
                     max(&lhs_max_pos * &rhs_max_pos, &lhs_max_neg * &rhs_max_neg),
                     max(&lhs_max_pos * &rhs_max_neg, &lhs_max_neg * &rhs_max_pos),
@@ -220,13 +220,13 @@ impl SymbolicExpr {
                 unreachable!()
             }
             SymbolicExpr::IntAdd(lhs, s) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
                 let scalar = BigUint::from_usize(s.unsigned_abs()).unwrap();
                 // Optimization opportunity: since `s` is a constant, we can likely do better than this bound.
                 (lhs_max_pos + &scalar, lhs_max_neg + &scalar)
             }
             SymbolicExpr::IntMul(lhs, s) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
                 let scalar = BigUint::from_usize(s.unsigned_abs()).unwrap();
                 if *s < 0 {
                     (lhs_max_neg * &scalar, lhs_max_pos * &scalar)
@@ -235,8 +235,8 @@ impl SymbolicExpr {
                 }
             }
             SymbolicExpr::Select(_, lhs, rhs) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
-                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
+                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(proper_max);
                 (max(lhs_max_pos, rhs_max_pos), max(lhs_max_neg, rhs_max_neg))
             }
         }
@@ -281,14 +281,17 @@ impl SymbolicExpr {
 
     /// Returns the maximum possible size, in bits, of each carry in `self.expr - q * p`.
     /// self should be a constraint expr.
+    ///
+    /// The cached value `proper_max` should equal `2^{limb_bits * num_limbs} - 1`.
     pub fn constraint_carry_bits_with_pq(
         &self,
         prime: &BigUint,
         limb_bits: usize,
         num_limbs: usize,
+        proper_max: &BigUint,
     ) -> usize {
         let without_pq = self.constraint_limb_max_abs(limb_bits, num_limbs);
-        let (q_limbs, _) = self.constraint_limbs(prime, limb_bits, num_limbs);
+        let (q_limbs, _) = self.constraint_limbs(prime, limb_bits, num_limbs, proper_max);
         let canonical_limb_max_abs = (1 << limb_bits) - 1;
         let limb_max_abs =
             without_pq + canonical_limb_max_abs * canonical_limb_max_abs * min(q_limbs, num_limbs);
@@ -327,23 +330,30 @@ impl SymbolicExpr {
     /// Returns (q_limbs, carry_limbs) where q_limbs is the number of limbs in q
     /// and carry_limbs is the number of limbs in the carry of the constraint self.expr - q * p = 0.
     /// self should be a constraint expression.
+    ///
+    /// The cached value `proper_max` should equal `2^{limb_bits * num_limbs} - 1`.
     pub fn constraint_limbs(
         &self,
         prime: &BigUint,
         limb_bits: usize,
         num_limbs: usize,
+        proper_max: &BigUint,
     ) -> (usize, usize) {
-        let (max_pos_abs, max_neg_abs) = self.max_abs(prime);
+        println!("{}", self);
+        let (max_pos_abs, max_neg_abs) = self.max_abs(proper_max);
         let max_abs = max(max_pos_abs, max_neg_abs);
         let max_q_abs = (&max_abs + prime - BigUint::one()) / prime;
         let q_bits = max_q_abs.bits() as usize;
         let p_bits = prime.bits() as usize;
         let q_limbs = q_bits.div_ceil(limb_bits);
+        // Attention! This must match with prime_overflow in `FieldExpr::generate_subrow`
         let p_limbs = p_bits.div_ceil(limb_bits);
         let qp_limbs = q_limbs + p_limbs - 1;
 
         let expr_limbs = self.expr_limbs(num_limbs);
+        println!("expr_limbs={}", expr_limbs);
         let carry_limbs = max(expr_limbs, qp_limbs);
+        println!("qp_limbs={}", qp_limbs);
         (q_limbs, carry_limbs)
     }
 

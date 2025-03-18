@@ -2,7 +2,7 @@ use std::{cell::RefCell, iter, ops::Deref, rc::Rc};
 
 use itertools::{zip_eq, Itertools};
 use num_bigint::{BigInt, BigUint, Sign};
-use num_traits::Zero;
+use num_traits::{One, Zero};
 use openvm_circuit_primitives::{
     bigint::{
         check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
@@ -56,6 +56,7 @@ pub struct ExprBuilder {
     pub limb_bits: usize,
     /// Number of limbs in canonical representation of the bigint field element.
     pub num_limbs: usize,
+    proper_max: BigUint,
     // The max bits to range check.
     pub range_checker_bits: usize,
 
@@ -89,6 +90,7 @@ pub struct ExprBuilder {
 impl ExprBuilder {
     pub fn new(config: ExprBuilderConfig, range_checker_bits: usize) -> Self {
         let prime_bigint = BigInt::from_biguint(Sign::Plus, config.modulus.clone());
+        let proper_max = (BigUint::one() << (config.num_limbs * config.limb_bits)) - BigUint::one();
         Self {
             prime: config.modulus.clone(),
             prime_bigint,
@@ -97,6 +99,7 @@ impl ExprBuilder {
             num_flags: 0,
             limb_bits: config.limb_bits,
             num_limbs: config.num_limbs,
+            proper_max,
             range_checker_bits,
             num_variables: 0,
             constants: vec![],
@@ -207,8 +210,12 @@ impl ExprBuilder {
     }
 
     pub fn set_constraint(&mut self, index: usize, constraint: SymbolicExpr) {
-        let (q_limbs, carry_limbs) =
-            constraint.constraint_limbs(&self.prime, self.limb_bits, self.num_limbs);
+        let (q_limbs, carry_limbs) = constraint.constraint_limbs(
+            &self.prime,
+            self.limb_bits,
+            self.num_limbs,
+            &self.proper_max,
+        );
         self.constraints[index] = constraint;
         self.q_limbs[index] = q_limbs;
         self.carry_limbs[index] = carry_limbs;
@@ -216,6 +223,13 @@ impl ExprBuilder {
 
     pub fn set_compute(&mut self, index: usize, compute: SymbolicExpr) {
         self.computes[index] = compute;
+    }
+
+    /// Returns `proper_max = 2^{num_limbs * limb_bits} - 1` as a precomputed value.
+    /// Any proper representation of a positive big integer using `num_limbs` limbs with
+    /// `limb_bits` bits each will be `<= proper_max`.
+    pub fn proper_max(&self) -> &BigUint {
+        &self.proper_max
     }
 }
 
@@ -448,8 +462,8 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             .collect::<Vec<_>>();
         let zero = OverflowInt::<isize>::from_canonical_unsigned_limbs(vec![0], limb_bits);
         let mut vars_overflow = vec![zero; self.num_variables];
-        let prime_overflow =
-            OverflowInt::<isize>::from_biguint(&self.prime, self.limb_bits, Some(self.num_limbs));
+        // Note: in cases where the prime fits in less limbs than `num_limbs`, we use the smaller number of limbs.
+        let prime_overflow = OverflowInt::<isize>::from_biguint(&self.prime, self.limb_bits, None);
 
         let constants: Vec<_> = self
             .constants

@@ -78,8 +78,12 @@ impl FieldVariable {
             Box::new(expr),
             Box::new(SymbolicExpr::Var(builder.num_variables)),
         );
-        let (q_limbs, _) =
-            constraint_expr.constraint_limbs(&builder.prime, builder.limb_bits, builder.num_limbs);
+        let (q_limbs, _) = constraint_expr.constraint_limbs(
+            &builder.prime,
+            builder.limb_bits,
+            builder.num_limbs,
+            builder.proper_max(),
+        );
         q_limbs
     }
 
@@ -263,6 +267,7 @@ impl FieldVariable {
         let prime = builder.prime.clone();
         let limb_bits = builder.limb_bits;
         let num_limbs = builder.num_limbs;
+        let proper_max = builder.proper_max().clone();
         drop(builder);
 
         // This is a dummy variable, will be replaced later so the index within it doesn't matter.
@@ -277,7 +282,8 @@ impl FieldVariable {
             )),
             Box::new(self.expr.clone()),
         );
-        let carry_bits = new_constraint.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        let carry_bits =
+            new_constraint.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
         if carry_bits > self.range_checker_bits {
             self.save();
         }
@@ -289,7 +295,8 @@ impl FieldVariable {
             )),
             Box::new(self.expr.clone()),
         );
-        let carry_bits = new_constraint.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        let carry_bits =
+            new_constraint.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs, &proper_max);
         if carry_bits > self.range_checker_bits {
             other.save();
         }
