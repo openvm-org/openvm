@@ -63,7 +63,7 @@ pub fn fp2_muldiv_expr(
     range_bus: VariableRangeCheckerBus,
 ) -> (FieldExpr, usize, usize) {
     config.check_valid();
-    let builder = ExprBuilder::new(config);
+    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
     let x = Fp2::new(builder.clone());

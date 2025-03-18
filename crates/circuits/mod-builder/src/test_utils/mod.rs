@@ -33,7 +33,7 @@ pub fn setup(prime: &BigUint) -> (Arc<VariableRangeCheckerChip>, Rc<RefCell<Expr
         limb_bits: LIMB_BITS,
         num_limbs: 32,
     };
-    let builder = ExprBuilder::new(config);
+    let builder = ExprBuilder::new(config, range_checker.range_max_bits());
     (range_checker, Rc::new(RefCell::new(builder)))
 }
 

@@ -11,7 +11,7 @@ pub fn ec_double_ne_expr(
     a_biguint: BigUint,
 ) -> FieldExpr {
     config.check_valid();
-    let builder = ExprBuilder::new(config);
+    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
     let mut x1 = ExprBuilder::new_input(builder.clone());

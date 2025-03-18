@@ -95,7 +95,7 @@ pub fn mul_by_02345_expr(
     xi: [isize; 2],
 ) -> FieldExpr {
     config.check_valid();
-    let builder = ExprBuilder::new(config.clone());
+    let builder = ExprBuilder::new(config.clone(), range_bus.range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
     let mut f = Fp12::new(builder.clone());
