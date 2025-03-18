@@ -69,18 +69,27 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
         AB::Expr: 'a,
     {
         assert_eq!(expr.limbs.len(), cols.carries.len());
-        let (carry_min_value_abs, _) =
+        let (carry_min_value_abs, carry_abs_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
-        // It suffices to range check the carries to `modulus_bits - limb_bits - 1` because
-        // it guarantees that the carry constraints below don't overflow
-        let max_carry_bits = AB::F::bits() - self.limb_bits - 1;
+
+        // The carry is range checked to `[-2^(carry_abs_bits - 1), 2^(carry_abs_bits - 1))`.
+        // We assert that carry[i] * 2^limb_bits in the constraints below does not overflow.
+        // Worst case: carry[i] = -2^(carry_abs_bits - 1) so
+        //   |carry[i] * 2^limb_bits| <= 2^(carry_abs_bits - 1 + limb_bits)
+        // which has `carry_abs_bits + limb_bits` bits
+        // We constrain it to be < modulus_bits - 1 so that it is contained in [-p/2, p/2]
+        assert!(
+            carry_abs_bits + self.limb_bits < AB::F::bits() - 1,
+            "carry is too large"
+        );
+
         // 1. Constrain the limbs size of carries.
         for &carry in cols.carries.iter() {
             range_check(
                 builder,
                 self.range_checker_bus,
                 self.decomp,
-                max_carry_bits,
+                carry_abs_bits,
                 carry + AB::F::from_canonical_usize(carry_min_value_abs),
                 is_valid.clone(),
             );
