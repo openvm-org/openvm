@@ -3,6 +3,8 @@
 The Mod Builder framework provides an easy way to build circuits that constrain arithmetic operations on modular integers.
 See the [usage](#usage) section to get started and read the [specification](#specification) section for implementation details.
 
+Note that Mod Builder assumes the proof system modulus is 31 bits.
+
 # Usage
 
 See the [examples section](#examples) for code examples to follow along with.
@@ -10,7 +12,7 @@ See the [examples section](#examples) for code examples to follow along with.
 1. Start by creating an `ExprBuilderConfig`.
    Use the `check_valid` method to assert its validity.
 
-2. Create an `ExprBuilder` with the config, let's say `let builder = ExprBuilder::new(config, range_checker_bits)`.
+2. Create an `ExprBuilder` with the config, let's say `let builder = ExprBuilder::new(config)`.
 
 3. Wrap the `ExprBuilder` in an `Rc<RefCell<ExprBuilder>>` so that it can be shared between multiple `FieldVariable`s.
    (You will be passing it into each `FieldVariable` that you create.)
@@ -64,10 +66,6 @@ We constrain `expr = 0` by iterating from its least significant limb to its most
 To be clear, the carries are provided as witnesses, and we constrain that they are correct and that the final carry is 0.
 All of this is done in the `CheckCarryModToZeroSubAir` subair, which uses the `CheckCarryToZeroSubAir` inside.
 See the [bigint documentation](https://github.com/openvm-org/openvm/blob/main/crates/circuits/primitives/src/bigint/README.md) for more details.
-
-Another note is that the carries of `expr` are range checked to be in `[0, 2^range_checker_bits)` where `range_checker_bits` is a preconfigured of the range checker chip.
-For soundness, we require that `range_checker_bits` is small enough so that the constraints involving the carries do not overflow.
-See the [note on `range_checker_bits`](#note-on-configuring-range_checker_bits) below for more details.
 
 The next subsections will explain the details of the structs used by Mod Builder.
 
@@ -223,17 +221,6 @@ However, there are some cases that all-0 row doesn't satisfy the constraints: wh
   For these chips, we will pad the trace with a "dummy row".
   This dummy row will be created by evaluating the constraints with all-0 inputs and all-0 flags, and setting `is_valid` to 0.
   See the `FieldExpressionCoreChip::finalize` method for details.
-
-## Note on configuring `range_checker_bits`
-
-The following precondition is asserted by `mod-builder`:
-`limb_bits + range_checker_bits < modulus_bits` where `modulus_bits` is the modulus of the proof system.
-
-**Explanation**:
-In `FieldExpr::eval` the constraints are evaluated as an `OverflowInt<AB::Expr>` and then passed to the `CheckCarryModToZeroSubAir` sub air.
-The `CheckCarryModToZeroSubAir` sub air constrains the carries to `[0, 2^range_checker_bits)` and then adds constraints `previous_carry + current_limb == 2^limb_bits * current_carry` for each limb.
-In order for these constraints to be sound, we must ensure the RHS does not overflow, which is what the precondition does. 
-Note that `modulus_bits` is the modulus of the proof system, not the modulus used by `mod-builder` for arithmetic.
 
 ## Note on value of `range_checker_bits`
 

@@ -8,7 +8,7 @@ The key optimization is to allow representations of BigInts as `OverflowInts` wi
 where `limbs[i]` in $`[-2^{\texttt{overflow\_bits}}, 2^{\texttt{overflow\_bits}})`$.
 The integer equals $`\sum_{i=0}^{n-1} \texttt{limbs}[i] \cdot 2^{\texttt{limb\_bits} \cdot i}`$.
 
-The core functionality that is needed is `check_carry_to_zero`: which is the constraint that given OverflowInt limbs, you can constrain the corresponding integer equals 0. This is done by a sequence of carries to get the overflow integer into canonical form (and check it's zero). The carries must be range checked to be limb_bits.
+The core functionality that is needed is `check_carry_to_zero`: which is the constraint that given OverflowInt limbs, you can constrain the corresponding integer equals 0. This is done by a sequence of carries to get the overflow integer into canonical form (and check it's zero). The carries must be range checked to be small enough that `carry[i] * 2^limb_bits` doesn't overflow.
 
 The use case is commonly if we have multiple OverflowInts `a,b,p,q,r` we may want to check
 `check_carry_to_zero(a * b + p * q - r)` where `a * b` is expanded bigint multiplication, but without carries. Observe this proves `a * b = r (mod p)`.
