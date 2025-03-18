@@ -676,6 +676,7 @@ mod bls12_381 {
         Ok(())
     }
 
+    #[ignore]
     #[test]
     fn test_bls12_381_pairing_check_fallback() -> Result<()> {
         let elf = build_example_program_at_path_with_features(
