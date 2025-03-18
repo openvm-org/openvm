@@ -339,7 +339,6 @@ impl SymbolicExpr {
         num_limbs: usize,
         proper_max: &BigUint,
     ) -> (usize, usize) {
-        println!("{}", self);
         let (max_pos_abs, max_neg_abs) = self.max_abs(proper_max);
         let max_abs = max(max_pos_abs, max_neg_abs);
         let max_q_abs = (&max_abs + prime - BigUint::one()) / prime;
@@ -351,9 +350,7 @@ impl SymbolicExpr {
         let qp_limbs = q_limbs + p_limbs - 1;
 
         let expr_limbs = self.expr_limbs(num_limbs);
-        println!("expr_limbs={}", expr_limbs);
         let carry_limbs = max(expr_limbs, qp_limbs);
-        println!("qp_limbs={}", qp_limbs);
         (q_limbs, carry_limbs)
     }
 

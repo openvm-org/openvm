@@ -42,7 +42,7 @@ pub fn main() {
     let reduced = &non_reduced + &Mersenne61::ZERO;
     reduced.assert_reduced();
 
-    // assert_eq!(&non_reduced + &non_reduced, reduced.double());
+    assert_eq!(&non_reduced + &non_reduced, reduced.double());
 
     non_reduced = Mersenne61::from_le_bytes(&Mersenne61::MODULUS);
     assert!(!non_reduced.is_reduced());
