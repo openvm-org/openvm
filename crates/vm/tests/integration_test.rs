@@ -717,6 +717,7 @@ fn test_hint_load_1() {
         program,
         vec![vec![F::ONE, F::TWO]].into(),
         None,
+        vec![],
         Default::default(),
     );
     segment.execute_from_pc(0).unwrap();
@@ -753,6 +754,7 @@ fn test_hint_load_2() {
         program,
         vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]].into(),
         None,
+        vec![],
         Default::default(),
     );
     segment.execute_from_pc(0).unwrap();

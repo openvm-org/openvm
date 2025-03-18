@@ -3,7 +3,7 @@ use std::{fs::read, path::PathBuf};
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use openvm_circuit::arch::{instructions::exe::VmExe, DefaultSegmentationStrategy, VmConfig};
+use openvm_circuit::arch::{instructions::exe::VmExe, SegmentationStrategy, VmConfig};
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
@@ -79,7 +79,7 @@ impl BenchmarkCli {
         app_vm_config.system_mut().profiling = self.profiling;
         if let Some(max_segment_length) = self.max_segment_length {
             app_vm_config.system_mut().set_segmentation_strategy(
-                DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_length),
+                SegmentationStrategy::new_with_max_segment_len(max_segment_length),
             );
         }
         AppConfig {

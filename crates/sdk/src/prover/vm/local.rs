@@ -3,7 +3,8 @@ use std::{marker::PhantomData, mem, sync::Arc};
 use async_trait::async_trait;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, SingleSegmentVmExecutor, Streams, VirtualMachine,
+        hasher::poseidon2::vm_poseidon2_hasher, GenerationError, GenerationPipelineError,
+        SegmentationStrategy, SingleSegmentVmExecutor, Streams, VirtualMachine,
         VmComplexTraceHeights, VmConfig,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
@@ -21,6 +22,8 @@ use crate::prover::vm::{
     types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
     ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
 };
+
+const SEGMENTATION_BACKOFF_FACTOR: usize = 4;
 
 pub struct VmLocalProver<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> {
     pub pk: Arc<VmProvingKey<SC, VC>>,
@@ -75,26 +78,53 @@ where
     fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> ContinuationVmProof<SC> {
         assert!(self.pk.vm_config.system().continuation_enabled);
         let e = E::new(self.pk.fri_params);
-        let vm = VirtualMachine::new_with_overridden_trace_heights(
+        let trace_height_constraints = self.pk.vm_pk.trace_height_constraints.clone();
+        let mut vm = VirtualMachine::new_with_overridden_trace_heights(
             e,
             self.pk.vm_config.clone(),
             self.overridden_heights.clone(),
         );
+        vm.set_trace_height_constraints(trace_height_constraints.clone());
         let mut final_memory = None;
         let VmCommittedExe {
             exe,
             committed_program,
         } = self.committed_exe.as_ref();
-        let per_segment = vm
-            .executor
-            .execute_and_then(exe.clone(), input, |seg_idx, mut seg| {
-                final_memory = mem::take(&mut seg.final_memory);
-                let proof_input = info_span!("trace_gen", segment = seg_idx)
-                    .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())));
-                info_span!("prove_segment", segment = seg_idx)
-                    .in_scope(|| vm.engine.prove(&self.pk.vm_pk, proof_input))
-            })
-            .unwrap();
+        let input = input.into();
+
+        // This loop should typically iterate exactly once. Only in exceptional cases will the
+        // segmentation produce an invalid segment and we will have to retry.
+        let per_segment = loop {
+            match vm
+                .executor
+                .execute_and_then(exe.clone(), input.clone(), |seg_idx, mut seg| {
+                    final_memory = mem::take(&mut seg.final_memory);
+                    let proof_input = info_span!("trace_gen", segment = seg_idx)
+                        .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())))?;
+                    info_span!("prove_segment", segment = seg_idx)
+                        .in_scope(|| Ok(vm.engine.prove(&self.pk.vm_pk, proof_input)))
+                }) {
+                Ok(per_segment) => break per_segment,
+                Err(GenerationPipelineError::Execution(err)) => panic!("execution failed: {err}"),
+                Err(GenerationPipelineError::Generation(err)) => match err {
+                    GenerationError::TraceHeightsLimitExceeded => {
+                        tracing::info!("trace heights limit exceeded; retrying execution");
+                        let segment_length = vm
+                            .executor
+                            .config
+                            .system()
+                            .segmentation_strategy
+                            .max_segment_len();
+                        vm.executor.config.system_mut().set_segmentation_strategy(
+                            SegmentationStrategy::new_with_max_segment_len(
+                                segment_length / SEGMENTATION_BACKOFF_FACTOR,
+                            ),
+                        );
+                        // continue
+                    }
+                },
+            };
+        };
         let user_public_values = UserPublicValuesProof::compute(
             self.pk.vm_config.system().memory_config.memory_dimensions(),
             self.pk.vm_config.system().num_public_values,
@@ -136,7 +166,11 @@ where
         assert!(!self.pk.vm_config.system().continuation_enabled);
         let e = E::new(self.pk.fri_params);
         // note: use SingleSegmentVmExecutor so there's not a "segment" label in metrics
-        let executor = SingleSegmentVmExecutor::new(self.pk.vm_config.clone());
+        let executor = {
+            let mut executor = SingleSegmentVmExecutor::new(self.pk.vm_config.clone());
+            executor.set_trace_height_constraints(self.pk.vm_pk.trace_height_constraints.clone());
+            executor
+        };
         let proof_input = executor
             .execute_and_generate(self.committed_exe.clone(), input)
             .unwrap();

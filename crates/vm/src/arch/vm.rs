@@ -5,7 +5,7 @@ use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Com, Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
-    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    keygen::types::{LinearConstraint, MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
     p3_field::{FieldAlgebra, PrimeField32},
     proof::Proof,
@@ -37,6 +37,20 @@ use crate::{
         program::trace::VmCommittedExe,
     },
 };
+
+#[derive(Error, Debug)]
+pub enum GenerationError {
+    #[error("generated trace heights violate constraints")]
+    TraceHeightsLimitExceeded,
+}
+
+#[derive(Error, Debug)]
+pub enum GenerationPipelineError {
+    #[error(transparent)]
+    Execution(#[from] ExecutionError),
+    #[error(transparent)]
+    Generation(#[from] GenerationError),
+}
 
 /// VM memory state for continuations.
 pub type VmMemoryState<F> = MemoryImage<F>;
@@ -73,6 +87,7 @@ impl<F> From<Vec<Vec<F>>> for Streams<F> {
 pub struct VmExecutor<F, VC> {
     pub config: VC,
     pub overridden_heights: Option<VmComplexTraceHeights>,
+    pub trace_height_constraints: Vec<LinearConstraint>,
     _marker: PhantomData<F>,
 }
 
@@ -137,6 +152,7 @@ where
         Self {
             config,
             overridden_heights,
+            trace_height_constraints: vec![],
             _marker: Default::default(),
         }
     }
@@ -154,8 +170,8 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        mut f: impl FnMut(usize, ExecutionSegment<F, VC>) -> R,
-    ) -> Result<Vec<R>, ExecutionError> {
+        mut f: impl FnMut(usize, ExecutionSegment<F, VC>) -> Result<R, GenerationError>,
+    ) -> Result<Vec<R>, GenerationPipelineError> {
         let mem_config = self.config.system().memory_config;
         let exe = exe.into();
         let mut segment_results = vec![];
@@ -172,7 +188,7 @@ where
         loop {
             let _span = info_span!("execute_segment", segment = segment_idx).entered();
             let one_segment_result = self.execute_until_segment(exe.clone(), state)?;
-            segment_results.push(f(segment_idx, one_segment_result.segment));
+            segment_results.push(f(segment_idx, one_segment_result.segment)?);
             if one_segment_result.next_state.is_none() {
                 break;
             }
@@ -191,7 +207,12 @@ where
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
-        self.execute_and_then(exe, input, |_, seg| seg)
+        self.execute_and_then(exe, input, |_, seg| Ok(seg)).map_err(
+            |err: GenerationPipelineError| match err {
+                GenerationPipelineError::Execution(err) => err,
+                _ => unreachable!("closure cannot produce generation error"),
+            },
+        )
     }
 
     /// Executes a program until a segmentation happens.
@@ -208,6 +229,7 @@ where
             exe.program.clone(),
             from_state.input,
             Some(from_state.memory),
+            self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
         );
         #[cfg(feature = "bench-metrics")]
@@ -259,7 +281,14 @@ where
         input: impl Into<Streams<F>>,
     ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
         let mut last = None;
-        self.execute_and_then(exe, input, |_, seg| last = Some(seg))?;
+        self.execute_and_then(exe, input, |_, seg| {
+            last = Some(seg);
+            Ok(())
+        })
+        .map_err(|err: GenerationPipelineError| match err {
+            GenerationPipelineError::Execution(err) => err,
+            _ => unreachable!("closure cannot produce generation error"),
+        })?;
         let last = last.expect("at least one segment must be executed");
         let final_memory = last.final_memory;
         let end_state =
@@ -277,7 +306,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<VmExecutorResult<SC>, ExecutionError>
+    ) -> Result<VmExecutorResult<SC>, GenerationPipelineError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
@@ -290,7 +319,7 @@ where
         &self,
         committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<VmExecutorResult<SC>, ExecutionError>
+    ) -> Result<VmExecutorResult<SC>, GenerationPipelineError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
@@ -308,7 +337,7 @@ where
         exe: VmExe<F>,
         committed_program: Option<CommittedTraceData<SC>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<VmExecutorResult<SC>, ExecutionError>
+    ) -> Result<VmExecutorResult<SC>, GenerationPipelineError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
@@ -328,12 +357,17 @@ where
             final_memory,
         })
     }
+
+    pub fn set_trace_height_constraints(&mut self, constraints: Vec<LinearConstraint>) {
+        self.trace_height_constraints = constraints;
+    }
 }
 
 /// A single segment VM.
 pub struct SingleSegmentVmExecutor<F, VC> {
     pub config: VC,
     pub overridden_heights: Option<VmComplexTraceHeights>,
+    pub trace_height_constraints: Vec<LinearConstraint>,
     _marker: PhantomData<F>,
 }
 
@@ -367,12 +401,17 @@ where
         Self {
             config,
             overridden_heights,
+            trace_height_constraints: vec![],
             _marker: Default::default(),
         }
     }
 
     pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
         self.overridden_heights = Some(overridden_heights);
+    }
+
+    pub fn set_trace_height_constraints(&mut self, constraints: Vec<LinearConstraint>) {
+        self.trace_height_constraints = constraints;
     }
 
     /// Executes a program, compute the trace heights, and returns the public values.
@@ -382,7 +421,7 @@ where
         input: impl Into<Streams<F>>,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
         let segment = {
-            let mut segment = self.execute_impl(exe.into(), input)?;
+            let mut segment = self.execute_impl(exe.into(), input.into())?;
             segment.chip_complex.finalize_memory();
             segment
         };
@@ -405,7 +444,7 @@ where
         &self,
         committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<ProofInput<SC>, ExecutionError>
+    ) -> Result<ProofInput<SC>, GenerationPipelineError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
@@ -414,7 +453,7 @@ where
         let segment = self.execute_impl(committed_exe.exe.clone(), input)?;
         let proof_input = tracing::info_span!("trace_gen").in_scope(|| {
             segment.generate_proof_input(Some(committed_exe.committed_program.clone()))
-        });
+        })?;
         Ok(proof_input)
     }
 
@@ -429,7 +468,8 @@ where
             exe.program.clone(),
             input.into(),
             None,
-            exe.fn_bounds,
+            self.trace_height_constraints.clone(),
+            exe.fn_bounds.clone(),
         );
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
@@ -525,6 +565,14 @@ where
         keygen_builder.generate_pk()
     }
 
+    pub fn set_trace_height_constraints(
+        &mut self,
+        trace_height_constraints: Vec<LinearConstraint>,
+    ) {
+        self.executor
+            .set_trace_height_constraints(trace_height_constraints);
+    }
+
     pub fn commit_exe(&self, exe: impl Into<VmExe<F>>) -> Arc<VmCommittedExe<SC>> {
         let exe = exe.into();
         Arc::new(VmCommittedExe::commit(exe, self.engine.config().pcs()))
@@ -542,7 +590,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<VmExecutorResult<SC>, ExecutionError> {
+    ) -> Result<VmExecutorResult<SC>, GenerationPipelineError> {
         self.executor.execute_and_generate(exe, input)
     }
 
@@ -550,7 +598,7 @@ where
         &self,
         committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<VmExecutorResult<SC>, ExecutionError>
+    ) -> Result<VmExecutorResult<SC>, GenerationPipelineError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {

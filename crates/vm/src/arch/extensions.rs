@@ -7,6 +7,7 @@ use std::{
 
 use derive_more::derive::From;
 use getset::Getters;
+use itertools::{any, zip_eq};
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
@@ -21,9 +22,11 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     interaction::{BusIndex, PermutationCheckBus},
+    keygen::types::LinearConstraint,
     p3_commit::PolynomialSpace,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32, TwoAdicField},
     p3_matrix::Matrix,
+    p3_util::log2_ceil_usize,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     AirRef, Chip, ChipUsageGetter,
 };
@@ -31,8 +34,8 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    vm_poseidon2_config, ExecutionBus, InstructionExecutor, PhantomSubExecutor, Streams,
-    SystemConfig, SystemTraceHeights,
+    vm_poseidon2_config, ExecutionBus, GenerationError, InstructionExecutor, PhantomSubExecutor,
+    Streams, SystemConfig, SystemTraceHeights,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -433,6 +436,9 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     pub inventory: VmInventory<E, P>,
     overridden_inventory_heights: Option<VmInventoryTraceHeights>,
 
+    /// Absolute maximum value a trace height can be and still be provable.
+    max_trace_height: usize,
+
     streams: Arc<Mutex<Streams<F>>>,
     bus_idx_mgr: BusIndexManager,
 }
@@ -523,7 +529,7 @@ pub enum SystemPeriphery<F: PrimeField32> {
     Poseidon2(Poseidon2PeripheryChip<F>),
 }
 
-impl<F: PrimeField32> SystemComplex<F> {
+impl<F: PrimeField32 + TwoAdicField> SystemComplex<F> {
     pub fn new(config: SystemConfig) -> Self {
         let mut bus_idx_mgr = BusIndexManager::new();
         let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
@@ -608,6 +614,9 @@ impl<F: PrimeField32> SystemComplex<F> {
             range_checker_chip: range_checker,
         };
 
+        let min_log_blowup = log2_ceil_usize(config.max_constraint_degree - 1);
+        let max_trace_height = 1 << (F::TWO_ADICITY - min_log_blowup);
+
         Self {
             config,
             base,
@@ -615,6 +624,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             bus_idx_mgr,
             streams,
             overridden_inventory_heights: None,
+            max_trace_height,
         }
     }
 }
@@ -678,6 +688,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             bus_idx_mgr: self.bus_idx_mgr,
             streams: self.streams,
             overridden_inventory_heights: self.overridden_inventory_heights,
+            max_trace_height: self.max_trace_height,
         }
     }
 
@@ -966,8 +977,9 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
         mut self,
         cached_program: Option<CommittedTraceData<SC>>,
+        trace_height_constraints: &[LinearConstraint],
         #[cfg(feature = "bench-metrics")] metrics: &mut VmMetrics,
-    ) -> ProofInput<SC>
+    ) -> Result<ProofInput<SC>, GenerationError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         E: Chip<SC>,
@@ -975,6 +987,23 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     {
         // System: Finalize memory.
         self.finalize_memory();
+
+        let trace_heights = self.current_trace_heights();
+        if any(&trace_heights, |h| *h > self.max_trace_height) {
+            return Err(GenerationError::TraceHeightsLimitExceeded);
+        }
+        if trace_height_constraints.is_empty() {
+            tracing::warn!("generating proof input without trace height constraints");
+        }
+        for constraint in trace_height_constraints {
+            let value = zip_eq(&constraint.coefficients, &trace_heights)
+                .map(|(c, h)| *c as u64 * *h as u64)
+                .sum::<u64>();
+            if value >= constraint.threshold as u64 {
+                return Err(GenerationError::TraceHeightsLimitExceeded);
+            }
+        }
+
         #[cfg(feature = "bench-metrics")]
         self.finalize_metrics(metrics);
 
@@ -1046,7 +1075,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         // System: Range Checker Chip
         builder.add_air_proof_input(range_checker_chip.generate_air_proof_input());
 
-        builder.build()
+        Ok(builder.build())
     }
 
     #[cfg(feature = "bench-metrics")]

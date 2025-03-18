@@ -655,6 +655,7 @@ impl<F: PrimeField32> MemoryController<F> {
             }),
         }
     }
+
     pub fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
         let access_adapters = vec![1; self.access_adapters.num_access_adapters()];
         match &self.interface_chip {
