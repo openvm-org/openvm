@@ -12,6 +12,7 @@ openvm::entry!(main);
 
 #[cfg(feature = "bn254")]
 mod bn254 {
+    use openvm_algebra_guest::field::FieldExtension;
     use openvm_pairing_guest::bn254::{Bn254, Fp, Fp2};
 
     use super::*;
@@ -31,9 +32,9 @@ mod bn254 {
         let pt = &io[32 * 4..32 * 8];
         let l = &io[32 * 8..32 * 12];
 
-        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
+        let s_cast = AffinePoint::new(Fp2::from_bytes(&s[..64]), Fp2::from_bytes(&s[64..128]));
 
-        let (pt_cmp, l_cmp) = Bn254::miller_double_step(s_cast);
+        let (pt_cmp, l_cmp) = Bn254::miller_double_step(&s_cast);
         let mut pt_bytes = [0u8; 32 * 4];
         let mut l_bytes = [0u8; 32 * 4];
 
@@ -60,9 +61,9 @@ mod bn254 {
         let l0 = &io[32 * 12..32 * 16];
         let l1 = &io[32 * 16..32 * 20];
 
-        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
-        let q_cast = unsafe { &*(q.as_ptr() as *const AffinePoint<Fp2>) };
-        let (pt_cmp, l0_cmp, l1_cmp) = Bn254::miller_double_and_add_step(s_cast, q_cast);
+        let s_cast = AffinePoint::new(Fp2::from_bytes(&s[..64]), Fp2::from_bytes(&s[64..128]));
+        let q_cast = AffinePoint::new(Fp2::from_bytes(&q[..64]), Fp2::from_bytes(&q[64..128]));
+        let (pt_cmp, l0_cmp, l1_cmp) = Bn254::miller_double_and_add_step(&s_cast, &q_cast);
         let mut pt_bytes = [0u8; 32 * 4];
         let mut l0_bytes = [0u8; 32 * 4];
         let mut l1_bytes = [0u8; 32 * 4];
@@ -90,6 +91,7 @@ mod bn254 {
 
 #[cfg(feature = "bls12_381")]
 mod bls12_381 {
+    use openvm_algebra_guest::field::FieldExtension;
     use openvm_pairing_guest::bls12_381::{Bls12_381, Fp, Fp2};
 
     use super::*;
@@ -109,9 +111,9 @@ mod bls12_381 {
         let pt = &io[48 * 4..48 * 8];
         let l = &io[48 * 8..48 * 12];
 
-        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
+        let s_cast = AffinePoint::new(Fp2::from_bytes(&s[..96]), Fp2::from_bytes(&s[96..192]));
 
-        let (pt_cmp, l_cmp) = Bls12_381::miller_double_step(s_cast);
+        let (pt_cmp, l_cmp) = Bls12_381::miller_double_step(&s_cast);
         let mut pt_bytes = [0u8; 48 * 4];
         let mut l_bytes = [0u8; 48 * 4];
 
@@ -136,9 +138,9 @@ mod bls12_381 {
         let l0 = &io[48 * 12..48 * 16];
         let l1 = &io[48 * 16..48 * 20];
 
-        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
-        let q_cast = unsafe { &*(q.as_ptr() as *const AffinePoint<Fp2>) };
-        let (pt_cmp, l0_cmp, l1_cmp) = Bls12_381::miller_double_and_add_step(s_cast, q_cast);
+        let s_cast = AffinePoint::new(Fp2::from_bytes(&s[..96]), Fp2::from_bytes(&s[96..192]));
+        let q_cast = AffinePoint::new(Fp2::from_bytes(&q[..96]), Fp2::from_bytes(&q[96..192]));
+        let (pt_cmp, l0_cmp, l1_cmp) = Bls12_381::miller_double_and_add_step(&s_cast, &q_cast);
         let mut pt_bytes = [0u8; 48 * 4];
         let mut l0_bytes = [0u8; 48 * 4];
         let mut l1_bytes = [0u8; 48 * 4];

@@ -109,10 +109,12 @@ mod bn254 {
         let q0 = &io[32 * 4..32 * 8];
         let q1 = &io[32 * 8..32 * 12];
 
-        let s0_cast = unsafe { &*(s0.as_ptr() as *const AffinePoint<Fp>) };
-        let s1_cast = unsafe { &*(s1.as_ptr() as *const AffinePoint<Fp>) };
-        let q0_cast = unsafe { &*(q0.as_ptr() as *const AffinePoint<Fp2>) };
-        let q1_cast = unsafe { &*(q1.as_ptr() as *const AffinePoint<Fp2>) };
+        let s0_cast =
+            AffinePoint::new(Fp::from_le_bytes(&s0[..32]), Fp::from_le_bytes(&s0[32..64]));
+        let s1_cast =
+            AffinePoint::new(Fp::from_le_bytes(&s1[..32]), Fp::from_le_bytes(&s1[32..64]));
+        let q0_cast = AffinePoint::new(Fp2::from_bytes(&q0[..64]), Fp2::from_bytes(&q0[64..128]));
+        let q1_cast = AffinePoint::new(Fp2::from_bytes(&q1[..64]), Fp2::from_bytes(&q1[64..128]));
 
         let f = Bn254Wrapper::pairing_check(
             &[s0_cast.clone(), s1_cast.clone()],
@@ -222,10 +224,12 @@ mod bls12_381 {
         let q0 = &io[48 * 4..48 * 8];
         let q1 = &io[48 * 8..48 * 12];
 
-        let s0_cast = unsafe { &*(s0.as_ptr() as *const AffinePoint<Fp>) };
-        let s1_cast = unsafe { &*(s1.as_ptr() as *const AffinePoint<Fp>) };
-        let q0_cast = unsafe { &*(q0.as_ptr() as *const AffinePoint<Fp2>) };
-        let q1_cast = unsafe { &*(q1.as_ptr() as *const AffinePoint<Fp2>) };
+        let s0_cast =
+            AffinePoint::new(Fp::from_le_bytes(&s0[..48]), Fp::from_le_bytes(&s0[48..96]));
+        let s1_cast =
+            AffinePoint::new(Fp::from_le_bytes(&s1[..48]), Fp::from_le_bytes(&s1[48..96]));
+        let q0_cast = AffinePoint::new(Fp2::from_bytes(&q0[..96]), Fp2::from_bytes(&q0[96..192]));
+        let q1_cast = AffinePoint::new(Fp2::from_bytes(&q1[..96]), Fp2::from_bytes(&q1[96..192]));
 
         let f = Bls12_381Wrapper::pairing_check(
             &[s0_cast.clone(), s1_cast.clone()],

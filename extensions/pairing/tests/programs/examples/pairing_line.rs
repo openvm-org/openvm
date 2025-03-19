@@ -30,10 +30,16 @@ mod bn254 {
         let l1 = &io[32 * 4..32 * 8];
         let expected = &io[32 * 8..32 * 18];
 
-        let l0_cast = unsafe { &*(l0.as_ptr() as *const EvaluatedLine<Fp2>) };
-        let l1_cast = unsafe { &*(l1.as_ptr() as *const EvaluatedLine<Fp2>) };
+        let l0_cast = EvaluatedLine {
+            b: Fp2::from_bytes(&l0[..64]),
+            c: Fp2::from_bytes(&l0[64..128]),
+        };
+        let l1_cast = EvaluatedLine {
+            b: Fp2::from_bytes(&l1[..64]),
+            c: Fp2::from_bytes(&l1[64..128]),
+        };
 
-        let r = Bn254::mul_013_by_013(l0_cast, l1_cast);
+        let r = Bn254::mul_013_by_013(&l0_cast, &l1_cast);
         let mut r_bytes = [0u8; 32 * 10];
         let mut i = 0;
         for x in r {
@@ -50,10 +56,16 @@ mod bn254 {
         let x = &io[32 * 12..32 * 22];
         let expected = &io[32 * 22..32 * 34];
 
-        let f_cast = unsafe { &*(f.as_ptr() as *const Fp12) };
-        let x_cast = unsafe { &*(x.as_ptr() as *const [Fp2; 5]) };
+        let f_cast = Fp12::from_bytes(f);
+        let x_cast = [
+            Fp2::from_bytes(&x[..64]),
+            Fp2::from_bytes(&x[64..128]),
+            Fp2::from_bytes(&x[128..192]),
+            Fp2::from_bytes(&x[192..256]),
+            Fp2::from_bytes(&x[256..320]),
+        ];
 
-        let r = Bn254::mul_by_01234(f_cast, x_cast);
+        let r = Bn254::mul_by_01234(&f_cast, &x_cast);
         let mut r_bytes = [0u8; 32 * 12];
         let mut i = 0;
         for x in r.to_coeffs() {
@@ -86,10 +98,16 @@ mod bls12_381 {
         let l1 = &io[48 * 4..48 * 8];
         let expected = &io[48 * 8..48 * 18];
 
-        let l0_cast = unsafe { &*(l0.as_ptr() as *const EvaluatedLine<Fp2>) };
-        let l1_cast = unsafe { &*(l1.as_ptr() as *const EvaluatedLine<Fp2>) };
+        let l0_cast = EvaluatedLine {
+            b: Fp2::from_bytes(&l0[..48 * 2]),
+            c: Fp2::from_bytes(&l0[48 * 2..48 * 4]),
+        };
+        let l1_cast = EvaluatedLine {
+            b: Fp2::from_bytes(&l1[..48 * 2]),
+            c: Fp2::from_bytes(&l1[48 * 2..48 * 4]),
+        };
 
-        let r = Bls12_381::mul_023_by_023(l0_cast, l1_cast);
+        let r = Bls12_381::mul_023_by_023(&l0_cast, &l1_cast);
         let mut r_bytes = [0u8; 48 * 10];
         let mut i = 0;
         for x in r {
@@ -106,10 +124,16 @@ mod bls12_381 {
         let x = &io[48 * 12..48 * 22];
         let expected = &io[48 * 22..48 * 34];
 
-        let f_cast = unsafe { &*(f.as_ptr() as *const Fp12) };
-        let x_cast = unsafe { &*(x.as_ptr() as *const [Fp2; 5]) };
+        let f_cast = Fp12::from_bytes(f);
+        let x_cast = [
+            Fp2::from_bytes(&x[..48 * 2]),
+            Fp2::from_bytes(&x[48 * 2..48 * 4]),
+            Fp2::from_bytes(&x[48 * 4..48 * 6]),
+            Fp2::from_bytes(&x[48 * 6..48 * 8]),
+            Fp2::from_bytes(&x[48 * 8..48 * 10]),
+        ];
 
-        let r = Bls12_381::mul_by_02345(f_cast, x_cast);
+        let r = Bls12_381::mul_by_02345(&f_cast, &x_cast);
         let mut r_bytes = [0u8; 48 * 12];
         let mut i = 0;
         for x in r.to_coeffs() {

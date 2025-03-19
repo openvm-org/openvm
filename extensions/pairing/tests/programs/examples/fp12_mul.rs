@@ -32,8 +32,8 @@ mod bn254 {
         let f1 = &io[32 * 12..32 * 24];
         let r_cmp = &io[32 * 24..32 * 36];
 
-        let f0_cast = unsafe { &*(f0.as_ptr() as *const Fp12) };
-        let f1_cast = unsafe { &*(f1.as_ptr() as *const Fp12) };
+        let f0_cast = Fp12::from_bytes(f0);
+        let f1_cast = Fp12::from_bytes(f1);
 
         let r = f0_cast * f1_cast;
         let mut r_bytes = [0u8; 32 * 12];
@@ -71,8 +71,8 @@ mod bls12_381 {
         let f1 = &io[48 * 12..48 * 24];
         let r_cmp = &io[48 * 24..48 * 36];
 
-        let f0_cast = unsafe { &*(f0.as_ptr() as *const Fp12) };
-        let f1_cast = unsafe { &*(f1.as_ptr() as *const Fp12) };
+        let f0_cast = Fp12::from_bytes(f0);
+        let f1_cast = Fp12::from_bytes(f1);
 
         let r = f0_cast * f1_cast;
         let mut r_bytes = [0u8; 48 * 12];
