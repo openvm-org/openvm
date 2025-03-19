@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[allow(unused_imports)]
 use openvm_pairing_guest::bls12_381::Bls12_381G1Affine;
 
 openvm_algebra_moduli_macros::moduli_init! {
