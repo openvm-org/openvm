@@ -36,6 +36,11 @@ impl U256 {
     /// The zero constant.
     pub const ZERO: Self = Self { limbs: [0u8; 32] };
 
+    /// Construct [U256] from little-endian bytes.
+    pub const fn from_le_bytes(bytes: [u8; 32]) -> Self {
+        Self { limbs: bytes }
+    }
+
     /// Value of this U256 as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
     pub fn as_biguint(&self) -> BigUint {

@@ -82,8 +82,8 @@ pub fn main() {
         hash.extend_from_slice(&digest2);
 
         // SAFETY: internally I256 is represented as [u8; 32]
-        let i1 = unsafe { transmute::<[u8; 32], I256>(digest1) };
-        let i2 = unsafe { transmute::<[u8; 32], I256>(digest2) };
+        let i1 = I256::from_le_bytes(digest1);
+        let i2 = I256::from_le_bytes(digest2);
 
         black_box(&i1 + &i2);
         black_box(&i1 - &i2);
