@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm::io::{read, reveal};
+use openvm::io::{read, reveal_u32};
 
 openvm::entry!(main);
 
@@ -14,6 +14,6 @@ pub fn main() {
         a = b;
         b = c;
     }
-    reveal(a as u32, 0);
-    reveal((a >> 32) as u32, 1);
+    reveal_u32(a as u32, 0);
+    reveal_u32((a >> 32) as u32, 1);
 }

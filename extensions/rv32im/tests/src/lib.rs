@@ -16,9 +16,7 @@ mod tests {
         build_example_program_at_path, build_example_program_at_path_with_features,
         get_programs_dir,
     };
-    use openvm_transpiler::{
-        elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES, transpiler::Transpiler, FromElf,
-    };
+    use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use test_case::test_case;
 
     type F = BabyBear;
@@ -136,15 +134,23 @@ mod tests {
         let hasher = vm_poseidon2_hasher();
         let pv_proof = UserPublicValuesProof::compute(
             config.system.memory_config.memory_dimensions(),
-            ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES,
+            64,
             &hasher,
             &final_memory,
         );
+        let mut bytes = [0u8; 32];
+        for (i, byte) in bytes.iter_mut().enumerate() {
+            *byte = i as u8;
+        }
         assert_eq!(
             pv_proof.public_values,
-            [123, 0, 456, 0u32, 0u32, 0u32, 0u32, 0u32]
+            bytes
                 .into_iter()
-                .flat_map(|x| x.to_le_bytes())
+                .chain(
+                    [123, 0, 456, 0u32, 0u32, 0u32, 0u32, 0u32]
+                        .into_iter()
+                        .flat_map(|x| x.to_le_bytes())
+                )
                 .map(F::from_canonical_u8)
                 .collect::<Vec<_>>()
         );

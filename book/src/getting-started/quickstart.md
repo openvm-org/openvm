@@ -25,7 +25,7 @@ The `read` function takes input from the stdin (it also works with OpenVM runtim
 
 ```rust
 // src/main.rs
-use openvm::io::{read, reveal};
+use openvm::io::{read, reveal_u32};
 
 openvm::entry!(main);
 
@@ -38,8 +38,8 @@ fn main() {
         a = b;
         b = c;
     }
-    reveal(a as u32, 0);
-    reveal((a >> 32) as u32, 1);
+    reveal_u32(a as u32, 0);
+    reveal_u32((a >> 32) as u32, 1);
 }
 ```
 

@@ -81,9 +81,26 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
     }
 }
 
+/// Publish `[u8; 32]` as the first 32 bytes of the user public output.
+/// In general, it is *recommended* that you reveal a single `[u8; 32]` which is
+/// the hash digest of all logical outputs.
+///
+/// Note: this will overwrite any previous data in the first 32 bytes of the user public
+/// output if it had been previously set.
+pub fn reveal_bytes32(bytes: [u8; 32]) {
+    for (i_u32, chunk) in bytes.chunks_exact(4).enumerate() {
+        let x = u32::from_le_bytes(chunk.try_into().unwrap());
+        reveal_u32(x, i_u32);
+    }
+}
+
 /// Publish `x` as the `index`-th u32 output.
+///
+/// This is a low-level API. It is **highly recommended** that developers use [reveal_bytes32]
+/// instead to publish a hash digest of program's logical outputs.
 #[allow(unused_variables)]
-pub fn reveal(x: u32, index: usize) {
+#[inline(always)]
+pub fn reveal_u32(x: u32, index: usize) {
     let byte_index = (index * 4) as u32;
     #[cfg(target_os = "zkvm")]
     openvm_rv32im_guest::reveal!(byte_index, x, 0);

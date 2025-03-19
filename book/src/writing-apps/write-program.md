@@ -40,7 +40,7 @@ let n: u64 = read();
 
 `openvm::io::read_vec` will just read a vector and return `Vec<u8>`.
 
-`openvm::io::reveal` sends public values to the final proof (to be read by the smart contract).
+`openvm::io::reveal_bytes32` sets the user public values in the final proof (to be read by the smart contract).
 
 For debugging purposes, `openvm::io::print` and `openvm::io::println` can be used normally, but `println!` will only work if `std` is enabled.
 
