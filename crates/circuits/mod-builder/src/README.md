@@ -13,6 +13,8 @@ The goal of Mod Builder is:
 
 to produce a circuit with variables $x_1, ..., x_n, y_1, ..., y_m$ that constrains $y_i \equiv f_i(x_1, ..., x_n) \pmod{p}$ for all $i = 1, ..., m$.
 
+Note: actually, $f_i$ is allowed to use the result of $f_j$ for $j < i$, but for notational simplicity we ignore this.
+
 We use the following trick to constrain modular arithmetic.
 Suppose we want to constrain $z = x + y \pmod{p}$.
 We can represent this as the constraint $x + y - z + q p = 0$ in the integers, where $q$ is a new witness variable.
