@@ -1,4 +1,4 @@
 Optimal Ate Pairing
 ==
 
-See [this HackMD](https://hackmd.io/@axiom/HJtiW_OhJl) for details.
+See [this HackMD](https://hackmd.io/@openvm/BkrrE_un1g) for details.
