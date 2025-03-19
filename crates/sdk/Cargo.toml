@@ -48,6 +48,7 @@ getset.workspace = true
 clap = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["hex"] }
 serde_json.workspace = true
+thiserror.workspace = true
 
 [features]
 default = ["parallel"]

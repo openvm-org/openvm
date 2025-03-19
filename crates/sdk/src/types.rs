@@ -2,6 +2,7 @@ use itertools::Itertools;
 use openvm_native_recursion::halo2::{Fr, RawEvmProof};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use thiserror::Error;
 
 /// Number of bytes in a Bn254Fr.
 const BN254_BYTES: usize = 32;
@@ -30,19 +31,37 @@ pub struct EvmProof {
     pub proof: Vec<u8>,
 }
 
+#[derive(Debug, Error)]
+pub enum EvmProofConversionError {
+    #[error("Invalid length of proof")]
+    InvalidLengthProof,
+    #[error("Invalid length of instances")]
+    InvalidLengthInstances,
+    #[error("Invalid length of user public values")]
+    InvalidUserPublicValuesLength,
+    #[error("Invalid length of accumulators")]
+    InvalidLengthAccumulators,
+}
+
 impl EvmProof {
     /// Return bytes calldata to be passed to the verifier contract.
     pub fn verifier_calldata(&self) -> Vec<u8> {
-        let evm_proof: RawEvmProof = self.clone().into();
+        let evm_proof: RawEvmProof = self.clone().try_into().unwrap();
         evm_proof.verifier_calldata()
     }
 }
 
-impl From<RawEvmProof> for EvmProof {
-    fn from(evm_proof: RawEvmProof) -> Self {
+impl TryFrom<RawEvmProof> for EvmProof {
+    type Error = EvmProofConversionError;
+
+    fn try_from(evm_proof: RawEvmProof) -> Result<Self, Self::Error> {
         let RawEvmProof { instances, proof } = evm_proof;
-        assert!(NUM_BN254_ACCUMULATORS + 2 < instances.len());
-        assert_eq!(proof.len(), NUM_BN254_PROOF * BN254_BYTES);
+        if NUM_BN254_ACCUMULATORS + 2 >= instances.len() {
+            return Err(EvmProofConversionError::InvalidLengthInstances);
+        }
+        if proof.len() != NUM_BN254_PROOF * BN254_BYTES {
+            return Err(EvmProofConversionError::InvalidLengthProof);
+        }
         let accumulators = instances[0..NUM_BN254_ACCUMULATORS]
             .iter()
             .flat_map(|f| f.to_bytes())
@@ -53,18 +72,19 @@ impl From<RawEvmProof> for EvmProof {
             .iter()
             .flat_map(|f| f.to_bytes())
             .collect::<Vec<_>>();
-        Self {
+        Ok(Self {
             accumulators,
             exe_commit,
             leaf_commit,
             user_public_values,
             proof,
-        }
+        })
     }
 }
 
-impl From<EvmProof> for RawEvmProof {
-    fn from(evm_openvm_proof: EvmProof) -> Self {
+impl TryFrom<EvmProof> for RawEvmProof {
+    type Error = EvmProofConversionError;
+    fn try_from(evm_openvm_proof: EvmProof) -> Result<Self, Self::Error> {
         let EvmProof {
             accumulators,
             exe_commit,
@@ -72,11 +92,16 @@ impl From<EvmProof> for RawEvmProof {
             user_public_values,
             proof,
         } = evm_openvm_proof;
-        assert_eq!(proof.len(), NUM_BN254_PROOF * BN254_BYTES);
+        if proof.len() != NUM_BN254_PROOF * BN254_BYTES {
+            return Err(EvmProofConversionError::InvalidLengthProof);
+        }
         let instances = {
-            assert_eq!(accumulators.len(), NUM_BN254_ACCUMULATORS * BN254_BYTES);
-            assert_eq!(user_public_values.len() % BN254_BYTES, 0);
-            assert!(!user_public_values.is_empty());
+            if accumulators.len() != NUM_BN254_ACCUMULATORS * BN254_BYTES {
+                return Err(EvmProofConversionError::InvalidLengthAccumulators);
+            }
+            if user_public_values.is_empty() || user_public_values.len() % BN254_BYTES != 0 {
+                return Err(EvmProofConversionError::InvalidUserPublicValuesLength);
+            }
             let mut ret = Vec::new();
             for chunk in &accumulators
                 .iter()
@@ -90,6 +115,6 @@ impl From<EvmProof> for RawEvmProof {
             }
             ret
         };
-        RawEvmProof { instances, proof }
+        Ok(RawEvmProof { instances, proof })
     }
 }

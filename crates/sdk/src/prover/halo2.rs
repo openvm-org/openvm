@@ -40,7 +40,8 @@ impl Halo2Prover {
             self.halo2_pk
                 .wrapper
                 .prove_for_evm(&self.wrapper_srs, snark)
-                .into()
+                .try_into()
+                .unwrap()
         })
     }
 }

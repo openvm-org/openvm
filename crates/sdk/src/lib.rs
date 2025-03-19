@@ -261,7 +261,7 @@ impl Sdk {
         evm_verifier: &EvmVerifier,
         evm_proof: &EvmProof,
     ) -> Result<u64> {
-        let evm_proof: RawEvmProof = evm_proof.clone().into();
+        let evm_proof: RawEvmProof = evm_proof.clone().try_into()?;
         let gas_cost = Halo2WrapperProvingKey::evm_verify(evm_verifier, &evm_proof)
             .map_err(|reason| eyre::eyre!("Sdk::verify_evm_proof: {reason:?}"))?;
         Ok(gas_cost)
