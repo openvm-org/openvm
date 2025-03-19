@@ -23,7 +23,7 @@ pub fn read_vec() -> Vec<u8> {
     read_vec_by_len(read_u32() as usize)
 }
 
-/// Read the next vec and deserialize it into a type `T`.
+/// Deserialize the next item from the next input stream into a type `T`.
 pub fn read<T: DeserializeOwned>() -> T {
     let reader = read::Reader::new();
     let mut deserializer = Deserializer::new(reader);
