@@ -3,22 +3,30 @@ use openvm_native_recursion::halo2::{Fr, RawEvmProof};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
+/// Number of bytes in a Bn254Fr.
 const BN254_BYTES: usize = 32;
+/// Number of Bn254Fr in `accumulators` field.
 const NUM_BN254_ACCUMULATORS: usize = 12;
+/// Number of Bn254Fr in `proof` field for a circuit with only 1 advice column.
 const NUM_BN254_PROOF: usize = 43;
 
 #[serde_as]
 #[derive(Clone, Deserialize, Serialize)]
 pub struct EvmProof {
     #[serde_as(as = "serde_with::hex::Hex")]
+    /// Bn254Fr public values for accumulators in flatten little-endian bytes. Length is `NUM_BN254_ACCUMULATORS * BN254_BYTES`.
     pub accumulators: Vec<u8>,
     #[serde_as(as = "serde_with::hex::Hex")]
+    /// 1 Bn254Fr public value for exe commit in little-endian bytes.
     pub exe_commit: [u8; BN254_BYTES],
     #[serde_as(as = "serde_with::hex::Hex")]
+    /// 1 Bn254Fr public value for leaf commit in little-endian bytes.
     pub leaf_commit: [u8; BN254_BYTES],
     #[serde_as(as = "serde_with::hex::Hex")]
+    /// Bn254Fr user public values in little-endian bytes.
     pub user_public_values: Vec<u8>,
     #[serde_as(as = "serde_with::hex::Hex")]
+    /// Bn254Fr proof in little-endian bytes. The circuit only has 1 advice column, so the proof is of length `NUM_BN254_PROOF * BN254_BYTES`.
     pub proof: Vec<u8>,
 }
 
