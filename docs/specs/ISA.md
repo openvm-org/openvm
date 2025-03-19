@@ -332,9 +332,9 @@ We will use shorthand `r32{c,g}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:
 signed 32-bit addition with the value of the register `[b:4]_1`. For consistency with other notation,
 we define the shorthand `r32{c}(b)` to mean `r32{c,g}(b)` where `g` is set to the most significant bit of `c`.
 Memory access to `ptr: i32` in address space `e` is only valid if `0 <= ptr < 2^addr_max_bits` and
-`ptr` is naturally aligned (i.e., `ptr` must be divisible by the size of the access in bytes), in
+`ptr` is naturally aligned (i.e., `ptr` must be divisible by the data size in bytes), in
 which case it is an access to `F::from_canonical_u32(ptr as u32)`.
-The size of the access is `1` for LOADB_RV32, LOADBU_RV32, STOREB_RV32, `2` for LOADH_RV32, LOADHU_RV32, STOREH_RV32, and `4` for LOADW_RV32, STOREW_RV32.
+The data size is `1` for LOADB_RV32, LOADBU_RV32, STOREB_RV32, `2` for LOADH_RV32, LOADHU_RV32, STOREH_RV32, and `4` for LOADW_RV32, STOREW_RV32.
 
 All load/store instructions always do block accesses of block size `4`, even for LOADB_RV32 and STOREB_RV32.
 
