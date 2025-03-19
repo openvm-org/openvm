@@ -36,6 +36,16 @@ We now specify the custom instructions for the default set of VM extensions.
 
 ## RV32IM Extension
 
+The RV32IM extension supports the RV32I Base Integer Instruction Set, Version 2.1 with `XLEN=32`
+and the "M" Extension for Integer Multiplication and Division, Version 2.0 with `XLEN=32`, following
+the specification of the [RISC-V Instruction Set Manual Volume I: Unprivileged ISA](https://lf-riscv.atlassian.net/wiki/spaces/HOME/pages/16154769/RISC-V+Technical+Specifications) (Version 20240411).
+
+**Memory Alignment**: Chapter 2.6 of _loc. cit._ specifies that the behavior of
+loads and stores whose effective addresses are not naturally aligned to the referenced datatype
+(i.e., the effective address is not divisible by the size of the access in bytes) depends on the
+execution environment interface (EEI). The OpenVM execution environment guarantees that misaligned
+loads and store are fully supported, so execution of the instruction will never fail due to issues of alignment. However aligned memory accesses are _preferred_, and misaligned accesses may result in slower execution.
+
 In addition to the standard RV32IM opcodes, we support the following additional instructions to handle system interactions
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[0:11] | RISC-V description and notes                                                                                                                                               |
