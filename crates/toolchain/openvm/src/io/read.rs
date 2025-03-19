@@ -64,7 +64,7 @@ impl WordRead for Reader {
         if !remainder.is_empty() {
             num_padded_bytes += WORD_SIZE - remainder.len();
             let mut padded = MaybeUninit::<[u8; WORD_SIZE]>::uninit();
-            hint_store_word(padded.as_mut_ptr() as *mut u32);
+            hint_store_word(padded.as_mut_ptr() as *mut u32); // TODO: UB (potential misalignment)
             let padded = unsafe { padded.assume_init() };
             remainder.copy_from_slice(&padded[..remainder.len()]);
         }

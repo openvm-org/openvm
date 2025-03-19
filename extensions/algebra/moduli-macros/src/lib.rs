@@ -863,7 +863,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0`, `x1` or `x2`, into a `SETUP_ADDSUB`, `SETUP_MULDIV` or `SETUP_ISEQ` instruction.
-                    let mut uninit: core::mem::MaybeUninit<[u8; #limbs]> = core::mem::MaybeUninit::uninit();
+                    let mut uninit: core::mem::MaybeUninit<[u8; #limbs]> = core::mem::MaybeUninit::uninit(); // TODO: first, potential misalignment. Second, shouldn't it be 4 * #limbs?
                     openvm::platform::custom_insn_r!(
                         opcode = ::openvm_algebra_guest::OPCODE,
                         funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,

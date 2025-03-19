@@ -31,7 +31,7 @@ mod bn254 {
         let pt = &io[32 * 4..32 * 8];
         let l = &io[32 * 8..32 * 12];
 
-        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
+        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) }; // TODO: UB (potential misalignment)
 
         let (pt_cmp, l_cmp) = Bn254::miller_double_step(s_cast);
         let mut pt_bytes = [0u8; 32 * 4];
@@ -60,8 +60,8 @@ mod bn254 {
         let l0 = &io[32 * 12..32 * 16];
         let l1 = &io[32 * 16..32 * 20];
 
-        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
-        let q_cast = unsafe { &*(q.as_ptr() as *const AffinePoint<Fp2>) };
+        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) }; // TODO: UB (potential misalignment)
+        let q_cast = unsafe { &*(q.as_ptr() as *const AffinePoint<Fp2>) }; // TODO: UB (potential misalignment)
         let (pt_cmp, l0_cmp, l1_cmp) = Bn254::miller_double_and_add_step(s_cast, q_cast);
         let mut pt_bytes = [0u8; 32 * 4];
         let mut l0_bytes = [0u8; 32 * 4];
@@ -109,7 +109,7 @@ mod bls12_381 {
         let pt = &io[48 * 4..48 * 8];
         let l = &io[48 * 8..48 * 12];
 
-        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
+        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) }; // TODO: UB (potential misalignment)
 
         let (pt_cmp, l_cmp) = Bls12_381::miller_double_step(s_cast);
         let mut pt_bytes = [0u8; 48 * 4];
@@ -136,8 +136,8 @@ mod bls12_381 {
         let l0 = &io[48 * 12..48 * 16];
         let l1 = &io[48 * 16..48 * 20];
 
-        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
-        let q_cast = unsafe { &*(q.as_ptr() as *const AffinePoint<Fp2>) };
+        let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) }; // TODO: UB (potential misalignment)
+        let q_cast = unsafe { &*(q.as_ptr() as *const AffinePoint<Fp2>) }; // TODO: UB (potential misalignment)
         let (pt_cmp, l0_cmp, l1_cmp) = Bls12_381::miller_double_and_add_step(s_cast, q_cast);
         let mut pt_bytes = [0u8; 48 * 4];
         let mut l0_bytes = [0u8; 48 * 4];

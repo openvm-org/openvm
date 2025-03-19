@@ -20,6 +20,7 @@ pub fn main() {
     let email = caps.name("email").expect("No email found.");
     let email_hash = openvm_keccak256_guest::keccak256(email.as_str().as_bytes());
 
+    // TODO: UB (potential misalignment)
     let email_hash = unsafe { transmute::<[u8; 32], [u32; 8]>(email_hash) };
 
     email_hash

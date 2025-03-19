@@ -36,10 +36,10 @@ mod bn254 {
         let q1 = &io[32 * 8..32 * 12];
         let f_cmp = &io[32 * 12..32 * 24];
 
-        let s0_cast = unsafe { &*(s0.as_ptr() as *const AffinePoint<Fp>) };
-        let s1_cast = unsafe { &*(s1.as_ptr() as *const AffinePoint<Fp>) };
-        let q0_cast = unsafe { &*(q0.as_ptr() as *const AffinePoint<Fp2>) };
-        let q1_cast = unsafe { &*(q1.as_ptr() as *const AffinePoint<Fp2>) };
+        let s0_cast = unsafe { &*(s0.as_ptr() as *const AffinePoint<Fp>) }; // TODO: UB (potential misalignment)
+        let s1_cast = unsafe { &*(s1.as_ptr() as *const AffinePoint<Fp>) }; // TODO: UB (potential misalignment)
+        let q0_cast = unsafe { &*(q0.as_ptr() as *const AffinePoint<Fp2>) }; // TODO: UB (potential misalignment)
+        let q1_cast = unsafe { &*(q1.as_ptr() as *const AffinePoint<Fp2>) }; // TODO: UB (potential misalignment)
 
         let f = Bn254::multi_miller_loop(
             &[s0_cast.clone(), s1_cast.clone()],
@@ -80,10 +80,10 @@ mod bls12_381 {
         let q1 = &io[48 * 8..48 * 12];
         let f_cmp = &io[48 * 12..48 * 24];
 
-        let s0_cast = unsafe { &*(s0.as_ptr() as *const AffinePoint<Fp>) };
-        let s1_cast = unsafe { &*(s1.as_ptr() as *const AffinePoint<Fp>) };
-        let q0_cast = unsafe { &*(q0.as_ptr() as *const AffinePoint<Fp2>) };
-        let q1_cast = unsafe { &*(q1.as_ptr() as *const AffinePoint<Fp2>) };
+        let s0_cast = unsafe { &*(s0.as_ptr() as *const AffinePoint<Fp>) }; // TODO: UB (potential misalignment)
+        let s1_cast = unsafe { &*(s1.as_ptr() as *const AffinePoint<Fp>) }; // TODO: UB (potential misalignment)
+        let q0_cast = unsafe { &*(q0.as_ptr() as *const AffinePoint<Fp2>) }; // TODO: UB (potential misalignment)
+        let q1_cast = unsafe { &*(q1.as_ptr() as *const AffinePoint<Fp2>) }; // TODO: UB (potential misalignment)
 
         let f = Bls12_381::multi_miller_loop(
             &[s0_cast.clone(), s1_cast.clone()],
