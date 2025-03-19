@@ -261,10 +261,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         // preventing mem_ptr overflow
         self.range_bus
             .range_check(
-                // (limb[0] - shift_amount) / 4 < 2^14 => limb[0] - shift_amount < 2^16
-                (local_cols.mem_ptr_limbs[0] - shift_amount)
-                    * AB::F::from_canonical_u32(4).inverse(),
-                RV32_CELL_BITS * 2 - 2,
+                local_cols.mem_ptr_limbs[0] - shift_amount,
+                RV32_CELL_BITS * 2,
             )
             .eval(builder, is_valid.clone());
         self.range_bus
@@ -285,7 +283,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             .when(not::<AB::Expr>(is_valid.clone()))
             .assert_zero(local_cols.mem_as);
 
-        // read_as is 2 for loads and 1 for stores
+        // read_as is [local_cols.mem_as] for loads and 1 for stores
         let read_as = select::<AB::Expr>(
             is_load.clone(),
             local_cols.mem_as,
@@ -310,7 +308,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
 
         let write_aux_cols = MemoryWriteAuxCols::from_base(local_cols.write_base_aux, ctx.reads.0);
 
-        // write_as is 1 for loads and 2 for stores
+        // write_as is 1 for loads and [local_cols.mem_as] for stores
         let write_as = select::<AB::Expr>(
             is_load.clone(),
             AB::F::from_canonical_u32(RV32_REGISTER_AS),
@@ -480,12 +478,17 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
+        let shift_amount = read_record.shift_amount;
         let write_id = if enabled != F::ZERO {
             let (record_id, _) = match local_opcode {
                 STOREW | STOREH | STOREB => {
                     let ptr = read_record.mem_ptr_limbs[0]
                         + read_record.mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-                    memory.write(e, F::from_canonical_u32(ptr & 0xfffffffc), output.writes[0])
+                    memory.write(
+                        e,
+                        F::from_canonical_u32(ptr - shift_amount),
+                        output.writes[0],
+                    )
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => memory.write(d, a, output.writes[0]),
             };
@@ -517,8 +520,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         memory: &OfflineMemory<F>,
     ) {
         self.range_checker_chip.add_count(
-            (read_record.mem_ptr_limbs[0] - read_record.shift_amount) / 4,
-            RV32_CELL_BITS * 2 - 2,
+            read_record.mem_ptr_limbs[0] - read_record.shift_amount,
+            RV32_CELL_BITS * 2,
         );
         self.range_checker_chip.add_count(
             read_record.mem_ptr_limbs[1],

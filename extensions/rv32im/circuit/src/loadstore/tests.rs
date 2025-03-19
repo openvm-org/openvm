@@ -47,22 +47,14 @@ fn set_and_execute(
     let imm_sign = imm_sign.unwrap_or(rng.gen_range(0..2));
     let imm_ext = imm + imm_sign * (0xffffffff ^ ((1 << IMM_BITS) - 1));
 
-    let alignment = match opcode {
-        LOADW | STOREW => 2,
-        LOADHU | STOREH => 1,
-        LOADBU | STOREB => 0,
-        _ => unreachable!(),
-    };
-
     let ptr_val = rng.gen_range(
         0..(1
             << (tester
                 .memory_controller()
                 .borrow()
                 .mem_config()
-                .pointer_max_bits
-                - alignment)),
-    ) << alignment;
+                .pointer_max_bits)),
+    );
 
     let rs1 = rs1
         .unwrap_or(u32_into_limbs::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
@@ -79,7 +71,12 @@ fn set_and_execute(
     });
 
     let ptr_val = imm_ext.wrapping_add(compose(rs1));
-    let shift_amount = ptr_val % 4;
+    // Refer to [Rv32LoadStoreAdapterChip] for the expected behavior in each case
+    let shift_amount = match opcode {
+        LOADW | STOREW => 0,
+        LOADH | LOADHU | STOREH => ptr_val & 0b10,
+        LOADB | LOADBU | STOREB => ptr_val & 0b11,
+    };
     tester.write(1, b, rs1);
 
     let mut some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
