@@ -5,7 +5,8 @@ We support the [optimal Ate pairing](https://datatracker.ietf.org/doc/html/draft
 
 For present use cases, we will only need to **assert** that the pairing is one. 
 This leads to significant optimizations in ZK. We refer to this as `pairing_check` instead of `pairing`.
-We implement this in eDSL since it was found that adding opcodes for this would cause performance issues.
+We implement most of the pairing check in Rust since it was found that doing certain pairing operations in circuits would cause performance issues.
+We still use opcodes for Fp and Fp2 arithmetic.
 
 Specifically this will be a pairing
 $$e: \mathbb G_1 \times \mathbb G_2 \to \mathbb G_T$$

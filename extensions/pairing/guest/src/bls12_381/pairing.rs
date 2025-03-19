@@ -327,8 +327,7 @@ impl Bls12_381 {
         // Since the Bls12_381 curve has a negative seed, the miller loop for Bls12_381 is computed as
         // f_{Miller,x,Q}(P) = conjugate( f_{Miller,-x,Q}(P) * c^{-x} ).
         // We will pass in the conjugate inverse of c into the miller loop so that we compute
-        // fc = f_{Miller,x,Q}(P)
-        //    = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} )  (where c' is the conjugate inverse of c)
+        // fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} )  (where c' is the conjugate inverse of c)
         //    = f_{Miller,x,Q}(P) * c^x
         let c_conj = c.conjugate();
         if c_conj == Fp12::ZERO {
