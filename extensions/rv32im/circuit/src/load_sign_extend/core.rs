@@ -307,7 +307,7 @@ pub(super) fn run_write_data_sign_extend<
             }
             write_data[0] = read_data[shift];
         }
-        _ => unreachable!(),
+        _ => unreachable!("memory block access shift miscalculation: {opcode:?}, shift: {shift}"),
     };
     write_data
 }
