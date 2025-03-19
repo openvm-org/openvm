@@ -73,11 +73,13 @@ pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmProof, path: P) -> Resu
 }
 
 pub fn read_evm_verifier_from_file<P: AsRef<Path>>(path: P) -> Result<EvmVerifier> {
-    read_from_file_bytes(path)
+    let verifier: EvmVerifier = serde_json::from_reader(File::open(path)?)?;
+    Ok(verifier)
 }
 
 pub fn write_evm_verifier_to_file<P: AsRef<Path>>(verifier: EvmVerifier, path: P) -> Result<()> {
-    write_to_file_bytes(path, verifier)
+    serde_json::to_writer(File::create(path)?, &verifier)?;
+    Ok(())
 }
 
 pub fn read_object_from_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
