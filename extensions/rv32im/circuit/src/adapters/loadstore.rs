@@ -285,7 +285,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             .when(not::<AB::Expr>(is_valid.clone()))
             .assert_zero(local_cols.mem_as);
 
-        // read_as is 2 for loads and 1 for stores
+        // read_as is [local_cols.mem_as] for loads and 1 for stores
         let read_as = select::<AB::Expr>(
             is_load.clone(),
             local_cols.mem_as,
@@ -310,7 +310,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
 
         let write_aux_cols = MemoryWriteAuxCols::from_base(local_cols.write_base_aux, ctx.reads.0);
 
-        // write_as is 1 for loads and 2 for stores
+        // write_as is 1 for loads and [local_cols.mem_as] for stores
         let write_as = select::<AB::Expr>(
             is_load.clone(),
             AB::F::from_canonical_u32(RV32_REGISTER_AS),
