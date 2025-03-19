@@ -307,7 +307,9 @@ pub(super) fn run_write_data_sign_extend<
             }
             write_data[0] = read_data[shift];
         }
-        _ => unreachable!("memory block access shift miscalculation: {opcode:?}, shift: {shift}"),
+        _ => unreachable!(
+            "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
+        ),
     };
     write_data
 }

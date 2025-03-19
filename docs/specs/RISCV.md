@@ -43,8 +43,9 @@ the specification of the [RISC-V Instruction Set Manual Volume I: Unprivileged I
 **Memory Alignment**: Chapter 2.6 of _loc. cit._ specifies that the behavior of
 loads and stores whose effective addresses are not naturally aligned to the referenced datatype
 (i.e., the effective address is not divisible by the size of the access in bytes) depends on the
-execution environment interface (EEI). The OpenVM execution environment guarantees that misaligned
-loads and store are fully supported, so execution of the instruction will never fail due to issues of alignment. However aligned memory accesses are _preferred_, and misaligned accesses may result in slower execution.
+execution environment interface (EEI). The OpenVM execution environment does not support misaligned
+loads and stores. More specifically, guest execution considers misaligned accesses invalid
+and host execution will raise an exception resulting in a fatal trap.
 
 In addition to the standard RV32IM opcodes, we support the following additional instructions to handle system interactions
 
