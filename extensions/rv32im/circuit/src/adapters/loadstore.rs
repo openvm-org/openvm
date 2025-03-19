@@ -399,7 +399,22 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
-        let shift_amount = ptr_val % 4;
+        // Memory access at un-aligned addresses (i.e., addresses not divisible by the access size)
+        // are supported, but we will shift if possible to do an aligned access when possible
+        // No matter the access size (1, 2, 4), the block access is always size 4
+        let shift_amount = match local_opcode {
+            LOADW | STOREW => 0, // access size 4, not allowed to shift
+            LOADH | LOADHU | STOREH => {
+                // access size 2, can shift either 0 or 2
+                // if ptr_val is 0 or 2 (mod 4), this will shift to a multiple of 4.
+                // otherwise it will shift by 2 if ptr_val = 3 (mod 4) but still have bad alignment
+                ptr_val & 0b10
+            }
+            LOADB | LOADBU | STOREB => {
+                // best to do an aligned block access at ptr_val - ptr_val % 4
+                ptr_val & 0b11
+            }
+        };
         assert!(
             ptr_val < (1 << self.air.pointer_max_bits),
             "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
