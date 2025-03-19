@@ -374,7 +374,9 @@ pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
             write_data[shift..(NUM_CELLS / 2 + shift)]
                 .copy_from_slice(&read_data[..(NUM_CELLS / 2)]);
         }
-        _ => unreachable!("memory block access shift miscalculation: {opcode:?}, shift: {shift}"),
+        _ => unreachable!(
+            "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
+        ),
     };
     write_data
 }
