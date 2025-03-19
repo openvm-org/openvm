@@ -751,14 +751,19 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
         let modulus_bytes = string_to_bytes(&modulus);
         let mut limbs = modulus_bytes.len();
+        let mut block_size = 32;
 
         if limbs <= 32 {
             limbs = 32;
         } else if limbs <= 48 {
             limbs = 48;
+            block_size = 16;
         } else {
             panic!("limbs must be at most 48");
         }
+
+        let block_size = proc_macro::Literal::usize_unsuffixed(block_size);
+        let block_size = syn::Lit::new(block_size.to_string().parse::<_>().unwrap());
 
         let modulus_bytes = modulus_bytes
             .into_iter()
@@ -861,9 +866,13 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                     ptr += 4;
                     let remaining = &#serialized_name[ptr..];
 
+                    // To avoid importing #struct_name, we create a placeholder struct with the same size and alignment.
+                    #[repr(C, align(#block_size))]
+                    struct AlignedPlaceholder([u8; #limbs]);
+
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0`, `x1` or `x2`, into a `SETUP_ADDSUB`, `SETUP_MULDIV` or `SETUP_ISEQ` instruction.
-                    let mut uninit: core::mem::MaybeUninit<[u8; #limbs]> = core::mem::MaybeUninit::uninit();
+                    let mut uninit: core::mem::MaybeUninit<AlignedPlaceholder> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(
                         opcode = ::openvm_algebra_guest::OPCODE,
                         funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
