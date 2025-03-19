@@ -307,6 +307,9 @@ pub(super) fn run_write_data_sign_extend<
             }
             write_data[0] = read_data[shift];
         }
+        // Currently the adapter AIR requires `ptr_val` to be aligned to the data size in bytes.
+        // The circuit requires that `shift = ptr_val % 4` so that `ptr_val - shift` is a multiple of 4.
+        // This requirement is non-trivial to remove, because we use it to ensure that `ptr_val - shift + 4 <= 2^pointer_max_bits`.
         _ => unreachable!(
             "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
         ),
