@@ -34,6 +34,8 @@ We now specify the custom instructions for the default set of VM extensions.
 | ----------- | --- | ----------- | ------ | --------- | ------------------------------- |
 | terminate   | I   | 0001011     | 000    | `code`    | terminate with exit code `code` |
 
+The `terminate` instruction is a requested trap that will cause an orderly termination to guest execution with the specified exit code.
+
 ## RV32IM Extension
 
 The RV32IM extension supports the RV32I Base Integer Instruction Set, Version 2.1 with `XLEN=32`
@@ -47,13 +49,22 @@ execution environment interface (EEI). The OpenVM execution environment does not
 loads and stores. More specifically, guest execution considers misaligned accesses invalid
 and host execution will raise an exception resulting in a fatal trap.
 
-In addition to the standard RV32IM opcodes, we support the following additional instructions to handle system interactions
+### IO
+In addition to the standard RV32IM opcodes, we support the following additional intrinsic instructions to handle interactions between the guest and host environments.
+These instructions require the host execution environment to maintain the following data structures
+as part of its state:
+
+- `input_stream`: a non-interactive queue of byte vectors which is provided at the start of
+  execution. This may be considered as the non-interactive input to the guest program.
+- `hint_stream`: a queue of bytes populated during execution
+  via instructions such as `hintinput`.
+- user IO space: a fixed length array of bytes, with length `num_public_values` which is a configuration constant of the execution environment. The length must equal `8` times a power of two. The IO space can be overwritten, and the final state of the IO space is persisted after execution halts.
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[0:11] | RISC-V description and notes                                                                                                                                               |
 | ----------- | --- | ----------- | ------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | hintstorew  | I   | 0001011     | 001    | 0x0       | Stores next 4-byte word from hint stream in user memory at `[rd]_2`. Only valid if next 4 values in hint stream are bytes.                                                 |
 | hintbuffer  | I   | 0001011     | 001    | 0x1       | Stores next `4 * rs1` bytes from hint stream in user memory at `[rd..rd + 4 * rs1]_2`. Only valid if next `4 * rs1` values in hint stream are bytes and `rs1` is non-zero. |
-| reveal      | I   | 0001011     | 010    |           | Stores the 4-byte word `rs1` at address `rd + imm` in user IO space.                                                                                                       |
+| reveal      | I   | 0001011     | 010    |           | Stores the 4-byte word `rs1` at address `rd + imm` in user IO space. The address `rd + imm` must be aligned to a 4-byte boundary. |
 | hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to the vector.                                                                                                     |
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails.                                                |
 | hintrandom  | I   | 0001011     | 011    | 0x2       | Resets the hint stream to `4 * rd` random bytes from `rand::rngs::OsRng` on the host.                                                                                      |
