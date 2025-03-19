@@ -7,8 +7,8 @@ openvm::entry!(main);
 
 pub fn main() {
     let mut bytes = [0u8; 32];
-    for i in 0..32 {
-        bytes[i] = i as u8;
+    for (i, byte) in bytes.iter_mut().enumerate() {
+        *byte = i as u8;
     }
     reveal_bytes32(bytes);
     let x: u32 = core::hint::black_box(123);
