@@ -43,21 +43,7 @@ pub struct NativeConfig {
     pub native: Native,
 }
 
-impl Default for NativeConfig {
-    fn default() -> Self {
-        Self {
-            system: SystemConfig::default().with_continuations(),
-            native: Default::default(),
-        }
-    }
-}
-
 impl NativeConfig {
-    pub fn with_continuations(mut self) -> Self {
-        self.system = self.system.with_continuations();
-        self
-    }
-
     pub fn aggregation(num_public_values: usize, poseidon2_max_constraint_degree: usize) -> Self {
         Self {
             system: SystemConfig::new(

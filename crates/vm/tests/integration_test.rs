@@ -7,9 +7,8 @@ use std::{
 use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        ChipId, ExecutionSegment, MemoryConfig, SingleSegmentVmExecutor, SystemConfig,
-        SystemTraceHeights, VirtualMachine, VmComplexTraceHeights, VmConfig,
-        VmInventoryTraceHeights,
+        ChipId, ExecutionSegment, SingleSegmentVmExecutor, SystemConfig, SystemTraceHeights,
+        VirtualMachine, VmComplexTraceHeights, VmConfig, VmInventoryTraceHeights,
     },
     system::{
         memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
@@ -55,6 +54,19 @@ where
     rng.gen_range(0..MAX_MEMORY - len) / len * len
 }
 
+fn test_native_config() -> NativeConfig {
+    NativeConfig {
+        system: SystemConfig::default(),
+        native: Default::default(),
+    }
+}
+
+fn test_native_continuations_config() -> NativeConfig {
+    let mut config = test_native_config();
+    config.system = config.system.with_continuations();
+    config
+}
+
 #[test]
 fn test_vm_1() {
     let n = 6;
@@ -95,7 +107,7 @@ fn test_vm_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeConfig::default(), program);
+    air_test(test_native_config(), program);
 }
 
 #[test]
@@ -307,7 +319,7 @@ fn test_vm_initial_memory() {
         .into_iter()
         .collect();
 
-    let config = NativeConfig::aggregation(0, 3).with_continuations();
+    let config = test_native_continuations_config();
     let exe = VmExe {
         program,
         pc_start: 0,
@@ -320,11 +332,8 @@ fn test_vm_initial_memory() {
 #[test]
 fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 32, 1024), 0),
-        native: Default::default(),
-    }
-    .with_continuations();
+    let config = test_native_continuations_config();
+    let ptr_max_bits = config.system.memory_config.pointer_max_bits;
     let airs = VmConfig::<BabyBear>::create_chip_complex(&config)
         .unwrap()
         .airs::<BabyBearPoseidon2Config>();
@@ -363,7 +372,7 @@ fn test_vm_1_persistent() {
         );
         let mut digest = [BabyBear::ZERO; CHUNK];
         let compression = vm_poseidon2_hasher();
-        for _ in 0..16 {
+        for _ in 0..=ptr_max_bits {
             digest = compression.compress(&digest, &digest);
         }
         assert_eq!(
@@ -427,7 +436,7 @@ fn test_vm_without_field_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeConfig::default(), program);
+    air_test(test_native_config(), program);
 }
 
 #[test]
@@ -474,7 +483,7 @@ fn test_vm_fibonacci_old() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeConfig::default(), program);
+    air_test(test_native_config(), program);
 }
 
 #[test]
@@ -532,7 +541,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeConfig::default(), program);
+    air_test(test_native_config(), program);
 }
 
 #[test]
@@ -556,7 +565,7 @@ fn test_vm_field_extension_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeConfig::default(), program);
+    air_test(test_native_config(), program);
 }
 
 #[test]
@@ -580,7 +589,7 @@ fn test_vm_max_access_adapter_8() {
 
     let program = Program::from_instructions(&instructions);
 
-    let mut config = NativeConfig::default();
+    let mut config = test_native_config();
     {
         let chip_complex1 = config.create_chip_complex().unwrap();
         let mem_ctrl1 = chip_complex1.base.memory_controller;
@@ -621,11 +630,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
     ];
 
     let program = Program::from_instructions(&instructions);
-    let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 32, 1024), 0)
-            .with_continuations(),
-        native: Default::default(),
-    };
+    let config = test_native_continuations_config();
     air_test(config, program);
 }
 
@@ -686,7 +691,7 @@ fn test_vm_hint() {
     type F = BabyBear;
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
-    let config = NativeConfig::default();
+    let config = test_native_config();
     air_test_with_min_segments(config, program, input_stream, 1);
 }
 
@@ -706,7 +711,7 @@ fn test_hint_load_1() {
     let program = Program::from_instructions(&instructions);
 
     let mut segment = ExecutionSegment::new(
-        &NativeConfig::aggregation(0, 3),
+        &test_native_config(),
         program,
         vec![vec![F::ONE, F::TWO]].into(),
         None,
@@ -742,7 +747,7 @@ fn test_hint_load_2() {
     let program = Program::from_instructions(&instructions);
 
     let mut segment = ExecutionSegment::new(
-        &NativeConfig::aggregation(0, 3),
+        &test_native_config(),
         program,
         vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]].into(),
         None,

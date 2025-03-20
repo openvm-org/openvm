@@ -480,7 +480,6 @@ fn verify_batch_chip_simple_50() {
 fn air_test_with_compress_poseidon2(
     poseidon2_max_constraint_degree: usize,
     program: Program<BabyBear>,
-    continuation_enabled: bool,
 ) {
     let fri_params = if matches!(std::env::var("OPENVM_FAST_TEST"), Ok(x) if &x == "1") {
         FriParameters {
@@ -494,11 +493,7 @@ fn air_test_with_compress_poseidon2(
     };
     let engine = BabyBearPoseidon2Engine::new(fri_params);
 
-    let config = if continuation_enabled {
-        NativeConfig::aggregation(0, poseidon2_max_constraint_degree).with_continuations()
-    } else {
-        NativeConfig::aggregation(0, poseidon2_max_constraint_degree)
-    };
+    let config = NativeConfig::aggregation(0, poseidon2_max_constraint_degree);
     let vm = VirtualMachine::new(engine, config);
 
     let pk = vm.keygen();
@@ -599,8 +594,6 @@ fn test_vm_compress_poseidon2_as4() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test_with_compress_poseidon2(7, program.clone(), false);
-    air_test_with_compress_poseidon2(3, program.clone(), false);
-    air_test_with_compress_poseidon2(7, program.clone(), true);
-    air_test_with_compress_poseidon2(3, program.clone(), true);
+    air_test_with_compress_poseidon2(3, program.clone());
+    air_test_with_compress_poseidon2(7, program.clone());
 }
