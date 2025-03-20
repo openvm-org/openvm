@@ -5,6 +5,9 @@ use alloy_primitives::{address, TxKind, U256};
 use openvm_keccak256_guest; // export native keccak
 use revm::{db::BenchmarkDB, primitives::Bytecode, Evm};
 
+// Necessary so the linker doesn't skip importing openvm crate
+openvm::entry!(main);
+
 fn main() {
     let mut evm = Evm::builder()
         .with_db(BenchmarkDB::new_bytecode(Bytecode::new()))
