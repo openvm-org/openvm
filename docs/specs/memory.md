@@ -3,6 +3,7 @@
 - [Basic performed interactions](#basic-performed-interactions)
 - [Access adapters](#access-adapters)
 - [Boundary chips](#boundary-chips)
+- [Invariants](#invariants)
 - [Soundness proof](#soundness-proof)
   - [Time goes forward](#time-goes-forward)
   - [Memory consistency](#memory-consistency)
@@ -158,13 +159,31 @@ In **persistent** memory, we use `PersistentBoundaryChip` to handle the final me
 
 Both boundary chips perform, for every subsegment ever existed in our nice set, a receive interaction on birth and a send interaction on death.
 
+## Invariants
+
+The following invariants **must** be maintained by the memory architecture:
+1. In the MEMORY_BUS, the `timestamp` is always in range `[0, 2^timestamp_max_bits)` where `timestamp_max_bits <= F::bits() - 2` is a configuration constant.
+2. In the MEMORY_BUS, the `address_space` is always in range `[0, 2^as_height)` where `as_height <= F::bits() - 2` is a configuration constant.
+3. In the MEMORY_BUS, the `pointer` is always in range `[0, 2^pointer_max_bits)` where `pointer_max_bits <= F::bits() - 2` is a configuration constant.
+
+Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](./circuit.md#instruction-executors) that the timestamp increase during instruction execution is bounded by the number of AIR interactions.
+
+Invariant 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the boundary chips:
+- VolatileBoundaryChip constrains the range checks outright.
+- PersistentBoundaryChip populates the MEMORY_BUS at timestamp `0` from the initial memory state, which is committed to in the public value `initial_memory_root`. PersistentBoundaryChip upholds Invariants 2 and 3 **assuming** that the initial memory state only contains addresses in the required range. This assumption needs to be checked outside the scope of the circuit.
+
+> [!IMPORTANT]
+> At all later timestamps, it is the responsibility of each chip to ensure their memory accesses maintain Invariants 2 and 3.
+
+We make the observation that if the `MemoryBridge` is used to add the interactions necessary for a write operation, then under the assumption that time goes forward, any attempt to write to an address out of range will lead to an unbalanced MEMORY_BUS because it will require a send at an earlier timestamp that was also out of bounds.
+
 ## Soundness proof
 
 Assume that the MEMORY_BUS interactions and the constraints mentioned above are satisfied.
 
 ### Time goes forward
 
-In the connector chip, we constrain that the final timestamp is less than $2^{29}$. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. In our current circuit set, all chips increase timestamp [less than they do interactions](./circuit.md#inspection-of-vm-chip-timestamp-increments), which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $2^{29}$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^29` guarantees that `prev_timestamp < timestamp` everywhere we check it.
+In the connector chip, we constrain that the final timestamp is less than $`2^\text{timestamp_max_bits}`$. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. In our current circuit set, all chips increase timestamp [less than they do interactions](./circuit.md#inspection-of-vm-chip-timestamp-increments), which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $`2^\text{timestamp_max_bits}`$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp_max_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
 
 ### Memory consistency
 
