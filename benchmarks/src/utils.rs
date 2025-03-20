@@ -69,6 +69,9 @@ pub struct BenchmarkCli {
     /// Whether to execute with additional profiling metric collection
     #[arg(long)]
     pub profiling: bool,
+
+    #[arg(long)]
+    pub manifest_dir: Option<PathBuf>,
 }
 
 impl BenchmarkCli {
@@ -138,7 +141,12 @@ impl BenchmarkCli {
             "release"
         }
         .to_string();
-        build_bench_program(program_name, profile)
+        let manifest_dir = self
+            .manifest_dir
+            .clone()
+            .unwrap_or(get_programs_dir())
+            .join(program_name);
+        build_bench_program(manifest_dir, profile)
     }
 
     pub fn bench_from_exe<VC>(
@@ -173,8 +181,7 @@ fn get_programs_dir() -> PathBuf {
     dir
 }
 
-pub fn build_bench_program(program_name: &str, profile: impl ToString) -> Result<Elf> {
-    let manifest_dir = get_programs_dir().join(program_name);
+pub fn build_bench_program(manifest_dir: PathBuf, profile: impl ToString) -> Result<Elf> {
     let pkg = get_package(manifest_dir);
     let target_dir = tempdir()?;
     // Build guest with default features
