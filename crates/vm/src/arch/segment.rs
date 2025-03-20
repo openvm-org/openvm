@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     utils::metrics_span,
     Chip,
 };
-
+use openvm_stark_backend::keygen::types::LinearConstraint;
 use super::{
     ExecutionError, Streams, SystemBase, SystemConfig, VmChipComplex, VmComplexTraceHeights,
     VmConfig,
@@ -56,6 +56,7 @@ pub struct DefaultSegmentationStrategy {
     max_cells_per_chip_in_segment: usize,
     #[allow(dead_code)]
     adapter_rows_upper_bound_threshold: u32,
+    linear_constraints: Vec<LinearConstraint>,
 }
 
 impl Default for DefaultSegmentationStrategy {
@@ -64,6 +65,7 @@ impl Default for DefaultSegmentationStrategy {
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             max_cells_per_chip_in_segment: DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT,
             adapter_rows_upper_bound_threshold: ADAPTER_ROWS_UPPER_BOUND_THRESHOLD,
+            linear_constraints: vec![],
         }
     }
 }
@@ -73,7 +75,7 @@ impl DefaultSegmentationStrategy {
         Self {
             max_segment_len,
             max_cells_per_chip_in_segment: max_segment_len * 120,
-            adapter_rows_upper_bound_threshold: ADAPTER_ROWS_UPPER_BOUND_THRESHOLD,
+            ..Default::default()
         }
     }
 
@@ -81,8 +83,13 @@ impl DefaultSegmentationStrategy {
         Self {
             max_segment_len,
             max_cells_per_chip_in_segment,
-            adapter_rows_upper_bound_threshold: ADAPTER_ROWS_UPPER_BOUND_THRESHOLD,
+            ..Default::default()
         }
+    }
+
+    pub fn with_linear_constraint(mut self, constraint: LinearConstraint) -> Self {
+        self.linear_constraints.push(constraint);
+        self
     }
 }
 
