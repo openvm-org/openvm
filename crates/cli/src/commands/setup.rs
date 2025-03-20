@@ -10,11 +10,14 @@ use eyre::{eyre, Result};
 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
     config::AggConfig,
-    fs::{write_agg_pk_to_file, write_evm_verifier_to_file},
+    fs::{
+        write_agg_pk_to_file, write_evm_verifier_to_folder, EVM_VERIFIER_ARTIFACT_FILENAME,
+        EVM_VERIFIER_SOL_FILENAME,
+    },
     DefaultStaticVerifierPvHandler, Sdk,
 };
 
-use crate::default::{DEFAULT_AGG_PK_PATH, DEFAULT_PARAMS_DIR, DEFAULT_VERIFIER_PATH};
+use crate::default::{DEFAULT_AGG_PK_PATH, DEFAULT_PARAMS_DIR, DEFAULT_VERIFIER_FOLDER};
 
 #[derive(Parser)]
 #[command(
@@ -26,7 +29,12 @@ pub struct EvmProvingSetupCmd {}
 impl EvmProvingSetupCmd {
     pub async fn run(&self) -> Result<()> {
         if PathBuf::from(DEFAULT_AGG_PK_PATH).exists()
-            && PathBuf::from(DEFAULT_VERIFIER_PATH).exists()
+            && PathBuf::from(DEFAULT_VERIFIER_FOLDER)
+                .join(EVM_VERIFIER_ARTIFACT_FILENAME)
+                .exists()
+            && PathBuf::from(DEFAULT_VERIFIER_FOLDER)
+                .join(EVM_VERIFIER_SOL_FILENAME)
+                .exists()
         {
             println!("Aggregation proving key and verifier contract already exist");
             return Ok(());
@@ -50,7 +58,7 @@ impl EvmProvingSetupCmd {
         write_agg_pk_to_file(agg_pk, DEFAULT_AGG_PK_PATH)?;
 
         println!("Writing verifier contract to file...");
-        write_evm_verifier_to_file(verifier, DEFAULT_VERIFIER_PATH)?;
+        write_evm_verifier_to_folder(verifier, DEFAULT_VERIFIER_FOLDER)?;
 
         Ok(())
     }
