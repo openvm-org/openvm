@@ -183,7 +183,7 @@ Assume that the MEMORY_BUS interactions and the constraints mentioned above are 
 
 ### Time goes forward
 
-In the connector chip, we constrain that the final timestamp is less than $`2^\text{timestamp\_max\_bits}`$. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. In our current circuit set, all chips increase timestamp [less than they do interactions](./circuit.md#inspection-of-vm-chip-timestamp-increments), which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $`2^\text{timestamp\_max\_bits}`$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp\_max\_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
+In the connector chip, we constrain that the final timestamp is less than $`2^\text{timestamp\_max\_bits}`$. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. In our current circuit set, all chips increase timestamp [less than they do interactions](./circuit.md#inspection-of-vm-chip-timestamp-increments), which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $`2^\text{timestamp\_max\_bits}`$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp_max_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
 
 ### Memory consistency
 
