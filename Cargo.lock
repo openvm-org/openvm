@@ -3684,6 +3684,7 @@ dependencies = [
  "openvm",
  "openvm-platform",
  "serde",
+ "serde-big-array",
  "strum_macros",
 ]
 
@@ -4027,7 +4028,6 @@ name = "openvm-keccak256-guest"
 version = "1.0.0-rc.2"
 dependencies = [
  "openvm-platform",
- "serde",
  "tiny-keccak",
 ]
 
@@ -4544,7 +4544,6 @@ dependencies = [
 name = "openvm-sha256-guest"
 version = "1.0.0-rc.2"
 dependencies = [
- "openvm",
  "openvm-platform",
  "sha2",
 ]

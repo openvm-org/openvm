@@ -38,7 +38,6 @@ lazy_static.workspace = true
 
 [features]
 default = []
-std = ["openvm/std"]
 # features to enable specific curves in guest programs
 # only enable for the curves you use as it affects the init! macro
 k256 = ["dep:k256"]

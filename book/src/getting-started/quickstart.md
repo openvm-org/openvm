@@ -27,8 +27,6 @@ The `read` function takes input from the stdin (it also works with OpenVM runtim
 // src/main.rs
 use openvm::io::{read, reveal_u32};
 
-openvm::entry!(main);
-
 fn main() {
     let n: u64 = read();
     let mut a: u64 = 0;

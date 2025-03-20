@@ -1,8 +1,3 @@
-#![cfg_attr(not(feature = "std"), no_main)]
-#![cfg_attr(not(feature = "std"), no_std)]
-
-extern crate alloc;
-
 use alloy_primitives::{keccak256, Bytes, B256, B512};
 use k256::{
     ecdsa::{Error, RecoveryId, Signature},
@@ -19,8 +14,6 @@ use openvm_keccak256_guest;
 use revm_precompile::{
     utilities::right_pad, Error as PrecompileError, PrecompileOutput, PrecompileResult,
 };
-
-openvm::entry!(main);
 
 openvm_algebra_guest::moduli_macros::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",

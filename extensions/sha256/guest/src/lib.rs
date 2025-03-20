@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
 /// This is custom-0 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x0b;

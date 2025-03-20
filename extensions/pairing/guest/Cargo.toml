@@ -38,7 +38,6 @@ subtle = "2.6.1"
 
 [features]
 default = []
-std = ["openvm/std"]
 halo2curves = ["bls12_381", "bn254", "dep:halo2curves-axiom"]
 # features to enable specific curves in guest programs
 # only enable for the curves you use as it affects the init! macro

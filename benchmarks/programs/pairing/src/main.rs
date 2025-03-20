@@ -1,10 +1,3 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(not(feature = "std"), no_main)]
-
-extern crate alloc;
-
-use alloc::vec::Vec;
-
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::AffinePoint;
 #[allow(unused_imports)]
@@ -25,8 +18,6 @@ openvm_ecc_guest::sw_macros::sw_init! {
 openvm_algebra_guest::complex_macros::complex_init! {
     Bn254Fp2 { mod_idx = 0 },
 }
-
-openvm::entry!(main);
 
 const PAIR_ELEMENT_LEN: usize = 32 * (2 + 4); // 1 G1Affine (2 Fp), 1 G2Affine (4 Fp)
 

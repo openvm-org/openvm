@@ -1,13 +1,8 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(not(feature = "std"), no_main)]
-
 mod generate;
 mod types;
 
 use bincode::{config::standard, decode_from_slice};
 use types::Players;
-
-openvm::entry!(main);
 
 fn main() {
     // nothing up our sleeves, state and stream are first 20 digits of pi

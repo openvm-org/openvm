@@ -5,13 +5,12 @@ name = "openvm-regex-program"
 edition = "2021"
 
 [dependencies]
-openvm = { path = "../../../crates/toolchain/openvm" }
+openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
 openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest" }
 regex = { version = "1.11.1", default-features = false }
 
 [features]
 default = []
-std = ["openvm/std"]
 
 [profile.profiling]
 inherits = "release"
