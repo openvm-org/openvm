@@ -32,7 +32,7 @@ num-bigint = "0.4.6"
 
 [features]
 default = []
-std = ["serde/std", "openvm/std", "openvm-ecc-guest/std"]
+std = ["serde/std", "openvm/std"]
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
 p256 = ["openvm-ecc-guest/p256"]
 

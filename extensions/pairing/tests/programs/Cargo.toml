@@ -28,7 +28,7 @@ k256 = { version = "0.13.3", default-features = false, features = [
 
 [features]
 default = []
-std = ["serde/std", "openvm/std", "openvm-pairing-guest/std"]
+std = ["serde/std", "openvm/std"]
 
 bn254 = ["openvm-pairing-guest/bn254"]
 bls12_381 = ["openvm-pairing-guest/bls12_381"]
