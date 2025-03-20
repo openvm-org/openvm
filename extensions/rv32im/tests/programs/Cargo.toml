@@ -14,14 +14,9 @@ serde = { version = "1.0", default-features = false, features = [
     "derive",
 ] }
 
-
 [features]
 default = []
-std = [
-    "serde/std",
-    "openvm/std",
-]
-
+std = ["serde/std", "openvm/std"]
 heap-embedded-alloc = ["openvm/heap-embedded-alloc"]
 
 [profile.release]
