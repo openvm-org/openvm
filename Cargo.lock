@@ -4174,6 +4174,7 @@ version = "1.0.0-rc.2"
 dependencies = [
  "bitcode",
  "cfg-if",
+ "eyre",
  "itertools 0.14.0",
  "lazy_static",
  "metrics",

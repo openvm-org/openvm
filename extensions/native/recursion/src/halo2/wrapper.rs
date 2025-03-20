@@ -31,6 +31,12 @@ use crate::halo2::{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvmVerifier {
     pub sol_code: String,
+    pub artifact: EvmVerifierByteCode,
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct EvmVerifierByteCode {
     pub sol_compiler_version: String,
     pub sol_compiler_options: String,
     #[serde_as(as = "serde_with::hex::Hex")]
@@ -83,7 +89,7 @@ impl Halo2WrapperProvingKey {
     /// A helper function for testing to verify the proof of this circuit with evm verifier.
     pub fn evm_verify(evm_verifier: &EvmVerifier, evm_proof: &RawEvmProof) -> Result<u64, String> {
         evm_verify(
-            evm_verifier.bytecode.clone(),
+            evm_verifier.artifact.bytecode.clone(),
             vec![evm_proof.instances.clone()],
             evm_proof.proof.clone(),
         )
@@ -210,8 +216,10 @@ fn gen_evm_verifier(
     let byte_code = compile_solidity(&sol_code);
     EvmVerifier {
         sol_code,
-        sol_compiler_version: "0.8.19".to_string(),
-        sol_compiler_options: "".to_string(),
-        bytecode: byte_code,
+        artifact: EvmVerifierByteCode {
+            sol_compiler_version: "0.8.19".to_string(),
+            sol_compiler_options: "".to_string(),
+            bytecode: byte_code,
+        },
     }
 }
