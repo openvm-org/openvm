@@ -27,7 +27,6 @@ use crate::halo2::{
     Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, RawEvmProof,
 };
 
-#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvmVerifier {
     pub sol_code: String,
