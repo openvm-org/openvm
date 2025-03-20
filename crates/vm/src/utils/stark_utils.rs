@@ -1,3 +1,4 @@
+use itertools::multiunzip;
 use openvm_instructions::{exe::VmExe, program::Program};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -10,7 +11,7 @@ use openvm_stark_sdk::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         setup_tracing, FriParameters,
     },
-    engine::{StarkFriEngine, VerificationDataWithFriParams},
+    engine::{StarkEngine, StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
     utils::ProofInputForTest,
 };
@@ -50,7 +51,19 @@ where
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let mut result = vm.execute_and_generate(exe, input).unwrap();
-    let final_memory = result.final_memory.take();
+    let final_memory = Option::take(&mut result.final_memory);
+    let global_airs = vm.config().create_chip_complex().unwrap().airs();
+    for proof_input in &result.per_segment {
+        let (airs, pks, air_proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
+            multiunzip(proof_input.per_air.iter().map(|(air_id, air_proof_input)| {
+                (
+                    global_airs[*air_id].clone(),
+                    pk.per_air[*air_id].clone(),
+                    air_proof_input.clone(),
+                )
+            }));
+        vm.engine.debug(&airs, &pks, &air_proof_inputs);
+    }
     let proofs = vm.prove(&pk, result);
 
     assert!(proofs.len() >= min_segments);
