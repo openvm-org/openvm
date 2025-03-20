@@ -145,6 +145,8 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
             .when_transition()
             .assert_eq(end.is_terminate, is_terminate);
 
+        builder.when_transition().assert_one(begin.timestamp);
+
         self.execution_bus.execute(
             builder,
             AB::Expr::ONE - prep_local[0], // 1 only if these are [0th, 1st] and not [1st, 0th]
