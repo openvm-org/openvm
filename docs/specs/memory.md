@@ -163,7 +163,7 @@ Both boundary chips perform, for every subsegment ever existed in our nice set, 
 
 The following invariants **must** be maintained by the memory architecture:
 1. In the MEMORY_BUS, the `timestamp` is always in range `[0, 2^timestamp_max_bits)` where `timestamp_max_bits <= F::bits() - 2` is a configuration constant.
-2. In the MEMORY_BUS, the `address_space` is always in range `[0, 2^as_height)` where `as_height <= F::bits() - 2` is a configuration constant.
+2. In the MEMORY_BUS, the `address_space` is always in range `[0, 2^as_height)` where `as_height <= F::bits() - 2` is a configuration constant. (Our current implementation only supports `as_height` at most the max bits supported by the VariableRangeCheckerBus).
 3. In the MEMORY_BUS, the `pointer` is always in range `[0, 2^pointer_max_bits)` where `pointer_max_bits <= F::bits() - 2` is a configuration constant.
 
 Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](./circuit.md#instruction-executors) that the timestamp increase during instruction execution is bounded by the number of AIR interactions.
@@ -175,7 +175,7 @@ Invariant 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the bound
 > [!IMPORTANT]
 > At all later timestamps, it is the responsibility of each chip to ensure their memory accesses maintain Invariants 2 and 3.
 
-We make the observation that if the `MemoryBridge` is used to add the interactions necessary for a write operation, then under the assumption that time goes forward, any attempt to write to an address out of range will lead to an unbalanced MEMORY_BUS because it will require a send at an earlier timestamp that was also out of bounds.
+We note an observation that may be useful in soundness analysis of instruction executor chips: if the `MemoryBridge` is used to add the interactions necessary for a write operation, then under the assumptions that time goes forward and that all memory accesses at previous timestamps are in valid range, any attempt to write to an address out of range will lead to an unbalanced MEMORY_BUS because it will require a send at an earlier timestamp that was also out of bounds.
 
 ## Soundness proof
 
@@ -183,7 +183,7 @@ Assume that the MEMORY_BUS interactions and the constraints mentioned above are 
 
 ### Time goes forward
 
-In the connector chip, we constrain that the final timestamp is less than $`2^\text{timestamp\_max\_bits}`$. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. In our current circuit set, all chips increase timestamp [less than they do interactions](./circuit.md#inspection-of-vm-chip-timestamp-increments), which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $`2^\text{timestamp\_max\_bits}`$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp_max_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
+In the connector chip, we constrain that the final timestamp is less than $`2^\text{timestamp\_max\_bits}`$ and that the start timestamp is equal to `1`. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. In our current circuit set, all chips increase timestamp [less than they do interactions](./circuit.md#inspection-of-vm-chip-timestamp-increments), which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $`2^\text{timestamp\_max\_bits}`$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp_max_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
 
 ### Memory consistency
 
