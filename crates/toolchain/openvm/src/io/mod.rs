@@ -58,7 +58,7 @@ fn hint_store_word(ptr: *mut u32) {
 
 /// Read the next `len` bytes from the hint stream into a vector.
 pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
-    let num_words = (len + 3) / 4;
+    let num_words = len.div_ceil(4);
     let capacity = num_words * 4;
 
     #[cfg(target_os = "zkvm")]
