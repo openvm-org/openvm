@@ -1,12 +1,7 @@
-#![cfg_attr(not(feature = "std"), no_main)]
-#![cfg_attr(not(feature = "std"), no_std)]
 #![allow(clippy::needless_range_loop)]
-
 use core::array;
 
 use openvm_bigint_guest::U256;
-
-openvm::entry!(main);
 
 const N: usize = 16;
 type Matrix = [[U256; N]; N];
