@@ -10,7 +10,6 @@ members = []
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
-openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-moduli-macros = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git" }
@@ -22,9 +21,3 @@ hex-literal = { version = "0.4.1", default-features = false }
 
 [features]
 default = []
-std = [
-    "openvm/std",
-    "openvm-algebra-guest/std",
-    "openvm-ecc-guest/std",
-    "openvm-pairing-guest/std",
-]
