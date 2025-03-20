@@ -1,11 +1,9 @@
-use std::rc::Rc;
-
 use itertools::Itertools;
 use openvm_stark_backend::p3_util::log2_ceil_usize;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use snark_verifier_sdk::{
-    evm::{evm_verify, gen_evm_proof_shplonk},
+    evm::{evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_sol_code},
     halo2::aggregation::{AggregationCircuit, AggregationConfigParams, VerifierUniversality},
     snark_verifier::{
         halo2_base::{
@@ -14,25 +12,20 @@ use snark_verifier_sdk::{
                 CircuitBuilderStage::{Keygen, Prover},
             },
             halo2_proofs::{
-                halo2curves::bn256::{Fq, G1Affine},
+                halo2curves::bn256::G1Affine,
                 plonk::{keygen_pk2, VerifyingKey},
-                poly::commitment::{Params, ParamsProver},
+                poly::commitment::Params,
             },
         },
-        loader::evm::{compile_solidity, EvmLoader},
-        system::halo2::{compile, transcript::evm::EvmTranscript, Config},
-        verifier::SnarkVerifier,
+        loader::evm::compile_solidity,
     },
-    CircuitExt, PlonkVerifier, Snark, SHPLONK,
+    CircuitExt, Snark, SHPLONK,
 };
 
 use crate::halo2::{
     utils::{Halo2ParamsReader, KZG_PARAMS_FOR_SVK},
-    Fr, Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, RawEvmProof,
+    Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, RawEvmProof,
 };
-
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct EvmVerifier(pub Vec<u8>);
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -207,39 +200,13 @@ fn emit_wrapper_circuit_metrics(agg_circuit: &AggregationCircuit) {
     metrics::gauge!("halo2_total_cells").set(total_cell as f64);
 }
 
-fn gen_evm_verifier_sol_code(
-    params: &Halo2Params,
-    vk: &VerifyingKey<G1Affine>,
-    num_instance: Vec<usize>,
-) -> String {
-    let protocol = compile(
-        params,
-        vk,
-        Config::kzg()
-            .with_num_instance(num_instance.clone())
-            .with_accumulator_indices(AggregationCircuit::accumulator_indices()),
-    );
-    // deciding key
-    let dk = (params.get_g()[0], params.g2(), params.s_g2()).into();
-
-    let loader = EvmLoader::new::<Fq, Fr>();
-    let protocol = protocol.loaded(&loader);
-    let mut transcript = EvmTranscript::<_, Rc<EvmLoader>, _, _>::new(&loader);
-
-    let instances = transcript.load_instances(num_instance);
-    let proof =
-        PlonkVerifier::<SHPLONK>::read_proof(&dk, &protocol, &instances, &mut transcript).unwrap();
-    PlonkVerifier::<SHPLONK>::verify(&dk, &protocol, &instances, &proof).unwrap();
-
-    loader.solidity_code()
-}
-
 fn gen_evm_verifier(
     params: &Halo2Params,
     vk: &VerifyingKey<G1Affine>,
     num_instance: Vec<usize>,
 ) -> EvmVerifier {
-    let sol_code = gen_evm_verifier_sol_code(params, vk, num_instance);
+    let sol_code =
+        gen_evm_verifier_sol_code::<AggregationCircuit, SHPLONK>(params, vk, num_instance);
     let byte_code = compile_solidity(&sol_code);
     EvmVerifier {
         sol_code,
