@@ -419,7 +419,7 @@ with user input-output.
 | Name             | Operands        | Description                                                                                                                                                                       |
 | ---------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | HINT_STOREW_RV32 | `_,b,_,1,2`     | `[r32{0}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                                                                          |
-| HINT_BUFFER_RV32 | `a,b,_,1,2`     | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. Very important: `l` should not be 0. |
+| HINT_BUFFER_RV32 | `a,b,_,1,2`     | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. Very important: `l` should not be 0. The pointer address `r32{0}(b)` does not need to be a multiple of `4`. |
 | REVEAL_RV32      | `a,b,c,1,3,_,g` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3,_,g` writing to the user IO address space `3`. Only valid when continuations are enabled.                                           |
 
 #### Phantom Sub-Instructions
