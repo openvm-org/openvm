@@ -255,7 +255,7 @@ fn test_memory_controller_2() {
             compression_bus,
         );
 
-        const LEN: usize = 4;
+        const LEN: usize = 32;
         memory_controller.write(
             BabyBear::ONE,
             BabyBear::from_canonical_u32(pos),
@@ -263,7 +263,7 @@ fn test_memory_controller_2() {
         );
         memory_controller.finalize(Some(&mut poseidon_chip));
 
-        println!("pos {pos}: {:?}", memory_controller.current_trace_heights());
+        println!("{:?},", &memory_controller.current_trace_heights()[2..]);
     }
 }
 

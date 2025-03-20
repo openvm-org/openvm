@@ -6,13 +6,14 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
+    keygen::types::LinearConstraint,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
     Chip,
 };
-use openvm_stark_backend::keygen::types::LinearConstraint;
+
 use super::{
     ExecutionError, Streams, SystemBase, SystemConfig, VmChipComplex, VmComplexTraceHeights,
     VmConfig,
@@ -102,6 +103,10 @@ impl SegmentationStrategy for DefaultSegmentationStrategy {
     ) -> bool {
         for (i, &height) in trace_heights.iter().enumerate() {
             if height > self.max_segment_len {
+                println!(
+                    "Should segment because chip {} (name: {}) has height {}",
+                    i, air_names[i], height
+                );
                 tracing::info!(
                     "Should segment because chip {} (name: {}) has height {}",
                     i,
@@ -113,6 +118,10 @@ impl SegmentationStrategy for DefaultSegmentationStrategy {
         }
         for (i, &num_cells) in trace_cells.iter().enumerate() {
             if num_cells > self.max_cells_per_chip_in_segment {
+                println!(
+                    "Should segment because chip {} (name: {}) has {} cells",
+                    i, air_names[i], num_cells
+                );
                 tracing::info!(
                     "Should segment because chip {} (name: {}) has {} cells",
                     i,
