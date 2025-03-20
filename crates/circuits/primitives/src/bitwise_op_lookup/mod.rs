@@ -108,8 +108,8 @@ impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
 
 pub struct BitwiseOperationLookupChip<const NUM_BITS: usize> {
     pub air: BitwiseOperationLookupAir<NUM_BITS>,
-    count_range: Vec<AtomicU32>,
-    count_xor: Vec<AtomicU32>,
+    pub count_range: Vec<AtomicU32>,
+    pub count_xor: Vec<AtomicU32>,
 }
 
 #[derive(Clone)]

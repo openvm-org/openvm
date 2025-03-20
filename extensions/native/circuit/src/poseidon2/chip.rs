@@ -129,8 +129,8 @@ pub struct NativePoseidon2RecordSet<F: Field> {
 
 pub struct NativePoseidon2Chip<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) air: NativePoseidon2Air<F, SBOX_REGISTERS>,
-    pub(super) record_set: NativePoseidon2RecordSet<F>,
-    pub(super) height: usize,
+    pub record_set: NativePoseidon2RecordSet<F>,
+    pub height: usize,
     pub(super) offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     pub(super) streams: Arc<Mutex<Streams<F>>>,

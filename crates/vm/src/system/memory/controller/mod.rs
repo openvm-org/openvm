@@ -59,7 +59,7 @@ pub const MERKLE_AIR_OFFSET: usize = 1;
 pub const BOUNDARY_AIR_OFFSET: usize = 0;
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordId(pub usize);
 
 pub type MemoryImage<F> = AddressMap<F, PAGE_SIZE>;

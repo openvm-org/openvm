@@ -164,7 +164,7 @@ pub struct JalRangeCheckRecord {
 /// the same chip is just to save columns.
 pub struct JalRangeCheckChip<F> {
     air: JalRangeCheckAir,
-    records: Vec<JalRangeCheckRecord>,
+    pub records: Vec<JalRangeCheckRecord>,
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     range_checker_chip: SharedVariableRangeCheckerChip,
     /// If true, ignore execution errors.

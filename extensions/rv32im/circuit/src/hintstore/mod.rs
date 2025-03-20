@@ -275,8 +275,8 @@ pub struct Rv32HintStoreRecord<F: Field> {
 
 pub struct Rv32HintStoreChip<F: Field> {
     air: Rv32HintStoreAir,
-    records: Vec<Rv32HintStoreRecord<F>>,
-    height: usize,
+    pub records: Vec<Rv32HintStoreRecord<F>>,
+    pub height: usize,
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,

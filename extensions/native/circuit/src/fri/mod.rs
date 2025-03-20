@@ -568,8 +568,8 @@ impl<F: Field> FriReducedOpeningRecord<F> {
 
 pub struct FriReducedOpeningChip<F: Field> {
     air: FriReducedOpeningAir,
-    records: Vec<FriReducedOpeningRecord<F>>,
-    height: usize,
+    pub records: Vec<FriReducedOpeningRecord<F>>,
+    pub height: usize,
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     streams: Arc<Mutex<Streams<F>>>,
 }

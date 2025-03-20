@@ -219,7 +219,7 @@ impl<F> GenericAccessAdapterChip<F> {
 pub struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
     range_checker: SharedVariableRangeCheckerChip,
-    records: Vec<AccessAdapterRecord<F>>,
+    pub records: Vec<AccessAdapterRecord<F>>,
     overridden_height: Option<usize>,
 }
 impl<F, const N: usize> AccessAdapterChip<F, N> {
