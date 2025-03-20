@@ -232,13 +232,19 @@ impl<F: PrimeField32> MemoryController<F> {
     ) -> Self {
         let range_checker_bus = range_checker.bus();
         let initial_memory = AddressMap::from_mem_config(&mem_config);
+        assert!(mem_config.pointer_max_bits <= F::bits() - 2);
+        assert!(mem_config.as_height <= F::bits() - 2);
+        let addr_space_max_bits = log2_strict_usize(
+            (mem_config.as_offset + 2u32.pow(mem_config.as_height as u32)).next_power_of_two()
+                as usize,
+        );
         Self {
             memory_bus,
             mem_config,
             interface_chip: MemoryInterface::Volatile {
                 boundary_chip: VolatileBoundaryChip::new(
                     memory_bus,
-                    mem_config.as_height,
+                    addr_space_max_bits,
                     mem_config.pointer_max_bits,
                     range_checker.clone(),
                 ),
@@ -273,6 +279,7 @@ impl<F: PrimeField32> MemoryController<F> {
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
     ) -> Self {
+        assert_eq!(mem_config.as_offset, 1);
         let memory_dims = MemoryDimensions {
             as_height: mem_config.as_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
