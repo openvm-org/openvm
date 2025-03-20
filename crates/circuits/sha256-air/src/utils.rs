@@ -1,6 +1,6 @@
 use std::array;
 
-pub(crate) use openvm_circuit_primitives::utils::compose;
+pub use openvm_circuit_primitives::utils::compose;
 use openvm_circuit_primitives::{
     encoder::Encoder,
     utils::{not, select},
