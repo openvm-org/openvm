@@ -693,7 +693,7 @@ fn test_vm_hint() {
     type F = BabyBear;
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
-    let config = test_native_config();
+    let config = NativeConfig::new(SystemConfig::default(), Default::default());
     air_test_with_min_segments(config, program, input_stream, 1);
 }
 
