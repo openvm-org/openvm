@@ -233,7 +233,7 @@ impl<F: PrimeField32> MemoryController<F> {
         let range_checker_bus = range_checker.bus();
         let initial_memory = AddressMap::from_mem_config(&mem_config);
         assert!(mem_config.pointer_max_bits <= F::bits() - 2);
-        assert!(mem_config.as_height <= F::bits() - 2);
+        assert!(mem_config.as_height < F::bits() - 2);
         let addr_space_max_bits = log2_strict_usize(
             (mem_config.as_offset + 2u32.pow(mem_config.as_height as u32)).next_power_of_two()
                 as usize,
