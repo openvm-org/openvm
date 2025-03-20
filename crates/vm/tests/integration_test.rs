@@ -7,8 +7,9 @@ use std::{
 use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        ChipId, ExecutionSegment, SingleSegmentVmExecutor, SystemConfig, SystemTraceHeights,
-        VirtualMachine, VmComplexTraceHeights, VmConfig, VmInventoryTraceHeights,
+        ChipId, ExecutionSegment, MemoryConfig, SingleSegmentVmExecutor, SystemConfig,
+        SystemTraceHeights, VirtualMachine, VmComplexTraceHeights, VmConfig,
+        VmInventoryTraceHeights,
     },
     system::{
         memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
@@ -56,7 +57,7 @@ where
 
 fn test_native_config() -> NativeConfig {
     NativeConfig {
-        system: SystemConfig::default(),
+        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 32, 1024), 0),
         native: Default::default(),
     }
 }
