@@ -21,7 +21,7 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
-    p3_util::log2_strict_usize,
+    p3_util::{log2_ceil_usize, log2_strict_usize},
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
 };
@@ -234,9 +234,8 @@ impl<F: PrimeField32> MemoryController<F> {
         let initial_memory = AddressMap::from_mem_config(&mem_config);
         assert!(mem_config.pointer_max_bits <= F::bits() - 2);
         assert!(mem_config.as_height < F::bits() - 2);
-        let addr_space_max_bits = log2_strict_usize(
-            (mem_config.as_offset + 2u32.pow(mem_config.as_height as u32)).next_power_of_two()
-                as usize,
+        let addr_space_max_bits = log2_ceil_usize(
+            (mem_config.as_offset + 2u32.pow(mem_config.as_height as u32)) as usize,
         );
         Self {
             memory_bus,
