@@ -47,6 +47,7 @@ use crate::{
     prover::{AppProver, ContinuationProver, StarkProver},
 };
 
+pub mod codec;
 pub mod commit;
 pub mod config;
 pub mod keygen;
