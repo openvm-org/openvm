@@ -1,9 +1,10 @@
 use std::{marker::PhantomData, mem, sync::Arc};
 
 use async_trait::async_trait;
+use oneshot::Sender;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, GenerationError, SingleSegmentVmExecutor, Streams,
+        hasher::poseidon2::vm_poseidon2_hasher, ExecutionSegment, SingleSegmentVmExecutor, Streams,
         VirtualMachine, VmComplexTraceHeights, VmConfig,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
@@ -89,43 +90,51 @@ where
             exe,
             committed_program,
         } = self.committed_exe.as_ref();
-        let input = input.into();
 
-        // This loop should typically iterate exactly once. Only in exceptional cases will the
-        // segmentation produce an invalid segment and we will have to retry.
-        let mut retries = 0;
-        let per_segment = loop {
-            match vm.executor.execute_and_then(
-                exe.clone(),
-                input.clone(),
-                |seg_idx, mut seg| {
-                    final_memory = mem::take(&mut seg.final_memory);
+        let (segment_tx, segment_rx) = std::sync::mpsc::sync_channel::<(
+            usize,
+            ExecutionSegment<Val<SC>, VC>,
+            Sender<Proof<SC>>,
+        )>(2);
+        let (trace_tx, trace_rx) = std::sync::mpsc::sync_channel(2);
+
+        // spin up trace gen worker
+        let trace_gen_worker = std::thread::spawn(move || loop {
+            match segment_rx.recv() {
+                Ok((seg_idx, seg, proof_tx)) => {
                     let proof_input = info_span!("trace_gen", segment = seg_idx)
-                        .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())))?;
-                    info_span!("prove_segment", segment = seg_idx)
-                        .in_scope(|| Ok(vm.engine.prove(&self.pk.vm_pk, proof_input)))
-                },
-                GenerationError::Execution,
-            ) {
-                Ok(per_segment) => break per_segment,
-                Err(GenerationError::Execution(err)) => panic!("execution error: {err}"),
-                Err(GenerationError::TraceHeightsLimitExceeded) => {
-                    if retries >= MAX_SEGMENTATION_RETRIES {
-                        panic!(
-                            "trace heights limit exceeded after {MAX_SEGMENTATION_RETRIES} retries"
-                        );
-                    }
-                    retries += 1;
-                    tracing::info!(
-                        "trace heights limit exceeded; retrying execution (attempt {retries})"
-                    );
-                    let sys_config = vm.executor.config.system_mut();
-                    let new_seg_strat = sys_config.segmentation_strategy.stricter_strategy();
-                    sys_config.set_segmentation_strategy(new_seg_strat);
-                    // continue
+                        .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())));
+                    trace_tx.send((seg_idx, proof_input, proof_tx)).unwrap();
                 }
-            };
-        };
+                Err(_) => break,
+            }
+        });
+
+        // spin up prover worker
+        let prover_worker = std::thread::spawn(move || loop {
+            match trace_rx.recv() {
+                Ok((seg_idx, proof_input, proof_tx)) => {
+                    let proof = info_span!("prove_segment", segment = seg_idx)
+                        .in_scope(|| vm.engine.prove(&self.pk.vm_pk, proof_input));
+                    proof_tx.send(proof).unwrap();
+                }
+                Err(_) => break,
+            }
+        });
+
+        let per_segment = vm
+            .executor
+            .execute_and_then(exe.clone(), input, |seg_idx, mut seg| {
+                final_memory = mem::take(&mut seg.final_memory);
+
+                let (proof_tx, proof_rx) = oneshot::channel();
+                segment_tx.send((seg_idx, seg, proof_tx)).unwrap();
+                proof_rx
+            })
+            .unwrap();
+
+        prover_worker.join().unwrap();
+        trace_gen_worker.join().unwrap();
 
         let user_public_values = UserPublicValuesProof::compute(
             self.pk.vm_config.system().memory_config.memory_dimensions(),
