@@ -40,6 +40,7 @@ use openvm_transpiler::{
     transpiler::{Transpiler, TranspilerError},
     FromElf,
 };
+use tracing::instrument;
 
 use crate::{
     config::AggConfig,
@@ -79,6 +80,7 @@ pub struct VerifiedContinuationVmPayload {
 pub struct Sdk;
 
 impl Sdk {
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn build<P: AsRef<Path>>(
         &self,
         guest_opts: GuestOptions,
@@ -103,6 +105,7 @@ impl Sdk {
         Elf::decode(&data, MEM_SIZE as u32)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn transpile(
         &self,
         elf: Elf,
@@ -111,6 +114,7 @@ impl Sdk {
         VmExe::from_elf(elf, transpiler)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn execute<VC: VmConfig<F>>(
         &self,
         exe: VmExe<F>,
@@ -131,6 +135,7 @@ impl Sdk {
         Ok(public_values)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn commit_app_exe(
         &self,
         app_fri_params: FriParameters,
@@ -140,6 +145,7 @@ impl Sdk {
         Ok(committed_exe)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn app_keygen<VC: VmConfig<F>>(&self, config: AppConfig<VC>) -> Result<AppProvingKey<VC>>
     where
         VC::Executor: Chip<SC>,
@@ -149,6 +155,7 @@ impl Sdk {
         Ok(app_pk)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn generate_app_proof<VC: VmConfig<F>>(
         &self,
         app_pk: Arc<AppProvingKey<VC>>,
@@ -172,6 +179,7 @@ impl Sdk {
     /// _with respect to_ a commitment to some VM executable.
     /// It is the responsibility of the caller to check that the commitment matches the expected
     /// VM executable.
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn verify_app_proof(
         &self,
         app_vk: &AppVerifyingKey,
@@ -194,6 +202,7 @@ impl Sdk {
         })
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn verify_app_proof_without_continuations(
         &self,
         app_vk: &AppVerifyingKey,
@@ -203,6 +212,7 @@ impl Sdk {
         e.verify(&app_vk.app_vm_vk, proof)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn agg_keygen(
         &self,
         config: AggConfig,
@@ -213,6 +223,7 @@ impl Sdk {
         Ok(agg_pk)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn generate_root_verifier_input<VC: VmConfig<F>>(
         &self,
         app_pk: Arc<AppProvingKey<VC>>,
@@ -229,6 +240,7 @@ impl Sdk {
         Ok(proof)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn generate_evm_proof<VC: VmConfig<F>>(
         &self,
         reader: &impl Halo2ParamsReader,
@@ -246,6 +258,7 @@ impl Sdk {
         Ok(proof)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn generate_snark_verifier_contract(
         &self,
         reader: &impl Halo2ParamsReader,
@@ -256,6 +269,7 @@ impl Sdk {
         Ok(evm_verifier)
     }
 
+    #[instrument(level = "trace", skip_all, fields(source = "sdk"))]
     pub fn verify_evm_proof(
         &self,
         evm_verifier: &EvmVerifier,
