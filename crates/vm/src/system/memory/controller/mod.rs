@@ -410,11 +410,11 @@ impl<F: PrimeField32> MemoryController<F> {
                 [6, 4, 4, 0, 0],
             ],
             [
-                [0, 0, 2, 0, 0],
+                [0, 0, 0, 0, 0],
                 [10, 6, 2, 0, 0],
                 [0, 6, 2, 0, 0],
                 [10, 6, 2, 0, 0],
-                [0, 0, 2, 0, 0],
+                [0, 0, 0, 0, 0],
                 [10, 6, 4, 0, 0],
                 [0, 6, 4, 0, 0],
                 [10, 6, 4, 0, 0],
@@ -764,11 +764,11 @@ impl<F: PrimeField32> MemoryController<F> {
         let access_adapter_heights = &self.access_adapter_max_heights;
         match &self.interface_chip {
             MemoryInterface::Volatile { .. } => iter::once(0)
-                .chain(access_adapter_heights.iter().map(|x| *x / 4))
+                .chain(access_adapter_heights.iter().copied())
                 .collect(),
             MemoryInterface::Persistent { .. } => iter::once(0)
                 .chain(iter::once(0))
-                .chain(access_adapter_heights.iter().map(|x| *x / 4))
+                .chain(access_adapter_heights.iter().copied())
                 .collect(),
         }
     }
