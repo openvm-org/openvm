@@ -7,7 +7,10 @@ mod bn254 {
     use eyre::Result;
     use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use openvm_circuit::{arch::SystemConfig, utils::air_test_with_min_segments};
+    use openvm_circuit::{
+        arch::SystemConfig,
+        utils::{air_test_impl, air_test_with_min_segments},
+    };
     use openvm_ecc_circuit::WeierstrassExtension;
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
@@ -342,8 +345,8 @@ mod bn254 {
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
-
-        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
+        // Don't run debugger because it's slow
+        air_test_impl(get_testing_config(), openvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
@@ -409,7 +412,7 @@ mod bls12_381 {
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::{
         arch::{instructions::exe::VmExe, SystemConfig},
-        utils::{air_test, air_test_with_min_segments},
+        utils::{air_test, air_test_impl, air_test_with_min_segments},
     };
     use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
     use openvm_ecc_guest::{
@@ -778,8 +781,8 @@ mod bls12_381 {
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
-
-        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
+        // Don't run debugger because it's slow
+        air_test_impl(get_testing_config(), openvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 

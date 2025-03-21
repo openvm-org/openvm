@@ -30,12 +30,29 @@ where
     air_test_with_min_segments(config, exe, Streams::default(), 1);
 }
 
-/// Executes the VM and returns the final memory state.
+/// Executes and proves the VM and returns the final memory state.
 pub fn air_test_with_min_segments<VC>(
     config: VC,
     exe: impl Into<VmExe<BabyBear>>,
     input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
+) -> Option<VmMemoryState<BabyBear>>
+where
+    VC: VmConfig<BabyBear>,
+    VC::Executor: Chip<BabyBearPoseidon2Config>,
+    VC::Periphery: Chip<BabyBearPoseidon2Config>,
+{
+    air_test_impl(config, exe, input, min_segments, true)
+}
+
+/// Executes and proves the VM and returns the final memory state.
+/// If `debug` is true, runs the debug prover.
+pub fn air_test_impl<VC>(
+    config: VC,
+    exe: impl Into<VmExe<BabyBear>>,
+    input: impl Into<Streams<BabyBear>>,
+    min_segments: usize,
+    debug: bool,
 ) -> Option<VmMemoryState<BabyBear>>
 where
     VC: VmConfig<BabyBear>,
@@ -53,16 +70,18 @@ where
     let mut result = vm.execute_and_generate(exe, input).unwrap();
     let final_memory = Option::take(&mut result.final_memory);
     let global_airs = vm.config().create_chip_complex().unwrap().airs();
-    for proof_input in &result.per_segment {
-        let (airs, pks, air_proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
-            multiunzip(proof_input.per_air.iter().map(|(air_id, air_proof_input)| {
-                (
-                    global_airs[*air_id].clone(),
-                    pk.per_air[*air_id].clone(),
-                    air_proof_input.clone(),
-                )
-            }));
-        vm.engine.debug(&airs, &pks, &air_proof_inputs);
+    if debug {
+        for proof_input in &result.per_segment {
+            let (airs, pks, air_proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
+                multiunzip(proof_input.per_air.iter().map(|(air_id, air_proof_input)| {
+                    (
+                        global_airs[*air_id].clone(),
+                        pk.per_air[*air_id].clone(),
+                        air_proof_input.clone(),
+                    )
+                }));
+            vm.engine.debug(&airs, &pks, &air_proof_inputs);
+        }
     }
     let proofs = vm.prove(&pk, result);
 
