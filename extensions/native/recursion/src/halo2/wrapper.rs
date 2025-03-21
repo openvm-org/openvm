@@ -217,7 +217,7 @@ fn gen_evm_verifier(
         sol_code,
         artifact: EvmVerifierByteCode {
             sol_compiler_version: "0.8.19".to_string(),
-            sol_compiler_options: "".to_string(),
+            sol_compiler_options: String::new(),
             bytecode: byte_code,
         },
     }
