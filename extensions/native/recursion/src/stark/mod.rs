@@ -138,6 +138,13 @@ where
         let pre_hash = builder.constant(m_advice.pre_hash.clone());
         challenger.observe_digest(builder, pre_hash);
         let air_ids = proof.get_air_ids(builder);
+        let num_airs = cast_usize_to_felt(builder, air_ids.len());
+        challenger.observe(builder, num_airs);
+        iter_zip!(builder, air_ids).for_each(|ptr_vec, builder| {
+            let air_id = builder.iter_ptr_get(&air_ids, ptr_vec[0]);
+            let air_id = cast_usize_to_felt(builder, air_id);
+            challenger.observe(builder, air_id);
+        });
         let m_advice_var = get_advice_per_air(builder, m_advice, &air_ids);
         // (T01a): `air_ids` is a subsequence of `0..(m_advice.per_air.len())`.
 
@@ -286,11 +293,7 @@ where
 
         iter_zip!(builder, air_proofs).for_each(|ptr_vec, builder| {
             let air_proof = builder.iter_ptr_get(air_proofs, ptr_vec[0]);
-            let log_degree = if builder.flags.static_only {
-                builder.eval(C::F::from_canonical_usize(air_proof.log_degree.value()))
-            } else {
-                builder.unsafe_cast_var_to_felt(air_proof.log_degree.get_var())
-            };
+            let log_degree = cast_usize_to_felt(builder, air_proof.log_degree);
             challenger.observe(builder, log_degree);
         });
 
@@ -1145,4 +1148,17 @@ fn assert_cumulative_sums<C: Config>(
             });
         builder.assert_ext_eq(cumulative_sum, C::EF::ZERO.cons());
     });
+}
+
+/// Conversion used for challenger to observe usize. The `val` must come
+/// from compile time constant in static mode.
+fn cast_usize_to_felt<C: Config>(builder: &mut Builder<C>, val: Usize<C::N>) -> Felt<C::F>
+where
+    C::F: TwoAdicField,
+{
+    if builder.flags.static_only {
+        builder.eval(C::F::from_canonical_usize(val.value()))
+    } else {
+        builder.unsafe_cast_var_to_felt(val.get_var())
+    }
 }
