@@ -89,10 +89,29 @@ where
             .executor
             .execute_and_then(exe.clone(), input, |seg_idx, mut seg| {
                 final_memory = mem::take(&mut seg.final_memory);
-                let proof_input = info_span!("trace_gen", segment = seg_idx)
-                    .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())));
-                info_span!("prove_segment", segment = seg_idx)
-                    .in_scope(|| vm.engine.prove(&self.pk.vm_pk, proof_input))
+                // Create a scope to ensure memory is dropped
+                let result = {
+                    let proof_input = info_span!("trace_gen", segment = seg_idx)
+                        .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())));
+
+                    info_span!("prove_segment", segment = seg_idx)
+                        .in_scope(|| vm.engine.prove(&self.pk.vm_pk, proof_input))
+                };
+
+                // Force a collection after each segment
+                #[cfg(feature = "jemalloc")]
+                {
+                    use tikv_jemalloc_sys::mallctl;
+                    unsafe {
+                        mallctl(
+                            "arena.0.purge",
+                            std::ptr::null_mut(),
+                            0,
+                            std::ptr::null_mut(),
+                            0,
+                        );
+                    }
+                }
             })
             .unwrap();
         let user_public_values = UserPublicValuesProof::compute(
