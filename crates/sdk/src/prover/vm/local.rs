@@ -96,10 +96,23 @@ where
 
                     let ret = info_span!("prove_segment", segment = seg_idx)
                         .in_scope(|| vm.engine.prove(&self.pk.vm_pk, proof_input));
-
-                    drop(proof_input);
                     ret
                 };
+
+                // Force a collection after each segment
+                #[cfg(feature = "jemalloc")]
+                {
+                    use tikv_jemalloc_sys::mallctl;
+                    unsafe {
+                        mallctl(
+                            "arena.0.purge",
+                            std::ptr::null_mut(),
+                            0,
+                            std::ptr::null_mut(),
+                            0,
+                        );
+                    }
+                }
 
                 result
             })
