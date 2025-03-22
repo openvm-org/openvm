@@ -98,20 +98,8 @@ where
                         .in_scope(|| vm.engine.prove(&self.pk.vm_pk, proof_input))
                 };
 
-                // Force a collection after each segment
-                #[cfg(feature = "jemalloc")]
-                {
-                    use tikv_jemalloc_sys::mallctl;
-                    unsafe {
-                        mallctl(
-                            "arena.0.purge",
-                            std::ptr::null_mut(),
-                            0,
-                            std::ptr::null_mut(),
-                            0,
-                        );
-                    }
-                }
+                drop(proof_input);
+                result
             })
             .unwrap();
         let user_public_values = UserPublicValuesProof::compute(
