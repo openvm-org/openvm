@@ -94,11 +94,13 @@ where
                     let proof_input = info_span!("trace_gen", segment = seg_idx)
                         .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())));
 
-                    info_span!("prove_segment", segment = seg_idx)
-                        .in_scope(|| vm.engine.prove(&self.pk.vm_pk, proof_input))
+                    let ret = info_span!("prove_segment", segment = seg_idx)
+                        .in_scope(|| vm.engine.prove(&self.pk.vm_pk, proof_input));
+
+                    drop(proof_input);
+                    ret
                 };
 
-                drop(proof_input);
                 result
             })
             .unwrap();
