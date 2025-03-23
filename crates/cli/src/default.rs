@@ -1,4 +1,3 @@
-use openvm_circuit::arch::SystemConfig;
 use openvm_sdk::config::{AppConfig, SdkVmConfig, DEFAULT_APP_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP};
 use openvm_stark_sdk::config::FriParameters;
 
