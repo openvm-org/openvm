@@ -13,7 +13,7 @@ use openvm_stark_backend::p3_field::FieldAlgebra;
 #[derive(Debug, Clone)]
 pub enum Input {
     FilePath(PathBuf),
-    HexBytes(Vec<u8>),
+    HexBytes(String),
 }
 
 impl FromStr for Input {
@@ -21,8 +21,9 @@ impl FromStr for Input {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if is_valid_hex_string(s) {
-            let bytes = decode_hex_string(s).map_err(|e| e.to_string())?;
-            Ok(Input::HexBytes(bytes))
+            // let bytes = decode_hex_string(s).map_err(|e| e.to_string())?;
+            // Ok(Input::HexBytes(bytes))
+            Ok(Input::HexBytes(s.to_string()))
         } else if PathBuf::from(s).exists() {
             Ok(Input::FilePath(PathBuf::from(s)))
         } else {
@@ -108,9 +109,10 @@ pub fn read_to_stdin(input: &Option<Input>) -> Result<StdIn> {
 
             Ok(stdin)
         }
-        Some(Input::HexBytes(bytes)) => {
+        Some(Input::HexBytes(hex_str)) => {
             let mut stdin = StdIn::default();
-            read_bytes_into_stdin(&mut stdin, bytes)?;
+            let bytes = decode_hex_string(hex_str)?;
+            read_bytes_into_stdin(&mut stdin, &bytes)?;
             Ok(stdin)
         }
         None => Ok(StdIn::default()),
