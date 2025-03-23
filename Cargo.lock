@@ -1137,6 +1137,7 @@ dependencies = [
  "openvm-native-recursion",
  "openvm-rv32im-transpiler",
  "openvm-sdk",
+ "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
  "prettytable-rs",

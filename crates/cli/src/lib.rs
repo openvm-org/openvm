@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod default;
+pub mod input;
 mod util;
 
 use std::process::{Command, Stdio};

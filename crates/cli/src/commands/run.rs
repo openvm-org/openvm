@@ -6,7 +6,8 @@ use openvm_sdk::{fs::read_exe_from_file, Sdk};
 
 use crate::{
     default::{DEFAULT_APP_CONFIG_PATH, DEFAULT_APP_EXE_PATH},
-    util::{read_config_toml_or_default, read_to_stdin, Input},
+    input::{read_to_stdin, Input},
+    util::read_config_toml_or_default,
 };
 
 #[derive(Parser)]

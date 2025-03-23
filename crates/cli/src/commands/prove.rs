@@ -19,7 +19,7 @@ use crate::{
         DEFAULT_AGG_PK_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_APP_PK_PATH, DEFAULT_APP_PROOF_PATH,
         DEFAULT_EVM_PROOF_PATH, DEFAULT_PARAMS_DIR,
     },
-    util::{read_to_stdin, Input},
+    input::{read_to_stdin, Input},
 };
 
 #[derive(Parser)]
