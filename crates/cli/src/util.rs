@@ -1,5 +1,4 @@
 use std::{
-    fmt::Display,
     fs::read_to_string,
     path::{Path, PathBuf},
 };
