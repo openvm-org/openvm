@@ -348,6 +348,7 @@ where
             });
 
             // Observe single commitment to all trace matrices in this phase.
+            builder.assert_usize_eq(after_challenge_commits.len(), RVar::one());
             let commit = builder.get(after_challenge_commits, phase_idx);
             challenger.observe_digest(builder, commit);
         });
@@ -546,6 +547,7 @@ where
                     );
                 });
         });
+        // T05b: the shape of `opening.values.main` has been validated
         {
             let batch_commit = builder.get(main_trace_commits, main_commit_idx.clone());
             builder.set_value(
@@ -623,6 +625,7 @@ where
                 );
                 builder.assign(&round_idx, round_idx.clone() + RVar::one());
             });
+        // T05c: the shape of `opening.values.main` has been validated
 
         // 4. Quotient domains and openings
 
