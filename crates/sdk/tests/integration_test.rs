@@ -25,8 +25,9 @@ use openvm_native_recursion::{
 };
 use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use openvm_sdk::{
+    codec::{decode_proof_from_bytes, encode_proof_to_bytes},
     commit::AppExecutionCommit,
-    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
+    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkVmConfig},
     keygen::AppProvingKey,
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
@@ -404,4 +405,38 @@ fn test_sdk_guest_build_and_transpile() {
         .with_extension(Rv32ITranspilerExtension)
         .with_extension(Rv32MTranspilerExtension);
     let _exe = sdk.transpile(one, transpiler).unwrap();
+}
+
+#[test]
+fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
+    // generate a proof
+    let sdk = Sdk;
+    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
+    pkg_dir.push("guest");
+    let elf = sdk.build(Default::default(), pkg_dir, &Default::default())?;
+    let vm_config = SdkVmConfig::builder()
+        .system(Default::default())
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .build();
+    assert!(vm_config.system.config.continuation_enabled);
+    let exe = sdk.transpile(elf, vm_config.transpiler())?;
+    let fri_params = FriParameters::standard_fast();
+    let app_config = AppConfig::new(fri_params, vm_config);
+    let committed_exe = sdk.commit_app_exe(fri_params, exe)?;
+    let app_pk = Arc::new(sdk.app_keygen(app_config)?);
+    let app_proof = sdk.generate_app_proof(app_pk.clone(), committed_exe, StdIn::default())?;
+    let proof = &app_proof.per_segment[0];
+    let encoded = encode_proof_to_bytes(proof)?;
+    let decoded_proof = decode_proof_from_bytes(&encoded)?;
+    // Test decoding against derived serde implementation
+    assert_eq!(
+        serde_json::to_vec(proof)?,
+        serde_json::to_vec(&decoded_proof)?
+    );
+    let mut app_proof = app_proof;
+    app_proof.per_segment[0] = decoded_proof;
+    // Test the decoding by verifying the decoded proof
+    sdk.verify_app_proof(&app_pk.get_app_vk(), &app_proof)?;
+    Ok(())
 }
