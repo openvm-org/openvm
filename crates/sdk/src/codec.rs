@@ -1,20 +1,24 @@
-use std::io::{self, Result, Write};
+use std::io::{self, Cursor, Read, Result, Write};
 
 use openvm_native_compiler::ir::DIGEST_SIZE;
-use openvm_native_recursion::hints::{
-    InnerBatchOpening, InnerFriProof, InnerQueryProof, InnerValMmcs,
-};
+use openvm_native_recursion::hints::{InnerBatchOpening, InnerFriProof, InnerQueryProof};
 use openvm_stark_backend::{
-    config::{Com, PcsProof, StarkGenericConfig},
-    interaction::fri_log_up::FriLogUpPartialProof,
-    p3_commit::OpenedValues,
-    p3_field::{extension::BinomialExtensionField, FieldExtensionAlgebra, PrimeField32},
-    proof::{AdjacentOpenedValues, AirProofData, OpeningProof, Proof},
+    config::{Com, PcsProof},
+    interaction::{fri_log_up::FriLogUpPartialProof, RapPhaseSeqKind},
+    p3_field::{
+        extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra, PrimeField32,
+    },
+    proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
 };
+use p3_fri::CommitPhaseProofStep;
 
 use super::{F, SC}; // BabyBearPoseidon2Config
 
 type Challenge = BinomialExtensionField<F, 4>;
+
+/// Codec version should change only when proof system or proof format changes.
+/// It does correspond to the main openvm version (which may change more frequently).
+const CODEC_VERSION: u32 = 1;
 
 /// Hardware and language independent encoding.
 /// Uses the Writer pattern for more efficient encoding without intermediate buffers.
@@ -31,11 +35,39 @@ pub trait Encode {
     }
 }
 
+/// Hardware and language independent decoding.
+/// Uses the Reader pattern for efficient decoding.
+pub trait Decode: Sized {
+    /// Reads and decodes a value from the given reader.
+    fn decode<R: Read>(reader: &mut R) -> Result<Self>;
+}
+
+// General Note [jpw]: even though `SC` is a concrete type below, for typedefs that rely on associated types such as PcsProof<SC>,
+// Rust will prevent you from implementing Encode on the typedef, (I think) because if the SC trait changes, then the associated
+// type may change. In these cases, either impl Encode on the concrete type, or make a separate `encode_something` function.
+
+pub fn encode_proof_to_bytes(proof: &Proof<SC>) -> Result<Vec<u8>> {
+    let mut buffer = Vec::new();
+    encode_proof(proof, &mut buffer)?;
+    Ok(buffer)
+}
+
+pub fn decode_proof_from_bytes(bytes: &[u8]) -> Result<Proof<SC>> {
+    let mut reader = Cursor::new(bytes);
+    decode_proof(&mut reader)
+}
+
+// ==================== Encode implementation ====================
+
 // We need to know:
 // - Pcs is TwoAdicFriPcs
 // - Com<SC>: Into<[F; 8]>
 // For simplicity, we only implement for fixed `BabyBearPoseidon2Config`
+//
+/// Encode a proof using FRI as the PCS with `BabyBearPoseidon2Config`.
+/// The Merkle tree hashes have digest `[F; 8]`.
 pub fn encode_proof<W: Write>(proof: &Proof<SC>, writer: &mut W) -> Result<()> {
+    writer.write_all(&CODEC_VERSION.to_le_bytes())?;
     // Encode commitments
     encode_commitments(&proof.commitments.main_trace, writer)?;
     encode_commitments(&proof.commitments.after_challenge, writer)?;
@@ -48,6 +80,7 @@ pub fn encode_proof<W: Write>(proof: &Proof<SC>, writer: &mut W) -> Result<()> {
     // Encode per_air data
     encode_slice(&proof.per_air, writer)?;
 
+    writer.write_all(&[RapPhaseSeqKind::FriLogUp as u8])?;
     // Encode logup witness
     proof.rap_phase_seq_proof.encode(writer)?;
 
@@ -59,43 +92,39 @@ fn encode_opening_proof<W: Write>(
     opening: &OpeningProof<PcsProof<SC>, Challenge>,
     writer: &mut W,
 ) -> Result<()> {
-    // Encode PCS proof
-    encode_pcs_proof(&opening.proof, writer)?;
-
-    // Encode OpenedValues
-    opening.values.encode(writer)?;
-
+    // Encode FRI proof
+    opening.proof.encode(writer)?;
+    encode_opened_values(&opening.values, writer)?;
     Ok(())
 }
 
-impl Encode for OpenedValues<Challenge> {
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
-        // Encode preprocessed values
-        encode_slice(&self.preprocessed, writer)?;
-
-        // Encode main values
-        (self.main.len() as u32).encode(writer)?;
-        for matrices in &self.main {
-            encode_slice(matrices, writer)?;
-        }
-
-        // Encode after_challenge values
-        self.after_challenge.len().encode(writer)?;
-        for matrices in &self.after_challenge {
-            encode_slice(matrices, writer)?;
-        }
-
-        // Encode quotient values
-        self.quotient.len().encode(writer)?;
-        for rap in &self.quotient {
-            (rap.len() as u32).encode(writer)?;
-            for chunk in rap {
-                encode_slice(chunk, writer)?;
-            }
-        }
-
-        Ok(())
+/// [OpenedValues] is a typedef for `Vec<Vec<Vec<Vec<F>>>>` for
+/// - each round
+///   - each matrix
+///     - each point to open at
+///       - evaluations for each column of matrix at that point
+fn encode_opened_values<W: Write>(
+    opened_values: &OpenedValues<Challenge>,
+    writer: &mut W,
+) -> Result<()> {
+    encode_slice(&opened_values.preprocessed, writer)?;
+    opened_values.main.len().encode(writer)?;
+    for part in &opened_values.main {
+        encode_slice(part, writer)?;
     }
+    opened_values.after_challenge.len().encode(writer)?;
+    for phase in &opened_values.after_challenge {
+        encode_slice(phase, writer)?;
+    }
+    opened_values.quotient.len().encode(writer)?;
+    for per_air in &opened_values.quotient {
+        per_air.len().encode(writer)?;
+        for chunk in per_air {
+            encode_slice(chunk, writer)?;
+        }
+    }
+
+    Ok(())
 }
 
 impl Encode for AdjacentOpenedValues<Challenge> {
@@ -121,6 +150,15 @@ impl Encode for AirProofData<F, Challenge> {
 
 // PcsProof<SC> = InnerFriProof where Pcs = TwoAdicFriPcs
 impl Encode for InnerFriProof {
+    /// Encodes the struct
+    /// ```
+    /// pub struct FriProof<Challenge, M: Mmcs<Challenge>> {
+    ///     pub commit_phase_commits: Vec<M::Commitment>,
+    ///     pub query_proofs: Vec<QueryProof<Challenge, M, Vec<BatchOpening<F>>>>,
+    ///     pub final_poly: Vec<Challenge>,
+    ///     pub pow_witness: F,
+    /// }
+    /// ```
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
         encode_commitments(&self.commit_phase_commits, writer)?;
         encode_slice(&self.query_proofs, writer)?;
@@ -131,22 +169,43 @@ impl Encode for InnerFriProof {
 }
 
 impl Encode for InnerQueryProof {
+    /// Encodes the struct
+    /// ```
+    /// pub struct QueryProof<Challenge, M: Mmcs<Challenge>> {
+    ///     pub input_proof: Vec<BatchOpening<F>>,
+    ///     pub commit_phase_openings: Vec<CommitPhaseProofStep<Challenge, M>>,
+    /// }
+    ///
+    /// pub struct BatchOpening<F> {
+    ///     pub opened_values: Vec<Vec<F>>,
+    ///     pub opening_proof: Vec<[F; DIGEST_SIZE]>,
+    /// }
+    ///
+    /// pub struct CommitPhaseProofStep<Challenge, M: Mmcs<Challenge>> {
+    ///     pub sibling_value: Challenge,
+    ///     pub opening_proof: Vec<[F; DIGEST_SIZE]>,
+    /// }
+    /// ```
+    ///
+    // @dev [jpw]: We prefer to keep the implementation all in one function
+    // without `impl Encode` on subtypes because it obfuscates what the overall
+    // struct consists of.
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
-        // Input proof for MerkleTree MMCS is just vector of sibling hashes
-        encode_slice(&self.input_proof, writer)?;
-        encode_slice(&self.commit_phase_openings, writer)?;
-        Ok(())
-    }
-}
-
-impl Encode for InnerBatchOpening {
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
-        self.opened_values.len().encode(writer)?;
-        for vals in &self.opened_values {
-            encode_slice(vals, writer)?;
+        // Input proof is Vec<BatchOpening<F>>
+        self.input_proof.len().encode(writer)?;
+        for batch_opening in &self.input_proof {
+            batch_opening.opened_values.len().encode(writer)?;
+            for vals in &batch_opening.opened_values {
+                encode_slice(vals, writer)?;
+            }
+            // Opening proof is just a vector of siblings
+            encode_slice(&batch_opening.opening_proof, writer)?;
         }
-        // Opening proof is just a vector of siblings
-        encode_slice(&self.opening_proof, writer)?;
+        self.commit_phase_openings.len().encode(writer)?;
+        for step in &self.commit_phase_openings {
+            step.sibling_value.encode(writer)?;
+            encode_slice(&step.opening_proof, writer)?;
+        }
         Ok(())
     }
 }
@@ -208,5 +267,278 @@ impl Encode for usize {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
         let x: u32 = (*self).try_into().map_err(io::Error::other)?;
         writer.write_all(&x.to_le_bytes())
+    }
+}
+
+// ============ Decode implementation =============
+
+/// Decode a proof using FRI as the PCS with `BabyBearPoseidon2Config`.
+pub fn decode_proof<R: Read>(reader: &mut R) -> Result<Proof<SC>> {
+    let mut version_bytes = [0u8; 4];
+    reader.read_exact(&mut version_bytes)?;
+    let version = u32::from_le_bytes(version_bytes);
+
+    if version != CODEC_VERSION {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Invalid codec version. Expected {}, got {}",
+                CODEC_VERSION, version
+            ),
+        ));
+    }
+
+    // Decode commitments
+    let main_trace = decode_commitments(reader)?;
+    let after_challenge = decode_commitments(reader)?;
+    let quotient = decode_commitment(reader)?;
+
+    let commitments = Commitments {
+        main_trace,
+        after_challenge,
+        quotient,
+    };
+
+    // Decode OpeningProof
+    let opening = decode_opening_proof(reader)?;
+
+    // Decode per_air data
+    let per_air = decode_vec(reader)?;
+
+    // Decode RAP phase sequence kind
+    let mut kind_byte = [0u8; 1];
+    reader.read_exact(&mut kind_byte)?;
+    if kind_byte[0] != RapPhaseSeqKind::FriLogUp as u8 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Unknown RapPhaseSeqKind: {}", kind_byte[0]),
+        ));
+    }
+
+    // Decode logup witness
+    let rap_phase_seq_proof = Option::<FriLogUpPartialProof<F>>::decode(reader)?;
+
+    Ok(Proof {
+        commitments,
+        opening,
+        per_air,
+        rap_phase_seq_proof,
+    })
+}
+
+fn decode_commitment<R: Read>(reader: &mut R) -> Result<Com<SC>> {
+    let digest = <[F; DIGEST_SIZE]>::decode(reader)?;
+    // Convert [F; DIGEST_SIZE] to Com<SC>
+    Ok(digest.into())
+}
+
+fn decode_commitments<R: Read>(reader: &mut R) -> Result<Vec<Com<SC>>> {
+    let coms_count = usize::decode(reader)?;
+    let mut coms = Vec::with_capacity(coms_count);
+
+    for _ in 0..coms_count {
+        coms.push(decode_commitment(reader)?);
+    }
+
+    Ok(coms)
+}
+
+fn decode_opening_proof<R: Read>(reader: &mut R) -> Result<OpeningProof<PcsProof<SC>, Challenge>> {
+    // Decode FRI proof
+    let proof = InnerFriProof::decode(reader)?;
+    let values = decode_opened_values(reader)?;
+
+    Ok(OpeningProof { proof, values })
+}
+
+fn decode_opened_values<R: Read>(reader: &mut R) -> Result<OpenedValues<Challenge>> {
+    let preprocessed = decode_vec(reader)?;
+
+    let main_count = usize::decode(reader)?;
+    let mut main = Vec::with_capacity(main_count);
+    for _ in 0..main_count {
+        main.push(decode_vec(reader)?);
+    }
+
+    let after_challenge_count = usize::decode(reader)?;
+    let mut after_challenge = Vec::with_capacity(after_challenge_count);
+    for _ in 0..after_challenge_count {
+        after_challenge.push(decode_vec(reader)?);
+    }
+
+    let quotient_count = usize::decode(reader)?;
+    let mut quotient = Vec::with_capacity(quotient_count);
+    for _ in 0..quotient_count {
+        let per_air_count = usize::decode(reader)?;
+        let mut per_air = Vec::with_capacity(per_air_count);
+        for _ in 0..per_air_count {
+            per_air.push(decode_vec(reader)?);
+        }
+        quotient.push(per_air);
+    }
+
+    Ok(OpenedValues {
+        preprocessed,
+        main,
+        after_challenge,
+        quotient,
+    })
+}
+
+impl Decode for AdjacentOpenedValues<Challenge> {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let local = decode_vec(reader)?;
+        let next = decode_vec(reader)?;
+
+        Ok(AdjacentOpenedValues { local, next })
+    }
+}
+
+impl Decode for AirProofData<F, Challenge> {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let air_id = usize::decode(reader)?;
+        let degree = usize::decode(reader)?;
+
+        let exposed_values_count = usize::decode(reader)?;
+        let mut exposed_values_after_challenge = Vec::with_capacity(exposed_values_count);
+        for _ in 0..exposed_values_count {
+            exposed_values_after_challenge.push(decode_vec(reader)?);
+        }
+
+        let public_values = decode_vec(reader)?;
+
+        Ok(AirProofData {
+            air_id,
+            degree,
+            exposed_values_after_challenge,
+            public_values,
+        })
+    }
+}
+
+impl Decode for InnerFriProof {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let commit_phase_commits = decode_commitments(reader)?;
+        let query_proofs = decode_vec(reader)?;
+        let final_poly = decode_vec(reader)?;
+        let pow_witness = F::decode(reader)?;
+
+        Ok(InnerFriProof {
+            commit_phase_commits,
+            query_proofs,
+            final_poly,
+            pow_witness,
+        })
+    }
+}
+
+impl Decode for InnerQueryProof {
+    /// See [InnerQueryProof::encode].
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let batch_opening_count = usize::decode(reader)?;
+        let mut input_proof = Vec::with_capacity(batch_opening_count);
+        for _ in 0..batch_opening_count {
+            let opened_values_len = usize::decode(reader)?;
+            let mut opened_values = Vec::with_capacity(opened_values_len);
+            for _ in 0..opened_values_len {
+                opened_values.push(decode_vec(reader)?);
+            }
+            let opening_proof = decode_vec(reader)?;
+
+            let batch_opening = InnerBatchOpening {
+                opened_values,
+                opening_proof,
+            };
+            input_proof.push(batch_opening);
+        }
+
+        let commit_phase_openings_count = usize::decode(reader)?;
+        let mut commit_phase_openings = Vec::with_capacity(commit_phase_openings_count);
+
+        for _ in 0..commit_phase_openings_count {
+            let sibling_value = Challenge::decode(reader)?;
+            let opening_proof = decode_vec(reader)?;
+
+            commit_phase_openings.push(CommitPhaseProofStep {
+                sibling_value,
+                opening_proof,
+            });
+        }
+
+        Ok(InnerQueryProof {
+            input_proof,
+            commit_phase_openings,
+        })
+    }
+}
+
+impl Decode for Option<FriLogUpPartialProof<F>> {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let mut bytes = [0u8; 4];
+        reader.read_exact(&mut bytes)?;
+
+        let value = u32::from_le_bytes(bytes);
+        if value == u32::MAX {
+            return Ok(None);
+        }
+
+        // Reconstruct the field element from the u32 value
+        let logup_pow_witness = F::from_canonical_u32(value);
+        Ok(Some(FriLogUpPartialProof { logup_pow_witness }))
+    }
+}
+
+impl Decode for Challenge {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        // For a BinomialExtensionField<F, 4>, we need to read 4 F elements
+        let mut base_elements = [F::ZERO; 4];
+        for base_element in &mut base_elements {
+            *base_element = F::decode(reader)?;
+        }
+
+        // Construct the extension field from base elements
+        Ok(Challenge::from_base_slice(&base_elements))
+    }
+}
+
+impl Decode for [F; DIGEST_SIZE] {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let mut result = [F::ZERO; DIGEST_SIZE];
+        for elt in &mut result {
+            *elt = F::decode(reader)?;
+        }
+        Ok(result)
+    }
+}
+
+/// Decodes a vector of elements
+fn decode_vec<T: Decode, R: Read>(reader: &mut R) -> Result<Vec<T>> {
+    let len = usize::decode(reader)?;
+    let mut vec = Vec::with_capacity(len);
+
+    for _ in 0..len {
+        vec.push(T::decode(reader)?);
+    }
+
+    Ok(vec)
+}
+
+impl Decode for F {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let mut bytes = [0u8; 4];
+        reader.read_exact(&mut bytes)?;
+
+        let value = u32::from_le_bytes(bytes);
+        Ok(F::from_canonical_u32(value))
+    }
+}
+
+impl Decode for usize {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let mut bytes = [0u8; 4];
+        reader.read_exact(&mut bytes)?;
+
+        let value = u32::from_le_bytes(bytes);
+        Ok(value as usize)
     }
 }

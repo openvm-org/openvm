@@ -8,6 +8,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+p3-fri = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
 openvm-bigint-circuit = { workspace = true }
