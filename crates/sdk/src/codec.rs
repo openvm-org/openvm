@@ -18,8 +18,8 @@ type Challenge = BinomialExtensionField<F, 4>;
 
 /// Hardware and language independent encoding.
 /// Uses the Writer pattern for more efficient encoding without intermediate buffers.
-// @dev Private trait right now just for implementation sanity
-trait Encode {
+// @dev Trait just for implementation sanity
+pub trait Encode {
     /// Writes the encoded representation of `self` to the given writer.
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()>;
 
@@ -132,6 +132,7 @@ impl Encode for InnerFriProof {
 
 impl Encode for InnerQueryProof {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
+        // Input proof for MerkleTree MMCS is just vector of sibling hashes
         encode_slice(&self.input_proof, writer)?;
         encode_slice(&self.commit_phase_openings, writer)?;
         Ok(())
