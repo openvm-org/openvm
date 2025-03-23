@@ -18,6 +18,7 @@ use crate::{
 
 pub const INITIAL_TIMESTAMP: u32 = 0;
 
+#[repr(C)]
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 struct BlockData {
     pointer: u32,
@@ -578,7 +579,7 @@ mod tests {
         initial_memory: MemoryImage<BabyBear>,
         initial_block_size: usize,
     ) -> (OfflineMemory<BabyBear>, AccessAdapterInventory<BabyBear>) {
-        let memory_bus = MemoryBus(0);
+        let memory_bus = MemoryBus::new(0);
         let range_checker =
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29));
         let mem_config = MemoryConfig {

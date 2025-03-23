@@ -8,6 +8,15 @@ use openvm_circuit::{
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
+use openvm_continuations::{
+    static_verifier::StaticVerifierPvHandler,
+    verifier::{
+        common::types::{SpecialAirIds, VmVerifierPvs},
+        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
+        root::types::RootVmVerifierPvs,
+        utils::compress_babybear_var_to_bn254,
+    },
+};
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use openvm_native_recursion::{
@@ -18,20 +27,13 @@ use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtensio
 use openvm_sdk::{
     commit::AppExecutionCommit,
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
-    keygen::{AppProvingKey, RootVerifierProvingKey},
-    static_verifier::StaticVerifierPvHandler,
-    verifier::{
-        common::types::{SpecialAirIds, VmVerifierPvs},
-        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
-        root::types::RootVmVerifierPvs,
-        utils::compress_babybear_var_to_bn254,
-    },
-    Sdk, StdIn,
+    keygen::AppProvingKey,
+    DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::{p3_field::FieldAlgebra, Chip},
@@ -88,7 +90,7 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
         program
     };
     Sdk.commit_app_exe(
-        standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
+        FriParameters::new_for_testing(app_log_blowup),
         program.into(),
     )
     .unwrap()
@@ -108,11 +110,9 @@ fn agg_config_for_test() -> AggConfig {
 fn agg_stark_config_for_test() -> AggStarkConfig {
     AggStarkConfig {
         max_num_user_public_values: NUM_PUB_VALUES,
-        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP),
-        internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(
-            INTERNAL_LOG_BLOWUP,
-        ),
-        root_fri_params: standard_fri_params_with_100_bits_conjectured_security(ROOT_LOG_BLOWUP),
+        leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP),
+        internal_fri_params: FriParameters::new_for_testing(INTERNAL_LOG_BLOWUP),
+        root_fri_params: FriParameters::new_for_testing(ROOT_LOG_BLOWUP),
         profiling: false,
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
@@ -124,8 +124,7 @@ fn agg_stark_config_for_test() -> AggStarkConfig {
 
 fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
     AppConfig {
-        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup)
-            .into(),
+        app_fri_params: FriParameters::new_for_testing(app_log_blowup).into(),
         app_vm_config: NativeConfig::new(
             SystemConfig::default()
                 .with_max_segment_len(200)
@@ -133,8 +132,7 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
                 .with_public_values(NUM_PUB_VALUES),
             Native,
         ),
-        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP)
-            .into(),
+        leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP).into(),
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
@@ -277,7 +275,6 @@ fn test_static_verifier_custom_pv_handler() {
             &self,
             builder: &mut Builder<OuterConfig>,
             input: &StarkProofVariable<OuterConfig>,
-            _root_verifier_pk: &RootVerifierProvingKey,
             special_air_ids: &SpecialAirIds,
         ) -> usize {
             let pv_air = builder.get(&input.per_air, special_air_ids.public_values_air_id);
@@ -334,7 +331,7 @@ fn test_static_verifier_custom_pv_handler() {
         leaf_verifier_commit,
     };
     let agg_pk = Sdk
-        .agg_keygen(agg_config_for_test(), &params_reader, Some(&pv_handler))
+        .agg_keygen(agg_config_for_test(), &params_reader, &pv_handler)
         .unwrap();
 
     // Generate verifier contract
@@ -367,7 +364,7 @@ fn test_e2e_proof_generation_and_verification() {
         .agg_keygen(
             agg_config_for_test(),
             &params_reader,
-            None::<&RootVerifierProvingKey>,
+            &DefaultStaticVerifierPvHandler,
         )
         .unwrap();
     let evm_verifier = Sdk

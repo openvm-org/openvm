@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::{
     arch::hasher::Hasher,
@@ -19,16 +20,27 @@ pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = 2;
     deserialize = "F: Deserialize<'de>, [F; CHUNK]: Deserialize<'de>"
 ))]
 pub struct UserPublicValuesProof<const CHUNK: usize, F> {
-    /// Proof of the path from the root of public values to the memory root in the format of (`bit`, `hash`)
-    /// `bit`: If `bit` is true, public values are in the left child, otherwise in the right child.
-    /// `hash`: Hash of the sibling node.
-    pub proof: Vec<(bool, [F; CHUNK])>,
+    /// Proof of the path from the root of public values to the memory root in the format of
+    /// sequence of sibling node hashes.
+    pub proof: Vec<[F; CHUNK]>,
     /// Raw public values. Its length should be a power of two * CHUNK.
     pub public_values: Vec<F>,
     /// Merkle root of public values. The computation of this value follows the same logic of
     /// `MemoryNode`. The merkle tree doesn't pad because the length `public_values` implies the
     /// merkle tree is always a full binary tree.
     pub public_values_commit: [F; CHUNK],
+}
+
+#[derive(Error, Debug)]
+pub enum UserPublicValuesProofError {
+    #[error("unexpected length: {0}")]
+    UnexpectedLength(usize),
+    #[error("incorrect proof length: {0} (expected {1})")]
+    IncorrectProofLength(usize, usize),
+    #[error("user public values do not match commitment")]
+    UserPublicValuesCommitMismatch,
+    #[error("final memory root mismatch")]
+    FinalMemoryRootMismatch,
 }
 
 impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
@@ -56,6 +68,53 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
             public_values_commit,
         }
     }
+
+    pub fn verify(
+        &self,
+        hasher: &impl Hasher<CHUNK, F>,
+        memory_dimensions: MemoryDimensions,
+        final_memory_root: [F; CHUNK],
+    ) -> Result<(), UserPublicValuesProofError> {
+        // Verify user public values Merkle proof:
+        // 0. Get correct indices for Merkle proof based on memory dimensions
+        // 1. Verify user public values commitment with respect to the final memory root.
+        // 2. Compare user public values commitment with Merkle root of user public values.
+        let pv_commit = self.public_values_commit;
+        // 0.
+        let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
+        let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
+        let pvs = &self.public_values;
+        if pvs.len() % CHUNK != 0 || !(pvs.len() / CHUNK).is_power_of_two() {
+            return Err(UserPublicValuesProofError::UnexpectedLength(pvs.len()));
+        }
+        let pv_height = log2_strict_usize(pvs.len() / CHUNK);
+        let proof_len = memory_dimensions.overall_height() - pv_height;
+        let idx_prefix = pv_start_idx >> pv_height;
+        // 1.
+        if self.proof.len() != proof_len {
+            return Err(UserPublicValuesProofError::IncorrectProofLength(
+                self.proof.len(),
+                proof_len,
+            ));
+        }
+        let mut curr_root = pv_commit;
+        for (i, sibling_hash) in self.proof.iter().enumerate() {
+            curr_root = if idx_prefix & (1 << i) != 0 {
+                hasher.compress(sibling_hash, &curr_root)
+            } else {
+                hasher.compress(&curr_root, sibling_hash)
+            }
+        }
+        if curr_root != final_memory_root {
+            return Err(UserPublicValuesProofError::FinalMemoryRootMismatch);
+        }
+        // 2. Compute merkle root of public values
+        if hasher.merkle_root(pvs) != pv_commit {
+            return Err(UserPublicValuesProofError::UserPublicValuesCommitMismatch);
+        }
+
+        Ok(())
+    }
 }
 
 fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeField32>(
@@ -63,7 +122,7 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
     num_public_values: usize,
     hasher: &(impl Hasher<CHUNK, F> + Sync),
     final_memory: &MemoryImage<F>,
-) -> Vec<(bool, [F; CHUNK])> {
+) -> Vec<[F; CHUNK]> {
     assert_eq!(
         num_public_values % CHUNK,
         0,
@@ -86,10 +145,10 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
         if let MemoryNode::NonLeaf { left, right, .. } = curr_node.as_ref().clone() {
             if PUBLIC_VALUES_ADDRESS_SPACE_OFFSET & bit != 0 {
                 curr_node = right;
-                proof.push((true, left.hash()));
+                proof.push(left.hash());
             } else {
                 curr_node = left;
-                proof.push((false, right.hash()));
+                proof.push(right.hash());
             }
         } else {
             unreachable!()
@@ -98,7 +157,7 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
     for _ in 0..address_leading_zeros {
         if let MemoryNode::NonLeaf { left, right, .. } = curr_node.as_ref().clone() {
             curr_node = left;
-            proof.push((false, right.hash()));
+            proof.push(right.hash());
         } else {
             unreachable!()
         }
@@ -146,10 +205,7 @@ mod tests {
 
     use super::{UserPublicValuesProof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET};
     use crate::{
-        arch::{
-            hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-            SystemConfig,
-        },
+        arch::{hasher::poseidon2::vm_poseidon2_hasher, SystemConfig},
         system::memory::{paged_vec::AddressMap, tree::MemoryNode, CHUNK},
     };
 
@@ -180,14 +236,8 @@ mod tests {
         );
         assert_eq!(pv_proof.public_values, expected_pvs);
         let final_memory_root = MemoryNode::tree_from_memory(memory_dimensions, &memory, &hasher);
-        let mut curr_root = pv_proof.public_values_commit;
-        for (is_right, sibling_hash) in &pv_proof.proof {
-            curr_root = if *is_right {
-                hasher.compress(sibling_hash, &curr_root)
-            } else {
-                hasher.compress(&curr_root, sibling_hash)
-            }
-        }
-        assert_eq!(curr_root, final_memory_root.hash());
+        pv_proof
+            .verify(&hasher, memory_dimensions, final_memory_root.hash())
+            .unwrap();
     }
 }

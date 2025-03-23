@@ -16,7 +16,6 @@ use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip};
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::{ParallelIterator, ParallelSlice},
-    Stateful,
 };
 use serde::{Deserialize, Serialize};
 
@@ -63,11 +62,12 @@ pub struct TopLevelRecord<F: Field> {
     pub incorporate_sibling: Option<IncorporateSiblingRecord<F>>,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct IncorporateSiblingRecord<F: Field> {
-    pub read_root_is_on_right: RecordId,
-    pub root_is_on_right: bool,
+    pub read_sibling_is_on_right: RecordId,
+    pub sibling_is_on_right: bool,
     pub p2_input: [F; 2 * CHUNK],
 }
 
@@ -89,6 +89,7 @@ pub struct InsideRowRecord<F: Field> {
     pub p2_input: [F; 2 * CHUNK],
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CellRecord {
     pub read: RecordId,
@@ -98,6 +99,7 @@ pub struct CellRecord {
     pub row_end: usize,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct SimplePoseidonRecord<F: Field> {
@@ -127,34 +129,11 @@ pub struct NativePoseidon2RecordSet<F: Field> {
 
 pub struct NativePoseidon2Chip<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) air: NativePoseidon2Air<F, SBOX_REGISTERS>,
-    pub(super) record_set: NativePoseidon2RecordSet<F>,
-    pub(super) height: usize,
+    pub record_set: NativePoseidon2RecordSet<F>,
+    pub height: usize,
     pub(super) offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     pub(super) streams: Arc<Mutex<Streams<F>>>,
-}
-
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> Stateful<Vec<u8>>
-    for NativePoseidon2Chip<F, SBOX_REGISTERS>
-{
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.record_set = bitcode::deserialize(&state).unwrap();
-        self.height = self.record_set.simple_permute_records.len();
-        for record in self.record_set.verify_batch_records.iter() {
-            for top_level in record.top_level.iter() {
-                if let Some(incorporate_row) = &top_level.incorporate_row {
-                    self.height += 1 + incorporate_row.chunks.len();
-                }
-                if top_level.incorporate_sibling.is_some() {
-                    self.height += 1;
-                }
-            }
-        }
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.record_set).unwrap()
-    }
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_REGISTERS> {
@@ -456,13 +435,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                         memory.increment_timestamp();
                     }
 
-                    let (read_root_is_on_right, root_is_on_right) = memory.read_cell(
+                    let (read_sibling_is_on_right, sibling_is_on_right) = memory.read_cell(
                         address_space,
                         index_base_pointer + F::from_canonical_usize(sibling_index),
                     );
-                    let root_is_on_right = root_is_on_right == F::ONE;
+                    let sibling_is_on_right = sibling_is_on_right == F::ONE;
                     let sibling = sibling_proof[sibling_index];
-                    let (p2_input, new_root) = if root_is_on_right {
+                    let (p2_input, new_root) = if sibling_is_on_right {
                         self.compress(sibling, root)
                     } else {
                         self.compress(root, sibling)
@@ -471,8 +450,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 
                     self.height += 1;
                     Some(IncorporateSiblingRecord {
-                        read_root_is_on_right,
-                        root_is_on_right,
+                        read_sibling_is_on_right,
+                        sibling_is_on_right,
                         p2_input,
                     })
                 };

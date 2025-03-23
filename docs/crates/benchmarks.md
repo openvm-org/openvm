@@ -36,7 +36,7 @@ To support host machine execution, the top of your guest program should have:
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
-You can copy from [fibonacci](./programs/fibonacci) to get started.
+You can copy from [fibonacci](../../benchmarks/programs/fibonacci) to get started.
 The guest program crate should **not** be included in the main repository workspace. Instead the guest
 `Cargo.toml` should have `[workspace]` at the top to keep it standalone. Your IDE will likely not
 lint or use rust-analyzer on the crate while in the workspace, so the recommended setup is to open a separate IDE workspace from the directory of the guest program.

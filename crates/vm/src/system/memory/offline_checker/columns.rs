@@ -50,6 +50,10 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
     pub fn get_base(self) -> MemoryBaseAuxCols<T> {
         self.base
     }
+
+    pub fn prev_data(&self) -> &[T; N] {
+        &self.prev_data
+    }
 }
 
 /// The auxiliary columns for a memory read operation with block size `N`.

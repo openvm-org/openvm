@@ -25,11 +25,11 @@ pub struct AssertLessThanIo<T> {
     /// Will only apply constraints when `count != 0`.
     /// Range checks are done with multiplicity `count`.
     /// If `count == 0` then no range checks are done.
-    /// In practice `count` is always boolean, although this is not enforced
-    /// by the subair.
+    /// `count` **assumed** to be boolean and must be constrained as such by
+    /// the caller.
     ///
     /// N.B.: in fact range checks could always be done, if the aux
-    /// subrow values are set to 0 when `count == 0`. This woud slightly
+    /// subrow values are set to 0 when `count == 0`. This would slightly
     /// simplify the range check interactions, although usually doesn't change
     /// the overall constraint degree. It however leads to the annoyance that
     /// you must update the RangeChecker's multiplicities even on dummy padding
@@ -66,7 +66,7 @@ pub struct LessThanAuxCols<T, const AUX_LEN: usize> {
 /// size `bus.range_max_bits`, and interacts with a
 /// `VariableRangeCheckerBus` to range check the decompositions.
 ///
-/// The SubAir will own auxilliary columns to store the decomposed limbs.
+/// The SubAir will own auxiliary columns to store the decomposed limbs.
 /// The number of limbs is `max_bits.div_ceil(bus.range_max_bits)`.
 ///
 /// The expected max constraint degree of `eval` is
@@ -90,16 +90,13 @@ pub struct AssertLtSubAir {
 
 impl AssertLtSubAir {
     pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
+        assert!(max_bits <= 29); // see soundness requirement above
         let decomp_limbs = max_bits.div_ceil(bus.range_max_bits);
         Self {
             bus,
             max_bits,
             decomp_limbs,
         }
-    }
-
-    pub fn when_transition(self) -> AssertLtWhenTransitionAir {
-        AssertLtWhenTransitionAir(self)
     }
 
     pub fn range_max_bits(&self) -> usize {
@@ -186,44 +183,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLtSubAir {
     }
 }
 
-/// The same subair as [AssertLtSubAir] except that non-range check
-/// constraints are not imposed on the last row.
-/// Intended use case is for asserting less than between entries in
-/// adjacent rows.
-#[derive(Clone, Copy, Debug)]
-pub struct AssertLtWhenTransitionAir(pub AssertLtSubAir);
-
-impl<AB: InteractionBuilder> SubAir<AB> for AssertLtWhenTransitionAir {
-    type AirContext<'a>
-        = (AssertLessThanIo<AB::Expr>, &'a [AB::Var])
-    where
-        AB::Expr: 'a,
-        AB::Var: 'a,
-        AB: 'a;
-
-    /// Imposes the non-interaction constraints on all except the last row. This is
-    /// intended for use when the comparators `x, y` are on adjacent rows.
-    ///
-    /// This function does also enable the interaction constraints _on every row_.
-    /// The `eval_interactions` performs range checks on `lower_decomp` on every row, even
-    /// though in this AIR the lower_decomp is not used on the last row.
-    /// This simply means the trace generation must fill in the last row with numbers in
-    /// range (e.g., with zeros)
-    fn eval<'a>(
-        &'a self,
-        builder: &'a mut AB,
-        (io, lower_decomp): (AssertLessThanIo<AB::Expr>, &'a [AB::Var]),
-    ) where
-        AB::Var: 'a,
-        AB::Expr: 'a,
-    {
-        self.0
-            .eval_range_checks(builder, lower_decomp, io.count.clone());
-        self.0
-            .eval_without_range_checks(&mut builder.when_transition(), io, lower_decomp);
-    }
-}
-
 impl<F: Field> TraceSubRowGenerator<F> for AssertLtSubAir {
     /// (range_checker, x, y)
     // x, y are u32 because memory records are storing u32 and there would be needless conversions. It also prevents a F: PrimeField32 trait bound.
@@ -231,7 +190,7 @@ impl<F: Field> TraceSubRowGenerator<F> for AssertLtSubAir {
     /// lower_decomp
     type ColsMut<'a> = &'a mut [F];
 
-    /// Should only be used when `io.count != 0`.
+    /// Should only be used when `io.count != 0` i.e. only on non-padding rows.
     #[inline(always)]
     fn generate_subrow<'a>(
         &'a self,

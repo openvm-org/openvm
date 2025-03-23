@@ -1,16 +1,18 @@
 use openvm_stark_backend::{
-    interaction::{InteractionBuilder, InteractionType},
+    interaction::{BusIndex, InteractionBuilder, LookupBus},
     p3_field::FieldAlgebra,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BitwiseOperationLookupBus {
-    pub index: usize,
+    pub inner: LookupBus,
 }
 
 impl BitwiseOperationLookupBus {
-    pub const fn new(index: usize) -> Self {
-        Self { index }
+    pub const fn new(index: BusIndex) -> Self {
+        Self {
+            inner: LookupBus::new(index),
+        }
     }
 
     #[must_use]
@@ -22,7 +24,7 @@ impl BitwiseOperationLookupBus {
     where
         T: FieldAlgebra,
     {
-        self.push(x, y, T::ZERO, T::ZERO, InteractionType::Send)
+        self.push(x, y, T::ZERO, T::ZERO, true)
     }
 
     #[must_use]
@@ -35,7 +37,7 @@ impl BitwiseOperationLookupBus {
     where
         T: FieldAlgebra,
     {
-        self.push(x, y, z, T::ONE, InteractionType::Send)
+        self.push(x, y, z, T::ONE, true)
     }
 
     #[must_use]
@@ -46,7 +48,7 @@ impl BitwiseOperationLookupBus {
         z: impl Into<T>,
         op: impl Into<T>,
     ) -> BitwiseOperationLookupBusInteraction<T> {
-        self.push(x, y, z, op, InteractionType::Receive)
+        self.push(x, y, z, op, false)
     }
 
     pub fn push<T>(
@@ -55,15 +57,15 @@ impl BitwiseOperationLookupBus {
         y: impl Into<T>,
         z: impl Into<T>,
         op: impl Into<T>,
-        interaction_type: InteractionType,
+        is_lookup: bool,
     ) -> BitwiseOperationLookupBusInteraction<T> {
         BitwiseOperationLookupBusInteraction {
             x: x.into(),
             y: y.into(),
             z: z.into(),
             op: op.into(),
-            bus_index: self.index,
-            interaction_type,
+            bus: self.inner,
+            is_lookup,
         }
     }
 }
@@ -74,8 +76,8 @@ pub struct BitwiseOperationLookupBusInteraction<T> {
     pub y: T,
     pub z: T,
     pub op: T,
-    pub bus_index: usize,
-    pub interaction_type: InteractionType,
+    pub bus: LookupBus,
+    is_lookup: bool,
 }
 
 impl<T: FieldAlgebra> BitwiseOperationLookupBusInteraction<T> {
@@ -83,11 +85,11 @@ impl<T: FieldAlgebra> BitwiseOperationLookupBusInteraction<T> {
     where
         AB: InteractionBuilder<Expr = T>,
     {
-        builder.push_interaction(
-            self.bus_index,
-            [self.x, self.y, self.z, self.op],
-            count,
-            self.interaction_type,
-        );
+        let key = [self.x, self.y, self.z, self.op];
+        if self.is_lookup {
+            self.bus.lookup_key(builder, key, count);
+        } else {
+            self.bus.add_key_with_lookups(builder, key, count);
+        }
     }
 }

@@ -5,17 +5,16 @@ use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
 use openvm_ecc_guest::AffinePoint;
 #[cfg(target_os = "zkvm")]
 use {
-    crate::pairing::shifted_funct7,
     crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
     core::mem::MaybeUninit,
     openvm_platform::custom_insn_r,
     openvm_rv32im_guest::hint_buffer_u32,
 };
 
-use super::{Bn254, Fp, Fp12, Fp2};
+use super::{Bn254, Fp, Fp12, Fp2, BN254_PSEUDO_BINARY_ENCODING, BN254_SEED};
 use crate::pairing::{
-    Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep, MultiMillerLoop,
-    PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
+    exp_check_fallback, Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep,
+    MultiMillerLoop, PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
 };
 #[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
 use crate::{
@@ -29,26 +28,11 @@ use crate::{
 
 impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
     fn evaluate(&self, xy_frac: &(Fp, Fp)) -> EvaluatedLine<Fp2> {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            let (x_over_y, y_inv) = xy_frac;
-            EvaluatedLine {
-                b: self.b.mul_base(x_over_y),
-                c: self.c.mul_base(y_inv),
-            }
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<EvaluatedLine<Fp2>> = MaybeUninit::uninit();
-            custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<Bn254>(PairingBaseFunct7::EvaluateLine),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In self as *const UnevaluatedLine<Fp2>,
-                rs2 = In xy_frac as *const (Fp, Fp)
-            );
-            unsafe { uninit.assume_init() }
+        let (x_over_y, y_inv) = xy_frac;
+        // Represents the line L(x,y) = 1 + b (x/y) w^1 + c (1/y) w^3
+        EvaluatedLine {
+            b: self.b.mul_base(x_over_y),
+            c: self.c.mul_base(y_inv),
         }
     }
 }
@@ -70,37 +54,21 @@ impl FromLineDType<Fp2> for Fp12 {
 impl LineMulDType<Fp2, Fp12> for Bn254 {
     /// Multiplies two lines in 013-form to get an element in 01234-form
     fn mul_013_by_013(l0: &EvaluatedLine<Fp2>, l1: &EvaluatedLine<Fp2>) -> [Fp2; 5] {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            let b0 = &l0.b;
-            let c0 = &l0.c;
-            let b1 = &l1.b;
-            let c1 = &l1.c;
+        let b0 = &l0.b;
+        let c0 = &l0.c;
+        let b1 = &l1.b;
+        let c1 = &l1.c;
 
-            // where w⁶ = xi
-            // l0 * l1 = 1 + (b0 + b1)w + (b0b1)w² + (c0 + c1)w³ + (b0c1 + b1c0)w⁴ + (c0c1)w⁶
-            //         = (1 + c0c1 * xi) + (b0 + b1)w + (b0b1)w² + (c0 + c1)w³ + (b0c1 + b1c0)w⁴
-            let x0 = Fp2::ONE + c0 * c1 * &Bn254::XI;
-            let x1 = b0 + b1;
-            let x2 = b0 * b1;
-            let x3 = c0 + c1;
-            let x4 = b0 * c1 + b1 * c0;
+        // where w⁶ = xi
+        // l0 * l1 = 1 + (b0 + b1)w + (b0b1)w² + (c0 + c1)w³ + (b0c1 + b1c0)w⁴ + (c0c1)w⁶
+        //         = (1 + c0c1 * xi) + (b0 + b1)w + (b0b1)w² + (c0 + c1)w³ + (b0c1 + b1c0)w⁴
+        let x0 = Fp2::ONE + c0 * c1 * &Bn254::XI;
+        let x1 = b0 + b1;
+        let x2 = b0 * b1;
+        let x3 = c0 + c1;
+        let x4 = b0 * c1 + b1 * c0;
 
-            [x0, x1, x2, x3, x4]
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<[Fp2; 5]> = MaybeUninit::uninit();
-            custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<Bn254>(PairingBaseFunct7::Mul013By013),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In l0 as *const EvaluatedLine<Fp2>,
-                rs2 = In l1 as *const EvaluatedLine<Fp2>
-            );
-            unsafe { uninit.assume_init() }
-        }
+        [x0, x1, x2, x3, x4]
     }
 
     /// Multiplies a line in 013-form with a Fp12 element to get an Fp12 element
@@ -110,66 +78,50 @@ impl LineMulDType<Fp2, Fp12> for Bn254 {
 
     /// Multiplies a line in 01234-form with a Fp12 element to get an Fp12 element
     fn mul_by_01234(f: &Fp12, x: &[Fp2; 5]) -> Fp12 {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            // we update the order of the coefficients to match the Fp12 coefficient ordering:
-            // Fp12 {
-            //   c0: Fp6 {
-            //     c0: x0,
-            //     c1: x2,
-            //     c2: x4,
-            //   },
-            //   c1: Fp6 {
-            //     c0: x1,
-            //     c1: x3,
-            //     c2: x5,
-            //   },
-            // }
-            let o0 = &x[0];
-            let o1 = &x[2];
-            let o2 = &x[4];
-            let o3 = &x[1];
-            let o4 = &x[3];
+        // we update the order of the coefficients to match the Fp12 coefficient ordering:
+        // Fp12 {
+        //   c0: Fp6 {
+        //     c0: x0,
+        //     c1: x2,
+        //     c2: x4,
+        //   },
+        //   c1: Fp6 {
+        //     c0: x1,
+        //     c1: x3,
+        //     c2: x5,
+        //   },
+        // }
+        let o0 = &x[0];
+        let o1 = &x[2];
+        let o2 = &x[4];
+        let o3 = &x[1];
+        let o4 = &x[3];
 
-            let xi = &Bn254::XI;
+        let xi = &Bn254::XI;
 
-            let self_coeffs = f.clone().to_coeffs();
-            let s0 = &self_coeffs[0];
-            let s1 = &self_coeffs[2];
-            let s2 = &self_coeffs[4];
-            let s3 = &self_coeffs[1];
-            let s4 = &self_coeffs[3];
-            let s5 = &self_coeffs[5];
+        let self_coeffs = &f.c;
+        let s0 = &self_coeffs[0];
+        let s1 = &self_coeffs[2];
+        let s2 = &self_coeffs[4];
+        let s3 = &self_coeffs[1];
+        let s4 = &self_coeffs[3];
+        let s5 = &self_coeffs[5];
 
-            // NOTE[yj]: Hand-calculated multiplication for Fp12 * 01234 ∈ Fp2; this is likely not the most efficient implementation
-            // c00 = cs0co0 + xi(cs1co2 + cs2co1 + cs4co4 + cs5co3)
-            // c01 = cs0co1 + cs1co0 + cs3co3 + xi(cs2co2 + cs5co4)
-            // c02 = cs0co2 + cs1co1 + cs2co0 + cs3co4 + cs4co3
-            // c10 = cs0co3 + cs3co0 + xi(cs2co4 + cs4co2 + cs5co1)
-            // c11 = cs0co4 + cs1co3 + cs3co1 + cs4co0 + xi(cs5co2)
-            // c12 = cs1co4 + cs2co3 + cs3co2 + cs4co1 + cs5co0
-            let c00 = s0 * o0 + xi * &(s1 * o2 + s2 * o1 + s4 * o4 + s5 * o3);
-            let c01 = s0 * o1 + s1 * o0 + s3 * o3 + xi * &(s2 * o2 + s5 * o4);
-            let c02 = s0 * o2 + s1 * o1 + s2 * o0 + s3 * o4 + s4 * o3;
-            let c10 = s0 * o3 + s3 * o0 + xi * &(s2 * o4 + s4 * o2 + s5 * o1);
-            let c11 = s0 * o4 + s1 * o3 + s3 * o1 + s4 * o0 + xi * &(s5 * o2);
-            let c12 = s1 * o4 + s2 * o3 + s3 * o2 + s4 * o1 + s5 * o0;
+        // NOTE[yj]: Hand-calculated multiplication for Fp12 * 01234 ∈ Fp2; this is likely not the most efficient implementation
+        // c00 = cs0co0 + xi(cs1co2 + cs2co1 + cs4co4 + cs5co3)
+        // c01 = cs0co1 + cs1co0 + cs3co3 + xi(cs2co2 + cs5co4)
+        // c02 = cs0co2 + cs1co1 + cs2co0 + cs3co4 + cs4co3
+        // c10 = cs0co3 + cs3co0 + xi(cs2co4 + cs4co2 + cs5co1)
+        // c11 = cs0co4 + cs1co3 + cs3co1 + cs4co0 + xi(cs5co2)
+        // c12 = cs1co4 + cs2co3 + cs3co2 + cs4co1 + cs5co0
+        let c00 = s0 * o0 + xi * &(s1 * o2 + s2 * o1 + s4 * o4 + s5 * o3);
+        let c01 = s0 * o1 + s1 * o0 + s3 * o3 + xi * &(s2 * o2 + s5 * o4);
+        let c02 = s0 * o2 + s1 * o1 + s2 * o0 + s3 * o4 + s4 * o3;
+        let c10 = s0 * o3 + s3 * o0 + xi * &(s2 * o4 + s4 * o2 + s5 * o1);
+        let c11 = s0 * o4 + s1 * o3 + s3 * o1 + s4 * o0 + xi * &(s5 * o2);
+        let c12 = s1 * o4 + s2 * o3 + s3 * o2 + s4 * o1 + s5 * o0;
 
-            Fp12::from_coeffs([c00, c10, c01, c11, c02, c12])
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<Fp12> = MaybeUninit::uninit();
-            custom_insn_r!(
-                opcode = OPCODE,
-                funct3 = PAIRING_FUNCT3,
-                funct7 = shifted_funct7::<Bn254>(PairingBaseFunct7::MulBy01234),
-                rd = In uninit.as_mut_ptr(),
-                rs1 = In f as *const Fp12,
-                rs2 = In x as *const [Fp2; 5]
-            );
-            unsafe { uninit.assume_init() }
-        }
+        Fp12::from_coeffs([c00, c10, c01, c11, c02, c12])
     }
 }
 
@@ -178,12 +130,8 @@ impl MultiMillerLoop for Bn254 {
     type Fp = Fp;
     type Fp12 = Fp12;
 
-    const SEED_ABS: u64 = 0x44e992b44a6909f1;
-    const PSEUDO_BINARY_ENCODING: &[i8] = &[
-        0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
-        0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
-        -1, 0, 0, 0, 1, 0, -1, 0, 1,
-    ];
+    const SEED_ABS: u64 = BN254_SEED;
+    const PSEUDO_BINARY_ENCODING: &[i8] = &BN254_PSEUDO_BINARY_ENCODING;
 
     fn evaluate_lines_vec(f: Self::Fp12, lines: Vec<EvaluatedLine<Self::Fp2>>) -> Self::Fp12 {
         let mut f = f;
@@ -202,6 +150,7 @@ impl MultiMillerLoop for Bn254 {
         f
     }
 
+    /// The expected output of this function when running the Miller loop with embedded exponent is c^2 * l_{2Q}
     fn pre_loop(
         Q_acc: Vec<AffinePoint<Self::Fp2>>,
         _Q: &[AffinePoint<Self::Fp2>],
@@ -209,6 +158,9 @@ impl MultiMillerLoop for Bn254 {
         xy_fracs: &[(Self::Fp, Self::Fp)],
     ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>) {
         let mut f = if let Some(mut c) = c {
+            // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
+            // will square c due to the last two values of the pseudo-binary encoding (BN254_PSEUDO_BINARY_ENCODING) being 0 and 1.
+            // Therefore, the final value of f at the end of this block is c^2.
             c.square_assign();
             c
         } else {
@@ -218,6 +170,8 @@ impl MultiMillerLoop for Bn254 {
         let mut Q_acc = Q_acc;
         let mut initial_lines = Vec::<EvaluatedLine<Self::Fp2>>::new();
 
+        // We don't need to special case the first iteration for Bn254, but since we are using the same Miller loop implementation
+        // for both Bn254 and Bls12_381, we need to do the first iteration separately here.
         let (Q_out_double, lines_2S) = Q_acc
             .into_iter()
             .map(|Q| Self::miller_double_step(&Q))
@@ -235,9 +189,10 @@ impl MultiMillerLoop for Bn254 {
         (f, Q_acc)
     }
 
+    /// Compute f_{Miller,Q}(P) from f_{6x+2,Q}(P)
     fn post_loop(
         f: &Self::Fp12,
-        Q_acc: Vec<AffinePoint<Self::Fp2>>,
+        Q_acc: Vec<AffinePoint<Self::Fp2>>, // at this point, Q_acc = (6x+2)Q
         Q: &[AffinePoint<Self::Fp2>],
         _c: Option<Self::Fp12>,
         xy_fracs: &[(Self::Fp, Self::Fp)],
@@ -248,7 +203,7 @@ impl MultiMillerLoop for Bn254 {
         let x_to_q_minus_1_over_3 = &Self::FROBENIUS_COEFF_FQ6_C1[1];
         let x_to_q_sq_minus_1_over_3 = &Self::FROBENIUS_COEFF_FQ6_C1[2];
 
-        // twisted frobenius calculation: `frob_p(twist(q)) = twist(q1)`
+        // For each q, compute q1 such that `frob_p(twist(q)) = twist(q1)`
         let q1_vec = Q
             .iter()
             .map(|Q| {
@@ -260,6 +215,7 @@ impl MultiMillerLoop for Bn254 {
             })
             .collect::<Vec<_>>();
 
+        // compute l_{(6x+2)\Psi(Q), \phi_p(\Psi(Q))} where \phi_p is the Frobenius map
         let (Q_out_add, lines_S_plus_Q) = Q_acc
             .iter()
             .zip(q1_vec.iter())
@@ -273,7 +229,7 @@ impl MultiMillerLoop for Bn254 {
             lines.push(line);
         }
 
-        // twisted frobenius calculation: `-frob_p^2(twist(q)) = twist(q2)`
+        // For each q, compute q2 such that `-frob_p^2(twist(q)) = twist(q2)`
         let q2_vec = Q
             .iter()
             .map(|Q| {
@@ -283,6 +239,7 @@ impl MultiMillerLoop for Bn254 {
             })
             .collect::<Vec<_>>();
 
+        // compute l_{(6x+2)\Psi(Q) + \phi_p(\Psi(Q)), -(\phi_p)^2(\Psi(Q))} where \phi_p is the Frobenius map
         let (Q_out_add, lines_S_plus_Q) = Q_acc
             .iter()
             .zip(q2_vec.iter())
@@ -372,26 +329,44 @@ impl PairingCheck for Bn254 {
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
     ) -> Result<(), PairingCheckError> {
+        Self::try_honest_pairing_check(P, Q).unwrap_or_else(|| {
+            let f = Self::multi_miller_loop(P, Q);
+            exp_check_fallback(&f, &Self::FINAL_EXPONENT)
+        })
+    }
+}
+
+#[allow(non_snake_case)]
+impl Bn254 {
+    fn try_honest_pairing_check(
+        P: &[AffinePoint<<Self as PairingCheck>::Fp>],
+        Q: &[AffinePoint<<Self as PairingCheck>::Fp2>],
+    ) -> Option<Result<(), PairingCheckError>> {
         let (c, u) = Self::pairing_check_hint(P, Q);
+        if c == Fp12::ZERO {
+            return None;
+        }
         let c_inv = Fp12::ONE.div_unsafe(&c);
 
-        // f * u == c^λ
-        // f * u == c^{6x + 2 + q^3 - q^2 + q}
+        // We follow Theorem 3 of https://eprint.iacr.org/2024/640.pdf to check that the pairing equals 1
+        // By the theorem, it suffices to provide c and u such that f * u == c^λ.
+        // Since λ = 6x + 2 + q^3 - q^2 + q, we will check the equivalent condition:
         // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
-        // where fc == f * c^-{6x + 2}
+        // This is because we can compute f * c^-{6x+2} by embedding the c^-{6x+2} computation in the miller loop.
+
         // c_mul = c^-{q^3 - q^2 + q}
         let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
         let c_q2 = FieldExtension::frobenius_map(&c, 2);
         let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
         let c_mul = c_q3_inv * c_q2 * c_q_inv;
 
-        // Compute miller loop with c_inv
+        // Pass c inverse into the miller loop so that we compute fc == f * c^-{6x + 2}
         let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
 
         if fc * c_mul * u == Fp12::ONE {
-            Ok(())
+            Some(Ok(()))
         } else {
-            Err(PairingCheckError)
+            None
         }
     }
 }

@@ -117,3 +117,15 @@ fn negative_test_range_tuple_chip() {
         "Expected constraint to fail"
     );
 }
+
+#[test]
+fn negative_test_range_tuple_chip_size_overflow() {
+    let bus_index = 0;
+    let sizes = [256, 256, 256, 256];
+
+    let result = std::panic::catch_unwind(|| RangeTupleCheckerBus::new(bus_index, sizes));
+    assert!(
+        result.is_err(),
+        "Expected RangeTupleCheckerBus::new to panic on overflow"
+    );
+}

@@ -132,6 +132,7 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FieldExtensionRecord<F> {
     pub opcode: FieldExtensionOpcode,

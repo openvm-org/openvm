@@ -237,21 +237,22 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "T: Serialize + DeserializeOwned")]
 pub struct ShiftCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub opcode: ShiftOpcode,
     #[serde(with = "BigArray")]
     pub a: [T; NUM_LIMBS],
     #[serde(with = "BigArray")]
     pub b: [T; NUM_LIMBS],
     #[serde(with = "BigArray")]
     pub c: [T; NUM_LIMBS],
+    pub b_sign: T,
     #[serde(with = "BigArray")]
     pub bit_shift_carry: [u32; NUM_LIMBS],
     pub bit_shift: usize,
     pub limb_shift: usize,
-    pub b_sign: T,
+    pub opcode: ShiftOpcode,
 }
 
 pub struct ShiftCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {

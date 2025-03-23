@@ -1,3 +1,7 @@
+/// A line function on Fp12 x Fp12 in a sparse representation.
+/// Let Fp12 = Fp2[w] / (w^6 - \xi). Then the line function is
+/// L(x,y) = 1 + b (x/y) w' + c (1/y) w'^3
+/// where w' = w for D-type and w' = w^-1 for M-type twists
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct UnevaluatedLine<Fp2> {
@@ -5,6 +9,8 @@ pub struct UnevaluatedLine<Fp2> {
     pub c: Fp2,
 }
 
+/// The output of a line function on Fp12 x Fp12 (see `UnevaluatedLine`).
+/// Represents 1 + b w' + c w'^3 where w' = w for D-type and w' = w^-1 for M-type twists.
 #[derive(Clone, Copy, Debug)]
 pub struct EvaluatedLine<Fp2> {
     pub b: Fp2,
@@ -12,6 +18,7 @@ pub struct EvaluatedLine<Fp2> {
 }
 
 pub trait Evaluatable<Fp, Fp2> {
+    // xy_frac is (x/y, 1/y)
     fn evaluate(&self, xy_frac: &(Fp, Fp)) -> EvaluatedLine<Fp2>;
 }
 

@@ -6,6 +6,8 @@ use core::{
     },
 };
 
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 #[cfg(not(target_os = "zkvm"))]
 use {super::bigint_to_limbs, num_bigint::BigInt};
 #[cfg(target_os = "zkvm")]
@@ -18,9 +20,10 @@ use {
 use crate::impl_bin_op;
 
 /// A 256-bit signed integer type.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 #[repr(align(32), C)]
 pub struct I256 {
+    #[serde(with = "BigArray")]
     limbs: [u8; 32],
 }
 
@@ -33,6 +36,11 @@ impl I256 {
 
     /// The zero constant.
     pub const ZERO: Self = Self { limbs: [0u8; 32] };
+
+    /// Construct [I256] from little-endian bytes.
+    pub const fn from_le_bytes(bytes: [u8; 32]) -> Self {
+        Self { limbs: bytes }
+    }
 
     /// Value of this I256 as a BigInt.
     #[cfg(not(target_os = "zkvm"))]

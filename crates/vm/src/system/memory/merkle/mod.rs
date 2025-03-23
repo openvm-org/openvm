@@ -1,15 +1,14 @@
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 use rustc_hash::FxHashSet;
 
 use super::controller::dimensions::MemoryDimensions;
 mod air;
-mod bus;
 mod columns;
 mod trace;
 
 pub use air::*;
-pub use bus::*;
 pub use columns::*;
+pub(super) use trace::SerialReceiver;
 
 #[cfg(test)]
 mod tests;
@@ -32,8 +31,8 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     /// `compression_bus` is the bus for direct (no-memory involved) interactions to call the cryptographic compression function.
     pub fn new(
         memory_dimensions: MemoryDimensions,
-        merkle_bus: MemoryMerkleBus,
-        compression_bus: DirectCompressionBus,
+        merkle_bus: PermutationCheckBus,
+        compression_bus: PermutationCheckBus,
     ) -> Self {
         assert!(memory_dimensions.as_height > 0);
         assert!(memory_dimensions.address_height > 0);

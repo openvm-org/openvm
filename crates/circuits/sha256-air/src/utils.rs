@@ -1,5 +1,6 @@
 use std::array;
 
+pub use openvm_circuit_primitives::utils::compose;
 use openvm_circuit_primitives::{
     encoder::Encoder,
     utils::{not, select},
@@ -43,7 +44,7 @@ pub const SHA256_WIDTH: usize = if SHA256_ROUND_WIDTH > SHA256_DIGEST_WIDTH {
     SHA256_DIGEST_WIDTH
 };
 /// We can notice that `carry_a`'s and `carry_e`'s are always the same on invalid rows
-/// To optimize the trace generation of invalid rows, we have thos values precomputed here
+/// To optimize the trace generation of invalid rows, we have those values precomputed here
 pub(crate) const SHA256_INVALID_CARRY_A: [[u32; SHA256_WORD_U16S]; SHA256_ROUNDS_PER_ROW] = [
     [1230919683, 1162494304],
     [266373122, 1282901987],
@@ -231,14 +232,6 @@ pub fn get_random_message(rng: &mut StdRng, len: usize) -> Vec<u8> {
     let mut random_message: Vec<u8> = vec![0u8; len];
     rng.fill(&mut random_message[..]);
     random_message
-}
-
-/// Composes a list of limb values into a single field element
-#[inline]
-pub fn compose<F: FieldAlgebra>(a: &[impl Into<F> + Clone], limb_size: usize) -> F {
-    a.iter().enumerate().fold(F::ZERO, |acc, (i, x)| {
-        acc + x.clone().into() * F::from_canonical_usize(1 << (i * limb_size))
-    })
 }
 
 /// Wrapper of `get_flag_pt` to get the flag pointer as an array

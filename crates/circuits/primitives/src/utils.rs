@@ -66,3 +66,11 @@ pub fn assert_array_eq<AB: AirBuilder, I1: Into<AB::Expr>, I2: Into<AB::Expr>, c
         builder.assert_eq(x, y);
     }
 }
+
+/// Composes a list of limb values into a single field element
+#[inline]
+pub fn compose<F: FieldAlgebra>(a: &[impl Into<F> + Clone], limb_size: usize) -> F {
+    a.iter().enumerate().fold(F::ZERO, |acc, (i, x)| {
+        acc + x.clone().into() * F::from_canonical_usize(1 << (i * limb_size))
+    })
+}

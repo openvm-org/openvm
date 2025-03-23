@@ -37,7 +37,7 @@ fn test_fixed_array_const() {
         .range(0, fixed_array.len())
         .for_each(|idx_vec, builder| {
             let value = builder.get(&fixed_array, idx_vec[0]);
-            builder.assert_eq::<Usize<_>>(value, Usize::from(2));
+            builder.assert_usize_eq(value, Usize::from(2));
         });
     let fixed_2d = builder.uninit_fixed_array(1);
     builder.set_value(&fixed_2d, RVar::zero(), fixed_array);

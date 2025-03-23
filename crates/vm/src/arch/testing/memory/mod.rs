@@ -120,7 +120,7 @@ impl<F: PrimeField32> ChipUsageGetter for MemoryTester<F> {
         "MemoryDummyAir".to_string()
     }
     fn current_trace_height(&self) -> usize {
-        self.records.len() / self.trace_width()
+        self.records.len()
     }
 
     fn trace_width(&self) -> usize {

@@ -1,15 +1,25 @@
-use std::{fs::read, path::PathBuf};
+use std::{
+    fs::{read, write},
+    path::PathBuf,
+};
 
 use clap::Parser;
 use eyre::Result;
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
-use openvm_sdk::{fs::write_exe_to_file, Sdk};
+use openvm_sdk::{
+    commit::{commit_app_exe, committed_exe_as_bn254},
+    fs::write_exe_to_file,
+    Sdk,
+};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
 use crate::{
-    default::{DEFAULT_APP_CONFIG_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_MANIFEST_DIR},
+    default::{
+        DEFAULT_APP_CONFIG_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_COMMITTED_APP_EXE_PATH,
+        DEFAULT_MANIFEST_DIR,
+    },
     util::read_config_toml_or_default,
 };
 
@@ -65,6 +75,13 @@ pub struct BuildArgs {
         help = "Output path for the transpiled program"
     )]
     pub exe_output: PathBuf,
+
+    #[arg(
+        long,
+        default_value = DEFAULT_COMMITTED_APP_EXE_PATH,
+        help = "Output path for the committed program"
+    )]
+    pub committed_exe_output: PathBuf,
 
     #[arg(long, default_value = "release", help = "Build profile")]
     pub profile: String,
@@ -127,7 +144,12 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         let data = read(elf_path.clone())?;
         let elf = Elf::decode(&data, MEM_SIZE as u32)?;
         let exe = Sdk.transpile(elf, transpiler)?;
+        let committed_exe = commit_app_exe(app_config.app_fri_params.fri_params, exe.clone());
         write_exe_to_file(exe, output_path)?;
+        write(
+            &build_args.committed_exe_output,
+            committed_exe_as_bn254(&committed_exe).value.to_bytes(),
+        )?;
 
         println!(
             "[openvm] Successfully transpiled to {}",
@@ -166,6 +188,7 @@ mod tests {
             no_transpile: true,
             config: PathBuf::from(DEFAULT_APP_CONFIG_PATH),
             exe_output: PathBuf::from(DEFAULT_APP_EXE_PATH),
+            committed_exe_output: PathBuf::from(DEFAULT_COMMITTED_APP_EXE_PATH),
             profile: "dev".to_string(),
             target_dir: Some(target_dir.to_path_buf()),
         };

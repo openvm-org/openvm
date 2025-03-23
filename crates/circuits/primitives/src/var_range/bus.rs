@@ -1,5 +1,5 @@
 use openvm_stark_backend::{
-    interaction::{InteractionBuilder, InteractionType},
+    interaction::{BusIndex, InteractionBuilder, LookupBus},
     p3_field::FieldAlgebra,
 };
 
@@ -7,16 +7,21 @@ use openvm_stark_backend::{
 // x is in [0, 2^bits) and bits is in [1, range_max_bits]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VariableRangeCheckerBus {
-    pub index: usize,
+    pub inner: LookupBus,
     pub range_max_bits: usize,
 }
 
 impl VariableRangeCheckerBus {
-    pub const fn new(index: usize, range_max_bits: usize) -> Self {
+    pub const fn new(index: BusIndex, range_max_bits: usize) -> Self {
         Self {
-            index,
+            inner: LookupBus::new(index),
             range_max_bits,
         }
+    }
+
+    #[inline(always)]
+    pub fn index(&self) -> BusIndex {
+        self.inner.index
     }
 
     #[must_use]
@@ -25,7 +30,7 @@ impl VariableRangeCheckerBus {
         value: impl Into<T>,
         max_bits: impl Into<T>,
     ) -> VariableRangeCheckerBusInteraction<T> {
-        self.push(value, max_bits, InteractionType::Send)
+        self.push(value, max_bits, true)
     }
 
     #[must_use]
@@ -34,7 +39,7 @@ impl VariableRangeCheckerBus {
         value: impl Into<T>,
         max_bits: impl Into<T>,
     ) -> VariableRangeCheckerBusInteraction<T> {
-        self.push(value, max_bits, InteractionType::Receive)
+        self.push(value, max_bits, false)
     }
 
     // Equivalent to `self.send(value, max_bits)` where max_bits is a usize constant
@@ -48,24 +53,20 @@ impl VariableRangeCheckerBus {
         T: FieldAlgebra,
     {
         debug_assert!(max_bits <= self.range_max_bits);
-        self.push(
-            value,
-            T::from_canonical_usize(max_bits),
-            InteractionType::Send,
-        )
+        self.push(value, T::from_canonical_usize(max_bits), true)
     }
 
     pub fn push<T>(
         &self,
         value: impl Into<T>,
         max_bits: impl Into<T>,
-        interaction_type: InteractionType,
+        is_lookup: bool,
     ) -> VariableRangeCheckerBusInteraction<T> {
         VariableRangeCheckerBusInteraction {
             value: value.into(),
             max_bits: max_bits.into(),
-            bus_index: self.index,
-            interaction_type,
+            bus: self.inner,
+            is_lookup,
         }
     }
 }
@@ -74,8 +75,8 @@ impl VariableRangeCheckerBus {
 pub struct VariableRangeCheckerBusInteraction<T> {
     pub value: T,
     pub max_bits: T,
-    pub bus_index: usize,
-    pub interaction_type: InteractionType,
+    pub bus: LookupBus,
+    pub is_lookup: bool,
 }
 
 impl<T: FieldAlgebra> VariableRangeCheckerBusInteraction<T> {
@@ -83,11 +84,11 @@ impl<T: FieldAlgebra> VariableRangeCheckerBusInteraction<T> {
     where
         AB: InteractionBuilder<Expr = T>,
     {
-        builder.push_interaction(
-            self.bus_index,
-            [self.value, self.max_bits],
-            count,
-            self.interaction_type,
-        );
+        let key = [self.value, self.max_bits];
+        if self.is_lookup {
+            self.bus.lookup_key(builder, key, count);
+        } else {
+            self.bus.add_key_with_lookups(builder, key, count);
+        }
     }
 }

@@ -29,6 +29,7 @@ pub trait LocalOpcode {
     }
 }
 
+#[repr(C)]
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, derive_new::new, Serialize, Deserialize)]
 pub struct VmOpcode(usize);
 

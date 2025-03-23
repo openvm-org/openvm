@@ -104,6 +104,7 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FieldArithmeticRecord<F> {
     pub opcode: FieldArithmeticOpcode,

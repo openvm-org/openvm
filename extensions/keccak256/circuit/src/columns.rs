@@ -133,6 +133,7 @@ impl<T: Copy> KeccakInstructionCols<T> {
     where
         T: Into<AB::Expr>,
     {
+        builder.assert_eq(self.pc, other.pc);
         builder.assert_eq(self.is_enabled, other.is_enabled);
         builder.assert_eq(self.start_timestamp, other.start_timestamp);
         builder.assert_eq(self.dst_ptr, other.dst_ptr);

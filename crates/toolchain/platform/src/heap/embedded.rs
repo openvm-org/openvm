@@ -22,6 +22,10 @@ pub fn init() {
         static _end: u8;
     }
     let heap_pos: usize = unsafe { (&_end) as *const u8 as usize };
+    if heap_pos > crate::memory::GUEST_MAX_MEM {
+        crate::print::println("Not enough memory for heap.");
+        crate::rust_rt::terminate::<1>();
+    }
     let heap_size: usize = crate::memory::GUEST_MAX_MEM - heap_pos;
     unsafe { HEAP.init(heap_pos, heap_size) }
 }

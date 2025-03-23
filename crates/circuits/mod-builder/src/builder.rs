@@ -1,8 +1,8 @@
-use std::{cell::RefCell, iter, ops::Deref, rc::Rc};
+use std::{cell::RefCell, cmp::min, iter, ops::Deref, rc::Rc};
 
 use itertools::{zip_eq, Itertools};
 use num_bigint::{BigInt, BigUint, Sign};
-use num_traits::Zero;
+use num_traits::{One, Zero};
 use openvm_circuit_primitives::{
     bigint::{
         check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
@@ -56,8 +56,11 @@ pub struct ExprBuilder {
     pub limb_bits: usize,
     /// Number of limbs in canonical representation of the bigint field element.
     pub num_limbs: usize,
-    // The max bits to range check.
+    proper_max: BigUint,
+    // The max bits that we can range check.
     pub range_checker_bits: usize,
+    // The max bits that carries are allowed to have.
+    pub max_carry_bits: usize,
 
     // The number of limbs of the quotient for each constraint.
     pub q_limbs: Vec<usize>,
@@ -86,9 +89,17 @@ pub struct ExprBuilder {
     needs_setup: bool,
 }
 
+// Number of bits in BabyBear modulus
+const MODULUS_BITS: usize = 31;
+
 impl ExprBuilder {
     pub fn new(config: ExprBuilderConfig, range_checker_bits: usize) -> Self {
         let prime_bigint = BigInt::from_biguint(Sign::Plus, config.modulus.clone());
+        let proper_max = (BigUint::one() << (config.num_limbs * config.limb_bits)) - BigUint::one();
+        // Max carry bits to ensure constraints don't overflow
+        let max_carry_bits = MODULUS_BITS - config.limb_bits - 2;
+        // sanity
+        assert!(config.limb_bits + 2 < MODULUS_BITS);
         Self {
             prime: config.modulus.clone(),
             prime_bigint,
@@ -97,7 +108,9 @@ impl ExprBuilder {
             num_flags: 0,
             limb_bits: config.limb_bits,
             num_limbs: config.num_limbs,
+            proper_max,
             range_checker_bits,
+            max_carry_bits: min(max_carry_bits, range_checker_bits),
             num_variables: 0,
             constants: vec![],
             q_limbs: vec![],
@@ -134,7 +147,7 @@ impl ExprBuilder {
         // We don't support multi-op chip that doesn't need setup right now.
         assert!(needs_setup || self.num_flags == 0);
 
-        // setup the defalut flag if needed
+        // setup the default flag if needed
         if needs_setup && self.num_flags == 0 {
             self.new_flag();
         }
@@ -145,7 +158,7 @@ impl ExprBuilder {
         let num_limbs = borrowed.num_limbs;
         let limb_bits = borrowed.limb_bits;
         borrowed.num_input += 1;
-        let (num_input, range_checker_bits) = (borrowed.num_input, borrowed.range_checker_bits);
+        let (num_input, max_carry_bits) = (borrowed.num_input, borrowed.max_carry_bits);
         drop(borrowed);
         FieldVariable {
             expr: SymbolicExpr::Input(num_input - 1),
@@ -153,7 +166,7 @@ impl ExprBuilder {
             limb_max_abs: (1 << limb_bits) - 1,
             max_overflow_bits: limb_bits,
             expr_limbs: num_limbs,
-            range_checker_bits,
+            max_carry_bits,
         }
     }
 
@@ -192,7 +205,7 @@ impl ExprBuilder {
         let limb_bits = borrowed.limb_bits;
         let num_limbs = borrowed.num_limbs;
         let limbs = big_uint_to_num_limbs(&value, limb_bits, num_limbs);
-        let range_checker_bits = borrowed.range_checker_bits;
+        let max_carry_bits = borrowed.max_carry_bits;
         borrowed.constants.push((value.clone(), limbs));
         drop(borrowed);
 
@@ -202,13 +215,17 @@ impl ExprBuilder {
             limb_max_abs: (1 << limb_bits) - 1,
             max_overflow_bits: limb_bits,
             expr_limbs: num_limbs,
-            range_checker_bits,
+            max_carry_bits,
         }
     }
 
     pub fn set_constraint(&mut self, index: usize, constraint: SymbolicExpr) {
-        let (q_limbs, carry_limbs) =
-            constraint.constraint_limbs(&self.prime, self.limb_bits, self.num_limbs);
+        let (q_limbs, carry_limbs) = constraint.constraint_limbs(
+            &self.prime,
+            self.limb_bits,
+            self.num_limbs,
+            &self.proper_max,
+        );
         self.constraints[index] = constraint;
         self.q_limbs[index] = q_limbs;
         self.carry_limbs[index] = carry_limbs;
@@ -216,6 +233,13 @@ impl ExprBuilder {
 
     pub fn set_compute(&mut self, index: usize, compute: SymbolicExpr) {
         self.computes[index] = compute;
+    }
+
+    /// Returns `proper_max = 2^{num_limbs * limb_bits} - 1` as a precomputed value.
+    /// Any proper representation of a positive big integer using `num_limbs` limbs with
+    /// `limb_bits` bits each will be `<= proper_max`.
+    pub fn proper_max(&self) -> &BigUint {
+        &self.proper_max
     }
 }
 
@@ -242,7 +266,7 @@ impl FieldExpr {
         let subair = CheckCarryModToZeroSubAir::new(
             builder.prime.clone(),
             builder.limb_bits,
-            range_bus.index,
+            range_bus.inner.index,
             range_bus.range_max_bits,
         );
         FieldExpr {
@@ -318,6 +342,8 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             flags,
         } = self.load_vars(local);
 
+        builder.assert_bool(is_valid);
+
         if self.builder.needs_setup() {
             let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
             builder.assert_bool(is_setup.clone());
@@ -329,7 +355,11 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             //   only the first segment will have setup called
 
             let expected = iter::empty()
-                .chain(self.builder.prime_limbs.clone())
+                .chain({
+                    let mut prime_limbs = self.builder.prime_limbs.clone();
+                    prime_limbs.resize(self.builder.num_limbs, 0);
+                    prime_limbs
+                })
                 .chain(self.setup_values.iter().flat_map(|x| {
                     big_uint_to_num_limbs(x, self.builder.limb_bits, self.builder.num_limbs)
                         .into_iter()
@@ -388,7 +418,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             for limb in var.limbs().iter() {
                 range_check(
                     builder,
-                    self.range_bus.index,
+                    self.range_bus.inner.index,
                     self.range_bus.range_max_bits,
                     self.limb_bits,
                     limb.clone(),
@@ -421,7 +451,6 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
     ) {
         assert!(self.builder.is_finalized());
         assert_eq!(inputs.len(), self.num_input);
-        // Remove this if this is no longer the case in the future.
         assert_eq!(self.num_variables, self.constraints.len());
 
         assert_eq!(flags.len(), self.builder.num_flags);
@@ -443,8 +472,8 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             .collect::<Vec<_>>();
         let zero = OverflowInt::<isize>::from_canonical_unsigned_limbs(vec![0], limb_bits);
         let mut vars_overflow = vec![zero; self.num_variables];
-        let prime_overflow =
-            OverflowInt::<isize>::from_biguint(&self.prime, self.limb_bits, Some(self.num_limbs));
+        // Note: in cases where the prime fits in less limbs than `num_limbs`, we use the smaller number of limbs.
+        let prime_overflow = OverflowInt::<isize>::from_biguint(&self.prime, self.limb_bits, None);
 
         let constants: Vec<_> = self
             .constants

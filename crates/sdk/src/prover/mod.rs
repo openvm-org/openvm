@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::VmConfig;
-use openvm_native_recursion::halo2::EvmProof;
 use openvm_stark_sdk::openvm_stark_backend::Chip;
 
 use crate::{keygen::AppProvingKey, stdin::StdIn, NonRootCommittedExe, F, SC};
@@ -23,7 +22,7 @@ pub mod vm;
 #[allow(unused_imports)]
 pub use stark::*;
 
-use crate::{keygen::AggProvingKey, prover::halo2::Halo2Prover};
+use crate::{keygen::AggProvingKey, prover::halo2::Halo2Prover, types::EvmProof};
 
 pub struct ContinuationProver<VC> {
     stark_prover: StarkProver<VC>,

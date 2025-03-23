@@ -4,7 +4,7 @@ use derive_new::new;
 use openvm_circuit::system::memory::MemoryTraceHeights;
 use openvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter, Stateful};
+use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
@@ -25,8 +25,8 @@ pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<F> {
 }
 
 pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {
-    type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter + Stateful<Vec<u8>>;
-    type Periphery: AnyEnum + ChipUsageGetter + Stateful<Vec<u8>>;
+    type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
+    type Periphery: AnyEnum + ChipUsageGetter;
 
     /// Must contain system config
     fn system(&self) -> &SystemConfig;
@@ -41,9 +41,10 @@ pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {
 pub struct MemoryConfig {
     /// The maximum height of the address space. This means the trie has `as_height` layers for searching the address space. The allowed address spaces are those in the range `[as_offset, as_offset + 2^as_height)` where `as_offset` is currently fixed to `1` to not allow address space `0` in memory.
     pub as_height: usize,
-    /// The offset of the address space.
+    /// The offset of the address space. Should be fixed to equal `1`.
     pub as_offset: u32,
     pub pointer_max_bits: usize,
+    /// All timestamps must be in the range `[0, 2^clk_max_bits)`. Maximum allowed: 29.
     pub clk_max_bits: usize,
     /// Limb size used by the range checker
     pub decomp: usize,
@@ -55,7 +56,7 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(3, 1, 29, 29, 17, 64, 1 << 24)
+        Self::new(3, 1, 29, 29, 17, 32, 1 << 24)
     }
 }
 
@@ -108,6 +109,10 @@ impl SystemConfig {
         num_public_values: usize,
     ) -> Self {
         let segmentation_strategy = get_default_segmentation_strategy();
+        assert!(
+            memory_config.clk_max_bits <= 29,
+            "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
+        );
         Self {
             max_constraint_degree,
             continuation_enabled: false,

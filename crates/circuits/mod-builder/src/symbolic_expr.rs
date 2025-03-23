@@ -24,6 +24,7 @@ pub enum SymbolicExpr {
     Sub(Box<SymbolicExpr>, Box<SymbolicExpr>),
     Mul(Box<SymbolicExpr>, Box<SymbolicExpr>),
     // Division is not allowed in "constraints", but can only be used in "computes"
+    // Note that division by zero in "computes" will panic.
     Div(Box<SymbolicExpr>, Box<SymbolicExpr>),
     // Add integer
     IntAdd(Box<SymbolicExpr>, isize),
@@ -149,6 +150,7 @@ impl Mul<SymbolicExpr> for &SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div for SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -157,6 +159,7 @@ impl Div for SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div<&SymbolicExpr> for SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -165,6 +168,7 @@ impl Div<&SymbolicExpr> for SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div for &SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -173,6 +177,7 @@ impl Div for &SymbolicExpr {
     }
 }
 
+// Note that division by zero will panic.
 impl Div<SymbolicExpr> for &SymbolicExpr {
     type Output = SymbolicExpr;
 
@@ -182,28 +187,29 @@ impl Div<SymbolicExpr> for &SymbolicExpr {
 }
 
 impl SymbolicExpr {
-    // Maximum absolute positive and negative value of the expression.
-    // Needed in constraint_limbs to estimate the number of limbs of q.
-    fn max_abs(&self, prime: &BigUint) -> (BigUint, BigUint) {
+    /// Returns maximum absolute positive and negative value of the expression.
+    /// That is, if `(r, l) = expr.max_abs(p)` then `l,r >= 0` and `-l <= expr <= r`.
+    /// Needed in `constraint_limbs` to estimate the number of limbs of q.
+    ///
+    /// It is assumed that any `Input` or `Var` is a non-negative big integer with value
+    /// in the range `[0, proper_max]`.
+    fn max_abs(&self, proper_max: &BigUint) -> (BigUint, BigUint) {
         match self {
-            SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => {
-                // Input and variable are field elements so are in [0, p)
-                (prime.clone() - BigUint::one(), BigUint::zero())
-            }
+            SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => (proper_max.clone(), BigUint::zero()),
             SymbolicExpr::Const(_, val, _) => (val.clone(), BigUint::zero()),
             SymbolicExpr::Add(lhs, rhs) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
-                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
+                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(proper_max);
                 (lhs_max_pos + rhs_max_pos, lhs_max_neg + rhs_max_neg)
             }
             SymbolicExpr::Sub(lhs, rhs) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
-                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
+                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(proper_max);
                 (lhs_max_pos + rhs_max_neg, lhs_max_neg + rhs_max_pos)
             }
             SymbolicExpr::Mul(lhs, rhs) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
-                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
+                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(proper_max);
                 (
                     max(&lhs_max_pos * &rhs_max_pos, &lhs_max_neg * &rhs_max_neg),
                     max(&lhs_max_pos * &rhs_max_neg, &lhs_max_neg * &rhs_max_pos),
@@ -214,13 +220,13 @@ impl SymbolicExpr {
                 unreachable!()
             }
             SymbolicExpr::IntAdd(lhs, s) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
                 let scalar = BigUint::from_usize(s.unsigned_abs()).unwrap();
                 // Optimization opportunity: since `s` is a constant, we can likely do better than this bound.
                 (lhs_max_pos + &scalar, lhs_max_neg + &scalar)
             }
             SymbolicExpr::IntMul(lhs, s) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
                 let scalar = BigUint::from_usize(s.unsigned_abs()).unwrap();
                 if *s < 0 {
                     (lhs_max_neg * &scalar, lhs_max_pos * &scalar)
@@ -229,16 +235,17 @@ impl SymbolicExpr {
                 }
             }
             SymbolicExpr::Select(_, lhs, rhs) => {
-                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
-                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(prime);
+                let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
+                let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(proper_max);
                 (max(lhs_max_pos, rhs_max_pos), max(lhs_max_neg, rhs_max_neg))
             }
         }
     }
 
-    // Self should be a constraint expr.
-    // This is already tracked in FieldVariable.
-    // However in some cases (checking auto save in div), we need to know it from expr only.
+    /// Returns the maximum possible size, in bits, of each limb in `self.expr`.
+    /// This is already tracked in `FieldVariable`. However when auto saving in `FieldVariable::div`,
+    /// we need to know it from the `SymbolicExpr` only.
+    /// self should be a constraint expr.
     pub fn constraint_limb_max_abs(&self, limb_bits: usize, num_limbs: usize) -> usize {
         let canonical_limb_max_abs = (1 << limb_bits) - 1;
         match self {
@@ -272,16 +279,19 @@ impl SymbolicExpr {
         }
     }
 
-    // Self should be a constraint expr.
-    // This returns the carry bits of self.expr - q * p.
+    /// Returns the maximum possible size, in bits, of each carry in `self.expr - q * p`.
+    /// self should be a constraint expr.
+    ///
+    /// The cached value `proper_max` should equal `2^{limb_bits * num_limbs} - 1`.
     pub fn constraint_carry_bits_with_pq(
         &self,
         prime: &BigUint,
         limb_bits: usize,
         num_limbs: usize,
+        proper_max: &BigUint,
     ) -> usize {
         let without_pq = self.constraint_limb_max_abs(limb_bits, num_limbs);
-        let (q_limbs, _) = self.constraint_limbs(prime, limb_bits, num_limbs);
+        let (q_limbs, _) = self.constraint_limbs(prime, limb_bits, num_limbs, proper_max);
         let canonical_limb_max_abs = (1 << limb_bits) - 1;
         let limb_max_abs =
             without_pq + canonical_limb_max_abs * canonical_limb_max_abs * min(q_limbs, num_limbs);
@@ -290,8 +300,8 @@ impl SymbolicExpr {
         carry_bits
     }
 
-    // Number of limbs to represent the expression.
-    // num_limbs is the number of limbs of a canonical field element.
+    /// Returns the number of limbs needed to represent the expression.
+    /// The parameter `num_limbs` is the number of limbs of a canonical field element.
     pub fn expr_limbs(&self, num_limbs: usize) -> usize {
         match self {
             SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => num_limbs,
@@ -316,21 +326,26 @@ impl SymbolicExpr {
         }
     }
 
-    // If the expression is equal to q * p.
-    // How many limbs does q have?
-    // How many carry_limbs does it need to constrain expr - q * p = 0?
+    /// Let `q` be such that `self.expr = q * p`.
+    /// Returns (q_limbs, carry_limbs) where q_limbs is the number of limbs in q
+    /// and carry_limbs is the number of limbs in the carry of the constraint self.expr - q * p = 0.
+    /// self should be a constraint expression.
+    ///
+    /// The cached value `proper_max` should equal `2^{limb_bits * num_limbs} - 1`.
     pub fn constraint_limbs(
         &self,
         prime: &BigUint,
         limb_bits: usize,
         num_limbs: usize,
+        proper_max: &BigUint,
     ) -> (usize, usize) {
-        let (max_pos_abs, max_neg_abs) = self.max_abs(prime);
+        let (max_pos_abs, max_neg_abs) = self.max_abs(proper_max);
         let max_abs = max(max_pos_abs, max_neg_abs);
         let max_q_abs = (&max_abs + prime - BigUint::one()) / prime;
         let q_bits = max_q_abs.bits() as usize;
         let p_bits = prime.bits() as usize;
         let q_limbs = q_bits.div_ceil(limb_bits);
+        // Attention! This must match with prime_overflow in `FieldExpr::generate_subrow`
         let p_limbs = p_bits.div_ceil(limb_bits);
         let qp_limbs = q_limbs + p_limbs - 1;
 
@@ -339,7 +354,8 @@ impl SymbolicExpr {
         (q_limbs, carry_limbs)
     }
 
-    // Used in trace gen to compute q.
+    /// Used in trace gen to compute `q``.
+    /// self should be a constraint expression.
     pub fn evaluate_bigint(
         &self,
         inputs: &[BigInt],
@@ -385,7 +401,8 @@ impl SymbolicExpr {
         }
     }
 
-    // Used in trace gen to compute carries.
+    /// Used in trace gen to compute carries.
+    /// self should be a constraint expression.
     pub fn evaluate_overflow_isize(
         &self,
         inputs: &[OverflowInt<isize>],
@@ -447,7 +464,8 @@ impl SymbolicExpr {
         }
     }
 
-    // Used in AIR eval.
+    /// Used in AIR eval.
+    /// self should be a constraint expression.
     pub fn evaluate_overflow_expr<AB: AirBuilder>(
         &self,
         inputs: &[OverflowInt<AB::Expr>],
@@ -509,7 +527,9 @@ impl SymbolicExpr {
         }
     }
 
-    // Result will be within [0, prime).
+    /// Result will be within [0, prime).
+    /// self should be a compute expression.
+    /// Note that division by zero will panic.
     pub fn compute(
         &self,
         inputs: &[BigUint],

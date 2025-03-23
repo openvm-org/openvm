@@ -62,7 +62,7 @@ We also have access to each of the specific functions that the pairing check uti
 
 ### Multi-Miller loop
 
-The multi-Miller loop requires the MultiMillerLoop trait can also be ran separately via:
+The multi-Miller loop requires the MultiMillerLoop trait can also be run separately via:
 
 ```rust
 let f = Bls12_381::multi_miller_loop(

@@ -10,14 +10,18 @@ use crate::{
     prelude::TracedVec,
 };
 
+pub const MEMORY_BITS: usize = 29;
 /// The memory location for the top of memory
-pub const MEMORY_TOP: u32 = (1 << 29) - 4;
+pub const MEMORY_TOP: u32 = (1 << MEMORY_BITS) - 4;
 
 // The memory location for the start of the heap.
 pub(crate) const HEAP_START_ADDRESS: i32 = 1 << 24;
 
 /// The heap pointer address.
 pub(crate) const HEAP_PTR: i32 = HEAP_START_ADDRESS - 4;
+
+const HEAP_SIZE: u32 = MEMORY_TOP - HEAP_START_ADDRESS as u32;
+
 /// Utility register.
 pub const A0: i32 = HEAP_START_ADDRESS - 8;
 
@@ -37,7 +41,9 @@ impl<F> Var<F> {
     /// Gets the frame pointer for a var.
     pub const fn fp(&self) -> i32 {
         // Vars are stored in stack positions 1, 2, 9, 10, 17, 18, ...
-        STACK_TOP - (8 * (self.0 / 2) + 1 + (self.0 % 2)) as i32
+        let offset = (8 * (self.0 / 2) + 1 + (self.0 % 2)) as i32;
+        assert!(offset < STACK_TOP, "Var fp overflow");
+        STACK_TOP - offset
     }
 }
 
@@ -45,7 +51,9 @@ impl<F> Felt<F> {
     /// Gets the frame pointer for a felt.
     pub const fn fp(&self) -> i32 {
         // Felts are stored in stack positions 3, 4, 11, 12, 19, 20, ...
-        STACK_TOP - (((self.0 >> 1) << 3) + 3 + (self.0 & 1)) as i32
+        let offset = (((self.0 >> 1) << 3) + 3 + (self.0 & 1)) as i32;
+        assert!(offset < STACK_TOP, "Felt fp overflow");
+        STACK_TOP - offset
     }
 }
 
@@ -53,6 +61,8 @@ impl<F, EF> Ext<F, EF> {
     /// Gets the frame pointer for an extension element
     pub const fn fp(&self) -> i32 {
         // Exts are stored in stack positions 5-8, 13-16, 21-24, ...
+        let offset = 8 * self.0 as i32;
+        assert!(offset < STACK_TOP, "Ext fp overflow");
         STACK_TOP - 8 * self.0 as i32
     }
 }
@@ -600,6 +610,13 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         debug_info,
                     );
                 }
+                DslIr::RangeCheckV(v, num_bits) => {
+                    let (lo_bits, hi_bits) = lo_hi_bits(num_bits as u32);
+                    self.push(
+                        AsmInstruction::RangeCheck(v.fp(), lo_bits, hi_bits),
+                        debug_info,
+                    );
+                }
                 _ => unimplemented!(),
             }
         }
@@ -622,20 +639,50 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     AsmInstruction::CopyF(ptr.fp(), HEAP_PTR),
                     debug_info.clone(),
                 );
-                let inc = F::from_canonical_usize(align((len.as_canonical_u32() as usize) * size));
-                self.push(AsmInstruction::AddFI(HEAP_PTR, HEAP_PTR, inc), debug_info);
+                let inc = align((len.as_canonical_u32() as usize) * size);
+                assert!((inc as u32) < HEAP_SIZE, "Allocation size too large");
+                let inc_f = F::from_canonical_usize(inc);
+                self.push(
+                    AsmInstruction::AddFI(HEAP_PTR, HEAP_PTR, inc_f),
+                    debug_info.clone(),
+                );
+                let (lo_bits, hi_bits) = lo_hi_bits(MEMORY_BITS as u32);
+                self.push(
+                    AsmInstruction::RangeCheck(HEAP_PTR, lo_bits, hi_bits),
+                    debug_info,
+                );
             }
             RVar::Val(len) => {
                 self.push(
                     AsmInstruction::CopyF(ptr.fp(), HEAP_PTR),
                     debug_info.clone(),
                 );
-                let size = F::from_canonical_usize(align(size));
+                let size: usize = align(size);
+                // Avoid (len * size) overflowing
+                {
+                    let size_bit = usize::BITS - size.leading_zeros();
+                    assert!(MEMORY_BITS as u32 > size_bit);
+                    let (lo_bits, hi_bits) = lo_hi_bits(MEMORY_BITS as u32 - size_bit);
+                    self.push(
+                        AsmInstruction::RangeCheck(len.fp(), lo_bits, hi_bits),
+                        debug_info.clone(),
+                    );
+                }
+                let size_f = F::from_canonical_usize(size);
                 self.push(
-                    AsmInstruction::MulFI(A0, len.fp(), size),
+                    AsmInstruction::MulFI(A0, len.fp(), size_f),
                     debug_info.clone(),
                 );
-                self.push(AsmInstruction::AddF(HEAP_PTR, HEAP_PTR, A0), debug_info);
+                self.push(
+                    AsmInstruction::AddF(HEAP_PTR, HEAP_PTR, A0),
+                    debug_info.clone(),
+                );
+                let (lo_bits, hi_bits) = lo_hi_bits(MEMORY_BITS as u32);
+                // Avoid HEAP_PTR overflowing
+                self.push(
+                    AsmInstruction::RangeCheck(HEAP_PTR, lo_bits, hi_bits),
+                    debug_info,
+                );
             }
         }
     }
@@ -773,7 +820,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> IfCom
         } = self;
 
         // Get the label for the current block, so we can generate the jump instruction into it.
-        // conditional branc instruction to it, if the condition is not met.
+        // conditional branch instruction to it, if the condition is not met.
         let if_branching_block = compiler.block_label();
 
         // Generate the block for the then branch.
@@ -1071,4 +1118,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             );
         }
     }
+}
+
+fn lo_hi_bits(bits: u32) -> (i32, i32) {
+    let lo_bits = bits.min(16);
+    let hi_bits = bits.max(16) - 16;
+    (lo_bits as i32, hi_bits as i32)
 }

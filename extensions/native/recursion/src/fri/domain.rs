@@ -165,7 +165,7 @@ pub(crate) mod tests {
     };
     use openvm_stark_sdk::config::{
         baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
-        FriParameters,
+        fri_params::SecurityParameters,
     };
     use rand::{thread_rng, Rng};
 
@@ -208,8 +208,8 @@ pub(crate) mod tests {
         type ScPcs = <SC as StarkGenericConfig>::Pcs;
 
         let mut rng = thread_rng();
-        let fri_params = FriParameters::standard_fast();
-        let config = config_from_perm(&default_perm(), fri_params);
+        let security_params = SecurityParameters::standard_fast();
+        let config = config_from_perm(&default_perm(), security_params.clone());
         let pcs = config.pcs();
         let natural_domain_for_degree = |degree: usize| -> Domain<SC> {
             <ScPcs as Pcs<EF, Challenger>>::natural_domain_for_degree(pcs, degree)
@@ -219,13 +219,13 @@ pub(crate) mod tests {
         let mut builder = AsmBuilder::<F, EF>::default();
         builder.flags.static_only = static_only;
 
-        let config_var = const_fri_config(&mut builder, &fri_params);
+        let config_var = const_fri_config(&mut builder, &security_params.fri_params);
         for i in 0..5 {
             let log_d_val = 10 + i;
 
             let log_quotient_degree = 2;
 
-            // Initialize a reference doamin.
+            // Initialize a reference domain.
             let domain_val = natural_domain_for_degree(1 << log_d_val);
             let domain = builder.constant(domain_val);
 
@@ -257,7 +257,7 @@ pub(crate) mod tests {
                 zeta_val,
             );
 
-            // Now try splited domains
+            // Now try split domains
             let qc_domains_val = disjoint_domain_val.split_domains(1 << log_quotient_degree);
             for dom_val in qc_domains_val.iter() {
                 let dom = builder.constant(*dom_val);

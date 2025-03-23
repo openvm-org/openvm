@@ -8,12 +8,15 @@ use openvm_ecc_guest::{
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
 use crate::pairing::{FinalExp, MultiMillerLoop};
 
+// The paper only describes the implementation for Bn254, so we use the gnark implementation for Bls12_381.
 #[allow(non_snake_case)]
 impl FinalExp for Bls12_381 {
     type Fp = Fq;
     type Fp2 = Fq2;
     type Fp12 = Fq12;
 
+    // Adapted from the gnark implementation:
+    // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bls12381/e12_pairing.go#L394C1-L395C1
     fn assert_final_exp_is_one(
         f: &Self::Fp12,
         P: &[AffinePoint<Self::Fp>],
@@ -21,22 +24,19 @@ impl FinalExp for Bls12_381 {
     ) {
         let (c, s) = Self::final_exp_hint(f);
 
-        // f * s = c^{q - x}
-        // f * s = c^q * c^-x
-        // f * c^x * c^-q * s = 1,
-        //   where fc = f * c'^x (embedded Miller loop with c conjugate inverse),
-        //   and the curve seed x = -0xd201000000010000
-        //   the miller loop computation includes a conjugation at the end because the value of the
-        //   seed is negative, so we need to conjugate the miller loop input c as c'. We then substitute
-        //   y = -x to get c^-y and finally compute c'^-y as input to the miller loop:
-        // f * c'^-y * c^-q * s = 1
-        let c_inv = c.invert().unwrap();
-        let c_conj_inv = c.conjugate().invert().unwrap();
-        let c_q_inv = c_inv.frobenius_map();
+        // The gnark implementation checks that f * s = c^{q - x} where x is the curve seed.
+        // We check an equivalent condition: f * c^x * c^-q * s = 1.
+        // This is because we can compute f * c^x by embedding the c^x computation in the miller loop.
 
-        // fc = f_{Miller,x,Q}(P) * c^{x}
-        // where
-        //   fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} ), with c' denoting the conjugate of c
+        // Since the Bls12_381 curve has a negative seed, the miller loop for Bls12_381 is computed as
+        // f_{Miller,x,Q}(P) = conjugate( f_{Miller,-x,Q}(P) * c^{-x} ).
+        // We will pass in the conjugate inverse of c into the miller loop so that we compute
+        // fc = f_{Miller,x,Q}(P)
+        //    = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} )  (where c' is the conjugate inverse of c)
+        //    = f_{Miller,x,Q}(P) * c^x
+        let c_conj_inv = c.conjugate().invert().unwrap();
+        let c_inv = c.invert().unwrap();
+        let c_q_inv = c_inv.frobenius_map();
         let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
 
         assert_eq!(fc * c_q_inv * s, Fq12::ONE);
@@ -45,6 +45,7 @@ impl FinalExp for Bls12_381 {
     // Adapted from the gnark implementation:
     // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bls12381/hints.go#L273
     // returns c (residueWitness) and s (scalingFactor)
+    // The Gnark implementation is based on https://eprint.iacr.org/2024/640.pdf
     fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
         // 1. get p-th root inverse
         let mut exp = FINAL_EXP_FACTOR.clone() * BigUint::from(27u32);

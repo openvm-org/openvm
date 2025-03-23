@@ -17,11 +17,7 @@ serde = { version = "1.0", default-features = false, features = [
 
 [features]
 default = []
-std = [
-    "serde/std",
-    "openvm/std",
-    "openvm-keccak256-guest/std",
-]
+std = ["serde/std", "openvm/std"]
 
 [profile.release]
 panic = "abort"

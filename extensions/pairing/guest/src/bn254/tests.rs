@@ -1,7 +1,10 @@
 use group::{ff::Field, prime::PrimeCurveAffine};
 use halo2curves_axiom::bn256::{
     Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1,
+    FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2,
 };
+use num_bigint::BigUint;
+use num_traits::One;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
 use rand::{rngs::StdRng, SeedableRng};
@@ -14,7 +17,8 @@ use crate::{
             convert_bn254_halo2_fq2_to_fp2, convert_bn254_halo2_fq_to_fp,
             convert_g2_affine_halo2_to_openvm,
         },
-        Bn254, G2Affine as OpenVmG2Affine,
+        Bn254, G2Affine as OpenVmG2Affine, BN254_MODULUS, BN254_ORDER,
+        BN254_PSEUDO_BINARY_ENCODING, BN254_SEED,
     },
     pairing::{
         fp2_invert_assign, fp6_invert_assign, fp6_square_assign, FinalExp, MultiMillerLoop,
@@ -279,4 +283,43 @@ fn test_bn254_pairing_check_hint_host() {
 
     assert_eq!(c, c_cmp);
     assert_eq!(u, u_cmp);
+}
+
+#[test]
+fn test_bn254_final_exponent() {
+    let final_exp = (BN254_MODULUS.pow(12) - BigUint::one()) / BN254_ORDER.clone();
+    assert_eq!(Bn254::FINAL_EXPONENT.to_vec(), final_exp.to_bytes_be());
+}
+
+#[test]
+fn test_bn254_frobenius_coeffs_fq6() {
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..3 {
+        assert_eq!(
+            Bn254::FROBENIUS_COEFF_FQ6_C1[i],
+            convert_bn254_halo2_fq2_to_fp2(FROBENIUS_COEFF_FQ6_C1[i]),
+            "FROBENIUS_COEFFS_FQ6_C1[{}] failed",
+            i,
+        )
+    }
+}
+
+#[test]
+fn test_bn254_pseudo_binary_encoding() {
+    let mut x: i128 = 0;
+    let mut power_of_2 = 1;
+    for b in BN254_PSEUDO_BINARY_ENCODING.iter() {
+        x += (*b as i128) * power_of_2;
+        power_of_2 *= 2;
+    }
+    assert_eq!(x.unsigned_abs(), 6 * (BN254_SEED as u128) + 2);
+}
+
+#[test]
+fn test_bn254_xi_to_q_minus_1_over_2() {
+    assert_eq!(
+        Bn254::XI_TO_Q_MINUS_1_OVER_2,
+        convert_bn254_halo2_fq2_to_fp2(XI_TO_Q_MINUS_1_OVER_2),
+        "XI_TO_Q_MINUS_1_OVER_2 failed",
+    )
 }

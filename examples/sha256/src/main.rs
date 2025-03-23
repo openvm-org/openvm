@@ -1,10 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_main)]
-#![cfg_attr(not(feature = "std"), no_std)]
-
-extern crate alloc;
-
 // ANCHOR: imports
-use alloc::vec::Vec;
 use core::hint::black_box;
 
 use hex::FromHex;

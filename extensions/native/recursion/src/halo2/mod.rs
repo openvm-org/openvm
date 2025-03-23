@@ -17,6 +17,7 @@ use openvm_stark_backend::p3_field::extension::BinomialExtensionField;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use snark_verifier_sdk::{
+    evm::encode_calldata,
     halo2::{gen_dummy_snark_from_vk, gen_snark_shplonk},
     snark_verifier::halo2_base::{
         gates::{
@@ -25,7 +26,7 @@ use snark_verifier_sdk::{
         },
         halo2_proofs::{
             dev::MockProver,
-            halo2curves::bn256::{Bn256, Fr, G1Affine},
+            halo2curves::bn256::{Bn256, G1Affine},
             plonk::{keygen_pk2, ProvingKey},
             poly::{commitment::Params, kzg::commitment::ParamsKZG},
             SerdeFormat,
@@ -37,14 +38,15 @@ use snark_verifier_sdk::{
 use crate::halo2::utils::Halo2ParamsReader;
 
 pub type Halo2Params = ParamsKZG<Bn256>;
+pub use snark_verifier_sdk::snark_verifier::halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 
 /// A prover that can generate proofs with the Halo2
 #[derive(Debug, Clone)]
 pub struct Halo2Prover;
 
 #[derive(Clone, Deserialize, Serialize)]
-pub struct EvmProof {
-    pub instances: Vec<Vec<Fr>>,
+pub struct RawEvmProof {
+    pub instances: Vec<Fr>,
     pub proof: Vec<u8>,
 }
 
@@ -68,6 +70,13 @@ pub struct Halo2ProvingMetadata {
     pub break_points: MultiPhaseThreadBreakPoints,
     /// Number of public values per column in order.
     pub num_pvs: Vec<usize>,
+}
+
+impl RawEvmProof {
+    /// Return bytes calldata to be passed to the verifier contract.
+    pub fn verifier_calldata(&self) -> Vec<u8> {
+        encode_calldata(&[self.instances.clone()], &self.proof)
+    }
 }
 
 impl Halo2ProvingPinning {

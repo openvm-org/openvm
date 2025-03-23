@@ -107,6 +107,7 @@ impl<
     }
 }
 
+#[repr(C)]
 #[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
@@ -130,6 +131,7 @@ pub struct Rv32VecHeapTwoReadsReadRecord<
     pub reads2: [RecordId; BLOCKS_PER_READ2],
 }
 
+#[repr(C)]
 #[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Rv32VecHeapTwoReadsWriteRecord<const BLOCKS_PER_WRITE: usize, const WRITE_SIZE: usize> {
@@ -282,7 +284,7 @@ impl<
             1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
         );
 
-        // Note: since limbs are read from memory we alread know that limb[i] < 2^RV32_CELL_BITS
+        // Note: since limbs are read from memory we already know that limb[i] < 2^RV32_CELL_BITS
         //       thus range checking limb[i] * shift < 2^RV32_CELL_BITS, gives us that
         //       limb[i] < 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1)))
         for pair in need_range_check.chunks_exact(2) {

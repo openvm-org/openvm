@@ -1,13 +1,9 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     mem::size_of,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc,
-    },
+    sync::{atomic::AtomicU32, Arc},
 };
 
-use itertools::Itertools;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -17,7 +13,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 mod bus;
@@ -29,7 +25,9 @@ pub use bus::*;
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]
 pub struct BitwiseOperationLookupCols<T> {
+    /// Number of range check operations requested for each (x, y) pair
     pub mult_range: T,
+    /// Number of XOR operations requested for each (x, y) pair
     pub mult_xor: T,
 }
 
@@ -38,6 +36,7 @@ pub struct BitwiseOperationLookupCols<T> {
 pub struct BitwiseOperationLookupPreprocessedCols<T> {
     pub x: T,
     pub y: T,
+    /// XOR result of x and y (x ⊕ y)
     pub z_xor: T,
 }
 
@@ -109,8 +108,8 @@ impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
 
 pub struct BitwiseOperationLookupChip<const NUM_BITS: usize> {
     pub air: BitwiseOperationLookupAir<NUM_BITS>,
-    count_range: Vec<AtomicU32>,
-    count_xor: Vec<AtomicU32>,
+    pub count_range: Vec<AtomicU32>,
+    pub count_xor: Vec<AtomicU32>,
 }
 
 #[derive(Clone)]
@@ -258,22 +257,5 @@ impl<const NUM_BITS: usize> ChipUsageGetter for SharedBitwiseOperationLookupChip
 
     fn trace_width(&self) -> usize {
         self.0.trace_width()
-    }
-}
-
-impl<const NUM_BITS: usize> Stateful<Vec<u8>> for SharedBitwiseOperationLookupChip<NUM_BITS> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        // AtomicU32 can be deserialized as u32
-        let (count_range, count_xor): (Vec<u32>, Vec<u32>) = bitcode::deserialize(&state).unwrap();
-        for (x, v) in self.0.count_range.iter().zip_eq(count_range) {
-            x.store(v, Ordering::Relaxed);
-        }
-        for (x, v) in self.0.count_xor.iter().zip_eq(count_xor) {
-            x.store(v, Ordering::Relaxed);
-        }
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&(&self.0.count_range, &self.0.count_xor)).unwrap()
     }
 }

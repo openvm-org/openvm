@@ -10,12 +10,14 @@ use eyre::{eyre, Result};
 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
     config::AggConfig,
-    fs::{write_agg_pk_to_file, write_evm_verifier_to_file},
-    keygen::RootVerifierProvingKey,
-    Sdk,
+    fs::{
+        write_agg_pk_to_file, write_evm_verifier_to_folder, EVM_VERIFIER_ARTIFACT_FILENAME,
+        EVM_VERIFIER_SOL_FILENAME,
+    },
+    DefaultStaticVerifierPvHandler, Sdk,
 };
 
-use crate::default::{DEFAULT_AGG_PK_PATH, DEFAULT_PARAMS_DIR, DEFAULT_VERIFIER_PATH};
+use crate::default::{DEFAULT_AGG_PK_PATH, DEFAULT_PARAMS_DIR, DEFAULT_VERIFIER_FOLDER};
 
 #[derive(Parser)]
 #[command(
@@ -27,7 +29,12 @@ pub struct EvmProvingSetupCmd {}
 impl EvmProvingSetupCmd {
     pub async fn run(&self) -> Result<()> {
         if PathBuf::from(DEFAULT_AGG_PK_PATH).exists()
-            && PathBuf::from(DEFAULT_VERIFIER_PATH).exists()
+            && PathBuf::from(DEFAULT_VERIFIER_FOLDER)
+                .join(EVM_VERIFIER_ARTIFACT_FILENAME)
+                .exists()
+            && PathBuf::from(DEFAULT_VERIFIER_FOLDER)
+                .join(EVM_VERIFIER_SOL_FILENAME)
+                .exists()
         {
             println!("Aggregation proving key and verifier contract already exist");
             return Ok(());
@@ -42,7 +49,7 @@ impl EvmProvingSetupCmd {
         let agg_config = AggConfig::default();
 
         println!("Generating proving key...");
-        let agg_pk = Sdk.agg_keygen(agg_config, &params_reader, None::<&RootVerifierProvingKey>)?;
+        let agg_pk = Sdk.agg_keygen(agg_config, &params_reader, &DefaultStaticVerifierPvHandler)?;
 
         println!("Generating verifier contract...");
         let verifier = Sdk.generate_snark_verifier_contract(&params_reader, &agg_pk)?;
@@ -51,7 +58,7 @@ impl EvmProvingSetupCmd {
         write_agg_pk_to_file(agg_pk, DEFAULT_AGG_PK_PATH)?;
 
         println!("Writing verifier contract to file...");
-        write_evm_verifier_to_file(verifier, DEFAULT_VERIFIER_PATH)?;
+        write_evm_verifier_to_folder(verifier, DEFAULT_VERIFIER_FOLDER)?;
 
         Ok(())
     }

@@ -7,14 +7,11 @@ edition = "2021"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
+    "std",
+] }
 openvm-keccak256-guest = { git = "https://github.com/openvm-org/openvm.git" }
-hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+hex = { version = "0.4.3" }
 
 [features]
 default = []
-std = [
-    "openvm/std",
-    "openvm-keccak256-guest/std",
-]

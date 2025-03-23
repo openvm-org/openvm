@@ -8,7 +8,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::*;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
@@ -49,12 +49,12 @@ impl Default for Keccak256Rv32Config {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum Keccak256Executor<F: PrimeField32> {
     Keccak256(KeccakVmChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum Keccak256Periphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),

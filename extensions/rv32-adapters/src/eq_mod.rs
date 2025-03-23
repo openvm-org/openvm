@@ -274,6 +274,7 @@ impl<
     }
 }
 
+#[repr(C)]
 #[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Rv32IsEqualModReadRecord<
@@ -287,6 +288,7 @@ pub struct Rv32IsEqualModReadRecord<
     pub reads: [[RecordId; BLOCKS_PER_READ]; NUM_READS],
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Rv32IsEqualModWriteRecord {
     pub from_state: ExecutionState<u32>,

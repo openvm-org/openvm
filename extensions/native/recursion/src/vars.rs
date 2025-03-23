@@ -20,6 +20,7 @@ pub struct StarkProofVariable<C: Config> {
     pub per_air: Array<C, AirProofDataVariable<C>>,
     /// A permutation of AIR indexes which are sorted by log_degree in descending order.
     pub air_perm_by_height: Array<C, Usize<C::N>>,
+    pub log_up_pow_witness: Felt<C::F>,
 }
 
 #[derive(DslVariable, Clone)]
@@ -40,6 +41,31 @@ pub struct MultiStarkVerificationAdviceVariable<C: Config> {
     /// Shape is as same as the shape of the original VK's `num_challenges_to_sample.
     /// Each element is 0 or 1. 1 means the challenge should be sampled.
     pub num_challenges_to_sample_mask: Vec<Vec<Usize<C::N>>>,
+    pub trace_height_constraint_system: TraceHeightConstraintSystem<C>,
+}
+
+#[derive(Clone)]
+pub struct LinearConstraintVariable<C: Config> {
+    pub coefficients: Array<C, Var<C::N>>,
+    pub threshold: Var<C::N>,
+    /// Whether `threshold == p`, to help distinguish from `threshold == 0` in the field.
+    pub is_threshold_at_p: bool,
+}
+
+#[derive(Clone)]
+pub struct TraceHeightConstraintSystem<C: Config> {
+    /// Linear constraints where each constraint includes all trace heights.
+    pub height_constraints: Vec<LinearConstraintVariable<C>>,
+    /// Optional hard constraints on the height of each trace, derived from the above
+    /// `height_constraints` to ensure that c_{ij} * a_j does not overflow the field.
+    /// `height` should be less than `height_max`.
+    pub height_maxes: Array<C, OptionalVar<C>>,
+}
+
+#[derive(DslVariable, Clone)]
+pub struct OptionalVar<C: Config> {
+    pub is_some: Usize<C::N>,
+    pub value: Var<C::N>,
 }
 
 #[derive(DslVariable, Clone)]
@@ -84,9 +110,14 @@ pub struct OpeningProofVariable<C: Config> {
 #[allow(clippy::type_complexity)]
 #[derive(DslVariable, Clone)]
 pub struct OpenedValuesVariable<C: Config> {
+    // For each preprocessed commitment, the opened values
     pub preprocessed: Array<C, AdjacentOpenedValuesVariable<C>>,
+    /// For each main trace commitment, for each matrix in commitment, the
+    /// opened values
     pub main: Array<C, Array<C, AdjacentOpenedValuesVariable<C>>>,
+    /// For each phase, for each RAP, the opened values,
     pub after_challenge: Array<C, Array<C, AdjacentOpenedValuesVariable<C>>>,
+    /// For each RAP, for each quotient chunk in quotient poly, the opened values
     pub quotient: Array<C, Array<C, Array<C, Ext<C::F, C::EF>>>>,
 }
 

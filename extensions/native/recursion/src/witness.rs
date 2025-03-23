@@ -160,12 +160,19 @@ impl Witnessable<C> for Proof<BabyBearPoseidon2RootConfig> {
         let per_air = self.per_air.read(builder);
         // This reads nothing because air_perm_by_height is a constant.
         let air_perm_by_height = builder.array(0);
+        let log_up_pow_witness = self
+            .rap_phase_seq_proof
+            .as_ref()
+            .map(|proof| proof.logup_pow_witness)
+            .unwrap_or_default()
+            .read(builder);
 
         StarkProofVariable {
             commitments,
             opening,
             per_air,
             air_perm_by_height,
+            log_up_pow_witness,
         }
     }
 
@@ -174,6 +181,12 @@ impl Witnessable<C> for Proof<BabyBearPoseidon2RootConfig> {
         self.opening.write(witness);
         self.per_air.write(witness);
         // air_perm_by_height is a constant so we write nothing.
+        let logup_pow_witness = self
+            .rap_phase_seq_proof
+            .as_ref()
+            .map(|p| p.logup_pow_witness)
+            .unwrap_or_default();
+        logup_pow_witness.write(witness);
     }
 }
 

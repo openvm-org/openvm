@@ -54,6 +54,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> NativeAdapterChip<F, R, W>
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NativeReadRecord<F: Field, const R: usize> {
     #[serde(with = "BigArray")]
@@ -70,6 +71,7 @@ impl<F: Field, const R: usize> NativeReadRecord<F, R> {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct NativeWriteRecord<F: Field, const W: usize> {

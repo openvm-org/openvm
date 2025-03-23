@@ -17,7 +17,7 @@ pub struct GroupedMetrics {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AggregateMetrics {
-    /// "group" label => metric aggregate statitics
+    /// "group" label => metric aggregate statistics
     #[serde(flatten)]
     pub by_group: HashMap<String, HashMap<MetricName, Stats>>,
     /// In seconds

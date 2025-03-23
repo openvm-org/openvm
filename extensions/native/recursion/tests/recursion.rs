@@ -7,10 +7,7 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::{extension::BinomialExtensionField, FieldAlgebra},
 };
-use openvm_stark_sdk::{
-    config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
-    p3_baby_bear::BabyBear, utils::ProofInputForTest,
-};
+use openvm_stark_sdk::{config::FriParameters, p3_baby_bear::BabyBear, utils::ProofInputForTest};
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;
@@ -70,10 +67,7 @@ where
 #[test]
 fn test_fibonacci_program_verify() {
     let fib_program_stark = fibonacci_program_test_proof_input(0, 1, 32);
-    run_recursive_test(
-        fib_program_stark,
-        standard_fri_params_with_100_bits_conjectured_security(3),
-    );
+    run_recursive_test(fib_program_stark, FriParameters::new_for_testing(3));
 }
 
 #[cfg(feature = "static-verifier")]
@@ -83,8 +77,5 @@ fn test_fibonacci_program_halo2_verify() {
     use openvm_native_recursion::halo2::testing_utils::run_static_verifier_test;
 
     let fib_program_stark = fibonacci_program_test_proof_input(0, 1, 32);
-    run_static_verifier_test(
-        fib_program_stark,
-        standard_fri_params_with_100_bits_conjectured_security(3),
-    );
+    run_static_verifier_test(fib_program_stark, FriParameters::new_for_testing(3));
 }

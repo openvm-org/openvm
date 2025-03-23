@@ -11,8 +11,8 @@ repository.workspace = true
 openvm = { workspace = true }
 openvm-platform = { workspace = true }
 strum_macros = { workspace = true }
-
 serde = { workspace = true, features = ["alloc"] }
+serde-big-array.workspace = true
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint.workspace = true
@@ -20,5 +20,4 @@ num-traits.workspace = true
 
 [features]
 default = []
-std = ["serde/std"]
 export-intrinsics = [] # export extern no_mangle functions for external linkage

@@ -63,10 +63,11 @@ impl WordRead for Reader {
         let remainder = bytes.chunks_exact_mut(WORD_SIZE).into_remainder();
         if !remainder.is_empty() {
             num_padded_bytes += WORD_SIZE - remainder.len();
-            let mut padded = MaybeUninit::<[u8; WORD_SIZE]>::uninit();
-            hint_store_word(padded.as_mut_ptr() as *mut u32);
+            let mut padded = MaybeUninit::<u32>::uninit();
+            hint_store_word(padded.as_mut_ptr());
             let padded = unsafe { padded.assume_init() };
-            remainder.copy_from_slice(&padded[..remainder.len()]);
+            // We use native endian so its equivalent to transmuting u32 to [u8; 4]
+            remainder.copy_from_slice(&padded.to_ne_bytes()[..remainder.len()]);
         }
         // If we reached EOF, then we set to 0.
         // Otherwise, we need to subtract the padding as well.

@@ -1,13 +1,15 @@
 use std::{
     borrow::{Borrow, BorrowMut},
+    cmp::min,
     sync::Arc,
 };
 
+use itertools::zip_eq;
 use openvm_circuit_primitives::{
     is_less_than_array::{
         IsLtArrayAuxCols, IsLtArrayIo, IsLtArraySubAir, IsLtArrayWhenTransitionAir,
     },
-    utils::implies,
+    utils::{compose, implies},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     SubAir, TraceSubRowGenerator,
 };
@@ -23,6 +25,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
+use static_assertions::const_assert;
 
 use super::TimestampedEquipartition;
 use crate::system::memory::{
@@ -35,12 +38,14 @@ mod tests;
 
 /// Address stored as address space, pointer
 const ADDR_ELTS: usize = 2;
+const NUM_AS_LIMBS: usize = 1;
+const_assert!(NUM_AS_LIMBS <= AUX_LEN);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct VolatileBoundaryCols<T> {
-    pub addr_space: T,
-    pub pointer: T,
+    pub addr_space_limbs: [T; NUM_AS_LIMBS],
+    pub pointer_limbs: [T; AUX_LEN],
 
     pub initial_data: T,
     pub final_data: T,
@@ -55,6 +60,9 @@ pub struct VolatileBoundaryCols<T> {
 pub struct VolatileBoundaryAir {
     pub memory_bus: MemoryBus,
     pub addr_lt_air: IsLtArrayWhenTransitionAir<ADDR_ELTS>,
+
+    addr_space_limb_bits: [usize; NUM_AS_LIMBS],
+    pointer_limb_bits: [usize; AUX_LEN],
 }
 
 impl VolatileBoundaryAir {
@@ -67,10 +75,31 @@ impl VolatileBoundaryAir {
         let addr_lt_air =
             IsLtArraySubAir::<ADDR_ELTS>::new(range_bus, addr_space_max_bits.max(pointer_max_bits))
                 .when_transition();
+        let range_max_bits = range_bus.range_max_bits;
+        let mut addr_space_limb_bits = [0; NUM_AS_LIMBS];
+        let mut bits_remaining = addr_space_max_bits;
+        for limb_bits in &mut addr_space_limb_bits {
+            *limb_bits = min(bits_remaining, range_max_bits);
+            bits_remaining -= *limb_bits;
+        }
+        assert_eq!(bits_remaining, 0, "addr_space_max_bits={addr_space_max_bits} with {NUM_AS_LIMBS} limbs exceeds range_max_bits={range_max_bits}");
+        let mut pointer_limb_bits = [0; AUX_LEN];
+        let mut bits_remaining = pointer_max_bits;
+        for limb_bits in &mut pointer_limb_bits {
+            *limb_bits = min(bits_remaining, range_max_bits);
+            bits_remaining -= *limb_bits;
+        }
+        assert_eq!(bits_remaining, 0, "pointer_max_bits={pointer_max_bits} with {AUX_LEN} limbs exceeds range_max_bits={range_max_bits}");
         Self {
             memory_bus,
             addr_lt_air,
+            addr_space_limb_bits,
+            pointer_limb_bits,
         }
+    }
+
+    pub fn range_bus(&self) -> VariableRangeCheckerBus {
+        self.addr_lt_air.0.lt.bus
     }
 }
 
@@ -97,11 +126,30 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
             .when_transition()
             .assert_one(implies(next.is_valid, local.is_valid));
 
+        // Range check local.addr_space_limbs to addr_space_max_bits
+        for (&limb, limb_bits) in zip_eq(&local.addr_space_limbs, self.addr_space_limb_bits) {
+            self.range_bus()
+                .range_check(limb, limb_bits)
+                .eval(builder, local.is_valid);
+        }
+        // Range check local.pointer_limbs to pointer_max_bits
+        for (&limb, limb_bits) in zip_eq(&local.pointer_limbs, self.pointer_limb_bits) {
+            self.range_bus()
+                .range_check(limb, limb_bits)
+                .eval(builder, local.is_valid);
+        }
+        let range_max_bits = self.range_bus().range_max_bits;
+        // Compose addr_space_limbs and pointer_limbs into addr_space, pointer for both local and next
+        let [addr_space, next_addr_space] = [&local.addr_space_limbs, &next.addr_space_limbs]
+            .map(|limbs| compose::<AB::Expr>(limbs, range_max_bits));
+        let [pointer, next_pointer] = [&local.pointer_limbs, &next.pointer_limbs]
+            .map(|limbs| compose::<AB::Expr>(limbs, range_max_bits));
+
         // Assert local addr < next addr when next.is_valid
         // This ensures the addresses in non-padding rows are all sorted
         let lt_io = IsLtArrayIo {
-            x: [local.addr_space, local.pointer].map(Into::into),
-            y: [next.addr_space, next.pointer].map(Into::into),
+            x: [addr_space.clone(), pointer.clone()],
+            y: [next_addr_space, next_pointer],
             out: AB::Expr::ONE,
             count: next.is_valid.into(),
         };
@@ -112,7 +160,7 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
         // Write the initial memory values at initial timestamps
         self.memory_bus
             .send(
-                MemoryAddress::new(local.addr_space, local.pointer),
+                MemoryAddress::new(addr_space.clone(), pointer.clone()),
                 vec![local.initial_data],
                 AB::Expr::ZERO,
             )
@@ -121,7 +169,7 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
         // Read the final memory values at last timestamps when written to
         self.memory_bus
             .receive(
-                MemoryAddress::new(local.addr_space, local.pointer),
+                MemoryAddress::new(addr_space.clone(), pointer.clone()),
                 vec![local.final_data],
                 local.final_timestamp,
             )
@@ -134,6 +182,8 @@ pub struct VolatileBoundaryChip<F> {
     range_checker: SharedVariableRangeCheckerChip,
     overridden_height: Option<usize>,
     final_memory: Option<TimestampedEquipartition<F, 1>>,
+    addr_space_max_bits: usize,
+    pointer_max_bits: usize,
 }
 
 impl<F> VolatileBoundaryChip<F> {
@@ -154,6 +204,8 @@ impl<F> VolatileBoundaryChip<F> {
             range_checker,
             overridden_height: None,
             final_memory: None,
+            addr_space_max_bits,
+            pointer_max_bits,
         }
     }
 }
@@ -200,6 +252,7 @@ where
         let sorted_final_memory: Vec<_> = final_memory.into_par_iter().collect();
         let memory_len = sorted_final_memory.len();
 
+        let range_checker = self.range_checker.as_ref();
         let mut rows = Val::<SC>::zero_vec(trace_height * width);
         rows.par_chunks_mut(width)
             .zip(sorted_final_memory.par_iter())
@@ -208,8 +261,12 @@ where
                 // `pointer` is the same as `label` since the equipartition has block size 1
                 let [data] = timestamped_values.values;
                 let row: &mut VolatileBoundaryCols<_> = row.borrow_mut();
-                row.addr_space = Val::<SC>::from_canonical_u32(*addr_space);
-                row.pointer = Val::<SC>::from_canonical_u32(*ptr);
+                range_checker.decompose(
+                    *addr_space,
+                    self.addr_space_max_bits,
+                    &mut row.addr_space_limbs,
+                );
+                range_checker.decompose(*ptr, self.pointer_max_bits, &mut row.pointer_limbs);
                 row.initial_data = Val::<SC>::ZERO;
                 row.final_data = data;
                 row.final_timestamp = Val::<SC>::from_canonical_u32(timestamped_values.timestamp);
@@ -222,7 +279,10 @@ where
                     air.addr_lt_air.0.generate_subrow(
                         (
                             self.range_checker.as_ref(),
-                            &[row.addr_space, row.pointer],
+                            &[
+                                Val::<SC>::from_canonical_u32(*addr_space),
+                                Val::<SC>::from_canonical_u32(*ptr),
+                            ],
                             &[
                                 Val::<SC>::from_canonical_u32(next_addr_space),
                                 Val::<SC>::from_canonical_u32(next_ptr),

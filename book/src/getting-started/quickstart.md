@@ -25,9 +25,7 @@ The `read` function takes input from the stdin (it also works with OpenVM runtim
 
 ```rust
 // src/main.rs
-use openvm::io::{read, reveal};
-
-openvm::entry!(main);
+use openvm::io::{read, reveal_u32};
 
 fn main() {
     let n: u64 = read();
@@ -38,8 +36,8 @@ fn main() {
         a = b;
         b = c;
     }
-    reveal(a as u32, 0);
-    reveal((a >> 32) as u32, 1);
+    reveal_u32(a as u32, 0);
+    reveal_u32((a >> 32) as u32, 1);
 }
 ```
 
@@ -72,7 +70,7 @@ OPENVM_FAST_TEST=1 cargo openvm prove app --input "0x0A00000000000000"
 ```
 
 The `--input` field is passed to the program which receives it via the `io::read` function.
-In our `main.rs` we called `read()` to get `n: u64`. The input here is `n = 100u64` _in little endian_. Note that this value must be padded to exactly 8 bytes (64 bits).
+In our `main.rs` we called `read()` to get `n: u64`. The input here is `n = 10u64` _in little endian_. Note that this value must be padded to exactly 8 bytes (64 bits).
 
 The serialized proof will be output to `./openvm/app.proof`.
 

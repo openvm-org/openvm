@@ -1,15 +1,11 @@
 //! Program to match the workload of <https://github.com/bluealloy/revm/blob/900409f134c1cbd4489d370a6b037f354afa4a5c/crates/revm/benches/bench.rs#L68>
 //! We run 100 transfers to take the average
-#![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(not(feature = "std"), no_main)]
-
-extern crate alloc;
-
 use alloy_primitives::{address, TxKind, U256};
 #[allow(unused_imports, clippy::single_component_path_imports)]
 use openvm_keccak256_guest; // export native keccak
 use revm::{db::BenchmarkDB, primitives::Bytecode, Evm};
 
+// Necessary so the linker doesn't skip importing openvm crate
 openvm::entry!(main);
 
 fn main() {

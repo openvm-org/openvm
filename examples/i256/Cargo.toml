@@ -7,13 +7,10 @@ edition = "2021"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
+    "std",
+] }
 openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
 
 [features]
 default = []
-std = [
-    "openvm/std",
-    "openvm-bigint-guest/std",
-]

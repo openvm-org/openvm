@@ -9,7 +9,7 @@ use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
@@ -27,7 +27,7 @@ pub struct Fp2Extension {
     pub supported_modulus: Vec<BigUint>,
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From)]
 pub enum Fp2ExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     Fp2AddSubRv32_32(Fp2AddSubChip<F, 2, 32>),
@@ -37,7 +37,7 @@ pub enum Fp2ExtensionExecutor<F: PrimeField32> {
     Fp2MulDivRv32_48(Fp2MulDivChip<F, 6, 16>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum Fp2ExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     // We put this only to get the <F> generic to work

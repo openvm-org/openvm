@@ -43,6 +43,10 @@ pub const BN254_LIMB_BITS: usize = 8;
 pub const BN254_BLOCK_SIZE: usize = 32;
 
 pub const BN254_SEED: u64 = 0x44e992b44a6909f1;
+// Encodes 6x+2 where x is the BN254 seed.
+// 6*x+2 = sum_i BN254_PSEUDO_BINARY_ENCODING[i] * 2^i
+// where BN254_PSEUDO_BINARY_ENCODING[i] is in {-1, 0, 1}
+// Validated against BN254_SEED_ABS by a test in tests.rs
 pub const BN254_PSEUDO_BINARY_ENCODING: [i8; 66] = [
     0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0,
     -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0, -1, 0,
@@ -122,6 +126,7 @@ mod g2 {
 
     const THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::ZERO);
     // 3 / (9 + u)
+    // validated by a test below
     const B: Fp2 = Fp2::new(
         Fp::from_const_bytes(hex!(
             "e538a124dce66732a3efdb59e5c5b4b5c36ae01b9918be81aeaab8ce409d142b"
@@ -132,15 +137,25 @@ mod g2 {
     );
     impl_sw_affine!(G2Affine, Fp2, THREE, B);
     impl_sw_group_ops!(G2Affine, Fp2);
+
+    #[test]
+    fn test_g2_curve_equation_b() {
+        use openvm_algebra_guest::DivUnsafe;
+        let b = Fp2::new(Fp::from_const_u8(3), Fp::ZERO)
+            .div_unsafe(Fp2::new(Fp::from_const_u8(9), Fp::ONE));
+        assert_eq!(b, B);
+    }
 }
 
 pub struct Bn254;
 
 impl Bn254 {
+    // Same as the values from halo2curves_shims
+    // Validated by a test in tests.rs
     pub const FROBENIUS_COEFF_FQ6_C1: [Fp2; 3] = [
         Fp2 {
             c0: Bn254Fp(hex!(
-                "9d0d8fc58d435dd33d0bc7f528eb780a2c4679786fa36e662fdf079ac1770a0e"
+                "0100000000000000000000000000000000000000000000000000000000000000"
             )),
             c1: Bn254Fp(hex!(
                 "0000000000000000000000000000000000000000000000000000000000000000"
@@ -164,6 +179,8 @@ impl Bn254 {
         },
     ];
 
+    // Same as the values from halo2curves_shims
+    // Validated by a test in tests.rs
     pub const XI_TO_Q_MINUS_1_OVER_2: Fp2 = Fp2 {
         c0: Bn254Fp(hex!(
             "5a13a071460154dc9859c9a9ede0aadbb9f9e2b698c65edcdcf59a4805f33c06"
@@ -172,6 +189,12 @@ impl Bn254 {
             "e3b02326637fd382d25ba28fc97d80212b6f79eca7b504079a0441acbc3cc007"
         )),
     };
+
+    // FINAL_EXPONENT = (p^12 - 1) / r in big-endian
+    // Validated by a test in test.rs
+    pub const FINAL_EXPONENT: [u8; 349] = hex!(
+        "2f4b6dc97020fddadf107d20bc842d43bf6369b1ff6a1c71015f3f7be2e1e30a73bb94fec0daf15466b2383a5d3ec3d15ad524d8f70c54efee1bd8c3b21377e563a09a1b705887e72eceaddea3790364a61f676baaf977870e88d5c6c8fef0781361e443ae77f5b63a2a2264487f2940a8b1ddb3d15062cd0fb2015dfc6668449aed3cc48a82d0d602d268c7daab6a41294c0cc4ebe5664568dfc50e1648a45a4a1e3a5195846a3ed011a337a02088ec80e0ebae8755cfe107acf3aafb40494e406f804216bb10cf430b0f37856b42db8dc5514724ee93dfb10826f0dd4a0364b9580291d2cd65664814fde37ca80bb4ea44eacc5e641bbadf423f9a2cbf813b8d145da90029baee7ddadda71c7f3811c4105262945bba1668c3be69a3c230974d83561841d766f9c9d570bb7fbe04c7e8a6c3c760c0de81def35692da361102b6b9b2b918837fa97896e84abb40a4efb7e54523a486964b64ca86f120"
+    );
 }
 
 impl IntrinsicCurve for Bn254 {
@@ -200,7 +223,14 @@ impl PairingIntrinsics for Bn254 {
     type Fp12 = Fp12;
 
     const PAIRING_IDX: usize = 0;
+    // The sextic extension `Fp12` is `Fp2[X] / (X^6 - \xi)`, where `\xi` is a non-residue.
     const XI: Fp2 = Fp2::new(Fp::from_const_u8(9), Fp::from_const_u8(1));
+    const FP2_TWO: Fp2 = Fp2::new(Fp::from_const_u8(2), Fp::from_const_u8(0));
+    const FP2_THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::from_const_u8(0));
+    // Multiplication constants for the Frobenius map for coefficients in Fp2 c1..=c5 for powers 0..12
+    // FROBENIUS_COEFFS\[i\]\[j\] = \xi^{(j + 1) * (p^i - 1)/6} when p = 1 (mod 6)
+    // These are validated against `halo2curves::bn256::FROBENIUS_COEFF_FQ12_C1` in tests.rs
+    // (Note that bn256 here is another name for bn254)
     const FROBENIUS_COEFFS: [[Self::Fp2; 5]; 12] = [
         [
             Fp2 {

@@ -203,7 +203,7 @@ memory argument.
 
 The overall runtime execution of a program is broken into **segments** (the logic of when to segment can be custom and
 depend on many factors). Each segment is proven in a separate STARK VM circuit as described
-in [STARK Architecture](./stark.md). The public values of the circuit must contain the pre- and post-state commitments
+in [Circuit Architecture](./circuit.md). The public values of the circuit must contain the pre- and post-state commitments
 to the segment. The state consists of the active program counter and the full state of memory. (Recall in our
 architecture that registers are part of memory, so register state is included in memory state).
 

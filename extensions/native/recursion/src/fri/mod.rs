@@ -40,7 +40,7 @@ pub fn verify_query<C: Config>(
     proof: &FriQueryProofVariable<C>,
     betas: &Array<C, Ext<C::F, C::EF>>,
     reduced_openings: &Array<C, Ext<C::F, C::EF>>,
-    log_max_height: RVar<C::N>,
+    log_max_lde_height: RVar<C::N>,
 ) -> Ext<C::F, C::EF>
 where
     C::F: TwoAdicField,
@@ -50,7 +50,7 @@ where
 
     let folded_eval: Ext<C::F, C::EF> = builder.eval(C::F::ZERO);
     let subgroup_size: Var<C::N> =
-        builder.eval(log_max_height + RVar::from(config.arity_bits) - C::N::ONE);
+        builder.eval(log_max_lde_height + RVar::from(config.arity_bits) - C::N::ONE);
     let two_adic_generator_f = config.get_two_adic_generator(builder, subgroup_size);
 
     let two_adic_gen_ext = two_adic_generator_f.to_operand().symbolic();
@@ -58,9 +58,9 @@ where
 
     let base = two_adic_generator_ef;
 
-    let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
+    let index_bits_truncated = index_bits.slice(builder, 0, log_max_lde_height);
 
-    let log_folded_height: Var<C::N> = builder.eval(log_max_height);
+    let log_folded_height: Var<C::N> = builder.eval(log_max_lde_height);
 
     let get_idx = |builder: &mut Builder<C>, start: Var<C::N>, end: Var<C::N>| {
         let idx: Var<C::N> = builder.eval(C::N::ZERO);
@@ -165,6 +165,11 @@ where
 
     let index_bits_offset: Var<C::N> = builder.eval(C::N::ZERO);
 
+    // proof.commit_phase_openings.len() == log_max_lde_height - log_blowup
+    builder.assert_usize_eq(
+        proof.commit_phase_openings.len(),
+        commit_phase_commits.len(),
+    );
     builder
         .range(0, commit_phase_commits.len())
         .for_each(|i_vec, builder| {

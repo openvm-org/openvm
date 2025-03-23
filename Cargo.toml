@@ -1,5 +1,5 @@
 [workspace.package]
-version = "1.0.0-rc.0"
+version = "1.0.0-rc.2"
 edition = "2021"
 rust-version = "1.82"
 authors = ["OpenVM Authors"]
@@ -25,6 +25,7 @@ members = [
     "crates/toolchain/macros",
     "crates/toolchain/platform",
     "crates/toolchain/tests",
+    "crates/continuations",
     "crates/vm",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
@@ -104,8 +105,8 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.0.0-rc.0", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.0.0-rc.0", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "2c535dc35542bf2d9c957104a327ce99e8bc7c59", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "2c535dc35542bf2d9c957104a327ce99e8bc7c59", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
@@ -122,10 +123,11 @@ openvm-instructions-derive = { path = "crates/toolchain/instructions/derive", de
 openvm-macros-common = { path = "crates/toolchain/macros", default-features = false }
 openvm-platform = { path = "crates/toolchain/platform", default-features = false }
 openvm-transpiler = { path = "crates/toolchain/transpiler", default-features = false }
-openvm-circuit = { path = "crates/vm", default-features = false }
-openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 openvm-toolchain-tests = { path = "crates/toolchain/tests", default-features = false }
 openvm-custom-insn = { path = "crates/toolchain/custom_insn", default-features = false }
+openvm-circuit = { path = "crates/vm", default-features = false }
+openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
+openvm-continuations = { path = "crates/continuations", default-features = false }
 
 # Extensions
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
@@ -160,31 +162,31 @@ openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-fe
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
 
 # Plonky3
-p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-commit = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
+p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-commit = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
 p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", features = [
     "nightly-features",
-], rev = "b0591e9" }
-p3-util = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-challenger = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-goldilocks = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-keccak = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
-p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
-p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "b0591e9" }
+], rev = "88d7f05" }
+p3-util = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-challenger = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-goldilocks = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-keccak = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
+p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
 
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "zkvm-v0.1", default-features = false, features = [
     "loader_halo2",
@@ -202,9 +204,10 @@ serde_with = "3.11.0"
 clap = "4.5.23"
 toml = "0.8.14"
 lazy_static = "1.5.0"
-once_cell = "1.19.0"
 derive-new = "0.6.0"
-derive_more = "1.0.0"
+derive_more = { version = "1.0.0", features = [
+    "display",
+], default-features = false }
 derivative = "2.2.0"
 strum_macros = "0.26.4"
 strum = { version = "0.26.3", features = ["derive"] }
@@ -230,16 +233,18 @@ hex = { version = "0.4.3", default-features = false }
 serde-big-array = "0.5.1"
 
 # default-features = false for no_std for use in guest programs
-itertools = { version = "0.13.0", default-features = false }
+itertools = { version = "0.14.0", default-features = false }
 bincode = { version = "2.0.0-rc.3", default-features = false }
-bitcode = { version = "0.6.3", default-features = false, features = ["serde"] }
+bitcode = { version = "0.6.5", default-features = false, features = ["serde"] }
 serde = { version = "1.0.201", default-features = false, features = ["derive"] }
 hex-literal = { version = "0.4.1", default-features = false }
 bytemuck = { version = "1.20.0", default-features = false }
+once_cell = { version = "1.20", default-features = false }
 
 # cryptography, default-features = false for no_std
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 k256 = { version = "0.13.3", default-features = false }
+p256 = { version = "0.13.2", default-features = false }
 elliptic-curve = { version = "0.13.8", default-features = false }
 ecdsa = { version = "0.16.9", default-features = false }
 num-bigint = { version = "0.4.6", default-features = false }

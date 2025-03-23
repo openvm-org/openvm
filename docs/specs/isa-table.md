@@ -3,8 +3,8 @@
 In this document, we provide a mapping between the representation of instructions
 in the OpenVM codebase and the instructions in the [ISA specification](../specs/ISA.md).
 
-- Instructions in OpenVM implement the `LocalOpcode` trait. Different groups of `LocalOpcode`s from different VM extensions may be combined to form a set of instructions for a customized VM using several extensions. 
-- The PHANTOM instruction may be extended in each VM extension by adding new sub-instructions with different `PhantomDiscriminant` values. 
+- Instructions in OpenVM implement the `LocalOpcode` trait. Different groups of `LocalOpcode`s from different VM extensions may be combined to form a set of instructions for a customized VM using several extensions.
+- The PHANTOM instruction may be extended in each VM extension by adding new sub-instructions with different `PhantomDiscriminant` values.
 
 In the tables below, we provide the mapping between the `LocalOpcode` and `PhantomDiscriminant` and instructions and phantom sub-instructions in the ISA specification.
 
@@ -92,6 +92,7 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Native | `NativeLoadStore4Opcode::LOADW4` | LOADW4 |
 | Native | `NativeLoadStore4Opcode::STOREW4` | STOREW4 |
 | Native | `NativeJalOpcode::JAL` | JAL |
+| Native | `NativeRangeCheckOpcode::RANGE_CHECK` | RANGE_CHECK |
 | Native | `NativeBranchEqualOpcode::BEQ` | BEQ |
 | Native | `NativeBranchEqualOpcode::BNE` | BNE |
 | Native | `NativeLoadStoreOpcode::HINT_STOREW` | HINT_STOREW |
@@ -200,17 +201,6 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 ## Pairing Extension
 
 #### Instructions
-
-| VM Extension | `LocalOpcode` | ISA Instruction |
-| ------------- | ---------- | ------------- |
-| Pairing | `PairingOpcode::MILLER_DOUBLE_STEP` | MILLER_DOUBLE_STEP\<C\> |
-| Pairing | `PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP` | MILLER_DOUBLE_AND_ADD_STEP\<C\> |
-| Pairing | `Fp12Opcode::FP12_MUL` | FP12_MUL\<C\> |
-| Pairing | `PairingOpcode::EVALUATE_LINE` | EVALUATE_LINE\<C\> |
-| Pairing | `PairingOpcode::MUL_013_BY_013` | MUL_013_BY_013\<C\> |
-| Pairing | `PairingOpcode::MUL_BY_01234` | MUL_BY_01234\<C\> |
-| Pairing | `PairingOpcode::MUL_023_BY_023` | MUL_023_BY_023\<C\> |
-| Pairing | `PairingOpcode::MUL_BY_02345` | MUL_BY_02345\<C\> |
 
 #### Phantom Sub-Instructions
 
