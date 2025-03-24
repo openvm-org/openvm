@@ -101,8 +101,7 @@ pub struct MemoryController<F> {
     memory: Memory<F>,
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-    #[getset(get = "pub", get_mut = "pub")]
-    access_adapters: AccessAdapterInventory<F>,
+    pub access_adapters: AccessAdapterInventory<F>,
     // Filled during finalization.
     final_state: Option<FinalState<F>>,
 }
