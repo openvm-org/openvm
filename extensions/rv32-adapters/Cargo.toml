@@ -17,7 +17,6 @@ openvm-rv32im-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 
 itertools.workspace = true
-tracing.workspace = true
 derive-new.workspace = true
 rand.workspace = true
 serde = { workspace = true, features = ["derive"] }
@@ -26,11 +25,7 @@ serde_with.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
-test-case.workspace = true
-test-log.workspace = true
-lazy_static.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-hex.workspace = true
 
 [features]
 default = ["parallel"]

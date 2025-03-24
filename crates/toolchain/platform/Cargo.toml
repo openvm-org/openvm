@@ -8,8 +8,6 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-stability = "0.2"
-strum_macros.workspace = true
 openvm-custom-insn.workspace = true
 openvm-rv32im-guest.workspace = true
 

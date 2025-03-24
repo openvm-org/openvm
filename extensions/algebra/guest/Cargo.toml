@@ -8,11 +8,8 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-openvm = { workspace = true }
-openvm-platform = { workspace = true }
 openvm-algebra-moduli-macros = { workspace = true }
 openvm-algebra-complex-macros = { workspace = true }
-serde.workspace = true
 serde-big-array.workspace = true
 strum_macros.workspace = true
 

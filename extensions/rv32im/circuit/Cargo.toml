@@ -16,11 +16,7 @@ openvm-circuit = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
-
-bitcode.workspace = true
 strum.workspace = true
-itertools.workspace = true
-tracing.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
@@ -33,9 +29,6 @@ serde-big-array.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
-test-case.workspace = true
-test-log.workspace = true
-lazy_static.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 
 [features]

@@ -9,10 +9,7 @@ repository.workspace = true
 
 [dependencies]
 openvm = { workspace = true }
-openvm-platform = { workspace = true }
 serde = { workspace = true }
-itertools = { workspace = true, features = ["use_alloc"] }
-rand.workspace = true
 strum_macros.workspace = true
 ecdsa = { workspace = true, features = ["verifying"] }
 elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
@@ -43,3 +40,6 @@ default = []
 k256 = ["dep:k256"]
 p256 = ["dep:p256"]
 halo2curves = ["dep:halo2curves-axiom", "openvm-algebra-guest/halo2curves"]
+
+[package.metadata.cargo-shear]
+ignored = ["openvm", "openvm-custom-insn", "openvm-rv32im-guest"]

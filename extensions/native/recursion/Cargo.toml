@@ -32,7 +32,6 @@ once_cell = { workspace = true, optional = true, features = ["std"] }
 metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 serde_with = { workspace = true, optional = true, features = ["hex"] }
-eyre = { workspace = true, optional = true }
 
 [dev-dependencies]
 openvm-native-recursion = { workspace = true, features = ["test-utils"] }
@@ -47,7 +46,6 @@ static-verifier = [
     "dep:snark-verifier-sdk",
     "dep:once_cell",
     "dep:serde_with",
-    "dep:eyre",
 ]
 test-utils = ["openvm-circuit/test-utils"]
 bench-metrics = [

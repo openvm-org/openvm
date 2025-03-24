@@ -29,16 +29,11 @@ rand.workspace = true
 eyre.workspace = true
 serde.workspace = true
 serde-big-array.workspace = true
-bitcode.workspace = true
 static_assertions.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
-test-case.workspace = true
-test-log.workspace = true
-lazy_static.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-hex.workspace = true
 
 [features]
 default = ["parallel"]

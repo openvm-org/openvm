@@ -8,8 +8,6 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-openvm-circuit-primitives-derive.workspace = true
-openvm-instructions = { workspace = true }
 openvm-stark-sdk.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-transpiler.workspace = true

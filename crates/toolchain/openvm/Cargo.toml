@@ -16,7 +16,6 @@ openvm-platform = { workspace = true, features = [
 openvm-custom-insn = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
-hex-literal.workspace = true
 bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
@@ -35,3 +34,6 @@ getrandom = ["openvm-platform/getrandom"]
 # memory. This will use a slower linked-list heap allocator to reclaim memory.
 heap-embedded-alloc = ["openvm-platform/heap-embedded-alloc"]
 std = ["serde/std", "openvm-platform/std"]
+
+[package.metadata.cargo-shear]
+ignored = ["openvm-custom-insn"]
