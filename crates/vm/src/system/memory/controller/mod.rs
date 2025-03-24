@@ -92,21 +92,17 @@ pub type Equipartition<F, const N: usize> = BTreeMap<(u32, u32), [F; N]>;
 pub struct MemoryController<F> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
-
     #[getset(get = "pub")]
     pub(crate) mem_config: MemoryConfig,
     pub range_checker: SharedVariableRangeCheckerChip,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
-
     // addr_space -> Memory data structure
     memory: Memory<F>,
-
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-
+    #[getset(get = "pub", set = "pub")]
     access_adapters: AccessAdapterInventory<F>,
-
     // Filled during finalization.
     final_state: Option<FinalState<F>>,
 }
