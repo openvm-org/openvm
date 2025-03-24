@@ -2,7 +2,11 @@ use openvm_native_compiler::{
     asm::AsmConfig,
     ir::{Builder, Config, Usize, DIGEST_SIZE},
 };
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::{
+    p3_commit::Mmcs,
+    p3_field::{Field, FieldAlgebra, PrimeField32},
+};
+use p3_fri::{BatchOpening, CommitPhaseProofStep, QueryProof};
 
 use super::types::BatchOpeningVariable;
 use crate::{
@@ -16,25 +20,28 @@ use crate::{
     vars::HintSlice,
 };
 
-type C = InnerConfig;
+// impl<C: Config> Hintable<C> for [C::F; DIGEST_SIZE]
+// where
+//     C::F: Copy,
+// {
+//     type HintVariable = DigestVariable<C>;
 
-impl Hintable<C> for InnerDigest {
-    type HintVariable = DigestVariable<C>;
+//     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
+//         let digest = builder.hint_felts_fixed(DIGEST_SIZE);
+//         DigestVariable::Felt(digest)
+//     }
 
-    fn read(builder: &mut Builder<AsmConfig<InnerVal, InnerChallenge>>) -> Self::HintVariable {
-        let digest = builder.hint_felts_fixed(DIGEST_SIZE);
-        DigestVariable::Felt(digest)
-    }
+//     fn write(&self) -> Vec<Vec<C::F>> {
+//         let h: [C::F; DIGEST_SIZE] = *self;
+//         h.map(|x| vec![x]).to_vec()
+//     }
+// }
 
-    fn write(&self) -> Vec<Vec<InnerVal>> {
-        let h: [InnerVal; DIGEST_SIZE] = *self;
-        h.map(|x| vec![x]).to_vec()
-    }
-}
+impl<F> VecAutoHintable for [F; DIGEST_SIZE] {}
 
-impl VecAutoHintable for InnerDigest {}
-
-impl Hintable<C> for InnerCommitPhaseStep {
+impl<F: Field, C: Config<F = F, N = F>, M: Mmcs<C::EF, Proof = Vec<[C::EF; DIGEST_SIZE]>>>
+    Hintable<C> for CommitPhaseProofStep<C::EF, M>
+{
     type HintVariable = FriCommitPhaseProofStepVariable<C>;
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
@@ -46,7 +53,7 @@ impl Hintable<C> for InnerCommitPhaseStep {
         }
     }
 
-    fn write(&self) -> Vec<Vec<<C as Config>::F>> {
+    fn write(&self) -> Vec<Vec<F>> {
         let mut stream = Vec::new();
 
         stream.extend(Hintable::<C>::write(&self.sibling_value));
@@ -56,14 +63,16 @@ impl Hintable<C> for InnerCommitPhaseStep {
     }
 }
 
-impl VecAutoHintable for InnerCommitPhaseStep {}
+impl<F: Field, M: Mmcs<F>> VecAutoHintable for CommitPhaseProofStep<F, M> {}
 
-impl Hintable<C> for InnerQueryProof {
+impl<F: PrimeField32, C: Config<F = F, N = F>, M: Mmcs<C::EF, Proof = Vec<[F; DIGEST_SIZE]>>>
+    Hintable<C> for QueryProof<C::EF, M, Vec<BatchOpening<C::EF, M>>>
+{
     type HintVariable = FriQueryProofVariable<C>;
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         let input_proof = Vec::<InnerBatchOpening>::read(builder);
-        let commit_phase_openings = Vec::<InnerCommitPhaseStep>::read(builder);
+        let commit_phase_openings = Vec::<CommitPhaseProofStep<F, M>>::read(builder);
         Self::HintVariable {
             input_proof,
             commit_phase_openings,
@@ -74,7 +83,7 @@ impl Hintable<C> for InnerQueryProof {
         let mut stream = Vec::new();
 
         stream.extend(self.input_proof.write());
-        stream.extend(Vec::<InnerCommitPhaseStep>::write(
+        stream.extend(Vec::<CommitPhaseProofStep<F, M>>::write(
             &self.commit_phase_openings,
         ));
 
@@ -149,15 +158,15 @@ impl Hintable<C> for InnerBatchOpening {
 impl VecAutoHintable for InnerBatchOpening {}
 impl VecAutoHintable for Vec<InnerBatchOpening> {}
 
-fn read_hint_slice(builder: &mut Builder<C>) -> HintSlice<C> {
+fn read_hint_slice<C: Config>(builder: &mut Builder<C>) -> HintSlice<C> {
     let length = Usize::from(builder.hint_var());
     let id = Usize::from(builder.hint_load());
     HintSlice { length, id }
 }
 
-fn write_opening_proof(opening_proof: &[InnerDigest]) -> Vec<Vec<InnerVal>> {
+fn write_opening_proof<F: FieldAlgebra + Copy>(opening_proof: &[[F; DIGEST_SIZE]]) -> Vec<Vec<F>> {
     vec![
-        vec![InnerVal::from_canonical_usize(opening_proof.len())],
+        vec![F::from_canonical_usize(opening_proof.len())],
         opening_proof.iter().flatten().copied().collect(),
     ]
 }

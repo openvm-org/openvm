@@ -24,7 +24,7 @@ use crate::{
         root::types::RootVmVerifierPvs,
         utils::compress_babybear_var_to_bn254,
     },
-    RootSC,
+    SdkConfig,
 };
 /// Custom public values handler for static verifier.
 /// This trait implementation defines what the public values of the
@@ -76,10 +76,10 @@ pub struct StaticVerifierConfig {
 }
 
 impl StaticVerifierConfig {
-    pub fn build_static_verifier_operations(
+    pub fn build_static_verifier_operations<SdkC: SdkConfig>(
         &self,
-        root_verifier_vk: &MultiStarkVerifyingKey<RootSC>,
-        proof: &Proof<RootSC>,
+        root_verifier_vk: &MultiStarkVerifyingKey<SdkC::RootSC>,
+        proof: &Proof<SdkC::RootSC>,
         pv_handler: &impl StaticVerifierPvHandler,
     ) -> DslOperations<OuterConfig> {
         let mut builder = Builder::<OuterConfig>::default();
@@ -103,10 +103,10 @@ impl StaticVerifierConfig {
     /// `root_verifier_vk` is the verifying key of the root verifier STARK circuit.
     /// `root_verifier_fri_params` are the FRI parameters used to prove the root
     /// verifier STARK circuit.
-    fn verify_root_proof(
+    fn verify_root_proof<SdkC: SdkConfig>(
         &self,
         builder: &mut Builder<OuterConfig>,
-        root_verifier_vk: &MultiStarkVerifyingKey<RootSC>,
+        root_verifier_vk: &MultiStarkVerifyingKey<SdkC::RootSC>,
         input: &StarkProofVariable<OuterConfig>,
     ) {
         let advice = new_from_outer_multi_vk(root_verifier_vk);

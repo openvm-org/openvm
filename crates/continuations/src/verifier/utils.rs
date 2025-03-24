@@ -1,6 +1,6 @@
 use std::array;
 
-use openvm_native_compiler::prelude::*;
+use openvm_native_compiler::{asm::AsmConfig, prelude::*};
 use openvm_native_recursion::{config::outer::OuterConfig, hints::Hintable, types::InnerConfig};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::{
@@ -43,9 +43,9 @@ pub(crate) fn assign_slice_to_array<C: Config>(
     }
 }
 
-pub(crate) fn write_field_slice(arr: &[BabyBear; DIGEST_SIZE]) -> Vec<Vec<BabyBear>> {
+pub(crate) fn write_field_slice<F, EF>(arr: &[F; DIGEST_SIZE]) -> Vec<Vec<F>> {
     arr.iter()
-        .flat_map(Hintable::<InnerConfig>::write)
+        .flat_map(Hintable::<AsmConfig<F, EF>>::write)
         .collect()
 }
 

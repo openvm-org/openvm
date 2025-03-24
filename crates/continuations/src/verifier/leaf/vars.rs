@@ -1,19 +1,17 @@
 use std::array;
 
-use openvm_native_compiler::prelude::*;
+use openvm_native_compiler::{asm::AsmConfig, prelude::*};
 use openvm_native_recursion::hints::Hintable;
+use openvm_stark_backend::p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 use openvm_stark_sdk::openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::FieldAlgebra,
     proof::Proof,
 };
 
-use crate::{
-    verifier::{
-        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
-        utils,
-    },
-    C, F,
+use crate::verifier::{
+    leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
+    utils,
 };
 
 #[derive(DslVariable, Clone)]
@@ -39,9 +37,13 @@ impl<SC: StarkGenericConfig> LeafVmVerifierInput<SC> {
     }
 }
 
-impl Hintable<C> for UserPublicValuesRootProof<F> {
-    type HintVariable = UserPublicValuesRootProofVariable<{ DIGEST_SIZE }, C>;
-    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
+impl<F, EF> Hintable<AsmConfig<F, EF>> for UserPublicValuesRootProof<F>
+where
+    F: PrimeField32 + TwoAdicField + Hintable<AsmConfig<F, EF>>,
+    EF: ExtensionField<F> + TwoAdicField,
+{
+    type HintVariable = UserPublicValuesRootProofVariable<{ DIGEST_SIZE }, AsmConfig<F, EF>>;
+    fn read(builder: &mut Builder<AsmConfig<F, EF>>) -> Self::HintVariable {
         let len = builder.hint_var();
         let sibling_hashes = builder.array(len);
         builder.range(0, len).for_each(|i_vec, builder| {
@@ -54,8 +56,8 @@ impl Hintable<C> for UserPublicValuesRootProof<F> {
             public_values_commit,
         }
     }
-    fn write(&self) -> Vec<Vec<<C as Config>::N>> {
-        let len = <<C as Config>::N>::from_canonical_usize(self.sibling_hashes.len());
+    fn write(&self) -> Vec<Vec<F>> {
+        let len = F::from_canonical_usize(self.sibling_hashes.len());
         let mut stream = len.write();
         stream.extend(
             self.sibling_hashes

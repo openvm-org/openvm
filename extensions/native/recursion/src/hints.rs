@@ -75,16 +75,27 @@ impl<C: Config> Hintable<C> for usize {
     }
 }
 
-// Assumes F = N
-impl Hintable<InnerConfig> for InnerVal {
-    type HintVariable = Felt<InnerVal>;
+// impl<C: Config> Hintable<C> for C::F {
+//     type HintVariable = Felt<C::F>;
 
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        builder.hint_felt()
+//     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
+//         builder.hint_felt()
+//     }
+
+//     fn write(&self) -> Vec<Vec<C::F>> {
+//         vec![vec![*self]]
+//     }
+// }
+
+impl<C: Config, const N: usize> Hintable<C> for [C::F; N] {
+    type HintVariable = Array<C, Felt<C::F>>;
+
+    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
+        builder.hint_felts()
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        vec![vec![*self]]
+    fn write(&self) -> Vec<Vec<C::F>> {
+        vec![self.to_vec()]
     }
 }
 
@@ -304,11 +315,12 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
             .collect();
         stream.extend(air_perm_by_height.write());
         stream.extend(
-            self.rap_phase_seq_proof
+            [self
+                .rap_phase_seq_proof
                 .as_ref()
                 .map(|p| p.logup_pow_witness)
-                .unwrap_or_default()
-                .write(),
+                .unwrap_or_default()]
+            .write(),
         );
 
         stream
