@@ -26,10 +26,10 @@ For more information on both commands, see the [build](./build.md) docs.
 
 ### Inputs
 
-The `--input` field needs to either be a hex string or a file path to a json file that contains the key `input` and an array of hex strings. Note that if your hex string represents a single number, it should be written in little-endian format (as this is what the VM expects).
-Each hex string (either in the file as the direct input) is either:
-- Hex strings of bytes, which is prefixed with 0x01
-- Hex strings of native field elements (represented as u32, little endian), prefixed with 0x02
+The `--input` field needs to either be a single hex string or a file path to a json file that contains the key `input` and an array of hex strings. Note that if your hex string represents a single number, it should be written in little-endian format (as this is what the VM expects). Also note that if you need to provide multiple input streams, you have to use the file path option.
+Each hex string (either in the file or as the direct input) is either:
+- Hex string of bytes, which is prefixed with 0x01
+- Hex string of native field elements (represented as u32, little endian), prefixed with 0x02
 
 To see how more complex inputs can be converted into a VM-readable format, see the **Using StdIn** section of the [SDK](../advanced-usage/sdk.md) doc.
 

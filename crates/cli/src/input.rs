@@ -21,8 +21,6 @@ impl FromStr for Input {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if is_valid_hex_string(s) {
-            // let bytes = decode_hex_string(s).map_err(|e| e.to_string())?;
-            // Ok(Input::HexBytes(bytes))
             Ok(Input::HexBytes(s.to_string()))
         } else if PathBuf::from(s).exists() {
             Ok(Input::FilePath(PathBuf::from(s)))
@@ -65,12 +63,7 @@ pub fn read_bytes_into_stdin(stdin: &mut StdIn, bytes: &[u8]) -> Result<()> {
                 ));
             }
             let mut fields = Vec::with_capacity(data.len() / 4);
-            for chunk in data.chunks(4) {
-                if chunk.len() != 4 {
-                    return Err(eyre::eyre!(
-                        "Invalid input format: incorrect number of bytes"
-                    ));
-                }
+            for chunk in data.chunks_exact(4) {
                 let value = u32::from_le_bytes(chunk.try_into().unwrap());
                 fields.push(F::from_canonical_u32(value));
             }

@@ -66,7 +66,7 @@ This will output a serialized proving key to `./openvm/app.pk` and a verificatio
 Now we are ready to generate a proof! Simply run:
 
 ```bash
-OPENVM_FAST_TEST=1 cargo openvm prove app --input "0x0A00000000000000"
+OPENVM_FAST_TEST=1 cargo openvm prove app --input "0x010A00000000000000"
 ```
 
 The `--input` field is passed to the program which receives it via the `io::read` function.
@@ -91,5 +91,5 @@ The process should exit with no errors.
 If necessary, the executable can also be run _without_ proof generation. This can be useful for testing purposes.
 
 ```bash
-cargo openvm run --input "0x0A00000000000000"
+cargo openvm run --input "0x010A00000000000000"
 ```
