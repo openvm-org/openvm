@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use getset::Getters;
+use getset::{Getters, MutGetters};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_zero::IsZeroSubAir,
@@ -88,7 +88,7 @@ pub type TimestampedEquipartition<F, const N: usize> =
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
 pub type Equipartition<F, const N: usize> = BTreeMap<(u32, u32), [F; N]>;
 
-#[derive(Getters)]
+#[derive(Getters, MutGetters)]
 pub struct MemoryController<F> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
@@ -101,7 +101,7 @@ pub struct MemoryController<F> {
     memory: Memory<F>,
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-    #[getset(get = "pub", set = "pub")]
+    #[getset(get = "pub", get_mut = "pub")]
     access_adapters: AccessAdapterInventory<F>,
     // Filled during finalization.
     final_state: Option<FinalState<F>>,
