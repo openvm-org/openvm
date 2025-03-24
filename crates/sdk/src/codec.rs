@@ -66,6 +66,14 @@ pub fn decode_proof_from_bytes(bytes: &[u8]) -> Result<Proof<SC>> {
 //
 /// Encode a proof using FRI as the PCS with `BabyBearPoseidon2Config`.
 /// The Merkle tree hashes have digest `[F; 8]`.
+/// ```
+/// pub struct Proof<SC: StarkGenericConfig> {
+///     pub commitments: Commitments<Com<SC>>,
+///     pub opening: OpeningProof<PcsProof<SC>, SC::Challenge>,
+///     pub per_air: Vec<AirProofData<Val<SC>, SC::Challenge>>,
+///     pub rap_phase_seq_proof: Option<RapPhaseSeqPartialProof<SC>>,
+/// }
+/// ```
 pub fn encode_proof<W: Write>(proof: &Proof<SC>, writer: &mut W) -> Result<()> {
     writer.write_all(&CODEC_VERSION.to_le_bytes())?;
     // Encode commitments
@@ -88,6 +96,12 @@ pub fn encode_proof<W: Write>(proof: &Proof<SC>, writer: &mut W) -> Result<()> {
 }
 
 // Helper function to encode OpeningProof
+// ```
+// pub struct OpeningProof<PcsProof, Challenge> {
+//    pub proof: PcsProof,
+//    pub values: OpenedValues<Challenge>,
+// }
+// ```
 fn encode_opening_proof<W: Write>(
     opening: &OpeningProof<PcsProof<SC>, Challenge>,
     writer: &mut W,
@@ -136,6 +150,15 @@ impl Encode for AdjacentOpenedValues<Challenge> {
 }
 
 impl Encode for AirProofData<F, Challenge> {
+    /// Encodes the struct
+    /// ```
+    /// pub struct OpenedValues<Challenge> {
+    ///     pub preprocessed: Vec<AdjacentOpenedValues<Challenge>>,
+    ///     pub main: Vec<Vec<AdjacentOpenedValues<Challenge>>>,
+    ///     pub after_challenge: Vec<Vec<AdjacentOpenedValues<Challenge>>>,
+    ///     pub quotient: Vec<Vec<Vec<Challenge>>>,
+    /// }
+    /// ```
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
         self.air_id.encode(writer)?;
         self.degree.encode(writer)?;
@@ -478,6 +501,7 @@ impl Decode for Option<FriLogUpPartialProof<F>> {
         reader.read_exact(&mut bytes)?;
 
         let value = u32::from_le_bytes(bytes);
+        // When `Option<FriLogUpPartialProof<F>>` is None, it's encoded as `u32::max`.
         if value == u32::MAX {
             return Ok(None);
         }
