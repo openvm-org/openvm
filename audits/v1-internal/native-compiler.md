@@ -39,7 +39,7 @@ save columns, `RANGE_CHECK` is put into the existing `JalChip`.
 **Context:** https://github.com/openvm-org/openvm/blob/336f1a475e5aa3513c4c5a266399f4128c119bba/extensions/native/compiler/src/conversion/mod.rs#L274
 
 **Description:** 
-ASM compiler compiles `Assert*` DSL instructions into a conditonal jump + a ASM instruction `Trap`, which only results a phantom instruction. The expolit can generate a valid execution trace which ignores all assertions in the program.
+ASM compiler compiles `Assert*` DSL instructions into a conditional jump + a ASM instruction `Trap`, which only results a phantom instruction. The expolit can generate a valid execution trace which ignores all assertions in the program.
 
 **Proof of concept:** N/A
 
@@ -92,7 +92,7 @@ Most DSL instructions are trivially converted into the corresponding ASM instruc
 - `If*`. This kind of instructions append 1 branch instruction before the then/else closure.
 - `ZipFor` appends 1 branch instruction after the loop body.
 - `Alloc` computes the allocation size then increases `HEAP_PTR` by the allocation size. Finding `2.1` about this.
-- `Assert*` results an if branch which panics if the condition is satisified. Finding `2.2` about this.
+- `Assert*` results an if branch which panics if the condition is satisfied. Finding `2.2` about this.
 - Debug instructions like `Print*`/`CycleTracker*`/
 
 Notably, immediate `Ext` DSL instructions result 5 ASM instruction - the compiler needs to write the immediate `Ext` as 4 `Felt`s first.
@@ -103,6 +103,6 @@ doesn't support jump and heap allocation. So it's simpler than the ASM compiler.
 are simply converted into the corresponding Halo2 circuit constraints.
 
 Non-trivial instructions:
-- `BabyBearChip` operations. https://github.com/openvm-org/openvm/pull/1407 add more explaination how it works.
-- Poseidon2 operations. The implementaion is copied from an audited codebase.
+- `BabyBearChip` operations. https://github.com/openvm-org/openvm/pull/1407 add more explanation how it works.
+- Poseidon2 operations. The implementation is copied from an audited codebase.
 - Bit decomposition. Had a finding in 2.3.

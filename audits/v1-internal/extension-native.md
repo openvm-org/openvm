@@ -11,7 +11,7 @@ The focus of this review is the native extension chips and transpiler.
 
 ## 2. Findings
 
-Classify by **severity** according to [cantina critiera](https://docs.cantina.xyz/cantina-docs/cantina-competitions/judging-process/finding-severity-criteria) in terms of likelihood and impact.
+Classify by **severity** according to [cantina criteria](https://docs.cantina.xyz/cantina-docs/cantina-competitions/judging-process/finding-severity-criteria) in terms of likelihood and impact.
 
 Findings include anything that could warrant change or unexpected behavior that should be brought to light. They range from severe to informational.
 
@@ -236,7 +236,7 @@ Aside from the issues found above, one observation from reviewing the AIRs is
 that the AIRs are not always consistent with whether or not they enforce if an
 instruction is syntactically valid. For example, many AIRs constrain that an
 unused operand is 0 (as in the spec), and `BranchNativeAdapterAir` constrains
-`d` and `e` to be either 0 or 4. But other AIRs do not inforce syntactic
+`d` and `e` to be either 0 or 4. But other AIRs do not enforce syntactic
 validity: `NativeLoadStoreAir` does not constrain that `a == 0` when `opcode ==
 HINT_STOREW`, and `NativePoseidon2Air` does not constrain that `g` is either the
 inverse of 1 or 4 when `opcode == VERIFY_BATCH`. This is not necessarily a

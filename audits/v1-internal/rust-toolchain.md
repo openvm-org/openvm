@@ -45,7 +45,7 @@ pub fn init() {
 }
 ```
 
-If we turn out to have a lot of unitialized data or otherwise make `_end` very far in memory, then `heap_pos` may exceed `crate::memory::GUEST_MAX_MEM`, which will probably lead to just a crash.
+If we turn out to have a lot of uninitialized data or otherwise make `_end` very far in memory, then `heap_pos` may exceed `crate::memory::GUEST_MAX_MEM`, which will probably lead to just a crash.
 
 <!-- **Proof of concept:** (optional) sample code/patch or other way to demonstrate the exploit -->
 

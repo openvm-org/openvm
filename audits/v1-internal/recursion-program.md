@@ -107,7 +107,7 @@ https://github.com/openvm-org/openvm/commit/485e5e524c8f0d1ec1f8725fa76a5c7f5f9c
 
 ### 3.1 Out of bound access
 
-When using `builder.get`/`builder.set` to read/write an element from an `Array`, the index has to be less than the length of the array. Otherwise, there could be potiential exploits:
+When using `builder.get`/`builder.set` to read/write an element from an `Array`, the index has to be less than the length of the array. Otherwise, there could be potential exploits:
 - The exploit could put an unexpected value into an irrelated object in the nearby memory and let it be the returned value.
 - If the index could be an arbitrary value, the exploit could overwrite any address and take the control flow.
 
@@ -120,6 +120,6 @@ This is a dynamic-only issue because the compiler will panic at compile if there
 
 ### 3.2 Constraint Evaluation
 
-AIR Constraints only depend on the VK. So constraint evalutation of a specific AIR could be represented as a long list of 
+AIR Constraints only depend on the VK. So constraint evaluation of a specific AIR could be represented as a long list of 
 instructions without loops or branches. In the recursion verifier program, we use `RecursiveVerifierConstraintFolder` to
-convert constraints into a big expresssion. The logic is simple and safe at DSL level.
+convert constraints into a big expression. The logic is simple and safe at DSL level.

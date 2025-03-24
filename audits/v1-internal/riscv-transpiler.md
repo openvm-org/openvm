@@ -30,7 +30,7 @@ VM Extension (intrinsic functions): document how to add new custom RISC-V instru
 
 ## 2. Findings
 
-Classify by **severity** according to [cantina critiera](https://docs.cantina.xyz/cantina-docs/cantina-competitions/judging-process/finding-severity-criteria) in terms of likelihood and impact.
+Classify by **severity** according to [cantina criteria](https://docs.cantina.xyz/cantina-docs/cantina-competitions/judging-process/finding-severity-criteria) in terms of likelihood and impact.
 
 Findings include anything that could warrant change or unexpected behavior that should be brought to light. They range from severe to informational.
 
@@ -113,7 +113,7 @@ Currently, we have two way to handle a RISC-V instruction that has `rd = x0`:
 1. Transpile to a `NOP` if it has no side effects
 2. Transpile to an OpenVM instruction that executes the expected side effect and does not change the value of `[0:4]_1` (side effect here could include raising an exception)
 
-For the available RISC-V instructions that OpenVM supports, it is guaranteed that only `rd` can be written to during its execution, so the two cases above are sufficient. However, we need to carefully reconsider that everytime we add a new instruction.
+For the available RISC-V instructions that OpenVM supports, it is guaranteed that only `rd` can be written to during its execution, so the two cases above are sufficient. However, we need to carefully reconsider that every time we add a new instruction.
 
 On the second case, the following instructions that allow `rd = x0` and can still possibly write into `rd`:
 

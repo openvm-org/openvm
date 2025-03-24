@@ -23,7 +23,7 @@ multiplicity, `b` a bus index, `sigma` a message, and `h_beta` a polynomial in
 `\beta` with coefficients given by the message `sigma`.
 
 The goal is that summands for one bus cannot cancel algebraically with summands
-from another bus. But these terms are not indepedent for different bus indices;
+from another bus. But these terms are not independent for different bus indices;
 if $X^b + c$ can be factored into $P(X) \cdot Q(X)$, then we can always write
 $1/(X^b + c)$ into a linear combination of $1/P(X)$ and $1/Q(X)$ via partial
 fraction decomposition.

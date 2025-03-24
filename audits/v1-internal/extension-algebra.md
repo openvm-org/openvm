@@ -68,7 +68,7 @@ When `is_setup = 0`, we constrain that:
     So this constraint ensures that one entry of `lt_marker` is 2.
     - `sum_i lt_marker[i] = 3` which, together with the previous constraint, ensures that one entry of `lt_marker` is 1.
 
-So far, we have constrained that, on a non-setup row, `lt_marker` either has exactly one nonzero entry and it is 1, or it has two nonzero entires, a 1 and a 2.
+So far, we have constrained that, on a non-setup row, `lt_marker` either has exactly one nonzero entry and it is 1, or it has two nonzero entries, a 1 and a 2.
 Let `b_diff_idx` be such that `lt_marker[b_diff_idx] = 1` and let `c_diff_idx` be such that `lt_marker[c_diff_idx] = 2` if such an index exists, otherwise let `c_diff_idx = b_diff_idx`.
 
 Next, we iterate `i` from the most significant to the least significant limb's index (`NUM_LIMBS - 1` to 0), and we maintain a prefix sum `prefix_sum[i]` of `lt_marker` (since we are iterating backwards, this is really a suffix sum).

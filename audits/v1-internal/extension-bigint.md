@@ -17,7 +17,7 @@ Describe the main focus and any additional context:
 
 ## 2. Findings
 
-Classify by **severity** according to [cantina critiera](https://docs.cantina.xyz/cantina-docs/cantina-competitions/judging-process/finding-severity-criteria) in terms of likelihood and impact.
+Classify by **severity** according to [cantina criteria](https://docs.cantina.xyz/cantina-docs/cantina-competitions/judging-process/finding-severity-criteria) in terms of likelihood and impact.
 
 Findings include anything that could warrant change or unexpected behavior that should be brought to light. They range from severe to informational.
 
