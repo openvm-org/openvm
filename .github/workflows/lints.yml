@@ -74,6 +74,11 @@ jobs:
             fi
           done
 
+      - name: Check for unused dependencies
+        run: |
+          cargo install cargo-shear
+          cargo shear
+
       - name: Cargo audit
         run: |
           cargo install cargo-audit
