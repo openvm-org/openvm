@@ -23,7 +23,7 @@ jobs:
 
       - uses: codespell-project/actions-codespell@v2
         with:
-          skip: Cargo.lock,./book/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,
+          skip: Cargo.lock,./book/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,
           ignore_words_file: .codespellignore
 
       - uses: dtolnay/rust-toolchain@stable
