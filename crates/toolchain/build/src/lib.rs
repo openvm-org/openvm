@@ -383,6 +383,10 @@ pub fn find_unique_executable<P: AsRef<Path>, Q: AsRef<Path>>(
             {
                 return false;
             }
+            // exclude non-bin targets
+            if !target.kind.contains(&"bin".to_string()) {
+                return false;
+            }
             if let Some(target_filter) = target_filter {
                 return target.kind.iter().any(|k| k == &target_filter.kind)
                     && target.name == target_filter.name;
