@@ -99,7 +99,7 @@ impl<
 
 #[repr(C)]
 #[serde_as]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(bound = "F: Field")]
 pub struct Rv32VecHeapReadRecord<
     F: Field,
@@ -121,7 +121,7 @@ pub struct Rv32VecHeapReadRecord<
 
 #[repr(C)]
 #[serde_as]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Rv32VecHeapWriteRecord<const BLOCKS_PER_WRITE: usize, const WRITE_SIZE: usize> {
     pub from_state: ExecutionState<u32>,
     #[serde_as(as = "[_; BLOCKS_PER_WRITE]")]
