@@ -71,7 +71,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let original_height = program.num_defined_instructions();
     let desired_height = original_height.next_power_of_two();
     let cells_to_add = (desired_height - original_height) * width;
-    program_cells.extend(iter::repeat(BabyBear::ZERO).take(cells_to_add));
+    program_cells.extend(iter::repeat_n(BabyBear::ZERO, cells_to_add));
 
     let counter_trace = RowMajorMatrix::new(program_cells, 10);
     println!("trace height = {}", original_height);

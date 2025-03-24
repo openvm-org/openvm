@@ -81,7 +81,7 @@ fn boundary_air_test() {
                     Val::ZERO,
                 ]
             })
-            .chain(iter::repeat(Val::ZERO).take(5 * diff_height))
+            .chain(iter::repeat_n(Val::ZERO, 5 * diff_height))
             .collect(),
         5,
     );
@@ -100,7 +100,7 @@ fn boundary_air_test() {
                     Val::from_canonical_u32(timestamped_value.timestamp),
                 ]
             })
-            .chain(iter::repeat(Val::ZERO).take(5 * diff_height))
+            .chain(iter::repeat_n(Val::ZERO, 5 * diff_height))
             .collect(),
         5,
     );
