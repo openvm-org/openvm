@@ -158,6 +158,8 @@ openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = f
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
+
+# Plonky3
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
 p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", features = [
     "nightly-features",
@@ -178,6 +180,7 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", b
 ] }
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 halo2curves-axiom = "0.5.3"
+
 tracing = "0.1.40"
 bon = "3.2.0"
 serde_json = "1.0.117"
@@ -230,23 +233,13 @@ num-traits = { version = "0.2.19", default-features = false }
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]
-# p3-air = { path = "../Plonky3/air" }
 # p3-field = { path = "../Plonky3/field" }
-# p3-commit = { path = "../Plonky3/commit" }
-# p3-matrix = { path = "../Plonky3/matrix" }
 # p3-baby-bear = { path = "../Plonky3/baby-bear" }
-# p3-util = { path = "../Plonky3/util" }
-# p3-challenger = { path = "../Plonky3/challenger" }
 # p3-dft = { path = "../Plonky3/dft" }
 # p3-fri = { path = "../Plonky3/fri" }
-# p3-goldilocks = { path = "../Plonky3/goldilocks" }
-# p3-keccak = { path = "../Plonky3/keccak" }
 # p3-keccak-air = { path = "../Plonky3/keccak-air" }
-# p3-blake3 = { path = "../Plonky3/blake3" }
-# p3-mds = { path = "../Plonky3/mds" }
 # p3-merkle-tree = { path = "../Plonky3/merkle-tree" }
+# p3-monty-31 = { path = "../Plonky3/monty-31" }
 # p3-poseidon2 = { path = "../Plonky3/poseidon2" }
+# p3-poseidon2-air = { path = "../Plonky3/poseidon2-air" }
 # p3-symmetric = { path = "../Plonky3/symmetric" }
-# p3-uni-stark = { path = "../Plonky3/uni-stark" }
-# p3-maybe-rayon = { path = "../Plonky3/maybe-rayon" }
-# p3-bn254-fr = { path = "../Plonky3/bn254-fr" }

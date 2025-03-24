@@ -10,6 +10,7 @@ repository.workspace = true
 openvm-stark-backend.workspace = true
 openvm-platform.workspace = true
 openvm-instructions.workspace = true
+
 eyre.workspace = true
 thiserror.workspace = true
 elf = "0.7.4"
