@@ -259,3 +259,11 @@ impl<const NUM_BITS: usize> ChipUsageGetter for SharedBitwiseOperationLookupChip
         self.0.trace_width()
     }
 }
+
+impl<const NUM_BITS: usize> AsRef<BitwiseOperationLookupChip<NUM_BITS>>
+    for SharedBitwiseOperationLookupChip<NUM_BITS>
+{
+    fn as_ref(&self) -> &BitwiseOperationLookupChip<NUM_BITS> {
+        &self.0
+    }
+}
