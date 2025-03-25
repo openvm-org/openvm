@@ -97,10 +97,8 @@ fn negative_test_range_tuple_chip() {
 
     let mut range_trace = range_checker.generate_trace();
 
-    // Corrupt the trace to make it invalid - modify a value in the first row
-    if !range_trace.values.is_empty() {
-        range_trace.values[0] = BabyBear::from_wrapped_u32(99);
-    }
+    // Corrupt the trace to make it invalid
+    range_trace.values[0] = BabyBear::from_wrapped_u32(99);
 
     disable_debug_builder();
     assert_eq!(
