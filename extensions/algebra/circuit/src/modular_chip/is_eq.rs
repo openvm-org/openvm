@@ -272,7 +272,7 @@ where
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ModularIsEqualCoreRecord<T, const READ_LIMBS: usize> {
     #[serde(with = "BigArray")]
     pub b: [T; READ_LIMBS],
