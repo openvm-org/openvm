@@ -267,11 +267,3 @@ impl<const NUM_BITS: usize> AsRef<BitwiseOperationLookupChip<NUM_BITS>>
         &self.0
     }
 }
-
-impl<const NUM_BITS: usize> AsMut<BitwiseOperationLookupChip<NUM_BITS>>
-    for SharedBitwiseOperationLookupChip<NUM_BITS>
-{
-    fn as_mut(&mut self) -> &mut BitwiseOperationLookupChip<NUM_BITS> {
-        &mut self.0
-    }
-}

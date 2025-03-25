@@ -276,9 +276,3 @@ impl AsRef<VariableRangeCheckerChip> for SharedVariableRangeCheckerChip {
         &self.0
     }
 }
-
-impl AsMut<VariableRangeCheckerChip> for SharedVariableRangeCheckerChip {
-    fn as_mut(&mut self) -> &mut VariableRangeCheckerChip {
-        &mut self.0
-    }
-}

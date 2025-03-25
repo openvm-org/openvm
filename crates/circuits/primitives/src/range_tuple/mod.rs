@@ -245,9 +245,3 @@ impl<const N: usize> AsRef<RangeTupleCheckerChip<N>> for SharedRangeTupleChecker
         &self.0
     }
 }
-
-impl<const N: usize> AsMut<RangeTupleCheckerChip<N>> for SharedRangeTupleCheckerChip<N> {
-    fn as_mut(&mut self) -> &mut RangeTupleCheckerChip<N> {
-        &mut self.0
-    }
-}
