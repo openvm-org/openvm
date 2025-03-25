@@ -77,12 +77,12 @@ jobs:
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
 
-      - name: Check for unused dependencies
+      - name: Cargo shear
         run: |
-          cargo binstall --no-confirm cargo-shear --version 1.1.9
+          cargo binstall --no-confirm --force cargo-shear --version 1.1.9
           cargo shear
 
       - name: Cargo audit
         run: |
-          cargo binstall --no-confirm cargo-audit
+          cargo binstall --no-confirm --force cargo-audit
           cargo audit
