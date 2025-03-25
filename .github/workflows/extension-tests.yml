@@ -9,6 +9,7 @@ on:
       - "crates/circuits/**"
       - "crates/vm/**"
       - "extensions/**"
+      - "Cargo.toml"
       - ".github/workflows/extension-tests.yml"
 
 concurrency:

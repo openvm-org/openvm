@@ -12,6 +12,7 @@ on:
       - "crates/toolchain/build/**"
       - "crates/toolchain/macros/**"
       - "crates/toolchain/tests/**"
+      - "Cargo.toml"
       - ".github/workflows/riscv.yml"
 
 concurrency:

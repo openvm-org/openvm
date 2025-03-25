@@ -11,6 +11,7 @@ on:
       - "crates/sdk/**"
       - "crates/cli/**"
       - "examples/**"
+      - "Cargo.toml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
