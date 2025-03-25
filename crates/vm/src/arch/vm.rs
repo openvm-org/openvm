@@ -316,6 +316,8 @@ where
     {
         let mut final_memory = None;
         let per_segment = self.execute_and_then(exe, input, |seg_idx, mut seg| {
+            // Note: this will only be Some on the last segment; otherwise it is
+            // already moved into next segment state
             final_memory = mem::take(&mut seg.final_memory);
             tracing::info_span!("trace_gen", segment = seg_idx)
                 .in_scope(|| seg.generate_proof_input(committed_program.clone()))
