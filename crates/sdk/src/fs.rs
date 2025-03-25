@@ -5,10 +5,12 @@ use std::{
 
 use eyre::Result;
 use openvm_circuit::arch::{instructions::exe::VmExe, ContinuationVmProof, VmConfig};
+use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_native_recursion::halo2::wrapper::{EvmVerifier, EvmVerifierByteCode};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
+    codec::{Decode, Encode},
     keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey},
     types::EvmProof,
     F, SC,
@@ -47,14 +49,27 @@ pub fn write_app_vk_to_file<P: AsRef<Path>>(app_vk: AppVerifyingKey, path: P) ->
 }
 
 pub fn read_app_proof_from_file<P: AsRef<Path>>(path: P) -> Result<ContinuationVmProof<SC>> {
-    read_from_file_bitcode(path)
+    decode_from_file(path)
 }
 
 pub fn write_app_proof_to_file<P: AsRef<Path>>(
     proof: ContinuationVmProof<SC>,
     path: P,
 ) -> Result<()> {
-    write_to_file_bitcode(path, proof)
+    encode_to_file(path, proof)
+}
+
+pub fn read_root_verifier_input_from_file<P: AsRef<Path>>(
+    path: P,
+) -> Result<RootVmVerifierInput<SC>> {
+    decode_from_file(path)
+}
+
+pub fn write_root_verifier_input_to_file<P: AsRef<Path>>(
+    input: RootVmVerifierInput<SC>,
+    path: P,
+) -> Result<()> {
+    encode_to_file(path, input)
 }
 
 pub fn read_agg_pk_from_file<P: AsRef<Path>>(path: P) -> Result<AggProvingKey> {
@@ -127,5 +142,20 @@ pub fn write_to_file_bytes<T: Into<Vec<u8>>, P: AsRef<Path>>(path: P, data: T) -
         create_dir_all(parent)?;
     }
     write(path, data.into())?;
+    Ok(())
+}
+
+pub fn decode_from_file<T: Decode, P: AsRef<Path>>(path: P) -> Result<T> {
+    let reader = &mut File::open(path)?;
+    let ret = T::decode(reader)?;
+    Ok(ret)
+}
+
+pub fn encode_to_file<T: Encode, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
+    if let Some(parent) = path.as_ref().parent() {
+        create_dir_all(parent)?;
+    }
+    let writer = &mut File::create(path)?;
+    data.encode(writer)?;
     Ok(())
 }

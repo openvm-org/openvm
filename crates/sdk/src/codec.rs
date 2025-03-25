@@ -1,9 +1,13 @@
 use std::io::{self, Cursor, Read, Result, Write};
 
+use openvm_circuit::{
+    arch::ContinuationVmProof, system::memory::tree::public_values::UserPublicValuesProof,
+};
+use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::{InnerBatchOpening, InnerFriProof, InnerQueryProof};
 use openvm_stark_backend::{
-    config::{Com, PcsProof, StarkGenericConfig},
+    config::{Com, PcsProof},
     interaction::{fri_log_up::FriLogUpPartialProof, RapPhaseSeqKind},
     p3_field::{
         extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra, PrimeField32,
@@ -40,26 +44,35 @@ pub trait Encode {
 pub trait Decode: Sized {
     /// Reads and decodes a value from the given reader.
     fn decode<R: Read>(reader: &mut R) -> Result<Self>;
-}
-
-pub fn encode_proof_to_bytes<SC: StarkGenericConfig>(proof: &Proof<SC>) -> Result<Vec<u8>>
-where
-    Proof<SC>: Encode,
-{
-    let mut buffer = Vec::new();
-    proof.encode(&mut buffer)?;
-    Ok(buffer)
-}
-
-pub fn decode_proof_from_bytes<SC: StarkGenericConfig>(bytes: &[u8]) -> Result<Proof<SC>>
-where
-    Proof<SC>: Decode,
-{
-    let mut reader = Cursor::new(bytes);
-    Proof::<SC>::decode(&mut reader)
+    fn decode_from_bytes(bytes: &[u8]) -> Result<Self> {
+        let mut reader = Cursor::new(bytes);
+        Self::decode(&mut reader)
+    }
 }
 
 // ==================== Encode implementation ====================
+
+impl Encode for ContinuationVmProof<SC> {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
+        encode_slice(&self.per_segment, writer)?;
+        self.user_public_values.encode(writer)
+    }
+}
+
+impl Encode for UserPublicValuesProof<DIGEST_SIZE, F> {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
+        encode_slice(&self.proof, writer)?;
+        encode_slice(&self.public_values, writer)?;
+        self.public_values_commit.encode(writer)
+    }
+}
+
+impl Encode for RootVmVerifierInput<SC> {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
+        encode_slice(&self.proofs, writer)?;
+        encode_slice(&self.public_values, writer)
+    }
+}
 
 impl Encode for Proof<SC> {
     // We need to know:
@@ -298,6 +311,41 @@ impl Encode for usize {
 }
 
 // ============ Decode implementation =============
+
+impl Decode for ContinuationVmProof<SC> {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let per_segment = decode_vec(reader)?;
+        let user_public_values = UserPublicValuesProof::decode(reader)?;
+        Ok(Self {
+            per_segment,
+            user_public_values,
+        })
+    }
+}
+
+impl Decode for UserPublicValuesProof<DIGEST_SIZE, F> {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let proof = decode_vec(reader)?;
+        let public_values = decode_vec(reader)?;
+        let public_values_commit = <[F; DIGEST_SIZE]>::decode(reader)?;
+        Ok(Self {
+            proof,
+            public_values,
+            public_values_commit,
+        })
+    }
+}
+
+impl Decode for RootVmVerifierInput<SC> {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let proofs = decode_vec(reader)?;
+        let public_values = decode_vec(reader)?;
+        Ok(Self {
+            proofs,
+            public_values,
+        })
+    }
+}
 
 impl Decode for Proof<SC> {
     /// Decode a proof using FRI as the PCS with `BabyBearPoseidon2Config`.
