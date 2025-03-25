@@ -90,11 +90,12 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
         program.max_num_public_values = NUM_PUB_VALUES;
         program
     };
-    Sdk.commit_app_exe(
-        FriParameters::new_for_testing(app_log_blowup),
-        program.into(),
-    )
-    .unwrap()
+    Sdk::default()
+        .commit_app_exe(
+            FriParameters::new_for_testing(app_log_blowup),
+            program.into(),
+        )
+        .unwrap()
 }
 
 fn agg_config_for_test() -> AggConfig {
@@ -308,7 +309,8 @@ fn test_static_verifier_custom_pv_handler() {
     println!("test setup");
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
-    let app_pk = Sdk.app_keygen(app_config.clone()).unwrap();
+    let sdk = Sdk::default();
+    let app_pk = sdk.app_keygen(app_config.clone()).unwrap();
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
     println!("app_config: {:?}", app_config.app_vm_config);
     println!(
@@ -331,19 +333,19 @@ fn test_static_verifier_custom_pv_handler() {
         exe_commit,
         leaf_verifier_commit,
     };
-    let agg_pk = Sdk
+    let agg_pk = sdk
         .agg_keygen(agg_config_for_test(), &params_reader, &pv_handler)
         .unwrap();
 
     // Generate verifier contract
     println!("generate verifier contract");
-    let evm_verifier = Sdk
+    let evm_verifier = sdk
         .generate_snark_verifier_contract(&params_reader, &agg_pk)
         .unwrap();
 
     // Generate and verify proof
     println!("generate and verify proof");
-    let evm_proof = Sdk
+    let evm_proof = sdk
         .generate_evm_proof(
             &params_reader,
             Arc::new(app_pk),
@@ -352,27 +354,28 @@ fn test_static_verifier_custom_pv_handler() {
             StdIn::default(),
         )
         .unwrap();
-    assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
+    assert!(sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
 }
 
 #[test]
 fn test_e2e_proof_generation_and_verification() {
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
-    let app_pk = Sdk.app_keygen(app_config).unwrap();
+    let sdk = Sdk::default();
+    let app_pk = sdk.app_keygen(app_config).unwrap();
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
-    let agg_pk = Sdk
+    let agg_pk = sdk
         .agg_keygen(
             agg_config_for_test(),
             &params_reader,
             &DefaultStaticVerifierPvHandler,
         )
         .unwrap();
-    let evm_verifier = Sdk
+    let evm_verifier = sdk
         .generate_snark_verifier_contract(&params_reader, &agg_pk)
         .unwrap();
 
-    let evm_proof = Sdk
+    let evm_proof = sdk
         .generate_evm_proof(
             &params_reader,
             Arc::new(app_pk),
@@ -381,12 +384,12 @@ fn test_e2e_proof_generation_and_verification() {
             StdIn::default(),
         )
         .unwrap();
-    assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
+    assert!(sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
 }
 
 #[test]
 fn test_sdk_guest_build_and_transpile() {
-    let sdk = Sdk;
+    let sdk = Sdk::default();
     let guest_opts = GuestOptions::default()
         // .with_features(vec!["zkvm"])
         // .with_options(vec!["--release"]);
@@ -410,7 +413,7 @@ fn test_sdk_guest_build_and_transpile() {
 #[test]
 fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     // generate a proof
-    let sdk = Sdk;
+    let sdk = Sdk::default();
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest");
     let elf = sdk.build(Default::default(), pkg_dir, &Default::default())?;

@@ -232,7 +232,7 @@ where
     let prover = AppProver::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name);
     let app_proof = prover.generate_app_proof(input_stream);
     // 6. Verify STARK proofs, including boundary conditions.
-    let sdk = Sdk;
+    let sdk = Sdk::default();
     sdk.verify_app_proof(&app_vk, &app_proof)
         .expect("Verification failed");
     if let Some(leaf_vm_config) = leaf_vm_config {

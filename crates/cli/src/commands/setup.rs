@@ -47,12 +47,13 @@ impl EvmProvingSetupCmd {
         Self::download_params(10, 24).await?;
         let params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
         let agg_config = AggConfig::default();
+        let sdk = Sdk::default();
 
         println!("Generating proving key...");
-        let agg_pk = Sdk.agg_keygen(agg_config, &params_reader, &DefaultStaticVerifierPvHandler)?;
+        let agg_pk = sdk.agg_keygen(agg_config, &params_reader, &DefaultStaticVerifierPvHandler)?;
 
         println!("Generating verifier contract...");
-        let verifier = Sdk.generate_snark_verifier_contract(&params_reader, &agg_pk)?;
+        let verifier = sdk.generate_snark_verifier_contract(&params_reader, &agg_pk)?;
 
         println!("Writing proving key to file...");
         write_agg_pk_to_file(agg_pk, DEFAULT_AGG_PK_PATH)?;

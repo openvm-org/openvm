@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
     ));
     let agg_config = args.agg_config();
 
-    let sdk = Sdk;
+    let sdk = Sdk::default();
     let halo2_params_reader = CacheHalo2ParamsReader::new(
         args.kzg_params_dir
             .clone()

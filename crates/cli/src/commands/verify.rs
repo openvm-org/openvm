@@ -42,14 +42,14 @@ impl VerifyCmd {
             VerifySubCommand::App { app_vk, proof } => {
                 let app_vk = read_app_vk_from_file(app_vk)?;
                 let app_proof = read_app_proof_from_file(proof)?;
-                Sdk.verify_app_proof(&app_vk, &app_proof)?;
+                Sdk::default().verify_app_proof(&app_vk, &app_proof)?;
             }
             VerifySubCommand::Evm { proof } => {
                 let evm_verifier = read_evm_verifier_from_folder(DEFAULT_VERIFIER_FOLDER).map_err(|e| {
                     eyre::eyre!("Failed to read EVM verifier: {}\nPlease run 'cargo openvm evm-proving-setup' first", e)
                 })?;
                 let evm_proof = read_evm_proof_from_file(proof)?;
-                Sdk.verify_evm_proof(&evm_verifier, &evm_proof)?;
+                Sdk::default().verify_evm_proof(&evm_verifier, &evm_proof)?;
             }
         }
         Ok(())

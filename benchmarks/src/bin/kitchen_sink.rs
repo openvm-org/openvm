@@ -60,7 +60,7 @@ fn main() -> Result<()> {
         .build();
     let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
 
-    let sdk = Sdk;
+    let sdk = Sdk::default();
     let app_config = args.app_config(vm_config.clone());
     let app_pk = Arc::new(sdk.app_keygen(app_config)?);
     let app_committed_exe = commit_app_exe(app_pk.app_fri_params(), exe);
