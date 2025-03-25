@@ -570,7 +570,7 @@ mod tests {
         let range_checker =
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29));
         let mem_config = MemoryConfig {
-            as_offset: 1,
+            as_offset: initial_memory.as_offset,
             ..Default::default()
         };
         let memory = OfflineMemory::new(
