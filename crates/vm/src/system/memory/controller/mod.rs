@@ -457,6 +457,9 @@ impl<F: PrimeField32> MemoryController<F> {
     fn replay_access_log(&mut self) {
         let log = mem::take(&mut self.memory.log);
         if log.is_empty() {
+            // Online memory logs may be empty, but offline memory may be replayed from external sources.
+            // In these cases, we skip the calls to replay access logs because `set_log_capacity` would
+            // panic.
             tracing::debug!("skipping replay_access_log");
             return;
         }
