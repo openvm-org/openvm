@@ -30,7 +30,6 @@ group = "0.13.0"
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint.workspace = true
-num-traits.workspace = true
 lazy_static.workspace = true
 
 [features]

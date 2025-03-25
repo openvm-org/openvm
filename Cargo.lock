@@ -3238,7 +3238,6 @@ dependencies = [
  "bytemuck",
  "chrono",
  "num-bigint 0.4.6",
- "num-traits",
  "openvm-custom-insn",
  "openvm-platform",
  "openvm-rv32im-guest",
@@ -3583,7 +3582,6 @@ dependencies = [
  "k256",
  "lazy_static",
  "num-bigint 0.4.6",
- "num-traits",
  "once_cell",
  "openvm",
  "openvm-algebra-guest",
@@ -3953,7 +3951,6 @@ dependencies = [
 name = "openvm-platform"
 version = "1.0.0-rc.2"
 dependencies = [
- "bytemuck",
  "critical-section",
  "embedded-alloc",
  "getrandom 0.2.15",

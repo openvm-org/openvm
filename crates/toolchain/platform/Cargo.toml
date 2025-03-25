@@ -14,7 +14,6 @@ openvm-rv32im-guest.workspace = true
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.
 [target.'cfg(target_os = "zkvm")'.dependencies]
-bytemuck = { workspace = true, optional = true }
 critical-section = { version = "1.1.2", optional = true }
 embedded-alloc = { version = "0.6.0", features = [
     "allocator_api",
@@ -41,7 +40,7 @@ entrypoint = []
 export-getrandom = ["dep:getrandom"]
 export-libm = ["dep:libm"]
 # Currently unimplemented: exports a `getrandom` implementation that uses sys_random
-getrandom = ["export-getrandom", "dep:bytemuck"]
+getrandom = ["export-getrandom"]
 heap-embedded-alloc = [
     "dep:critical-section",
     "dep:embedded-alloc",
