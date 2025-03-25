@@ -28,7 +28,7 @@ use openvm_native_recursion::halo2::{
     wrapper::{EvmVerifier, Halo2WrapperProvingKey},
     RawEvmProof,
 };
-use openvm_stark_backend::{engine::StarkEngine, proof::Proof};
+use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
