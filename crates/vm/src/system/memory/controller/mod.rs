@@ -456,6 +456,10 @@ impl<F: PrimeField32> MemoryController<F> {
 
     fn replay_access_log(&mut self) {
         let log = mem::take(&mut self.memory.log);
+        if log.is_empty() {
+            tracing::debug!("skipping replay_access_log");
+            return;
+        }
 
         let mut offline_memory = self.offline_memory.lock().unwrap();
         offline_memory.set_log_capacity(log.len());
