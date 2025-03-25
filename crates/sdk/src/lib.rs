@@ -92,6 +92,10 @@ impl<E: StarkFriEngine<SC>> Default for GenericSdk<E> {
 pub type Sdk = GenericSdk<BabyBearPoseidon2Engine>;
 
 impl<E: StarkFriEngine<SC>> GenericSdk<E> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn build<P: AsRef<Path>>(
         &self,
         guest_opts: GuestOptions,

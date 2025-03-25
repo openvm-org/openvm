@@ -90,7 +90,7 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
         program.max_num_public_values = NUM_PUB_VALUES;
         program
     };
-    Sdk::default()
+    Sdk::new()
         .commit_app_exe(
             FriParameters::new_for_testing(app_log_blowup),
             program.into(),
@@ -309,7 +309,7 @@ fn test_static_verifier_custom_pv_handler() {
     println!("test setup");
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
-    let sdk = Sdk::default();
+    let sdk = Sdk::new();
     let app_pk = sdk.app_keygen(app_config.clone()).unwrap();
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
     println!("app_config: {:?}", app_config.app_vm_config);
@@ -361,7 +361,7 @@ fn test_static_verifier_custom_pv_handler() {
 fn test_e2e_proof_generation_and_verification() {
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
-    let sdk = Sdk::default();
+    let sdk = Sdk::new();
     let app_pk = sdk.app_keygen(app_config).unwrap();
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
     let agg_pk = sdk
@@ -389,7 +389,7 @@ fn test_e2e_proof_generation_and_verification() {
 
 #[test]
 fn test_sdk_guest_build_and_transpile() {
-    let sdk = Sdk::default();
+    let sdk = Sdk::new();
     let guest_opts = GuestOptions::default()
         // .with_features(vec!["zkvm"])
         // .with_options(vec!["--release"]);
@@ -413,7 +413,7 @@ fn test_sdk_guest_build_and_transpile() {
 #[test]
 fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     // generate a proof
-    let sdk = Sdk::default();
+    let sdk = Sdk::new();
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest");
     let elf = sdk.build(Default::default(), pkg_dir, &Default::default())?;

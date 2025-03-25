@@ -28,7 +28,7 @@ impl RunCmd {
         let exe = read_exe_from_file(&self.exe)?;
         let app_config = read_config_toml_or_default(&self.config)?;
         let output =
-            Sdk::default().execute(exe, app_config.app_vm_config, read_to_stdin(&self.input)?)?;
+            Sdk::new().execute(exe, app_config.app_vm_config, read_to_stdin(&self.input)?)?;
         println!("Execution output: {:?}", output);
         Ok(())
     }

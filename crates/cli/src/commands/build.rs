@@ -143,7 +143,7 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
 
         let data = read(elf_path.clone())?;
         let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-        let exe = Sdk::default().transpile(elf, transpiler)?;
+        let exe = Sdk::new().transpile(elf, transpiler)?;
         let committed_exe = commit_app_exe(app_config.app_fri_params.fri_params, exe.clone());
         write_exe_to_file(exe, output_path)?;
         write(

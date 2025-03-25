@@ -69,7 +69,7 @@ impl ProveCmd {
                 output,
             } => {
                 let (app_pk, committed_exe, input) = Self::prepare_execution(app_pk, exe, input)?;
-                let app_proof = Sdk::default().generate_app_proof(app_pk, committed_exe, input)?;
+                let app_proof = Sdk::new().generate_app_proof(app_pk, committed_exe, input)?;
                 write_app_proof_to_file(app_proof, output)?;
             }
             ProveSubCommand::Evm {
@@ -84,7 +84,7 @@ impl ProveCmd {
                 let agg_pk = read_agg_pk_from_file(DEFAULT_AGG_PK_PATH).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
-                let evm_proof = Sdk::default().generate_evm_proof(
+                let evm_proof = Sdk::new().generate_evm_proof(
                     &params_reader,
                     app_pk,
                     committed_exe,
@@ -108,7 +108,7 @@ impl ProveCmd {
     )> {
         let app_pk: Arc<AppProvingKey<SdkVmConfig>> = Arc::new(read_app_pk_from_file(app_pk)?);
         let app_exe = read_exe_from_file(exe)?;
-        let committed_exe = Sdk::default().commit_app_exe(app_pk.app_fri_params(), app_exe)?;
+        let committed_exe = Sdk::new().commit_app_exe(app_pk.app_fri_params(), app_exe)?;
 
         let commits = AppExecutionCommit::compute(
             &app_pk.app_vm_pk.vm_config,

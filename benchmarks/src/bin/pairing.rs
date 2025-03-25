@@ -29,7 +29,7 @@ fn main() -> Result<()> {
         ]))
         .pairing(PairingExtension::new(vec![PairingCurve::Bn254]))
         .build();
-    let sdk = Sdk::default();
+    let sdk = Sdk::new();
     let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {

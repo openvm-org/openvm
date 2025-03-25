@@ -47,7 +47,7 @@ impl EvmProvingSetupCmd {
         Self::download_params(10, 24).await?;
         let params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
         let agg_config = AggConfig::default();
-        let sdk = Sdk::default();
+        let sdk = Sdk::new();
 
         println!("Generating proving key...");
         let agg_pk = sdk.agg_keygen(agg_config, &params_reader, &DefaultStaticVerifierPvHandler)?;
