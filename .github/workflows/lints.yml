@@ -38,6 +38,7 @@ jobs:
       - name: Run fmt
         run: |
           rustup install nightly
+          rustup component add --toolchain nightly rustfmt
           cargo +nightly fmt --all -- --check
 
       - name: Run clippy
