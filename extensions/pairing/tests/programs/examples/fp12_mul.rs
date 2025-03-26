@@ -1,4 +1,3 @@
-#![feature(cfg_match)]
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(unused_imports)]
@@ -90,9 +89,12 @@ pub fn main() {
     #[allow(unused_variables)]
     let io = read_vec();
 
-    cfg_match! {
-        cfg(feature = "bn254") => { bn254::test_fp12_mul(&io) }
-        cfg(feature = "bls12_381") => { bls12_381::test_fp12_mul(&io) }
-        _ => { panic!("No curve feature enabled") }
+    #[cfg(feature = "bn254")]
+    {
+        bn254::test_fp12_mul(&io)
+    }
+    #[cfg(feature = "bls12_381")]
+    {
+        bls12_381::test_fp12_mul(&io)
     }
 }

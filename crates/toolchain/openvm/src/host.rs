@@ -2,53 +2,57 @@
 
 use alloc::vec::Vec;
 #[cfg(feature = "std")]
-use core::cell::RefCell;
-
-/// Simulated input stream on host
-pub enum HostInputStream {
-    /// Read directly from stdin
-    Stdin,
-    /// Directly set from a test using [`set_hints`].
-    Internal(Vec<Vec<u8>>),
-}
-
-impl HostInputStream {
-    pub const fn new() -> Self {
-        Self::Stdin
-    }
-}
-
-impl Default for HostInputStream {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+pub use std::*;
 
 #[cfg(feature = "std")]
-thread_local! {
-    /// Hint streams in the non-zkVM environment.
-    pub static HINTS: RefCell<HostInputStream> = RefCell::new(HostInputStream::new());
-    /// Current hint stream in the non-zkVM environment.
-    pub static HINT_STREAM: RefCell<Vec<u8>> = RefCell::new(Vec::new());
-}
+mod std {
+    use alloc::vec::Vec;
+    use core::cell::RefCell;
 
-/// Set the hints and reset the current hint stream.
-#[cfg(feature = "std")]
-pub fn set_hints(hints: Vec<Vec<u8>>) {
-    HINTS.replace(HostInputStream::Internal(
-        hints
-            .into_iter()
-            .rev()
-            .map(|v| {
-                let len = v.len() as u32;
-                len.to_le_bytes()
-                    .into_iter()
-                    .chain(v.iter().cloned())
-                    .collect()
-            })
-            .collect(),
-    ));
-    HINT_STREAM.replace(Vec::new());
+    /// Simulated input stream on host
+    pub enum HostInputStream {
+        /// Read directly from stdin
+        Stdin,
+        /// Directly set from a test using [`set_hints`].
+        Internal(Vec<Vec<u8>>),
+    }
+
+    impl HostInputStream {
+        pub const fn new() -> Self {
+            Self::Stdin
+        }
+    }
+
+    impl Default for HostInputStream {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    thread_local! {
+        /// Hint streams in the non-zkVM environment.
+        pub static HINTS: RefCell<HostInputStream> = RefCell::new(HostInputStream::new());
+        /// Current hint stream in the non-zkVM environment.
+        pub static HINT_STREAM: RefCell<Vec<u8>> = RefCell::new(Vec::new());
+    }
+
+    /// Set the hints and reset the current hint stream.
+    pub fn set_hints(hints: Vec<Vec<u8>>) {
+        HINTS.replace(HostInputStream::Internal(
+            hints
+                .into_iter()
+                .rev()
+                .map(|v| {
+                    let len = v.len() as u32;
+                    len.to_le_bytes()
+                        .into_iter()
+                        .chain(v.iter().cloned())
+                        .collect()
+                })
+                .collect(),
+        ));
+        HINT_STREAM.replace(Vec::new());
+    }
 }
 
 /// Read the next hint stream from the hints.
