@@ -306,7 +306,7 @@ impl<C: Config> Builder<C> {
     /// Only works for Felt == BabyBear and in the VM.
     ///
     /// Uses bit decomposition hint, which has large constant factor overhead, so prefer
-    /// [assert_less_than_slow_small_rhs] when rhs is small.
+    /// [Self::assert_less_than_slow_small_rhs] when rhs is small.
     pub fn assert_less_than_slow_bit_decomp(&mut self, lhs: Var<C::N>, rhs: Var<C::N>) {
         let lhs = self.unsafe_cast_var_to_felt(lhs);
         let rhs = self.unsafe_cast_var_to_felt(rhs);

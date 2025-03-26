@@ -477,7 +477,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    /// Low-level API to replay a single memory access log entry and populate the [OfflineMemory], [MemoryInterface], and [AccessAdapterInventory].
+    /// Low-level API to replay a single memory access log entry and populate the [OfflineMemory], [MemoryInterface], and `AccessAdapterInventory`.
     pub fn replay_access(
         entry: MemoryLogEntry<F>,
         offline_memory: &mut OfflineMemory<F>,

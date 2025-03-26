@@ -584,7 +584,7 @@ where
 
     /// Verify segment proofs, checking continuation boundary conditions between segments if VM memory is persistent
     /// The behavior of this function differs depending on whether continuations is enabled or not.
-    /// We recommend to call the functions [`Self::verify_segments`] or [`Self::verify_single`] directly instead.
+    /// We recommend to call the functions [`verify_segments`] or [`verify_single`] directly instead.
     pub fn verify(
         &self,
         vk: &MultiStarkVerifyingKey<SC>,

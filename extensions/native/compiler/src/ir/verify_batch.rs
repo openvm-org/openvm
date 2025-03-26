@@ -21,7 +21,7 @@ impl<C: Config> Builder<C> {
         ));
     }
 
-    /// Version of [`verify_batch_felt`] where `opened_values` are extension field elements.
+    /// Version of [`Self::verify_batch_felt`] where `opened_values` are extension field elements.
     /// - Requires `dimensions.len() == opened_values.len()`
     /// - `proof` is an array of arrays where inner arrays are of length `CHUNK`
     /// - `commit.len() = CHUNK`

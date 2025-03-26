@@ -31,7 +31,7 @@ pub trait Encode {
     /// Writes the encoded representation of `self` to the given writer.
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()>;
 
-    /// Convenience method to encode into a Vec<u8>
+    /// Convenience method to encode into a `Vec<u8>`
     fn encode_to_vec(&self) -> Result<Vec<u8>> {
         let mut buffer = Vec::new();
         self.encode(&mut buffer)?;
