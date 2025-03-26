@@ -19,7 +19,7 @@ pub struct AppProver<VC, E: StarkFriEngine<SC>> {
     app_prover: VmLocalProver<SC, VC, E>,
 }
 
-impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
+impl<VC: 'static, E: StarkFriEngine<SC>> AppProver<VC, E> {
     pub fn new(
         app_vm_pk: Arc<VmProvingKey<SC, VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
@@ -44,9 +44,9 @@ impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
     /// Generates proof for every continuation segment
     pub fn generate_app_proof(&self, input: StdIn) -> ContinuationVmProof<SC>
     where
-        VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
+        VC: VmConfig<F> + Send,
+        VC::Executor: Chip<SC> + Send,
+        VC::Periphery: Chip<SC> + Send,
     {
         assert!(
             self.vm_config().system().continuation_enabled,
@@ -70,8 +70,8 @@ impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
     pub fn generate_app_proof_without_continuations(&self, input: StdIn) -> Proof<SC>
     where
         VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
+        VC::Executor: Chip<SC> + Send,
+        VC::Periphery: Chip<SC> + Send,
     {
         assert!(
             !self.vm_config().system().continuation_enabled,

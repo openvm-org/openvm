@@ -1,18 +1,25 @@
-use std::{marker::PhantomData, mem, sync::Arc};
+use std::{
+    marker::PhantomData,
+    mem,
+    sync::{mpsc, Arc},
+};
 
 use async_trait::async_trait;
-use oneshot::Sender;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, ExecutionSegment, SingleSegmentVmExecutor, Streams,
-        VirtualMachine, VmComplexTraceHeights, VmConfig,
+        VirtualMachine, VmComplexTraceHeights, VmConfig, VmExecutorNextSegmentState,
     },
-    system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
+    system::{
+        memory::{paged_vec::AddressMap, tree::public_values::UserPublicValuesProof},
+        program::trace::VmCommittedExe,
+    },
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
     proof::Proof,
+    prover::types::ProofInput,
     Chip,
 };
 use openvm_stark_sdk::{config::FriParameters, engine::StarkFriEngine};
@@ -68,12 +75,15 @@ impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
 
 const MAX_SEGMENTATION_RETRIES: usize = 4;
 
-impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> ContinuationVmProver<SC>
-    for VmLocalProver<SC, VC, E>
+impl<
+        SC: StarkGenericConfig + 'static,
+        VC: VmConfig<Val<SC>> + 'static + Send,
+        E: StarkFriEngine<SC> + 'static + Send,
+    > ContinuationVmProver<SC> for VmLocalProver<SC, VC, E>
 where
     Val<SC>: PrimeField32,
-    VC::Executor: Chip<SC>,
-    VC::Periphery: Chip<SC>,
+    VC::Executor: Chip<SC> + Send,
+    VC::Periphery: Chip<SC> + Send,
 {
     fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> ContinuationVmProof<SC> {
         assert!(self.pk.vm_config.system().continuation_enabled);
@@ -90,88 +100,193 @@ where
             exe,
             committed_program,
         } = self.committed_exe.as_ref();
+        let input = input.into();
 
-        let (segment_tx, segment_rx) = std::sync::mpsc::sync_channel::<(
-            usize,
-            ExecutionSegment<Val<SC>, VC>,
-            Sender<Proof<SC>>,
-        )>(2);
-        let (trace_tx, trace_rx) = std::sync::mpsc::sync_channel(2);
+        // Set up pipeline channels with capacity 1 to ensure flow control
+        let (segment_tx, segment_rx) =
+            mpsc::sync_channel::<(usize, ExecutionSegment<Val<SC>, VC>, tracing::Span)>(1);
+        let (trace_tx, trace_rx) = mpsc::sync_channel::<(usize, ProofInput<SC>, tracing::Span)>(1);
+        let (proof_tx, proof_rx) = mpsc::sync_channel::<(usize, Proof<SC>)>(1);
+        let (memory_tx, memory_rx) = mpsc::sync_channel(1);
 
-        // spin up trace gen worker
-        let trace_gen_worker = std::thread::spawn(move || loop {
-            match segment_rx.recv() {
-                Ok((seg_idx, seg, proof_tx)) => {
-                    let proof_input = info_span!("trace_gen", segment = seg_idx)
-                        .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())));
-                    trace_tx.send((seg_idx, proof_input, proof_tx)).unwrap();
+        std::thread::scope(|s| {
+            // ===== EXECUTION THREAD =====
+            // Executes VM code segments and feeds them to the trace generation pipeline
+            let exe_clone = exe.clone();
+            let executor_handle = s.spawn(move || {
+                let executor = &vm.executor;
+                let mem_config = executor.config.system().memory_config;
+                let exe_val = exe_clone;
+
+                let memory = AddressMap::from_iter(
+                    mem_config.as_offset,
+                    1 << mem_config.as_height,
+                    1 << mem_config.pointer_max_bits,
+                    exe_val.init_memory.clone(),
+                );
+                let pc = exe_val.pc_start;
+                let mut state = VmExecutorNextSegmentState::new(memory, input, pc);
+                let mut segment_idx = 0;
+                let mut segment_indices = vec![];
+                let mut final_memory = None;
+
+                // Execute segments until completion
+                loop {
+                    let segment_span = info_span!("execute_segment", segment = segment_idx);
+                    let _span_guard = segment_span.enter();
+
+                    // Execute current segment
+                    let mut segment_result =
+                        match executor.execute_until_segment(exe_val.clone(), state) {
+                            Ok(result) => result,
+                            Err(e) => panic!("Execution error: {:?}", e),
+                        };
+
+                    // Check if this is the final segment
+                    let is_last_segment = segment_result.next_state.is_none();
+                    if is_last_segment {
+                        final_memory = mem::take(&mut segment_result.segment.final_memory);
+                    }
+
+                    // Send segment data to trace thread
+                    segment_tx
+                        .send((segment_idx, segment_result.segment, segment_span.clone()))
+                        .expect("Failed to send segment");
+
+                    segment_indices.push(segment_idx);
+
+                    // Exit loop if this was the last segment
+                    if is_last_segment {
+                        break;
+                    }
+
+                    // Prepare for next segment
+                    state = segment_result.next_state.unwrap();
+                    segment_idx += 1;
                 }
-                Err(_) => break,
-            }
-        });
+                drop(segment_tx);
 
-        // spin up prover worker
-        let prover_worker = std::thread::spawn(move || loop {
-            match trace_rx.recv() {
-                Ok((seg_idx, proof_input, proof_tx)) => {
-                    let proof = info_span!("prove_segment", segment = seg_idx)
-                        .in_scope(|| vm.engine.prove(&self.pk.vm_pk, proof_input));
-                    proof_tx.send(proof).unwrap();
+                // Send final memory state to main thread
+                if let Some(mem) = final_memory {
+                    memory_tx.send(mem).expect("Failed to send final memory");
+                } else {
+                    panic!("No final memory captured");
                 }
-                Err(_) => break,
+
+                segment_indices
+            });
+
+            // ===== TRACE GENERATION THREAD =====
+            // Generates proof inputs from execution segments
+            let trace_handle = s.spawn(move || {
+                let committed_program_clone = committed_program.clone();
+
+                for (segment_idx, segment, parent_span) in segment_rx.iter() {
+                    let span =
+                        parent_span.in_scope(|| info_span!("trace_gen", segment = segment_idx));
+                    let _guard = span.enter();
+
+                    let proof_input =
+                        segment.generate_proof_input(Some(committed_program_clone.clone()));
+
+                    trace_tx
+                        .send((segment_idx, proof_input, parent_span.clone()))
+                        .expect("Failed to send trace data");
+                }
+                drop(trace_tx);
+            });
+
+            // ===== PROOF GENERATION THREAD =====
+            // Generates cryptographic proofs from trace data
+            let prove_engine = E::new(self.pk.fri_params);
+            let vm_pk_clone = self.pk.vm_pk.clone();
+            let prove_handle = s.spawn(move || {
+                for (segment_idx, proof_input, parent_span) in trace_rx.iter() {
+                    let span =
+                        parent_span.in_scope(|| info_span!("prove_segment", segment = segment_idx));
+                    let _guard = span.enter();
+
+                    let proof = prove_engine.prove(&vm_pk_clone, proof_input);
+
+                    proof_tx
+                        .send((segment_idx, proof))
+                        .expect("Failed to send proof");
+                }
+                drop(proof_tx);
+            });
+
+            // ===== COLLECTOR THREAD =====
+            // Collects proofs as they are generated
+            let collector_handle = s.spawn(move || {
+                let mut proofs = Vec::new();
+                for (_, proof) in proof_rx.iter() {
+                    proofs.push(proof); // Collect proofs in order
+                }
+
+                proofs
+            });
+
+            // ===== MAIN THREAD COORDINATION =====
+            // Wait for execution & tracegen & prove to complete
+            let segment_indices = executor_handle.join().expect("Executor thread panicked");
+            let final_memory = memory_rx.recv().expect("Failed to receive final memory");
+            trace_handle.join().expect("Trace thread panicked");
+            prove_handle.join().expect("Prove thread panicked");
+
+            // Get collected proofs
+            let collected_proofs = collector_handle.join().expect("Collector thread panicked");
+            if collected_proofs.len() != segment_indices.len() {
+                panic!(
+                    "Proof count mismatch: expected {}, got {}",
+                    segment_indices.len(),
+                    collected_proofs.len()
+                );
             }
-        });
 
-        let per_segment = vm
-            .executor
-            .execute_and_then(exe.clone(), input, |seg_idx, mut seg| {
-                final_memory = mem::take(&mut seg.final_memory);
+            let user_public_values = UserPublicValuesProof::compute(
+                self.pk.vm_config.system().memory_config.memory_dimensions(),
+                self.pk.vm_config.system().num_public_values,
+                &vm_poseidon2_hasher(),
+                &final_memory,
+            );
 
-                let (proof_tx, proof_rx) = oneshot::channel();
-                segment_tx.send((seg_idx, seg, proof_tx)).unwrap();
-                proof_rx
-            })
-            .unwrap();
-
-        prover_worker.join().unwrap();
-        trace_gen_worker.join().unwrap();
-
-        let user_public_values = UserPublicValuesProof::compute(
-            self.pk.vm_config.system().memory_config.memory_dimensions(),
-            self.pk.vm_config.system().num_public_values,
-            &vm_poseidon2_hasher(),
-            final_memory.as_ref().unwrap(),
-        );
-        ContinuationVmProof {
-            per_segment,
-            user_public_values,
-        }
+            ContinuationVmProof {
+                per_segment: collected_proofs,
+                user_public_values,
+            }
+        })
     }
 }
 
-#[async_trait]
-impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>>
-    AsyncContinuationVmProver<SC> for VmLocalProver<SC, VC, E>
-where
-    VmLocalProver<SC, VC, E>: Send + Sync,
-    Val<SC>: PrimeField32,
-    VC::Executor: Chip<SC>,
-    VC::Periphery: Chip<SC>,
-{
-    async fn prove(
-        &self,
-        input: impl Into<Streams<Val<SC>>> + Send + Sync,
-    ) -> ContinuationVmProof<SC> {
-        ContinuationVmProver::prove(self, input)
-    }
-}
+// #[async_trait]
+// impl<
+//         SC: StarkGenericConfig + 'static,
+//         VC: VmConfig<Val<SC>> + 'static,
+//         E: StarkFriEngine<SC> + 'static,
+//     > AsyncContinuationVmProver<SC> for VmLocalProver<SC, VC, E>
+// where
+//     VmLocalProver<SC, VC, E>: Send + Sync,
+//     Val<SC>: PrimeField32,
+//     VC::Executor: Chip<SC> + Send,
+//     VC::Periphery: Chip<SC> + Send,
+// {
+//     async fn prove(
+//         &self,
+//         input: impl Into<Streams<Val<SC>>> + Send + Sync,
+//     ) -> ContinuationVmProof<SC> {
+//         ContinuationVmProver::prove(self, input)
+//     }
+// }
 
-impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> SingleSegmentVmProver<SC>
-    for VmLocalProver<SC, VC, E>
+impl<
+        SC: StarkGenericConfig + 'static,
+        VC: VmConfig<Val<SC>> + 'static,
+        E: StarkFriEngine<SC> + 'static,
+    > SingleSegmentVmProver<SC> for VmLocalProver<SC, VC, E>
 where
     Val<SC>: PrimeField32,
-    VC::Executor: Chip<SC>,
-    VC::Periphery: Chip<SC>,
+    VC::Executor: Chip<SC> + Send,
+    VC::Periphery: Chip<SC> + Send,
 {
     fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> Proof<SC> {
         assert!(!self.pk.vm_config.system().continuation_enabled);
@@ -190,16 +305,19 @@ where
     }
 }
 
-#[async_trait]
-impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>>
-    AsyncSingleSegmentVmProver<SC> for VmLocalProver<SC, VC, E>
-where
-    VmLocalProver<SC, VC, E>: Send + Sync,
-    Val<SC>: PrimeField32,
-    VC::Executor: Chip<SC>,
-    VC::Periphery: Chip<SC>,
-{
-    async fn prove(&self, input: impl Into<Streams<Val<SC>>> + Send + Sync) -> Proof<SC> {
-        SingleSegmentVmProver::prove(self, input)
-    }
-}
+// #[async_trait]
+// impl<
+//         SC: StarkGenericConfig + 'static,
+//         VC: VmConfig<Val<SC>> + 'static,
+//         E: StarkFriEngine<SC> + 'static,
+//     > AsyncSingleSegmentVmProver<SC> for VmLocalProver<SC, VC, E>
+// where
+//     VmLocalProver<SC, VC, E>: Send + Sync,
+//     Val<SC>: PrimeField32,
+//     VC::Executor: Chip<SC> + Send,
+//     VC::Periphery: Chip<SC> + Send,
+// {
+//     async fn prove(&self, input: impl Into<Streams<Val<SC>>> + Send + Sync) -> Proof<SC> {
+//         SingleSegmentVmProver::prove(self, input)
+//     }
+// }
