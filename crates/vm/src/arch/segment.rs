@@ -42,6 +42,9 @@ const DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT: usize = DEFAULT_MAX_SEGMENT_LEN * 1
 pub trait SegmentationStrategy:
     std::fmt::Debug + Send + Sync + std::panic::UnwindSafe + std::panic::RefUnwindSafe
 {
+    /// Whether the execution should segment based on the trace heights and cells.
+    ///
+    /// Air names are provided for debugging purposes.
     fn should_segment(
         &self,
         air_names: &[String],
@@ -49,6 +52,10 @@ pub trait SegmentationStrategy:
         trace_cells: &[usize],
     ) -> bool;
 
+    /// A strategy that segments more aggressively than the current one.
+    ///
+    /// Called when `should_segment` results in a segment that is infeasible. Execution will be
+    /// re-run with the stricter segmentation strategy.
     fn stricter_strategy(&self) -> Arc<dyn SegmentationStrategy>;
 }
 

@@ -952,7 +952,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         // program_chip, connector_chip
         [0, 0]
             .into_iter()
-            .chain([self.connector_chip().current_trace_cells()])
             .chain(self._public_values_chip().map(|c| c.current_trace_cells()))
             .chain(self.memory_controller().current_trace_cells())
             .chain(

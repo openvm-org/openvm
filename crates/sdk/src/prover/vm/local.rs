@@ -65,6 +65,8 @@ impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
     }
 }
 
+const MAX_SEGMENTATION_RETRIES: usize = 4;
+
 impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> ContinuationVmProver<SC>
     for VmLocalProver<SC, VC, E>
 where
@@ -91,6 +93,7 @@ where
 
         // This loop should typically iterate exactly once. Only in exceptional cases will the
         // segmentation produce an invalid segment and we will have to retry.
+        let mut retries = 0;
         let per_segment = loop {
             match vm.executor.execute_and_then(
                 exe.clone(),
@@ -107,7 +110,15 @@ where
                 Ok(per_segment) => break per_segment,
                 Err(GenerationError::Execution(err)) => panic!("execution error: {err}"),
                 Err(GenerationError::TraceHeightsLimitExceeded) => {
-                    tracing::info!("trace heights limit exceeded; retrying execution");
+                    if retries >= MAX_SEGMENTATION_RETRIES {
+                        panic!(
+                            "trace heights limit exceeded after {MAX_SEGMENTATION_RETRIES} retries"
+                        );
+                    }
+                    retries += 1;
+                    tracing::info!(
+                        "trace heights limit exceeded; retrying execution (attempt {retries})"
+                    );
                     let sys_config = vm.executor.config.system_mut();
                     let new_seg_strat = sys_config.segmentation_strategy.stricter_strategy();
                     sys_config.set_segmentation_strategy(new_seg_strat);
@@ -115,6 +126,7 @@ where
                 }
             };
         };
+
         let user_public_values = UserPublicValuesProof::compute(
             self.pk.vm_config.system().memory_config.memory_dimensions(),
             self.pk.vm_config.system().num_public_values,
