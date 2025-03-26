@@ -2,12 +2,12 @@
 
 use alloc::vec::Vec;
 #[cfg(feature = "std")]
-pub use std::*;
+pub use input::*;
 
 #[cfg(feature = "std")]
-mod std {
+mod input {
     use alloc::vec::Vec;
-    use core::cell::RefCell;
+    use std::cell::RefCell;
 
     /// Simulated input stream on host
     pub enum HostInputStream {
@@ -59,9 +59,7 @@ mod std {
 pub fn hint_input() {
     #[cfg(feature = "std")]
     {
-        let mut hints = HINTS.borrow_mut();
-        match &mut (*hints) {
-            #[cfg(feature = "std")]
+        HINTS.with_borrow_mut(|hints| match hints {
             HostInputStream::Stdin => {
                 use std::io::Read;
                 let mut buf = Vec::new();
@@ -75,7 +73,7 @@ pub fn hint_input() {
                 let hint = hints.pop().expect("No hint stream available");
                 HINT_STREAM.replace(hint);
             }
-        }
+        });
     }
     #[cfg(not(feature = "std"))]
     unimplemented!("hint_input not supported on no_std host")
@@ -85,7 +83,7 @@ pub fn hint_input() {
 pub fn read_n_bytes(_n: usize) -> Vec<u8> {
     #[cfg(feature = "std")]
     {
-        HINT_STREAM.borrow_mut().drain(.._n).collect()
+        HINT_STREAM.with_borrow_mut(|stream| stream.drain(.._n).collect())
     }
     #[cfg(not(feature = "std"))]
     {
