@@ -7,7 +7,7 @@ use std::{
 
 use derive_more::derive::From;
 use getset::Getters;
-use itertools::{any, zip_eq};
+use itertools::{any, zip_eq, Itertools};
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
@@ -941,7 +941,9 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         E: ChipUsageGetter,
         P: ChipUsageGetter,
     {
-        once(self.program_chip().current_trace_cells())
+        // program_chip, connector_chip
+        [0, 0]
+            .into_iter()
             .chain([self.connector_chip().current_trace_cells()])
             .chain(self._public_values_chip().map(|c| c.current_trace_cells()))
             .chain(self.memory_controller().current_trace_cells())
@@ -949,7 +951,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
                 self.chips_excluding_pv_chip()
                     .map(|c| c.current_trace_cells()),
             )
-            .chain([self.range_checker_chip().current_trace_cells()])
+            .chain([0]) // range_checker_chip
             .collect()
     }
 
@@ -988,7 +990,11 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         // System: Finalize memory.
         self.finalize_memory();
 
-        let trace_heights = self.current_trace_heights();
+        let trace_heights = self
+            .current_trace_heights()
+            .iter()
+            .map(|h| next_power_of_two_or_zero(*h))
+            .collect_vec();
         if any(&trace_heights, |h| *h > self.max_trace_height) {
             return Err(GenerationError::TraceHeightsLimitExceeded);
         }
@@ -999,6 +1005,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             let value = zip_eq(&constraint.coefficients, &trace_heights)
                 .map(|(c, h)| *c as u64 * *h as u64)
                 .sum::<u64>();
+
             if value >= constraint.threshold as u64 {
                 return Err(GenerationError::TraceHeightsLimitExceeded);
             }
