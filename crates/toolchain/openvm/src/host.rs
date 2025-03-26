@@ -32,9 +32,9 @@ mod input {
 
     thread_local! {
         /// Hint streams in the non-zkVM environment.
-        pub static HINTS: RefCell<HostInputStream> = RefCell::new(HostInputStream::new());
+        pub static HINTS: RefCell<HostInputStream> = const { RefCell::new(HostInputStream::new()) };
         /// Current hint stream in the non-zkVM environment.
-        pub static HINT_STREAM: RefCell<Vec<u8>> = RefCell::new(Vec::new());
+        pub static HINT_STREAM: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     }
 
     /// Set the hints and reset the current hint stream.
