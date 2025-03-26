@@ -1,6 +1,7 @@
 //! Hints emulation for the non-zkVM environment.
 
 use alloc::vec::Vec;
+
 #[cfg(feature = "std")]
 pub use input::*;
 
