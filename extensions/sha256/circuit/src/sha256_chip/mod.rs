@@ -57,7 +57,7 @@ pub struct Sha256VmChip<F: PrimeField32> {
     offset: usize,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Sha256Record<F> {
     pub from_state: ExecutionState<F>,
     pub dst_read: RecordId,
