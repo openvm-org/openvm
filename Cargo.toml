@@ -105,8 +105,8 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "4a223981722e75bf97c6807e4d56935196d86edf", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "4a223981722e75bf97c6807e4d56935196d86edf", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "b051e8978da9c829a76b262abf4a9736c8d1681e", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "b051e8978da9c829a76b262abf4a9736c8d1681e", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
