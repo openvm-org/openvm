@@ -173,13 +173,12 @@ p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05"
 p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
 p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
 
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "zkvm-v0.1", default-features = false, features = [
+zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
+snark-verifier-sdk = { version = "0.2.0", default-features = false, features = [
     "loader_halo2",
     "halo2-axiom",
-    "display",
 ] }
-zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
-halo2curves-axiom = "0.5.3"
+halo2curves-axiom = "0.7.0"
 
 tracing = "0.1.40"
 bon = "3.2.0"
