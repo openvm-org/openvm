@@ -37,7 +37,7 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
-use openvm_stark_backend::p3_field::{PrimeField32, TwoAdicField};
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 
@@ -160,7 +160,7 @@ impl SdkVmConfig {
     }
 }
 
-impl<F: PrimeField32 + TwoAdicField> VmConfig<F> for SdkVmConfig {
+impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
     type Executor = SdkVmConfigExecutor<F>;
     type Periphery = SdkVmConfigPeriphery<F>;
 

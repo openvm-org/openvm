@@ -1,16 +1,16 @@
+use std::sync::Arc;
+
 use derive_new::new;
 use openvm_circuit::system::memory::MemoryTraceHeights;
 use openvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_stark_backend::{
-    p3_field::{PrimeField32, TwoAdicField},
-    ChipUsageGetter,
-};
+use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
-    segment::SegmentationStrategy, AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor,
-    SystemPeriphery, VmChipComplex, VmInventoryError, PUBLIC_VALUES_AIR_ID,
+    segment::DefaultSegmentationStrategy, AnyEnum, InstructionExecutor, SegmentationStrategy,
+    SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex, VmInventoryError,
+    PUBLIC_VALUES_AIR_ID,
 };
 use crate::system::memory::BOUNDARY_AIR_OFFSET;
 
@@ -89,11 +89,11 @@ pub struct SystemConfig {
     /// This field is skipped in serde as it's only used in execution and
     /// not needed after any serialize/deserialize.
     #[serde(skip, default = "get_default_segmentation_strategy")]
-    pub segmentation_strategy: SegmentationStrategy,
+    pub segmentation_strategy: Arc<dyn SegmentationStrategy>,
 }
 
-pub fn get_default_segmentation_strategy() -> SegmentationStrategy {
-    SegmentationStrategy::default()
+pub fn get_default_segmentation_strategy() -> Arc<DefaultSegmentationStrategy> {
+    Arc::new(DefaultSegmentationStrategy::default())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -144,12 +144,13 @@ impl SystemConfig {
     }
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        self.segmentation_strategy =
-            SegmentationStrategy::new_with_max_segment_len(max_segment_len);
+        self.segmentation_strategy = Arc::new(
+            DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_len),
+        );
         self
     }
 
-    pub fn set_segmentation_strategy(&mut self, strategy: SegmentationStrategy) {
+    pub fn set_segmentation_strategy(&mut self, strategy: Arc<dyn SegmentationStrategy>) {
         self.segmentation_strategy = strategy;
     }
 
@@ -200,7 +201,7 @@ impl SystemTraceHeights {
     }
 }
 
-impl<F: PrimeField32 + TwoAdicField> VmConfig<F> for SystemConfig {
+impl<F: PrimeField32> VmConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
     type Periphery = SystemPeriphery<F>;
 

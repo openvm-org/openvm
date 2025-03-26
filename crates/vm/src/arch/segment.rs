@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
@@ -37,14 +39,27 @@ const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 //    its trace width is 36 and its after challenge trace width is 80.
 const DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT: usize = DEFAULT_MAX_SEGMENT_LEN * 120;
 
+pub trait SegmentationStrategy:
+    std::fmt::Debug + Send + Sync + std::panic::UnwindSafe + std::panic::RefUnwindSafe
+{
+    fn should_segment(
+        &self,
+        air_names: &[String],
+        trace_heights: &[usize],
+        trace_cells: &[usize],
+    ) -> bool;
+
+    fn stricter_strategy(&self) -> Arc<dyn SegmentationStrategy>;
+}
+
 /// Default segmentation strategy: segment if any chip's height or cells exceed the limits.
 #[derive(Debug, Clone)]
-pub struct SegmentationStrategy {
+pub struct DefaultSegmentationStrategy {
     max_segment_len: usize,
     max_cells_per_chip_in_segment: usize,
 }
 
-impl Default for SegmentationStrategy {
+impl Default for DefaultSegmentationStrategy {
     fn default() -> Self {
         Self {
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
@@ -53,7 +68,7 @@ impl Default for SegmentationStrategy {
     }
 }
 
-impl SegmentationStrategy {
+impl DefaultSegmentationStrategy {
     pub fn new_with_max_segment_len(max_segment_len: usize) -> Self {
         Self {
             max_segment_len,
@@ -71,7 +86,11 @@ impl SegmentationStrategy {
     pub fn max_segment_len(&self) -> usize {
         self.max_segment_len
     }
+}
 
+const SEGMENTATION_BACKOFF_FACTOR: usize = 4;
+
+impl SegmentationStrategy for DefaultSegmentationStrategy {
     fn should_segment(
         &self,
         air_names: &[String],
@@ -101,6 +120,14 @@ impl SegmentationStrategy {
             }
         }
         false
+    }
+
+    fn stricter_strategy(&self) -> Arc<dyn SegmentationStrategy> {
+        Arc::new(Self {
+            max_segment_len: self.max_segment_len / SEGMENTATION_BACKOFF_FACTOR,
+            max_cells_per_chip_in_segment: self.max_cells_per_chip_in_segment
+                / SEGMENTATION_BACKOFF_FACTOR,
+        })
     }
 }
 

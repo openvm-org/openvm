@@ -1,5 +1,5 @@
 use std::{
-    any::Any,
+    any::{Any, TypeId},
     cell::RefCell,
     iter::once,
     sync::{Arc, Mutex},
@@ -7,7 +7,7 @@ use std::{
 
 use derive_more::derive::From;
 use getset::Getters;
-use itertools::{any, zip_eq, Itertools};
+use itertools::{zip_eq, Itertools};
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
@@ -30,6 +30,7 @@ use openvm_stark_backend::{
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     AirRef, Chip, ChipUsageGetter,
 };
+use p3_baby_bear::BabyBear;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
@@ -529,7 +530,7 @@ pub enum SystemPeriphery<F: PrimeField32> {
     Poseidon2(Poseidon2PeripheryChip<F>),
 }
 
-impl<F: PrimeField32 + TwoAdicField> SystemComplex<F> {
+impl<F: PrimeField32> SystemComplex<F> {
     pub fn new(config: SystemConfig) -> Self {
         let mut bus_idx_mgr = BusIndexManager::new();
         let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
@@ -614,8 +615,15 @@ impl<F: PrimeField32 + TwoAdicField> SystemComplex<F> {
             range_checker_chip: range_checker,
         };
 
-        let min_log_blowup = log2_ceil_usize(config.max_constraint_degree - 1);
-        let max_trace_height = 1 << (F::TWO_ADICITY - min_log_blowup);
+        let max_trace_height = if TypeId::of::<F>() == TypeId::of::<BabyBear>() {
+            let min_log_blowup = log2_ceil_usize(config.max_constraint_degree - 1);
+            1 << (BabyBear::TWO_ADICITY - min_log_blowup)
+        } else {
+            tracing::warn!(
+                "constructing SystemComplex for unrecognized field; using max_trace_height = 2^30"
+            );
+            1 << 30
+        };
 
         Self {
             config,
@@ -995,18 +1003,33 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .iter()
             .map(|h| next_power_of_two_or_zero(*h))
             .collect_vec();
-        if any(&trace_heights, |h| *h > self.max_trace_height) {
+        if let Some(index) = trace_heights
+            .iter()
+            .position(|h| *h > self.max_trace_height)
+        {
+            tracing::info!(
+                "trace height of air {index} has height {} greater than maximum {}",
+                trace_heights[index],
+                self.max_trace_height
+            );
             return Err(GenerationError::TraceHeightsLimitExceeded);
         }
         if trace_height_constraints.is_empty() {
             tracing::warn!("generating proof input without trace height constraints");
         }
-        for constraint in trace_height_constraints {
+        for (i, constraint) in trace_height_constraints.iter().enumerate() {
             let value = zip_eq(&constraint.coefficients, &trace_heights)
-                .map(|(c, h)| *c as u64 * *h as u64)
+                .map(|(&c, &h)| c as u64 * h as u64)
                 .sum::<u64>();
 
             if value >= constraint.threshold as u64 {
+                tracing::info!(
+                    "trace heights {:?} violate linear constraint {} ({} >= {})",
+                    trace_heights,
+                    i,
+                    value,
+                    constraint.threshold
+                );
                 return Err(GenerationError::TraceHeightsLimitExceeded);
             }
         }

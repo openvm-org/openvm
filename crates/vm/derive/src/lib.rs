@@ -345,20 +345,20 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
 
             TokenStream::from(quote! {
                 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
-                pub enum #executor_type<F: PrimeField32 + openvm_stark_backend::p3_field::TwoAdicField> {
+                pub enum #executor_type<F: PrimeField32> {
                     #[any_enum]
                     #source_name_upper(#source_executor_type<F>),
                     #(#executor_enum_fields)*
                 }
 
                 #[derive(ChipUsageGetter, Chip, From, AnyEnum)]
-                pub enum #periphery_type<F: PrimeField32 + openvm_stark_backend::p3_field::TwoAdicField> {
+                pub enum #periphery_type<F: PrimeField32> {
                     #[any_enum]
                     #source_name_upper(#source_periphery_type<F>),
                     #(#periphery_enum_fields)*
                 }
 
-                impl<F: PrimeField32 + openvm_stark_backend::p3_field::TwoAdicField> VmConfig<F> for #name {
+                impl<F: PrimeField32> VmConfig<F> for #name {
                     type Executor = #executor_type<F>;
                     type Periphery = #periphery_type<F>;
 

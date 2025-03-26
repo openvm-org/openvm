@@ -4,7 +4,7 @@ use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
-        SingleSegmentVmExecutor, SystemConfig, VmConfig, VmExecutor,
+        GenerationError, SingleSegmentVmExecutor, SystemConfig, VmConfig, VmExecutor,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -42,7 +42,6 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
 };
-use openvm_circuit::arch::{GenerationPipelineError, SegmentationStrategy};
 use openvm_transpiler::transpiler::Transpiler;
 
 type SC = BabyBearPoseidon2Config;
@@ -478,15 +477,12 @@ fn test_segmentation_retry() {
         app_vm.execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![]);
     assert!(matches!(
         app_vm_result,
-        Err(GenerationPipelineError::Generation(_))
+        Err(GenerationError::TraceHeightsLimitExceeded)
     ));
 
     // Try lowering segmentation threshold.
     let config = VmConfig::<BabyBear>::system_mut(&mut app_vm.config);
-    let max_segment_len = config.segmentation_strategy.max_segment_len();
-    config.set_segmentation_strategy(SegmentationStrategy::new_with_max_segment_len(
-        max_segment_len / 4,
-    ));
+    config.set_segmentation_strategy(config.segmentation_strategy.stricter_strategy());
     let app_vm_result = app_vm
         .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
         .unwrap();

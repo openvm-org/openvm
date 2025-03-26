@@ -42,14 +42,8 @@ use crate::{
 pub enum GenerationError {
     #[error("generated trace heights violate constraints")]
     TraceHeightsLimitExceeded,
-}
-
-#[derive(Error, Debug)]
-pub enum GenerationPipelineError {
     #[error(transparent)]
     Execution(#[from] ExecutionError),
-    #[error(transparent)]
-    Generation(#[from] GenerationError),
 }
 
 /// VM memory state for continuations.
@@ -166,12 +160,13 @@ where
     /// Returns the results from each closure, one per segment.
     ///
     /// The closure takes `f(segment_idx, segment) -> R`.
-    pub fn execute_and_then<R>(
+    pub fn execute_and_then<R, E>(
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        mut f: impl FnMut(usize, ExecutionSegment<F, VC>) -> Result<R, GenerationError>,
-    ) -> Result<Vec<R>, GenerationPipelineError> {
+        mut f: impl FnMut(usize, ExecutionSegment<F, VC>) -> Result<R, E>,
+        map_err: impl Fn(ExecutionError) -> E,
+    ) -> Result<Vec<R>, E> {
         let mem_config = self.config.system().memory_config;
         let exe = exe.into();
         let mut segment_results = vec![];
@@ -187,7 +182,9 @@ where
 
         loop {
             let _span = info_span!("execute_segment", segment = segment_idx).entered();
-            let one_segment_result = self.execute_until_segment(exe.clone(), state)?;
+            let one_segment_result = self
+                .execute_until_segment(exe.clone(), state)
+                .map_err(&map_err)?;
             segment_results.push(f(segment_idx, one_segment_result.segment)?);
             if one_segment_result.next_state.is_none() {
                 break;
@@ -207,12 +204,7 @@ where
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
-        self.execute_and_then(exe, input, |_, seg| Ok(seg)).map_err(
-            |err: GenerationPipelineError| match err {
-                GenerationPipelineError::Execution(err) => err,
-                _ => unreachable!("closure cannot produce generation error"),
-            },
-        )
+        self.execute_and_then(exe, input, |_, seg| Ok(seg), |err| err)
     }
 
     /// Executes a program until a segmentation happens.
@@ -281,14 +273,15 @@ where
         input: impl Into<Streams<F>>,
     ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
         let mut last = None;
-        self.execute_and_then(exe, input, |_, seg| {
-            last = Some(seg);
-            Ok(())
-        })
-        .map_err(|err: GenerationPipelineError| match err {
-            GenerationPipelineError::Execution(err) => err,
-            _ => unreachable!("closure cannot produce generation error"),
-        })?;
+        self.execute_and_then(
+            exe,
+            input,
+            |_, seg| {
+                last = Some(seg);
+                Ok(())
+            },
+            |err| err,
+        )?;
         let last = last.expect("at least one segment must be executed");
         let final_memory = last.final_memory;
         let end_state =
@@ -306,7 +299,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<VmExecutorResult<SC>, GenerationPipelineError>
+    ) -> Result<VmExecutorResult<SC>, GenerationError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
@@ -319,7 +312,7 @@ where
         &self,
         committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<VmExecutorResult<SC>, GenerationPipelineError>
+    ) -> Result<VmExecutorResult<SC>, GenerationError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
@@ -337,20 +330,25 @@ where
         exe: VmExe<F>,
         committed_program: Option<CommittedTraceData<SC>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<VmExecutorResult<SC>, GenerationPipelineError>
+    ) -> Result<VmExecutorResult<SC>, GenerationError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
         let mut final_memory = None;
-        let per_segment = self.execute_and_then(exe, input, |seg_idx, mut seg| {
-            // Note: this will only be Some on the last segment; otherwise it is
-            // already moved into next segment state
-            final_memory = mem::take(&mut seg.final_memory);
-            tracing::info_span!("trace_gen", segment = seg_idx)
-                .in_scope(|| seg.generate_proof_input(committed_program.clone()))
-        })?;
+        let per_segment = self.execute_and_then(
+            exe,
+            input,
+            |seg_idx, mut seg| {
+                // Note: this will only be Some on the last segment; otherwise it is
+                // already moved into next segment state
+                final_memory = mem::take(&mut seg.final_memory);
+                tracing::info_span!("trace_gen", segment = seg_idx)
+                    .in_scope(|| seg.generate_proof_input(committed_program.clone()))
+            },
+            GenerationError::Execution,
+        )?;
 
         Ok(VmExecutorResult {
             per_segment,
@@ -444,7 +442,7 @@ where
         &self,
         committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<ProofInput<SC>, GenerationPipelineError>
+    ) -> Result<ProofInput<SC>, GenerationError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
@@ -590,7 +588,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<VmExecutorResult<SC>, GenerationPipelineError> {
+    ) -> Result<VmExecutorResult<SC>, GenerationError> {
         self.executor.execute_and_generate(exe, input)
     }
 
@@ -598,7 +596,7 @@ where
         &self,
         committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<VmExecutorResult<SC>, GenerationPipelineError>
+    ) -> Result<VmExecutorResult<SC>, GenerationError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
