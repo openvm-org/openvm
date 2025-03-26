@@ -560,7 +560,7 @@ pub struct FriReducedOpeningRecord<F: Field> {
 }
 
 impl<F: Field> FriReducedOpeningRecord<F> {
-    fn get_height(&self) -> usize {
+    pub fn get_height(&self) -> usize {
         // 2 for instruction rows
         self.a_rws.len() + 2
     }
