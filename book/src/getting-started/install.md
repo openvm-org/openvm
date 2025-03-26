@@ -51,6 +51,6 @@ cargo openvm --version
 In order for the `cargo-openvm` build command to work, you must install certain Rust nightly components:
 
 ```bash
-rustup install nightly-2024-10-30
-rustup component add rust-src --toolchain nightly-2024-10-30
+rustup install nightly-2025-02-14
+rustup component add rust-src --toolchain nightly-2025-02-14
 ```

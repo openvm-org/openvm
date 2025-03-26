@@ -1,38 +1,39 @@
 //! Hints emulation for the non-zkVM environment.
 
 use alloc::vec::Vec;
+#[cfg(feature = "std")]
 use core::cell::RefCell;
 
 /// Simulated input stream on host
 pub enum HostInputStream {
     /// Read directly from stdin
-    #[cfg(feature = "std")]
     Stdin,
     /// Directly set from a test using [`set_hints`].
     Internal(Vec<Vec<u8>>),
 }
 
 impl HostInputStream {
-    const fn new() -> Self {
-        #[cfg(feature = "std")]
-        {
-            Self::Stdin
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            Self::Internal(Vec::new())
-        }
+    pub const fn new() -> Self {
+        Self::Stdin
     }
 }
 
-/// Hint streams in the non-zkVM environment.
-#[thread_local]
-pub static HINTS: RefCell<HostInputStream> = RefCell::new(HostInputStream::new());
-/// Current hint stream in the non-zkVM environment.
-#[thread_local]
-pub static HINT_STREAM: RefCell<Vec<u8>> = RefCell::new(Vec::new());
+impl Default for HostInputStream {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "std")]
+thread_local! {
+    /// Hint streams in the non-zkVM environment.
+    pub static HINTS: RefCell<HostInputStream> = RefCell::new(HostInputStream::new());
+    /// Current hint stream in the non-zkVM environment.
+    pub static HINT_STREAM: RefCell<Vec<u8>> = RefCell::new(Vec::new());
+}
 
 /// Set the hints and reset the current hint stream.
+#[cfg(feature = "std")]
 pub fn set_hints(hints: Vec<Vec<u8>>) {
     HINTS.replace(HostInputStream::Internal(
         hints
@@ -52,28 +53,40 @@ pub fn set_hints(hints: Vec<Vec<u8>>) {
 
 /// Read the next hint stream from the hints.
 pub fn hint_input() {
-    let mut hints = HINTS.borrow_mut();
-    match &mut (*hints) {
-        #[cfg(feature = "std")]
-        HostInputStream::Stdin => {
-            use std::io::Read;
-            let mut buf = Vec::new();
-            std::io::stdin()
-                .read_to_end(&mut buf)
-                .expect("Failed to read from stdin");
-            let hint = [&(buf.len() as u32).to_le_bytes(), &buf[..]].concat();
-            HINT_STREAM.replace(hint);
-        }
-        HostInputStream::Internal(hints) => {
-            let hint = hints.pop().expect("No hint stream available");
-            HINT_STREAM.replace(hint);
+    #[cfg(feature = "std")]
+    {
+        let mut hints = HINTS.borrow_mut();
+        match &mut (*hints) {
+            #[cfg(feature = "std")]
+            HostInputStream::Stdin => {
+                use std::io::Read;
+                let mut buf = Vec::new();
+                std::io::stdin()
+                    .read_to_end(&mut buf)
+                    .expect("Failed to read from stdin");
+                let hint = [&(buf.len() as u32).to_le_bytes(), &buf[..]].concat();
+                HINT_STREAM.replace(hint);
+            }
+            HostInputStream::Internal(hints) => {
+                let hint = hints.pop().expect("No hint stream available");
+                HINT_STREAM.replace(hint);
+            }
         }
     }
+    #[cfg(not(feature = "std"))]
+    unimplemented!("hint_input not supported on no_std host")
 }
 
 /// Read the next `n` bytes from the hint stream.
-pub fn read_n_bytes(n: usize) -> Vec<u8> {
-    HINT_STREAM.borrow_mut().drain(..n).collect()
+pub fn read_n_bytes(_n: usize) -> Vec<u8> {
+    #[cfg(feature = "std")]
+    {
+        HINT_STREAM.borrow_mut().drain(.._n).collect()
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        unimplemented!("hint_stream not supported on no_std host")
+    }
 }
 
 /// Read the next 4 bytes from the hint stream as a `u32`.
@@ -82,7 +95,7 @@ pub fn read_u32() -> u32 {
     u32::from_le_bytes(bytes.try_into().unwrap())
 }
 
-#[cfg(all(test, not(target_os = "zkvm")))]
+#[cfg(all(feature = "std", test, not(target_os = "zkvm")))]
 mod tests {
     use alloc::vec;
 

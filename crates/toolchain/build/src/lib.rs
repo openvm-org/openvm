@@ -21,7 +21,7 @@ mod config;
 
 /// The rustc compiler [target](https://doc.rust-lang.org/rustc/targets/index.html).
 pub const RUSTC_TARGET: &str = "riscv32im-risc0-zkvm-elf";
-const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2024-10-30";
+const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2025-02-14";
 const BUILD_LOCKED_ENV: &str = "OPENVM_BUILD_LOCKED";
 const SKIP_BUILD_ENV: &str = "OPENVM_SKIP_BUILD";
 const GUEST_LOGFILE_ENV: &str = "OPENVM_GUEST_LOGFILE";

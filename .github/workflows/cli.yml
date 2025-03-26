@@ -41,7 +41,7 @@ jobs:
 
       - name: Install tools
         run: |
-          rustup component add rust-src --toolchain nightly-2024-10-30
+          rustup component add rust-src --toolchain nightly-2025-02-14
 
       - name: Install cargo-openvm
         working-directory: crates/cli
