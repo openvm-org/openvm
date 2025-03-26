@@ -37,7 +37,7 @@ mod evm {
         pub halo2_prover: Halo2Prover,
     }
 
-    impl<VC, E: StarkFriEngine<SC>> EvmHalo2Prover<VC, E> {
+    impl<VC: 'static, E: StarkFriEngine<SC>> EvmHalo2Prover<VC, E> {
         pub fn new(
             reader: &impl Halo2ParamsReader,
             app_pk: Arc<AppProvingKey<VC>>,
@@ -67,9 +67,9 @@ mod evm {
 
         pub fn generate_proof_for_evm(&self, input: StdIn) -> EvmProof
         where
-            VC: VmConfig<F>,
-            VC::Executor: Chip<SC>,
-            VC::Periphery: Chip<SC>,
+            VC: VmConfig<F> + Send,
+            VC::Executor: Chip<SC> + Send,
+            VC::Periphery: Chip<SC> + Send,
         {
             let root_proof = self.stark_prover.generate_proof_for_outer_recursion(input);
             self.halo2_prover.prove_for_evm(&root_proof)

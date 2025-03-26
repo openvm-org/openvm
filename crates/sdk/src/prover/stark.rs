@@ -16,7 +16,7 @@ pub struct StarkProver<VC, E: StarkFriEngine<SC>> {
     pub app_prover: AppProver<VC, E>,
     pub agg_prover: AggStarkProver<E>,
 }
-impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
+impl<VC: 'static, E: StarkFriEngine<SC>> StarkProver<VC, E> {
     pub fn new(
         app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
@@ -51,9 +51,9 @@ impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
     }
     pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> Proof<RootSC>
     where
-        VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
+        VC: VmConfig<F> + Send,
+        VC::Executor: Chip<SC> + Send,
+        VC::Periphery: Chip<SC> + Send,
     {
         let app_proof = self.app_prover.generate_app_proof(input);
         self.agg_prover.generate_agg_proof(app_proof)
@@ -61,9 +61,9 @@ impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
 
     pub fn generate_root_verifier_input(&self, input: StdIn) -> RootVmVerifierInput<SC>
     where
-        VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
+        VC: VmConfig<F> + Send,
+        VC::Executor: Chip<SC> + Send,
+        VC::Periphery: Chip<SC> + Send,
     {
         let app_proof = self.app_prover.generate_app_proof(input);
         self.agg_prover.generate_root_verifier_input(app_proof)

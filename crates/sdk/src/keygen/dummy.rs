@@ -98,14 +98,14 @@ pub(super) fn dummy_internal_proof_riscv_app_vm(
 }
 
 #[allow(dead_code)]
-pub fn dummy_leaf_proof<VC: VmConfig<F>>(
+pub fn dummy_leaf_proof<VC: VmConfig<F> + 'static + Send>(
     leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     app_vm_pk: Arc<VmProvingKey<SC, VC>>,
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> Proof<SC>
 where
-    VC::Executor: Chip<SC>,
-    VC::Periphery: Chip<SC>,
+    VC::Executor: Chip<SC> + Send,
+    VC::Periphery: Chip<SC> + Send,
 {
     let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), overridden_heights);
     dummy_leaf_proof_impl(leaf_vm_pk, app_vm_pk, &app_proof)
@@ -163,13 +163,13 @@ fn dummy_riscv_app_vm_pk(
     }
 }
 
-fn dummy_app_proof_impl<VC: VmConfig<F>>(
+fn dummy_app_proof_impl<VC: VmConfig<F> + 'static + Send>(
     app_vm_pk: Arc<VmProvingKey<SC, VC>>,
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> ContinuationVmProof<SC>
 where
-    VC::Executor: Chip<SC>,
-    VC::Periphery: Chip<SC>,
+    VC::Executor: Chip<SC> + Send,
+    VC::Periphery: Chip<SC> + Send,
 {
     let fri_params = app_vm_pk.fri_params;
     let dummy_exe = dummy_app_committed_exe(fri_params);

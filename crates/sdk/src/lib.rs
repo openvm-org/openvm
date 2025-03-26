@@ -192,15 +192,15 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(app_pk)
     }
 
-    pub fn generate_app_proof<VC: VmConfig<F>>(
+    pub fn generate_app_proof<VC: VmConfig<F> + 'static + Send>(
         &self,
         app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
         inputs: StdIn,
     ) -> Result<ContinuationVmProof<SC>>
     where
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
+        VC::Executor: Chip<SC> + Send,
+        VC::Periphery: Chip<SC> + Send,
     {
         let app_prover = AppProver::<VC, E>::new(app_pk.app_vm_pk.clone(), app_committed_exe);
         let proof = app_prover.generate_app_proof(inputs);
@@ -256,7 +256,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(agg_pk)
     }
 
-    pub fn generate_root_verifier_input<VC: VmConfig<F>>(
+    pub fn generate_root_verifier_input<VC: VmConfig<F> + 'static + Send>(
         &self,
         app_pk: Arc<AppProvingKey<VC>>,
         app_exe: Arc<NonRootCommittedExe>,
@@ -264,8 +264,8 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         inputs: StdIn,
     ) -> Result<RootVmVerifierInput<SC>>
     where
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
+        VC::Executor: Chip<SC> + Send,
+        VC::Periphery: Chip<SC> + Send,
     {
         let stark_prover =
             StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config);
@@ -274,7 +274,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
     }
 
     #[cfg(feature = "evm-prove")]
-    pub fn generate_evm_proof<VC: VmConfig<F>>(
+    pub fn generate_evm_proof<VC: VmConfig<F> + 'static + Send>(
         &self,
         reader: &impl Halo2ParamsReader,
         app_pk: Arc<AppProvingKey<VC>>,
@@ -283,8 +283,8 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         inputs: StdIn,
     ) -> Result<EvmProof>
     where
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
+        VC::Executor: Chip<SC> + Send,
+        VC::Periphery: Chip<SC> + Send,
     {
         let e2e_prover =
             EvmHalo2Prover::<VC, E>::new(reader, app_pk, app_exe, agg_pk, self.agg_tree_config);
