@@ -38,7 +38,7 @@ jobs:
       # separately and copy over the index as a hack
       - name: Build index page
         run: |
-          cargo doc --workspace --no-deps --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test" --target-dir target/doc-nodeps
+          cargo +nightly doc --workspace --no-deps --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test" --target-dir target/doc-nodeps
           cp target/doc-nodeps/doc/index.html target/doc/
           cp target/doc-nodeps/doc/crates.js target/doc/
         env:
