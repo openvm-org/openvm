@@ -33,6 +33,7 @@ metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 serde_with = { workspace = true, optional = true, features = ["hex"] }
 eyre = { workspace = true, optional = true }
+tracing-subscriber = "0.3.19"
 
 [dev-dependencies]
 openvm-native-recursion = { workspace = true, features = ["test-utils"] }

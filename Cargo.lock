@@ -4197,6 +4197,7 @@ dependencies = [
  "snark-verifier-sdk",
  "tempfile",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

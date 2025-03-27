@@ -26,6 +26,7 @@ use openvm_stark_sdk::{
     engine::StarkFriEngine,
     utils::{to_field_vec, ProofInputForTest},
 };
+use tracing::Level;
 
 use crate::{
     hints::Hintable, stark::VerifierProgram, testing_utils::inner::run_recursive_test,
@@ -95,25 +96,37 @@ where
 
 #[test]
 fn test_fibonacci_small() {
-    run_recursive_test(
-        fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 5),
-        FriParameters::new_for_testing(3),
-    )
+    let mut fri_params = FriParameters::new_for_testing(3);
+
+    for arity_bits in 1..=4 {
+        fri_params.arity_bits = arity_bits;
+
+        run_recursive_test(
+            fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 5),
+            fri_params,
+        )
+    }
 }
 
 #[test]
 fn test_fibonacci() {
-    // test lde = 27
-    run_recursive_test(
-        fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 24),
-        FriParameters {
-            log_blowup: 3,
-            log_final_poly_len: 0,
-            num_queries: 2,
-            proof_of_work_bits: 0,
-            arity_bits: 1,
-        },
-    )
+    let mut fri_params = FriParameters::new_for_testing(3);
+
+    for arity_bits in 1..=3 {
+        fri_params.arity_bits = arity_bits;
+
+        // test lde = 27
+        run_recursive_test(
+            fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 24),
+            FriParameters {
+                log_blowup: 3,
+                log_final_poly_len: 0,
+                num_queries: 2,
+                proof_of_work_bits: 0,
+                arity_bits: arity_bits,
+            },
+        )
+    }
 }
 
 #[test]

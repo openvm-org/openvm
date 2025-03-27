@@ -154,7 +154,7 @@ where
                 })
             })
             .collect();
-        let p3_keccak_trace: RowMajorMatrix<Val<SC>> = generate_trace_rows(p3_states);
+        let p3_keccak_trace: RowMajorMatrix<Val<SC>> = generate_trace_rows(p3_states, 0);
         let num_rows = p3_keccak_trace.height();
         // Every `NUM_ROUNDS` rows corresponds to one input block
         let num_blocks = num_rows.div_ceil(NUM_ROUNDS);

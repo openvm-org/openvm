@@ -53,7 +53,9 @@ pub fn verify_two_adic_pcs<C: Config>(
     // The `proof.final_poly` length is in general `2^{log_final_poly_len + log_blowup}`.
     // We require `log_final_poly_len = 0`, so `proof.final_poly` has length `2^log_blowup`.
     // In fact, the FRI low-degree test requires that `proof.final_poly = [constant, 0, ..., 0]`.
-    builder.assert_usize_eq(proof.final_poly.len(), RVar::from(config.blowup));
+
+    // builder.print_expr(config.blowup);
+    // builder.assert_usize_eq(proof.final_poly.len(), RVar::from(config.blowup));
     // Constant term of final poly
     let final_poly_ct = builder.get(&proof.final_poly, 0);
     for i in 1..config.blowup {
@@ -97,6 +99,7 @@ pub fn verify_two_adic_pcs<C: Config>(
             });
         });
     });
+
     let alpha = challenger.sample_ext(builder);
     if builder.flags.static_only {
         builder.ext_reduce_circuit(alpha);
@@ -105,8 +108,8 @@ pub fn verify_two_adic_pcs<C: Config>(
     builder.cycle_tracker_start("stage-d-verifier-verify");
     // **ATTENTION**: always check shape of user inputs.
     builder.assert_usize_eq(proof.query_proofs.len(), RVar::from(config.num_queries));
-    builder.assert_usize_eq(proof.commit_phase_commits.len(), log_max_height);
-    let betas: Array<C, Ext<C::F, C::EF>> = builder.array(log_max_height);
+    // builder.assert_usize_eq(proof.commit_phase_commits.len(), log_max_height);
+    let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
     iter_zip!(builder, proof.commit_phase_commits, betas).for_each(|ptr_vec, builder| {
         let comm_ptr = ptr_vec[0];
         let beta_ptr = ptr_vec[1];

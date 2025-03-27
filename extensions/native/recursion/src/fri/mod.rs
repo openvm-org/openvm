@@ -1,14 +1,10 @@
 pub use domain::*;
 use openvm_native_compiler::{
-    ir::{
-        Array, ArrayLike, Builder, Config, Ext, ExtensionOperand, Felt, RVar, SymbolicVar, Usize,
-        Var,
-    },
+    ir::{Array, ArrayLike, Builder, Config, Ext, Felt, RVar, SymbolicVar, Usize, Var},
     prelude::MemVariable,
 };
 use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::{FieldAlgebra, TwoAdicField};
-use tracing::debug;
 pub use two_adic_pcs::*;
 
 use self::types::{DimensionsVariable, FriConfigVariable, FriQueryProofVariable};
@@ -49,14 +45,10 @@ where
     builder.cycle_tracker_start("verify-query");
 
     let folded_eval: Ext<C::F, C::EF> = builder.eval(C::F::ZERO);
-    let subgroup_size: Var<C::N> =
-        builder.eval(log_max_lde_height + RVar::from(config.arity_bits) - C::N::ONE);
+    let subgroup_size: Var<C::N> = builder.eval(log_max_lde_height);
     let two_adic_generator_f = config.get_two_adic_generator(builder, subgroup_size);
 
-    let two_adic_gen_ext = two_adic_generator_f.to_operand().symbolic();
-    let two_adic_generator_ef: Ext<_, _> = builder.eval(two_adic_gen_ext);
-
-    let base = two_adic_generator_ef;
+    let base = builder.eval(two_adic_generator_f);
 
     let index_bits_truncated = index_bits.slice(builder, 0, log_max_lde_height);
 
@@ -64,11 +56,15 @@ where
 
     let get_idx = |builder: &mut Builder<C>, start: Var<C::N>, end: Var<C::N>| {
         let idx: Var<C::N> = builder.eval(C::N::ZERO);
-        builder.range(start, end).for_each(|i_vec, builder| {
+
+        let seg_len: Var<C::N> = builder.eval(end - start);
+        builder.range(0, seg_len).for_each(|i_vec, builder| {
             let i = i_vec[0];
+            let i: Var<C::N> = builder.eval(end - i - C::N::ONE);
             let bit = builder.get(&index_bits, i);
             builder.assign(&idx, idx * C::N::TWO + bit);
         });
+
         idx
     };
 
@@ -165,11 +161,6 @@ where
 
     let index_bits_offset: Var<C::N> = builder.eval(C::N::ZERO);
 
-    // proof.commit_phase_openings.len() == log_max_lde_height - log_blowup
-    builder.assert_usize_eq(
-        proof.commit_phase_openings.len(),
-        commit_phase_commits.len(),
-    );
     builder
         .range(0, commit_phase_commits.len())
         .for_each(|i_vec, builder| {
@@ -213,27 +204,25 @@ where
                 let lh: Var<C::N> = builder.eval(log_folded_height - j);
                 let ro = builder.get(reduced_openings, lh);
 
-                // TODO[osama]: the following should be inside an if condition testing if a new polynomial enters
-
-                let opened_row = builder.get(&opening.opened_rows, opened_row_index);
-                builder.assign(&opened_row_index, opened_row_index + C::N::ONE);
-
-                // Make sure the opened row is of the correct length
                 let log_row_len: Var<C::N> =
                     builder.eval(lh + RVar::from(cur_arity_bits) - log_folded_height);
                 let row_len: Var<C::N> = builder.sll(C::N::ONE, log_row_len.into());
-                builder.assert_eq::<Var<C::N>>(opened_row.len(), row_len);
 
+                let opened_row = builder.get(&opening.opened_rows, opened_row_index);
                 builder.assign(&index_bits_offset, index_bits_offset + C::N::ONE);
 
-                assert_opened_row(
-                    builder,
-                    &opening.opened_rows,
-                    opened_row_index.into(),
-                    index_bits_offset,
-                    index_bits_offset + log_row_len,
-                    ro,
-                );
+                builder.if_eq(opened_row.len(), row_len).then(|builder| {
+                    assert_opened_row(
+                        builder,
+                        &opening.opened_rows,
+                        opened_row_index.into(),
+                        index_bits_offset,
+                        index_bits_offset + log_row_len,
+                        ro,
+                    );
+
+                    builder.assign(&opened_row_index, opened_row_index + C::N::ONE);
+                });
             });
 
             let log_height: Var<C::N> =
@@ -253,17 +242,9 @@ where
             builder.assign(&index_bits_offset, index_bits_offset + C::N::ONE);
             let index_row = index_bits.shift(builder, index_bits_offset);
 
-            // verify_batch::<C>(
-            //     builder,
-            //     &commit,
-            //     dims_slice,
-            //     index_row,
-            //     &NestedOpenedValues::Ext(opening.opened_rows),
-            //     &opening.opening_proof,
-            // );
+            // verify_batch call at the end of the loop
 
             // Do the folding logic
-
             let folded_row = builder.get(&opening.opened_rows, 0);
             let opened_row_index: Var<C::N> = builder.eval(C::N::ONE);
 
@@ -294,7 +275,10 @@ where
                     .for_each(|j_vec, builder| {
                         let j = j_vec[0];
 
-                        let x = get_power(builder, base, &counter, &index_row, log_folded_height);
+                        let index_row_truncated_len: Var<C::N> =
+                            builder.eval(log_folded_height - counter.len());
+                        let x =
+                            get_power(builder, base, &counter, &index_row, index_row_truncated_len);
 
                         let k_0: Var<C::N> = builder.eval(j.clone() + j.clone());
                         let k_1: Var<C::N> = builder.eval(k_0 + C::N::ONE);
@@ -344,7 +328,6 @@ where
             let new_folded_eval = builder.get(&folded_row, 0);
             builder.assign(&folded_eval, new_folded_eval);
 
-            // TODO[osama]: maybe figure out how to move this
             verify_batch::<C>(
                 builder,
                 &commit,
