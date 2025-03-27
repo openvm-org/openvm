@@ -4075,6 +4075,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
+ "snark-verifier-sdk",
  "thiserror 1.0.69",
  "tracing",
 ]

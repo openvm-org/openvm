@@ -40,6 +40,7 @@ use openvm_transpiler::{
     transpiler::{Transpiler, TranspilerError},
     FromElf,
 };
+use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit, snark_verifier::{halo2_base::halo2_proofs::poly::commitment::Params, loader::evm::compile_solidity}, SHPLONK};
 
 use crate::{
     config::AggConfig,
@@ -269,6 +270,19 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         agg_pk: &AggProvingKey,
     ) -> Result<EvmVerifier> {
         let params = reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
+
+        let pinning = &agg_pk.halo2_pk.wrapper.pinning;
+
+        assert_eq!(
+            pinning.metadata.config_params.k as u32,
+            params.k(),
+            "Provided params don't match circuit config"
+        );
+
+        let sol_code =
+        gen_evm_verifier_sol_code::<AggregationCircuit, SHPLONK>(&params, agg_pk.halo2_pk.wrapper.pinning.pk.get_vk(), agg_pk.halo2_pk.wrapper.pinning.metadata.num_pvs.clone());
+        let byte_code = compile_solidity(&sol_code);
+
         let evm_verifier = agg_pk.halo2_pk.wrapper.generate_evm_verifier(&params);
         Ok(evm_verifier)
     }

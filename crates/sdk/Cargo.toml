@@ -50,6 +50,8 @@ serde_with = { workspace = true, features = ["hex"] }
 serde_json.workspace = true
 thiserror.workspace = true
 
+snark-verifier-sdk = { workspace = true }
+
 [features]
 default = ["parallel"]
 bench-metrics = [
