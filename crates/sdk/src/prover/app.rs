@@ -69,7 +69,7 @@ impl<VC: 'static, E: StarkFriEngine<SC>> AppProver<VC, E> {
 
     pub fn generate_app_proof_without_continuations(&self, input: StdIn) -> Proof<SC>
     where
-        VC: VmConfig<F>,
+        VC: VmConfig<F> + Sync + Send,
         VC::Executor: Chip<SC> + Send,
         VC::Periphery: Chip<SC> + Send,
     {
