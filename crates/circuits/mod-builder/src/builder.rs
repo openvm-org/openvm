@@ -566,6 +566,20 @@ impl FieldExpr {
 
     pub fn execute(&self, inputs: Vec<BigUint>, flags: Vec<bool>) -> Vec<BigUint> {
         assert!(self.builder.is_finalized());
+
+        #[cfg(debug_assertions)]
+        {
+            let is_setup = self.builder.needs_setup() && flags.iter().all(|&x| !x);
+            if is_setup {
+                assert_eq!(inputs[0], self.builder.prime);
+                // Check that inputs.iter().skip(1) has all the setup values as a prefix
+                assert!(inputs.len() > self.setup_values.len());
+                for (expected, actual) in self.setup_values.iter().zip(inputs.iter().skip(1)) {
+                    assert_eq!(expected, actual);
+                }
+            }
+        }
+
         let mut vars = vec![BigUint::zero(); self.num_variables];
         for i in 0..self.constraints.len() {
             let r = self.computes[i].compute(&inputs, &vars, &flags, &self.prime);

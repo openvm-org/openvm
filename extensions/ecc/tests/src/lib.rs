@@ -274,4 +274,28 @@ mod tests {
         air_test(config, openvm_exe);
         Ok(())
     }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_setup() {
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "invalid_setup",
+            ["k256", "p256"],
+        )
+        .unwrap();
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )
+        .unwrap();
+        let config =
+            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+        air_test(config, openvm_exe);
+    }
 }

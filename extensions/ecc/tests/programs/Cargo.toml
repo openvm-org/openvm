@@ -73,3 +73,7 @@ required-features = ["k256"]
 [[example]]
 name = "ecdsa"
 required-features = ["k256"]
+
+[[example]]
+name = "invalid_setup"
+required-features = ["k256", "p256"]

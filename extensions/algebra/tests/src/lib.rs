@@ -120,4 +120,25 @@ mod tests {
         air_test(config, openvm_exe);
         Ok(())
     }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_setup() {
+        let elf = build_example_program_at_path(get_programs_dir!(), "invalid-setup").unwrap();
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )
+        .unwrap();
+        let config = Rv32ModularConfig::new(vec![
+            BigUint::from_str("998244353").unwrap(),
+            BigUint::from_str("1000000007").unwrap(),
+        ]);
+        air_test(config, openvm_exe);
+    }
 }
