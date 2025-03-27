@@ -1,13 +1,20 @@
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 
-use openvm_circuit::arch::ContinuationVmProof;
+use openvm_circuit::arch::{ContinuationVmProof, SingleSegmentVmExecutor, Streams, VirtualMachine};
 use openvm_continuations::verifier::{
     internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
     root::types::RootVmVerifierInput,
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
-use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proof};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    prover::types::ProofInput,
+};
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    openvm_stark_backend::proof::Proof,
+};
 use tracing::info_span;
 
 use crate::{
@@ -194,14 +201,76 @@ impl LeafProvingController {
             let leaf_inputs =
                 LeafVmVerifierInput::chunk_continuation_vm_proof(app_proofs, self.num_children);
             tracing::info!("num_leaf_proofs={}", leaf_inputs.len());
-            leaf_inputs
-                .into_iter()
-                .enumerate()
-                .map(|(leaf_node_idx, input)| {
-                    info_span!("single_leaf_agg", idx = leaf_node_idx)
-                        .in_scope(|| SingleSegmentVmProver::prove(prover, input.write_to_stream()))
-                })
-                .collect::<Vec<_>>()
+
+            std::thread::scope(|s| {
+                let (input_tx, input_rx) =
+                    mpsc::sync_channel::<(Streams<Val<SC>>, tracing::Span)>(1);
+                let (proof_input_tx, proof_input_rx) =
+                    mpsc::sync_channel::<(ProofInput<SC>, tracing::Span)>(1);
+                let (proof_tx, proof_rx) = mpsc::sync_channel::<Proof<SC>>(1);
+
+                let committed_exe = prover.committed_exe.clone();
+                let vm_config = prover.pk.vm_config.clone();
+                let vm_pk = prover.pk.clone();
+                let fri_params = prover.pk.fri_params;
+
+                let executor = SingleSegmentVmExecutor::new(vm_config.clone());
+                let trace_handle = s.spawn(move || {
+                    for (input, parent_span) in input_rx.iter() {
+                        let span = parent_span.in_scope(|| info_span!("trace_gen"));
+                        let _guard = span.enter();
+
+                        let proof_input = executor
+                            .execute_and_generate(committed_exe.clone(), input)
+                            .unwrap();
+
+                        proof_input_tx
+                            .send((proof_input, parent_span.clone()))
+                            .expect("Failed to send proof input");
+                    }
+                    drop(proof_input_tx);
+                });
+
+                let prove_handle = s.spawn(move || {
+                    let prove_engine = BabyBearPoseidon2Engine::new(fri_params);
+                    let vm = VirtualMachine::new(prove_engine, vm_config.clone());
+
+                    for (proof_input, parent_span) in proof_input_rx.iter() {
+                        let span = parent_span.in_scope(|| info_span!("prove_segment"));
+                        let _guard = span.enter();
+
+                        let proof = vm.prove_single(&vm_pk.vm_pk, proof_input);
+
+                        proof_tx.send(proof).expect("Failed to send proof");
+                    }
+                    drop(proof_tx);
+                });
+
+                let collector_handle = s.spawn(move || {
+                    let mut proofs = Vec::new();
+                    for proof in proof_rx.iter() {
+                        proofs.push(proof); // Collect proofs in order
+                    }
+
+                    proofs
+                });
+
+                for (leaf_node_idx, input) in leaf_inputs.into_iter().enumerate() {
+                    let span = info_span!("single_leaf_agg", idx = leaf_node_idx);
+                    let _guard = span.enter();
+
+                    input_tx
+                        .send((input.write_to_stream().into(), span.clone()))
+                        .expect("Failed to send leaf input");
+                }
+
+                drop(input_tx);
+
+                trace_handle.join().expect("Trace thread panicked");
+                prove_handle.join().expect("Prove thread panicked");
+
+                collector_handle.join().expect("Collector thread panicked")
+            })
         })
     }
 }
