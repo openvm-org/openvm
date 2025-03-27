@@ -23,11 +23,14 @@ use openvm_native_recursion::{
     config::outer::OuterConfig, halo2::utils::CacheHalo2ParamsReader, types::InnerConfig,
     vars::StarkProofVariable,
 };
-use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
+use openvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
 use openvm_sdk::{
     codec::{Decode, Encode},
     commit::AppExecutionCommit,
-    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkVmConfig},
+    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkSystemConfig, SdkVmConfig},
+    fs::{read_agg_pk_from_file, write_agg_pk_to_file},
     keygen::AppProvingKey,
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
@@ -373,7 +376,7 @@ fn test_e2e_proof_generation_and_verification() {
         )
         .unwrap();
     let evm_verifier = sdk
-        .generate_snark_verifier_contract(&params_reader, &agg_pk)
+        .generate_openvm_halo2_verifier_contract(&params_reader, &agg_pk)
         .unwrap();
 
     let evm_proof = sdk
@@ -385,7 +388,87 @@ fn test_e2e_proof_generation_and_verification() {
             StdIn::default(),
         )
         .unwrap();
-    assert!(sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
+
+    sdk.verify_openvm_halo2_proof(&evm_verifier, &evm_proof)
+        .unwrap_or_else(|e| panic!("{:?}", e));
+    sdk.verify_openvm_halo2_proof_with_wrapped_interface(&evm_verifier, &evm_proof)
+        .unwrap_or_else(|e| panic!("{:?}", e));
+}
+
+#[test]
+fn test_e2e_proof_generation_and_verification_with_pvs() {
+    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
+    pkg_dir.push("guest");
+
+    let vm_config = SdkVmConfig::builder()
+        .system(SdkSystemConfig {
+            config: SystemConfig::default()
+                .with_max_segment_len(200)
+                .with_continuations()
+                .with_public_values(NUM_PUB_VALUES),
+        })
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .native(Default::default())
+        .build();
+
+    let sdk = Sdk::new();
+    let elf = sdk
+        .build(Default::default(), pkg_dir, &Default::default())
+        .unwrap();
+    let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
+
+    let app_log_blowup = 1;
+    let app_fri_params = FriParameters::new_for_testing(app_log_blowup);
+    let leaf_fri_params = FriParameters::new_for_testing(LEAF_LOG_BLOWUP);
+    let mut app_config =
+        AppConfig::new_with_leaf_fri_params(app_fri_params, vm_config, leaf_fri_params);
+    app_config.compiler_options.enable_cycle_tracker = true;
+
+    let app_committed_exe = sdk
+        .commit_app_exe(app_fri_params, exe)
+        .expect("failed to commit exe");
+
+    let app_pk = sdk.app_keygen(app_config).unwrap();
+
+    let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
+    let agg_pk = match read_agg_pk_from_file("./temp") {
+        Ok(agg_pk) => agg_pk,
+        Err(_) => {
+            let a = sdk
+                .agg_keygen(
+                    agg_config_for_test(),
+                    &params_reader,
+                    &DefaultStaticVerifierPvHandler,
+                )
+                .unwrap();
+
+            write_agg_pk_to_file(a.clone(), "./temp").expect("failed to write agg pk to file");
+
+            a
+        }
+    };
+
+    let evm_verifier = sdk
+        .generate_openvm_halo2_verifier_contract(&params_reader, &agg_pk)
+        .unwrap();
+
+    let evm_proof = sdk
+        .generate_evm_proof(
+            &params_reader,
+            Arc::new(app_pk),
+            app_committed_exe,
+            agg_pk,
+            StdIn::default(),
+        )
+        .unwrap();
+
+    assert!(sdk
+        .verify_openvm_halo2_proof(&evm_verifier, &evm_proof)
+        .is_ok());
+    sdk.verify_openvm_halo2_proof_with_wrapped_interface(&evm_verifier, &evm_proof)
+        .unwrap_or_else(|e| panic!("{:?}", e));
 }
 
 #[test]
@@ -407,7 +490,8 @@ fn test_sdk_guest_build_and_transpile() {
     assert_eq!(one.instructions, two.instructions);
     let transpiler = Transpiler::<F>::default()
         .with_extension(Rv32ITranspilerExtension)
-        .with_extension(Rv32MTranspilerExtension);
+        .with_extension(Rv32MTranspilerExtension)
+        .with_extension(Rv32IoTranspilerExtension);
     let _exe = sdk.transpile(one, transpiler).unwrap();
 }
 
@@ -418,10 +502,18 @@ fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest");
     let elf = sdk.build(Default::default(), pkg_dir, &Default::default())?;
+
     let vm_config = SdkVmConfig::builder()
-        .system(Default::default())
+        .system(SdkSystemConfig {
+            config: SystemConfig::default()
+                .with_max_segment_len(200)
+                .with_continuations()
+                .with_public_values(NUM_PUB_VALUES),
+        })
         .rv32i(Default::default())
         .rv32m(Default::default())
+        .io(Default::default())
+        .native(Default::default())
         .build();
     assert!(vm_config.system.config.continuation_enabled);
     let exe = sdk.transpile(elf, vm_config.transpiler())?;

@@ -12,12 +12,16 @@ use serde::{de::DeserializeOwned, Serialize};
 use crate::{
     codec::{Decode, Encode},
     keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey},
-    types::EvmProof,
+    types::{EvmProof, OpenVmEvmHalo2Verifier},
     F, SC,
 };
 
 pub const EVM_VERIFIER_SOL_FILENAME: &str = "verifier.sol";
 pub const EVM_VERIFIER_ARTIFACT_FILENAME: &str = "verifier.bytecode.json";
+
+pub const OPENVM_HALO2_VERIFIER_INTERFACE_NAME: &str = "IOpenVmHalo2Verifier.sol";
+pub const OPENVM_HALO2_VERIFIER_PARENT_NAME: &str = "Halo2Verifier.sol";
+pub const OPENVM_HALO2_VERIFIER_BASE_NAME: &str = "OpenVmHalo2Verifier.sol";
 
 pub fn read_exe_from_file<P: AsRef<Path>>(path: P) -> Result<VmExe<F>> {
     read_from_file_bitcode(path)
@@ -96,6 +100,45 @@ pub fn read_evm_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<EvmVer
     let artifact_path = folder.as_ref().join(EVM_VERIFIER_ARTIFACT_FILENAME);
     let artifact: EvmVerifierByteCode = serde_json::from_reader(File::open(artifact_path)?)?;
     Ok(EvmVerifier { sol_code, artifact })
+}
+
+/// Writes three Solidity contracts into the following folder structure:
+///
+/// ```text
+/// halo2/
+/// ├── interfaces/
+/// │   └── IOpenVmHalo2Verifier.sol
+/// ├── OpenVmHalo2Verifier.sol
+/// └── Halo2Verifier.sol
+/// ```
+///
+/// If the relevant directories do not exist, they will be created.
+pub fn write_openvm_halo2_verifier_to_folder<P: AsRef<Path>>(
+    verifier: OpenVmEvmHalo2Verifier,
+    folder: P,
+) -> Result<()> {
+    let folder = folder.as_ref();
+    if !folder.exists() {
+        std::fs::create_dir_all(folder)?; // Make sure directories exist
+    }
+
+    let halo2_verifier_code_path = folder.join(OPENVM_HALO2_VERIFIER_PARENT_NAME);
+    let openvm_verifier_code_path = folder.join(OPENVM_HALO2_VERIFIER_BASE_NAME);
+    let interface_path = folder
+        .join("interfaces")
+        .join(OPENVM_HALO2_VERIFIER_INTERFACE_NAME);
+
+    if let Some(parent) = interface_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    std::fs::write(halo2_verifier_code_path, verifier.halo2_verifier_code)
+        .expect("Failed to write halo2 verifier code");
+    std::fs::write(openvm_verifier_code_path, verifier.openvm_verifier_code)
+        .expect("Failed to write openvm halo2 verifier code");
+    std::fs::write(interface_path, verifier.openvm_verifier_interface)
+        .expect("Failed to write openvm halo2 verifier interface");
+    Ok(())
 }
 
 pub fn write_evm_verifier_to_folder<P: AsRef<Path>>(
