@@ -320,7 +320,7 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 ///
 /// Phantom sub-instructions are only allowed to use operands
 /// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
-pub trait PhantomSubExecutor<F> {
+pub trait PhantomSubExecutor<F>: Send {
     fn phantom_execute(
         &mut self,
         memory: &MemoryController<F>,
