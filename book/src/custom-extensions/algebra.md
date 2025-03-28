@@ -106,6 +106,8 @@ supported_modulus = ["1157920892373161954235709850086879078532699846656405640394
 ```
 
 The `supported_modulus` parameter is a list of moduli that the guest program will use. They must be provided in decimal format in the `.toml` file.
+The order of moduli in `[app_vm_config.modular]` must match the order in the `moduli_init!` macro.
+Similarly, the order of moduli in `[app_vm_config.fp2]` must match the order in the `complex_init!` macro.
 
 ### Example program
 
