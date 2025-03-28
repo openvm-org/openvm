@@ -209,34 +209,44 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
         // Assert that the previous hash + work vars == final hash.
         // That is, `next.prev_hash[i] + local.work_vars[i] == next.final_hash[i]`
         // where addition is done modulo 2^32
-        for i in 0..SHA256_HASH_WORDS {
+        for i in 0..C::HASH_WORDS {
             let mut carry = AB::Expr::ZERO;
-            for j in 0..SHA256_WORD_U16S {
-                let work_var_limb = if i < SHA256_ROUNDS_PER_ROW {
+            for j in 0..C::WORD_U16S {
+                let work_var_limb = if i < C::ROUNDS_PER_ROW {
                     compose::<AB::Expr>(
-                        &local.work_vars.a[SHA256_ROUNDS_PER_ROW - 1 - i][j * 16..(j + 1) * 16],
+                        &local
+                            .work_vars
+                            .a
+                            .slice(s![C::ROUNDS_PER_ROW - 1 - i, j * 16..(j + 1) * 16])
+                            .as_slice().unwrap(),
                         1,
                     )
                 } else {
                     compose::<AB::Expr>(
-                        &local.work_vars.e[SHA256_ROUNDS_PER_ROW + 3 - i][j * 16..(j + 1) * 16],
+                        &local
+                            .work_vars
+                            .e
+                            .slice(s![C::ROUNDS_PER_ROW + 3 - i, j * 16..(j + 1) * 16])
+                            .as_slice().unwrap(),
                         1,
                     )
                 };
-                let final_hash_limb =
-                    compose::<AB::Expr>(&next.final_hash[i][j * 2..(j + 1) * 2], 8);
+                let final_hash_limb = compose::<AB::Expr>(
+                    &next.final_hash.slice(s![i, j * 2..(j + 1) * 2]).as_slice().unwrap(),
+                    8,
+                );
 
                 carry = AB::Expr::from(AB::F::from_canonical_u32(1 << 16).inverse())
-                    * (next.prev_hash[i][j] + work_var_limb + carry - final_hash_limb);
+                    * (next.prev_hash[[i,j]] + work_var_limb + carry - final_hash_limb);
                 builder
-                    .when(next.flags.is_digest_row)
+                    .when(*next.flags.is_digest_row)
                     .assert_bool(carry.clone());
             }
             // constrain the final hash limbs two at a time since we can do two checks per interaction
-            for chunk in next.final_hash[i].chunks(2) {
+            for chunk in next.final_hash.row(i).as_slice().unwrap().chunks(2) {
                 self.bitwise_lookup_bus
                     .send_range(chunk[0], chunk[1])
-                    .eval(builder, next.flags.is_digest_row);
+                    .eval(builder, *next.flags.is_digest_row);
             }
         }
     }
@@ -364,7 +374,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
             .assert_zero(*next_cols.flags.local_block_idx);
 
         self.eval_message_schedule(builder, local_cols.clone(), next_cols.clone());
-        self.eval_work_vars(builder, local_cols, next_cols);
+        self.eval_work_vars(builder, local_cols.clone(), next_cols);
         let next_cols: ShaDigestColsRef<AB::Var> =
             ShaDigestColsRef::from::<C>(&next[start_col..start_col + C::DIGEST_WIDTH]);
         self.eval_digest_row(builder, local_cols, next_cols);

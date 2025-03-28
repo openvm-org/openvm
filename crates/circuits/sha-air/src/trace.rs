@@ -339,9 +339,10 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                 let final_hash: Vec<C::Word> = (0..C::HASH_WORDS)
                     .map(|i| work_vars[i].wrapping_add(prev_hash[i]))
                     .collect();
-                let final_hash_limbs: Vec<Vec<C::Word>> = final_hash.iter().map(|i| 
-                    word_into_u8_limbs::<C>(final_hash[i])
-                ) 
+                let final_hash_limbs: Vec<Vec<u32>> = final_hash
+                    .iter()
+                    .map(|word| word_into_u8_limbs::<C>(*word))
+                    .collect();
                 // need to ensure final hash limbs are bytes, in order for
                 //   prev_hash[i] + work_vars[i] == final_hash[i]
                 // to be constrained correctly
@@ -368,7 +369,7 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
                             .collect::<Vec<_>>()
                     }))
                     .for_each(|(x, y)| *x = y);
- 
+
                 let hash = if is_last_block {
                     C::get_h()
                         .iter()
@@ -476,11 +477,20 @@ impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ShaAir<C> {
             &mut next_block_first_row[trace_start_col..trace_start_col + C::ROUND_WIDTH],
         );
         // Fill in the last round row's `intermed_12` with dummy values so the message schedule constraints holds on row 16
-        Self::generate_intermed_12(&mut cols_last_round_row, ShaRoundColsRef::from_mut::<C>(&cols_digest_row));
+        Self::generate_intermed_12(
+            &mut cols_last_round_row,
+            ShaRoundColsRef::from_mut::<C>(&cols_digest_row),
+        );
         // Fill in the digest row's `intermed_12` with dummy values so the message schedule constraints holds on the next block's row 0
-        Self::generate_intermed_12(&mut cols_digest_row, ShaRoundColsRef::from_mut::<C>(&cols_next_block_first_row));
+        Self::generate_intermed_12(
+            &mut cols_digest_row,
+            ShaRoundColsRef::from_mut::<C>(&cols_next_block_first_row),
+        );
         // Fill in the next block's first row's `intermed_4` with dummy values so the message schedule constraints holds on that row
-        Self::generate_intermed_4(ShaRoundColsRef::from_mut::<C>(&cols_digest_row), &mut cols_next_block_first_row);
+        Self::generate_intermed_4(
+            ShaRoundColsRef::from_mut::<C>(&cols_digest_row),
+            &mut cols_next_block_first_row,
+        );
     }
 
     /// Fills the `cols` as a padding row
@@ -796,9 +806,8 @@ pub fn generate_trace<F: PrimeField32, C: ShaConfig + ShaPrecomputedValues<C::Wo
             let input_words = (0..C::BLOCK_WORDS)
                 .map(|i| {
                     limbs_into_word::<C>(
-                       &(0..C::WORD_U8S).map(|j|
-                            input[((i + 1) * C::WORD_U8S - j - 1]
-                        )
+                        &(0..C::WORD_U8S)
+                            .map(|j| input[(i + 1) * C::WORD_U8S - j - 1] as u32)
                             .collect::<Vec<_>>(),
                     )
                 })

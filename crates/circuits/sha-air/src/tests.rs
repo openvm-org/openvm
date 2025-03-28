@@ -1,4 +1,5 @@
-use std::{array, borrow::BorrowMut, cmp::max, sync::Arc};
+use std::{borrow::BorrowMut, cmp::max, sync::Arc};
+use crate::{ShaDigestColsRefMut, ShaRoundColsRefMut, ShaRoundColsRef};
 
 use openvm_circuit::arch::{
     instructions::riscv::RV32_CELL_BITS,
@@ -22,8 +23,7 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
 
 use crate::{
-    compose, small_sig0_field, Sha256Config, Sha512Config, ShaAir, ShaConfig, ShaFlagsColsRef,
-    ShaFlagsColsRefMut, ShaPrecomputedValues,
+    compose, small_sig0_field, Sha256Config, Sha512Config, ShaAir, ShaConfig, ShaPrecomputedValues,
 };
 
 // A wrapper AIR purely for testing purposes
@@ -101,7 +101,7 @@ fn rand_sha_test<C: ShaConfig + ShaPrecomputedValues<C::Word> + 'static>() {
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let len = rng.gen_range(1..100);
     let random_records: Vec<_> = (0..len)
-        .map(|_| {
+        .map(|i| {
             (
                 (0..C::BLOCK_U8S)
                     .map(|_| rng.gen::<u8>())
@@ -137,7 +137,7 @@ fn rand_sha512_test() {
 pub struct ShaTestBadFinalHashChip<C: ShaConfig + ShaPrecomputedValues<C::Word>> {
     pub air: ShaTestAir<C>,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
-    pub records: Vec<(Vec<u8>, bool)>, // length of inner vec is C::BLOCK_U8S
+    pub records: Vec<(Vec<u8>, bool)>, // length of inner vec should be C::BLOCK_U8S
 }
 
 impl<SC: StarkGenericConfig, C: ShaConfig + ShaPrecomputedValues<C::Word> + 'static> Chip<SC>
@@ -150,7 +150,7 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let mut trace = crate::generate_trace::<Val<SC>>(
+        let mut trace = crate::generate_trace::<Val<SC>, C>(
             &self.air.sub_air,
             self.bitwise_lookup_chip.clone(),
             self.records.clone(),
@@ -161,7 +161,7 @@ where
         for (i, row) in self.records.iter().enumerate() {
             if row.1 {
                 let last_digest_row_idx = (i + 1) * C::ROWS_PER_BLOCK - 1;
-                let last_digest_row: crate::ShaDigestColsRefMut<Val<SC>> =
+                let mut last_digest_row: crate::ShaDigestColsRefMut<Val<SC>> =
                     ShaDigestColsRefMut::from::<C>(
                         trace.row_mut(last_digest_row_idx)[..C::DIGEST_WIDTH].borrow_mut(),
                     );
@@ -176,10 +176,10 @@ where
                     trace.row_pair_mut(last_digest_row_idx - 1, last_digest_row_idx);
                 let last_round_row: crate::ShaRoundColsRefMut<Val<SC>> =
                     ShaRoundColsRefMut::from::<C>(last_round_row.borrow_mut());
-                let last_digest_row: crate::ShaRoundColsRefMut<Val<SC>> =
+                let mut last_digest_row: crate::ShaRoundColsRefMut<Val<SC>> =
                     ShaRoundColsRefMut::from::<C>(last_digest_row.borrow_mut());
                 // fix the intermed_4 for the digest row
-                generate_intermed_4(last_round_row, last_digest_row);
+                generate_intermed_4::<Val<SC>, C>(&ShaRoundColsRef::from_mut::<C>(&last_round_row), &mut last_digest_row);
             }
         }
 
@@ -199,52 +199,72 @@ where
 
 // Copy of private method in Sha256Air used for testing
 /// Puts the correct intermed_4 in the `next_row`
-fn generate_intermed_4<F: PrimeField32>(
-    local_cols: &Sha256RoundCols<F>,
-    next_cols: &mut Sha256RoundCols<F>,
+fn generate_intermed_4<F: PrimeField32, C: ShaConfig + ShaPrecomputedValues<C::Word>>(
+    local_cols: &ShaRoundColsRef<F>,
+    next_cols: &mut ShaRoundColsRefMut<F>,
 ) {
-    let w = [local_cols.message_schedule.w, next_cols.message_schedule.w].concat();
-    let w_limbs: Vec<[F; SHA256_WORD_U16S]> = w
+    let w = [
+        local_cols
+            .message_schedule
+            .w
+            .rows()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        next_cols
+            .message_schedule
+            .w
+            .rows()
+            .into_iter()
+            .collect::<Vec<_>>(),
+    ]
+    .concat();
+ 
+    
+    // length of inner vec is C::WORD_U16S
+    let w_limbs: Vec<Vec<F>> = w 
         .iter()
-        .map(|x| array::from_fn(|i| compose::<F>(&x[i * 16..(i + 1) * 16], 1)))
+        .map(|x| {
+            (0..C::WORD_U16S)
+                .map(|i| compose::<F>(&x.as_slice().unwrap()[i * 16..(i + 1) * 16], 1))
+                .collect::<Vec<F>>()
+        })
         .collect();
-    for i in 0..SHA256_ROUNDS_PER_ROW {
-        let sig_w = small_sig0_field::<F>(&w[i + 1]);
-        let sig_w_limbs: [F; SHA256_WORD_U16S] =
-            array::from_fn(|j| compose::<F>(&sig_w[j * 16..(j + 1) * 16], 1));
+    for i in 0..C::ROUNDS_PER_ROW {
+        let sig_w = small_sig0_field::<F, C>(w[i + 1].as_slice().unwrap());
+        let sig_w_limbs: Vec<F> = (0..C::WORD_U16S)
+            .map(|j| compose::<F>(&sig_w[j * 16..(j + 1) * 16], 1))
+            .collect();
         for (j, sig_w_limb) in sig_w_limbs.iter().enumerate() {
-            next_cols.schedule_helper.intermed_4[i][j] = w_limbs[i][j] + *sig_w_limb;
+            next_cols.schedule_helper.intermed_4[[i, j]] = w_limbs[i][j] + *sig_w_limb;
         }
     }
 }
 
-impl ChipUsageGetter for Sha256TestBadFinalHashChip {
+impl<C: ShaConfig + ShaPrecomputedValues<C::Word>> ChipUsageGetter for ShaTestBadFinalHashChip<C> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
     fn current_trace_height(&self) -> usize {
-        self.records.len() * SHA256_ROWS_PER_BLOCK
+        self.records.len() * C::ROWS_PER_BLOCK
     }
 
     fn trace_width(&self) -> usize {
-        max(SHA256_ROUND_WIDTH, SHA256_DIGEST_WIDTH)
+        max(C::ROUND_WIDTH, C::DIGEST_WIDTH)
     }
 }
 
-#[test]
-#[should_panic]
-fn test_sha256_final_hash_constraints() {
+fn test_sha_final_hash_constraints<C: ShaConfig + ShaPrecomputedValues<C::Word> + 'static>() {
     let mut rng = create_seeded_rng();
     let tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let len = rng.gen_range(1..100);
     let random_records: Vec<_> = (0..len)
-        .map(|_| (array::from_fn(|_| rng.gen::<u8>()), true))
+        .map(|_| ((0..C::BLOCK_U8S).map(|_| rng.gen::<u8>()).collect::<Vec<_>>(), true))
         .collect();
-    let chip = Sha256TestBadFinalHashChip {
-        air: Sha256TestAir {
-            sub_air: Sha256Air::new(bitwise_bus, SELF_BUS_IDX),
+    let chip = ShaTestBadFinalHashChip {
+        air: ShaTestAir {
+            sub_air: ShaAir::<C>::new(bitwise_bus, SELF_BUS_IDX),
         },
         bitwise_lookup_chip: bitwise_chip.clone(),
         records: random_records,
@@ -252,4 +272,16 @@ fn test_sha256_final_hash_constraints() {
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+#[should_panic]
+fn test_sha256_final_hash_constraints() {
+    test_sha_final_hash_constraints::<Sha256Config>();
+}
+
+#[test]
+#[should_panic]
+fn test_sha512_final_hash_constraints() {
+    test_sha_final_hash_constraints::<Sha512Config>();
 }

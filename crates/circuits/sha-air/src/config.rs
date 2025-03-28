@@ -40,8 +40,6 @@ pub trait ShaConfig: Send + Sync + Clone {
     const ROUNDS_PER_ROW_MINUS_ONE: usize = Self::ROUNDS_PER_ROW - 1;
     /// Number of rounds per block. Must be a multiple of Self::ROUNDS_PER_ROW
     const ROUNDS_PER_BLOCK: usize;
-    /// Number of rows used to constrain rounds
-    const ROUND_ROWS: usize = Self::ROUNDS_PER_BLOCK / Self::ROUNDS_PER_ROW;
     /// Number of words in a SHA hash
     const HASH_WORDS: usize;
     /// Number of vars needed to encode the row index with [Encoder]
@@ -85,7 +83,7 @@ pub trait ShaConfig: Send + Sync + Clone {
 /// To optimize the trace generation of invalid rows, we precompute those values.
 /// This trait also stores the constants K and H for the given SHA config.
 pub trait ShaPrecomputedValues<T> {
-    // these should be appropirately sized for the config
+    // these should be appropriately sized for the config
     fn get_invalid_carry_a(round_num: usize) -> &'static [u32];
     fn get_invalid_carry_e(round_num: usize) -> &'static [u32];
     fn get_k() -> &'static [T];

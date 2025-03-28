@@ -1,9 +1,6 @@
-#![feature(proc_macro_diagnostic)]
-
 extern crate proc_macro;
 
 use itertools::Itertools;
-//use openvm_macros_common::MacroArgs;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, parse_quote, DeriveInput, Expr};
