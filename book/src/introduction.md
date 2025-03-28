@@ -9,6 +9,7 @@ OpenVM is an open-source zero-knowledge virtual machine (zkVM) framework focused
 - **Modular no-CPU Architecture**: Unlike traditional machine architectures, the OpenVM architecture has no central processing unit. This design choice allows for seamless integration of custom chips, **without forking or modifying the core architecture**.
 
 - **Extensible Instruction Set**: The instruction set architecture (ISA) is designed to be extended with new custom instructions that integrate directly with the virtual machine. Current extensions available for OpenVM include:
+
   - RISC-V support via RV32IM
   - A native field arithmetic extension for proof recursion and aggregation
   - The Keccak-256 and SHA2-256 hash functions
@@ -32,7 +33,7 @@ The following chapters will guide you through:
 
 ## Security Status
 
-As of December 2024, OpenVM has not been audited and is currently not recommended for production use. We plan to continue development towards a production-ready release in 2025.
+As of the v1.0.0 release in March 2025, OpenVM is recommended for production use. OpenVM completed an external [audit](https://github.com/openvm-org/openvm/blob/main/audits/v1-cantina-report.pdf) on [Cantina](https://cantina.xyz/) from January to March 2025 as well as an internal [audit](https://github.com/openvm-org/openvm/blob/main/audits/v1-internal/README.md) by members of the [Axiom](https://axiom.xyz/) team during the same timeframe.
 
 > 📖 **About this book**
 >
