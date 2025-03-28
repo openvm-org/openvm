@@ -65,7 +65,7 @@ For the basic operations provided by the `WeierstrassPoint` trait, the scalar fi
 
 ## ECDSA
 
-The ECC extension supports ECDSA signature verification on any elliptic curve, and pre-defined implementations are provided for the `Secp256k1` and `Secp256r1` curves.
+The ECC extension supports ECDSA signature verification on any elliptic curve, and pre-defined implementations are provided for the secp256k1 and secp256r1 curves.
 To verify an ECDSA signature, first call the `VerifyingKey::recover_from_prehash_noverify` associated function to recover the verifying key, then call the `VerifyingKey::verify_prehashed` method on the recovered verifying key.
 
 ## Example program
