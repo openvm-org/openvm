@@ -14,7 +14,7 @@ OpenVM is an open-source zero-knowledge virtual machine (zkVM) framework focused
   - The Keccak-256 and SHA2-256 hash functions
   - Int256 arithmetic
   - Modular arithmetic over arbitrary fields
-  - Elliptic curve operations, including multi-scalar multiplication and ECDSA scalar multiplication.
+  - Elliptic curve operations, including multi-scalar multiplication and ECDSA signature verification, including for the `Secp256k1` and `Secp256r1` curves.
   - Pairing operations on the BN254 and BLS12-381 curves.
 
 - **Rust Frontend**: ISA extensions are directly accessible through a Rust frontend via [intrinsic functions](https://en.wikipedia.org/wiki/Intrinsic_function), providing a smooth developer experience.

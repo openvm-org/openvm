@@ -61,6 +61,11 @@ To use elliptic curve operations on a struct defined with `sw_declare!`, it is e
 
 For the basic operations provided by the `WeierstrassPoint` trait, the scalar field is not needed. For the ECDSA functions in the `ecdsa` module, the scalar field must also be declared, initialized, and set up.
 
+## ECDSA
+
+The ECC extension supports ECDSA signature verification on any elliptic curve, and pre-defined implementations are provided for the `Secp256k1` and `Secp256r1` curves.
+To verify an ECDSA signature, first call the `VerifyingKey::recover_from_prehash_noverify` associated function to recover the verifying key, then call the `VerifyingKey::verify_prehashed` method on the recovered verifying key.
+
 ## Example program
 
 See a working example [here](https://github.com/openvm-org/openvm/blob/main/examples/ecc/src/main.rs).
