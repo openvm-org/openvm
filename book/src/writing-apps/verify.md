@@ -104,7 +104,7 @@ where each field is a hex string. We explain what each field represents:
 The `cargo openvm verify evm` command reads the EVM proof from JSON file and then simulates the call to the verifier contract using [Revm](https://github.com/bluealloy/revm/tree/main). This function should only be used for testing and development purposes but not for production.
 
 To verify the EVM proof in an EVM execution environment, the EVM proof must be formatted into calldata bytes and sent to the fallback function of the verifier smart contract. The calldata bytes are formed by concatenating the fields of the EVM proof described above in the following order and format:
-1. `accumulators`: every 32 bytes are _reversed_ from little endian to big endian and concatenated.
+1. `accumulators`: every `32` bytes are _reversed_ from little endian to big endian and concatenated.
 2. `exe_commit`: the `32` bytes are _reversed_ from little endian to big endian.
 3. `leaf_commit`: the `32` bytes are _reversed_ from little endian to big endian.
 4. `user_public_values`: every `32` bytes are _reversed_ from little endian to big endian and concatenated.
