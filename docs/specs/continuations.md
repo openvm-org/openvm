@@ -55,10 +55,6 @@ Public Values Exposed:
 
 Parameters (which could result in a different circuit):
 
-- Number of public values (from upper stream)
-- k in Halo2
-- Determines the number of columns of the circuit.
-
 - Number of public values (from upstream)
 - k in Halo2 (determines the number of columns in the circuit)
 - Root VM verifier
@@ -88,18 +84,22 @@ The Root VM Verifier verifies 1 or more proofs of:
 
 In practice, Root VM verifier only verifies one proof to guarantee constant heights.
 
-Logical Input:
+Input:
 
-- Root input
+- Root input (`RootVmVerifierInput<SC>` containing proofs and public values)
+
+Output:
+
+- `Proof<RootSC>`
 
 Cached Trace Commit:
 
 - `ProgramAir`: commits the root verifier program
 
-Public values:
-
-- `RootVmVerifierPvs`
-  - Note: exe_commit is the commitment of the executable. The way to compute it can be found here.
+Public Values (`RootVmVerifierPvs`):
+  - `exe_commit: [F; DIGEST_SIZE]` - Original program execution commitment
+  - `leaf_verifier_commit: [F; DIGEST_SIZE]` - Commitment to leaf verifier program
+  - `public_values: Vec<F>` - Original user-defined public values preserved through chain
 
 Parameters:
 
@@ -117,17 +117,23 @@ The Internal VM Verifier validates one or more proofs of:
 - Leaf VM Verifier
 - Internal VM Verifier
 
-Logical Input:
+Input:
 
-- `InternalVmVerifierInput`
+- `Vec<Proof<SC>>` (Leaf of other internal proofs)
+
+Output:
+
+- `Proof<SC>`
 
 Cached Trace Commit:
 
 - `ProgramAir`: commits the internal verifier program. `agg_vm_pk` contains it.
 
-Public values:
-
-- `InternalVmVerifierPvs`
+Public Values (`InternalVmVerifierPvs`):
+  - `vm_verifier_pvs: VmVerifierPvs<F>` - See below
+  - `extra_pvs: InternalVmVerifierExtraPvs<F>`:
+    - `leaf_verifier_commit: [F; DIGEST_SIZE]` - The commitment of the leaf verifier program
+    - `internal_program_commit: [F; DIGEST_SIZE]` - The commitment of the internal program
 
 Parameters:
 
@@ -144,17 +150,29 @@ Verify 1 or more proofs of:
 
 - segment circuits
 
-Logical Input:
+Input:
 
-- `LeafVmVerifierInput`
+- `ContinuationVmProof<SC>`
+
+Output:
+
+- `Vec<Proof<SC>>`
 
 Cached Trace Commit:
 
 - ProgramAir: commits the leaf verifier program. The leaf verifier program commits .
 
-Public values:
-
-- `VmVerifierPvs`
+Public Values (`VmVerifierPvs`):
+  - `app_commit: [F; DIGEST_SIZE]` - Commitment to program code
+  - `connector`: Contains execution metadata:
+    - `is_terminate: F` - Flag indicating if execution terminated
+    - `initial_pc: F` - Starting program counter
+    - `final_pc: F` - Final program counter
+    - `exit_code: F` - Program exit code (0=success)
+  - `memory`: Contains memory state information:
+    - `initial_root: [F; DIGEST_SIZE]` - Merkle root of initial memory
+    - `final_root: [F; DIGEST_SIZE]` - Merkle root of final memory
+  - `public_values_commit: [F; DIGEST_SIZE]` - Merkle root of the subtree corresponding to the user public values
 
 Parameters:
 
@@ -170,9 +188,13 @@ App VM executes an executable with inputs and returns a list of segment proofs.
 
 ## Segment
 
-Logical Input:
+Input:
 
-- App VM input stream
+- App VM input stream (`StdIn`)
+
+Output: `ContinuationVmProof<SC>` containing:
+  - `per_segment`: Collection of STARK proofs for each execution segment
+  - `user_public_values`: Proof of public values from memory
 
 Cached Trace Commit:
 
