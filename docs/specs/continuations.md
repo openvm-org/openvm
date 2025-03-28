@@ -29,6 +29,12 @@ wrapper is determined by the following parameters:
 - Number of public values
 - The Aggregation VM chip constraints (but **not** the App VM chips)
 
+Public values:
+- `accumulators`: every `32` bytes are _reversed_ from little endian to big endian and concatenated
+- `exe_commit`: the `32` bytes are _reversed_ from little endian to big endian
+- `leaf_commit`: the `32` bytes are _reversed_ from little endian to big endian
+- `user_public_values`: every `32` bytes are _reversed_ from little endian to big endian and concatenated
+
 ## Continuation Verifier
 
 The continuation verifier is a Halo2 circuit (static verifier) together with some single segment VM circuits (Agg VM).
