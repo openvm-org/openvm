@@ -1,6 +1,6 @@
 # OpenVM V1 Internal Audit
 
-This is the report from an internal audit of OpenVM V1 done by members of the OpenVM team during the period of Feb 17, 2025 to March 21, 2025.
+This is the report from an internal audit of OpenVM V1 done by members of the [Axiom](https://axiom.xyz) team during the period of Feb 17, 2025 to March 21, 2025.
 
 ## Table of Contents
 
