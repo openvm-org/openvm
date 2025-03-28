@@ -40,5 +40,7 @@ If `--app_pk` and/or `--exe` are not provided, the command will search for these
 
 The `app` subcommand is used to generate an application-level proof, while the `evm` command generates an end-to-end EVM proof.
 
-> ⚠️ **WARNING**  
+> ⚠️ **WARNING**
 > In order to run the `evm` subcommand, you must have previously called the costly `cargo openvm setup`, which requires very large amounts of computation and memory (~200 GB).
+
+See [EVM Proof Format](./verify.md#evm-proof-json-format) for details on the output format for `cargo openvm prove evm`.
