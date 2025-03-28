@@ -90,22 +90,22 @@ are determined in part from the prover's private randomness.
 **Context:** https://github.com/openvm-org/stark-backend/blob/fdb808bec40ff21dce7e462c2c18dbb997207adb/crates/stark-backend/src/verifier/mod.rs#L54
 
 **Description:**
-To protect against weak Fiat-Shamir, everything in the proof input should be observed in the Fiat-Shamir transcript. 
+To protect against weak Fiat-Shamir, everything in the proof input should be observed in the Fiat-Shamir transcript.
 The `Proof` contains the `air_ids` of the AIRs used in the proof, where the protocol will verify the proof against this subset of the AIRs specified in the verification key.
 This finding is similar in nature to [Cantina #152](https://cantina.xyz/code/c486d600-bed0-4fc6-aed1-de759fd29fa2/findings/152).
 
 We also ensure that everything in the `Proof` is observed:
 - `commitments`: [preprocessed](https://github.com/openvm-org/stark-backend/blob/fdb808bec40ff21dce7e462c2c18dbb997207adb/crates/stark-backend/src/verifier/mod.rs#L88), [main](https://github.com/openvm-org/stark-backend/blob/fdb808bec40ff21dce7e462c2c18dbb997207adb/crates/stark-backend/src/verifier/mod.rs#L92), [after challenge](https://github.com/openvm-org/stark-backend/blob/fdb808bec40ff21dce7e462c2c18dbb997207adb/crates/stark-backend/src/interaction/fri_log_up.rs#L195) assuming `<=1` phase, [quotient](https://github.com/openvm-org/stark-backend/blob/fdb808bec40ff21dce7e462c2c18dbb997207adb/crates/stark-backend/src/verifier/mod.rs#L145)
   - We note that `observe_slice` does not observe the length of the slice, which is acceptable for commitments because the number of commitments is recorded in the verifying key, _assuming_ that the proof shape is validated against the verifying key (see Finding 2.5 below)
-- `opening: OpeningProof`: 
-  - `proof: PcsProof<SC>` is of concrete type `FriProof` and is observed as part of FRI verify: [commit_phase_commits](https://github.com/Plonky3/Plonky3/blob/88d7f059500fd956a7c1eb121e08653e5974728d/fri/src/verifier.rs#L40), [final_poly](https://github.com/Plonky3/Plonky3/blob/88d7f059500fd956a7c1eb121e08653e5974728d/fri/src/verifier.rs#L49), [pow_witness](https://github.com/Plonky3/Plonky3/blob/88d7f059500fd956a7c1eb121e08653e5974728d/fri/src/verifier.rs#L56). 
-    - `query_proofs` consists entirely of sibling hashes in Merkle proofs, which are not observed because they are determined from the opening value and Merkle root. 
-  - `opened_values` is observed as part of FRI verify [here](https://github.com/Plonky3/Plonky3/blob/88d7f05/fri/src/two_adic_pcs.rs#L405)
+- `opening: OpeningProof`:
+  - `proof: PcsProof<SC>` is of concrete type `FriProof` and is observed as part of FRI verify: [commit_phase_commits](https://github.com/Plonky3/Plonky3/blob/1ba4e5c9500fd956a7c1eb121e08653e5974728d/fri/src/verifier.rs#L40), [final_poly](https://github.com/Plonky3/Plonky3/blob/1ba4e5c9500fd956a7c1eb121e08653e5974728d/fri/src/verifier.rs#L49), [pow_witness](https://github.com/Plonky3/Plonky3/blob/1ba4e5c9500fd956a7c1eb121e08653e5974728d/fri/src/verifier.rs#L56).
+    - `query_proofs` consists entirely of sibling hashes in Merkle proofs, which are not observed because they are determined from the opening value and Merkle root.
+  - `opened_values` is observed as part of FRI verify [here](https://github.com/Plonky3/Plonky3/blob/1ba4e5c/fri/src/two_adic_pcs.rs#L405)
 
 **Recommendation:**
 Observe the `air_ids` and also the number of AIRs.
 
-**Resolution:** 
+**Resolution:**
 - https://github.com/openvm-org/stark-backend/pull/56 (https://github.com/openvm-org/stark-backend/commit/2c535dc35542bf2d9c957104a327ce99e8bc7c59)
 - https://github.com/openvm-org/openvm/pull/1502 (https://github.com/openvm-org/openvm/commit/70c0d62cd0001e3defb2cf0f8e08b1c969e0a87a)
 

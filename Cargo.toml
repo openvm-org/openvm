@@ -105,8 +105,8 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "b051e8978da9c829a76b262abf4a9736c8d1681e", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "b051e8978da9c829a76b262abf4a9736c8d1681e", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "39e79c5998907d008319e02fe885d48054c6444b", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "39e79c5998907d008319e02fe885d48054c6444b", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
@@ -160,18 +160,18 @@ openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-fe
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
 
 # Plonky3
-p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
 p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", features = [
     "nightly-features",
-], rev = "88d7f05" }
-p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
-p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
-p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
-p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
-p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
-p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
-p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
-p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "88d7f05" }
+], rev = "1ba4e5c" }
+p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
+p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
+p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
+p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
+p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
+p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
+p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
+p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
 
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 snark-verifier-sdk = { version = "0.2.0", default-features = false, features = [
