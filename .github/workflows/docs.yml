@@ -32,7 +32,7 @@ jobs:
         run: cargo check
 
       - name: Build documentation
-        run: cargo doc --workspace --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
+        run: cargo +nightly doc --workspace --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
 
       # We only want the index page to display workspace crates, so we build
       # separately and copy over the index as a hack
