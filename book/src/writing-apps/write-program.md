@@ -27,7 +27,7 @@ For debugging purposes, `openvm::io::print` and `openvm::io::println` can be use
 
 > ⚠️ **WARNING**
 >
-> The maximum memory address for an OpenVM program is `2^29`. Majority of that (approximately 480-500 MB depending on transpilation) is available to the guest program, but large reads may exceed the maximum memory and thus fail.
+> The maximum memory address for an OpenVM program is `2^29`. The majority of that (approximately 480-500 MB depending on transpilation) is available to the guest program, but large reads may exceed the maximum memory and thus fail.
 
 ## Rust `std` library support
 

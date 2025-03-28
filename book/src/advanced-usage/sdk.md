@@ -31,6 +31,10 @@ The `SdkVmConfig` struct allows you to specify the extensions and system configu
 {{ #include ../../../crates/sdk/examples/sdk_app.rs:vm_config }}
 ```
 
+> ℹ️
+> When using Rust to write the guest program, the VM system configuration should keep the default value `pointer_max_bits = 29` to match the hardcoded memory limit of the memory allocator. Otherwise, the guest program may fail due to out of bounds memory access in the VM.
+
+
 ## Running a Program
 
 To run your program and see the public value output, you can do the following:
