@@ -53,12 +53,6 @@ Static Verifier Requirements:
 - The height of each trace is fixed.
 - Trace heights are in a descending order.
 
-Public Values Exposed:
-
-- Exe commit encoded in Bn254Fr
-- Leaf commit encoded in Bn254Fr
-- User public values in BabyBear
-
 Parameters (which could result in a different circuit):
 
 - Number of public values (from upstream)
@@ -66,6 +60,12 @@ Parameters (which could result in a different circuit):
 - Root VM verifier
   - VK (including the heights of all traces)
   - Root verifier program commitment
+
+Public values:
+- `exe_commit`: one `Bn254Fr` element (as `32` bytes) for the commitment of the app executable.
+- `leaf_commit`: one `Bn254Fr` element (as `32` bytes) for the commitment of the executable verifying app VM proofs.
+- `user_public_values`: sequence of `num_public_values` user-defined public values, each as a `Bn254Fr` element (`32` bytes). The number of user public values is a VM configuration parameter.
+
 
 ### Aggregation VM
 
