@@ -69,9 +69,6 @@ pub struct BenchmarkCli {
     /// Whether to execute with additional profiling metric collection
     #[arg(long)]
     pub profiling: bool,
-
-    #[arg(long)]
-    pub manifest_dir: Option<PathBuf>,
 }
 
 impl BenchmarkCli {
@@ -143,11 +140,7 @@ impl BenchmarkCli {
             "release"
         }
         .to_string();
-        let manifest_dir = self
-            .manifest_dir
-            .clone()
-            .unwrap_or(get_programs_dir())
-            .join(program_name);
+        let manifest_dir = get_programs_dir().join(program_name);
         build_bench(manifest_dir, profile)
     }
 
