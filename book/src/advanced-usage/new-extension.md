@@ -3,7 +3,7 @@
 Extensions in OpenVM let you introduce additional functionality without disrupting the existing system. Consider, for example, an extension that provides two new operations on `u32` values: one that squares a number, and another that multiplies it by three. With such an extension:
 
 1. You define functions like `square(x: u32) -> u32` and `mul3(x: u32) -> u32` for use in guest code.
-2. When the compiler encounters these functions, it generates corresponding custom [RISC-V instructions](https://github.com/openvm-org/openvm/blob/main/docs/specs/RISCV.md).
+2. When the compiler encounters these functions, it generates corresponding custom [RISC-V instructions](https://github.com/openvm-org/openvm/blob/main/docs/specs/RISCV.md).dfd
 3. During the transpilation phase, these custom instructions are translated into OpenVM instructions.
 4. At runtime, the OpenVM program sends these new instructions to a specialized [chip](https://github.com/openvm-org/openvm/blob/main/docs/specs/circuit.md) that computes the results and ensures their correctness.
 
