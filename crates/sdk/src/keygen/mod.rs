@@ -17,6 +17,10 @@ use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::halo2::{
     utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey, wrapper::Halo2WrapperProvingKey,
 };
+use openvm_stark_backend::{
+    config::Val,
+    p3_field::{FieldExtensionAlgebra, PrimeField32, TwoAdicField},
+};
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -105,6 +109,11 @@ where
                 vm_pk,
             }
         };
+        check_recursive_verifier_size(
+            &app_vm_pk.vm_pk.get_vk(),
+            config.app_fri_params.fri_params,
+            config.leaf_fri_params.fri_params.log_blowup,
+        );
         let leaf_committed_exe = {
             let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params.fri_params);
             let leaf_program = LeafVmVerifierConfig {
@@ -155,6 +164,88 @@ where
     }
 }
 
+/// Try to determine statically if there will be an issue with the recursive verifier size and log
+/// a warning if so.
+///
+/// `next_log_blowup` refers to the `log_blowup` of the next verifier in the chain; this determines
+/// a maximum trace height.
+fn check_recursive_verifier_size<SC: StarkGenericConfig>(
+    vk: &MultiStarkVerifyingKey<SC>,
+    fri_params: FriParameters,
+    next_log_blowup: usize,
+) where
+    Val<SC>: PrimeField32 + TwoAdicField,
+{
+    let vk = &vk.inner;
+
+    // for each round we will compute the pair (total_width, num_airs, num_pts)
+    let mut rounds = vec![];
+
+    // Preprocessed rounds.
+    rounds.extend(
+        vk.per_air
+            .iter()
+            .filter_map(|vk| vk.params.width.preprocessed)
+            .map(|width| (width, 1, 2)),
+    );
+
+    let common_main_total_width = vk
+        .per_air
+        .iter()
+        .map(|vk| vk.params.width.common_main)
+        .sum();
+    rounds.push((common_main_total_width, vk.per_air.len(), 2));
+
+    for vk in vk.per_air.iter() {
+        for &cached_main_width in &vk.params.width.cached_mains {
+            rounds.push((cached_main_width, 1, 2));
+        }
+    }
+
+    let mut after_challenge_rounds = vec![];
+    for vk in vk.per_air.iter() {
+        let widths = &vk.params.width.after_challenge;
+        if widths.len() > after_challenge_rounds.len() {
+            after_challenge_rounds.resize(widths.len(), (0, 0, 2));
+        }
+        for (i, &width) in widths.iter().enumerate() {
+            after_challenge_rounds[i].0 += SC::Challenge::D * width;
+            after_challenge_rounds[i].1 += 1;
+        }
+    }
+    rounds.extend(after_challenge_rounds);
+
+    let quotient_round = (
+        vk.per_air
+            .iter()
+            .map(|vk| SC::Challenge::D * vk.quotient_degree as usize)
+            .sum(),
+        vk.per_air.len(),
+        1,
+    );
+    rounds.push(quotient_round);
+
+    // This computes the number of rows in the `FRI_REDUCED_OPENING` chip, which is the expected
+    // bottleneck of the recursive verifier.
+    let fri_reduced_opening_trace_height = fri_params.num_queries
+        * rounds
+            .iter()
+            .map(|(total_width, num_airs, total_pts)| total_pts * (total_width + 2 * num_airs))
+            .sum::<usize>();
+    // First check: is FriReducedOpening trace height too large?
+    if fri_reduced_opening_trace_height > (1 << (Val::<SC>::TWO_ADICITY - next_log_blowup)) {
+        tracing::warn!("recursive verifier size may be too large; FriReducedOpening height ({fri_reduced_opening_trace_height}) > {}", 1 << (Val::<SC>::TWO_ADICITY - next_log_blowup));
+    }
+    // Second check: static check for log up soundness constraints using FriReducedOpening trace height as proxy
+    if fri_reduced_opening_trace_height as u32 >= Val::<SC>::ORDER_U32 / 200 {
+        tracing::warn!(
+            "recursive verifier size may violate log up soundness constraints; {} > {}",
+            200 * fri_reduced_opening_trace_height,
+            Val::<SC>::ORDER_U32
+        );
+    }
+}
+
 impl AggStarkProvingKey {
     pub fn keygen(config: AggStarkConfig) -> Self {
         tracing::info_span!("agg_stark_keygen", group = "agg_stark_keygen")
@@ -178,6 +269,11 @@ impl AggStarkProvingKey {
             }
         });
         let leaf_vm_vk = leaf_vm_pk.vm_pk.get_vk();
+        check_recursive_verifier_size(
+            &leaf_vm_vk,
+            config.leaf_fri_params,
+            config.internal_fri_params.log_blowup,
+        );
 
         let internal_engine = BabyBearPoseidon2Engine::new(config.internal_fri_params);
         let internal_vm = VirtualMachine::new(internal_engine, internal_vm_config.clone());
@@ -193,6 +289,11 @@ impl AggStarkProvingKey {
             }
         });
         let internal_vm_vk = internal_vm_pk.vm_pk.get_vk();
+        check_recursive_verifier_size(
+            &internal_vm_vk,
+            config.internal_fri_params,
+            config.internal_fri_params.log_blowup,
+        );
 
         let internal_program = InternalVmVerifierConfig {
             leaf_fri_params: config.leaf_fri_params,
@@ -250,7 +351,6 @@ impl AggStarkProvingKey {
                 air_heights,
             }
         };
-
         (
             Self {
                 leaf_vm_pk,
