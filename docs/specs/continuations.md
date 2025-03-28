@@ -30,10 +30,10 @@ wrapper is determined by the following parameters:
 - The Aggregation VM chip constraints (but **not** the App VM chips)
 
 Public values:
-- `accumulators`: every `32` bytes are _reversed_ from little endian to big endian and concatenated
-- `exe_commit`: the `32` bytes are _reversed_ from little endian to big endian
-- `leaf_commit`: the `32` bytes are _reversed_ from little endian to big endian
-- `user_public_values`: every `32` bytes are _reversed_ from little endian to big endian and concatenated
+- `accumulators`: `12 * 32` bytes representing the KZG accumulator of the SNARK proof.
+- `exe_commit`: one `Bn254Fr` element (as `32` bytes) for the commitment of the app executable.
+- `leaf_commit`: one `Bn254Fr` element (as `32` bytes) for the commitment of the executable verifying app VM proofs.
+- `user_public_values`: sequence of `num_public_values` user-defined public values, each as a `Bn254Fr` element (`32` bytes). The number of user public values is a VM configuration parameter.
 
 ## Continuation Verifier
 
@@ -55,8 +55,8 @@ Static Verifier Requirements:
 
 Public Values Exposed:
 
-- Exe commit encoded in Bn254
-- Leaf commit encoded in Bn254
+- Exe commit encoded in Bn254Fr
+- Leaf commit encoded in Bn254Fr
 - User public values in BabyBear
 
 Parameters (which could result in a different circuit):
