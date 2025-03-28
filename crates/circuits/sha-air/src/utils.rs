@@ -1,5 +1,3 @@
-use std::array;
-
 pub use openvm_circuit_primitives::utils::compose;
 use openvm_circuit_primitives::{
     encoder::Encoder,
