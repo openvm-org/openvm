@@ -194,7 +194,7 @@ Input:
 
 Output: `ContinuationVmProof<SC>` containing:
   - `per_segment`: Collection of STARK proofs for each execution segment
-  - `user_public_values`: Proof of public values from memory
+  - `user_public_values`: Merkle proof of public values from memory Merkle root
 
 Cached Trace Commit:
 
