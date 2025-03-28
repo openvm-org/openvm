@@ -101,6 +101,8 @@ Public Values (`RootVmVerifierPvs`):
   - `leaf_verifier_commit: [F; DIGEST_SIZE]` - Commitment to leaf verifier program
   - `public_values: Vec<F>` - Original user-defined public values preserved through chain
 
+**Note:** the verifier program hardcodes the commitment to the internal program as a constant, that's why it's not among public values.
+
 Parameters:
 
 - For circuit:
