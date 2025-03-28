@@ -68,39 +68,6 @@ pub trait WeierstrassPoint: Sized {
     }
 }
 
-// Hint for a decompression
-// if possible is true, then `sqrt` is the decompressed y-coordinate
-// if possible is false, then `sqrt` is such that
-// `sqrt^2 = rhs * non_qr` where `rhs` is the rhs of the curve equation
-pub struct DecompressionHint<T> {
-    pub possible: bool,
-    pub sqrt: T,
-}
-
-pub trait FromCompressed<Coordinate> {
-    /// Given `x`-coordinate,
-    ///
-    /// Decompresses a point from its x-coordinate and a recovery identifier which indicates
-    /// the parity of the y-coordinate. Given the x-coordinate, this function attempts to find the
-    /// corresponding y-coordinate that satisfies the elliptic curve equation. If successful, it
-    /// returns the point as an instance of Self. If the point cannot be decompressed, it returns None.
-    fn decompress(x: Coordinate, rec_id: &u8) -> Option<Self>
-    where
-        Self: core::marker::Sized;
-
-    /// If it exists, hints the unique `y` coordinate that is less than `Coordinate::MODULUS`
-    /// such that `(x, y)` is a point on the curve and `y` has parity equal to `rec_id`.
-    /// If such `y` does not exist, hints a coordinate `sqrt` such that `sqrt^2 = rhs * non_qr`
-    /// where `rhs` is the rhs of the curve equation and `non_qr` is the non-quadratic residue
-    /// for this curve that was initialized in the setup function.
-    ///
-    /// This is only a hint, and the returned value does not guarantee any of the above properties.
-    /// They must be checked separately. Normal users should use `decompress` directly.
-    ///
-    /// Returns None if the `DecompressionHint::possible` flag in the hint stream is not a boolean.
-    fn hint_decompress(x: &Coordinate, rec_id: &u8) -> Option<DecompressionHint<Coordinate>>;
-}
-
 // MSM using preprocessed table (windowed method)
 // Reference: modified from https://github.com/arkworks-rs/algebra/blob/master/ec/src/scalar_mul/mod.rs
 //
