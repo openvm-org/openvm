@@ -12,9 +12,10 @@ mod tests {
         utils::{air_test, air_test_with_min_segments},
     };
     use openvm_ecc_circuit::{
-        CurveConfig, EccExtension, Rv32EccConfig, ED25519_CONFIG, P256_CONFIG, SECP256K1_CONFIG,
+        CurveConfig, EccExtension, Rv32EccConfig, SwCurveCoeffs, ED25519_CONFIG, P256_CONFIG,
+        SECP256K1_CONFIG,
     };
-    use openvm_ecc_guest::CyclicGroup;
+    use openvm_ecc_guest::{ed25519::Ed25519Point, edwards::TwistedEdwardsPoint, CyclicGroup};
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_rv32im_transpiler::{
@@ -89,12 +90,7 @@ mod tests {
 
     #[test]
     fn test_decompress() -> Result<()> {
-        use openvm_algebra_guest::IntMod;
-        use openvm_ecc_guest::{
-            ed25519::Ed25519Point,
-            edwards::TwistedEdwardsPoint,
-            halo2curves::{group::Curve, secp256k1::Secp256k1Affine},
-        };
+        use openvm_ecc_guest::halo2curves::{group::Curve, secp256k1::Secp256k1Affine};
 
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
@@ -118,22 +114,22 @@ mod tests {
                     // unused, set to 10e9 + 7
                     scalar: BigUint::from_str("1000000007")
                         .unwrap(),
-                    coeffs: CurveCoeffs::SwCurve(SwCurveConfig {
+                    coeffs: SwCurveCoeffs {
                         a: BigUint::ZERO,
                         b: BigUint::from_str("3").unwrap(),
-                    }),
+                    },
                 },
                 CurveConfig {
                     modulus: BigUint::from_radix_be(&hex!("ffffffffffffffffffffffffffffffff000000000000000000000001"), 256)
                         .unwrap(),
                     scalar: BigUint::from_radix_be(&hex!("ffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3d"), 256)
                         .unwrap(),
-                    coeffs: CurveCoeffs::SwCurve(SwCurveConfig {
+                    coeffs: SwCurveCoeffs {
                         a: BigUint::from_radix_be(&hex!("fffffffffffffffffffffffffffffffefffffffffffffffffffffffe"), 256)
                             .unwrap(),
                         b: BigUint::from_radix_be(&hex!("b4050a850c04b3abf54132565044b0b7d7bfd8ba270b39432355ffb4"), 256)
                             .unwrap(),
-                    }),
+                    },
                 },
             ], vec![ED25519_CONFIG.clone()]);
 
@@ -159,6 +155,7 @@ mod tests {
     }
 
     fn test_decompress_invalid_specific_test(test_type: &str) -> Result<()> {
+        use openvm_algebra_guest::IntMod;
         use openvm_ecc_guest::halo2curves::{group::Curve, secp256k1::Secp256k1Affine};
 
         let elf = build_example_program_at_path_with_features(
@@ -183,24 +180,24 @@ mod tests {
                     // unused, set to 10e9 + 7
                     scalar: BigUint::from_str("1000000007")
                         .unwrap(),
-                    coeffs: CurveCoeffs::SwCurve(SwCurveConfig {
+                    coeffs: SwCurveCoeffs {
                         a: BigUint::ZERO,
                         b: BigUint::from_str("3").unwrap(),
-                    }),
+                    },
                 },
                 CurveConfig {
                     modulus: BigUint::from_radix_be(&hex!("ffffffffffffffffffffffffffffffff000000000000000000000001"), 256)
                         .unwrap(),
                     scalar: BigUint::from_radix_be(&hex!("ffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3d"), 256)
                         .unwrap(),
-                    coeffs: CurveCoeffs::SwCurve(SwCurveConfig {
+                    coeffs: SwCurveCoeffs {
                         a: BigUint::from_radix_be(&hex!("fffffffffffffffffffffffffffffffefffffffffffffffffffffffe"), 256)
                             .unwrap(),
                         b: BigUint::from_radix_be(&hex!("b4050a850c04b3abf54132565044b0b7d7bfd8ba270b39432355ffb4"), 256)
                             .unwrap(),
-                    }),
+                    },
                 },
-            ]);
+            ], vec![]);
 
         let p1 = Secp256k1Affine::generator();
         let p1 = (p1 + p1 + p1).to_affine();
@@ -343,7 +340,7 @@ mod tests {
         )
         .unwrap();
         let config =
-            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+            Rv32EccConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()], vec![]);
         air_test(config, openvm_exe);
     }
 }

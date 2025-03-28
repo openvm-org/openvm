@@ -38,7 +38,7 @@ pub enum Rv32EdwardsOpcode {
 pub enum EccPhantom {
     SwHintDecompress = 0x40,
     TeHintDecompress = 0x41,
-    HintNonQr = 0x41,
+    HintNonQr = 0x42,
 }
 
 #[derive(Default)]
