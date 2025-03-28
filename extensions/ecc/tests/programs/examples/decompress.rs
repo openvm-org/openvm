@@ -78,8 +78,8 @@ pub fn main() {
     test_impossible_decompression::<CurvePoint1mod4>(&Fp1mod4::from_u8(1), rec_id);
 
     // ed25519
-    let x = Ed25519Coord::from_le_bytes(&bytes[64..96]);
-    let y = Ed25519Coord::from_le_bytes(&bytes[96..128]);
+    let x = Ed25519Coord::from_le_bytes(&bytes[192..224]);
+    let y = Ed25519Coord::from_le_bytes(&bytes[224..256]);
     let rec_id = x.as_le_bytes()[0] & 1;
 
     let p = Ed25519Point::decompress(y.clone(), &rec_id);
