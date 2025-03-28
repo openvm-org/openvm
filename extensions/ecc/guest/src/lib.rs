@@ -62,8 +62,9 @@ impl TeBaseFunct7 {
     pub const TWISTED_EDWARDS_MAX_KINDS: u8 = 8;
 }
 
-/// A trait for elliptic curves that bridges the openvm types and external types with CurveArithmetic etc.
-/// Implement this for external curves with corresponding openvm point and scalar types.
+/// A trait for elliptic curves that bridges the openvm types and external types with
+/// CurveArithmetic etc. Implement this for external curves with corresponding openvm point and
+/// scalar types.
 pub trait IntrinsicCurve {
     type Scalar: Clone;
     type Point: Clone;
@@ -77,23 +78,12 @@ pub trait IntrinsicCurve {
 pub trait FromCompressed<Coordinate> {
     /// Given `x`-coordinate,
     ///
-    /// ## Panics
-    /// If the input is not a valid compressed point.
-    /// The zkVM panics instead of returning an [Option] because this function
-    /// can only guarantee correct behavior when decompression is possible,
-    /// but the function cannot compute the boolean equal to true if and only
-    /// if decompression is possible.
-    // This is because we rely on a hint for the correct decompressed value
-    // and then constrain its correctness. A malicious prover could hint
-    // incorrectly, so there is no way to use a hint to prove that the input
-    // **cannot** be decompressed.
-    fn decompress(x: Coordinate, rec_id: &u8) -> Self;
-
-    /// If it exists, hints the unique `y` coordinate that is less than `Coordinate::MODULUS`
-    /// such that `(x, y)` is a point on the curve and `y` has parity equal to `rec_id`.
-    /// If such `y` does not exist, undefined behavior.
-    ///
-    /// This is only a hint, and the returned `y` does not guarantee any of the above properties.
-    /// They must be checked separately. Normal users should use `decompress` directly.
-    fn hint_decompress(x: &Coordinate, rec_id: &u8) -> Coordinate;
+    /// Decompresses a point from its x-coordinate and a recovery identifier which indicates
+    /// the parity of the y-coordinate. Given the x-coordinate, this function attempts to find the
+    /// corresponding y-coordinate that satisfies the elliptic curve equation. If successful, it
+    /// returns the point as an instance of Self. If the point cannot be decompressed, it returns
+    /// None.
+    fn decompress(x: Coordinate, rec_id: &u8) -> Option<Self>
+    where
+        Self: core::marker::Sized;
 }

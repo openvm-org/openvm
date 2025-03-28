@@ -112,19 +112,6 @@ pub trait WeierstrassPoint: Clone + Sized {
     }
 }
 
-pub trait FromCompressed<Coordinate> {
-    /// Given `x`-coordinate,
-    ///
-    /// Decompresses a point from its x-coordinate and a recovery identifier which indicates
-    /// the parity of the y-coordinate. Given the x-coordinate, this function attempts to find the
-    /// corresponding y-coordinate that satisfies the elliptic curve equation. If successful, it
-    /// returns the point as an instance of Self. If the point cannot be decompressed, it returns
-    /// None.
-    fn decompress(x: Coordinate, rec_id: &u8) -> Option<Self>
-    where
-        Self: core::marker::Sized;
-}
-
 // MSM using preprocessed table (windowed method)
 // Reference: modified from https://github.com/arkworks-rs/algebra/blob/master/ec/src/scalar_mul/mod.rs
 //
