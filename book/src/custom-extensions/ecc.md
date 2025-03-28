@@ -2,7 +2,7 @@
 
 The OpenVM Elliptic Curve Cryptography Extension provides support for elliptic curve operations through the `openvm-ecc-guest` crate.
 
-The Secp256k1 and Secp256r1 curves are supported out of the box, and one can also define their own elliptic curve types by providing the modulus for the coordinate field and the coefficients in the curve equation.
+The secp256k1 and secp256r1 curves are supported out of the box, and developers can enable arbitrary Weierstrass curves by configuring this extension with the modulus for the coordinate field and the coefficients in the curve equation.
 
 ## Available traits and methods
 
