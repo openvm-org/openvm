@@ -8,8 +8,11 @@ use hex_literal::hex;
 use openvm::io::read_vec;
 use openvm_ecc_guest::{
     algebra::{Field, IntMod},
+    ed25519::{Ed25519Coord, Ed25519Point},
+    edwards::TwistedEdwardsPoint,
     k256::{Secp256k1Coord, Secp256k1Point},
-    weierstrass::{FromCompressed, WeierstrassPoint},
+    weierstrass::WeierstrassPoint,
+    FromCompressed,
     Group,
 };
 
@@ -29,6 +32,7 @@ openvm_algebra_moduli_macros::moduli_init! {
     "1000000007",
     "0xffffffffffffffffffffffffffffffff000000000000000000000001",
     "0xffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3d",
+    "57896044618658097711785492504343953926634992332820282019728792003956564819949",,
 }
 
 const CURVE_B_5MOD8: Fp5mod8 = Fp5mod8::from_const_u8(3);
@@ -88,14 +92,21 @@ openvm_ecc_sw_macros::sw_init! {
     CurvePoint1mod4,
 }
 
+openvm_ecc_te_macros::te_init! {
+    Ed25519Point,
+}
+
 // test decompression under an honest host
 pub fn main() {
     setup_0();
     setup_2();
     setup_4();
-    setup_all_curves();
+    setup_all_sw_curves();
+    setup_all_te_curves();
 
     let bytes = read_vec();
+
+    // secp256k1
     let x = Secp256k1Coord::from_le_bytes(&bytes[..32]);
     let y = Secp256k1Coord::from_le_bytes(&bytes[32..64]);
     let rec_id = y.as_le_bytes()[0] & 1;
@@ -119,6 +130,19 @@ pub fn main() {
     test_possible_decompression::<CurvePoint1mod4>(&x, &y, rec_id);
     // x = 1 is not on the x-coordinate of any point on the CurvePoint1mod4 curve
     test_impossible_decompression_curvepoint1mod4(&Fp1mod4::from_u8(1), rec_id);
+
+    // ed25519
+    let x = Ed25519Coord::from_le_bytes(&bytes[64..96]);
+    let y = Ed25519Coord::from_le_bytes(&bytes[96..128]);
+    let rec_id = x.as_le_bytes()[0] & 1;
+
+    let hint_x = Ed25519Point::hint_decompress(&y, &rec_id);
+    assert_eq!(x, hint_x);
+
+    let p = Ed25519Point::decompress(y.clone(), &rec_id);
+    assert_eq!(p.x(), &x);
+    assert_eq!(p.y(), &y);
+
 }
 
 fn test_possible_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinate>>(
@@ -184,4 +208,5 @@ fn test_impossible_decompression_curvepoint1mod4(x: &Fp1mod4, rec_id: u8) {
 
     let p = CurvePoint1mod4::decompress(x.clone(), &rec_id);
     assert!(p.is_none());
+
 }

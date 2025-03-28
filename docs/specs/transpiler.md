@@ -203,8 +203,11 @@ Each VM extension's behavior is specified below.
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | sw_add_ne\<C\>  | EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                           |
 | sw_double\<C\>  | EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                                                                                                                  |
-| setup\<C\>      | SETUP_EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) != 0`, SETUP_EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) = 0` |
-| hint_decompress | PHANTOM `ind(rs1), ind(rs2), phantom_c(curve_idx, HintDecompress)`                                                                                                |
+| sw_setup\<C\>      | SETUP_EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) != 0`, SETUP_EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) = 0` |
+| sw_hint_decompress | PHANTOM `ind(rs1), ind(rs2), phantom_c(curve_idx, HintDecompress)`                                                                                                |
+| te_add\<C\> | TE_ADD_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| te_setup\<C\>     | SETUP_TE_ADD_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
+| te_hint_decompress| PHANTOM `ind(rd), ind(rs1), phantom_c(curve_idx, HintDecompress)` |
 | hint_non_qr     | PHANTOM `0, 0, phantom_c(curve_idx, HintNonQr)`                                                                                                |
 
 ### Pairing Extension
