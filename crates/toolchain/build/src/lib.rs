@@ -269,6 +269,13 @@ pub fn build_guest_package(
         return Err(None);
     }
 
+    // Check if the required toolchain and rust-src component are installed, and if not, install them.
+    // This requires that `rustup` is installed.
+    if let Err(code) = ensure_toolchain_installed(RUSTUP_TOOLCHAIN_NAME, &["rust-src"]) {
+        eprintln!("rustup toolchain commands failed. Please ensure rustup is installed (https://www.rust-lang.org/tools/install)");
+        return Err(Some(code));
+    }
+
     let target_dir = guest_opts
         .target_dir
         .clone()
@@ -414,10 +421,78 @@ pub fn detect_toolchain(name: &str) {
     let stdout = String::from_utf8(result.stdout).unwrap();
     if !stdout.lines().any(|line| line.trim().starts_with(name)) {
         eprintln!("The '{name}' toolchain could not be found.");
-        // eprintln!("To install the risc0 toolchain, use rzup.");
-        // eprintln!("For example:");
-        // eprintln!("  curl -L https://risczero.com/install | bash");
-        // eprintln!("  rzup install");
         std::process::exit(-1);
     }
+}
+
+/// Ensures the required toolchain and components are installed.
+fn ensure_toolchain_installed(toolchain: &str, components: &[&str]) -> Result<(), i32> {
+    // Check if toolchain is installed
+    let output = Command::new("rustup")
+        .args(["toolchain", "list"])
+        .output()
+        .map_err(|e| {
+            tty_println(&format!("Failed to check toolchains: {}", e));
+            e.raw_os_error().unwrap_or(1)
+        })?;
+
+    let toolchain_installed = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .any(|line| line.trim().starts_with(toolchain));
+
+    // Install toolchain if missing
+    if !toolchain_installed {
+        tty_println(&format!("Installing required toolchain: {}", toolchain));
+        let status = Command::new("rustup")
+            .args(["toolchain", "install", toolchain])
+            .status()
+            .map_err(|e| {
+                tty_println(&format!("Failed to install toolchain: {}", e));
+                e.raw_os_error().unwrap_or(1)
+            })?;
+
+        if !status.success() {
+            tty_println(&format!("Failed to install toolchain {}", toolchain));
+            return Err(status.code().unwrap_or(1));
+        }
+    }
+
+    // Check and install missing components
+    for component in components {
+        let output = Command::new("rustup")
+            .args(["component", "list", "--toolchain", toolchain])
+            .output()
+            .map_err(|e| {
+                tty_println(&format!("Failed to check components: {}", e));
+                e.raw_os_error().unwrap_or(1)
+            })?;
+
+        let is_installed = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .any(|line| line.contains(component) && line.contains("(installed)"));
+
+        if !is_installed {
+            tty_println(&format!(
+                "Installing component {} for toolchain {}",
+                component, toolchain
+            ));
+            let status = Command::new("rustup")
+                .args(["component", "add", component, "--toolchain", toolchain])
+                .status()
+                .map_err(|e| {
+                    tty_println(&format!("Failed to install component: {}", e));
+                    e.raw_os_error().unwrap_or(1)
+                })?;
+
+            if !status.success() {
+                tty_println(&format!(
+                    "Failed to install component {} for toolchain {}",
+                    component, toolchain
+                ));
+                return Err(status.code().unwrap_or(1));
+            }
+        }
+    }
+
+    Ok(())
 }

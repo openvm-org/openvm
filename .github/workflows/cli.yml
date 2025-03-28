@@ -39,10 +39,6 @@ jobs:
       - name: Install solc # svm should support arm64 linux
         run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
-      - name: Install tools
-        run: |
-          rustup component add rust-src --toolchain nightly-2025-02-14
-
       - name: Install cargo-openvm
         working-directory: crates/cli
         run: |
