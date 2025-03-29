@@ -56,6 +56,7 @@ Binary crates can generally be written using the standard library, although for 
 OpenVM fully supports `no_std` Rust. We refer to the [Embedded Rust Book](https://docs.rust-embedded.org/book/intro/no-std.html) for a more detailed introduction to `no_std` Rust.
 
 ### `no_std` library crates
+
 In a library crate, you should add the following to `lib.rs` to declare your crate as `no_std`:
 
 ```rust
@@ -101,16 +102,20 @@ fn main() {
 ```
 
 If you want to feature gate the usage of the standard library, you can add
+
 ```toml
 [features]
 std = ["openvm/std"]
 ```
+
 to `Cargo.toml` as discussed above. In this case, the `main.rs` header should be modified to:
+
 ```rust
 // main.rs
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
+
 and you still need the `openvm::entry!(main)` line.
 This tells Rust to use the custom `main` handler when the environment is `no_std`, but to use the Rust `std` library and the standard `main` handler when the feature `"std"` is enabled.
 

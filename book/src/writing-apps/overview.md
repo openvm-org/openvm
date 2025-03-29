@@ -28,6 +28,7 @@ For more information on both commands, see the [build](./build.md) docs.
 
 The `--input` field needs to either be a single hex string or a file path to a json file that contains the key `input` and an array of hex strings. Note that if your hex string represents a single number, it should be written in little-endian format (as this is what the VM expects). Also note that if you need to provide multiple input streams, you have to use the file path option.
 Each hex string (either in the file or as the direct input) is either:
+
 - Hex string of bytes, which is prefixed with 0x01
 - Hex string of native field elements (represented as u32, little endian), prefixed with 0x02
 

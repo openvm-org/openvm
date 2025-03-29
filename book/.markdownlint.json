@@ -14,5 +14,7 @@
     "single-title": false,
     "no-emphasis-as-heading": false,
     "no-duplicate-header": false,
-    "no-inline-html": false
-}
+    "no-inline-html": false,
+    "MD013": false,
+    "MD029": false
+  }
