@@ -10,13 +10,16 @@ use eyre::{Context, Result};
 pub const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2025-02-14";
 
 pub const OPENVM_VERSION_MESSAGE: &str = concat!(
-    "openvm",
+    "openvm ",
+    env!("OPENVM_WORKSPACE_VERSION"),
     " (",
     env!("VERGEN_GIT_SHA"),
     " ",
     env!("VERGEN_BUILD_TIMESTAMP"),
     ")"
 );
+
+pub const OPENVM_WORKSPACE_VERSION: &str = env!("OPENVM_WORKSPACE_VERSION");
 
 #[allow(dead_code)]
 trait CommandExecutor {

@@ -15,6 +15,8 @@ vergen = { version = "8", default-features = false, features = [
     "git",
     "git2",
 ] }
+# For workspace version detection
+cargo_metadata = "0.18.1"
 
 [dependencies]
 openvm-build = { workspace = true }
@@ -23,6 +25,7 @@ openvm-native-recursion = { workspace = true, features = ["static-verifier"] }
 openvm-sdk = { workspace = true }
 openvm-stark-sdk.workspace = true
 openvm-stark-backend.workspace = true
+cargo_metadata = "0.18.1"
 
 aws-sdk-s3 = "1.78"
 aws-config = "1.5"

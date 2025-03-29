@@ -3,8 +3,9 @@ use std::{
     path::PathBuf,
 };
 
+use cargo_metadata::Package;
 use clap::Parser;
-use eyre::Result;
+use eyre::{eyre, Result};
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
@@ -21,6 +22,7 @@ use crate::{
         DEFAULT_MANIFEST_DIR,
     },
     util::read_config_toml_or_default,
+    OPENVM_WORKSPACE_VERSION,
 };
 
 #[derive(Parser)]
@@ -120,7 +122,9 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         .with_profile(build_args.profile.clone());
     guest_options.target_dir = build_args.target_dir.clone();
 
+    // Check if workspace version matches the CLI version
     let pkg = get_package(&build_args.manifest_dir);
+    check_workspace_version(&pkg)?;
     // We support builds of libraries with 0 or >1 executables.
     let elf_path = match build_guest_package(&pkg, &guest_options, None, &target_filter) {
         Ok(target_dir) => {
@@ -166,6 +170,54 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         println!("[openvm] Successfully built the package");
         Ok(None)
     }
+}
+
+// Check if workspace version matches the CLI version
+fn check_workspace_version(pkg: &Package) -> Result<()> {
+    // Look for the openvm dependency in the package dependencies
+    for dep in &pkg.dependencies {
+        if dep.name == "openvm" {
+            // Handle different ways the dependency might be specified
+            if let Some(dep_version) = get_dependency_version(dep) {
+                // Compare with CLI version
+                if dep_version != OPENVM_WORKSPACE_VERSION {
+                    return Err(eyre!(
+                        "Version mismatch: CLI was built with openvm version {} but the project is using version {}. 
+                        Please reinstall the CLI with a matching version.",
+                        OPENVM_WORKSPACE_VERSION,
+                        dep_version
+                    ));
+                }
+
+                return Ok(());
+            }
+        }
+    }
+
+    // If we don't have an openvm dependency or couldn't determine its version,
+    // we'll allow the build to proceed since it might be a non-standard setup
+    Ok(())
+}
+
+// Extract version from a dependency, handling various specification methods
+fn get_dependency_version(dep: &cargo_metadata::Dependency) -> Option<String> {
+    // Handle precise version requirement (e.g., version = "1.0.0")
+    if let cargo_metadata::VersionReq::Precise(version) = &dep.req {
+        return Some(version.to_string());
+    }
+
+    // Check for git repository with a tag
+    if let Some(source) = &dep.source {
+        if source.starts_with("git+") {
+            if let Some(tag) = &dep.req.to_string().strip_prefix("=") {
+                return Some(tag.to_string());
+            }
+        }
+    }
+
+    // For path dependencies, we can't determine the version easily
+    // We'll allow this to proceed since it's likely a local development setup
+    None
 }
 
 #[cfg(test)]

@@ -1074,6 +1074,7 @@ version = "1.0.0"
 dependencies = [
  "aws-config",
  "aws-sdk-s3",
+ "cargo_metadata",
  "clap",
  "eyre",
  "hex",
