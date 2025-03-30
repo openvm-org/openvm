@@ -1,14 +1,21 @@
-use proc_macro2::Span;
+use std::{fmt::Debug, hash::Hash};
+
+use pest::iterators::Pair;
 
 #[derive(Clone, Debug, Default)]
 pub struct ParserMetadata {
-    pub source_text: Option<String>,
+    pub line: usize,
+    pub column: usize,
+    pub source_text: String,
 }
 
 impl ParserMetadata {
-    pub fn new(span: Span) -> Self {
+    pub fn new<R: Copy + Debug + Eq + Hash + Ord>(pair: &Pair<R>) -> Self {
+        let (line, column) = pair.line_col();
         Self {
-            source_text: span.source_text(),
+            line,
+            column,
+            source_text: pair.get_input().to_string(),
         }
     }
 }

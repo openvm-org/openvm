@@ -19,12 +19,15 @@ pub enum DependencyType {
 }
 
 impl ExpressionContainer {
-    pub fn new(expression: Expression) -> Self {
+    pub fn new(expression: Expression, parser_metadata: ParserMetadata) -> Self {
         Self {
             expression: Box::new(expression),
             tipo: None,
-            parser_metadata: Default::default(),
+            parser_metadata,
         }
+    }
+    pub fn synthetic(expression: Expression) -> Self {
+        Self::new(expression, ParserMetadata::default())
     }
 
     pub fn children(&self) -> Vec<&ExpressionContainer> {

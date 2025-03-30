@@ -33,6 +33,7 @@ impl Type {
                 if root_container.type_set().algebraic_types.contains_key(name) {
                     Ok(())
                 } else {
+                    println!("oh no");
                     Err(CompilationError::UndefinedType(
                         parser_metadata.clone(),
                         name.clone(),
@@ -211,7 +212,7 @@ impl FlattenedFunction {
                         array.resolve_types_top_down(
                             &Type::AppendablePrefix(
                                 Box::new(elem_type.clone()),
-                                Box::new(ExpressionContainer::new(Expression::Constant {
+                                Box::new(ExpressionContainer::synthetic(Expression::Constant {
                                     value: 0,
                                 })),
                             ),
@@ -240,10 +241,12 @@ impl FlattenedFunction {
                         )?;
                         let new_prefix_type = Type::AppendablePrefix(
                             Box::new(elem_type.clone()),
-                            Box::new(ExpressionContainer::new(Expression::Arithmetic {
+                            Box::new(ExpressionContainer::synthetic(Expression::Arithmetic {
                                 operator: ArithmeticOperator::Plus,
                                 left: old_length.clone(),
-                                right: ExpressionContainer::new(Expression::Constant { value: 1 }),
+                                right: ExpressionContainer::synthetic(Expression::Constant {
+                                    value: 1,
+                                }),
                             })),
                         );
 

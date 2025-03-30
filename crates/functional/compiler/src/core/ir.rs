@@ -1,4 +1,4 @@
-use std::ops::BitAndAssign;
+use std::ops::{BitAnd, BitAndAssign};
 
 use crate::{core::containers::ExpressionContainer, parser::metadata::ParserMetadata};
 
@@ -295,10 +295,20 @@ impl Material {
     }
 }
 
+impl BitAnd for Material {
+    type Output = Self;
+
+    fn bitand(self, other: Self) -> Self {
+        if other == Material::Materialized {
+            self
+        } else {
+            Material::Dematerialized
+        }
+    }
+}
+
 impl BitAndAssign for Material {
     fn bitand_assign(&mut self, other: Self) {
-        if other == Material::Dematerialized {
-            *self = Material::Dematerialized;
-        }
+        *self = *self & other;
     }
 }

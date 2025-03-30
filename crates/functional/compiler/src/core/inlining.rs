@@ -166,12 +166,13 @@ impl FlattenedFunction {
                     panic!("representation via inline functions is currently limited to matching definition order (argument {})", i);
                 }
                 let index = target.statements.len() + self.statements.len();
-                let mut argument_expression = ExpressionContainer::new(Expression::Variable {
-                    name: self.arguments[i].name.clone(),
-                    declares: true,
-                    defines: true,
-                    represents: self.arguments[i].represents,
-                });
+                let mut argument_expression =
+                    ExpressionContainer::synthetic(Expression::Variable {
+                        name: self.arguments[i].name.clone(),
+                        declares: true,
+                        defines: true,
+                        represents: self.arguments[i].represents,
+                    });
                 argument_expression.tipo = Some(self.arguments[i].tipo.clone());
                 self.statements.push(FlatStatement {
                     material,
@@ -201,12 +202,13 @@ impl FlattenedFunction {
                     },
                     parser_metadata: ParserMetadata::default(),
                 });
-                let mut argument_expression = ExpressionContainer::new(Expression::Variable {
-                    name: self.arguments[i].name.clone(),
-                    declares: false,
-                    defines: false,
-                    represents: self.arguments[i].represents,
-                });
+                let mut argument_expression =
+                    ExpressionContainer::synthetic(Expression::Variable {
+                        name: self.arguments[i].name.clone(),
+                        declares: false,
+                        defines: false,
+                        represents: self.arguments[i].represents,
+                    });
                 argument_expression.tipo = Some(self.arguments[i].tipo.clone());
                 self.atoms_staged[0].insert(0, Atom::Statement(declaration_index));
                 self.atoms_staged[stage.index].push(Atom::Statement(out_index));

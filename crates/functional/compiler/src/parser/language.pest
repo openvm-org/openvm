@@ -1,0 +1,98 @@
+number_literal = @{ "-"? ~ '0'..'9'+ }
+var_identifier = @{ (ASCII_ALPHA_LOWER | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+type_identifier = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_")* }
+
+WHITESPACE = _{ " " | NEWLINE }
+COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+
+field_type = { "F" }
+reference_type = { "&" ~ tipo }
+readable_prefix_type = { "@.." ~ expr ~ "[" ~ tipo ~ "]" }
+appendable_prefix_type = { "#.." ~ expr ~ "[" ~ tipo ~ "]" }
+const_array_type = { "[" ~ tipo ~ ";" ~ number_literal ~ "]" }
+named_type = { type_identifier }
+unmaterialized_type = { "{" ~ tipo ~ "}" }
+tipo = _{ field_type | reference_type | readable_prefix_type | appendable_prefix_type | const_array_type | named_type }
+
+wrapped_type = { "<" ~ tipo ~ ">" }
+
+unmaterialized_expr = { "{" ~ expr ~ "}" }
+algebraic_expr = { type_identifier ~ ("(" ~ expr_series ~ ")")? }
+const_array = { "[" ~ expr_series ~ "]" }
+empty_const_array = { "[" ~ wrapped_type ~ "]" }
+
+const_index = { "[" ~ number_literal ~ "]" }
+const_slice = { "[" ~ number_literal ~ ".." ~ number_literal ~ "]" }
+
+eq = { "==" }
+plus = { "+" }
+minus = { "-" }
+times = { "*" }
+div = { "/" }
+concat = { "++" }
+readable = { "@" }
+
+expr = { expr1 ~ (eq ~ expr)? }
+expr1 = { expr2 ~ ((plus | minus | concat) ~ expr1)? }
+expr2 = { expr3 ~ ((times | div) ~ expr2)? }
+expr3 = { minus? ~ expr4 }
+expr4 = { expr5 ~ (const_index | const_slice)* }
+expr5 = { readable? ~ expr6 }
+expr6 = { expr_def | expr_let | expr_fix | expr_set | expr_rep | expr_low }
+
+expr_def = { "def" ~ expr_low }
+expr_let = { "let" ~ expr_low }
+expr_fix = { "fix" ~ expr_low }
+expr_set = { "set" ~ expr_low }
+expr_rep = { "rep" ~ expr_low }
+expr_low = { number_literal | var_identifier | unmaterialized_expr | algebraic_expr | const_array | empty_const_array }
+
+expr_series = { (expr ~ ",")* ~ expr? }
+
+alloc_declaration = { "alloc" ~ wrapped_type ~ var_identifier }
+unalloc_declaration = { "unalloc" ~ wrapped_type ~ var_identifier }
+equality = { expr ~ "=" ~ expr }
+reference = { expr ~ "->" ~ expr }
+dereference = { expr ~ "<-" ~ expr }
+empty_prefix = { expr ~ "->" ~ "|" ~ wrapped_type }
+prefix_append = { expr ~ "->" ~ expr ~ "|" ~ expr }
+prefix_access = { expr ~ "<-" ~ expr ~ "!!" ~ expr }
+
+statement_inside = { alloc_declaration | unalloc_declaration | equality | reference | dereference | empty_prefix | prefix_append | prefix_access }
+statement_materialized = { statement_inside ~ ";" }
+statement_unmaterialized = { "{" ~ statement_inside ~ "}" ~ ";" }
+
+function_call_inside = { var_identifier ~ "(" ~ expr_series ~ ")" }
+function_call_materialized = { function_call_inside ~ ";" }
+function_call_unmaterialized = { "{" ~ function_call_inside ~ "}" ~ ";" }
+
+component = { (alloc | unalloc)? ~ var_identifier }
+component_series = { (component ~ ",")* ~ component? }
+match_arm = { type_identifier ~ ("(" ~ component_series ~ ")")? ~ "=>" ~ body }
+match_argument_materialized = { "match" ~ expr }
+match_argument_unmaterialized = { "{" ~ "match" ~ expr ~ "}" }
+match_inside = { (match_argument_materialized | match_argument_unmaterialized) ~ "(" ~ match_arm* ~ ")" }
+match_materialized = { match_inside }
+match_unmaterialized = { "{" ~ match_inside ~ "}" }
+
+body_elem = _{ statement_materialized | statement_unmaterialized | function_call_materialized | function_call_unmaterialized | match_materialized | match_unmaterialized }
+body_inside = _{ body_elem* }
+body_materialized = { ("(" ~ body_inside ~ ")") }
+body_unmaterialized = { "{" ~ body_inside ~ "}" }
+body = { body_materialized | body_unmaterialized }
+
+arg_in = { "in" }
+arg_out = { "out" }
+alloc = { "alloc" }
+unalloc = { "unalloc" }
+argument = { (arg_in | arg_out) ~ (alloc | unalloc)? ~ wrapped_type ~ var_identifier }
+function_keyword = { "fn" }
+inline_function_keyword = { "inline" }
+function_definition = { (function_keyword | inline_function_keyword) ~ var_identifier ~ "(" ~ (argument ~ ",")* ~ argument? ~ ")" ~ body }
+
+type_definition_single = { "struct" ~ type_identifier ~ "(" ~ (tipo ~ ",") ~ tipo? ~ ")" }
+type_definition_variant = { type_identifier ~ ("(" ~ (tipo ~ ",") ~ tipo? ~ ")")? }
+type_definition_enum = { "enum" ~ type_identifier ~ "(" ~ (type_definition_variant ~ ",") ~ type_definition_variant? ~ ")" }
+type_definition = { type_definition_single | type_definition_enum }
+
+program = { SOI ~ (type_definition | function_definition)* ~ EOI }

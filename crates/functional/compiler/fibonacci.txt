@@ -1,44 +1,16 @@
+enum Bool ( True, False )
+
 fn fibonacci(in<F> n, out<F> a, out<F> b) (
     {match n == 0} (
         True => (
             n = 0;
             fix a = 0;
             fix b = 1;
-        ),
+        )
         False => (
             fibonacci(n - 1, def x, def y);
             fix a = y;
             fix b = x + y;
-        ),
+        )
     )
-)
-
-fn fibonacci(in<F> n, out<F> a, out<F> b) (
-    {match n == 0} (
-        True => (
-            n = 0;
-            fix a = 0;
-            fix b = 1;
-        ),
-        False => (
-            fibonacci(n - 1, def x, fix a);
-            fix b = x + y;
-        ),
-    )
-)
-
-fn fp_add(in<&FP> x, in<&FP> y, out<&FP> z);
-fn fp_sub(in<&FP> x, in<&FP> y, out<&FP> z);
-fn fp_mul(in<&FP> x, in<&FP> y, out<&FP> z);
-
-fn fp2_mul(in<FP2> x, in<FP2> y, out<FP2> z) (
-    def FP2(x0, x1) = x;
-    def FP2(y0, y1) = y;
-    fp_mul(x0, y0, def a);
-    fp_mul(x1, y1, def b);
-    fp_sub(a, b, def z0);
-    fp_mul(x0, y1, def c);
-    fp_mul(x1, y0, def d);
-    fp_add(c, d, def z1);
-    fix z = FP2(z0, z1);
 )
