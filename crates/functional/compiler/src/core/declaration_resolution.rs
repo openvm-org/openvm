@@ -51,6 +51,9 @@ impl Type {
                 length.resolve_bottom_up(root_container, scope, material, false, true)?;
                 inside.check_exists(root_container, scope, material, parser_metadata)
             }
+            Type::Array(inside) => {
+                inside.check_exists(root_container, scope, material, parser_metadata)
+            }
             Type::Unmaterialized(inside) => {
                 inside.check_exists(root_container, scope, material, parser_metadata)
             }
@@ -239,6 +242,11 @@ impl FlattenedFunction {
                             material,
                             &elem.parser_metadata,
                         )?;
+                        if elem_type.contains_appendable_prefix(&root_container.type_set) {
+                            return Err(CompilationError::RepeatedAppendablePrefixConsumption(
+                                elem.parser_metadata.clone(),
+                            ));
+                        }
                         let new_prefix_type = Type::AppendablePrefix(
                             Box::new(elem_type.clone()),
                             Box::new(ExpressionContainer::synthetic(Expression::Arithmetic {
@@ -253,13 +261,13 @@ impl FlattenedFunction {
                         new_array.resolve_types_top_down(
                             &new_prefix_type,
                             root_container,
-                            &path,
+                            path,
                             material,
                         )?;
                     }
-                    StatementVariant::PrefixAccess {
+                    StatementVariant::ArrayAccess {
                         elem,
-                        prefix,
+                        array: prefix,
                         index,
                     } => {
                         index.resolve_bottom_up(root_container, path, material, false, true)?;
@@ -270,9 +278,9 @@ impl FlattenedFunction {
                             ));
                         }
                         prefix.resolve_bottom_up(root_container, path, material, false, true)?;
-                        let (elem_type, _) = prefix
+                        let elem_type = prefix
                             .get_type()
-                            .get_readable_prefix_type(material, &prefix.parser_metadata)?;
+                            .get_array_type(material, &prefix.parser_metadata)?;
                         elem.resolve_types_top_down(elem_type, root_container, &path, material)?;
                     }
                 }

@@ -165,6 +165,19 @@ impl ExpressionContainer {
                     Box::new(length.clone()),
                 ));
             }
+            Expression::PrefixIntoArray { appendable_prefix } => {
+                appendable_prefix.resolve_bottom_up(
+                    function_container,
+                    path,
+                    Material::Dematerialized,
+                    can_represent,
+                    consuming_prefix,
+                )?;
+                let (elem_type, _) = appendable_prefix
+                    .get_type()
+                    .get_appendable_prefix_type(material, &self.parser_metadata)?;
+                self.tipo = Some(Type::Array(Box::new(elem_type.clone())));
+            }
             Expression::Eq { left, right } => {
                 if material == Material::Materialized {
                     return Err(CompilationError::EqMustBeDematerialized(
@@ -329,11 +342,9 @@ impl ExpressionContainer {
                 )?;
                 let elem_type = element.get_type();
                 if elem_type.contains_appendable_prefix(&function_container.type_set) {
-                    return Err(
-                        CompilationError::DuplicateUnderConstructionArrayConsumptionInConstArray(
-                            element.parser_metadata.clone(),
-                        ),
-                    );
+                    return Err(CompilationError::RepeatedAppendablePrefixConsumption(
+                        element.parser_metadata.clone(),
+                    ));
                 }
 
                 self.tipo = Some(Type::ConstArray(Box::new(elem_type.clone()), *length));

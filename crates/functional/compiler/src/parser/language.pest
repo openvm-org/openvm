@@ -8,11 +8,12 @@ COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 field_type = { "F" }
 reference_type = { "&" ~ tipo }
 readable_prefix_type = { "@.." ~ expr ~ "[" ~ tipo ~ "]" }
+array_type = { "@" ~ "[" ~ tipo ~ "]" }
 appendable_prefix_type = { "#.." ~ expr ~ "[" ~ tipo ~ "]" }
 const_array_type = { "[" ~ tipo ~ ";" ~ number_literal ~ "]" }
 named_type = { type_identifier }
 unmaterialized_type = { "{" ~ tipo ~ "}" }
-tipo = _{ field_type | reference_type | readable_prefix_type | appendable_prefix_type | const_array_type | named_type }
+tipo = _{ field_type | reference_type | readable_prefix_type | appendable_prefix_type | const_array_type | named_type | array_type}
 
 wrapped_type = { "<" ~ tipo ~ ">" }
 
@@ -30,14 +31,15 @@ minus = { "-" }
 times = { "*" }
 div = { "/" }
 concat = { "++" }
-readable = { "@" }
+readable = { "@.." }
+into_array = { "@" }
 
 expr = { expr1 ~ (eq ~ expr)? }
 expr1 = { expr2 ~ ((plus | minus | concat) ~ expr1)? }
 expr2 = { expr3 ~ ((times | div) ~ expr2)? }
 expr3 = { minus? ~ expr4 }
 expr4 = { expr5 ~ (const_index | const_slice)* }
-expr5 = { readable? ~ expr6 }
+expr5 = { (readable | into_array)? ~ expr6 }
 expr6 = { expr_def | expr_let | expr_fix | expr_set | expr_rep | expr_low }
 
 expr_def = { "def" ~ expr_low }

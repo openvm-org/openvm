@@ -148,6 +148,7 @@ impl Type {
             Type::Reference(_) => true,
             Type::ReadablePrefix(..) => true,
             Type::AppendablePrefix(..) => true,
+            Type::Array(..) => true,
             Type::Field => false,
             Type::NamedType(name) => {
                 let algebraic_type = type_set
@@ -174,6 +175,7 @@ impl Type {
             Type::AppendablePrefix(..) => true,
             Type::Reference(value) => value.contains_appendable_prefix(type_set),
             Type::ReadablePrefix(elem, _) => elem.contains_appendable_prefix(type_set),
+            Type::Array(elem) => elem.contains_appendable_prefix(type_set),
             Type::Field => false,
             Type::NamedType(name) => {
                 let algebraic_type = type_set
@@ -220,7 +222,7 @@ impl Type {
             (Type::Unmaterialized(inside), Material::Dematerialized) => {
                 inside.get_appendable_prefix_type(material, parser_metadata)
             }
-            _ => Err(CompilationError::NotAnUnderConstructionArray(
+            _ => Err(CompilationError::NotAnAppendablePrefix(
                 parser_metadata.clone(),
                 self.clone(),
             )),
@@ -236,6 +238,23 @@ impl Type {
             (Type::ReadablePrefix(elem_type, length), _) => Ok((elem_type, length)),
             (Type::Unmaterialized(inside), Material::Dematerialized) => {
                 inside.get_readable_prefix_type(material, parser_metadata)
+            }
+            _ => Err(CompilationError::NotAReadablePrefix(
+                parser_metadata.clone(),
+                self.clone(),
+            )),
+        }
+    }
+
+    pub fn get_array_type(
+        &self,
+        material: Material,
+        parser_metadata: &ParserMetadata,
+    ) -> Result<&Type, CompilationError> {
+        match (self, material) {
+            (Type::Array(value), _) => Ok(value),
+            (Type::Unmaterialized(inside), Material::Dematerialized) => {
+                inside.get_array_type(material, parser_metadata)
             }
             _ => Err(CompilationError::NotAnArray(
                 parser_metadata.clone(),

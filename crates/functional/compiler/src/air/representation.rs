@@ -207,6 +207,9 @@ impl ExpressionContainer {
             Expression::ReadableViewOfPrefix { appendable_prefix } => {
                 appendable_prefix.calc_representation(type_set, representation_table, scope)
             }
+            Expression::PrefixIntoArray { appendable_prefix } => {
+                appendable_prefix.calc_representation(type_set, representation_table, scope)
+            }
             Expression::Eq { .. } => unreachable!(),
             Expression::EmptyConstArray { .. } => vec![],
             Expression::ConstArray { elements } => elements
@@ -739,14 +742,9 @@ impl FlatStatement {
                         &array_representation,
                     );
                 }
-                // TODO: check bounds (lower is automatic, upper is not checked) / add unsafe version
-                StatementVariant::PrefixAccess {
-                    prefix,
-                    index,
-                    elem,
-                } => {
-                    let prefix_representation =
-                        prefix.calc_representation(type_set, representation_table, &self.scope);
+                StatementVariant::ArrayAccess { array, index, elem } => {
+                    let array_representation =
+                        array.calc_representation(type_set, representation_table, &self.scope);
                     let index_representation =
                         index.calc_representation(type_set, representation_table, &self.scope);
                     let elem_representation = elem.create_representation_top_down(
@@ -756,7 +754,7 @@ impl FlatStatement {
                         &self.scope,
                     );
                     let mut fields = vec![];
-                    fields.extend(prefix_representation);
+                    fields.extend(array_representation);
                     fields.extend(index_representation);
                     fields.extend(elem_representation);
                     air_constructor.add_scoped_interaction(

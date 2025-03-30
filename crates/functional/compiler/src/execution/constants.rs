@@ -35,6 +35,7 @@ pub fn type_to_rust(tipo: &Type) -> TokenStream {
         Type::Reference(_) => reference_type(),
         Type::ReadablePrefix(..) => array_type(),
         Type::AppendablePrefix(..) => array_type(),
+        Type::Array(..) => array_type(),
         Type::NamedType(name) => type_name(name),
         Type::Unmaterialized(inner) => type_to_rust(inner),
         Type::ConstArray(elem, length) => {
@@ -49,10 +50,11 @@ pub fn type_to_identifier(tipo: &Type) -> String {
     match tipo {
         Type::Field => "F".to_string(),
         Type::Reference(inner) => format!("Ref_{}", type_to_identifier(inner)),
-        Type::ReadablePrefix(inner, _) => format!("Array_{}", type_to_identifier(inner)),
+        Type::ReadablePrefix(inner, _) => format!("ReadablePrefix_{}", type_to_identifier(inner)),
         Type::AppendablePrefix(inner, _) => {
-            format!("UnderConstructionArray_{}", type_to_identifier(inner))
+            format!("AppendablePrefix_{}", type_to_identifier(inner))
         }
+        Type::Array(inner) => format!("Array_{}", type_to_identifier(inner)),
         Type::NamedType(name) => name.clone(),
         Type::Unmaterialized(inner) => type_to_identifier(inner),
         Type::ConstArray(elem, length) => {

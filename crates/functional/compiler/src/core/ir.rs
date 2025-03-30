@@ -9,6 +9,7 @@ pub enum Type {
     Reference(Box<Type>),
     AppendablePrefix(Box<Type>, Box<ExpressionContainer>),
     ReadablePrefix(Box<Type>, Box<ExpressionContainer>),
+    Array(Box<Type>),
     Unmaterialized(Box<Type>),
     ConstArray(Box<Type>, usize),
 }
@@ -108,6 +109,9 @@ pub enum Expression {
     ReadableViewOfPrefix {
         appendable_prefix: ExpressionContainer,
     },
+    PrefixIntoArray {
+        appendable_prefix: ExpressionContainer,
+    },
     Eq {
         left: ExpressionContainer,
         right: ExpressionContainer,
@@ -178,9 +182,9 @@ pub enum StatementVariant {
         old_prefix: ExpressionContainer,
         elem: ExpressionContainer,
     },
-    PrefixAccess {
+    ArrayAccess {
         elem: ExpressionContainer,
-        prefix: ExpressionContainer,
+        array: ExpressionContainer,
         index: ExpressionContainer,
     },
 }

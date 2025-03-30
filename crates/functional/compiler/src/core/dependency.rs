@@ -40,6 +40,7 @@ impl ExpressionContainer {
             Expression::ReadableViewOfPrefix {
                 appendable_prefix: appendable,
             } => vec![appendable],
+            Expression::PrefixIntoArray { appendable_prefix } => vec![appendable_prefix],
             Expression::ConstArray { elements } => elements.iter().collect(),
             Expression::ConstArrayAccess { array, .. } => vec![array],
             Expression::ConstArraySlice { array, .. } => vec![array],
@@ -67,6 +68,7 @@ impl ExpressionContainer {
             Expression::ReadableViewOfPrefix {
                 appendable_prefix: appendable,
             } => vec![appendable],
+            Expression::PrefixIntoArray { appendable_prefix } => vec![appendable_prefix],
             Expression::ConstArray { elements } => elements.iter_mut().collect(),
             Expression::ConstArrayAccess { array, .. } => vec![array],
             Expression::ConstArraySlice { array, .. } => vec![array],
@@ -139,6 +141,7 @@ impl Type {
             Type::Reference(inside) => vec![inside],
             Type::AppendablePrefix(elem_type, _) => vec![elem_type],
             Type::ReadablePrefix(elem_type, _) => vec![elem_type],
+            Type::Array(elem_type) => vec![elem_type],
             Type::Unmaterialized(inside) => vec![inside],
             Type::ConstArray(elem_type, _) => vec![elem_type],
         }
@@ -150,6 +153,7 @@ impl Type {
             Type::Reference(inside) => vec![inside],
             Type::AppendablePrefix(elem_type, _) => vec![elem_type],
             Type::ReadablePrefix(elem_type, _) => vec![elem_type],
+            Type::Array(elem_type) => vec![elem_type],
             Type::Unmaterialized(inside) => vec![inside],
             Type::ConstArray(elem_type, _) => vec![elem_type],
         }
@@ -296,9 +300,9 @@ impl FlattenedFunction {
                     old_prefix,
                     elem,
                 } => vec![new_prefix, old_prefix, elem],
-                StatementVariant::PrefixAccess {
+                StatementVariant::ArrayAccess {
                     elem,
-                    prefix,
+                    array: prefix,
                     index,
                 } => vec![elem, prefix, index],
             },

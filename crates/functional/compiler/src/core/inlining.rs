@@ -265,11 +265,7 @@ impl FlatStatement {
                 elem.inline(renamer);
                 old_array.inline(renamer);
             }
-            StatementVariant::PrefixAccess {
-                elem,
-                prefix: array,
-                index,
-            } => {
+            StatementVariant::ArrayAccess { elem, array, index } => {
                 elem.inline(renamer);
                 array.inline(renamer);
                 index.inline(renamer);

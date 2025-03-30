@@ -24,7 +24,8 @@ pub enum CompilationError {
     UndefinedConstructor(ParserMetadata, String),
 
     NotAReference(ParserMetadata, Type),
-    NotAnUnderConstructionArray(ParserMetadata, Type),
+    NotAnAppendablePrefix(ParserMetadata, Type),
+    NotAReadablePrefix(ParserMetadata, Type),
     NotAnArray(ParserMetadata, Type),
     NotAnIndex(ParserMetadata, Type),
     NotANamedType(ParserMetadata, Type),
@@ -47,7 +48,7 @@ pub enum CompilationError {
     OutOfBoundsConstArrayAccess(ParserMetadata, usize, usize),
     OutOfBoundsConstArraySlice(ParserMetadata, usize, usize, usize),
     IncorrectNumberOfElementsInConstArray(ParserMetadata, usize, usize),
-    DuplicateUnderConstructionArrayConsumptionInConstArray(ParserMetadata),
+    RepeatedAppendablePrefixConsumption(ParserMetadata),
 
     EqMustBeDematerialized(ParserMetadata),
     DivMustBeDematerialized(ParserMetadata),

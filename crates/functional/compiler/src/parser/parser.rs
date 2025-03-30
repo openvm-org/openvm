@@ -137,10 +137,16 @@ fn parse_expression_helper(pair: Pair<Rule>, tag: Option<VariableUsageTag>) -> E
             if inner.len() == 1 {
                 return parse_expression_helper(inner.next().unwrap(), tag);
             } else {
-                inner.next();
+                let operator = inner.next().unwrap();
                 let right = parse_expression_helper(inner.next().unwrap(), tag);
-                Expression::ReadableViewOfPrefix {
-                    appendable_prefix: right,
+                match operator.as_rule() {
+                    Rule::readable => Expression::ReadableViewOfPrefix {
+                        appendable_prefix: right,
+                    },
+                    Rule::into_array => Expression::PrefixIntoArray {
+                        appendable_prefix: right,
+                    },
+                    _ => unreachable!(),
                 }
             }
         }
@@ -388,9 +394,9 @@ fn parse_statement_variant(pair: Pair<Rule>) -> StatementVariant {
                     let elem = parse_expression(inner.next().unwrap());
                     let prefix = parse_expression(inner.next().unwrap());
                     let index = parse_expression(inner.next().unwrap());
-                    StatementVariant::PrefixAccess {
+                    StatementVariant::ArrayAccess {
                         elem,
-                        prefix,
+                        array: prefix,
                         index,
                     }
                 }

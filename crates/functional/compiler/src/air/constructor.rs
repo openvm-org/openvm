@@ -140,6 +140,7 @@ impl TypeSet {
             Type::Reference(_) => 1,
             Type::ReadablePrefix(..) => 1,
             Type::AppendablePrefix(..) => 1,
+            Type::Array(_) => 1,
             Type::NamedType(name) => {
                 let algebraic_type = &self.algebraic_types[name];
                 let max_variant_size = algebraic_type

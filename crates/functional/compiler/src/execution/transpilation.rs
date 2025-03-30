@@ -164,6 +164,9 @@ impl ExpressionContainer {
             Expression::ReadableViewOfPrefix { appendable_prefix } => {
                 appendable_prefix.transpile_defined(scope, namer, type_set)
             }
+            Expression::PrefixIntoArray { appendable_prefix } => {
+                appendable_prefix.transpile_defined(scope, namer, type_set)
+            }
             Expression::Eq { left, right } => {
                 let left = left.transpile_defined(scope, namer, type_set);
                 let right = right.transpile_defined(scope, namer, type_set);
@@ -431,11 +434,7 @@ impl FlatStatement {
                     #following
                 }
             }
-            StatementVariant::PrefixAccess {
-                elem,
-                prefix: array,
-                index,
-            } => {
+            StatementVariant::ArrayAccess { elem, array, index } => {
                 let tipo = elem.get_type();
                 let array = array.transpile_defined(scope, &namer, type_set);
                 let index = index.transpile_defined(scope, &namer, type_set);
