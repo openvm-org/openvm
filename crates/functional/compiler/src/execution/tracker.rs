@@ -99,7 +99,7 @@ impl Stage2Program {
         let field_type = field_type();
         quote! {
             use std::ops::Neg;
-            use openvm_stark_sdk::openvm_stark_backend::p3_field::FieldAlgebra;
+            use openvm_stark_sdk::openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
             type #field_type = openvm_stark_sdk::p3_baby_bear::BabyBear;
 
             #tracker

@@ -282,7 +282,7 @@ impl FlattenedFunction {
         Ok(())
     }
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum DeclarationResolutionStep {
     Statement(usize),
     Match(usize),
@@ -302,6 +302,19 @@ impl FlattenedFunction {
             disp_steps.push(DeclarationResolutionStep::Match(i));
         }
         for (i, function_call) in self.function_calls.iter().enumerate() {
+            let callee = &root_container
+                .function_set
+                .get_function(&function_call.function_name, &function_call.parser_metadata)?
+                .function;
+            let expected_number_of_arguments = callee.arguments.len();
+            if function_call.arguments.len() != expected_number_of_arguments {
+                return Err(CompilationError::IncorrectNumberOfArgumentsToFunction(
+                    function_call.parser_metadata.clone(),
+                    function_call.function_name.clone(),
+                    expected_number_of_arguments,
+                    function_call.arguments.len(),
+                ));
+            }
             for j in 0..function_call.arguments.len() {
                 disp_steps.push(DeclarationResolutionStep::CallArgument(i, j));
             }
@@ -344,10 +357,11 @@ impl FlattenedFunction {
             disp_atoms.push(Atom::Match(i));
         }
         for i in 0..self.function_calls.len() {
-            disp_atoms.push(Atom::PartialFunctionCall(
-                i,
-                root_container.current_function.stages[0],
-            ));
+            let callee = root_container.function_set.get_function(
+                &self.function_calls[i].function_name,
+                &self.function_calls[i].parser_metadata,
+            )?;
+            disp_atoms.push(Atom::PartialFunctionCall(i, callee.stages[0]));
         }
         root_container.root_scope.activate();
 
@@ -430,10 +444,7 @@ impl FlattenedFunction {
                 )
                 .unwrap();
             if callee.function.inline {
-                disp_atoms.push(Atom::PartialFunctionCall(
-                    i,
-                    root_container.current_function.stages[0].clone(),
-                ));
+                disp_atoms.push(Atom::PartialFunctionCall(i, callee.stages[0]));
             } else {
                 for stage in callee.stages.iter() {
                     disp_atoms.push(Atom::PartialFunctionCall(i, *stage));

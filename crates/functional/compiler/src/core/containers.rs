@@ -69,7 +69,7 @@ impl RootContainer {
             if let Type::Unmaterialized(inside) = left {
                 return self.assert_types_eq_helper(inside, right, scope, material);
             } else if let Type::Unmaterialized(inside) = right {
-                return self.assert_types_eq_helper(inside, right, scope, material);
+                return self.assert_types_eq_helper(left, inside, scope, material);
             }
         }
         match (left, right) {
@@ -94,6 +94,9 @@ impl RootContainer {
                     scope: scope.clone(),
                     material,
                 });
+                self.assert_types_eq_helper(left, right, scope, material)
+            }
+            (Type::Array(left), Type::Array(right)) => {
                 self.assert_types_eq_helper(left, right, scope, material)
             }
             (Type::Unmaterialized(left), Type::Unmaterialized(right)) => {

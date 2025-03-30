@@ -1,7 +1,8 @@
 use crate::{
     core::stage1::stage1,
     parser::parser::parse_program_source,
-    transpiled_fibonacci::{isize_to_field_elem, TLFunction_fibonacci, Tracker},
+    transpiled_fibonacci::{isize_to_field_elem, TLFunction_fibonacci},
+    transpiled_merkle::TLFunction_main,
 };
 
 pub mod air;
@@ -9,10 +10,11 @@ pub mod core;
 pub mod execution;
 pub mod parser;
 pub mod transpiled_fibonacci;
+pub mod transpiled_merkle;
 
 fn main() {
     println!("Hello, world!");
-    parse_and_compile_and_transpile_fibonacci();
+    // parse_and_compile_and_transpile_fibonacci();
     // test_fibonacci();
 
     /*let x = true;
@@ -21,10 +23,13 @@ fn main() {
 
     //let mut x = Box::new(Some(vec![]));
     //x.as_mut().as_mut().unwrap().push(1);
+
+    // parse_and_compile_and_transpile_merkle();
+    test_merkle();
 }
 
 fn test_fibonacci() {
-    let mut tracker = Tracker::default();
+    let mut tracker = transpiled_fibonacci::Tracker::default();
     let mut fibonacci = TLFunction_fibonacci::default();
     fibonacci.n = isize_to_field_elem(12);
     println!("calculating {}th fibonacci number", fibonacci.n);
@@ -41,4 +46,18 @@ fn parse_and_compile_and_transpile_fibonacci() {
     //println!("{:?}", stage2_program);
     let transpiled = stage2_program.transpile();
     println!("{}", transpiled);
+}
+
+fn parse_and_compile_and_transpile_merkle() {
+    let source = std::fs::read_to_string("merkle.txt").unwrap();
+    let program = parse_program_source(&source).unwrap();
+    let stage2_program = stage1(program).unwrap();
+    let transpiled = stage2_program.transpile();
+    println!("{}", transpiled);
+}
+
+fn test_merkle() {
+    let mut tracker = transpiled_merkle::Tracker::default();
+    let mut main = TLFunction_main::default();
+    main.stage_0(&mut tracker);
 }

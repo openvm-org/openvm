@@ -33,7 +33,7 @@ enum InlineResult {
 }
 
 impl FlattenedFunction {
-    pub fn perform_inlining(&mut self, functions: &HashMap<String, FlattenedFunction>) {
+    pub fn perform_inlining(&mut self, inlined_functions: &HashMap<String, FlattenedFunction>) {
         let old_function_calls = take(&mut self.function_calls);
         let mut num_inlines = 0;
         let mut inline_results = vec![];
@@ -45,14 +45,7 @@ impl FlattenedFunction {
                 arguments,
                 parser_metadata: _,
             } = &function_call;
-            // hacky, would be nice some other way
-            if function_name == &self.name {
-                inline_results.push(InlineResult::NotInlined(self.function_calls.len()));
-                self.function_calls.push(function_call.clone());
-                continue;
-            }
-            let callee = &functions[function_name];
-            if callee.inline {
+            if let Some(callee) = inlined_functions.get(function_name) {
                 let path_offset = self.tree.num_branches(scope);
                 self.tree.insert(scope, &callee.tree);
 
@@ -97,6 +90,47 @@ impl FlattenedFunction {
                     }
                 } else {
                     atoms.push(atom);
+                }
+            }
+        }
+
+        match &mut self.representation_order {
+            RepresentationOrder::Inline(representation_order) => {
+                for atoms in representation_order.iter_mut() {
+                    let old_atoms = take(atoms);
+                    for atom in old_atoms {
+                        if let Atom::PartialFunctionCall(index, stage) = atom {
+                            match &inline_results[index] {
+                                InlineResult::Inlined(inlined_callee) => {
+                                    atoms.extend(inlined_callee.atoms_staged[stage.index].iter());
+                                }
+                                InlineResult::NotInlined(new_index) => {
+                                    atoms.push(Atom::PartialFunctionCall(*new_index, stage));
+                                }
+                            }
+                        } else {
+                            atoms.push(atom);
+                        }
+                    }
+                }
+            }
+            RepresentationOrder::NotInline(representation_order) => {
+                let old_atoms = take(representation_order);
+                for atom in old_atoms {
+                    if let Atom::PartialFunctionCall(index, stage) = atom {
+                        match &inline_results[index] {
+                            InlineResult::Inlined(inlined_callee) => {
+                                representation_order
+                                    .extend(inlined_callee.atoms_staged[stage.index].iter());
+                            }
+                            InlineResult::NotInlined(new_index) => {
+                                representation_order
+                                    .push(Atom::PartialFunctionCall(*new_index, stage));
+                            }
+                        }
+                    } else {
+                        representation_order.push(atom);
+                    }
                 }
             }
         }
@@ -181,7 +215,7 @@ impl FlattenedFunction {
                         left: argument_expression,
                         right: argument_fulfillments[i].clone(),
                     },
-                    parser_metadata: ParserMetadata::default(),
+                    parser_metadata: argument_fulfillments[i].parser_metadata.clone(),
                 });
                 self.atoms_staged[stage.index].insert(0, Atom::Statement(index));
                 atoms_staged_representation[stage.index].insert(0, Atom::Statement(index));
@@ -210,6 +244,15 @@ impl FlattenedFunction {
                         represents: self.arguments[i].represents,
                     });
                 argument_expression.tipo = Some(self.arguments[i].tipo.clone());
+                self.statements.push(FlatStatement {
+                    material,
+                    scope: path_prefix.clone(),
+                    statement: StatementVariant::Equality {
+                        left: argument_fulfillments[i].clone(),
+                        right: argument_expression,
+                    },
+                    parser_metadata: argument_fulfillments[i].parser_metadata.clone(),
+                });
                 self.atoms_staged[0].insert(0, Atom::Statement(declaration_index));
                 self.atoms_staged[stage.index].push(Atom::Statement(out_index));
                 atoms_staged_representation[0].insert(0, Atom::Statement(declaration_index));

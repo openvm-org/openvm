@@ -33,7 +33,6 @@ impl Type {
                 if root_container.type_set().algebraic_types.contains_key(name) {
                     Ok(())
                 } else {
-                    println!("oh no");
                     Err(CompilationError::UndefinedType(
                         parser_metadata.clone(),
                         name.clone(),

@@ -15,7 +15,7 @@ impl ParserMetadata {
         Self {
             line,
             column,
-            source_text: pair.get_input().to_string(),
+            source_text: pair.get_input()[pair.as_span().start()..pair.as_span().end()].to_string(),
         }
     }
 }

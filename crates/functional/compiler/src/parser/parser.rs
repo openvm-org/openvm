@@ -225,9 +225,15 @@ fn parse_expression_helper(pair: Pair<Rule>, tag: Option<VariableUsageTag>) -> E
                     let elem_type = parse_wrapped_type(inside.into_inner().next().unwrap());
                     Expression::EmptyConstArray { elem_type }
                 }
-                Rule::unmaterialized_expr => {
-                    return parse_expression_helper(inside.into_inner().next().unwrap(), tag);
+                Rule::const_array_repeated => {
+                    let mut inner = inside.into_inner();
+                    let element = parse_expression(inner.next().unwrap());
+                    let length = parse_literal(inner.next().unwrap()) as usize;
+                    Expression::ConstArrayRepeated { element, length }
                 }
+                Rule::unmaterialized_expr => Expression::Dematerialized {
+                    value: parse_expression_helper(inside.into_inner().next().unwrap(), tag),
+                },
                 _ => unreachable!(),
             }
         }
@@ -282,6 +288,7 @@ fn parse_type(pair: Pair<Rule>) -> Type {
             let len = parse_literal(inner.next().unwrap()) as usize;
             Type::ConstArray(Box::new(elem_type), len)
         }
+        Rule::array_type => Type::Array(Box::new(parse_type(pair.into_inner().next().unwrap()))),
         Rule::named_type => Type::NamedType(pair.as_str().to_string()),
         Rule::unmaterialized_type => {
             Type::Unmaterialized(Box::new(parse_type(pair.into_inner().next().unwrap())))
@@ -389,7 +396,7 @@ fn parse_statement_variant(pair: Pair<Rule>) -> StatementVariant {
                         elem,
                     }
                 }
-                Rule::prefix_access => {
+                Rule::array_access => {
                     let mut inner = inside.into_inner();
                     let elem = parse_expression(inner.next().unwrap());
                     let prefix = parse_expression(inner.next().unwrap());
@@ -432,20 +439,14 @@ fn parse_match(pair: Pair<Rule>, material: Material) -> Match {
             let mut inner = pair.into_inner();
             let match_argument = inner.next().unwrap();
             let (value, check_material) = match match_argument.as_rule() {
-                Rule::match_argument_materialized => {
-                    println!("match_argument_materialized");
-                    (
-                        parse_expression(match_argument.into_inner().next().unwrap()),
-                        Material::Materialized,
-                    )
-                }
-                Rule::match_argument_unmaterialized => {
-                    println!("match_argument_unmaterialized");
-                    (
-                        parse_expression(match_argument.into_inner().next().unwrap()),
-                        Material::Dematerialized,
-                    )
-                }
+                Rule::match_argument_materialized => (
+                    parse_expression(match_argument.into_inner().next().unwrap()),
+                    Material::Materialized,
+                ),
+                Rule::match_argument_unmaterialized => (
+                    parse_expression(match_argument.into_inner().next().unwrap()),
+                    Material::Dematerialized,
+                ),
                 _ => unreachable!(),
             };
             let mut branches = vec![];

@@ -35,7 +35,7 @@ impl ExpressionContainer {
                         name.clone(),
                     ));
                 }
-                if *represents && !can_represent {
+                if *represents && (!can_represent || material == Material::Dematerialized) {
                     return Err(CompilationError::CannotRepresentHere(
                         self.parser_metadata.clone(),
                         name.clone(),
@@ -451,7 +451,7 @@ impl ExpressionContainer {
                 name,
                 declares: true,
                 defines,
-                ..
+                represents,
             } => {
                 assert!(*defines);
                 let declaration_type = match material {
@@ -460,13 +460,19 @@ impl ExpressionContainer {
                         Type::Unmaterialized(Box::new(expected_type.clone()))
                     }
                 };
+                if *represents && material == Material::Dematerialized {
+                    return Err(CompilationError::CannotRepresentHere(
+                        self.parser_metadata.clone(),
+                        name.clone(),
+                    ));
+                }
                 function_container.declare(path, name, declaration_type, &self.parser_metadata)?;
             }
             Expression::Variable {
                 name,
                 declares: false,
                 defines: true,
-                ..
+                represents,
             } => {
                 function_container.assert_types_eq(
                     &function_container.get_declaration_type(path, name, &self.parser_metadata)?,
@@ -479,6 +485,12 @@ impl ExpressionContainer {
                     && expected_type.contains_reference(&function_container.type_set(), true)
                 {
                     return Err(CompilationError::ReferenceDefinitionMustBeMaterialized(
+                        self.parser_metadata.clone(),
+                        name.clone(),
+                    ));
+                }
+                if *represents && material == Material::Dematerialized {
+                    return Err(CompilationError::CannotRepresentHere(
                         self.parser_metadata.clone(),
                         name.clone(),
                     ));

@@ -13,7 +13,7 @@ appendable_prefix_type = { "#.." ~ expr ~ "[" ~ tipo ~ "]" }
 const_array_type = { "[" ~ tipo ~ ";" ~ number_literal ~ "]" }
 named_type = { type_identifier }
 unmaterialized_type = { "{" ~ tipo ~ "}" }
-tipo = _{ field_type | reference_type | readable_prefix_type | appendable_prefix_type | const_array_type | named_type | array_type}
+tipo = _{ field_type | reference_type | readable_prefix_type | appendable_prefix_type | const_array_type | named_type | array_type | unmaterialized_type }
 
 wrapped_type = { "<" ~ tipo ~ ">" }
 
@@ -21,6 +21,7 @@ unmaterialized_expr = { "{" ~ expr ~ "}" }
 algebraic_expr = { type_identifier ~ ("(" ~ expr_series ~ ")")? }
 const_array = { "[" ~ expr_series ~ "]" }
 empty_const_array = { "[" ~ wrapped_type ~ "]" }
+const_array_repeated = { "[" ~ expr ~ ";" ~ number_literal ~ "]" }
 
 const_index = { "[" ~ number_literal ~ "]" }
 const_slice = { "[" ~ number_literal ~ ".." ~ number_literal ~ "]" }
@@ -47,7 +48,7 @@ expr_let = { "let" ~ expr_low }
 expr_fix = { "fix" ~ expr_low }
 expr_set = { "set" ~ expr_low }
 expr_rep = { "rep" ~ expr_low }
-expr_low = { number_literal | var_identifier | unmaterialized_expr | algebraic_expr | const_array | empty_const_array }
+expr_low = { number_literal | var_identifier | unmaterialized_expr | algebraic_expr | const_array | empty_const_array | const_array_repeated }
 
 expr_series = { (expr ~ ",")* ~ expr? }
 
@@ -58,9 +59,9 @@ reference = { expr ~ "->" ~ expr }
 dereference = { expr ~ "<-" ~ expr }
 empty_prefix = { expr ~ "->" ~ "|" ~ wrapped_type }
 prefix_append = { expr ~ "->" ~ expr ~ "|" ~ expr }
-prefix_access = { expr ~ "<-" ~ expr ~ "!!" ~ expr }
+array_access = { expr ~ "<-" ~ expr ~ "!!" ~ expr }
 
-statement_inside = { alloc_declaration | unalloc_declaration | equality | reference | dereference | empty_prefix | prefix_append | prefix_access }
+statement_inside = { alloc_declaration | unalloc_declaration | equality | prefix_append | reference | array_access | dereference | empty_prefix }
 statement_materialized = { statement_inside ~ ";" }
 statement_unmaterialized = { "{" ~ statement_inside ~ "}" ~ ";" }
 

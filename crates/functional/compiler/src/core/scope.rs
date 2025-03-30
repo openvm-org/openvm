@@ -16,6 +16,9 @@ impl ScopePath {
     }
 
     pub fn concat(&self, offset: usize, other: &Self) -> Self {
+        if other.0.is_empty() {
+            return self.clone();
+        }
         let mut result = self.0.clone();
         result.push(other.0[0].clone());
         result.last_mut().unwrap().0 += offset;

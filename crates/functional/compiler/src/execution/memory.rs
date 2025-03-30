@@ -52,8 +52,8 @@ pub fn rust_memory() -> TokenStream {
                 #array_struct(array.0, array.1 + 1)
             }
 
-            pub fn #array_access(&self, array: #array_struct, index: usize) -> T {
-                self.arrays[array.0][index]
+            pub fn #array_access(&self, array: #array_struct, index: F) -> T {
+                self.arrays[array.0][index.as_canonical_u32() as usize]
             }
         }
     }

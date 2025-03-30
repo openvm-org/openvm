@@ -31,6 +31,7 @@ impl PartialEq for Type {
             (Type::Reference(left), Type::Reference(right)) => left.eq(right),
             (Type::ReadablePrefix(left, _), Type::ReadablePrefix(right, _)) => left.eq(right),
             (Type::AppendablePrefix(left, _), Type::AppendablePrefix(right, _)) => left.eq(right),
+            (Type::Array(left), Type::Array(right)) => left.eq(right),
             (Type::Unmaterialized(left), Type::Unmaterialized(right)) => {
                 left.eq_unmaterialized(right)
             }
@@ -59,6 +60,7 @@ impl Type {
                 (Type::AppendablePrefix(left, _), Type::AppendablePrefix(right, _)) => {
                     left.eq_unmaterialized(right)
                 }
+                (Type::Array(left), Type::Array(right)) => left.eq_unmaterialized(right),
                 (Type::ConstArray(left, len), Type::ConstArray(right, len2)) => {
                     left.eq_unmaterialized(right) && *len == *len2
                 }
