@@ -44,7 +44,7 @@ inline hash(in<[F; 8]> left, in<[F; 8]> right, out<[F; 8]> result) (
     ];
 )
 
-fn main() (
+fn main(in<Bool> should_fail) (
     def leaf = [0; 8];
     def a = [1; 8];
     def b = [2; 8];
@@ -66,5 +66,12 @@ fn main() (
     def bits3 -> bits2 | False;
     def bits = @bits3;
 
-    merkle_verify(leaf, 3, bits, {siblings}, root);
+    match should_fail (
+        False => (
+            merkle_verify(leaf, 3, bits, {siblings}, root);
+        )
+        True => (
+            merkle_verify(leaf, 2, bits, {siblings}, root);
+        )
+    )
 )

@@ -25,7 +25,7 @@ fn main() {
     //x.as_mut().as_mut().unwrap().push(1);
 
     // parse_and_compile_and_transpile_merkle();
-    test_merkle();
+    test_merkle(false);
 }
 
 fn test_fibonacci() {
@@ -56,8 +56,9 @@ fn parse_and_compile_and_transpile_merkle() {
     println!("{}", transpiled);
 }
 
-fn test_merkle() {
+fn test_merkle(should_fail: bool) {
     let mut tracker = transpiled_merkle::Tracker::default();
     let mut main = TLFunction_main::default();
+    main.should_fail = should_fail;
     main.stage_0(&mut tracker);
 }
