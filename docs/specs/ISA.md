@@ -683,8 +683,7 @@ The elliptic curve extension supports arithmetic over elliptic curves `C` in the
 
 We note that
 the definitions of the curve arithmetic operations for short Weierstrass curves do not depend on `C::B`. The VM configuration will specify a list of supported curves. For
-each curve `C` (of either form) there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (
-defined below). The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be
+each curve `C` (of either form) there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (defined below). The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be
 bytes.
 
 An affine curve point `EcPoint(x, y)` is a pair of `x,y` where each element is an array of `C::COORD_SIZE` elements each
@@ -701,6 +700,8 @@ r32_ec_point(a) -> EcPoint {
     return EcPoint(x, y);
 }
 ```
+
+The instructions that have prefix `SW_` perform short Weierstrass curve operations, and those with prefix `TE_` perform twisted Edwards curve operations.
 
 | Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
 | -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
