@@ -241,11 +241,6 @@ impl FlattenedFunction {
                             material,
                             &elem.parser_metadata,
                         )?;
-                        if elem_type.contains_appendable_prefix(&root_container.type_set) {
-                            return Err(CompilationError::RepeatedAppendablePrefixConsumption(
-                                elem.parser_metadata.clone(),
-                            ));
-                        }
                         let new_prefix_type = Type::AppendablePrefix(
                             Box::new(elem_type.clone()),
                             Box::new(ExpressionContainer::synthetic(Expression::Arithmetic {

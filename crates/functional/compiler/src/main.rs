@@ -61,4 +61,5 @@ fn test_merkle(should_fail: bool) {
     let mut main = TLFunction_main::default();
     main.should_fail = should_fail;
     main.stage_0(&mut tracker);
+    println!("commit = {:?}", main.callee_0.as_ref().as_ref().unwrap().commit);
 }
