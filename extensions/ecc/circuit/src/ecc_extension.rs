@@ -315,12 +315,22 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                 panic!("Modulus too large");
             }
         }
+        let sw_non_qr_hint_sub_ex = phantom::NonQrHintSubEx::new(self.supported_sw_curves.clone());
         builder.add_phantom_sub_executor(
-            phantom::DecompressHintSubEx::new(self.supported_sw_curves.clone()),
-            PhantomDiscriminant(EccPhantom::SwHintDecompress as u16),
+            sw_non_qr_hint_sub_ex.clone(),
+            PhantomDiscriminant(EccPhantom::SwHintNonQr as u16),
         )?;
         builder.add_phantom_sub_executor(
-            phantom::DecompressHintSubEx::new(self.supported_te_curves.clone()),
+            phantom::DecompressHintSubEx::new(sw_non_qr_hint_sub_ex),
+            PhantomDiscriminant(EccPhantom::SwHintDecompress as u16),
+        )?;
+        let te_non_qr_hint_sub_ex = phantom::NonQrHintSubEx::new(self.supported_te_curves.clone());
+        builder.add_phantom_sub_executor(
+            te_non_qr_hint_sub_ex.clone(),
+            PhantomDiscriminant(EccPhantom::TeHintNonQr as u16),
+        )?;
+        builder.add_phantom_sub_executor(
+            phantom::DecompressHintSubEx::new(te_non_qr_hint_sub_ex),
             PhantomDiscriminant(EccPhantom::TeHintDecompress as u16),
         )?;
 
@@ -329,25 +339,36 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
 }
 
 pub(crate) mod phantom {
-    use std::iter::repeat;
+    use std::{
+        iter::{once, repeat},
+        ops::Deref,
+    };
 
     use eyre::bail;
-    use num_bigint::BigUint;
+    use num_bigint::{BigUint, RandBigInt};
     use num_integer::Integer;
     use num_traits::{FromPrimitive, One};
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
+    use openvm_ecc_guest::DecompressionHint;
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
     use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
+    use rand::{rngs::StdRng, SeedableRng};
 
     use super::{CurveConfig, SwCurveCoeffs, TeCurveCoeffs};
 
     #[derive(derive_new::new)]
-    pub struct DecompressHintSubEx<T> {
-        pub supported_curves: Vec<CurveConfig<T>>,
+    pub struct DecompressHintSubEx<T>(NonQrHintSubEx<T>);
+
+    impl<T> Deref for DecompressHintSubEx<T> {
+        type Target = NonQrHintSubEx<T>;
+
+        fn deref(&self) -> &NonQrHintSubEx<T> {
+            &self.0
+        }
     }
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for DecompressHintSubEx<SwCurveCoeffs> {
@@ -361,7 +382,6 @@ pub(crate) mod phantom {
             c_upper: u16,
         ) -> eyre::Result<()> {
             let c_idx = c_upper as usize;
-
             if c_idx >= self.supported_curves.len() {
                 bail!(
                     "Curve index {c_idx} out of range: {} supported curves",
@@ -369,15 +389,6 @@ pub(crate) mod phantom {
                 );
             }
             let curve = &self.supported_curves[c_idx];
-
-            let modulus_mod_4 = BigUint::from(3u8) & curve.modulus.clone();
-            if modulus_mod_4 != BigUint::from(3u8) {
-                bail!(
-                        "Currently only supporting short Weierstrass curves with modulus congruent to 3 mod 4."
-                    );
-                // TODO: Tonelli-Shanks algorithm
-            }
-
             let rs1 = unsafe_read_rv32_register(memory, a);
             let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
                 32
@@ -386,9 +397,7 @@ pub(crate) mod phantom {
             } else {
                 bail!("Modulus too large")
             };
-
             let mut x_limbs: Vec<u8> = Vec::with_capacity(num_limbs);
-
             for i in 0..num_limbs {
                 let limb = memory.unsafe_read_cell(
                     F::from_canonical_u32(RV32_MEMORY_AS),
@@ -402,40 +411,73 @@ pub(crate) mod phantom {
                 F::from_canonical_u32(RV32_MEMORY_AS),
                 F::from_canonical_u32(rs2),
             );
-
-            let y = decompress_sw_point(x, rec_id.as_canonical_u32() & 1 == 1, curve);
-
-            let y_bytes = y
-                .to_bytes_le()
-                .into_iter()
-                .map(F::from_canonical_u8)
+            let hint = self.decompress_point(x, rec_id.as_canonical_u32() & 1 == 1, c_idx);
+            let hint_bytes = once(F::from_bool(hint.possible))
                 .chain(repeat(F::ZERO))
-                .take(num_limbs)
+                .take(4)
+                .chain(
+                    hint.sqrt
+                        .to_bytes_le()
+                        .into_iter()
+                        .map(F::from_canonical_u8)
+                        .chain(repeat(F::ZERO))
+                        .take(num_limbs),
+                )
                 .collect();
-
-            streams.hint_stream = y_bytes;
-
+            streams.hint_stream = hint_bytes;
             Ok(())
         }
     }
 
-    fn decompress_sw_point(
-        x: BigUint,
-        is_y_odd: bool,
-        curve: &CurveConfig<SwCurveCoeffs>,
-    ) -> BigUint {
-        let alpha = ((&x * &x * &x) + (&x * &curve.coeffs.a) + &curve.coeffs.b) % &curve.modulus;
-        let beta = mod_sqrt(alpha, &curve.modulus);
-        if is_y_odd == beta.is_odd() {
-            beta
-        } else {
-            &curve.modulus - &beta
+    impl DecompressHintSubEx<SwCurveCoeffs> {
+        /// Given `x` in the coordinate field of the curve, and the recovery id,
+        /// return the unique `y` such that `(x, y)` is a point on the curve and
+        /// `y` has the same parity as the recovery id.
+        ///
+        /// If no such `y` exists, return the square root of `(x^3 + ax + b) * non_qr`
+        /// where `non_qr` is a quadratic nonresidue of the field.
+        fn decompress_point(
+            &self,
+            x: BigUint,
+            is_y_odd: bool,
+            curve_idx: usize,
+        ) -> DecompressionHint<BigUint> {
+            let curve = &self.supported_curves[curve_idx];
+            let alpha =
+                ((&x * &x * &x) + (&x * &curve.coeffs.a) + &curve.coeffs.b) % &curve.modulus;
+            match mod_sqrt(&alpha, &curve.modulus, &self.non_qrs[curve_idx]) {
+                Some(beta) => {
+                    if is_y_odd == beta.is_odd() {
+                        DecompressionHint {
+                            possible: true,
+                            sqrt: beta,
+                        }
+                    } else {
+                        DecompressionHint {
+                            possible: true,
+                            sqrt: &curve.modulus - &beta,
+                        }
+                    }
+                }
+                None => {
+                    debug_assert_eq!(
+                        self.non_qrs[curve_idx]
+                            .modpow(&((&curve.modulus - BigUint::one()) >> 1), &curve.modulus),
+                        &curve.modulus - BigUint::one()
+                    );
+                    let sqrt = mod_sqrt(
+                        &(&alpha * &self.non_qrs[curve_idx]),
+                        &curve.modulus,
+                        &self.non_qrs[curve_idx],
+                    )
+                    .unwrap();
+                    DecompressionHint {
+                        possible: false,
+                        sqrt,
+                    }
+                }
+            }
         }
-    }
-
-    fn mod_sqrt(x: BigUint, modulus: &BigUint) -> BigUint {
-        let exponent = (modulus + BigUint::one()) >> 2;
-        x.modpow(&exponent, modulus)
     }
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for DecompressHintSubEx<TeCurveCoeffs> {
@@ -449,7 +491,6 @@ pub(crate) mod phantom {
             c_upper: u16,
         ) -> eyre::Result<()> {
             let c_idx = c_upper as usize;
-
             if c_idx >= self.supported_curves.len() {
                 bail!(
                     "Curve index {c_idx} out of range: {} supported curves",
@@ -457,17 +498,7 @@ pub(crate) mod phantom {
                 );
             }
             let curve = &self.supported_curves[c_idx];
-
-            let modulus_mod_8 = BigUint::from(7u8) & curve.modulus.clone();
-            if modulus_mod_8 != BigUint::from(5u8) {
-                bail!(
-                            "Currently only supporting twisted Edwards curves with modulus congruent to 5 mod 8."
-                        );
-                // TODO: Tonelli-Shanks algorithm
-            }
-
             let rs1 = unsafe_read_rv32_register(memory, a);
-            // TODO: Better support for different limb sizes
             let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
                 32
             } else if curve.modulus.bits().div_ceil(8) <= 48 {
@@ -475,9 +506,7 @@ pub(crate) mod phantom {
             } else {
                 bail!("Modulus too large")
             };
-
             let mut y_limbs: Vec<u8> = Vec::with_capacity(num_limbs);
-
             for i in 0..num_limbs {
                 let limb = memory.unsafe_read_cell(
                     F::from_canonical_u32(RV32_MEMORY_AS),
@@ -486,52 +515,234 @@ pub(crate) mod phantom {
                 y_limbs.push(limb.as_canonical_u32() as u8);
             }
             let y = BigUint::from_bytes_le(&y_limbs);
+            println!("y: {:?}", &y);
             let rs2 = unsafe_read_rv32_register(memory, b);
             let rec_id = memory.unsafe_read_cell(
                 F::from_canonical_u32(RV32_MEMORY_AS),
                 F::from_canonical_u32(rs2),
             );
+            let hint = self.decompress_point(y, rec_id.as_canonical_u32() & 1 == 1, c_idx);
+            println!(
+                "hint.sqrt: {:?}, hint.possible: {}",
+                hint.sqrt, hint.possible
+            );
+            let hint_bytes = once(F::from_bool(hint.possible))
+                .chain(repeat(F::ZERO))
+                .take(4)
+                .chain(
+                    hint.sqrt
+                        .to_bytes_le()
+                        .into_iter()
+                        .map(F::from_canonical_u8)
+                        .chain(repeat(F::ZERO))
+                        .take(num_limbs),
+                )
+                .collect();
+            streams.hint_stream = hint_bytes;
+            Ok(())
+        }
+    }
 
-            let x = decompress_te_point(y, rec_id.as_canonical_u32() & 1 == 1, curve)?;
+    impl DecompressHintSubEx<TeCurveCoeffs> {
+        /// Given `y` in the coordinate field of the curve, and the recovery id,
+        /// return the unique `x` such that `(x, y)` is a point on the curve and
+        /// `x` has the same parity as the recovery id.
+        ///
+        /// If no such `x` exists, return the square root of `(y^2 - 1) / (d * y^2 - a) * non_qr`
+        /// where `non_qr` is a quadratic nonresidue of the field.
+        fn decompress_point(
+            &self,
+            y: BigUint,
+            is_x_odd: bool,
+            curve_idx: usize,
+        ) -> DecompressionHint<BigUint> {
+            let curve = &self.supported_curves[curve_idx];
+            println!("y: {:?}", &y);
+            println!("curve.modulus: {:?}", &curve.modulus);
+            let numerator = (&y * &y + &curve.modulus - 1u8) % &curve.modulus;
+            let denominator =
+                (&curve.coeffs.d * &y * &y + &curve.modulus - &curve.coeffs.a) % &curve.modulus;
+            println!("numerator: {:?}", &numerator);
+            let rhs = numerator * denominator.modinv(&curve.modulus).unwrap() % &curve.modulus;
+            println!("denominator: {:?}", &denominator);
+            println!("rhs: {:?}", &rhs);
+            println!("non_qr: {:?}", &self.non_qrs[curve_idx]);
+            match mod_sqrt(&rhs, &curve.modulus, &self.non_qrs[curve_idx]) {
+                Some(x) => {
+                    if is_x_odd == x.is_odd() {
+                        DecompressionHint {
+                            possible: true,
+                            sqrt: x,
+                        }
+                    } else if x > 0u8.into() {
+                        DecompressionHint {
+                            possible: true,
+                            sqrt: &curve.modulus - &x,
+                        }
+                    } else {
+                        panic!("invalid rec_id. expected 0 found 1");
+                    }
+                }
+                None => {
+                    debug_assert_eq!(
+                        self.non_qrs[curve_idx]
+                            .modpow(&((&curve.modulus - BigUint::one()) >> 1), &curve.modulus),
+                        &curve.modulus - BigUint::one()
+                    );
+                    let sqrt = mod_sqrt(
+                        &(&rhs * &self.non_qrs[curve_idx]),
+                        &curve.modulus,
+                        &self.non_qrs[curve_idx],
+                    )
+                    .unwrap();
+                    DecompressionHint {
+                        possible: false,
+                        sqrt,
+                    }
+                }
+            }
+        }
+    }
 
-            let x_bytes = x
+    /// Find the square root of `x` modulo `modulus` with `non_qr` a
+    /// quadratic nonresidue of the field.
+    pub fn mod_sqrt(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigUint> {
+        if modulus % 4u32 == BigUint::from_u8(3).unwrap() {
+            // x^(1/2) = x^((p+1)/4) when p = 3 mod 4
+            let exponent = (modulus + BigUint::one()) >> 2;
+            let ret = x.modpow(&exponent, modulus);
+            if &ret * &ret % modulus == x % modulus {
+                Some(ret)
+            } else {
+                None
+            }
+        } else {
+            // Tonelli-Shanks algorithm
+            // https://en.wikipedia.org/wiki/Tonelli%E2%80%93Shanks_algorithm#The_algorithm
+            let mut q = modulus - BigUint::one();
+            let mut s = 0;
+            while &q % 2u32 == BigUint::ZERO {
+                s += 1;
+                q /= 2u32;
+            }
+            let z = non_qr;
+            let mut m = s;
+            let mut c = z.modpow(&q, modulus);
+            let mut t = x.modpow(&q, modulus);
+            let mut r = x.modpow(&((q + BigUint::one()) >> 1), modulus);
+            loop {
+                if t == BigUint::ZERO {
+                    return Some(BigUint::ZERO);
+                }
+                if t == BigUint::one() {
+                    return Some(r);
+                }
+                let mut i = 0;
+                let mut tmp = t.clone();
+                while tmp != BigUint::one() && i < m {
+                    tmp = &tmp * &tmp % modulus;
+                    i += 1;
+                }
+                if i == m {
+                    // self is not a quadratic residue
+                    return None;
+                }
+                for _ in 0..m - i - 1 {
+                    c = &c * &c % modulus;
+                }
+                let b = c;
+                m = i;
+                c = &b * &b % modulus;
+                t = ((t * &b % modulus) * &b) % modulus;
+                r = (r * b) % modulus;
+            }
+        }
+    }
+
+    #[derive(Clone)]
+    pub struct NonQrHintSubEx<T> {
+        pub supported_curves: Vec<CurveConfig<T>>,
+        pub non_qrs: Vec<BigUint>,
+    }
+
+    impl<T> NonQrHintSubEx<T> {
+        pub fn new(supported_curves: Vec<CurveConfig<T>>) -> Self {
+            let non_qrs = supported_curves
+                .iter()
+                .map(|curve| find_non_qr(&curve.modulus))
+                .collect();
+            Self {
+                supported_curves,
+                non_qrs,
+            }
+        }
+    }
+
+    impl<F: PrimeField32, T: Send> PhantomSubExecutor<F> for NonQrHintSubEx<T> {
+        fn phantom_execute(
+            &mut self,
+            _: &MemoryController<F>,
+            streams: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            _: F,
+            _: F,
+            c_upper: u16,
+        ) -> eyre::Result<()> {
+            let c_idx = c_upper as usize;
+            if c_idx >= self.supported_curves.len() {
+                bail!(
+                    "Curve index {c_idx} out of range: {} supported curves",
+                    self.supported_curves.len()
+                );
+            }
+            let curve = &self.supported_curves[c_idx];
+
+            let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
+                32
+            } else if curve.modulus.bits().div_ceil(8) <= 48 {
+                48
+            } else {
+                bail!("Modulus too large")
+            };
+
+            let hint_bytes = self.non_qrs[c_idx]
                 .to_bytes_le()
                 .into_iter()
                 .map(F::from_canonical_u8)
                 .chain(repeat(F::ZERO))
                 .take(num_limbs)
                 .collect();
-
-            streams.hint_stream = x_bytes;
-
+            streams.hint_stream = hint_bytes;
             Ok(())
         }
     }
 
-    fn decompress_te_point(
-        y: BigUint,
-        is_x_odd: bool,
-        curve: &CurveConfig<TeCurveCoeffs>,
-    ) -> eyre::Result<BigUint> {
-        let u: BigUint = (&y * &y - 1u8) % &curve.modulus;
-        let v: BigUint = (&curve.coeffs.d * &y * &y - &curve.coeffs.a) % &curve.modulus;
-        let exponent = (&curve.modulus - 5u8) >> 3;
-        let mut x = (&u * &v * &v * &v) % &curve.modulus
-            * (&u * &v.modpow(&7u8.into(), &curve.modulus) % &curve.modulus)
-                .modpow(&exponent, &curve.modulus)
-            % &curve.modulus;
-        if (&v * &x * &x + &u).is_multiple_of(&curve.modulus) {
-            x = &x
-                * BigUint::from_u32(2)
-                    .unwrap()
-                    .modpow(&((&curve.modulus - BigUint::one()) >> 2), &curve.modulus)
-                % &curve.modulus;
+    // Returns a non-quadratic residue in the field
+    fn find_non_qr(modulus: &BigUint) -> BigUint {
+        if modulus % 4u32 == BigUint::from(3u8) {
+            // p = 3 mod 4 then -1 is a quadratic residue
+            modulus - BigUint::one()
+        } else if modulus % 8u32 == BigUint::from(5u8) {
+            // p = 5 mod 8 then 2 is a non-quadratic residue
+            // since 2^((p-1)/2) = (-1)^((p^2-1)/8)
+            BigUint::from_u8(2u8).unwrap()
+        } else {
+            let mut rng = StdRng::from_entropy();
+            let mut non_qr = rng.gen_biguint_range(
+                &BigUint::from_u8(2).unwrap(),
+                &(modulus - BigUint::from_u8(1).unwrap()),
+            );
+            // To check if non_qr is a quadratic nonresidue, we compute non_qr^((p-1)/2)
+            // If the result is p-1, then non_qr is a quadratic nonresidue
+            // Otherwise, non_qr is a quadratic residue
+            let exponent = (modulus - BigUint::one()) >> 1;
+            while non_qr.modpow(&exponent, modulus) != modulus - BigUint::one() {
+                non_qr = rng.gen_biguint_range(
+                    &BigUint::from_u8(2).unwrap(),
+                    &(modulus - BigUint::from_u8(1).unwrap()),
+                );
+            }
+            non_qr
         }
-        if x == BigUint::one() && is_x_odd {
-            bail!("decoding twisted Edwards point failed");
-        } else if is_x_odd != x.is_odd() {
-            x = &curve.modulus - &x;
-        }
-        Ok(x)
     }
 }

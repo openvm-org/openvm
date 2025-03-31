@@ -51,7 +51,7 @@ pub fn main() {
     // Setup will materialize every chip
     setup_all_moduli();
     setup_all_complex_extensions();
-    setup_all_curves();
+    setup_all_sw_curves();
 
     let [one, six] = [1, 6].map(Seven::from_u32);
     assert_eq!(one + six, Seven::ZERO);

@@ -208,7 +208,8 @@ pub fn main() {
     setup_0();
     setup_2();
     setup_4();
-    setup_all_curves();
+    setup_all_sw_curves();
+    setup_all_te_curves();
 
     let bytes = read_vec();
 

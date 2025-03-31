@@ -509,9 +509,9 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #hint_non_qr_extern_func() {
                 openvm::platform::custom_insn_r!(
-                    opcode = OPCODE,
+                    opcode = SW_OPCODE,
                     funct3 = SW_FUNCT3 as usize,
-                    funct7 = SwBaseFunct7::HintNonQr as usize + #ec_idx
+                    funct7 = SwBaseFunct7::SwHintNonQr as usize + #ec_idx
                         * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                     rd = Const "x0",
                     rs1 = Const "x0",

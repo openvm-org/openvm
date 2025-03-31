@@ -202,7 +202,7 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
             }
 
             mod #group_ops_mod_name {
-                use ::openvm_ecc_guest::{edwards::TwistedEdwardsPoint, FromCompressed, DecompressionHint, impl_te_group_ops};
+                use ::openvm_ecc_guest::{edwards::TwistedEdwardsPoint, FromCompressed, DecompressionHint, impl_te_group_ops, algebra::{IntMod, DivUnsafe, DivAssignUnsafe, ExpBytes}};
                 use super::*;
 
                 impl_te_group_ops!(#struct_name, #intmod_type);
@@ -270,7 +270,7 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                             // ensure sqrt < modulus
                             hint.sqrt.assert_reduced();
 
-                            let lhs = (&hint.sqrt * &hint.sqrt) * (&<#struct_name as ::openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_D * y * y - &<#struct_name as ::openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_A * &hint.sqrt * &hint.sqrt - &<#struct_name as ::openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_A);
+                            let lhs = (&hint.sqrt * &hint.sqrt) * (&<#struct_name as ::openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_D * y * y - &<#struct_name as ::openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_A);
                             let rhs = y * y - &<#intmod_type as openvm_algebra_guest::IntMod>::ONE;
                             if lhs == rhs * Self::get_non_qr() {
                                 Some(None)
@@ -288,6 +288,7 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                         }
                         #[cfg(target_os = "zkvm")]
                         {
+                            use openvm_algebra_guest::DivUnsafe;
                             use openvm::platform as openvm_platform; // needed for hint_buffer_u32
                             let mut non_qr_uninit = core::mem::MaybeUninit::<#intmod_type>::uninit();
                             let mut non_qr;
@@ -374,6 +375,10 @@ pub fn te_init(input: TokenStream) -> TokenStream {
             &format!("te_hint_decompress_extern_func_{}", str_path),
             span.into(),
         );
+        let hint_non_qr_extern_func = syn::Ident::new(
+            &format!("hint_non_qr_extern_func_{}", str_path),
+            span.into(),
+        );
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #add_extern_func(rd: usize, rs1: usize, rs2: usize) {
@@ -398,6 +403,19 @@ pub fn te_init(input: TokenStream) -> TokenStream {
                     rd = Const "x0",
                     rs1 = In rs1,
                     rs2 = In rs2
+                );
+            }
+
+            #[no_mangle]
+            extern "C" fn #hint_non_qr_extern_func() {
+                openvm::platform::custom_insn_r!(
+                    opcode = TE_OPCODE,
+                    funct3 = TE_FUNCT3 as usize,
+                    funct7 = TeBaseFunct7::TeHintNonQr as usize + #ec_idx
+                        * (TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS as usize),
+                    rd = Const "x0",
+                    rs1 = Const "x0",
+                    rs2 = Const "x0"
                 );
             }
         });

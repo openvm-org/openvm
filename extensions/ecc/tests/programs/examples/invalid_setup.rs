@@ -22,5 +22,5 @@ openvm::entry!(main);
 pub fn main() {
     setup_all_moduli();
     // this should cause a debug assertion to fail
-    setup_all_curves();
+    setup_all_sw_curves();
 }
