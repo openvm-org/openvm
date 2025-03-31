@@ -515,17 +515,12 @@ pub(crate) mod phantom {
                 y_limbs.push(limb.as_canonical_u32() as u8);
             }
             let y = BigUint::from_bytes_le(&y_limbs);
-            println!("y: {:?}", &y);
             let rs2 = unsafe_read_rv32_register(memory, b);
             let rec_id = memory.unsafe_read_cell(
                 F::from_canonical_u32(RV32_MEMORY_AS),
                 F::from_canonical_u32(rs2),
             );
             let hint = self.decompress_point(y, rec_id.as_canonical_u32() & 1 == 1, c_idx);
-            println!(
-                "hint.sqrt: {:?}, hint.possible: {}",
-                hint.sqrt, hint.possible
-            );
             let hint_bytes = once(F::from_bool(hint.possible))
                 .chain(repeat(F::ZERO))
                 .take(4)
@@ -557,16 +552,10 @@ pub(crate) mod phantom {
             curve_idx: usize,
         ) -> DecompressionHint<BigUint> {
             let curve = &self.supported_curves[curve_idx];
-            println!("y: {:?}", &y);
-            println!("curve.modulus: {:?}", &curve.modulus);
             let numerator = (&y * &y + &curve.modulus - 1u8) % &curve.modulus;
             let denominator =
                 (&curve.coeffs.d * &y * &y + &curve.modulus - &curve.coeffs.a) % &curve.modulus;
-            println!("numerator: {:?}", &numerator);
             let rhs = numerator * denominator.modinv(&curve.modulus).unwrap() % &curve.modulus;
-            println!("denominator: {:?}", &denominator);
-            println!("rhs: {:?}", &rhs);
-            println!("non_qr: {:?}", &self.non_qrs[curve_idx]);
             match mod_sqrt(&rhs, &curve.modulus, &self.non_qrs[curve_idx]) {
                 Some(x) => {
                     if is_x_odd == x.is_odd() {
