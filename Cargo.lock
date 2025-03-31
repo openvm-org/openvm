@@ -4920,7 +4920,6 @@ dependencies = [
  "hex-literal",
  "num-bigint 0.4.6",
  "openvm-algebra-circuit",
- "openvm-algebra-guest",
  "openvm-algebra-transpiler",
  "openvm-circuit",
  "openvm-ecc-circuit",
@@ -4944,11 +4943,9 @@ dependencies = [
 
 [[package]]
 name = "openvm-ecc-te-macros"
-version = "1.0.0-rc.2"
+version = "1.0.0"
 dependencies = [
- "num-bigint 0.4.6",
  "openvm-macros-common",
- "proc-macro2",
  "quote",
  "syn 2.0.100",
 ]

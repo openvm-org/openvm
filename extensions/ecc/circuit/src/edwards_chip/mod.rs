@@ -25,7 +25,7 @@ use utils::jacobi;
 /// For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct TeAddChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    VmChipWrapper<
+    pub  VmChipWrapper<
         F,
         Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreChip,
