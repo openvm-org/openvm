@@ -6,6 +6,7 @@
 | [User Book](https://book.openvm.dev)
 | [Contributor Docs](./docs)
 | [Crate Docs](https://docs.openvm.dev/openvm)
+| [Whitepaper](https://openvm.dev/whitepaper.pdf)
 
 [tg-badge]: https://img.shields.io/endpoint?color=neon&logo=telegram&label=chat&url=https://tg.sumanjay.workers.dev/openvm
 
