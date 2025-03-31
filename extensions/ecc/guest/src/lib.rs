@@ -39,7 +39,7 @@ pub enum SwBaseFunct7 {
     SwDouble,
     SwSetup,
     SwHintDecompress,
-    HintNonQr,
+    SwHintNonQr,
 }
 
 impl SwBaseFunct7 {
@@ -56,6 +56,7 @@ pub enum TeBaseFunct7 {
     TeAdd = 0,
     TeSetup,
     TeHintDecompress,
+    TeHintNonQr,
 }
 
 impl TeBaseFunct7 {

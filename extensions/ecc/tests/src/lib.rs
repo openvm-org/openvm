@@ -15,7 +15,6 @@ mod tests {
         CurveConfig, EccExtension, Rv32EccConfig, SwCurveCoeffs, ED25519_CONFIG, P256_CONFIG,
         SECP256K1_CONFIG,
     };
-    use openvm_ecc_guest::{ed25519::Ed25519Point, edwards::TwistedEdwardsPoint, CyclicGroup};
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_rv32im_transpiler::{
@@ -100,7 +99,7 @@ mod tests {
     fn test_decompress() -> Result<()> {
         use ed25519::Ed25519Point;
         use edwards::TwistedEdwardsPoint;
-        use halo2curves_axiom::{group::Curve, secp256k1::Secp256k1Affine};
+        use halo2curves_axiom::{ed25519::Ed25519Affine, group::Curve, secp256k1::Secp256k1Affine};
         use openvm_algebra_guest::IntMod;
 
         let config =
@@ -143,24 +142,24 @@ mod tests {
             hex!("211D5C11D68032342211C256D3C1034AB99013327FBFB46BBD0C0EB700000000");
         let r_y: [u8; 32] =
             hex!("347E00859981D5446447075AA07543CDE6DF224CFB23F7B5886337BD00000000");
+        let s = Ed25519Affine::generator();
+        let s = (s + s + s).to_affine();
 
-        let coords1 = [p1.x.to_bytes(), p1.y.to_bytes(), q_x, q_y, r_x, r_y]
-            .concat()
-            .into_iter()
-            .map(FieldAlgebra::from_canonical_u8)
-            .collect();
+        let coords = [
+            p.x.to_bytes(),
+            p.y.to_bytes(),
+            q_x,
+            q_y,
+            r_x,
+            r_y,
+            s.x.to_bytes(),
+            s.y.to_bytes(),
+        ]
+        .concat()
+        .into_iter()
+        .map(FieldAlgebra::from_canonical_u8)
+        .collect();
 
-        let p2 = Ed25519Point::GENERATOR.clone();
-        let p2 = &p2 + &p2 + &p2;
-        println!("ed25519 decompressed: {:?}", &p2);
-
-        let coords2: Vec<_> = [p2.x().as_le_bytes(), p2.y().as_le_bytes()]
-            .concat()
-            .into_iter()
-            .map(FieldAlgebra::from_canonical_u8)
-            .collect();
-
-        let coords = [coords1, coords2].concat();
         air_test_with_min_segments(config, openvm_exe, vec![coords], 1);
         Ok(())
     }

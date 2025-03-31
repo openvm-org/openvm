@@ -37,8 +37,9 @@ pub enum Rv32EdwardsOpcode {
 #[repr(u16)]
 pub enum EccPhantom {
     SwHintDecompress = 0x40,
-    TeHintDecompress = 0x41,
-    HintNonQr = 0x42,
+    SwHintNonQr = 0x41,
+    TeHintDecompress = 0x42,
+    TeHintNonQr = 0x43,
 }
 
 #[derive(Default)]
@@ -85,6 +86,17 @@ impl EccTranspilerExtension {
                     PhantomDiscriminant(EccPhantom::TeHintDecompress as u16),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    curve_idx as u16,
+                )));
+            }
+            if let Some(TeBaseFunct7::TeHintNonQr) = TeBaseFunct7::from_repr(base_funct7) {
+                assert_eq!(dec_insn.rd, 0);
+                assert_eq!(dec_insn.rs1, 0);
+                assert_eq!(dec_insn.rs2, 0);
+                return Some(TranspilerOutput::one_to_one(Instruction::phantom(
+                    PhantomDiscriminant(EccPhantom::TeHintNonQr as u16),
+                    F::ZERO,
+                    F::ZERO,
                     curve_idx as u16,
                 )));
             }
@@ -150,12 +162,12 @@ impl EccTranspilerExtension {
                     curve_idx as u16,
                 )));
             }
-            if let Some(SwBaseFunct7::HintNonQr) = SwBaseFunct7::from_repr(base_funct7) {
+            if let Some(SwBaseFunct7::SwHintNonQr) = SwBaseFunct7::from_repr(base_funct7) {
                 assert_eq!(dec_insn.rd, 0);
                 assert_eq!(dec_insn.rs1, 0);
                 assert_eq!(dec_insn.rs2, 0);
                 return Some(TranspilerOutput::one_to_one(Instruction::phantom(
-                    PhantomDiscriminant(EccPhantom::HintNonQr as u16),
+                    PhantomDiscriminant(EccPhantom::SwHintNonQr as u16),
                     F::ZERO,
                     F::ZERO,
                     curve_idx as u16,
