@@ -9,8 +9,8 @@ use openvm::io::read_vec;
 use openvm_ecc_guest::{
     algebra::{Field, IntMod},
     k256::{Secp256k1Coord, Secp256k1Point},
-    weierstrass::{DecompressionHint, FromCompressed, WeierstrassPoint},
-    Group,
+    weierstrass::WeierstrassPoint,
+    DecompressionHint, FromCompressed, Group,
 };
 
 openvm::entry!(main);
@@ -209,7 +209,6 @@ pub fn main() {
     setup_2();
     setup_4();
     setup_all_sw_curves();
-    setup_all_te_curves();
 
     let bytes = read_vec();
 

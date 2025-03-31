@@ -25,7 +25,7 @@ pub fn main() {
     setup_all_moduli();
     setup_all_complex_extensions();
     // Pairing doesn't need G1Affine intrinsics, but we trigger it anyways to test the chips
-    setup_all_curves();
+    setup_all_sw_curves();
 
     // copied from https://github.com/bluealloy/revm/blob/9e39df5dbc5fdc98779c644629b28b8bee75794a/crates/precompile/src/bn128.rs#L395
     let input = hex::decode(

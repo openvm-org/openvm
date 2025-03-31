@@ -10,8 +10,6 @@ repository.workspace = true
 syn = { version = "2.0", features = ["full"] }
 quote = "1.0"
 openvm-macros-common = { workspace = true, default-features = false }
-num-bigint.workspace = true
-proc-macro2 = "1.0.38"
 
 [lib]
 proc-macro = true

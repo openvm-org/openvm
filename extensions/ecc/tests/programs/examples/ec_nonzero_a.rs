@@ -2,8 +2,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use hex_literal::hex;
-use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
+    algebra::IntMod,
     p256::{P256Coord, P256Point},
     weierstrass::WeierstrassPoint,
     CyclicGroup, Group,

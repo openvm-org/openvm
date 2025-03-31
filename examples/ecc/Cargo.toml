@@ -8,6 +8,7 @@ members = []
 
 [dependencies]
 openvm = { path = "../../crates/toolchain/openvm", features = ["std"] }
+openvm-custom-insn = { path = "../../crates/toolchain/custom_insn", default-features = false }
 openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
 openvm-ecc-guest = { path = "../../extensions/ecc/guest", features = ["k256"] }
 openvm-rv32im-guest = { path = "../../extensions/rv32im/guest" }

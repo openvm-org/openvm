@@ -7,6 +7,8 @@ use openvm_ecc_guest::{
     weierstrass::WeierstrassPoint,
     Group,
 };
+extern crate alloc;
+
 // ANCHOR_END: imports
 openvm_algebra_guest::moduli_macros::moduli_declare! {
     // The Secp256k1 modulus and scalar field modulus are already declared in the k256 module
