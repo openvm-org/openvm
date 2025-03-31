@@ -37,7 +37,7 @@ fn test_range_gate_chip() {
         .collect::<Vec<Vec<u32>>>();
 
     let lists = (0..num_lists)
-        .map(|_| DummyInteractionAir::new(1, true, bus.index))
+        .map(|_| DummyInteractionAir::new(1, true, bus.index()))
         .collect::<Vec<DummyInteractionAir>>();
 
     let lists_traces = lists_vals

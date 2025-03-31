@@ -36,10 +36,3 @@ impl Evaluatable<Fq, Fq2> for UnevaluatedLine<Fq2> {
         }
     }
 }
-
-#[cfg(target_os = "zkvm")]
-use {
-    axvm_platform::constants::{Custom1Funct3, SwBaseFunct7, CUSTOM_1},
-    axvm_platform::custom_insn_r,
-    core::mem::MaybeUninit,
-};

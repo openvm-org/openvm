@@ -3,7 +3,7 @@ use std::{iter::Zip, vec::IntoIter};
 use backtrace::Backtrace;
 use itertools::izip;
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -282,7 +282,7 @@ impl<C: Config> Builder<C> {
     }
 
     /// Asserts that lhs is less than rhs in time O(rhs).
-    pub fn assert_less_than_slow<
+    pub fn assert_less_than_slow_small_rhs<
         LhsExpr: Into<SymbolicVar<C::N>>,
         RhsExpr: Into<SymbolicVar<C::N>>,
     >(
@@ -299,6 +299,39 @@ impl<C: Config> Builder<C> {
             builder.assign(&product, product.clone() * diff);
         });
         self.assert_usize_eq(product, RVar::from(0));
+    }
+
+    /// Asserts that lhs is less than rhs in time O(log(lhs) + log(rhs)).
+    ///
+    /// Only works for Felt == BabyBear and in the VM.
+    ///
+    /// Uses bit decomposition hint, which has large constant factor overhead, so prefer
+    /// [Self::assert_less_than_slow_small_rhs] when rhs is small.
+    pub fn assert_less_than_slow_bit_decomp(&mut self, lhs: Var<C::N>, rhs: Var<C::N>) {
+        let lhs = self.unsafe_cast_var_to_felt(lhs);
+        let rhs = self.unsafe_cast_var_to_felt(rhs);
+
+        let lhs_bits = self.num2bits_f(lhs, C::N::bits() as u32);
+        let rhs_bits = self.num2bits_f(rhs, C::N::bits() as u32);
+
+        let is_lt: Var<_> = self.eval(C::N::ZERO);
+
+        iter_zip!(self, lhs_bits, rhs_bits).for_each(|ptr_vec, builder| {
+            let lhs_bit = builder.iter_ptr_get(&lhs_bits, ptr_vec[0]);
+            let rhs_bit = builder.iter_ptr_get(&rhs_bits, ptr_vec[1]);
+
+            builder.if_ne(lhs_bit, rhs_bit).then(|builder| {
+                builder.assign(&is_lt, rhs_bit);
+            });
+        });
+        self.assert_var_eq(is_lt, C::N::ONE);
+    }
+
+    /// asserts that x has at most num_bits bits
+    pub fn range_check_var(&mut self, x: Var<C::N>, num_bits: usize) {
+        assert!(!self.flags.static_only, "range_check_var is dynamic");
+        assert!(num_bits <= 30);
+        self.trace_push(DslIr::RangeCheckV(x, num_bits));
     }
 
     /// Evaluate a block of operations over a range from start to end.
@@ -413,8 +446,14 @@ impl<C: Config> Builder<C> {
     }
 
     pub fn hint_ext(&mut self) -> Ext<C::F, C::EF> {
-        let arr = self.hint_exts();
-        self.get(&arr, RVar::zero())
+        let flattened = self.hint_felts_fixed(C::EF::D);
+
+        // Simply recast memory as Array<Ext>.
+        let array: Array<C, Ext<_, _>> = match flattened {
+            Array::Fixed(_) => unreachable!(),
+            Array::Dyn(ptr, _) => Array::Dyn(ptr, Usize::from(1)),
+        };
+        self.get(&array, 0)
     }
 
     /// Hint a vector of variables.
@@ -427,6 +466,10 @@ impl<C: Config> Builder<C> {
     /// Hint a vector of felts.
     pub fn hint_felts(&mut self) -> Array<C, Felt<C::F>> {
         self.hint_words()
+    }
+
+    pub fn hint_felts_fixed(&mut self, len: impl Into<RVar<C::N>>) -> Array<C, Felt<C::F>> {
+        self.hint_words_fixed(len)
     }
 
     /// Hints an array of V and assumes V::size_of() == 1.
@@ -450,7 +493,6 @@ impl<C: Config> Builder<C> {
 
         let vlen: Var<C::N> = self.uninit();
         self.load(vlen, ptr, index);
-
         let arr = self.dyn_array(vlen);
 
         // Write the content hints directly into the array memory.
@@ -462,15 +504,34 @@ impl<C: Config> Builder<C> {
             };
             builder.operations.push(DslIr::StoreHintWord(
                 Ptr {
-                    address: match ptr_vec[0] {
-                        RVar::Const(_) => unreachable!(),
-                        RVar::Val(v) => v,
-                    },
+                    address: ptr_vec[0].variable(),
                 },
                 index,
             ));
         });
+        arr
+    }
 
+    /// Hints an array of V and assumes V::size_of() == 1.
+    fn hint_words_fixed<V: MemVariable<C>>(&mut self, len: impl Into<RVar<C::N>>) -> Array<C, V> {
+        assert_eq!(V::size_of(), 1);
+
+        let arr = self.dyn_array(len.into());
+        // Write the content hints directly into the array memory.
+        iter_zip!(self, arr).for_each(|ptr_vec, builder| {
+            let index = MemIndex {
+                index: 0.into(),
+                offset: 0,
+                size: 1,
+            };
+            builder.operations.push(DslIr::HintFelt());
+            builder.operations.push(DslIr::StoreHintWord(
+                Ptr {
+                    address: ptr_vec[0].variable(),
+                },
+                index,
+            ));
+        });
         arr
     }
 

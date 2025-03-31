@@ -22,12 +22,13 @@ impl Hintable<C> for InnerDigest {
     type HintVariable = DigestVariable<C>;
 
     fn read(builder: &mut Builder<AsmConfig<InnerVal, InnerChallenge>>) -> Self::HintVariable {
-        DigestVariable::Felt(builder.hint_felts())
+        let digest = builder.hint_felts_fixed(DIGEST_SIZE);
+        DigestVariable::Felt(digest)
     }
 
     fn write(&self) -> Vec<Vec<InnerVal>> {
         let h: [InnerVal; DIGEST_SIZE] = *self;
-        vec![h.to_vec()]
+        h.map(|x| vec![x]).to_vec()
     }
 }
 
@@ -48,7 +49,7 @@ impl Hintable<C> for InnerCommitPhaseStep {
     fn write(&self) -> Vec<Vec<<C as Config>::F>> {
         let mut stream = Vec::new();
 
-        stream.extend(Hintable::<C>::write(&vec![self.sibling_value]));
+        stream.extend(Hintable::<C>::write(&self.sibling_value));
         stream.extend(write_opening_proof(&self.opening_proof));
 
         stream

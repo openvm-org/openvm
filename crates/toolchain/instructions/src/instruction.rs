@@ -7,6 +7,7 @@ use crate::{utils::isize_to_field, LocalOpcode, PhantomDiscriminant, SystemOpcod
 /// Number of operands of an instruction.
 pub const NUM_OPERANDS: usize = 7;
 
+#[repr(C)]
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new, Serialize, Deserialize)]
 pub struct Instruction<F> {

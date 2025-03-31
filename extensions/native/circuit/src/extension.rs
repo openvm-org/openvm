@@ -2,23 +2,22 @@ use air::VerifyBatchBus;
 use alu_native_adapter::AluNativeAdapterChip;
 use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
-use jal_native_adapter::JalNativeAdapterChip;
 use loadstore_native_adapter::NativeLoadStoreAdapterChip;
 use native_vectorized_adapter::NativeVectorizedAdapterChip;
 use openvm_circuit::{
     arch::{
-        MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex,
-        VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, SystemPort,
+        VmChipComplex, VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
-    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom, Poseidon2Opcode,
-    VerifyBatchOpcode, BLOCK_LOAD_STORE_SIZE,
+    NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom,
+    NativeRangeCheckOpcode, Poseidon2Opcode, VerifyBatchOpcode, BLOCK_LOAD_STORE_SIZE,
 };
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::{
@@ -44,25 +43,11 @@ pub struct NativeConfig {
     pub native: Native,
 }
 
-impl Default for NativeConfig {
-    fn default() -> Self {
-        Self {
-            system: SystemConfig::default().with_continuations(),
-            native: Default::default(),
-        }
-    }
-}
-
 impl NativeConfig {
-    pub fn with_continuations(mut self) -> Self {
-        self.system = self.system.with_continuations();
-        self
-    }
-
-    pub fn aggregation(num_public_values: usize, poseidon2_max_constraint_degree: usize) -> Self {
+    pub fn aggregation(num_public_values: usize, max_constraint_degree: usize) -> Self {
         Self {
             system: SystemConfig::new(
-                poseidon2_max_constraint_degree,
+                max_constraint_degree,
                 MemoryConfig {
                     max_access_adapter_n: 8,
                     ..Default::default()
@@ -78,19 +63,19 @@ impl NativeConfig {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum NativeExecutor<F: PrimeField32> {
     LoadStore(NativeLoadStoreChip<F, 1>),
     BlockLoadStore(NativeLoadStoreChip<F, 4>),
     BranchEqual(NativeBranchEqChip<F>),
-    Jal(NativeJalChip<F>),
+    Jal(JalRangeCheckChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
     FriReducedOpening(FriReducedOpeningChip<F>),
     VerifyBatch(NativePoseidon2Chip<F, 1>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum NativePeriphery<F: PrimeField32> {
     Phantom(PhantomChip<F>),
 }
@@ -157,12 +142,18 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             NativeBranchEqualOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let jal_chip = NativeJalChip::new(
-            JalNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_bridge),
-            JalCoreChip::new(),
+        let jal_chip = JalRangeCheckChip::new(
+            ExecutionBridge::new(execution_bus, program_bus),
             offline_memory.clone(),
+            builder.system_base().range_checker_chip.clone(),
         );
-        inventory.add_executor(jal_chip, NativeJalOpcode::iter().map(|x| x.global_opcode()))?;
+        inventory.add_executor(
+            jal_chip,
+            [
+                NativeJalOpcode::JAL.global_opcode(),
+                NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(),
+            ],
+        )?;
 
         let field_arithmetic_chip = FieldArithmeticChip::new(
             AluNativeAdapterChip::<F>::new(execution_bus, program_bus, memory_bridge),
@@ -200,7 +191,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             builder.system_port(),
             offline_memory.clone(),
             Poseidon2Config::default(),
-            VerifyBatchBus(builder.new_bus_idx()),
+            VerifyBatchBus::new(builder.new_bus_idx()),
             builder.streams().clone(),
         );
         inventory.add_executor(
@@ -376,12 +367,12 @@ pub(crate) mod phantom {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct CastFExtension;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum CastFExtensionExecutor<F: PrimeField32> {
     CastF(CastFChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum, BytesStateful)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum CastFExtensionPeriphery<F: PrimeField32> {
     Placeholder(CastFChip<F>),
 }

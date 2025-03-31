@@ -45,16 +45,17 @@ pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
     pub prev_data: [T; NUM_CELLS],
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Serialize + DeserializeOwned")]
 pub struct LoadSignExtendCoreRecord<F, const NUM_CELLS: usize> {
-    pub opcode: Rv32LoadStoreOpcode,
-    pub most_sig_bit: bool,
     #[serde(with = "BigArray")]
     pub shifted_read_data: [F; NUM_CELLS],
     #[serde(with = "BigArray")]
     pub prev_data: [F; NUM_CELLS],
+    pub opcode: Rv32LoadStoreOpcode,
     pub shift_amount: u32,
+    pub most_sig_bit: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -119,9 +120,9 @@ where
         let limb_mask = data_most_sig_bit * AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1);
 
         // there are three parts to write_data:
-        //      1st limb is always shifted_read_data
-        //      2nd to (NUM_CELLS/2)th limbs are read_data if loadh and sign extended if loadb
-        //      (NUM_CELLS/2 + 1)th to last limbs are always sign extended limbs
+        // - 1st limb is always shifted_read_data
+        // - 2nd to (NUM_CELLS/2)th limbs are read_data if loadh and sign extended if loadb
+        // - (NUM_CELLS/2 + 1)th to last limbs are always sign extended limbs
         let write_data: [AB::Expr; NUM_CELLS] = array::from_fn(|i| {
             if i == 0 {
                 (is_loadh + is_loadb0) * shifted_read_data[i].into()
@@ -161,9 +162,9 @@ where
             reads: (prev_data, read_data).into(),
             writes: [write_data].into(),
             instruction: LoadStoreInstruction {
-                is_valid,
+                is_valid: is_valid.clone(),
                 opcode: expected_opcode,
-                is_load: AB::Expr::ONE,
+                is_load: is_valid,
                 load_shift_amount,
                 store_shift_amount: AB::Expr::ZERO,
             }
@@ -306,7 +307,12 @@ pub(super) fn run_write_data_sign_extend<
             }
             write_data[0] = read_data[shift];
         }
-        _ => unreachable!(),
+        // Currently the adapter AIR requires `ptr_val` to be aligned to the data size in bytes.
+        // The circuit requires that `shift = ptr_val % 4` so that `ptr_val - shift` is a multiple of 4.
+        // This requirement is non-trivial to remove, because we use it to ensure that `ptr_val - shift + 4 <= 2^pointer_max_bits`.
+        _ => unreachable!(
+            "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
+        ),
     };
     write_data
 }

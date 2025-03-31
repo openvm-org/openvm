@@ -1,6 +1,12 @@
 # Range Checker
 
-This chip is initialized with a `max` value and gets requests to verify that a number is in the range `[0, max)`. It has only two columns `counter` and `mult`. The `counter` column is preprocessed and the `mult` is left unconstrained.
+This chip implements range checking using a lookup table approach. It is initialized with a `max` value and gets requests to verify that a number is in the range `[0, max)`. The lookup table contains all possible values within the range and tracks the multiplicity of each value.
+
+**Preprocessed Columns:**
+- `counter`: Column containing all possible values within the range `[0, max)`
+
+**IO Columns:**
+- `mult`: Multiplicity column that tracks the number of range checks to perform for each element (left unconstrained)
 
 The `RangeCheckerAir` adds interaction constraints:
 
@@ -21,6 +27,8 @@ where the bus index must equal that used for `RangeChecker`.
 Now during trace generation, every time the requester chip want to range check `x` with non-zero `cond`, it will increment the `mult` trace value in `RangeChecker`'s trace by `cond`. All `mult` trace values start at 0.
 
 If the non-materialized send and receive multisets on the shared bus are equal, then the range check is satisfied.
+
+**Note:** This implementation can also be used to efficiently range check values up to $`2^{\texttt{max\_bits}}`$ (where $`2^{\texttt{max\_bits}} < \texttt{max}`$) by checking both the original value and a shifted value. This works by verifying that both $`x`$ and $`x + (\texttt{max} - 2^{\texttt{max\_bits}})`$ are within the valid range of $`0..\texttt{max}`$. This approach only works when $`2 * \texttt{max}`$ is less than the field modulus to avoid wrap-around issues.
 
 ## Example
 

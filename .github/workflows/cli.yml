@@ -11,6 +11,7 @@ on:
       - "crates/sdk/**"
       - "crates/cli/**"
       - "examples/**"
+      - "Cargo.toml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -30,17 +31,13 @@ jobs:
     steps:
       - uses: runs-on/action@v1
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
       - name: Install solc # svm should support arm64 linux
         run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
-
-      - name: Install tools
-        run: |
-          rustup component add rust-src --toolchain nightly-2024-10-30
 
       - name: Install cargo-openvm
         working-directory: crates/cli

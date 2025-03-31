@@ -1,6 +1,3 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(not(feature = "std"), no_main)]
-
 mod generate;
 mod types;
 
@@ -8,8 +5,6 @@ use core::hint::black_box;
 
 use rkyv::{access_unchecked, Archive};
 use types::Players;
-
-openvm::entry!(main);
 
 fn main() {
     // Uncomment to generate a minecraft save file:

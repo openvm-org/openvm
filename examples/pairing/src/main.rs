@@ -1,7 +1,4 @@
 // ANCHOR: pre
-#![cfg_attr(not(feature = "std"), no_main)]
-#![cfg_attr(not(feature = "std"), no_std)]
-
 use hex_literal::hex;
 // ANCHOR_END: pre
 // ANCHOR: imports
@@ -25,8 +22,6 @@ openvm_algebra_complex_macros::complex_init! {
 // ANCHOR_END: init
 
 // ANCHOR: main
-openvm::entry!(main);
-
 pub fn main() {
     // ANCHOR: setup
     setup_0();

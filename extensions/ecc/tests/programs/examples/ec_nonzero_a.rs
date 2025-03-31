@@ -1,13 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::hint::black_box;
-
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
-    msm,
-    p256::{P256Coord, P256Point, P256Scalar},
+    p256::{P256Coord, P256Point},
     weierstrass::WeierstrassPoint,
     CyclicGroup, Group,
 };
@@ -54,4 +51,10 @@ pub fn main() {
     if double.x() != p4.x() || double.y() != p4.y() {
         panic!();
     }
+
+    // Test generator
+    let (gen_x, gen_y) = P256Point::GENERATOR.into_coords();
+    let _generator = P256Point::from_xy(gen_x, gen_y).unwrap();
+    let (neg_x, neg_y) = P256Point::NEG_GENERATOR.into_coords();
+    let _neg_generator = P256Point::from_xy(neg_x, neg_y).unwrap();
 }

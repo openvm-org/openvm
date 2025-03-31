@@ -23,7 +23,7 @@ use crate::{
 
 /// The trace generation of SHA256 should be done in two passes.
 /// The first pass should do `get_block_trace` for every block and generate the invalid rows through `get_default_row`
-/// The second pass should go through all the blocks and call `generate_missing_values`
+/// The second pass should go through all the blocks and call `generate_missing_cells`
 impl Sha256Air {
     /// This function takes the input_message (padding not handled), the previous hash,
     /// and returns the new hash after processing the block input
@@ -235,8 +235,18 @@ impl Sha256Air {
                 cols.flags.local_block_idx = F::from_canonical_u32(local_block_idx);
                 let final_hash: [u32; SHA256_HASH_WORDS] =
                     array::from_fn(|i| work_vars[i].wrapping_add(prev_hash[i]));
+                let final_hash_limbs: [[u32; SHA256_WORD_U8S]; SHA256_HASH_WORDS] =
+                    array::from_fn(|i| u32_into_limbs::<SHA256_WORD_U8S>(final_hash[i]));
+                // need to ensure final hash limbs are bytes, in order for
+                //   prev_hash[i] + work_vars[i] == final_hash[i]
+                // to be constrained correctly
+                for word in final_hash_limbs.iter() {
+                    for chunk in word.chunks(2) {
+                        bitwise_lookup_chip.request_range(chunk[0], chunk[1]);
+                    }
+                }
                 cols.final_hash = array::from_fn(|i| {
-                    u32_into_limbs::<SHA256_WORD_U8S>(final_hash[i]).map(F::from_canonical_u32)
+                    array::from_fn(|j| F::from_canonical_u32(final_hash_limbs[i][j]))
                 });
                 cols.prev_hash = prev_hash
                     .map(|f| u32_into_limbs::<SHA256_WORD_U16S>(f).map(F::from_canonical_u32));
@@ -274,10 +284,15 @@ impl Sha256Air {
                 }
             }
             if i == SHA256_ROWS_PER_BLOCK - 2 {
+                // `next` is a digest row.
+                // Fill in `carry_a` and `carry_e` with dummy values so the constraints on `a` and `e` hold.
                 Self::generate_carry_ae(local_cols, next_cols);
+                // Fill in row 16's `intermed_4` with dummy values so the message schedule constraints holds on that row
                 Self::generate_intermed_4(local_cols, next_cols);
             }
             if i <= 2 {
+                // i is in 0..3.
+                // Fill in `local.intermed_12` with dummy values so the message schedule constraints hold on rows 1..4.
                 Self::generate_intermed_12(local_cols, next_cols);
             }
         }
@@ -305,8 +320,11 @@ impl Sha256Air {
             row_16[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH].borrow_mut();
         let cols_17: &mut Sha256RoundCols<F> =
             row_17[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH].borrow_mut();
+        // Fill in row 15's `intermed_12` with dummy values so the message schedule constraints holds on row 16
         Self::generate_intermed_12(cols_15, cols_16);
+        // Fill in row 16's `intermed_12` with dummy values so the message schedule constraints holds on the next block's row 0
         Self::generate_intermed_12(cols_16, cols_17);
+        // Fill in row 0's `intermed_4` with dummy values so the message schedule constraints holds on that row
         Self::generate_intermed_4(cols_16, cols_17);
     }
 
@@ -513,7 +531,7 @@ pub fn generate_trace<F: PrimeField32>(
             } = ctx;
             let input_words = array::from_fn(|i| {
                 limbs_into_u32::<SHA256_WORD_U8S>(array::from_fn(|j| {
-                    input[i * SHA256_WORD_U8S + j] as u32
+                    input[(i + 1) * SHA256_WORD_U8S - j - 1] as u32
                 }))
             });
             sub_air.generate_block_trace(

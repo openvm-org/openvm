@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// ```
     // ANCHOR: build
     // 1. Build the VmConfig with the extensions needed.
-    let sdk = Sdk;
+    let sdk = Sdk::new();
 
     // 2a. Build the ELF with guest options and a target filter.
     let guest_opts = GuestOptions::default();

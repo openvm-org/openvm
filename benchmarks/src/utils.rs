@@ -1,11 +1,9 @@
-use std::{fs::read, path::PathBuf};
+use std::{fs::read, path::PathBuf, sync::Arc};
 
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use openvm_circuit::arch::{
-    instructions::exe::VmExe, DefaultSegmentationStrategy, VirtualMachine, VmConfig,
-};
+use openvm_circuit::arch::{instructions::exe::VmExe, DefaultSegmentationStrategy, VmConfig};
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
@@ -18,7 +16,7 @@ use openvm_sdk::{
     prover::{
         vm::local::VmLocalProver, AppProver, LeafProvingController, DEFAULT_NUM_CHILDREN_LEAF,
     },
-    StdIn,
+    Sdk, StdIn,
 };
 use openvm_stark_backend::utils::metrics_span;
 use openvm_stark_sdk::{
@@ -26,7 +24,6 @@ use openvm_stark_sdk::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         FriParameters,
     },
-    engine::StarkFriEngine,
     openvm_stark_backend::Chip,
     p3_baby_bear::BabyBear,
 };
@@ -81,9 +78,11 @@ impl BenchmarkCli {
 
         app_vm_config.system_mut().profiling = self.profiling;
         if let Some(max_segment_length) = self.max_segment_length {
-            app_vm_config.system_mut().set_segmentation_strategy(
-                DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_length),
-            );
+            app_vm_config
+                .system_mut()
+                .set_segmentation_strategy(Arc::new(
+                    DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_length),
+                ));
         }
         AppConfig {
             app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
@@ -141,7 +140,8 @@ impl BenchmarkCli {
             "release"
         }
         .to_string();
-        build_bench_program(program_name, profile)
+        let manifest_dir = get_programs_dir().join(program_name);
+        build_bench(manifest_dir, profile)
     }
 
     pub fn bench_from_exe<VC>(
@@ -170,14 +170,13 @@ impl BenchmarkCli {
     }
 }
 
-fn get_programs_dir() -> PathBuf {
+pub fn get_programs_dir() -> PathBuf {
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     dir.push("programs");
     dir
 }
 
-pub fn build_bench_program(program_name: &str, profile: impl ToString) -> Result<Elf> {
-    let manifest_dir = get_programs_dir().join(program_name);
+pub fn build_bench(manifest_dir: PathBuf, profile: impl ToString) -> Result<Elf> {
     let pkg = get_package(manifest_dir);
     let target_dir = tempdir()?;
     // Build guest with default features
@@ -216,8 +215,6 @@ where
     VC::Periphery: Chip<SC>,
 {
     let bench_name = bench_name.to_string();
-    let engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params.fri_params);
-    let vm = VirtualMachine::new(engine, app_config.app_vm_config.clone());
     // 1. Generate proving key from config.
     let app_pk = info_span!("keygen", group = &bench_name).in_scope(|| {
         metrics_span("keygen_time_ms", || {
@@ -233,11 +230,12 @@ where
     // 3. Executes runtime
     // 4. Generate trace
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
-    let vk = app_pk.app_vm_pk.vm_pk.get_vk();
+    let app_vk = app_pk.get_app_vk();
     let prover = AppProver::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name);
     let app_proof = prover.generate_app_proof(input_stream);
     // 6. Verify STARK proofs, including boundary conditions.
-    vm.verify(&vk, app_proof.per_segment.clone())
+    let sdk = Sdk::new();
+    sdk.verify_app_proof(&app_vk, &app_proof)
         .expect("Verification failed");
     if let Some(leaf_vm_config) = leaf_vm_config {
         let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);

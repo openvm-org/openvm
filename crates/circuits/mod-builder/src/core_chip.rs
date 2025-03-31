@@ -16,6 +16,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::BaseAirWithPublicValues,
 };
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 
@@ -164,7 +165,7 @@ where
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct FieldExpressionRecord {
     #[serde_as(as = "Vec<DisplayFromStr>")]
     pub inputs: Vec<BigUint>,
@@ -192,6 +193,10 @@ impl FieldExpressionCoreChip {
         should_finalize: bool,
     ) -> Self {
         let air = FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx);
+        tracing::info!(
+            "FieldExpressionCoreChip: opcode={name}, main_width={}",
+            BaseAir::<BabyBear>::width(&air)
+        );
         Self {
             air,
             range_checker,

@@ -8,17 +8,13 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-openvm-circuit-primitives-derive.workspace = true
 openvm-instructions = { workspace = true }
 openvm-stark-sdk.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-transpiler.workspace = true
-openvm-build.workspace = true
 openvm-algebra-transpiler.workspace = true
 openvm-algebra-circuit.workspace = true
 openvm-rv32im-transpiler.workspace = true
-openvm-platform = { workspace = true }
-openvm = { workspace = true }
 openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
 openvm-ecc-circuit.workspace = true
 eyre.workspace = true

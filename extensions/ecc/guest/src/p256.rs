@@ -12,6 +12,7 @@ use crate::weierstrass::{CachedMulTable, IntrinsicCurve};
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
+    // The constants are taken from: https://neuromancer.sk/std/secg/secp256r1
     pub static ref P256_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
         "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
     ));
@@ -36,8 +37,6 @@ pub const CURVE_B: P256Coord = P256Coord::from_const_bytes(hex!(
     "4b60d2273e3cce3bf6b053ccb0061d65bc86987655bdebb3e7933aaad835c65a"
 ));
 
-pub struct P256;
-
 openvm_ecc_sw_macros::sw_declare! {
     P256Point { mod_type = P256Coord, a = CURVE_A, b = CURVE_B },
 }
@@ -58,25 +57,27 @@ impl Field for P256Coord {
 }
 
 impl CyclicGroup for P256Point {
+    // The constants are taken from: https://neuromancer.sk/std/secg/secp256r1
     const GENERATOR: Self = P256Point {
+        // from_const_bytes takes a little endian byte string
         x: P256Coord::from_const_bytes(hex!(
-            "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"
+            "96c298d84539a1f4a033eb2d817d0377f240a463e5e6bcf847422ce1f2d1176b"
         )),
         y: P256Coord::from_const_bytes(hex!(
-            "4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5"
+            "f551bf376840b6cbce5e316b5733ce2b169e0f7c4aebe78e9b7f1afee242e34f"
         )),
     };
     const NEG_GENERATOR: Self = P256Point {
         x: P256Coord::from_const_bytes(hex!(
-            "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"
+            "96c298d84539a1f4a033eb2d817d0377f240a463e5e6bcf847422ce1f2d1176b"
         )),
         y: P256Coord::from_const_bytes(hex!(
-            "b01cbd1c01e58065711814b583f061e9d431cca994cea1313449bf97c840ae0a"
+            "0aae40c897bf493431a1ce94a9cc31d4e961f083b51418716580e5011cbd1cb0"
         )),
     };
 }
 
-impl IntrinsicCurve for P256 {
+impl IntrinsicCurve for p256::NistP256 {
     type Scalar = P256Scalar;
     type Point = P256Point;
 

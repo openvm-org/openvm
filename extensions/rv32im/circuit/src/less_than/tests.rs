@@ -53,6 +53,7 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
+            bitwise_chip.clone(),
         ),
         LessThanCoreChip::new(bitwise_chip.clone(), LessThanOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),

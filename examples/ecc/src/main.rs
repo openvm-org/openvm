@@ -1,6 +1,3 @@
-#![cfg_attr(not(feature = "std"), no_main)]
-#![cfg_attr(not(feature = "std"), no_std)]
-
 // ANCHOR: imports
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
@@ -22,8 +19,6 @@ openvm_ecc_guest::sw_macros::sw_init! {
 // ANCHOR_END: init
 
 // ANCHOR: main
-openvm::entry!(main);
-
 pub fn main() {
     setup_all_moduli();
     setup_all_curves();

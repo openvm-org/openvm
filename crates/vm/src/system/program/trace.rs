@@ -2,11 +2,12 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use derivative::Derivative;
 use itertools::Itertools;
+use openvm_circuit::arch::hasher::poseidon2::Poseidon2Hasher;
 use openvm_instructions::{exe::VmExe, program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::{
     config::{Com, Domain, StarkGenericConfig, Val},
     p3_commit::{Pcs, PolynomialSpace},
-    p3_field::{Field, PrimeField64},
+    p3_field::{Field, FieldAlgebra, PrimeField32, PrimeField64},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::{
@@ -17,6 +18,13 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use super::{Instruction, ProgramChip, ProgramExecutionCols, EXIT_CODE_FAIL};
+use crate::{
+    arch::{
+        hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
+        MemoryConfig,
+    },
+    system::memory::{tree::MemoryNode, AddressMap, CHUNK},
+};
 
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound(
@@ -33,8 +41,10 @@ pub struct VmCommittedExe<SC: StarkGenericConfig> {
 
 impl<SC: StarkGenericConfig> VmCommittedExe<SC>
 where
-    Val<SC>: PrimeField64,
+    Val<SC>: PrimeField32,
 {
+    /// Creates [VmCommittedExe] from [VmExe] by using `pcs` to commit to the
+    /// program code as a _cached trace_ matrix.
     pub fn commit(exe: VmExe<Val<SC>>, pcs: &SC::Pcs) -> Self {
         let cached_trace = generate_cached_trace(&exe.program);
         let domain = pcs.natural_domain_for_degree(cached_trace.height());
@@ -50,6 +60,45 @@ where
     }
     pub fn get_program_commit(&self) -> Com<SC> {
         self.committed_program.commitment.clone()
+    }
+
+    /// Computes a commitment to [VmCommittedExe]. This is a Merklelized hash of:
+    /// - Program code commitment (commitment of the cached trace)
+    /// - Merkle root of the initial memory
+    /// - Starting program counter (`pc_start`)
+    ///
+    /// The program code commitment is itself a commitment (via the proof system PCS) to
+    /// the program code.
+    ///
+    /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
+    /// and a cryptographic compression function (for internal nodes).
+    ///
+    /// **Note**: This function recomputes the Merkle tree for the initial memory image.
+    pub fn compute_exe_commit(&self, memory_config: &MemoryConfig) -> Com<SC>
+    where
+        Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
+    {
+        let hasher = vm_poseidon2_hasher();
+        let memory_dimensions = memory_config.memory_dimensions();
+        let app_program_commit: &[Val<SC>; CHUNK] = self.committed_program.commitment.as_ref();
+        let mem_config = memory_config;
+        let init_memory_commit = MemoryNode::tree_from_memory(
+            memory_dimensions,
+            &AddressMap::from_iter(
+                mem_config.as_offset,
+                1 << mem_config.as_height,
+                1 << mem_config.pointer_max_bits,
+                self.exe.init_memory.clone(),
+            ),
+            &hasher,
+        )
+        .hash();
+        Com::<SC>::from(compute_exe_commit(
+            &hasher,
+            app_program_commit,
+            &init_memory_commit,
+            Val::<SC>::from_canonical_u32(self.exe.pc_start),
+        ))
     }
 }
 
@@ -86,6 +135,27 @@ impl<F: PrimeField64> ProgramChip<F> {
             )
         }
     }
+}
+
+/// Computes a Merklelized hash of:
+/// - Program code commitment (commitment of the cached trace)
+/// - Merkle root of the initial memory
+/// - Starting program counter (`pc_start`)
+///
+/// The Merklelization uses [Poseidon2Hasher] as a cryptographic hash function (for the leaves)
+/// and a cryptographic compression function (for internal nodes).
+pub fn compute_exe_commit<F: PrimeField32>(
+    hasher: &Poseidon2Hasher<F>,
+    program_commit: &[F; CHUNK],
+    init_memory_root: &[F; CHUNK],
+    pc_start: F,
+) -> [F; CHUNK] {
+    let mut padded_pc_start = [F::ZERO; CHUNK];
+    padded_pc_start[0] = pc_start;
+    let program_hash = hasher.hash(program_commit);
+    let memory_hash = hasher.hash(init_memory_root);
+    let pc_hash = hasher.hash(&padded_pc_start);
+    hasher.compress(&hasher.compress(&program_hash, &memory_hash), &pc_hash)
 }
 
 pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatrix<F> {

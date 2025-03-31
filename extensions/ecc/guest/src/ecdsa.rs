@@ -1,7 +1,8 @@
+use alloc::vec::Vec;
 use core::ops::{Add, AddAssign, Mul};
 
 use ecdsa::{self, hazmat::bits2field, Error, RecoveryId, Result};
-use elliptic_curve::PrimeCurve;
+use elliptic_curve::{sec1::Tag, PrimeCurve};
 use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
 
 use crate::{
@@ -25,15 +26,112 @@ pub struct PublicKey<C: IntrinsicCurve> {
     point: <C as IntrinsicCurve>::Point,
 }
 
-impl<C: IntrinsicCurve> PublicKey<C> {
-    pub fn into_inner(self) -> <C as IntrinsicCurve>::Point {
-        self.point
+impl<C: IntrinsicCurve> PublicKey<C>
+where
+    C::Point: WeierstrassPoint + Group + FromCompressed<Coordinate<C>>,
+    Coordinate<C>: IntMod,
+    for<'a> &'a Coordinate<C>: Mul<&'a Coordinate<C>, Output = Coordinate<C>>,
+{
+    pub fn new(point: <C as IntrinsicCurve>::Point) -> Self {
+        Self { point }
+    }
+
+    pub fn from_sec1_bytes(bytes: &[u8]) -> Result<Self> {
+        if bytes.is_empty() {
+            return Err(Error::new());
+        }
+
+        // Validate tag
+        let tag = Tag::from_u8(bytes[0]).unwrap();
+
+        // Validate length
+        let expected_len = tag.message_len(Coordinate::<C>::NUM_LIMBS);
+        if bytes.len() != expected_len {
+            return Err(Error::new());
+        }
+
+        match tag {
+            Tag::Identity => {
+                let point = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::IDENTITY;
+                Ok(Self { point })
+            }
+
+            Tag::CompressedEvenY | Tag::CompressedOddY => {
+                let x = Coordinate::<C>::from_be_bytes(&bytes[1..]);
+                let rec_id = bytes[0] & 1;
+                let point = FromCompressed::decompress(x, &rec_id).ok_or_else(Error::new)?;
+                Ok(Self { point })
+            }
+
+            Tag::Uncompressed => {
+                let (x_bytes, y_bytes) = bytes[1..].split_at(Coordinate::<C>::NUM_LIMBS);
+                let x = Coordinate::<C>::from_be_bytes(x_bytes);
+                let y = Coordinate::<C>::from_be_bytes(y_bytes);
+                let point = <C as IntrinsicCurve>::Point::from_xy(x, y).ok_or_else(Error::new)?;
+                Ok(Self { point })
+            }
+
+            _ => Err(Error::new()),
+        }
+    }
+
+    pub fn to_sec1_bytes(&self, compress: bool) -> Vec<u8> {
+        if self.point.is_identity() {
+            return vec![0x00];
+        }
+
+        let (x, y) = self.point.clone().into_coords();
+
+        if compress {
+            let mut bytes = Vec::<u8>::with_capacity(1 + Coordinate::<C>::NUM_LIMBS);
+            let tag = if y.as_le_bytes()[0] & 1 == 1 {
+                Tag::CompressedOddY
+            } else {
+                Tag::CompressedEvenY
+            };
+            bytes.push(tag.into());
+            bytes.extend_from_slice(x.to_be_bytes().as_ref());
+            bytes
+        } else {
+            let mut bytes = Vec::<u8>::with_capacity(1 + Coordinate::<C>::NUM_LIMBS * 2);
+            bytes.push(Tag::Uncompressed.into());
+            bytes.extend_from_slice(x.to_be_bytes().as_ref());
+            bytes.extend_from_slice(y.to_be_bytes().as_ref());
+            bytes
+        }
+    }
+
+    pub fn as_affine(&self) -> &<C as IntrinsicCurve>::Point {
+        &self.point
     }
 }
 
-impl<C: IntrinsicCurve> VerifyingKey<C> {
+impl<C: IntrinsicCurve> VerifyingKey<C>
+where
+    C::Point: WeierstrassPoint + Group + FromCompressed<Coordinate<C>>,
+    Coordinate<C>: IntMod,
+    for<'a> &'a Coordinate<C>: Mul<&'a Coordinate<C>, Output = Coordinate<C>>,
+{
+    pub fn new(public_key: PublicKey<C>) -> Self {
+        Self { inner: public_key }
+    }
+
+    pub fn from_sec1_bytes(bytes: &[u8]) -> Result<Self> {
+        let public_key = PublicKey::<C>::from_sec1_bytes(bytes)?;
+        Ok(Self::new(public_key))
+    }
+
+    pub fn from_affine(point: <C as IntrinsicCurve>::Point) -> Result<Self> {
+        let public_key = PublicKey::<C>::new(point);
+        Ok(Self::new(public_key))
+    }
+
+    pub fn to_sec1_bytes(&self, compress: bool) -> Vec<u8> {
+        self.inner.to_sec1_bytes(compress)
+    }
+
     pub fn as_affine(&self) -> &<C as IntrinsicCurve>::Point {
-        &self.inner.point
+        self.inner.as_affine()
     }
 }
 
@@ -55,7 +153,7 @@ where
         prehash: &[u8],
         sig: &[u8],
         recovery_id: RecoveryId,
-    ) -> VerifyingKey<C>
+    ) -> Result<Self>
     where
         for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
         for<'a> &'a Coordinate<C>: Mul<&'a Coordinate<C>, Output = Coordinate<C>>,
@@ -69,10 +167,12 @@ where
         // Note: Scalar internally stores using little endian
         let r = Scalar::<C>::from_be_bytes(r_be);
         let s = Scalar::<C>::from_be_bytes(s_be);
-        // The PartialEq implementation of Scalar: IntMod will constrain `r, s`
-        // are in the canonical unique form (i.e., less than the modulus).
-        assert_ne!(r, Scalar::<C>::ZERO);
-        assert_ne!(s, Scalar::<C>::ZERO);
+        if !r.is_reduced() || !s.is_reduced() {
+            return Err(Error::new());
+        }
+        if r == Scalar::<C>::ZERO || s == Scalar::<C>::ZERO {
+            return Err(Error::new());
+        }
 
         // Perf: don't use bits2field from ::ecdsa
         let z = Scalar::<C>::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
@@ -87,7 +187,7 @@ where
         }
         let rec_id = recovery_id.to_byte();
         // The point R decompressed from x-coordinate `r`
-        let R: C::Point = FromCompressed::decompress(x, &rec_id);
+        let R: C::Point = FromCompressed::decompress(x, &rec_id).ok_or_else(Error::new)?;
 
         let neg_u1 = z.div_unsafe(&r);
         let u2 = s.div_unsafe(&r);
@@ -95,7 +195,7 @@ where
         let point = <C as IntrinsicCurve>::msm(&[neg_u1, u2], &[NEG_G, R]);
         let public_key = PublicKey { point };
 
-        VerifyingKey { inner: public_key }
+        Ok(VerifyingKey { inner: public_key })
     }
 
     // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270
@@ -114,10 +214,12 @@ where
         // Note: Scalar internally stores using little endian
         let r = Scalar::<C>::from_be_bytes(r_be);
         let s = Scalar::<C>::from_be_bytes(s_be);
-        // The PartialEq implementation of Scalar: IntMod will constrain `r, s`
-        // are in the canonical unique form (i.e., less than the modulus).
-        assert_ne!(r, Scalar::<C>::ZERO);
-        assert_ne!(s, Scalar::<C>::ZERO);
+        if !r.is_reduced() || !s.is_reduced() {
+            return Err(Error::new());
+        }
+        if r == Scalar::<C>::ZERO || s == Scalar::<C>::ZERO {
+            return Err(Error::new());
+        }
 
         // Perf: don't use bits2field from ::ecdsa
         let z = <C as IntrinsicCurve>::Scalar::from_be_bytes(
@@ -135,6 +237,7 @@ where
             return Err(Error::new());
         }
         let (x_1, _) = R.into_coords();
+        // Scalar and Coordinate may be different byte lengths, so we use an inefficient reduction
         let x_mod_n = Scalar::<C>::reduce_le_bytes(x_1.as_le_bytes());
         if x_mod_n == r {
             Ok(())

@@ -1,0 +1,36 @@
+[workspace]
+[package]
+name = "openvm-kitchen-sink-program"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../crates/toolchain/openvm", default-features = false, features = [
+    "std",
+] }
+openvm-algebra-guest = { path = "../../../extensions/algebra/guest", default-features = false }
+openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false, features = [
+    "k256",
+    "p256",
+] }
+openvm-pairing-guest = { path = "../../../extensions/pairing/guest", default-features = false, features = [
+    "bn254",
+    "bls12_381",
+] }
+openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest", default-features = false }
+openvm-sha256-guest = { path = "../../../extensions/sha256/guest", default-features = false }
+openvm-bigint-guest = { path = "../../../extensions/bigint/guest", default-features = false }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+serde = "1.0"
+
+[features]
+default = []
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # faster compile time
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false

@@ -1,5 +1,5 @@
 use std::{
-    any::Any,
+    any::{Any, TypeId},
     cell::RefCell,
     iter::once,
     sync::{Arc, Mutex},
@@ -7,7 +7,7 @@ use std::{
 
 use derive_more::derive::From;
 use getset::Getters;
-use itertools::Itertools;
+use itertools::{zip_eq, Itertools};
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
@@ -15,34 +15,35 @@ use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
     program::Program, LocalOpcode, PhantomDiscriminant, PublishOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
+    interaction::{BusIndex, PermutationCheckBus},
+    keygen::types::LinearConstraint,
     p3_commit::PolynomialSpace,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32, TwoAdicField},
     p3_matrix::Matrix,
+    p3_util::log2_ceil_usize,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
-    AirRef, Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter,
 };
+use p3_baby_bear::BabyBear;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    vm_poseidon2_config, ExecutionBus, InstructionExecutor, PhantomSubExecutor, Streams,
-    SystemConfig, SystemTraceHeights,
+    vm_poseidon2_config, ExecutionBus, GenerationError, InstructionExecutor, PhantomSubExecutor,
+    Streams, SystemConfig, SystemTraceHeights,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::system::{
     connector::VmConnectorChip,
     memory::{
-        interface::MemoryInterface,
-        merkle::{DirectCompressionBus, MemoryMerkleBus},
         offline_checker::{MemoryBridge, MemoryBus},
-        online::MemoryLogEntry,
         MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
     },
     native_adapter::NativeAdapterChip,
@@ -65,11 +66,6 @@ pub const BOUNDARY_AIR_ID: usize = PUBLIC_VALUES_AIR_ID + 1 + BOUNDARY_AIR_OFFSE
 /// If VM has continuations enabled, all AIRs of MemoryController are added after ConnectorChip.
 /// Merkle AIR commits start/final memory states.
 pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
-
-const EXECUTION_BUS: ExecutionBus = ExecutionBus(0);
-const MEMORY_BUS: MemoryBus = MemoryBus(1);
-const PROGRAM_BUS: ProgramBus = ProgramBus(2);
-const RANGE_CHECKER_BUS: usize = 3;
 
 /// Configuration for a processor extension.
 ///
@@ -121,8 +117,7 @@ pub struct VmInventoryBuilder<'a, F: PrimeField32> {
     system_config: &'a SystemConfig,
     system: &'a SystemBase<F>,
     streams: &'a Arc<Mutex<Streams<F>>>,
-    /// Bus indices are in range [0, bus_idx_max)
-    bus_idx_max: usize,
+    bus_idx_mgr: BusIndexManager,
     /// Chips that are already included in the chipset and may be used
     /// as dependencies. The order should be that depended-on chips are ordered
     /// **before** their dependents.
@@ -134,13 +129,13 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
         system_config: &'a SystemConfig,
         system: &'a SystemBase<F>,
         streams: &'a Arc<Mutex<Streams<F>>>,
-        bus_idx_max: usize,
+        bus_idx_mgr: BusIndexManager,
     ) -> Self {
         Self {
             system_config,
             system,
             streams,
-            bus_idx_max,
+            bus_idx_mgr,
             chips: Vec::new(),
         }
     }
@@ -161,10 +156,8 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
         }
     }
 
-    pub fn new_bus_idx(&mut self) -> usize {
-        let idx = self.bus_idx_max;
-        self.bus_idx_max += 1;
-        idx
+    pub fn new_bus_idx(&mut self) -> BusIndex {
+        self.bus_idx_mgr.new_bus_idx()
     }
 
     /// Looks through built chips to see if there exists any of type `C` by downcasting.
@@ -208,19 +201,11 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
 pub struct VmInventory<E, P> {
     /// Lookup table to executor ID. We store executors separately due to mutable borrow issues.
     instruction_lookup: FxHashMap<VmOpcode, ExecutorId>,
-    executors: Vec<E>,
-    pub(super) periphery: Vec<P>,
+    pub executors: Vec<E>,
+    pub periphery: Vec<P>,
     /// Order of insertion. The reverse of this will be the order the chips are destroyed
     /// to generate trace.
     insertion_order: Vec<ChipId>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct VmInventoryState {
-    /// Executor states in order
-    executors: Vec<Vec<u8>>,
-    /// Periphery states in order
-    periphery: Vec<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -406,26 +391,6 @@ impl<E, P> VmInventory<E, P> {
     }
 }
 
-impl<E: Stateful<Vec<u8>>, P: Stateful<Vec<u8>>> Stateful<VmInventoryState> for VmInventory<E, P> {
-    fn load_state(&mut self, state: VmInventoryState) {
-        for (e, s) in self.executors.iter_mut().zip_eq(state.executors) {
-            e.load_state(s)
-        }
-        for (p, s) in self.periphery.iter_mut().zip_eq(state.periphery) {
-            p.load_state(s)
-        }
-    }
-
-    fn store_state(&self) -> VmInventoryState {
-        let executors = self.executors.iter().map(|e| e.store_state()).collect();
-        let periphery = self.periphery.iter().map(|p| p.store_state()).collect();
-        VmInventoryState {
-            executors,
-            periphery,
-        }
-    }
-}
-
 impl VmInventoryTraceHeights {
     /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
     pub fn round_to_next_power_of_two(&mut self) {
@@ -472,15 +437,29 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     pub inventory: VmInventory<E, P>,
     overridden_inventory_heights: Option<VmInventoryTraceHeights>,
 
+    /// Absolute maximum value a trace height can be and still be provable.
+    max_trace_height: usize,
+
     streams: Arc<Mutex<Streams<F>>>,
-    /// System buses use indices [0, bus_idx_max)
-    bus_idx_max: usize,
+    bus_idx_mgr: BusIndexManager,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct VmChipComplexState<F> {
-    base: SystemBaseState<F>,
-    inventory: VmInventoryState,
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BusIndexManager {
+    /// All existing buses use indices in [0, bus_idx_max)
+    bus_idx_max: BusIndex,
+}
+
+impl BusIndexManager {
+    pub fn new() -> Self {
+        Self { bus_idx_max: 0 }
+    }
+
+    pub fn new_bus_idx(&mut self) -> BusIndex {
+        let idx = self.bus_idx_max;
+        self.bus_idx_max = self.bus_idx_max.checked_add(1).unwrap();
+        idx
+    }
 }
 
 /// The base [VmChipComplex] with only system chips.
@@ -497,26 +476,17 @@ pub struct SystemBase<F> {
     pub program_chip: ProgramChip<F>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct SystemBaseState<F> {
-    pub range_checker_chip: Vec<u8>,
-    pub initial_memory: Option<MemoryImage<F>>,
-    pub memory_logs: Vec<MemoryLogEntry<F>>,
-    pub connector_chip: Vec<u8>,
-    pub program_chip: Vec<u8>,
-}
-
 impl<F: PrimeField32> SystemBase<F> {
     pub fn range_checker_bus(&self) -> VariableRangeCheckerBus {
         self.range_checker_chip.bus()
     }
 
     pub fn memory_bus(&self) -> MemoryBus {
-        MEMORY_BUS
+        self.memory_controller.memory_bus
     }
 
     pub fn program_bus(&self) -> ProgramBus {
-        PROGRAM_BUS
+        self.program_chip.air.bus
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {
@@ -528,7 +498,7 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 
     pub fn execution_bus(&self) -> ExecutionBus {
-        EXECUTION_BUS
+        self.connector_chip.air.execution_bus
     }
 
     /// Return trace heights of SystemBase. Usually this is for aggregation and not useful for
@@ -548,37 +518,13 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 }
 
-impl<F: PrimeField32> Stateful<SystemBaseState<F>> for SystemBase<F> {
-    fn load_state(&mut self, state: SystemBaseState<F>) {
-        self.range_checker_chip.load_state(state.range_checker_chip);
-        if let Some(initial_memory) = state.initial_memory {
-            self.memory_controller.set_initial_memory(initial_memory);
-        }
-        self.memory_controller.set_memory_logs(state.memory_logs);
-        self.connector_chip.load_state(state.connector_chip);
-        self.program_chip.load_state(state.program_chip);
-    }
-    fn store_state(&self) -> SystemBaseState<F> {
-        SystemBaseState {
-            range_checker_chip: self.range_checker_chip.store_state(),
-            initial_memory: match &self.memory_controller.interface_chip {
-                MemoryInterface::Volatile { .. } => None,
-                MemoryInterface::Persistent { initial_memory, .. } => Some(initial_memory.clone()),
-            },
-            memory_logs: self.memory_controller.get_memory_logs(),
-            connector_chip: self.connector_chip.store_state(),
-            program_chip: self.program_chip.store_state(),
-        }
-    }
-}
-
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
     Phantom(RefCell<PhantomChip<F>>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, BytesStateful)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum SystemPeriphery<F: PrimeField32> {
     /// Poseidon2 chip with direct compression interactions
     Poseidon2(Poseidon2PeripheryChip<F>),
@@ -586,38 +532,45 @@ pub enum SystemPeriphery<F: PrimeField32> {
 
 impl<F: PrimeField32> SystemComplex<F> {
     pub fn new(config: SystemConfig) -> Self {
+        let mut bus_idx_mgr = BusIndexManager::new();
+        let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
+        let memory_bus = MemoryBus::new(bus_idx_mgr.new_bus_idx());
+        let program_bus = ProgramBus::new(bus_idx_mgr.new_bus_idx());
         let range_bus =
-            VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
-        let mut bus_idx_max = RANGE_CHECKER_BUS;
+            VariableRangeCheckerBus::new(bus_idx_mgr.new_bus_idx(), config.memory_config.decomp);
 
         let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
         let memory_controller = if config.continuation_enabled {
-            bus_idx_max += 2;
             MemoryController::with_persistent_memory(
-                MEMORY_BUS,
+                memory_bus,
                 config.memory_config,
                 range_checker.clone(),
-                MemoryMerkleBus(bus_idx_max - 2),
-                DirectCompressionBus(bus_idx_max - 1),
+                PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
+                PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
             )
         } else {
             MemoryController::with_volatile_memory(
-                MEMORY_BUS,
+                memory_bus,
                 config.memory_config,
                 range_checker.clone(),
             )
         };
         let memory_bridge = memory_controller.memory_bridge();
         let offline_memory = memory_controller.offline_memory();
-        let program_chip = ProgramChip::new(PROGRAM_BUS);
-        let connector_chip = VmConnectorChip::new(EXECUTION_BUS, PROGRAM_BUS);
+        let program_chip = ProgramChip::new(program_bus);
+        let connector_chip = VmConnectorChip::new(
+            execution_bus,
+            program_bus,
+            range_checker.clone(),
+            config.memory_config.clk_max_bits,
+        );
 
         let mut inventory = VmInventory::new();
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
         if config.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
             let chip = PublicValuesChip::new(
-                NativeAdapterChip::new(EXECUTION_BUS, PROGRAM_BUS, memory_bridge),
+                NativeAdapterChip::new(execution_bus, program_bus, memory_bridge),
                 PublicValuesCoreChip::new(
                     config.num_public_values,
                     config.max_constraint_degree as u32 - 1,
@@ -638,7 +591,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 .interface_chip
                 .compression_bus()
                 .unwrap()
-                .0;
+                .index;
             let chip = Poseidon2PeripheryChip::new(
                 vm_poseidon2_config(),
                 direct_bus_idx,
@@ -649,7 +602,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         let streams = Arc::new(Mutex::new(Streams::default()));
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
         let mut phantom_chip =
-            PhantomChip::new(EXECUTION_BUS, PROGRAM_BUS, SystemOpcode::CLASS_OFFSET);
+            PhantomChip::new(execution_bus, program_bus, SystemOpcode::CLASS_OFFSET);
         phantom_chip.set_streams(streams.clone());
         inventory
             .add_executor(RefCell::new(phantom_chip), [phantom_opcode])
@@ -662,13 +615,24 @@ impl<F: PrimeField32> SystemComplex<F> {
             range_checker_chip: range_checker,
         };
 
+        let max_trace_height = if TypeId::of::<F>() == TypeId::of::<BabyBear>() {
+            let min_log_blowup = log2_ceil_usize(config.max_constraint_degree - 1);
+            1 << (BabyBear::TWO_ADICITY - min_log_blowup)
+        } else {
+            tracing::warn!(
+                "constructing SystemComplex for unrecognized field; using max_trace_height = 2^30"
+            );
+            1 << 30
+        };
+
         Self {
             config,
             base,
             inventory,
-            bus_idx_max,
+            bus_idx_mgr,
             streams,
             overridden_inventory_heights: None,
+            max_trace_height,
         }
     }
 }
@@ -679,14 +643,14 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     /// **If** internal poseidon2 chip exists, then its periphery index is 0.
     pub(super) const POSEIDON2_PERIPHERY_IDX: usize = 0;
 
-    // @dev: Remember to update self.bus_idx_max after dropping this!
+    // @dev: Remember to update self.bus_idx_mgr after dropping this!
     pub fn inventory_builder(&self) -> VmInventoryBuilder<F>
     where
         E: AnyEnum,
         P: AnyEnum,
     {
         let mut builder =
-            VmInventoryBuilder::new(&self.config, &self.base, &self.streams, self.bus_idx_max);
+            VmInventoryBuilder::new(&self.config, &self.base, &self.streams, self.bus_idx_mgr);
         // Add range checker for convenience, the other system base chips aren't included - they can be accessed directly from builder
         builder.add_chip(&self.base.range_checker_chip);
         for chip in self.inventory.executors() {
@@ -714,7 +678,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     {
         let mut builder = self.inventory_builder();
         let inventory_ext = config.build(&mut builder)?;
-        self.bus_idx_max = builder.bus_idx_max;
+        self.bus_idx_mgr = builder.bus_idx_mgr;
         let mut ext_complex = self.transmute();
         ext_complex.append(inventory_ext.transmute())?;
         Ok(ext_complex)
@@ -729,9 +693,10 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             config: self.config,
             base: self.base,
             inventory: self.inventory.transmute(),
-            bus_idx_max: self.bus_idx_max,
+            bus_idx_mgr: self.bus_idx_mgr,
             streams: self.streams,
             overridden_inventory_heights: self.overridden_inventory_heights,
+            max_trace_height: self.max_trace_height,
         }
     }
 
@@ -979,20 +944,23 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     /// Return trace cells of all chips in order.
+    /// This returns 0 cells for chips with preprocessed trace because the number of trace cells is constant in those cases.
+    /// This function is used to sample periodically and provided to the segmentation strategy to decide whether to segment during execution.
     pub(crate) fn current_trace_cells(&self) -> Vec<usize>
     where
         E: ChipUsageGetter,
         P: ChipUsageGetter,
     {
-        once(self.program_chip().current_trace_cells())
-            .chain([self.connector_chip().current_trace_cells()])
+        // program_chip, connector_chip
+        [0, 0]
+            .into_iter()
             .chain(self._public_values_chip().map(|c| c.current_trace_cells()))
             .chain(self.memory_controller().current_trace_cells())
             .chain(
                 self.chips_excluding_pv_chip()
                     .map(|c| c.current_trace_cells()),
             )
-            .chain([self.range_checker_chip().current_trace_cells()])
+            .chain([0]) // range_checker_chip
             .collect()
     }
 
@@ -1020,8 +988,9 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
         mut self,
         cached_program: Option<CommittedTraceData<SC>>,
+        trace_height_constraints: &[LinearConstraint],
         #[cfg(feature = "bench-metrics")] metrics: &mut VmMetrics,
-    ) -> ProofInput<SC>
+    ) -> Result<ProofInput<SC>, GenerationError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         E: Chip<SC>,
@@ -1029,6 +998,43 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     {
         // System: Finalize memory.
         self.finalize_memory();
+
+        let trace_heights = self
+            .current_trace_heights()
+            .iter()
+            .map(|h| next_power_of_two_or_zero(*h))
+            .collect_vec();
+        if let Some(index) = trace_heights
+            .iter()
+            .position(|h| *h > self.max_trace_height)
+        {
+            tracing::info!(
+                "trace height of air {index} has height {} greater than maximum {}",
+                trace_heights[index],
+                self.max_trace_height
+            );
+            return Err(GenerationError::TraceHeightsLimitExceeded);
+        }
+        if trace_height_constraints.is_empty() {
+            tracing::warn!("generating proof input without trace height constraints");
+        }
+        for (i, constraint) in trace_height_constraints.iter().enumerate() {
+            let value = zip_eq(&constraint.coefficients, &trace_heights)
+                .map(|(&c, &h)| c as u64 * h as u64)
+                .sum::<u64>();
+
+            if value >= constraint.threshold as u64 {
+                tracing::info!(
+                    "trace heights {:?} violate linear constraint {} ({} >= {})",
+                    trace_heights,
+                    i,
+                    value,
+                    constraint.threshold
+                );
+                return Err(GenerationError::TraceHeightsLimitExceeded);
+            }
+        }
+
         #[cfg(feature = "bench-metrics")]
         self.finalize_metrics(metrics);
 
@@ -1100,7 +1106,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         // System: Range Checker Chip
         builder.add_air_proof_input(range_checker_chip.generate_air_proof_input());
 
-        builder.build()
+        Ok(builder.build())
     }
 
     #[cfg(feature = "bench-metrics")]
@@ -1118,22 +1124,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             metrics.chip_heights =
                 itertools::izip!(self.air_names(), self.current_trace_heights()).collect();
             metrics.emit();
-        }
-    }
-}
-
-impl<F: PrimeField32, E: Stateful<Vec<u8>>, P: Stateful<Vec<u8>>> Stateful<VmChipComplexState<F>>
-    for VmChipComplex<F, E, P>
-{
-    fn load_state(&mut self, state: VmChipComplexState<F>) {
-        self.base.load_state(state.base);
-        self.inventory.load_state(state.inventory);
-    }
-
-    fn store_state(&self) -> VmChipComplexState<F> {
-        VmChipComplexState {
-            base: self.base.store_state(),
-            inventory: self.inventory.store_state(),
         }
     }
 }
@@ -1262,7 +1252,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use p3_baby_bear::BabyBear;
+
     use super::*;
+    use crate::system::memory::interface::MemoryInterface;
 
     #[allow(dead_code)]
     #[derive(Copy, Clone)]
@@ -1331,5 +1324,22 @@ mod tests {
         assert_eq!(d.as_any_kind().downcast_ref::<u8>(), Some(&1));
         let e = EnumC::C(3);
         assert_eq!(e.as_any_kind().downcast_ref::<u64>(), Some(&3));
+    }
+
+    #[test]
+    fn test_system_bus_indices() {
+        let config = SystemConfig::default().with_continuations();
+        let complex = SystemComplex::<BabyBear>::new(config);
+        assert_eq!(complex.base.execution_bus().index(), 0);
+        assert_eq!(complex.base.memory_bus().index(), 1);
+        assert_eq!(complex.base.program_bus().index(), 2);
+        assert_eq!(complex.base.range_checker_bus().index(), 3);
+        match &complex.memory_controller().interface_chip {
+            MemoryInterface::Persistent { boundary_chip, .. } => {
+                assert_eq!(boundary_chip.air.merkle_bus.index, 4);
+                assert_eq!(boundary_chip.air.compression_bus.index, 5);
+            }
+            _ => unreachable!(),
+        };
     }
 }

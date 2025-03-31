@@ -8,8 +8,8 @@ use std::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    interaction::InteractionBuilder,
-    p3_air::{Air, BaseAir},
+    interaction::{InteractionBuilder, PermutationCheckBus},
+    p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
@@ -19,12 +19,12 @@ use openvm_stark_backend::{
 };
 use rustc_hash::FxHashSet;
 
-use super::merkle::{DirectCompressionBus, SerialReceiver};
+use super::merkle::SerialReceiver;
 use crate::{
     arch::hasher::Hasher,
     system::memory::{
-        dimensions::MemoryDimensions, merkle::MemoryMerkleBus, offline_checker::MemoryBus,
-        MemoryAddress, MemoryImage, TimestampedEquipartition, INITIAL_TIMESTAMP,
+        dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
+        TimestampedEquipartition, INITIAL_TIMESTAMP,
     },
 };
 
@@ -54,8 +54,8 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
 pub struct PersistentBoundaryAir<const CHUNK: usize> {
     pub memory_dims: MemoryDimensions,
     pub memory_bus: MemoryBus,
-    pub merkle_bus: MemoryMerkleBus,
-    pub compression_bus: DirectCompressionBus,
+    pub merkle_bus: PermutationCheckBus,
+    pub compression_bus: PermutationCheckBus,
 }
 
 impl<const CHUNK: usize, F> BaseAir<F> for PersistentBoundaryAir<CHUNK> {
@@ -79,6 +79,13 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             local.expand_direction * local.expand_direction * local.expand_direction,
         );
 
+        // Constrain that an "initial" row has timestamp zero.
+        // Since `direction` is constrained to be in {-1, 0, 1}, we can select `direction == 1`
+        // with the constraint below.
+        builder
+            .when(local.expand_direction * (local.expand_direction + AB::F::ONE))
+            .assert_zero(local.timestamp);
+
         let mut expand_fields = vec![
             // direction =  1 => is_final = 0
             // direction = -1 => is_final = 1
@@ -88,14 +95,11 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             local.leaf_label.into(),
         ];
         expand_fields.extend(local.hash.map(Into::into));
-        builder.push_send(
-            self.merkle_bus.0,
-            expand_fields,
-            local.expand_direction.into(),
-        );
+        self.merkle_bus
+            .interact(builder, expand_fields, local.expand_direction.into());
 
-        builder.push_send(
-            self.compression_bus.0,
+        self.compression_bus.interact(
+            builder,
             iter::empty()
                 .chain(local.values.map(Into::into))
                 .chain(iter::repeat(AB::Expr::ZERO).take(CHUNK))
@@ -166,8 +170,8 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     pub fn new(
         memory_dimensions: MemoryDimensions,
         memory_bus: MemoryBus,
-        merkle_bus: MemoryMerkleBus,
-        compression_bus: DirectCompressionBus,
+        merkle_bus: PermutationCheckBus,
+        compression_bus: PermutationCheckBus,
     ) -> Self {
         Self {
             air: PersistentBoundaryAir {

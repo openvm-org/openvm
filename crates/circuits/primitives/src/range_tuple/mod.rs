@@ -5,13 +5,10 @@
 
 use std::{
     mem::size_of,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc,
-    },
+    sync::{atomic::AtomicU32, Arc},
 };
 
-use itertools::Itertools;
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -20,7 +17,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter,
 };
 
 mod bus;
@@ -30,13 +27,16 @@ pub mod tests;
 
 pub use bus::*;
 
-#[derive(Default, Copy, Clone)]
+#[repr(C)]
+#[derive(Default, Copy, Clone, AlignedBorrow)]
 pub struct RangeTupleCols<T> {
+    /// Number of range checks requested for each tuple combination
     pub mult: T,
 }
 
 #[derive(Default, Clone)]
 pub struct RangeTuplePreprocessedCols<T> {
+    /// Contains all possible tuple combinations within specified ranges
     pub tuple: Vec<T>,
 }
 
@@ -101,7 +101,7 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
 #[derive(Debug)]
 pub struct RangeTupleCheckerChip<const N: usize> {
     pub air: RangeTupleCheckerAir<N>,
-    count: Vec<Arc<AtomicU32>>,
+    pub count: Vec<Arc<AtomicU32>>,
 }
 
 #[derive(Debug, Clone)]
@@ -240,15 +240,8 @@ impl<const N: usize> ChipUsageGetter for SharedRangeTupleCheckerChip<N> {
     }
 }
 
-impl<const N: usize> Stateful<Vec<u8>> for SharedRangeTupleCheckerChip<N> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        let vals: Vec<u32> = bitcode::deserialize(&state).unwrap();
-        for (x, v) in self.0.count.iter().zip_eq(vals) {
-            x.store(v, Ordering::Relaxed);
-        }
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.0.count).unwrap()
+impl<const N: usize> AsRef<RangeTupleCheckerChip<N>> for SharedRangeTupleCheckerChip<N> {
+    fn as_ref(&self) -> &RangeTupleCheckerChip<N> {
+        &self.0
     }
 }

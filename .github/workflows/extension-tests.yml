@@ -9,6 +9,7 @@ on:
       - "crates/circuits/**"
       - "crates/vm/**"
       - "extensions/**"
+      - "Cargo.toml"
       - ".github/workflows/extension-tests.yml"
 
 concurrency:
@@ -75,6 +76,8 @@ jobs:
           FEATURE_ARGS=""
           if [[ "${{ matrix.extension.name }}" == "pairing" ]]; then
             FEATURE_ARGS="--features=bn254,bls12_381,halo2curves"
+          elif [[ "${{ matrix.extension.name }}" == "ecc" ]]; then
+            FEATURE_ARGS="--features=k256,p256"
           fi
           cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass
 
@@ -82,5 +85,5 @@ jobs:
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
-          rustup component add rust-src --toolchain nightly-2024-10-30
+          rustup component add rust-src --toolchain nightly-2025-02-14
           cargo nextest run --cargo-profile=fast --no-tests=pass

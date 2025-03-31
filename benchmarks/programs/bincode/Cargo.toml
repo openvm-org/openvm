@@ -5,7 +5,7 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-openvm = { path = "../../../crates/toolchain/openvm" }
+openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
 bincode = { version = "2.0.0-rc.3", default-features = false, features = [
     "derive",
     "alloc",
@@ -16,7 +16,6 @@ rand_pcg = "0.3.1"
 
 [features]
 default = []
-std = ["openvm/std"]
 
 [profile.profiling]
 inherits = "release"

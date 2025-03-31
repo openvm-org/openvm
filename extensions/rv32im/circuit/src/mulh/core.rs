@@ -219,6 +219,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCoreChip<NUM_LIMBS, LIM
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MulHCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode: MulHOpcode,

@@ -6,10 +6,16 @@ use openvm_circuit::{
             exe::VmExe, instruction::Instruction, program::Program, LocalOpcode,
             SystemOpcode::TERMINATE,
         },
-        SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights, VmConfig, VmExecutor,
+        ContinuationVmProof, SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights,
+        VmConfig, VmExecutor,
     },
     system::program::trace::VmCommittedExe,
     utils::next_power_of_two_or_zero,
+};
+use openvm_continuations::verifier::{
+    internal::types::InternalVmVerifierInput,
+    leaf::{types::LeafVmVerifierInput, LeafVmVerifierConfig},
+    root::types::RootVmVerifierInput,
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
@@ -28,13 +34,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     prover::vm::{
-        local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
-        SingleSegmentVmProver,
-    },
-    verifier::{
-        internal::types::InternalVmVerifierInput,
-        leaf::{types::LeafVmVerifierInput, LeafVmVerifierConfig},
-        root::types::RootVmVerifierInput,
+        local::VmLocalProver, types::VmProvingKey, ContinuationVmProver, SingleSegmentVmProver,
     },
     NonRootCommittedExe, F, SC,
 };

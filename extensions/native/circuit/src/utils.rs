@@ -13,3 +13,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Strea
 
     executor.execute(program, input_stream).unwrap();
 }
+
+pub(crate) const fn const_max(a: usize, b: usize) -> usize {
+    [a, b][(a < b) as usize]
+}

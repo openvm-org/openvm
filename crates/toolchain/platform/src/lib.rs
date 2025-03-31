@@ -1,5 +1,5 @@
 #![doc = include_str!("../README.md")]
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![allow(unused_variables)]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
@@ -13,6 +13,7 @@ pub mod heap;
 #[cfg(all(feature = "export-libm", target_os = "zkvm"))]
 mod libm_extern;
 pub mod memory;
+pub mod print;
 #[cfg(feature = "rust-runtime")]
 pub mod rust_rt;
 

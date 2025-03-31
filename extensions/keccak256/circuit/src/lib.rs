@@ -7,7 +7,7 @@ use std::{
 };
 
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
-use openvm_stark_backend::{p3_field::PrimeField32, Stateful};
+use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use tiny_keccak::{Hasher, Keccak};
@@ -80,7 +80,7 @@ pub struct KeccakVmChip<F: PrimeField32> {
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct KeccakRecord<F> {
     pub pc: F,
     pub dst_read: RecordId,
@@ -90,7 +90,7 @@ pub struct KeccakRecord<F> {
     pub digest_writes: [RecordId; KECCAK_DIGEST_WRITES],
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct KeccakInputBlock {
     /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES / KECCAK_WORD_SIZE].
     pub reads: Vec<RecordId>,
@@ -281,15 +281,5 @@ impl Default for KeccakInputBlock {
             reads: Vec::new(),
             src: 0,
         }
-    }
-}
-
-impl<F: PrimeField32> Stateful<Vec<u8>> for KeccakVmChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
     }
 }

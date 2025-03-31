@@ -7,6 +7,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
+    interaction::BusIndex,
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -21,7 +22,7 @@ use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreChip, Rv32AuipcCoreCols};
 use crate::adapters::{Rv32RdWriteAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
 const IMM_BITS: usize = 24;
-const BITWISE_OP_LOOKUP_BUS: usize = 9;
+const BITWISE_OP_LOOKUP_BUS: BusIndex = 9;
 
 type F = BabyBear;
 
@@ -93,7 +94,7 @@ fn run_negative_auipc_test(
     initial_pc: Option<u32>,
     rd_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm_limbs: Option<[u32; RV32_REGISTER_NUM_LIMBS - 1]>,
-    pc_limbs: Option<[u32; RV32_REGISTER_NUM_LIMBS - 1]>,
+    pc_limbs: Option<[u32; RV32_REGISTER_NUM_LIMBS - 2]>,
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
@@ -167,11 +168,20 @@ fn invalid_limb_negative_tests() {
     );
     run_negative_auipc_test(
         AUIPC,
+        Some(0),
+        Some(2110400),
+        Some([194, 51, 32, 240]),
+        None,
+        Some([51, 32]),
+        VerificationError::ChallengePhaseError,
+    );
+    run_negative_auipc_test(
+        AUIPC,
         None,
         None,
         None,
         None,
-        Some([206, 166, 133]),
+        Some([206, 166]),
         VerificationError::OodEvaluationMismatch,
     );
     run_negative_auipc_test(
@@ -190,7 +200,7 @@ fn invalid_limb_negative_tests() {
         Some(876487877),
         Some([197, 202, 49, 70]),
         Some([166, 243, 17]),
-        Some([36, 62, 52]),
+        Some([36, 62]),
         VerificationError::ChallengePhaseError,
     );
 }
@@ -212,7 +222,7 @@ fn overflow_negative_tests() {
         None,
         None,
         None,
-        Some([0, 0, 0]),
+        Some([0, 0]),
         VerificationError::OodEvaluationMismatch,
     );
     run_negative_auipc_test(
@@ -230,7 +240,7 @@ fn overflow_negative_tests() {
         Some(255),
         Some([F::NEG_ONE.as_canonical_u32(), 1, 0, 0]),
         Some([0, 0, 0]),
-        Some([1, 0, 0]),
+        Some([1, 0]),
         VerificationError::ChallengePhaseError,
     );
 }

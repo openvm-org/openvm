@@ -172,7 +172,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         let (rd_record, rd_val) = read_rv32_register(memory, d, a);
 
         let read_records = rs_vals.map(|address| {
-            debug_assert!(address < (1 << self.air.address_bits));
+            debug_assert!(address as usize + READ_SIZE - 1 < (1 << self.air.address_bits));
             [memory.read::<READ_SIZE>(e, F::from_canonical_u32(address))]
         });
         let read_data = read_records.map(|r| r[0].1);

@@ -61,6 +61,8 @@ where
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &CastFCoreCols<_> = local_core.borrow();
 
+        builder.assert_bool(cols.is_valid);
+
         let intermed_val = cols
             .out_val
             .iter()
@@ -101,6 +103,7 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CastFRecord<F> {
     pub in_val: F,

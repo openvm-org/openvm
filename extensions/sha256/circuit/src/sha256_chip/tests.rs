@@ -8,7 +8,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_sha256_air::get_random_message;
 use openvm_sha256_transpiler::Rv32Sha256Opcode::{self, *};
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
@@ -16,7 +16,7 @@ use super::Sha256VmChip;
 use crate::{sha256_solve, Sha256VmDigestCols, Sha256VmRoundCols};
 
 type F = BabyBear;
-const BUS_IDX: usize = 28;
+const BUS_IDX: BusIndex = 28;
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Sha256VmChip<F>,

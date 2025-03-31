@@ -127,6 +127,10 @@ pub enum AsmInstruction<F, EF> {
     /// opened values are extension field elements
     VerifyBatchExt(i32, i32, i32, i32, i32, i32),
 
+    /// (v, x_bit, y_bit)
+    /// Assert that v = x + y * 2^16 where x < 2^x_bit and y < 2^y_bit.
+    RangeCheck(i32, i32, i32),
+
     /// Print a variable.
     PrintV(i32),
 
@@ -384,6 +388,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                     "verify_batch_ext ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
                     dim, opened, opened_length, sibling, index, commit
                 )
+            }
+            AsmInstruction::RangeCheck(fp, lo_bits, hi_bits) => {
+                write!(f, "range_check_fp ({})fp, ({}), ({})", fp, lo_bits, hi_bits)
             }
         }
     }

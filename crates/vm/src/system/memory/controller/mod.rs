@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use getset::Getters;
+use getset::{Getters, MutGetters};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_zero::IsZeroSubAir,
@@ -17,10 +17,11 @@ use openvm_circuit_primitives::{
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
+    interaction::PermutationCheckBus,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
-    p3_util::log2_strict_usize,
+    p3_util::{log2_ceil_usize, log2_strict_usize},
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
 };
@@ -28,7 +29,6 @@ use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{
-    merkle::{DirectCompressionBus, SerialReceiver},
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
 };
@@ -37,7 +37,7 @@ use crate::{
     system::memory::{
         adapter::AccessAdapterInventory,
         dimensions::MemoryDimensions,
-        merkle::{MemoryMerkleBus, MemoryMerkleChip},
+        merkle::{MemoryMerkleChip, SerialReceiver},
         offline::{MemoryRecord, OfflineMemory, INITIAL_TIMESTAMP},
         offline_checker::{
             MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
@@ -58,11 +58,13 @@ pub const MERKLE_AIR_OFFSET: usize = 1;
 /// The offset of the boundary AIR in AIRs of MemoryController.
 pub const BOUNDARY_AIR_OFFSET: usize = 0;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordId(pub usize);
 
 pub type MemoryImage<F> = AddressMap<F, PAGE_SIZE>;
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimestampedValues<T, const N: usize> {
     pub timestamp: u32,
@@ -86,25 +88,20 @@ pub type TimestampedEquipartition<F, const N: usize> =
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
 pub type Equipartition<F, const N: usize> = BTreeMap<(u32, u32), [F; N]>;
 
-#[derive(Getters)]
+#[derive(Getters, MutGetters)]
 pub struct MemoryController<F> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
-
     #[getset(get = "pub")]
     pub(crate) mem_config: MemoryConfig,
     pub range_checker: SharedVariableRangeCheckerChip,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
-
     // addr_space -> Memory data structure
     memory: Memory<F>,
-
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-
-    access_adapters: AccessAdapterInventory<F>,
-
+    pub access_adapters: AccessAdapterInventory<F>,
     // Filled during finalization.
     final_state: Option<FinalState<F>>,
 }
@@ -230,13 +227,18 @@ impl<F: PrimeField32> MemoryController<F> {
     ) -> Self {
         let range_checker_bus = range_checker.bus();
         let initial_memory = AddressMap::from_mem_config(&mem_config);
+        assert!(mem_config.pointer_max_bits <= F::bits() - 2);
+        assert!(mem_config.as_height < F::bits() - 2);
+        let addr_space_max_bits = log2_ceil_usize(
+            (mem_config.as_offset + 2u32.pow(mem_config.as_height as u32)) as usize,
+        );
         Self {
             memory_bus,
             mem_config,
             interface_chip: MemoryInterface::Volatile {
                 boundary_chip: VolatileBoundaryChip::new(
                     memory_bus,
-                    mem_config.as_height,
+                    addr_space_max_bits,
                     mem_config.pointer_max_bits,
                     range_checker.clone(),
                 ),
@@ -268,9 +270,10 @@ impl<F: PrimeField32> MemoryController<F> {
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: SharedVariableRangeCheckerChip,
-        merkle_bus: MemoryMerkleBus,
-        compression_bus: DirectCompressionBus,
+        merkle_bus: PermutationCheckBus,
+        compression_bus: PermutationCheckBus,
     ) -> Self {
+        assert_eq!(mem_config.as_offset, 1);
         let memory_dims = MemoryDimensions {
             as_height: mem_config.as_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
@@ -453,6 +456,13 @@ impl<F: PrimeField32> MemoryController<F> {
 
     fn replay_access_log(&mut self) {
         let log = mem::take(&mut self.memory.log);
+        if log.is_empty() {
+            // Online memory logs may be empty, but offline memory may be replayed from external sources.
+            // In these cases, we skip the calls to replay access logs because `set_log_capacity` would
+            // panic.
+            tracing::debug!("skipping replay_access_log");
+            return;
+        }
 
         let mut offline_memory = self.offline_memory.lock().unwrap();
         offline_memory.set_log_capacity(log.len());
@@ -467,7 +477,8 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    fn replay_access(
+    /// Low-level API to replay a single memory access log entry and populate the [OfflineMemory], [MemoryInterface], and `AccessAdapterInventory`.
+    pub fn replay_access(
         entry: MemoryLogEntry<F>,
         offline_memory: &mut OfflineMemory<F>,
         interface_chip: &mut MemoryInterface<F>,
@@ -644,6 +655,7 @@ impl<F: PrimeField32> MemoryController<F> {
             }),
         }
     }
+
     pub fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
         let access_adapters = vec![1; self.access_adapters.num_access_adapters()];
         match &self.interface_chip {
@@ -691,11 +703,14 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
         self.offline_memory.clone()
     }
-    pub fn get_memory_logs(&self) -> Vec<MemoryLogEntry<F>> {
-        self.memory.log.clone()
+    pub fn get_memory_logs(&self) -> &Vec<MemoryLogEntry<F>> {
+        &self.memory.log
     }
     pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {
         self.memory.log = logs;
+    }
+    pub fn take_memory_logs(&mut self) -> Vec<MemoryLogEntry<F>> {
+        std::mem::take(&mut self.memory.log)
     }
 }
 
@@ -802,11 +817,10 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
 
 #[cfg(test)]
 mod tests {
-
     use openvm_circuit_primitives::var_range::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
     };
-    use openvm_stark_backend::p3_field::FieldAlgebra;
+    use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
@@ -816,13 +830,13 @@ mod tests {
         system::memory::offline_checker::MemoryBus,
     };
 
-    const RANGE_CHECKER_BUS: usize = 3;
+    const RANGE_CHECKER_BUS: BusIndex = 3;
 
     #[test]
     fn test_no_adapter_records_for_singleton_accesses() {
         type F = BabyBear;
 
-        let memory_bus = MemoryBus(MEMORY_BUS);
+        let memory_bus = MemoryBus::new(MEMORY_BUS);
         let memory_config = MemoryConfig::default();
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
         let range_checker = SharedVariableRangeCheckerChip::new(range_bus);

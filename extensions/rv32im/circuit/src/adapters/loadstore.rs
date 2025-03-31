@@ -20,7 +20,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    utils::select,
+    utils::{not, select},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -49,9 +49,11 @@ use crate::adapters::RV32_CELL_BITS;
 /// This adapter always batch reads/writes 4 bytes,
 /// thus it needs to shift left the memory pointer by some amount in case of not 4 byte aligned intermediate pointers
 pub struct LoadStoreInstruction<T> {
+    /// is_valid is constrained to be bool
     pub is_valid: T,
-    // Absolute opcode number
+    /// Absolute opcode number
     pub opcode: T,
+    /// is_load is constrained to be bool, and can only be 1 if is_valid is 1
     pub is_load: T,
 
     /// Keeping two separate shift amounts is needed for getting the read_ptr/write_ptr with degree 2
@@ -119,27 +121,29 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct Rv32LoadStoreReadRecord<F: Field> {
     pub rs1_record: RecordId,
-    pub rs1_ptr: F,
     /// This will be a read from a register in case of Stores and a read from RISC-V memory in case of Loads.
     pub read: RecordId,
-
+    pub rs1_ptr: F,
     pub imm: F,
-    pub imm_sign: bool,
-    pub mem_ptr_limbs: [u32; 2],
+    pub imm_sign: F,
     pub mem_as: F,
+    pub mem_ptr_limbs: [u32; 2],
     pub shift_amount: u32,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct Rv32LoadStoreWriteRecord<F: Field> {
-    pub from_state: ExecutionState<u32>,
-    /// This will be a write to a register in case of Load and a write to RISC-V memory in case of Stores
+    /// This will be a write to a register in case of Load and a write to RISC-V memory in case of Stores.
+    /// For better struct packing, `RecordId(usize::MAX)` is used to indicate that there is no write.
     pub write_id: RecordId,
+    pub from_state: ExecutionState<u32>,
     pub rd_rs2_ptr: F,
 }
 
@@ -161,6 +165,13 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub mem_as: T,
     /// prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
     pub write_base_aux: MemoryBaseAuxCols<T>,
+    /// Only writes if `needs_write`.
+    /// If the instruction is a Load:
+    /// - Sets `needs_write` to 0 iff `rd == x0`
+    ///
+    /// Otherwise:
+    /// - Sets `needs_write` to 1
+    pub needs_write: T,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -200,6 +211,20 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let load_shift_amount = ctx.instruction.load_shift_amount;
         let store_shift_amount = ctx.instruction.store_shift_amount;
         let shift_amount = load_shift_amount.clone() + store_shift_amount.clone();
+
+        let write_count = local_cols.needs_write;
+
+        // This constraint ensures that the memory write only occurs when `is_valid == 1`.
+        builder.assert_bool(write_count);
+        builder.when(write_count).assert_one(is_valid.clone());
+
+        // Constrain that if `is_valid == 1` and `write_count == 0`, then `is_load == 1` and `rd_rs2_ptr == x0`
+        builder
+            .when(is_valid.clone() - write_count)
+            .assert_one(is_load.clone());
+        builder
+            .when(is_valid.clone() - write_count)
+            .assert_zero(local_cols.rd_rs2_ptr);
 
         // read rs1
         self.memory_bridge
@@ -252,7 +277,15 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let mem_ptr = local_cols.mem_ptr_limbs[0]
             + local_cols.mem_ptr_limbs[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
 
-        // read_as is 2 for loads and 1 for stores
+        let is_store = is_valid.clone() - is_load.clone();
+        // constrain mem_as to be in {0, 1, 2} if the instruction is a load,
+        // and in {2, 3, 4} if the instruction is a store
+        builder.assert_tern(local_cols.mem_as - is_store * AB::Expr::TWO);
+        builder
+            .when(not::<AB::Expr>(is_valid.clone()))
+            .assert_zero(local_cols.mem_as);
+
+        // read_as is [local_cols.mem_as] for loads and 1 for stores
         let read_as = select::<AB::Expr>(
             is_load.clone(),
             local_cols.mem_as,
@@ -277,7 +310,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
 
         let write_aux_cols = MemoryWriteAuxCols::from_base(local_cols.write_base_aux, ctx.reads.0);
 
-        // write_as is 1 for loads and 2 for stores
+        // write_as is 1 for loads and [local_cols.mem_as] for stores
         let write_as = select::<AB::Expr>(
             is_load.clone(),
             AB::F::from_canonical_u32(RV32_REGISTER_AS),
@@ -295,7 +328,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
                 timestamp_pp(),
                 &write_aux_cols,
             )
-            .eval(builder, is_valid.clone());
+            .eval(builder, write_count);
 
         let to_pc = ctx
             .to_pc
@@ -309,6 +342,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
                     local_cols.imm.into(),
                     AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     local_cols.mem_as.into(),
+                    local_cols.needs_write.into(),
+                    local_cols.imm_sign.into(),
                 ],
                 local_cols.from_state,
                 ExecutionState {
@@ -347,6 +382,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             c,
             d,
             e,
+            g,
             ..
         } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -359,7 +395,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
 
         let rs1_val = compose(rs1_record.1);
         let imm = c.as_canonical_u32();
-        let imm_sign = (imm & 0x8000) >> 15;
+        let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
@@ -400,7 +436,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                 rs1_ptr: b,
                 read: read_record.0,
                 imm: c,
-                imm_sign: imm_sign == 1,
+                imm_sign: g,
                 shift_amount,
                 mem_ptr_limbs,
                 mem_as: e,
@@ -417,20 +453,32 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction {
-            opcode, a, d, e, ..
+            opcode,
+            a,
+            d,
+            e,
+            f: enabled,
+            ..
         } = *instruction;
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        let (write_id, _) = match local_opcode {
-            STOREW | STOREH | STOREB => {
-                let ptr = read_record.mem_ptr_limbs[0]
-                    + read_record.mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-                memory.write(e, F::from_canonical_u32(ptr & 0xfffffffc), output.writes[0])
-            }
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => memory.write(d, a, output.writes[0]),
+        let write_id = if enabled != F::ZERO {
+            let (record_id, _) = match local_opcode {
+                STOREW | STOREH | STOREB => {
+                    let ptr = read_record.mem_ptr_limbs[0]
+                        + read_record.mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
+                    memory.write(e, F::from_canonical_u32(ptr & 0xfffffffc), output.writes[0])
+                }
+                LOADW | LOADB | LOADH | LOADBU | LOADHU => memory.write(d, a, output.writes[0]),
+            };
+            record_id
+        } else {
+            memory.increment_timestamp();
+            // RecordId will never get to usize::MAX, so it can be used as a flag for no write
+            RecordId(usize::MAX)
         };
 
         Ok((
@@ -473,11 +521,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let read = memory.record_by_id(read_record.read);
         aux_cols_factory.generate_read_aux(read, &mut adapter_cols.read_data_aux);
         adapter_cols.imm = read_record.imm;
-        adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
+        adapter_cols.imm_sign = read_record.imm_sign;
         adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
-        let write = memory.record_by_id(write_record.write_id);
-        aux_cols_factory.generate_base_aux(write, &mut adapter_cols.write_base_aux);
         adapter_cols.mem_as = read_record.mem_as;
+        if write_record.write_id.0 != usize::MAX {
+            let write = memory.record_by_id(write_record.write_id);
+            aux_cols_factory.generate_base_aux(write, &mut adapter_cols.write_base_aux);
+            adapter_cols.needs_write = F::ONE;
+        }
     }
 
     fn air(&self) -> &Self::Air {

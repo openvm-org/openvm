@@ -1,6 +1,9 @@
 use itertools::Itertools;
 use num_bigint::BigUint;
-use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::FieldAlgebra};
+use openvm_stark_backend::{
+    interaction::{BusIndex, InteractionBuilder},
+    p3_field::FieldAlgebra,
+};
 
 use super::{
     check_carry_to_zero::{CheckCarryToZeroCols, CheckCarryToZeroSubAir},
@@ -11,6 +14,7 @@ use crate::SubAir;
 
 #[derive(Clone)]
 pub struct CheckCarryModToZeroCols<T> {
+    /// Carries for converting the remainder to canonical form
     pub carries: Vec<T>,
 
     // We will check that expr - quotient * modulus = 0, which imples expr is 0 mod modulus.
@@ -30,7 +34,7 @@ impl CheckCarryModToZeroSubAir {
     pub fn new(
         modulus: BigUint,
         limb_bits: usize,
-        range_checker_bus: usize,
+        range_checker_bus: BusIndex,
         decomp: usize,
     ) -> Self {
         let check_carry_to_zero = CheckCarryToZeroSubAir::new(limb_bits, range_checker_bus, decomp);
@@ -55,6 +59,9 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryModToZeroSubAir {
         AB::Expr: 'a,
         AB: 'a;
 
+    /// Assumes that the parent chip has already asserted `is_valid` is to be boolean.
+    /// This is to avoid duplicating that constraint since this subair's eval method is
+    /// often called multiple times from the parent air.
     fn eval<'a>(
         &'a self,
         builder: &'a mut AB,
@@ -68,7 +75,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryModToZeroSubAir {
         AB::Expr: 'a,
     {
         let CheckCarryModToZeroCols { quotient, carries } = cols;
-        builder.assert_bool(is_valid.clone());
         let q_offset = AB::F::from_canonical_usize(1 << self.check_carry_to_zero.limb_bits);
         for &q in quotient.iter() {
             range_check(

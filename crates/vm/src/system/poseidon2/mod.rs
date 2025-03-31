@@ -11,6 +11,7 @@
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    interaction::BusIndex,
     p3_field::PrimeField32,
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
@@ -22,7 +23,6 @@ pub mod tests;
 pub mod air;
 mod chip;
 pub use chip::*;
-use openvm_circuit_primitives_derive::BytesStateful;
 
 use crate::arch::hasher::{Hasher, HasherChip};
 pub mod columns;
@@ -31,7 +31,6 @@ pub mod trace;
 pub const PERIPHERY_POSEIDON2_WIDTH: usize = 16;
 pub const PERIPHERY_POSEIDON2_CHUNK_SIZE: usize = 8;
 
-#[derive(BytesStateful)]
 pub enum Poseidon2PeripheryChip<F: PrimeField32> {
     Register0(Poseidon2PeripheryBaseChip<F, 0>),
     Register1(Poseidon2PeripheryBaseChip<F, 1>),
@@ -39,7 +38,7 @@ pub enum Poseidon2PeripheryChip<F: PrimeField32> {
 impl<F: PrimeField32> Poseidon2PeripheryChip<F> {
     pub fn new(
         poseidon2_config: Poseidon2Config<F>,
-        bus_idx: usize,
+        bus_idx: BusIndex,
         max_constraint_degree: usize,
     ) -> Self {
         if max_constraint_degree >= 7 {

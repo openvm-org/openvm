@@ -3,10 +3,19 @@ use std::{borrow::Borrow, path::PathBuf, sync::Arc};
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, SingleSegmentVmExecutor,
-        SystemConfig, VmConfig, VmExecutor,
+        hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
+        GenerationError, SingleSegmentVmExecutor, SystemConfig, VmConfig, VmExecutor,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
+};
+use openvm_continuations::{
+    static_verifier::StaticVerifierPvHandler,
+    verifier::{
+        common::types::{SpecialAirIds, VmVerifierPvs},
+        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
+        root::types::RootVmVerifierPvs,
+        utils::compress_babybear_var_to_bn254,
+    },
 };
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
@@ -16,22 +25,17 @@ use openvm_native_recursion::{
 };
 use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use openvm_sdk::{
+    codec::{Decode, Encode},
     commit::AppExecutionCommit,
-    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
-    keygen::{AppProvingKey, RootVerifierProvingKey},
-    static_verifier::StaticVerifierPvHandler,
-    verifier::{
-        common::types::{SpecialAirIds, VmVerifierPvs},
-        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
-        root::types::RootVmVerifierPvs,
-        utils::compress_babybear_var_to_bn254,
-    },
-    Sdk, StdIn,
+    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkVmConfig},
+    keygen::AppProvingKey,
+    DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
+use openvm_stark_backend::{keygen::types::LinearConstraint, p3_matrix::Matrix};
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        setup_tracing, FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::{p3_field::FieldAlgebra, Chip},
@@ -87,11 +91,12 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
         program.max_num_public_values = NUM_PUB_VALUES;
         program
     };
-    Sdk.commit_app_exe(
-        standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
-        program.into(),
-    )
-    .unwrap()
+    Sdk::new()
+        .commit_app_exe(
+            FriParameters::new_for_testing(app_log_blowup),
+            program.into(),
+        )
+        .unwrap()
 }
 
 fn agg_config_for_test() -> AggConfig {
@@ -108,11 +113,9 @@ fn agg_config_for_test() -> AggConfig {
 fn agg_stark_config_for_test() -> AggStarkConfig {
     AggStarkConfig {
         max_num_user_public_values: NUM_PUB_VALUES,
-        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP),
-        internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(
-            INTERNAL_LOG_BLOWUP,
-        ),
-        root_fri_params: standard_fri_params_with_100_bits_conjectured_security(ROOT_LOG_BLOWUP),
+        leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP),
+        internal_fri_params: FriParameters::new_for_testing(INTERNAL_LOG_BLOWUP),
+        root_fri_params: FriParameters::new_for_testing(ROOT_LOG_BLOWUP),
         profiling: false,
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
@@ -124,8 +127,7 @@ fn agg_stark_config_for_test() -> AggStarkConfig {
 
 fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
     AppConfig {
-        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup)
-            .into(),
+        app_fri_params: FriParameters::new_for_testing(app_log_blowup).into(),
         app_vm_config: NativeConfig::new(
             SystemConfig::default()
                 .with_max_segment_len(200)
@@ -133,8 +135,7 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
                 .with_public_values(NUM_PUB_VALUES),
             Native,
         ),
-        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP)
-            .into(),
+        leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP).into(),
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
@@ -277,7 +278,6 @@ fn test_static_verifier_custom_pv_handler() {
             &self,
             builder: &mut Builder<OuterConfig>,
             input: &StarkProofVariable<OuterConfig>,
-            _root_verifier_pk: &RootVerifierProvingKey,
             special_air_ids: &SpecialAirIds,
         ) -> usize {
             let pv_air = builder.get(&input.per_air, special_air_ids.public_values_air_id);
@@ -310,7 +310,8 @@ fn test_static_verifier_custom_pv_handler() {
     println!("test setup");
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
-    let app_pk = Sdk.app_keygen(app_config.clone()).unwrap();
+    let sdk = Sdk::new();
+    let app_pk = sdk.app_keygen(app_config.clone()).unwrap();
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
     println!("app_config: {:?}", app_config.app_vm_config);
     println!(
@@ -333,19 +334,19 @@ fn test_static_verifier_custom_pv_handler() {
         exe_commit,
         leaf_verifier_commit,
     };
-    let agg_pk = Sdk
-        .agg_keygen(agg_config_for_test(), &params_reader, Some(&pv_handler))
+    let agg_pk = sdk
+        .agg_keygen(agg_config_for_test(), &params_reader, &pv_handler)
         .unwrap();
 
     // Generate verifier contract
     println!("generate verifier contract");
-    let evm_verifier = Sdk
+    let evm_verifier = sdk
         .generate_snark_verifier_contract(&params_reader, &agg_pk)
         .unwrap();
 
     // Generate and verify proof
     println!("generate and verify proof");
-    let evm_proof = Sdk
+    let evm_proof = sdk
         .generate_evm_proof(
             &params_reader,
             Arc::new(app_pk),
@@ -354,27 +355,28 @@ fn test_static_verifier_custom_pv_handler() {
             StdIn::default(),
         )
         .unwrap();
-    assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
+    assert!(sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
 }
 
 #[test]
 fn test_e2e_proof_generation_and_verification() {
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
-    let app_pk = Sdk.app_keygen(app_config).unwrap();
+    let sdk = Sdk::new();
+    let app_pk = sdk.app_keygen(app_config).unwrap();
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
-    let agg_pk = Sdk
+    let agg_pk = sdk
         .agg_keygen(
             agg_config_for_test(),
             &params_reader,
-            None::<&RootVerifierProvingKey>,
+            &DefaultStaticVerifierPvHandler,
         )
         .unwrap();
-    let evm_verifier = Sdk
+    let evm_verifier = sdk
         .generate_snark_verifier_contract(&params_reader, &agg_pk)
         .unwrap();
 
-    let evm_proof = Sdk
+    let evm_proof = sdk
         .generate_evm_proof(
             &params_reader,
             Arc::new(app_pk),
@@ -383,12 +385,12 @@ fn test_e2e_proof_generation_and_verification() {
             StdIn::default(),
         )
         .unwrap();
-    assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
+    assert!(sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
 }
 
 #[test]
 fn test_sdk_guest_build_and_transpile() {
-    let sdk = Sdk;
+    let sdk = Sdk::new();
     let guest_opts = GuestOptions::default()
         // .with_features(vec!["zkvm"])
         // .with_options(vec!["--release"]);
@@ -407,4 +409,92 @@ fn test_sdk_guest_build_and_transpile() {
         .with_extension(Rv32ITranspilerExtension)
         .with_extension(Rv32MTranspilerExtension);
     let _exe = sdk.transpile(one, transpiler).unwrap();
+}
+
+#[test]
+fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
+    // generate a proof
+    let sdk = Sdk::new();
+    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
+    pkg_dir.push("guest");
+    let elf = sdk.build(Default::default(), pkg_dir, &Default::default())?;
+    let vm_config = SdkVmConfig::builder()
+        .system(Default::default())
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .build();
+    assert!(vm_config.system.config.continuation_enabled);
+    let exe = sdk.transpile(elf, vm_config.transpiler())?;
+    let fri_params = FriParameters::standard_fast();
+    let app_config = AppConfig::new(fri_params, vm_config);
+    let committed_exe = sdk.commit_app_exe(fri_params, exe)?;
+    let app_pk = Arc::new(sdk.app_keygen(app_config)?);
+    let app_proof = sdk.generate_app_proof(app_pk.clone(), committed_exe, StdIn::default())?;
+    let mut app_proof_bytes = Vec::new();
+    app_proof.encode(&mut app_proof_bytes)?;
+    let decoded_app_proof = ContinuationVmProof::decode(&mut &app_proof_bytes[..])?;
+    // Test decoding against derived serde implementation
+    assert_eq!(
+        serde_json::to_vec(&app_proof)?,
+        serde_json::to_vec(&decoded_app_proof)?
+    );
+    // Test the decoding by verifying the decoded proof
+    sdk.verify_app_proof(&app_pk.get_app_vk(), &decoded_app_proof)?;
+    Ok(())
+}
+
+#[test]
+fn test_segmentation_retry() {
+    setup_tracing();
+    let app_log_blowup = 3;
+    let app_config = small_test_app_config(app_log_blowup);
+    let app_pk = AppProvingKey::keygen(app_config);
+    let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
+
+    let app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
+    let app_vm_result = app_vm
+        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
+        .unwrap();
+    assert!(app_vm_result.per_segment.len() > 2);
+
+    let total_height: usize = app_vm_result.per_segment[0]
+        .per_air
+        .iter()
+        .map(|(_, input)| {
+            let main = input.raw.common_main.as_ref();
+            main.map(|mat| mat.height()).unwrap_or(0)
+        })
+        .sum();
+
+    // Re-run with a threshold that will be violated.
+    let mut app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
+    let num_airs = app_pk.app_vm_pk.vm_pk.per_air.len();
+    app_vm.set_trace_height_constraints(vec![LinearConstraint {
+        coefficients: vec![1; num_airs],
+        threshold: total_height as u32 - 1,
+    }]);
+    let app_vm_result =
+        app_vm.execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![]);
+    assert!(matches!(
+        app_vm_result,
+        Err(GenerationError::TraceHeightsLimitExceeded)
+    ));
+
+    // Try lowering segmentation threshold.
+    let config = VmConfig::<BabyBear>::system_mut(&mut app_vm.config);
+    config.set_segmentation_strategy(config.segmentation_strategy.stricter_strategy());
+    let app_vm_result = app_vm
+        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
+        .unwrap();
+
+    // New max height should indeed by smaller.
+    let new_total_height: usize = app_vm_result.per_segment[0]
+        .per_air
+        .iter()
+        .map(|(_, input)| {
+            let main = input.raw.common_main.as_ref();
+            main.map(|mat| mat.height()).unwrap_or(0)
+        })
+        .sum();
+    assert!(new_total_height < total_height);
 }

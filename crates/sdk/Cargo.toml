@@ -8,6 +8,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+p3-fri = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
 openvm-bigint-circuit = { workspace = true }
@@ -30,6 +31,7 @@ openvm-transpiler = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
+openvm-continuations = { workspace = true }
 openvm = { workspace = true }
 
 bitcode = { workspace = true }
@@ -37,7 +39,6 @@ bon = { workspace = true }
 derivative = { workspace = true }
 derive_more = { workspace = true }
 serde = { workspace = true }
-static_assertions.workspace = true
 eyre.workspace = true
 async-trait.workspace = true
 metrics.workspace = true
@@ -45,6 +46,9 @@ tracing.workspace = true
 itertools.workspace = true
 getset.workspace = true
 clap = { workspace = true, features = ["derive"] }
+serde_with = { workspace = true, features = ["hex"] }
+serde_json.workspace = true
+thiserror.workspace = true
 
 [features]
 default = ["parallel"]

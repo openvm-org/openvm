@@ -2,7 +2,7 @@ use openvm_native_compiler::prelude::*;
 use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::{
     p3_commit::TwoAdicMultiplicativeCoset,
-    p3_field::{FieldAlgebra, TwoAdicField},
+    p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField},
 };
 use p3_symmetric::Hash;
 
@@ -25,6 +25,7 @@ pub const MAX_TWO_ADICITY: usize = 27;
 /// 1. FieldMerkleTreeMMCS sorts traces by height in descending order when committing data.
 /// 2. **Required** that `C::F` has two-adicity <= [MAX_TWO_ADICITY]. In particular this implies that all LDE matrices have
 ///    `log2(lde_height) <= MAX_TWO_ADICITY`.
+/// 3. **Required** that the maximum trace height is `2^log_max_height - 1`.
 ///
 /// Reference:
 /// <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53>
@@ -41,6 +42,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     config: &FriConfigVariable<C>,
     rounds: Array<C, TwoAdicPcsRoundVariable<C>>,
     proof: FriProofVariable<C>,
+    log_max_height: RVar<C::N>,
     challenger: &mut impl ChallengerVariable<C>,
 ) where
     C::F: TwoAdicField,
@@ -62,13 +64,49 @@ pub fn verify_two_adic_pcs<C: Config>(
     let g = builder.generator();
 
     let log_blowup = config.log_blowup;
+    iter_zip!(builder, rounds).for_each(|ptr_vec, builder| {
+        let round = builder.iter_ptr_get(&rounds, ptr_vec[0]);
+        iter_zip!(builder, round.mats).for_each(|ptr_vec, builder| {
+            let mat = builder.iter_ptr_get(&round.mats, ptr_vec[0]);
+            iter_zip!(builder, mat.values).for_each(|ptr_vec, builder| {
+                let value = builder.iter_ptr_get(&mat.values, ptr_vec[0]);
+                iter_zip!(builder, value).for_each(|ptr_vec, builder| {
+                    if builder.flags.static_only {
+                        let ext = builder.iter_ptr_get(&value, ptr_vec[0]);
+                        let arr = builder.ext2felt(ext);
+                        challenger.observe_slice(builder, arr);
+                    } else {
+                        let ptr = ptr_vec[0];
+                        for i in 0..C::EF::D {
+                            let f: Felt<_> = builder.uninit();
+                            builder.load(
+                                f,
+                                Ptr {
+                                    address: ptr.variable(),
+                                },
+                                MemIndex {
+                                    index: RVar::from(i),
+                                    offset: 0,
+                                    size: 1,
+                                },
+                            );
+                            challenger.observe(builder, f);
+                        }
+                    }
+                });
+            });
+        });
+    });
     let alpha = challenger.sample_ext(builder);
     if builder.flags.static_only {
         builder.ext_reduce_circuit(alpha);
     }
 
     builder.cycle_tracker_start("stage-d-verifier-verify");
-    let betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
+    // **ATTENTION**: always check shape of user inputs.
+    builder.assert_usize_eq(proof.query_proofs.len(), RVar::from(config.num_queries));
+    builder.assert_usize_eq(proof.commit_phase_commits.len(), log_max_height);
+    let betas: Array<C, Ext<C::F, C::EF>> = builder.array(log_max_height);
     iter_zip!(builder, proof.commit_phase_commits, betas).for_each(|ptr_vec, builder| {
         let comm_ptr = ptr_vec[0];
         let beta_ptr = ptr_vec[1];
@@ -84,16 +122,12 @@ pub fn verify_two_adic_pcs<C: Config>(
         challenger.observe_slice(builder, final_poly_elem_felts);
     });
 
-    // **ATTENTION**: always check shape of user inputs.
-    builder.assert_usize_eq(proof.query_proofs.len(), RVar::from(config.num_queries));
-
     challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
 
-    let log_max_height =
-        builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(log_blowup));
+    let log_max_lde_height = builder.eval_expr(log_max_height + RVar::from(log_blowup));
     // tag_exp is a shared buffer.
-    let tag_exp: Array<C, Felt<C::F>> = builder.array(log_max_height);
-    let w = config.get_two_adic_generator(builder, log_max_height);
+    let tag_exp: Array<C, Felt<C::F>> = builder.array(log_max_lde_height);
+    let w = config.get_two_adic_generator(builder, log_max_lde_height);
     let max_gen_pow = config.get_two_adic_generator(builder, 1);
     let one_var: Felt<C::F> = builder.eval(C::F::ONE);
 
@@ -121,7 +155,7 @@ pub fn verify_two_adic_pcs<C: Config>(
 
     iter_zip!(builder, proof.query_proofs).for_each(|ptr_vec, builder| {
         let query_proof = builder.iter_ptr_get(&proof.query_proofs, ptr_vec[0]);
-        let index_bits = challenger.sample_bits(builder, log_max_height);
+        let index_bits = challenger.sample_bits(builder, log_max_lde_height);
 
         // We reset the reduced opening accumulators at the start of each query.
         // We describe what `ro[log_height]` computes per query in pseduo-code, where `log_height` is log2 of the size of the LDE domain:
@@ -166,7 +200,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         builder.cycle_tracker_start("cache-generator-powers");
         {
             // truncate index_bits to log_max_height
-            let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
+            let index_bits_truncated = index_bits.slice(builder, 0, log_max_lde_height);
 
             // b = index_bits
             // w = generator of order 2^log_max_height
@@ -229,7 +263,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     let cur_alpha_pow = builder.get(&alpha_pow, log_height);
 
                     builder.cycle_tracker_start("exp-reverse-bits-len");
-                    let height_idx = builder.eval_expr(log_max_height - log_height);
+                    let height_idx = builder.eval_expr(log_max_lde_height - log_height);
                     let x = builder.get(&tag_exp, height_idx);
                     builder.cycle_tracker_end("exp-reverse-bits-len");
 
@@ -284,7 +318,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                 });
                 builder.cycle_tracker_end("compute-reduced-opening");
 
-                let bits_reduced: Usize<_> = builder.eval(log_max_height - log_batch_max_height);
+                let bits_reduced: Usize<_> =
+                    builder.eval(log_max_lde_height - log_batch_max_height);
                 let index_bits_shifted_v1 = index_bits.shift(builder, bits_reduced);
 
                 builder.cycle_tracker_start("verify-batch");
@@ -308,7 +343,7 @@ pub fn verify_two_adic_pcs<C: Config>(
             &query_proof,
             &betas,
             &ro,
-            log_max_height,
+            log_max_lde_height,
         );
 
         builder.assert_ext_eq(folded_eval, final_poly_ct);
@@ -402,9 +437,17 @@ where
         builder: &mut Builder<C>,
         rounds: Array<C, TwoAdicPcsRoundVariable<C>>,
         proof: Self::Proof,
+        log_max_height: RVar<C::N>,
         challenger: &mut impl ChallengerVariable<C>,
     ) {
-        verify_two_adic_pcs(builder, &self.config, rounds, proof, challenger)
+        verify_two_adic_pcs(
+            builder,
+            &self.config,
+            rounds,
+            proof,
+            log_max_height,
+            challenger,
+        )
     }
 }
 
@@ -658,7 +701,13 @@ pub mod tests {
         let commit = DigestVariable::Felt(builder.constant::<Array<_, _>>(commit));
         challenger.observe_digest(&mut builder, commit);
         challenger.sample_ext(&mut builder);
-        pcs_var.verify(&mut builder, rounds, proofvar, &mut challenger);
+        pcs_var.verify(
+            &mut builder,
+            rounds,
+            proofvar,
+            RVar::from(nb_log2_rows),
+            &mut challenger,
+        );
         builder.halt();
 
         let program = builder.compile_isa();

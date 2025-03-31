@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use openvm_benchmarks::utils::build_bench_program;
+use openvm_benchmarks::utils::{build_bench, get_programs_dir};
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_keccak256_circuit::Keccak256Rv32Config;
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -11,7 +11,7 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 fn benchmark_function(c: &mut Criterion) {
-    let elf = build_bench_program("regex", "release").unwrap();
+    let elf = build_bench(get_programs_dir().join("regex"), "release").unwrap();
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()

@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, ImmInstruction, Result, VmAdapterAir, VmAdapterChip,
+        ExecutionBus, ExecutionState, Result, SignedImmInstruction, VmAdapterAir, VmAdapterChip,
         VmAdapterInterface,
     },
     system::{
@@ -53,11 +53,13 @@ impl<F: PrimeField32> Rv32JalrAdapterChip<F> {
         }
     }
 }
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32JalrReadRecord {
     pub rs1: RecordId,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rv32JalrWriteRecord {
     pub from_state: ExecutionState<u32>,
@@ -72,6 +74,8 @@ pub struct Rv32JalrAdapterCols<T> {
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
     pub rd_ptr: T,
     pub rd_aux_cols: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    /// Only writes if `needs_write`.
+    /// Sets `needs_write` to 0 iff `rd == x0`
     pub needs_write: T,
 }
 
@@ -90,7 +94,7 @@ impl<F: Field> BaseAir<F> for Rv32JalrAdapterAir {
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
     type Interface = BasicAdapterInterface<
         AB::Expr,
-        ImmInstruction<AB::Expr>,
+        SignedImmInstruction<AB::Expr>,
         1,
         1,
         RV32_REGISTER_NUM_LIMBS,
@@ -158,6 +162,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
                     AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     AB::Expr::ZERO,
                     write_count.into(),
+                    ctx.instruction.imm_sign,
                 ],
                 local_cols.from_state,
                 ExecutionState {
@@ -180,7 +185,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
     type Air = Rv32JalrAdapterAir;
     type Interface = BasicAdapterInterface<
         F,
-        ImmInstruction<F>,
+        SignedImmInstruction<F>,
         1,
         1,
         RV32_REGISTER_NUM_LIMBS,

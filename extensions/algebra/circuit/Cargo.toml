@@ -23,7 +23,6 @@ openvm-algebra-transpiler = { workspace = true }
 itertools = { workspace = true }
 num-bigint = { workspace = true, features = ["serde"] }
 num-traits = { workspace = true }
-tracing = { workspace = true }
 rand = { workspace = true }
 derive_more = { workspace = true, features = ["from"] }
 strum = { workspace = true }

@@ -55,6 +55,19 @@ where
     rng.gen_range(0..MAX_MEMORY - len) / len * len
 }
 
+fn test_native_config() -> NativeConfig {
+    NativeConfig {
+        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 32, 1024), 0),
+        native: Default::default(),
+    }
+}
+
+fn test_native_continuations_config() -> NativeConfig {
+    let mut config = test_native_config();
+    config.system = config.system.with_continuations();
+    config
+}
+
 #[test]
 fn test_vm_1() {
     let n = 6;
@@ -95,13 +108,12 @@ fn test_vm_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeConfig::default(), program);
+    air_test(test_native_config(), program);
 }
 
 #[test]
 fn test_vm_override_executor_height() {
-    let fri_params = FriParameters::standard_fast();
-    let e = BabyBearPoseidon2Engine::new(fri_params);
+    let e = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let program = Program::<BabyBear>::from_instructions(&[
         Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 4, 0, 0, 0),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -233,7 +245,8 @@ fn test_vm_1_optional_air() {
             "Expect less used AIRs"
         );
         let proofs = vm.prove(&pk, result);
-        vm.verify_single(&pk.get_vk(), &proofs[0])
+        assert_eq!(proofs.len(), 1);
+        vm.verify(&pk.get_vk(), proofs)
             .expect("Verification failed");
     }
 }
@@ -307,7 +320,7 @@ fn test_vm_initial_memory() {
         .into_iter()
         .collect();
 
-    let config = NativeConfig::aggregation(0, 3).with_continuations();
+    let config = test_native_continuations_config();
     let exe = VmExe {
         program,
         pc_start: 0,
@@ -320,11 +333,9 @@ fn test_vm_initial_memory() {
 #[test]
 fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 10, 6, 64, 1024), 0),
-        native: Default::default(),
-    }
-    .with_continuations();
+    let config = test_native_continuations_config();
+    let ptr_max_bits = config.system.memory_config.pointer_max_bits;
+    let as_height = config.system.memory_config.as_height;
     let airs = VmConfig::<BabyBear>::create_chip_complex(&config)
         .unwrap()
         .airs::<BabyBearPoseidon2Config>();
@@ -363,14 +374,14 @@ fn test_vm_1_persistent() {
         );
         let mut digest = [BabyBear::ZERO; CHUNK];
         let compression = vm_poseidon2_hasher();
-        for _ in 0..16 {
+        for _ in 0..ptr_max_bits + as_height - 2 {
             digest = compression.compress(&digest, &digest);
         }
         assert_eq!(
             merkle_air_proof_input.raw.public_values[..8],
             // The value when you start with zeros and repeatedly hash the value with itself
-            // 16 times. We use 16 because addr_space_max_bits = 2 and pointer_max_bits = 16,
-            // so the height of the tree is 2 + 16 - 3 = 15. The leaf also must be hashed once
+            // ptr_max_bits + as_height - 2 times.
+            // The height of the tree is ptr_max_bits + as_height - log2(8). The leaf also must be hashed once
             // with padding for security.
             digest
         );
@@ -427,7 +438,7 @@ fn test_vm_without_field_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeConfig::default(), program);
+    air_test(test_native_config(), program);
 }
 
 #[test]
@@ -474,7 +485,7 @@ fn test_vm_fibonacci_old() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeConfig::default(), program);
+    air_test(test_native_config(), program);
 }
 
 #[test]
@@ -532,7 +543,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeConfig::default(), program);
+    air_test(test_native_config(), program);
 }
 
 #[test]
@@ -556,7 +567,7 @@ fn test_vm_field_extension_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeConfig::default(), program);
+    air_test(test_native_config(), program);
 }
 
 #[test]
@@ -580,22 +591,22 @@ fn test_vm_max_access_adapter_8() {
 
     let program = Program::from_instructions(&instructions);
 
-    let mut config = NativeConfig::default();
+    let mut config = test_native_config();
     {
         let chip_complex1 = config.create_chip_complex().unwrap();
         let mem_ctrl1 = chip_complex1.base.memory_controller;
         config.system.memory_config.max_access_adapter_n = 8;
         let chip_complex2 = config.create_chip_complex().unwrap();
         let mem_ctrl2 = chip_complex2.base.memory_controller;
-        // AccessAdapterAir with N=16/32/64 are disabled.
-        assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 3);
+        // AccessAdapterAir with N=16/32 are disabled.
+        assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 2);
         assert_eq!(
             mem_ctrl1.airs::<BabyBearPoseidon2Config>().len(),
-            mem_ctrl2.airs::<BabyBearPoseidon2Config>().len() + 3
+            mem_ctrl2.airs::<BabyBearPoseidon2Config>().len() + 2
         );
         assert_eq!(
             mem_ctrl1.current_trace_heights().len(),
-            mem_ctrl2.current_trace_heights().len() + 3
+            mem_ctrl2.current_trace_heights().len() + 2
         );
     }
     air_test(config, program);
@@ -621,11 +632,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
     ];
 
     let program = Program::from_instructions(&instructions);
-    let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 10, 6, 64, 1024), 0)
-            .with_continuations(),
-        native: Default::default(),
-    };
+    let config = test_native_continuations_config();
     air_test(config, program);
 }
 
@@ -686,7 +693,7 @@ fn test_vm_hint() {
     type F = BabyBear;
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
-    let config = NativeConfig::default();
+    let config = NativeConfig::new(SystemConfig::default(), Default::default());
     air_test_with_min_segments(config, program, input_stream, 1);
 }
 
@@ -706,10 +713,11 @@ fn test_hint_load_1() {
     let program = Program::from_instructions(&instructions);
 
     let mut segment = ExecutionSegment::new(
-        &NativeConfig::aggregation(0, 3),
+        &test_native_config(),
         program,
         vec![vec![F::ONE, F::TWO]].into(),
         None,
+        vec![],
         Default::default(),
     );
     segment.execute_from_pc(0).unwrap();
@@ -742,10 +750,11 @@ fn test_hint_load_2() {
     let program = Program::from_instructions(&instructions);
 
     let mut segment = ExecutionSegment::new(
-        &NativeConfig::aggregation(0, 3),
+        &test_native_config(),
         program,
         vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]].into(),
         None,
+        vec![],
         Default::default(),
     );
     segment.execute_from_pc(0).unwrap();

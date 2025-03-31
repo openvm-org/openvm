@@ -1,5 +1,6 @@
 use std::array;
 
+pub use openvm_circuit_primitives::utils::compose;
 use openvm_circuit_primitives::{
     encoder::Encoder,
     utils::{not, select},
@@ -231,14 +232,6 @@ pub fn get_random_message(rng: &mut StdRng, len: usize) -> Vec<u8> {
     let mut random_message: Vec<u8> = vec![0u8; len];
     rng.fill(&mut random_message[..]);
     random_message
-}
-
-/// Composes a list of limb values into a single field element
-#[inline]
-pub fn compose<F: FieldAlgebra>(a: &[impl Into<F> + Clone], limb_size: usize) -> F {
-    a.iter().enumerate().fold(F::ZERO, |acc, (i, x)| {
-        acc + x.clone().into() * F::from_canonical_usize(1 << (i * limb_size))
-    })
 }
 
 /// Wrapper of `get_flag_pt` to get the flag pointer as an array

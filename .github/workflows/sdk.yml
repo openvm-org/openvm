@@ -9,6 +9,7 @@ on:
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
       - "crates/sdk/**"
+      - "Cargo.toml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -22,7 +23,7 @@ jobs:
   tests:
     runs-on:
       - runs-on=${{ github.run_id }}
-      - family=m7a.48xlarge
+      - family=m7a.24xlarge
       - disk=large
       - extras=s3-cache
 
@@ -43,11 +44,11 @@ jobs:
           case $arch in
             arm64|aarch64)
               S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
-              rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
+              rustup component add rust-src --toolchain nightly-2025-02-14-aarch64-unknown-linux-gnu
               ;;
             x86_64|amd64)
               S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
-              rustup component add rust-src --toolchain nightly-2024-10-30-x86_64-unknown-linux-gnu
+              rustup component add rust-src --toolchain nightly-2025-02-14-x86_64-unknown-linux-gnu
               ;;
             *)
               echo "Unsupported architecture: $arch"

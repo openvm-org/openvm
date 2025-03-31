@@ -1,10 +1,13 @@
 name: Publish mdBook to Vercel
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - "book/**"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy"
+        required: true
+        type: string
+        default: "main"
 
 permissions:
   contents: write
@@ -16,6 +19,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

@@ -1,11 +1,11 @@
 use openvm_stark_backend::{
-    interaction::{InteractionBuilder, InteractionType},
+    interaction::{InteractionBuilder, LookupBus},
     p3_field::FieldAlgebra,
 };
 
 /// Represents a bus for `(x, y, x ^ y)` identified by a unique bus index (`usize`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct XorBus(pub usize);
+pub struct XorBus(pub LookupBus);
 
 impl XorBus {
     pub fn send<T>(
@@ -14,7 +14,7 @@ impl XorBus {
         y: impl Into<T>,
         x_xor_y: impl Into<T>,
     ) -> XorBusInteraction<T> {
-        self.push(x, y, x_xor_y, InteractionType::Send)
+        self.push(x, y, x_xor_y, true)
     }
 
     pub fn receive<T>(
@@ -23,7 +23,7 @@ impl XorBus {
         y: impl Into<T>,
         x_xor_y: impl Into<T>,
     ) -> XorBusInteraction<T> {
-        self.push(x, y, x_xor_y, InteractionType::Receive)
+        self.push(x, y, x_xor_y, false)
     }
 
     pub fn push<T>(
@@ -31,14 +31,14 @@ impl XorBus {
         x: impl Into<T>,
         y: impl Into<T>,
         x_xor_y: impl Into<T>,
-        interaction_type: InteractionType,
+        is_lookup: bool,
     ) -> XorBusInteraction<T> {
         XorBusInteraction {
             x: x.into(),
             y: y.into(),
             x_xor_y: x_xor_y.into(),
-            bus_index: self.0,
-            interaction_type,
+            bus: self.0,
+            is_lookup,
         }
     }
 }
@@ -49,8 +49,8 @@ pub struct XorBusInteraction<T> {
     pub y: T,
     pub x_xor_y: T,
 
-    pub bus_index: usize,
-    pub interaction_type: InteractionType,
+    pub bus: LookupBus,
+    pub is_lookup: bool,
 }
 
 impl<T: FieldAlgebra> XorBusInteraction<T> {
@@ -59,11 +59,11 @@ impl<T: FieldAlgebra> XorBusInteraction<T> {
     where
         AB: InteractionBuilder<Expr = T>,
     {
-        builder.push_interaction(
-            self.bus_index,
-            [self.x, self.y, self.x_xor_y],
-            count,
-            self.interaction_type,
-        );
+        let key = [self.x, self.y, self.x_xor_y];
+        if self.is_lookup {
+            self.bus.lookup_key(builder, key, count);
+        } else {
+            self.bus.add_key_with_lookups(builder, key, count);
+        }
     }
 }

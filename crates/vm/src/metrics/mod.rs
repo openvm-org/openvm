@@ -86,16 +86,22 @@ impl VmMetrics {
         self.current_trace_cells = now_trace_cells;
     }
 
-    /// Clear statistics that are local to a segment
-    // Important: chip and cycle count metrics should start over for SegmentationStrategy,
-    // but we need to carry over the cycle tracker so spans can cross segments
-    pub(super) fn clear(&mut self) {
-        *self = Self {
+    /// Take the cycle tracker and fn bounds information for use in
+    /// next segment. Leave the rest of the metrics for recording purposes.
+    pub fn partial_take(&mut self) -> Self {
+        Self {
             cycle_tracker: mem::take(&mut self.cycle_tracker),
             fn_bounds: mem::take(&mut self.fn_bounds),
             current_fn: mem::take(&mut self.current_fn),
             ..Default::default()
         }
+    }
+
+    /// Clear statistics that are local to a segment
+    // Important: chip and cycle count metrics should start over for SegmentationStrategy,
+    // but we need to carry over the cycle tracker so spans can cross segments
+    pub fn clear(&mut self) {
+        *self = self.partial_take();
     }
 
     #[cfg(feature = "function-span")]

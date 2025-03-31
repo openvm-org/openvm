@@ -55,7 +55,7 @@ fn main() -> Result<()> {
             compiler_options,
         };
         let (program, input_stream) = build_verification_program(vdata, compiler_options);
-        let sdk = Sdk;
+        let sdk = Sdk::new();
         let app_pk = sdk.app_keygen(app_config)?;
         let app_vk = app_pk.get_app_vk();
         let committed_exe = sdk.commit_app_exe(app_fri_params, program.into())?;

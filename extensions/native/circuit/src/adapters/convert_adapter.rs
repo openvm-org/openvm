@@ -28,12 +28,14 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VectorReadRecord<const NUM_READS: usize, const READ_SIZE: usize> {
     #[serde(with = "BigArray")]
     pub reads: [RecordId; NUM_READS],
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VectorWriteRecord<const WRITE_SIZE: usize> {
     pub from_state: ExecutionState<u32>,

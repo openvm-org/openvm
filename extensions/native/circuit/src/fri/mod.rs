@@ -1,7 +1,6 @@
 use core::ops::Deref;
 use std::{
     borrow::{Borrow, BorrowMut},
-    collections::HashMap,
     mem::offset_of,
     sync::{Arc, Mutex},
 };
@@ -32,12 +31,15 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter,
 };
 use serde::{Deserialize, Serialize};
 use static_assertions::const_assert_eq;
 
-use crate::field_extension::{FieldExtension, EXT_DEG};
+use crate::{
+    field_extension::{FieldExtension, EXT_DEG},
+    utils::const_max,
+};
 
 #[cfg(test)]
 mod tests;
@@ -48,6 +50,7 @@ struct WorkloadCols<T> {
     prefix: PrefixCols<T>,
 
     a_aux: MemoryWriteAuxCols<T, 1>,
+    /// The value of `b` read.
     b: [T; EXT_DEG],
     b_aux: MemoryReadAuxCols<T>,
 }
@@ -67,8 +70,8 @@ struct Instruction1Cols<T> {
     b_ptr_ptr: T,
     b_ptr_aux: MemoryReadAuxCols<T>,
 
-    /// A trick to reduce 1 degree. When `is_ins_row = 1`, `write_a_x_is_first = write_a * is_first`.
-    /// This field must align in both Instruction1Cols and Instruction2Cols.
+    /// Extraneous column that is constrained to write_a * a_or_is_first but has no meaningful
+    /// effect. It can be removed along with its constraints without impacting correctness.
     write_a_x_is_first: T,
 }
 const INS_1_WIDTH: usize = Instruction1Cols::<u8>::width();
@@ -82,7 +85,7 @@ const_assert_eq!(
 #[derive(Debug, AlignedBorrow)]
 struct Instruction2Cols<T> {
     general: GeneralCols<T>,
-    // is_first = 0 means the second instruction row.
+    /// Shared with `a_or_is_first` in other column types. Must be 0 for Instruction2Cols.
     is_first: T,
 
     length_ptr: T,
@@ -99,8 +102,8 @@ struct Instruction2Cols<T> {
     is_init_ptr: T,
     is_init_aux: MemoryReadAuxCols<T>,
 
-    /// A trick to reduce 1 degree. When `is_ins_row = 1`, `write_a_x_is_first = write_a * is_first`.
-    /// This field must align in both Instruction1Cols and Instruction2Cols.
+    /// Extraneous column that is constrained to write_a * a_or_is_first but has no meaningful
+    /// effect. It can be removed along with its constraints without impacting correctness.
     write_a_x_is_first: T,
 }
 const INS_2_WIDTH: usize = Instruction2Cols::<u8>::width();
@@ -118,12 +121,10 @@ const_assert_eq!(
     offset_of!(Instruction2Cols<u8>, write_a_x_is_first)
 );
 
-const fn const_max(a: usize, b: usize) -> usize {
-    [a, b][(a < b) as usize]
-}
 pub const OVERALL_WIDTH: usize = const_max(const_max(WL_WIDTH, INS_1_WIDTH), INS_2_WIDTH);
 const_assert_eq!(OVERALL_WIDTH, 27);
 
+/// Every row starts with these columns.
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
 struct GeneralCols<T> {
@@ -131,6 +132,9 @@ struct GeneralCols<T> {
     is_workload_row: T,
     /// Whether the row is an instruction row.
     is_ins_row: T,
+    /// For Instruction1 rows, the initial timestamp of the FRI_REDUCED_OPENING instruction.
+    /// For Workload rows, the final timestamp after processing the next elements minus `INSTRUCTION_READS`.
+    /// For Instruction2 rows, unused.
     timestamp: T,
 }
 const GENERAL_WIDTH: usize = GeneralCols::<u8>::width();
@@ -139,11 +143,27 @@ const_assert_eq!(GENERAL_WIDTH, 3);
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
 struct DataCols<T> {
+    /// For Instruction1 rows, `mem[a_ptr_ptr]`.
+    /// For Workload rows, the pointer in a-values after increment.
     a_ptr: T,
+    /// Indicates whether to write a-value or read it.
+    /// For Instruction1 rows, `1 - mem[is_init_ptr]`.
+    /// For Workload rows, whether we are writing the a-value or reading it; fixed for entire
+    /// workload/instruction block.
     write_a: T,
+    /// For Instruction1 rows, `mem[b_ptr_ptr]`.
+    /// For Workload rows, the pointer in b-values after increment.
     b_ptr: T,
+    /// For Instruction1 rows, the value read from `mem[length_ptr]`.
+    /// For Workload rows, the workload row index from the top. *Not* the index into a-values and
+    /// b-values. (Note: idx increases within a workload/instruction block, while timestamp, a_ptr,
+    /// and b_ptr decrease.)
     idx: T,
+    /// For both Instruction1 and Workload rows, equal to sum_{k=0}^{idx} alpha^{len-i} (b_i - a_i).
+    /// Instruction1 rows constrain this to be the result written to `mem[result_ptr]`.
     result: [T; EXT_DEG],
+    /// The alpha to use in this instruction. Fixed across workload rows; Instruction1 rows read
+    /// this from `mem[alpha_ptr]`.
     alpha: [T; EXT_DEG],
 }
 #[allow(dead_code)]
@@ -155,8 +175,8 @@ const_assert_eq!(DATA_WIDTH, 12);
 #[derive(Debug, AlignedBorrow)]
 struct PrefixCols<T> {
     general: GeneralCols<T>,
-    /// WorkloadCols uses this column as `a`. Instruction1Cols uses this column as `is_first` which
-    /// indicates whether this is the first row of an instruction row. This is to save a column.
+    /// WorkloadCols uses this column as the value of `a` read. Instruction1Cols uses this column as
+    /// the `is_first` flag must be set to one. Shared with Instruction2Cols `is_first`.
     a_or_is_first: T,
     data: DataCols<T>,
 }
@@ -165,6 +185,40 @@ const_assert_eq!(PREFIX_WIDTH, 16);
 
 const INSTRUCTION_READS: usize = 5;
 
+/// A valid trace is a sequence of blocks, where each block has the following consecutive rows:
+/// 1. **Workload Columns**: A sequence of rows used to compute the "rolling hash" of b - a.
+/// 2. **Instruction1**: The "local" row for the instruction window.
+/// 3. **Instruction2**: The "next" row for the instruction window.
+///
+/// The row mode is determined by the following flags:
+/// * `GeneralCols.is_workload_row`: Indicator for a Workload row.
+/// * `GeneralCols.is_ins_row`: Indicator for an Instruction1 or Instruction2 row.
+/// * `PrefixCols.a_or_is_first` / `Instruction2Cols.is_first`: For Instruction1 or Instruction2
+///   rows, indicator for Instruction1 rows.
+///
+/// We impose the following flag constraints:
+/// * (F1): Every row is either a Workload row, an Instruction row, or Disabled.
+///
+/// A trace may also end in one or more Disabled rows, which emit no interactions and for which
+/// the all-zeroes row is valid.
+///
+/// The AIR enforces the following transitions, which define the block structure outlined above:
+/// * (T1): The trace must start with a Workload row or a Disabled row.
+/// * (T2): A Disabled row can only be followed by a Disabled row (except on last).
+/// * (T3): A Workload row cannot be followed by a Disabled row.
+/// * (T4): A non-Instruction must not be followed by an Instruction2 row.
+/// * (T5): An Instruction1 row must be followed by an Instruction2 row.
+/// * (T6): An Instruction2 row can only be followed by a Workload or Disabled row.
+/// * (T7): The last row is either a Disabled or an Instruction2 row.
+///
+/// Note that (T2) + (T3) + (T4) together imply that a Workload row can only be followed by an
+/// Instruction1 row, as desired.
+///
+/// Note that these transition constraints do allow for a somewhat degenerate trace consisting of
+/// only disabled rows. If the trace does not have this degenerate form, then the constraints ensure
+/// it starts with a Workload row (T1) and ends with either a Disabled or Instruction2 row (T7).
+/// The other transition constraints then ensure the proper state transitions from Workload to
+/// Instruction2.
 #[derive(Copy, Clone, Debug)]
 struct FriReducedOpeningAir {
     execution_bridge: ExecutionBridge,
@@ -202,12 +256,14 @@ impl FriReducedOpeningAir {
     ) {
         let local: &GeneralCols<AB::Var> = local_slice[..GENERAL_WIDTH].borrow();
         let next: &GeneralCols<AB::Var> = next_slice[..GENERAL_WIDTH].borrow();
-        builder.assert_bool(local.is_ins_row);
-        builder.assert_bool(local.is_workload_row);
-        // A row can either be an instruction row or a workload row.
-        builder.assert_bool(local.is_ins_row + local.is_workload_row);
+        // (F1): Every row is either a Workload row, an Instruction row, or Disabled.
         {
-            // All enabled rows must be before disabled rows.
+            builder.assert_bool(local.is_ins_row);
+            builder.assert_bool(local.is_workload_row);
+            builder.assert_bool(local.is_ins_row + local.is_workload_row);
+        }
+        //  (T2): A Disabled row can only be followed by a Disabled row (except on last).
+        {
             let mut when_transition = builder.when_transition();
             let mut when_disabled =
                 when_transition.when_ne(local.is_ins_row + local.is_workload_row, AB::Expr::ONE);
@@ -301,14 +357,19 @@ impl FriReducedOpeningAir {
             let mut next_ins = builder.when(next.general.is_ins_row);
             let mut local_non_ins =
                 next_ins.when_ne(local.prefix.general.is_ins_row, AB::Expr::ONE);
-            // The row after a workload row can only be the first instruction row.
+            // (T4): A non-Instruction must not be followed by an Instruction2 row.
             local_non_ins.assert_one(next.a_or_is_first);
+
+            // (T3): A Workload row cannot be followed by a Disabled row.
+            builder
+                .when(local.prefix.general.is_workload_row)
+                .assert_one(next.general.is_ins_row + next.general.is_workload_row);
         }
         {
             let mut when_first_row = builder.when_first_row();
             let mut when_enabled = when_first_row
                 .when(local.prefix.general.is_ins_row + local.prefix.general.is_workload_row);
-            // First row must be a workload row.
+            // (T1): The trace must start with a Workload row or a Disabled row.
             when_enabled.assert_one(local.prefix.general.is_workload_row);
             // Workload rows must start with the first element.
             when_enabled.assert_zero(local.prefix.data.idx);
@@ -331,17 +392,21 @@ impl FriReducedOpeningAir {
         let next: &Instruction2Cols<AB::Var> = next_slice[..INS_2_WIDTH].borrow();
         // `is_ins_row` already indicates enabled.
         let mut is_ins_row = builder.when(local.prefix.general.is_ins_row);
-        // These constraints of `is_ins_row` apply to both Instruction1Cols and Instruction2Cols. It's a trick to reduce 1 degree.
-        // `write_a` refers to a random field in Instruction2Cols but `write_a_x_is_first` must be 0 because `is_first` is 0.
-        is_ins_row.assert_eq(
-            local.write_a_x_is_first,
-            local.prefix.data.write_a * local.prefix.a_or_is_first,
-        );
-        is_ins_row.assert_bool(local.write_a_x_is_first);
+        // These constraints do not add anything and can be safely removed.
+        {
+            is_ins_row.assert_eq(
+                local.write_a_x_is_first,
+                local.prefix.data.write_a * local.prefix.a_or_is_first,
+            );
+            is_ins_row.assert_bool(local.write_a_x_is_first);
+        }
         let mut is_first_ins = is_ins_row.when(local.prefix.a_or_is_first);
         // ATTENTION: degree of is_first_ins is 2
-        is_first_ins.assert_one(next.general.is_ins_row);
-        is_first_ins.assert_zero(next.is_first);
+        // (T5): An Instruction1 row must be followed by an Instruction2 row.
+        {
+            is_first_ins.assert_one(next.general.is_ins_row);
+            is_first_ins.assert_zero(next.is_first);
+        }
 
         let local_data = &local.prefix.data;
         let length = local.prefix.data.idx;
@@ -434,12 +499,11 @@ impl FriReducedOpeningAir {
     ) {
         let local: &Instruction2Cols<AB::Var> = local_slice[..INS_2_WIDTH].borrow();
         let next: &WorkloadCols<AB::Var> = next_slice[..WL_WIDTH].borrow();
+        // (T7): The last row is either a Disabled or an Instruction2 row.
         {
             let mut last_row = builder.when_last_row();
             let mut enabled =
                 last_row.when(local.general.is_ins_row + local.general.is_workload_row);
-            // If the last row is enabled, it must be the second row of an instruction row. This
-            // is a safeguard for edge cases.
             enabled.assert_one(local.general.is_ins_row);
             enabled.assert_zero(local.is_first);
         }
@@ -449,7 +513,7 @@ impl FriReducedOpeningAir {
             let mut not_first_ins_row = is_ins_row.when_ne(local.is_first, AB::Expr::ONE);
             // ATTENTION: degree of not_first_ins_row is 2
             // Because all the following assert 0, we don't need to check next.enabled.
-            // The next row must be a workload row.
+            // (T6): An Instruction2 row must be followed by a Workload or Disabled row.
             not_first_ins_row.assert_zero(next.prefix.general.is_ins_row);
             // The next row must have idx = 0.
             not_first_ins_row.assert_zero(next.prefix.data.idx);
@@ -496,7 +560,7 @@ pub struct FriReducedOpeningRecord<F: Field> {
 }
 
 impl<F: Field> FriReducedOpeningRecord<F> {
-    fn get_height(&self) -> usize {
+    pub fn get_height(&self) -> usize {
         // 2 for instruction rows
         self.a_rws.len() + 2
     }
@@ -504,11 +568,10 @@ impl<F: Field> FriReducedOpeningRecord<F> {
 
 pub struct FriReducedOpeningChip<F: Field> {
     air: FriReducedOpeningAir,
-    records: Vec<FriReducedOpeningRecord<F>>,
-    height: usize,
+    pub records: Vec<FriReducedOpeningRecord<F>>,
+    pub height: usize,
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     streams: Arc<Mutex<Streams<F>>>,
-    hint_offsets: HashMap<usize, usize>,
 }
 impl<F: PrimeField32> FriReducedOpeningChip<F> {
     pub fn new(
@@ -528,7 +591,6 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
             height: 0,
             offline_memory,
             streams,
-            hint_offsets: HashMap::default(),
         }
     }
 }
@@ -560,7 +622,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
 
         let hint_id_f = memory.unsafe_read_cell(addr_space, hint_id_ptr);
         let hint_id = hint_id_f.as_canonical_u32() as usize;
-        let hint_offset = self.hint_offsets.get(&hint_id).copied().unwrap_or(0);
 
         let alpha = alpha_read.1;
         let length = length_read.1.as_canonical_u32() as usize;
@@ -572,21 +633,17 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         let mut result = [F::ZERO; EXT_DEG];
 
         let data = if is_init == 0 {
-            self.hint_offsets.insert(hint_id, hint_offset + length);
-            let streams = self.streams.lock().unwrap();
-            streams.hint_space[hint_id][hint_offset..hint_offset + length].to_vec()
+            let mut streams = self.streams.lock().unwrap();
+            let hint_steam = &mut streams.hint_space[hint_id];
+            hint_steam.drain(0..length).collect()
         } else {
             vec![]
         };
         #[allow(clippy::needless_range_loop)]
         for i in 0..length {
             let a_rw = if is_init == 0 {
-                let (record_id, _) = memory.write_cell(
-                    addr_space,
-                    a_ptr + F::from_canonical_usize(i),
-                    // Values in the hint space are flattened. We use hint_offset to find the corresponding value.
-                    data[i],
-                );
+                let (record_id, _) =
+                    memory.write_cell(addr_space, a_ptr + F::from_canonical_usize(i), data[i]);
                 (record_id, data[i])
             } else {
                 memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i))
@@ -825,17 +882,6 @@ where
 
         let matrix = RowMajorMatrix::new(flat_trace, OVERALL_WIDTH);
         AirProofInput::simple_no_pis(matrix)
-    }
-}
-
-impl<F: PrimeField32> Stateful<Vec<u8>> for FriReducedOpeningChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.records = bitcode::deserialize(&state).unwrap();
-        self.height = self.records.iter().map(|record| record.get_height()).sum();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.records).unwrap()
     }
 }
 

@@ -10,7 +10,7 @@ use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
-use openvm_circuit_primitives_derive::{BytesStateful, Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
 };
@@ -20,7 +20,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: two AffinePoint<Fp2>: 4 field elements each
 // Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, BytesStateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct MillerDoubleAndAddStepChip<
     F: PrimeField32,
     const INPUT_BLOCKS: usize,

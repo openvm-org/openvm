@@ -1,5 +1,3 @@
-#![feature(proc_macro_diagnostic)]
-
 extern crate proc_macro;
 
 use std::sync::atomic::AtomicUsize;
@@ -106,6 +104,17 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let module_name = format_ident!("algebra_impl_{}", mod_idx);
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
+            /// An element of the ring of integers modulo a positive integer.
+            /// The element is internally represented as a fixed size array of bytes.
+            ///
+            /// ## Caution
+            /// It is not guaranteed that the integer representation is less than the modulus.
+            /// After any arithmetic operation, the honest host should normalize the result
+            /// to its canonical representation less than the modulus, but guest execution does not
+            /// require it.
+            ///
+            /// See [`assert_reduced`](openvm_algebra_guest::IntMod::assert_reduced) and
+            /// [`is_reduced`](openvm_algebra_guest::IntMod::is_reduced).
             #[derive(Clone, Eq, serde::Serialize, serde::Deserialize)]
             #[repr(C, align(#block_size))]
             pub struct #struct_name(#[serde(with = "openvm_algebra_guest::BigArray")] [u8; #limbs]);
@@ -126,6 +135,8 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     Self(bytes)
                 }
 
+                /// Constructor from little-endian bytes. Does not enforce the integer value of `bytes`
+                /// must be less than the modulus.
                 pub const fn from_const_bytes(bytes: [u8; #limbs]) -> Self {
                     Self(bytes)
                 }
@@ -430,6 +441,28 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     fn cube(&self) -> Self {
                         &self.square() * self
                     }
+
+                    /// If `self` is not in its canonical form, the proof will fail to verify.
+                    /// This means guest execution will never terminate (either successfully or
+                    /// unsuccessfully) if `self` is not in its canonical form.
+                    // is_eq_mod enforces `self` is less than `modulus`
+                    fn assert_reduced(&self) {
+                        // This must not be optimized out
+                        let _ = core::hint::black_box(PartialEq::eq(self, self));
+                    }
+
+                    fn is_reduced(&self) -> bool {
+                        // limbs are little endian
+                        for (x_limb, p_limb) in self.0.iter().rev().zip(Self::MODULUS.iter().rev()) {
+                            if x_limb < p_limb {
+                                return true;
+                            } else if x_limb > p_limb {
+                                return false;
+                            }
+                        }
+                        // At this point, all limbs are equal
+                        false
+                    }
                 }
 
                 impl<'a> core::ops::AddAssign<&'a #struct_name> for #struct_name {
@@ -716,14 +749,19 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
         let modulus_bytes = string_to_bytes(&modulus);
         let mut limbs = modulus_bytes.len();
+        let mut block_size = 32;
 
         if limbs <= 32 {
             limbs = 32;
         } else if limbs <= 48 {
             limbs = 48;
+            block_size = 16;
         } else {
             panic!("limbs must be at most 48");
         }
+
+        let block_size = proc_macro::Literal::usize_unsuffixed(block_size);
+        let block_size = syn::Lit::new(block_size.to_string().parse::<_>().unwrap());
 
         let modulus_bytes = modulus_bytes
             .into_iter()
@@ -826,9 +864,13 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                     ptr += 4;
                     let remaining = &#serialized_name[ptr..];
 
+                    // To avoid importing #struct_name, we create a placeholder struct with the same size and alignment.
+                    #[repr(C, align(#block_size))]
+                    struct AlignedPlaceholder([u8; #limbs]);
+
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0`, `x1` or `x2`, into a `SETUP_ADDSUB`, `SETUP_MULDIV` or `SETUP_ISEQ` instruction.
-                    let mut uninit: core::mem::MaybeUninit<[u8; #limbs]> = core::mem::MaybeUninit::uninit();
+                    let mut uninit: core::mem::MaybeUninit<AlignedPlaceholder> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(
                         opcode = ::openvm_algebra_guest::OPCODE,
                         funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,

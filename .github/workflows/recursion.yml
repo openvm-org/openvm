@@ -10,6 +10,7 @@ on:
       - "crates/vm/**"
       - "extensions/native/compiler/**"
       - "extensions/native/recursion/**"
+      - "Cargo.toml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -41,3 +42,8 @@ jobs:
         working-directory: extensions/native/recursion
         run: |
           cargo nextest run --features parallel,static-verifier
+
+      - name: Run continuations verifier crate tests
+        working-directory: crates/continuations
+        run: |
+          cargo nextest run --no-tests=pass

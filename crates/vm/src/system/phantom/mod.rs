@@ -17,7 +17,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter, Stateful,
+    AirRef, Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -46,6 +46,7 @@ pub struct PhantomAir {
     pub phantom_opcode: VmOpcode,
 }
 
+#[repr(C)]
 #[derive(AlignedBorrow, Copy, Clone, Serialize, Deserialize)]
 pub struct PhantomCols<T> {
     pub pc: T,
@@ -218,15 +219,5 @@ where
         let trace = RowMajorMatrix::new(rows, width);
 
         AirProofInput::simple(trace, vec![])
-    }
-}
-
-impl<F: PrimeField32> Stateful<Vec<u8>> for PhantomChip<F> {
-    fn load_state(&mut self, state: Vec<u8>) {
-        self.rows = bitcode::deserialize(&state).unwrap();
-    }
-
-    fn store_state(&self) -> Vec<u8> {
-        bitcode::serialize(&self.rows).unwrap()
     }
 }

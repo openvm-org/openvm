@@ -29,9 +29,9 @@ OpenVM is a performant and modular zkVM framework built for customization and ex
 
 - **On-chain Verification**: Every VM made using the framework comes with out-of-the-box support for unbounded program proving with verification on Ethereum.
 
-## Security Status
+## Status
 
-As of December 2024, OpenVM has not been audited and is currently not recommended for production use. We plan to continue development towards a production-ready release in 2025.
+As of the v1.0.0 release in March 2025, OpenVM is recommended for production use. OpenVM completed an external [audit](https://github.com/openvm-org/openvm/blob/main/audits/v1-cantina-report.pdf) on [Cantina](https://cantina.xyz/) from January to March 2025 as well as an internal [audit](https://github.com/openvm-org/openvm/blob/main/audits/v1-internal/README.md) by members of the [Axiom](https://axiom.xyz/) team during the same timeframe.
 
 ## For Users
 
@@ -39,7 +39,11 @@ See the [Book](https://book.openvm.dev) for more information on how to use OpenV
 
 ## For Contributors
 
-See the [Contributor Docs](./docs) for more information on the project. A good starting point is [Project Layout](./docs/repo/layout.md). See the [Assets](https://github.com/openvm-org/openvm/tree/main/assets) folder for OpenVM's logo and favicon. 
+See the [Contributor Docs](./docs) for more information on the project. A good starting point is [Project Layout](./docs/repo/layout.md). See the [Assets](https://github.com/openvm-org/openvm/tree/main/assets) folder for OpenVM's logo and favicon.
+
+## Security
+
+See [SECURITY.md](./SECURITY.md).
 
 ## Acknowledgements
 

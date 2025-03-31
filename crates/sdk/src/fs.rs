@@ -1,18 +1,23 @@
 use std::{
-    fs::{create_dir_all, read, write},
+    fs::{create_dir_all, read, write, File},
     path::Path,
 };
 
 use eyre::Result;
-use openvm_circuit::arch::{instructions::exe::VmExe, VmConfig};
-use openvm_native_recursion::halo2::{wrapper::EvmVerifier, EvmProof};
+use openvm_circuit::arch::{instructions::exe::VmExe, ContinuationVmProof, VmConfig};
+use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+use openvm_native_recursion::halo2::wrapper::{EvmVerifier, EvmVerifierByteCode};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
+    codec::{Decode, Encode},
     keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey},
-    prover::vm::ContinuationVmProof,
+    types::EvmProof,
     F, SC,
 };
+
+pub const EVM_VERIFIER_SOL_FILENAME: &str = "verifier.sol";
+pub const EVM_VERIFIER_ARTIFACT_FILENAME: &str = "verifier.bytecode.json";
 
 pub fn read_exe_from_file<P: AsRef<Path>>(path: P) -> Result<VmExe<F>> {
     read_from_file_bitcode(path)
@@ -44,14 +49,27 @@ pub fn write_app_vk_to_file<P: AsRef<Path>>(app_vk: AppVerifyingKey, path: P) ->
 }
 
 pub fn read_app_proof_from_file<P: AsRef<Path>>(path: P) -> Result<ContinuationVmProof<SC>> {
-    read_from_file_bitcode(path)
+    decode_from_file(path)
 }
 
 pub fn write_app_proof_to_file<P: AsRef<Path>>(
     proof: ContinuationVmProof<SC>,
     path: P,
 ) -> Result<()> {
-    write_to_file_bitcode(path, proof)
+    encode_to_file(path, proof)
+}
+
+pub fn read_root_verifier_input_from_file<P: AsRef<Path>>(
+    path: P,
+) -> Result<RootVmVerifierInput<SC>> {
+    decode_from_file(path)
+}
+
+pub fn write_root_verifier_input_to_file<P: AsRef<Path>>(
+    input: RootVmVerifierInput<SC>,
+    path: P,
+) -> Result<()> {
+    encode_to_file(path, input)
 }
 
 pub fn read_agg_pk_from_file<P: AsRef<Path>>(path: P) -> Result<AggProvingKey> {
@@ -63,19 +81,32 @@ pub fn write_agg_pk_to_file<P: AsRef<Path>>(agg_pk: AggProvingKey, path: P) -> R
 }
 
 pub fn read_evm_proof_from_file<P: AsRef<Path>>(path: P) -> Result<EvmProof> {
-    read_from_file_bitcode(path)
+    let proof: EvmProof = serde_json::from_reader(File::open(path)?)?;
+    Ok(proof)
 }
 
 pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmProof, path: P) -> Result<()> {
-    write_to_file_bitcode(path, proof)
+    serde_json::to_writer(File::create(path)?, &proof)?;
+    Ok(())
 }
 
-pub fn read_evm_verifier_from_file<P: AsRef<Path>>(path: P) -> Result<EvmVerifier> {
-    read_from_file_bytes(path)
+pub fn read_evm_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<EvmVerifier> {
+    let sol_code_path = folder.as_ref().join(EVM_VERIFIER_SOL_FILENAME);
+    let sol_code = std::fs::read_to_string(sol_code_path)?;
+    let artifact_path = folder.as_ref().join(EVM_VERIFIER_ARTIFACT_FILENAME);
+    let artifact: EvmVerifierByteCode = serde_json::from_reader(File::open(artifact_path)?)?;
+    Ok(EvmVerifier { sol_code, artifact })
 }
 
-pub fn write_evm_verifier_to_file<P: AsRef<Path>>(verifier: EvmVerifier, path: P) -> Result<()> {
-    write_to_file_bytes(path, verifier)
+pub fn write_evm_verifier_to_folder<P: AsRef<Path>>(
+    verifier: EvmVerifier,
+    folder: P,
+) -> Result<()> {
+    let sol_code_path = folder.as_ref().join(EVM_VERIFIER_SOL_FILENAME);
+    std::fs::write(sol_code_path, verifier.sol_code)?;
+    let artifact_path = folder.as_ref().join(EVM_VERIFIER_ARTIFACT_FILENAME);
+    serde_json::to_writer(File::create(artifact_path)?, &verifier.artifact)?;
+    Ok(())
 }
 
 pub fn read_object_from_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
@@ -111,5 +142,20 @@ pub fn write_to_file_bytes<T: Into<Vec<u8>>, P: AsRef<Path>>(path: P, data: T) -
         create_dir_all(parent)?;
     }
     write(path, data.into())?;
+    Ok(())
+}
+
+pub fn decode_from_file<T: Decode, P: AsRef<Path>>(path: P) -> Result<T> {
+    let reader = &mut File::open(path)?;
+    let ret = T::decode(reader)?;
+    Ok(ret)
+}
+
+pub fn encode_to_file<T: Encode, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
+    if let Some(parent) = path.as_ref().parent() {
+        create_dir_all(parent)?;
+    }
+    let writer = &mut File::create(path)?;
+    data.encode(writer)?;
     Ok(())
 }

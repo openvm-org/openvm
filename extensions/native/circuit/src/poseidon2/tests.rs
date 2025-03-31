@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
-    Streams, VirtualMachine,
+    verify_single, Streams, VirtualMachine,
 };
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
 use openvm_native_compiler::{
@@ -38,13 +38,13 @@ use crate::{
     NativeConfig,
 };
 
-const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus(7);
+const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
 
 fn compute_commit<F: Field>(
     dim: &[usize],
     opened: &[Vec<F>],
     proof: &[[F; CHUNK]],
-    root_is_on_right: &[bool],
+    sibling_is_on_right: &[bool],
     hash_function: impl Fn([F; CHUNK], [F; CHUNK]) -> ([F; CHUNK], [F; CHUNK]),
 ) -> [F; CHUNK] {
     let mut log_height = dim[0] as isize;
@@ -73,7 +73,7 @@ fn compute_commit<F: Field>(
         }
         if log_height > 0 {
             let sibling = proof[proof_index];
-            let (left, right) = if root_is_on_right[proof_index] {
+            let (left, right) = if sibling_is_on_right[proof_index] {
                 (sibling, root)
             } else {
                 (root, sibling)
@@ -93,7 +93,7 @@ struct VerifyBatchInstance {
     dim: Vec<usize>,
     opened: Vec<Vec<F>>,
     proof: Vec<[F; CHUNK]>,
-    root_is_on_right: Vec<bool>,
+    sibling_is_on_right: Vec<bool>,
     commit: [F; CHUNK],
 }
 
@@ -106,7 +106,7 @@ fn random_instance(
     let mut dims = vec![];
     let mut opened = vec![];
     let mut proof = vec![];
-    let mut root_is_on_right = vec![];
+    let mut sibling_is_on_right = vec![];
     for (log_height, row_lengths) in row_lengths.iter().enumerate() {
         for &row_length in row_lengths {
             dims.push(log_height);
@@ -118,22 +118,22 @@ fn random_instance(
         }
         if log_height > 0 {
             proof.push(std::array::from_fn(|_| rng.gen()));
-            root_is_on_right.push(rng.gen());
+            sibling_is_on_right.push(rng.gen());
         }
     }
 
     dims.reverse();
     opened.reverse();
     proof.reverse();
-    root_is_on_right.reverse();
+    sibling_is_on_right.reverse();
 
-    let commit = compute_commit(&dims, &opened, &proof, &root_is_on_right, hash_function);
+    let commit = compute_commit(&dims, &opened, &proof, &sibling_is_on_right, hash_function);
 
     VerifyBatchInstance {
         dim: dims,
         opened,
         proof,
-        root_is_on_right,
+        sibling_is_on_right,
         commit,
     }
 }
@@ -184,7 +184,7 @@ fn test<const N: usize>(cases: [Case; N]) {
             dim,
             opened,
             proof,
-            root_is_on_right,
+            sibling_is_on_right,
             commit,
         } = instance;
 
@@ -225,7 +225,7 @@ fn test<const N: usize>(cases: [Case; N]) {
             .hint_space
             .push(proof.iter().flatten().copied().collect());
         drop(streams);
-        for (i, &bit) in root_is_on_right.iter().enumerate() {
+        for (i, &bit) in sibling_is_on_right.iter().enumerate() {
             tester.write_cell(address_space, index_base_pointer + i, F::from_bool(bit));
         }
         tester.write(address_space, commit_pointer, commit);
@@ -455,7 +455,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
 }
 
 fn get_engine() -> BabyBearBlake3Engine {
-    BabyBearBlake3Engine::new(standard_fri_params_with_100_bits_conjectured_security(3))
+    BabyBearBlake3Engine::new(FriParameters::new_for_testing(3))
 }
 
 #[test]
@@ -480,7 +480,6 @@ fn verify_batch_chip_simple_50() {
 fn air_test_with_compress_poseidon2(
     poseidon2_max_constraint_degree: usize,
     program: Program<BabyBear>,
-    continuation_enabled: bool,
 ) {
     let fri_params = if matches!(std::env::var("OPENVM_FAST_TEST"), Ok(x) if &x == "1") {
         FriParameters {
@@ -494,19 +493,14 @@ fn air_test_with_compress_poseidon2(
     };
     let engine = BabyBearPoseidon2Engine::new(fri_params);
 
-    let config = if continuation_enabled {
-        NativeConfig::aggregation(0, poseidon2_max_constraint_degree).with_continuations()
-    } else {
-        NativeConfig::aggregation(0, poseidon2_max_constraint_degree)
-    };
+    let config = NativeConfig::aggregation(0, poseidon2_max_constraint_degree);
     let vm = VirtualMachine::new(engine, config);
 
     let pk = vm.keygen();
     let result = vm.execute_and_generate(program, vec![]).unwrap();
     let proofs = vm.prove(&pk, result);
     for proof in proofs {
-        vm.verify_single(&pk.get_vk(), &proof)
-            .expect("Verification failed");
+        verify_single(&vm.engine, &pk.get_vk(), &proof).expect("Verification failed");
     }
 }
 
@@ -600,8 +594,6 @@ fn test_vm_compress_poseidon2_as4() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test_with_compress_poseidon2(7, program.clone(), false);
-    air_test_with_compress_poseidon2(3, program.clone(), false);
-    air_test_with_compress_poseidon2(7, program.clone(), true);
-    air_test_with_compress_poseidon2(3, program.clone(), true);
+    air_test_with_compress_poseidon2(3, program.clone());
+    air_test_with_compress_poseidon2(7, program.clone());
 }

@@ -39,7 +39,7 @@ pub fn verify_query<C: Config>(
     proof: &FriQueryProofVariable<C>,
     betas: &Array<C, Ext<C::F, C::EF>>,
     reduced_openings: &Array<C, Ext<C::F, C::EF>>,
-    log_max_height: RVar<C::N>,
+    log_max_lde_height: RVar<C::N>,
 ) -> Ext<C::F, C::EF>
 where
     C::F: TwoAdicField,
@@ -47,14 +47,15 @@ where
 {
     builder.cycle_tracker_start("verify-query");
     let folded_eval: Ext<C::F, C::EF> = builder.eval(C::F::ZERO);
-    let two_adic_generator_f = config.get_two_adic_generator(builder, log_max_height);
+    let two_adic_generator_f = config.get_two_adic_generator(builder, log_max_lde_height);
 
     let two_adic_gen_ext = two_adic_generator_f.to_operand().symbolic();
     let two_adic_generator_ef: Ext<_, _> = builder.eval(two_adic_gen_ext);
 
-    let index_bits_truncated = index_bits.slice(builder, 0, log_max_height);
+    let index_bits_truncated = index_bits.slice(builder, 0, log_max_lde_height);
     let x = builder.exp_bits_big_endian(two_adic_generator_ef, &index_bits_truncated);
 
+    // proof.commit_phase_openings.len() == log_max_lde_height - log_blowup
     builder.assert_usize_eq(
         proof.commit_phase_openings.len(),
         commit_phase_commits.len(),
@@ -63,12 +64,13 @@ where
         .range(0, commit_phase_commits.len())
         .for_each(|i_vec, builder| {
             let i = i_vec[0];
-            let log_folded_height = builder.eval_expr(log_max_height - i - C::N::ONE);
+            let log_folded_height = builder.eval_expr(log_max_lde_height - i - C::N::ONE);
             let log_folded_height_plus_one = builder.eval_expr(log_folded_height + C::N::ONE);
             let commit = builder.get(commit_phase_commits, i);
             let step = builder.get(&proof.commit_phase_openings, i);
             let beta = builder.get(betas, i);
 
+            // reduced_openings.len() == MAX_TWO_ADICITY >= log_max_lde_height >= log_folded_height_plus_one
             let reduced_opening = builder.get(reduced_openings, log_folded_height_plus_one);
             builder.assign(&folded_eval, folded_eval + reduced_opening);
 

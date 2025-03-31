@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 use crate::arch::MemoryConfig;
 
 /// (address_space, pointer)
-pub(crate) type Address = (u32, u32);
-pub(crate) const PAGE_SIZE: usize = 1 << 12;
+pub type Address = (u32, u32);
+pub const PAGE_SIZE: usize = 1 << 12;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct PagedVec<T, const PAGE_SIZE: usize> {
-    pages: Vec<Option<Vec<T>>>,
+pub struct PagedVec<T, const PAGE_SIZE: usize> {
+    pub pages: Vec<Option<Vec<T>>>,
 }
 
 // ------------------------------------------------------------------
@@ -229,8 +229,8 @@ impl<T: Clone, const PAGE_SIZE: usize> Iterator for PagedVecIter<'_, T, PAGE_SIZ
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddressMap<T, const PAGE_SIZE: usize> {
-    paged_vecs: Vec<PagedVec<T, PAGE_SIZE>>,
-    as_offset: u32,
+    pub paged_vecs: Vec<PagedVec<T, PAGE_SIZE>>,
+    pub as_offset: u32,
 }
 
 impl<T: Clone + Default, const PAGE_SIZE: usize> Default for AddressMap<T, PAGE_SIZE> {

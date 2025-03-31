@@ -7,10 +7,13 @@ mod bn254 {
     use eyre::Result;
     use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use openvm_circuit::{arch::SystemConfig, utils::air_test_with_min_segments};
+    use openvm_circuit::{
+        arch::SystemConfig,
+        utils::{air_test_impl, air_test_with_min_segments},
+    };
     use openvm_ecc_circuit::WeierstrassExtension;
     use openvm_ecc_guest::{
-        algebra::field::FieldExtension,
+        algebra::{field::FieldExtension, IntMod},
         halo2curves::{
             bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
             ff::Field,
@@ -22,7 +25,7 @@ mod bn254 {
     use openvm_pairing_guest::{
         bn254::BN254_MODULUS,
         halo2curves_shims::bn254::Bn254,
-        pairing::{EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop},
+        pairing::{EvaluatedLine, FinalExp, LineMulDType, MillerStep, MultiMillerLoop},
     };
     use openvm_pairing_transpiler::PairingTranspilerExtension;
     use openvm_rv32im_transpiler::{
@@ -291,6 +294,113 @@ mod bn254 {
         air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
+
+    #[test]
+    fn test_bn254_pairing_check_fallback() -> Result<()> {
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_check_fallback",
+            ["bn254"],
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        )?;
+
+        let S = G1Affine::generator();
+        let Q = G2Affine::generator();
+
+        let mut S_mul = [
+            G1Affine::from(S * Fr::from(1)),
+            G1Affine::from(S * Fr::from(2)),
+        ];
+        S_mul[1].y = -S_mul[1].y;
+        let Q_mul = [
+            G2Affine::from(Q * Fr::from(2)),
+            G2Affine::from(Q * Fr::from(1)),
+        ];
+
+        let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+        let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+
+        // Gather inputs
+        let io0 = s
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
+            .map(FieldAlgebra::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io1 = q
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter())
+            .flat_map(|fp2| fp2.to_coeffs())
+            .flat_map(|fp| fp.to_bytes())
+            .map(FieldAlgebra::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
+        // Don't run debugger because it's slow
+        air_test_impl(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        Ok(())
+    }
+
+    #[test]
+    fn test_bn254_final_exp_hint() -> Result<()> {
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "bn_final_exp_hint",
+            ["bn254"],
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        )?;
+
+        let P = G1Affine::generator();
+        let Q = G2Affine::generator();
+        let ps = vec![AffinePoint::new(P.x, P.y), AffinePoint::new(P.x, -P.y)];
+        let qs = vec![AffinePoint::new(Q.x, Q.y), AffinePoint::new(Q.x, Q.y)];
+        let f = Bn254::multi_miller_loop(&ps, &qs);
+        let (c, s) = Bn254::final_exp_hint(&f);
+        let ps = ps
+            .into_iter()
+            .map(|pt| {
+                let [x, y] = [pt.x, pt.y]
+                    .map(|x| openvm_pairing_guest::bn254::Fp::from_le_bytes(&x.to_bytes()));
+                AffinePoint::new(x, y)
+            })
+            .collect::<Vec<_>>();
+        let qs = qs
+            .into_iter()
+            .map(|pt| {
+                let [x, y] = [pt.x, pt.y]
+                    .map(|x| openvm_pairing_guest::bn254::Fp2::from_bytes(&x.to_bytes()));
+                AffinePoint::new(x, y)
+            })
+            .collect::<Vec<_>>();
+        let [c, s] = [c, s].map(|x| openvm_pairing_guest::bn254::Fp12::from_bytes(&x.to_bytes()));
+        let io = (ps, qs, (c, s));
+        let io = openvm::serde::to_vec(&io).unwrap();
+        let io = io
+            .into_iter()
+            .flat_map(|w| w.to_le_bytes())
+            .map(F::from_canonical_u8)
+            .collect();
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -302,7 +412,7 @@ mod bls12_381 {
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::{
         arch::{instructions::exe::VmExe, SystemConfig},
-        utils::{air_test, air_test_with_min_segments},
+        utils::{air_test, air_test_impl, air_test_with_min_segments},
     };
     use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
     use openvm_ecc_guest::{
@@ -621,11 +731,66 @@ mod bls12_381 {
         Ok(())
     }
 
+    #[ignore]
+    #[test]
+    fn test_bls12_381_pairing_check_fallback() -> Result<()> {
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_check_fallback",
+            ["bls12_381"],
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        )?;
+
+        let S = G1Affine::generator();
+        let Q = G2Affine::generator();
+
+        let mut S_mul = [
+            G1Affine::from(S * Fr::from(1)),
+            G1Affine::from(S * Fr::from(2)),
+        ];
+        S_mul[1].y = -S_mul[1].y;
+        let Q_mul = [
+            G2Affine::from(Q * Fr::from(2)),
+            G2Affine::from(Q * Fr::from(1)),
+        ];
+        let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+        let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+
+        // Gather inputs
+        let io0 = s
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
+            .map(FieldAlgebra::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io1 = q
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter())
+            .flat_map(|fp2| fp2.to_coeffs())
+            .flat_map(|fp| fp.to_bytes())
+            .map(FieldAlgebra::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
+        // Don't run debugger because it's slow
+        air_test_impl(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        Ok(())
+    }
+
     #[test]
     fn test_bls12_381_final_exp_hint() -> Result<()> {
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
-            "final_exp_hint",
+            "bls_final_exp_hint",
             ["bls12_381"],
         )?;
         let openvm_exe = VmExe::from_elf(

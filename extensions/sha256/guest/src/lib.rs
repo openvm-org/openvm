@@ -1,7 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-
-#[cfg(target_os = "zkvm")]
-use core::mem::MaybeUninit;
+#![no_std]
 
 /// This is custom-0 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x0b;
