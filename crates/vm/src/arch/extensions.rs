@@ -956,10 +956,16 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .into_iter()
             .chain(self._public_values_chip().map(|c| c.current_trace_cells()))
             .chain(self.memory_controller().current_trace_cells())
-            .chain(
-                self.chips_excluding_pv_chip()
-                    .map(|c| c.current_trace_cells()),
-            )
+            .chain(self.chips_excluding_pv_chip().map(|c| match c {
+                Either::Executor(c) => c.current_trace_cells(),
+                Either::Periphery(c) => {
+                    if c.constant_trace_height().is_some() {
+                        0
+                    } else {
+                        c.current_trace_cells()
+                    }
+                }
+            }))
             .chain([0]) // range_checker_chip
             .collect()
     }

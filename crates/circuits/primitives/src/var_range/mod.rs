@@ -262,6 +262,10 @@ impl ChipUsageGetter for SharedVariableRangeCheckerChip {
         self.0.air_name()
     }
 
+    fn constant_trace_height(&self) -> Option<usize> {
+        self.0.constant_trace_height()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.0.current_trace_height()
     }
