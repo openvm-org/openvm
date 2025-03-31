@@ -28,28 +28,35 @@ impl Renamer {
 }
 
 enum InlineResult {
-    Inlined(FlattenedFunction),
+    ToInline(FlatFunctionCall, FlattenedFunction),
     NotInlined(usize),
 }
 
 impl FlattenedFunction {
     pub fn perform_inlining(&mut self, inlined_functions: &HashMap<String, FlattenedFunction>) {
         let old_function_calls = take(&mut self.function_calls);
-        let mut num_inlines = 0;
         let mut inline_results = vec![];
         for function_call in old_function_calls {
-            let FlatFunctionCall {
-                material,
-                scope,
-                function_name,
-                arguments,
-                parser_metadata: _,
-            } = &function_call;
-            if let Some(callee) = inlined_functions.get(function_name) {
-                let path_offset = self.tree.num_branches(scope);
-                self.tree.insert(scope, &callee.tree);
+            if let Some(callee) = inlined_functions.get(&function_call.function_name) {
+                inline_results.push(InlineResult::ToInline(function_call, callee.clone()));
+            } else {
+                inline_results.push(InlineResult::NotInlined(self.function_calls.len()));
+                self.function_calls.push(function_call);
+            }
+        }
 
-                let mut inlined_callee = callee.clone();
+        let mut num_inlines = 0;
+        for inline_result in inline_results.iter_mut() {
+            if let InlineResult::ToInline(call, inlined_callee) = inline_result {
+                let FlatFunctionCall {
+                    material,
+                    scope,
+                    function_name: _,
+                    arguments,
+                    parser_metadata: _,
+                } = call;
+                let path_offset = self.tree.num_branches(scope);
+                self.tree.insert(scope, &inlined_callee.tree);
                 inlined_callee.inline(
                     self,
                     path_offset,
@@ -67,11 +74,7 @@ impl FlattenedFunction {
                 self.function_calls
                     .extend(inlined_callee.function_calls.clone());
 
-                inline_results.push(InlineResult::Inlined(inlined_callee));
                 num_inlines += 1;
-            } else {
-                inline_results.push(InlineResult::NotInlined(self.function_calls.len()));
-                self.function_calls.push(function_call.clone());
             }
         }
 
@@ -81,7 +84,7 @@ impl FlattenedFunction {
             for atom in old_atoms {
                 if let Atom::PartialFunctionCall(index, stage) = atom {
                     match &inline_results[index] {
-                        InlineResult::Inlined(inlined_callee) => {
+                        InlineResult::ToInline(_, inlined_callee) => {
                             atoms.extend(inlined_callee.atoms_staged[stage.index].clone());
                         }
                         InlineResult::NotInlined(new_index) => {
@@ -101,7 +104,7 @@ impl FlattenedFunction {
                     for atom in old_atoms {
                         if let Atom::PartialFunctionCall(index, stage) = atom {
                             match &inline_results[index] {
-                                InlineResult::Inlined(inlined_callee) => {
+                                InlineResult::ToInline(_, inlined_callee) => {
                                     atoms.extend(inlined_callee.atoms_staged[stage.index].iter());
                                 }
                                 InlineResult::NotInlined(new_index) => {
@@ -119,7 +122,7 @@ impl FlattenedFunction {
                 for atom in old_atoms {
                     if let Atom::PartialFunctionCall(index, stage) = atom {
                         match &inline_results[index] {
-                            InlineResult::Inlined(inlined_callee) => {
+                            InlineResult::ToInline(_, inlined_callee) => {
                                 representation_order
                                     .extend(inlined_callee.atoms_staged[stage.index].iter());
                             }
@@ -393,28 +396,6 @@ impl Assertion {
 impl Atom {
     pub fn inline(&mut self, target: &FlattenedFunction) {
         match self {
-            /*Atom::InArgument(argument_index) => {
-                home.statements.push(FlatStatement {
-                    material: imposed_material,
-                    scope: path_prefix.clone(),
-                    statement: Statement::Equality {
-                        left: home.arguments[*argument_index].clone(),
-                        right: argument_fulfillments[*argument_index].clone(),
-                    },
-                });
-                *self = Atom::Statement(target.statements.len() + home.statements.len() - 1);
-            }
-            Atom::OutArgument(argument_index) => {
-                home.statements.push(FlatStatement {
-                    material: imposed_material,
-                    scope: path_prefix.clone(),
-                    statement: Statement::Equality {
-                        left: argument_fulfillments[*argument_index].clone(),
-                        right: home.arguments[*argument_index].clone(),
-                    },
-                });
-                *self = Atom::Statement(target.statements.len() + home.statements.len() - 1);
-            }*/
             Atom::Match(index) => *index += target.matches.len(),
             Atom::Statement(index) => *index += target.statements.len(),
             Atom::PartialFunctionCall(index, _) => *index += target.function_calls.len(),
