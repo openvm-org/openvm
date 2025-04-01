@@ -2,7 +2,6 @@ use proc_macro2::{Ident, Span, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 
 use crate::core::ir::{Type, BOOLEAN_TYPE_NAME};
-use crate::execution::transpilation::FieldNamer;
 
 pub fn ident(s: &str) -> TokenStream {
     TokenStream::from(TokenTree::Ident(Ident::new(s, Span::call_site())))
@@ -47,19 +46,50 @@ pub fn type_to_rust(tipo: &Type) -> TokenStream {
         }
     }
 }
-pub fn type_to_identifier(tipo: &Type) -> String {
+pub fn type_to_identifier_execution(tipo: &Type) -> String {
+    type_to_identifier(tipo, true)
+}
+
+pub fn type_to_identifier_trace_generation(tipo: &Type) -> String {
+    type_to_identifier(tipo, false)
+}
+
+fn type_to_identifier(tipo: &Type, pass_through_unmaterialized: bool) -> String {
     match tipo {
         Type::Field => "F".to_string(),
-        Type::Reference(inner) => format!("Ref_{}", type_to_identifier(inner)),
-        Type::ReadablePrefix(inner, _) => format!("ReadablePrefix_{}", type_to_identifier(inner)),
+        Type::Reference(inner) => format!(
+            "Ref_{}",
+            type_to_identifier(inner, pass_through_unmaterialized)
+        ),
+        Type::ReadablePrefix(inner, _) => format!(
+            "ReadablePrefix_{}",
+            type_to_identifier(inner, pass_through_unmaterialized)
+        ),
         Type::AppendablePrefix(inner, _) => {
-            format!("AppendablePrefix_{}", type_to_identifier(inner))
+            format!(
+                "AppendablePrefix_{}",
+                type_to_identifier(inner, pass_through_unmaterialized)
+            )
         }
-        Type::Array(inner) => format!("Array_{}", type_to_identifier(inner)),
+        Type::Array(inner) => format!(
+            "Array_{}",
+            type_to_identifier(inner, pass_through_unmaterialized)
+        ),
         Type::NamedType(name) => name.clone(),
-        Type::Unmaterialized(inner) => type_to_identifier(inner),
+        Type::Unmaterialized(inner) => {
+            let inner_id = type_to_identifier(inner, pass_through_unmaterialized);
+            if pass_through_unmaterialized {
+                inner_id
+            } else {
+                format!("Unmaterialized_{}", inner_id)
+            }
+        }
         Type::ConstArray(elem, length) => {
-            format!("ConstArray{}_{}", length, type_to_identifier(elem))
+            format!(
+                "ConstArray{}_{}",
+                length,
+                type_to_identifier(elem, pass_through_unmaterialized)
+            )
         }
     }
 }
@@ -87,12 +117,22 @@ pub const APPEND_UNDER_CONSTRUCTION_ARRAY: &str = "append_under_construction_arr
 pub const ARRAY_ACCESS: &str = "array_access";
 pub const STAGE: &str = "stage";
 pub const FUNCTION_ID: &str = "FUNCTION_ID";
+pub const ZK_IDENTIFIER: &str = "zk_identifier";
 pub const CALC_ZK_IDENTIFIER: &str = "calc_zk_identifier";
+
+pub const GET_REFERENCE_MULTIPLICITY: &str = "get_reference_multiplicity";
+pub const GET_ARRAY_MULTIPLICITY: &str = "get_array_multiplicity";
 
 pub fn isize_to_field_elem(x: impl ToTokens) -> TokenStream {
     let function_name = ident(ISIZE_TO_FIELD_ELEM);
     quote! {
         #function_name(#x)
+    }
+}
+
+pub fn usize_to_field_elem(x: impl ToTokens) -> TokenStream {
+    quote! {
+        F::from_canonical_usize(#x)
     }
 }
 
@@ -109,7 +149,7 @@ pub fn create_ref(
 }
 
 pub fn dereference(tipo: &Type, x: impl ToTokens) -> TokenStream {
-    let type_identifier = type_to_identifier(tipo);
+    let type_identifier = type_to_identifier_execution(tipo);
     let tracker = ident(TRACKER);
     let memory = ident(&format!("{}_{}", MEMORY, type_identifier));
     let function_name = ident(DEREFERENCE);
@@ -122,7 +162,7 @@ pub fn create_empty_under_construction_array(
     tipo: &Type,
     zk_identifier: TokenStream,
 ) -> TokenStream {
-    let type_identifier = type_to_identifier(tipo);
+    let type_identifier = type_to_identifier_execution(tipo);
     let tracker = ident(TRACKER);
     let memory = ident(&format!("{}_{}", MEMORY, type_identifier));
     let function_name = ident(CREATE_EMPTY_UNDER_CONSTRUCTION_ARRAY);
@@ -131,12 +171,12 @@ pub fn create_empty_under_construction_array(
     }
 }
 
-pub fn prepend_under_construction_array(
+pub fn append_under_construction_array(
     tipo: &Type,
     old_array: impl ToTokens,
     elem: impl ToTokens,
 ) -> TokenStream {
-    let type_identifier = type_to_identifier(tipo);
+    let type_identifier = type_to_identifier_execution(tipo);
     let tracker = ident(TRACKER);
     let memory = ident(&format!("{}_{}", MEMORY, type_identifier));
     let function_name = ident(APPEND_UNDER_CONSTRUCTION_ARRAY);
@@ -146,7 +186,7 @@ pub fn prepend_under_construction_array(
 }
 
 pub fn array_access(tipo: &Type, array: impl ToTokens, index: impl ToTokens) -> TokenStream {
-    let type_identifier = type_to_identifier(tipo);
+    let type_identifier = type_to_identifier_execution(tipo);
     let tracker = ident(TRACKER);
     let memory = ident(&format!("{}_{}", MEMORY, type_identifier));
     let function_name = ident(ARRAY_ACCESS);

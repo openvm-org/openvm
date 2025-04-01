@@ -7,7 +7,7 @@ use crate::{
         ir::{Material, StatementVariant, Type},
         stage1::Stage2Program,
     },
-    execution::{
+    transpilation::execution::{
         constants::*,
         transpilation::{FieldNamer, VariableNamer},
     },
@@ -17,6 +17,10 @@ impl FlattenedFunction {
     pub fn transpile_struct_declaration(&self) -> TokenStream {
         let mut fields = vec![];
         let field_namer = FieldNamer::new(&self.declaration_set);
+        let name = field_namer.materialized();
+        fields.push(quote! {
+            pub #name: bool,
+        });
         let name = field_namer.call_index();
         fields.push(quote! {
             pub #name: usize,
@@ -49,9 +53,11 @@ impl FlattenedFunction {
                         })
                     }
                     StatementVariant::PrefixAppend { .. } => {
-                        let name = field_namer.appended_array_name(i);
+                        let array_name = field_namer.appended_array_name(i);
+                        let index_name = field_namer.appended_index_name(i);
                         fields.push(quote! {
-                            pub #name: #array_type,
+                            pub #array_name: #array_type,
+                            pub #index_name: usize,
                         })
                     }
                     _ => {}
@@ -79,7 +85,13 @@ impl FlattenedFunction {
         let mut namer = VariableNamer::new(&self.declaration_set);
         let mut transpiled_atoms = vec![];
         if stage_index == 0 {
-            transpiled_atoms.push(get_call_index(&self.name, namer.call_index()))
+            let materialized = namer.materialized();
+            let get_call_index = get_call_index(&self.name, namer.call_index());
+            transpiled_atoms.push(quote! {
+                if #materialized {
+                    #get_call_index
+                }
+            })
         }
         for atom in self.atoms_staged[stage_index].iter() {
             let transpiled_atom =
@@ -112,15 +124,10 @@ impl FlattenedFunction {
         let function_id = ident(FUNCTION_ID);
         let function_id_value = self.function_id;
 
-        // remove later, just to make it work without trace generation
-        let calc_zk_identifier = ident(CALC_ZK_IDENTIFIER);
         quote! {
             impl #struct_name {
                 const #function_id: usize = #function_id_value;
                 #(#stages)*
-                fn #calc_zk_identifier(&self, _: usize) -> usize {
-                    0
-                }
             }
         }
     }

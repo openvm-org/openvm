@@ -48,15 +48,28 @@ impl<T: Copy + Clone> Memory<T> {
             zk_identifier,
         }
     }
-    pub fn append_under_construction_array(&mut self, array: TLArray, value: T) -> TLArray {
+    pub fn append_under_construction_array(
+        &mut self,
+        array: TLArray,
+        value: T,
+    ) -> (usize, TLArray) {
         self.arrays[array.execution_index].push(value);
         self.array_num_accesses[array.execution_index].push(0);
-        array
+        (
+            self.array_num_accesses[array.execution_index].len() - 1,
+            array,
+        )
     }
     pub fn array_access(&mut self, array: TLArray, index: F) -> T {
         let index = index.as_canonical_u32() as usize;
         self.array_num_accesses[array.execution_index][index] += 1;
         self.arrays[array.execution_index][index]
+    }
+    pub fn get_reference_multiplicity(&self, reference: TLRef) -> usize {
+        self.reference_num_accesses[reference.execution_index]
+    }
+    pub fn get_array_multiplicity(&self, array: TLArray, index: usize) -> usize {
+        self.array_num_accesses[array.execution_index][index]
     }
 }
 pub fn isize_to_field_elem(x: isize) -> F {
@@ -69,22 +82,23 @@ pub fn isize_to_field_elem(x: isize) -> F {
 }
 #[derive(Default, Debug)]
 pub struct TLFunction_merkle_verify {
+    pub materialized: bool,
     pub call_index: usize,
-    pub leaf: [F; 8usize],
-    pub inline0_right: [F; 8usize],
-    pub sibling_0_False: [F; 8usize],
+    pub child_0_False: [F; 8usize],
     pub hash_result: [F; 8usize],
     pub right: [F; 8usize],
-    pub siblings: TLArray,
     pub commit: [F; 8usize],
-    pub bits: TLArray,
+    pub left: [F; 8usize],
     pub inline0_left: [F; 8usize],
-    pub child_0_False: [F; 8usize],
+    pub inline0_result: [F; 8usize],
+    pub siblings: TLArray,
+    pub i_0_False: F,
+    pub inline0_right: [F; 8usize],
+    pub leaf: [F; 8usize],
+    pub bits: TLArray,
+    pub sibling_0_False: [F; 8usize],
     pub length: F,
     pub bit_0_False: bool,
-    pub inline0_result: [F; 8usize],
-    pub left: [F; 8usize],
-    pub i_0_False: F,
     pub scope_0_True: bool,
     pub scope_0_False: bool,
     pub scope_0_False_0_True: bool,
@@ -94,8 +108,10 @@ pub struct TLFunction_merkle_verify {
 impl TLFunction_merkle_verify {
     const FUNCTION_ID: usize = 0usize;
     pub fn stage_0(&mut self, tracker: &mut Tracker) {
-        self.call_index = tracker.merkle_verify_call_counter;
-        tracker.merkle_verify_call_counter += 1;
+        if self.materialized {
+            self.call_index = tracker.merkle_verify_call_counter;
+            tracker.merkle_verify_call_counter += 1;
+        }
         match self.length == isize_to_field_elem(0isize) {
             true => self.scope_0_True = true,
             false => self.scope_0_False = true,
@@ -137,6 +153,7 @@ impl TLFunction_merkle_verify {
         }
         if self.scope_0_False {
             self.callee_0 = Box::new(Some(TLFunction_merkle_verify::default()));
+            self.callee_0.as_mut().as_mut().unwrap().materialized = self.materialized;
             self.callee_0.as_mut().as_mut().unwrap().leaf = self.leaf;
             self.callee_0.as_mut().as_mut().unwrap().length =
                 self.length - isize_to_field_elem(1isize);
@@ -174,50 +191,59 @@ impl TLFunction_merkle_verify {
 }
 #[derive(Default, Debug)]
 pub struct TLFunction_main {
+    pub materialized: bool,
     pub call_index: usize,
-    pub inline0_left: [F; 8usize],
-    pub siblings1: TLArray,
-    pub bits: TLArray,
-    pub inline0_result: [F; 8usize],
-    pub inline0_right: [F; 8usize],
-    pub inline1_result: [F; 8usize],
     pub bits2: TLArray,
-    pub inline1_right: [F; 8usize],
-    pub bits0: TLArray,
-    pub x: [F; 8usize],
-    pub c: [F; 8usize],
-    pub siblings2: TLArray,
-    pub siblings: TLArray,
-    pub a: [F; 8usize],
-    pub inline2_right: [F; 8usize],
-    pub inline1_left: [F; 8usize],
-    pub inline2_result: [F; 8usize],
-    pub inline2_left: [F; 8usize],
-    pub siblings0: TLArray,
-    pub bits1: TLArray,
-    pub siblings3: TLArray,
-    pub should_fail: bool,
     pub bits3: TLArray,
-    pub b: [F; 8usize],
-    pub y: [F; 8usize],
+    pub inline1_right: [F; 8usize],
+    pub c: [F; 8usize],
+    pub bits1: TLArray,
+    pub should_fail: bool,
+    pub inline1_result: [F; 8usize],
+    pub bits: TLArray,
+    pub a: [F; 8usize],
+    pub inline0_result: [F; 8usize],
+    pub inline2_result: [F; 8usize],
+    pub inline2_right: [F; 8usize],
+    pub siblings2: TLArray,
+    pub siblings3: TLArray,
+    pub siblings: TLArray,
+    pub x: [F; 8usize],
+    pub inline0_right: [F; 8usize],
+    pub inline2_left: [F; 8usize],
+    pub bits0: TLArray,
     pub root: [F; 8usize],
+    pub siblings1: TLArray,
+    pub siblings0: TLArray,
     pub leaf: [F; 8usize],
+    pub y: [F; 8usize],
+    pub inline0_left: [F; 8usize],
+    pub b: [F; 8usize],
+    pub inline1_left: [F; 8usize],
     pub scope_0_False: bool,
     pub scope_0_True: bool,
     pub appended_array_5: TLArray,
+    pub appended_index_5: usize,
     pub appended_array_6: TLArray,
+    pub appended_index_6: usize,
     pub appended_array_7: TLArray,
+    pub appended_index_7: usize,
     pub appended_array_10: TLArray,
+    pub appended_index_10: usize,
     pub appended_array_11: TLArray,
+    pub appended_index_11: usize,
     pub appended_array_12: TLArray,
+    pub appended_index_12: usize,
     pub callee_0: Box<Option<TLFunction_merkle_verify>>,
     pub callee_1: Box<Option<TLFunction_merkle_verify>>,
 }
 impl TLFunction_main {
     const FUNCTION_ID: usize = 1usize;
     pub fn stage_0(&mut self, tracker: &mut Tracker) {
-        self.call_index = tracker.main_call_counter;
-        tracker.main_call_counter += 1;
+        if self.materialized {
+            self.call_index = tracker.main_call_counter;
+            tracker.main_call_counter += 1;
+        }
         self.leaf = [isize_to_field_elem(0isize); 8usize];
         self.a = [isize_to_field_elem(1isize); 8usize];
         self.b = [isize_to_field_elem(2isize); 8usize];
@@ -226,33 +252,45 @@ impl TLFunction_main {
             .memory_ConstArray8_F
             .create_empty_under_construction_array(self.calc_zk_identifier(4usize));
         self.appended_array_5 = self.siblings0;
-        self.siblings1 = tracker
+        let (temp_2, temp_1) = tracker
             .memory_ConstArray8_F
             .append_under_construction_array(self.appended_array_5, self.a);
+        self.appended_index_5 = temp_2;
+        self.siblings1 = temp_1;
         self.appended_array_6 = self.siblings1;
-        self.siblings2 = tracker
+        let (temp_4, temp_3) = tracker
             .memory_ConstArray8_F
             .append_under_construction_array(self.appended_array_6, self.b);
+        self.appended_index_6 = temp_4;
+        self.siblings2 = temp_3;
         self.appended_array_7 = self.siblings2;
-        self.siblings3 = tracker
+        let (temp_6, temp_5) = tracker
             .memory_ConstArray8_F
             .append_under_construction_array(self.appended_array_7, self.c);
+        self.appended_index_7 = temp_6;
+        self.siblings3 = temp_5;
         self.siblings = self.siblings3;
         self.bits0 = tracker
             .memory_Bool
             .create_empty_under_construction_array(self.calc_zk_identifier(9usize));
         self.appended_array_10 = self.bits0;
-        self.bits1 = tracker
+        let (temp_8, temp_7) = tracker
             .memory_Bool
             .append_under_construction_array(self.appended_array_10, false);
+        self.appended_index_10 = temp_8;
+        self.bits1 = temp_7;
         self.appended_array_11 = self.bits1;
-        self.bits2 = tracker
+        let (temp_10, temp_9) = tracker
             .memory_Bool
             .append_under_construction_array(self.appended_array_11, true);
+        self.appended_index_11 = temp_10;
+        self.bits2 = temp_9;
         self.appended_array_12 = self.bits2;
-        self.bits3 = tracker
+        let (temp_12, temp_11) = tracker
             .memory_Bool
             .append_under_construction_array(self.appended_array_12, false);
+        self.appended_index_12 = temp_12;
+        self.bits3 = temp_11;
         self.bits = self.bits3;
         match self.should_fail {
             false => self.scope_0_False = true,
@@ -299,6 +337,7 @@ impl TLFunction_main {
         self.root = self.inline2_result;
         if self.scope_0_False {
             self.callee_0 = Box::new(Some(TLFunction_merkle_verify::default()));
+            self.callee_0.as_mut().as_mut().unwrap().materialized = self.materialized;
             self.callee_0.as_mut().as_mut().unwrap().leaf = self.leaf;
             self.callee_0.as_mut().as_mut().unwrap().length = isize_to_field_elem(3isize);
             self.callee_0.as_mut().as_mut().unwrap().bits = self.bits;
@@ -308,6 +347,7 @@ impl TLFunction_main {
         }
         if self.scope_0_True {
             self.callee_1 = Box::new(Some(TLFunction_merkle_verify::default()));
+            self.callee_1.as_mut().as_mut().unwrap().materialized = self.materialized;
             self.callee_1.as_mut().as_mut().unwrap().leaf = self.leaf;
             self.callee_1.as_mut().as_mut().unwrap().length = isize_to_field_elem(2isize);
             self.callee_1.as_mut().as_mut().unwrap().bits = self.bits;

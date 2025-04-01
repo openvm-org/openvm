@@ -2,6 +2,7 @@ use itertools::Itertools;
 use proc_macro2::TokenStream;
 use quote::quote;
 
+use crate::transpilation::execution::constants::*;
 use crate::{
     core::{
         containers::{DeclarationSet, ExpressionContainer},
@@ -15,7 +16,6 @@ use crate::{
         stage1::Stage2Program,
         type_resolution::TypeSet,
     },
-    execution::constants::*,
     parser::metadata::ParserMetadata,
 };
 
@@ -38,6 +38,9 @@ pub fn name_field_according_to_scope(scope: &ScopePath, name: &str) -> TokenStre
 }
 
 impl<'a> FieldNamer<'a> {
+    pub fn materialized(&self) -> TokenStream {
+        ident("materialized")
+    }
     pub fn call_index(&self) -> TokenStream {
         ident("call_index")
     }
@@ -58,6 +61,9 @@ impl<'a> FieldNamer<'a> {
     }
     pub fn appended_array_name(&self, index: usize) -> TokenStream {
         ident(&format!("appended_array_{}", index))
+    }
+    pub fn appended_index_name(&self, index: usize) -> TokenStream {
+        ident(&format!("appended_index_{}", index))
     }
     pub fn callee_name(&self, index: usize) -> TokenStream {
         ident(&format!("callee_{}", index))
@@ -85,6 +91,9 @@ impl<'a> VariableNamer<'a> {
             self.#name
         }
     }
+    pub fn materialized(&self) -> TokenStream {
+        self.refer_to_field(self.field_namer.materialized())
+    }
     pub fn call_index(&self) -> TokenStream {
         self.refer_to_field(self.field_namer.call_index())
     }
@@ -111,6 +120,9 @@ impl<'a> VariableNamer<'a> {
     }
     pub fn appended_array_name(&self, index: usize) -> TokenStream {
         self.refer_to_field(self.field_namer.appended_array_name(index))
+    }
+    pub fn appended_index_name(&self, index: usize) -> TokenStream {
+        self.refer_to_field(self.field_namer.appended_index_name(index))
     }
     pub fn callee_name(&self, index: usize) -> TokenStream {
         self.refer_to_field(self.field_namer.callee_name(index))
@@ -349,7 +361,7 @@ impl FlatStatement {
                 reference: reference_expression,
                 data,
             } => {
-                let type_identifier = type_to_identifier(data.get_type());
+                let type_identifier = type_to_identifier_execution(data.get_type());
                 let data = data.transpile_defined(scope, &namer, type_set);
                 let zk_identifier = calc_zk_identifier(index);
                 let reference = create_ref(type_identifier, data, zk_identifier);
@@ -432,15 +444,28 @@ impl FlatStatement {
                         )
                     }
                 };
+                let new_array_name = namer.new_temporary_name();
+                let index_name = namer.new_temporary_name();
                 let elem = elem.transpile_defined(scope, namer, type_set);
-                let following = new_array.transpile_top_down(
-                    scope,
-                    &prepend_under_construction_array(tipo, this, elem),
-                    namer,
-                    type_set,
-                );
+                let append = append_under_construction_array(tipo, this, elem);
+                let append = quote! {
+                    let (#index_name, #new_array_name) = #append;
+                };
+                let index_store = match material {
+                    Material::Materialized => {
+                        let index_field = namer.appended_index_name(index);
+                        quote! {
+                            #index_field = #index_name;
+                        }
+                    }
+                    Material::Dematerialized => quote! {},
+                };
+                let following =
+                    new_array.transpile_top_down(scope, &new_array_name, namer, type_set);
                 quote! {
                     #init
+                    #append
+                    #index_store
                     #following
                 }
             }
@@ -474,6 +499,15 @@ impl FlatFunctionCall {
             block.push(quote! {
                 #callee_field = Box::new(Some(#struct_name::default()));
             });
+            if self.material == Material::Materialized {
+                let declaration_set = DeclarationSet::default();
+                let field_namer = FieldNamer::new(&declaration_set);
+                let materialized = field_namer.materialized();
+                let self_materialized = namer.materialized();
+                block.push(quote! {
+                    #callee_field.as_mut().as_mut().unwrap().#materialized = #self_materialized;
+                });
+            }
         };
 
         for i in stage.start..stage.mid {

@@ -21,7 +21,7 @@ use crate::{
 #[derive(Default)]
 pub struct Representation {
     pub expressions: Vec<AirExpression>,
-    pub owned: Vec<bool>,
+    pub owned: Vec<Option<usize>>,
 }
 
 impl Representation {
@@ -34,7 +34,7 @@ impl Representation {
     pub fn unowned(&self) -> Representation {
         Representation {
             expressions: self.expressions.clone(),
-            owned: vec![false; self.expressions.len()],
+            owned: vec![None; self.expressions.len()],
         }
     }
 
@@ -44,14 +44,20 @@ impl Representation {
                 .iter()
                 .map(|x| x.as_ref().unwrap().clone())
                 .collect(),
-            owned: vec![false; options.len()],
+            owned: vec![None; options.len()],
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.expressions.len()
     }
 }
 
 pub struct RepresentationTable<'a> {
-    representations: HashMap<(ScopePath, String), Representation>,
+    pub(crate) representations: HashMap<(ScopePath, String), Representation>,
     declaration_set: &'a DeclarationSet,
+    pub reference_multiplicity_cells: HashMap<usize, usize>,
+    pub reference_offsets: HashMap<usize, usize>,
 }
 
 impl<'a> RepresentationTable<'a> {
@@ -59,6 +65,8 @@ impl<'a> RepresentationTable<'a> {
         Self {
             representations: HashMap::new(),
             declaration_set,
+            reference_multiplicity_cells: HashMap::new(),
+            reference_offsets: HashMap::new(),
         }
     }
     pub fn get_representation(&self, scope: &ScopePath, name: &str) -> Vec<AirExpression> {
@@ -83,12 +91,12 @@ impl<'a> RepresentationTable<'a> {
         for right in right.iter_mut() {
             if let Some(right) = right {
                 representation.expressions.push(right.clone());
-                representation.owned.push(false);
+                representation.owned.push(None);
             } else {
                 let new_cell = air_constructor.new_normal_cell(scope);
                 let expression = AirExpression::single_cell(new_cell);
                 representation.expressions.push(expression.clone());
-                representation.owned.push(true);
+                representation.owned.push(Some(new_cell));
                 *right = Some(expression);
             }
         }
@@ -106,7 +114,7 @@ impl<'a> RepresentationTable<'a> {
             name,
             Representation {
                 expressions: representation,
-                owned: vec![false; representation_len],
+                owned: vec![None; representation_len],
             },
         );
     }
@@ -145,6 +153,22 @@ impl<'a> RepresentationTable<'a> {
             .representations
             .insert((scope.clone(), name.to_string()), representation);
         assert!(prev.is_none());
+    }
+
+    pub fn new_multiplicity_cell(
+        &mut self,
+        air_constructor: &mut AirConstructor,
+        statement_index: usize,
+        scope: &ScopePath,
+    ) -> usize {
+        let cell = air_constructor.new_normal_cell(scope);
+        self.reference_multiplicity_cells
+            .insert(statement_index, cell);
+        cell
+    }
+
+    pub fn set_reference_offset(&mut self, index: usize, offset: usize) {
+        self.reference_offsets.insert(index, offset);
     }
 }
 
@@ -678,8 +702,11 @@ impl FlatStatement {
                         &self.scope,
                         &reference_representation,
                     );
-                    let multiplicity_cell =
-                        air_constructor.new_multiplicity_cell(index, &self.scope);
+                    let multiplicity_cell = representation_table.new_multiplicity_cell(
+                        air_constructor,
+                        index,
+                        &self.scope,
+                    );
                     let mut fields = vec![];
                     fields.extend(reference_representation);
                     fields.extend(data_representation);

@@ -31,9 +31,9 @@ pub struct AirConstructor {
     next_cell: usize,
     normal_cells: Vec<(usize, CellUsage)>,
 
+    pub(crate) leaf_scopes: HashMap<ScopePath, usize>,
     scope_expressions: HashMap<ScopePath, AirExpression>,
     reference_address_expressions: HashMap<usize, AirExpression>,
-    reference_multiplicity_cells: HashMap<usize, usize>,
 }
 
 impl AirConstructor {
@@ -113,16 +113,15 @@ impl AirConstructor {
         self.interactions.push(interaction);
     }
 
+    pub fn add_leaf_scope(&mut self, scope: &ScopePath) -> AirExpression {
+        let cell = self.make_cell();
+        self.leaf_scopes.insert(scope.clone(), cell);
+        AirExpression::single_cell(cell)
+    }
+
     pub fn set_scope_expression(&mut self, scope: &ScopePath, expression: AirExpression) {
         self.add_single_constraint(expression.clone(), expression.times(&expression));
         self.scope_expressions.insert(scope.clone(), expression);
-    }
-
-    pub fn new_multiplicity_cell(&mut self, statement_index: usize, scope: &ScopePath) -> usize {
-        let cell = self.new_normal_cell(scope);
-        self.reference_multiplicity_cells
-            .insert(statement_index, cell);
-        cell
     }
 
     pub fn set_reference_address_expression(&mut self, index: usize, expression: AirExpression) {
@@ -131,6 +130,10 @@ impl AirConstructor {
 
     pub fn get_reference_address_expression(&mut self, index: usize) -> AirExpression {
         self.reference_address_expressions[&index].clone()
+    }
+
+    pub fn width(&self) -> usize {
+        self.next_cell
     }
 }
 
@@ -200,7 +203,7 @@ impl AirTree {
 
     pub fn calc_scope_expressions(&self, air_constructor: &mut AirConstructor) -> AirExpression {
         let expression = if self.children.is_empty() {
-            AirExpression::single_cell(air_constructor.make_cell())
+            air_constructor.add_leaf_scope(&self.path_here)
         } else {
             let mut canonical_expression: Option<AirExpression> = None;
             for (_, children) in self.children.iter() {
@@ -227,7 +230,7 @@ impl AirTree {
 
 impl FlattenedFunction {
     #[allow(dead_code)]
-    fn construct_air(&self, program: &Stage2Program) -> AirConstructor {
+    fn construct_air(&self, program: &Stage2Program) -> (RepresentationTable, AirConstructor) {
         let mut relevant_scopes = vec![];
 
         for statement in self.statements.iter() {
@@ -259,6 +262,7 @@ impl FlattenedFunction {
         air_tree.init(&self.tree, &relevant_scopes);
 
         let mut air_constructor = AirConstructor::default();
+        let mut representation_table = RepresentationTable::new(&self.declaration_set);
 
         if self.creates_addresses {
             let mut offsets = HashMap::new();
@@ -289,10 +293,9 @@ impl FlattenedFunction {
                     i,
                     base.plus(&AirExpression::constant(offset as isize)),
                 );
+                representation_table.set_reference_offset(i, offset);
             }
         }
-
-        let mut representation_table = RepresentationTable::new(&self.declaration_set);
 
         let mut function_call_interactions = vec![];
         for function_call in self.function_calls.iter() {
@@ -396,7 +399,8 @@ impl FlattenedFunction {
                     old_prefix.calc_representation(&program.types, &representation_table, scope);
                 let elem_representation =
                     elem.calc_representation(&program.types, &representation_table, scope);
-                let multiplicity_cell = air_constructor.new_multiplicity_cell(i, scope);
+                let multiplicity_cell =
+                    representation_table.new_multiplicity_cell(&mut air_constructor, i, scope);
                 let (_, length) = old_prefix
                     .get_type()
                     .get_appendable_prefix_type(Material::Materialized, &ParserMetadata::default())
@@ -443,6 +447,52 @@ impl FlattenedFunction {
         };
         air_constructor.add_scoped_interaction(&ScopePath::empty(), own_call_interaction);
 
-        air_constructor
+        for assertion in self.assertions.iter() {
+            let left_representation = assertion.left.calc_representation(
+                &program.types,
+                &representation_table,
+                &assertion.scope,
+            )[0]
+            .clone();
+            let right_representation = assertion.right.calc_representation(
+                &program.types,
+                &representation_table,
+                &assertion.scope,
+            )[0]
+            .clone();
+            air_constructor.add_scoped_constraint(
+                &assertion.scope,
+                vec![left_representation],
+                &mut vec![Some(right_representation)],
+            );
+        }
+
+        (representation_table, air_constructor)
+    }
+}
+
+#[derive(Default)]
+pub struct AirSet<'a> {
+    pub airs: HashMap<String, (RepresentationTable<'a>, AirConstructor)>,
+}
+
+impl<'a> AirSet<'a> {
+    pub fn insert(&mut self, name: String, air: (RepresentationTable<'a>, AirConstructor)) {
+        self.airs.insert(name, air);
+    }
+
+    pub fn get_air(&self, name: &String) -> &(RepresentationTable<'a>, AirConstructor) {
+        self.airs.get(name).unwrap()
+    }
+}
+
+impl Stage2Program {
+    pub fn construct_airs(&self) -> AirSet {
+        let mut airs = AirSet::default();
+        for function in self.functions.values() {
+            let air = function.construct_air(self);
+            airs.insert(function.name.clone(), air);
+        }
+        airs
     }
 }

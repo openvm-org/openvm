@@ -1,14 +1,13 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use crate::air::constructor::AirConstructor;
 use crate::{
     core::{
         ir::{AlgebraicTypeDeclaration, Type, BOOLEAN_TYPE_NAME},
         stage1::Stage2Program,
         type_resolution::TypeSet,
     },
-    execution::{constants::*, helpers::rust_helpers, memory::rust_memory},
+    transpilation::execution::{constants::*, helpers::rust_helpers, memory::rust_memory},
 };
 
 pub fn rust_tracker(program: &Stage2Program, types_in_memory: Vec<Type>) -> TokenStream {
@@ -30,7 +29,7 @@ pub fn rust_tracker(program: &Stage2Program, types_in_memory: Vec<Type>) -> Toke
         })
     }
     for tipo in distinct_types {
-        let identifier = type_to_identifier(&tipo);
+        let identifier = type_to_identifier_execution(&tipo);
         let field_name = ident(&format!("{}_{}", MEMORY, identifier));
         let rust_type = type_to_rust(&tipo);
         let memory = memory_struct_name();
@@ -87,7 +86,7 @@ impl AlgebraicTypeDeclaration {
 }
 
 impl Stage2Program {
-    pub fn transpile(&self) -> TokenStream {
+    pub fn transpile_execution(&self) -> TokenStream {
         let mut functions = vec![];
         let mut types_in_memory = vec![];
         for function in self.functions.values() {

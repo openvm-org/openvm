@@ -7,8 +7,8 @@ use crate::{
 
 pub mod air;
 pub mod core;
-pub mod execution;
 pub mod parser;
+mod transpilation;
 pub mod transpiled_fibonacci;
 pub mod transpiled_merkle;
 
@@ -44,7 +44,7 @@ fn parse_and_compile_and_transpile_fibonacci() {
 
     let stage2_program = stage1(program).unwrap();
     //println!("{:?}", stage2_program);
-    let transpiled = stage2_program.transpile();
+    let transpiled = stage2_program.transpile_execution();
     println!("{}", transpiled);
 }
 
@@ -52,8 +52,11 @@ fn parse_and_compile_and_transpile_merkle() {
     let source = std::fs::read_to_string("merkle.txt").unwrap();
     let program = parse_program_source(&source).unwrap();
     let stage2_program = stage1(program).unwrap();
-    let transpiled = stage2_program.transpile();
-    println!("{}", transpiled);
+    let execution = stage2_program.transpile_execution();
+    println!("{}", execution);
+    let air_set = stage2_program.construct_airs();
+    let trace_generation = stage2_program.transpile_trace_generation(&air_set);
+    println!("{}", trace_generation);
 }
 
 fn test_merkle(should_fail: bool) {

@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use crate::execution::constants::{field_type, ident, ISIZE_TO_FIELD_ELEM};
+use crate::transpilation::execution::constants::{field_type, ident, ISIZE_TO_FIELD_ELEM};
 
 pub fn rust_helpers() -> TokenStream {
     let isize_to_field_elem = ident(ISIZE_TO_FIELD_ELEM);
