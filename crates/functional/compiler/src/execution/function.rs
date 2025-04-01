@@ -17,6 +17,10 @@ impl FlattenedFunction {
     pub fn transpile_struct_declaration(&self) -> TokenStream {
         let mut fields = vec![];
         let field_namer = FieldNamer::new(&self.declaration_set);
+        let name = field_namer.call_index();
+        fields.push(quote! {
+            pub #name: usize,
+        });
         for ((scope, name), tipo) in self.declaration_set.declarations.iter() {
             let name = field_namer.variable_name(scope, name);
             let tipo = type_to_rust(tipo);
@@ -72,8 +76,11 @@ impl FlattenedFunction {
     }
 
     pub fn transpile_stage(&self, stage_index: usize, program: &Stage2Program) -> TokenStream {
-        let mut transpiled_atoms = vec![];
         let mut namer = VariableNamer::new(&self.declaration_set);
+        let mut transpiled_atoms = vec![];
+        if stage_index == 0 {
+            transpiled_atoms.push(get_call_index(&self.name, namer.call_index()))
+        }
         for atom in self.atoms_staged[stage_index].iter() {
             let transpiled_atom =
                 match atom {
@@ -102,9 +109,18 @@ impl FlattenedFunction {
             stages.push(self.transpile_stage(i, program));
         }
         let struct_name = function_struct_name(&self.name);
+        let function_id = ident(FUNCTION_ID);
+        let function_id_value = self.function_id;
+
+        // remove later, just to make it work without trace generation
+        let calc_zk_identifier = ident(CALC_ZK_IDENTIFIER);
         quote! {
             impl #struct_name {
+                const #function_id: usize = #function_id_value;
                 #(#stages)*
+                fn #calc_zk_identifier(&self, _: usize) -> usize {
+                    0
+                }
             }
         }
     }

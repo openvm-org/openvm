@@ -2,6 +2,7 @@ use proc_macro2::{Ident, Span, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 
 use crate::core::ir::{Type, BOOLEAN_TYPE_NAME};
+use crate::execution::transpilation::FieldNamer;
 
 pub fn ident(s: &str) -> TokenStream {
     TokenStream::from(TokenTree::Ident(Ident::new(s, Span::call_site())))
@@ -78,12 +79,15 @@ pub fn tracker_struct_name() -> TokenStream {
 pub const ISIZE_TO_FIELD_ELEM: &str = "isize_to_field_elem";
 pub const TRACKER: &str = "tracker";
 pub const MEMORY: &str = "memory";
+pub const CALL_COUNTER: &str = "call_counter";
 pub const CREATE_REF: &str = "create_ref";
 pub const DEREFERENCE: &str = "dereference";
 pub const CREATE_EMPTY_UNDER_CONSTRUCTION_ARRAY: &str = "create_empty_under_construction_array";
 pub const APPEND_UNDER_CONSTRUCTION_ARRAY: &str = "append_under_construction_array";
 pub const ARRAY_ACCESS: &str = "array_access";
 pub const STAGE: &str = "stage";
+pub const FUNCTION_ID: &str = "FUNCTION_ID";
+pub const CALC_ZK_IDENTIFIER: &str = "calc_zk_identifier";
 
 pub fn isize_to_field_elem(x: impl ToTokens) -> TokenStream {
     let function_name = ident(ISIZE_TO_FIELD_ELEM);
@@ -92,11 +96,15 @@ pub fn isize_to_field_elem(x: impl ToTokens) -> TokenStream {
     }
 }
 
-pub fn create_ref(type_identifier: String, x: impl ToTokens) -> TokenStream {
+pub fn create_ref(
+    type_identifier: String,
+    x: impl ToTokens,
+    zk_identifier: TokenStream,
+) -> TokenStream {
     let tracker = ident(TRACKER);
     let function_name = ident(&format!("{}_{}", CREATE_REF, type_identifier));
     quote! {
-        #tracker.#function_name(#x)
+        #tracker.#function_name(#x, #zk_identifier)
     }
 }
 
@@ -110,13 +118,16 @@ pub fn dereference(tipo: &Type, x: impl ToTokens) -> TokenStream {
     }
 }
 
-pub fn create_empty_under_construction_array(tipo: &Type) -> TokenStream {
+pub fn create_empty_under_construction_array(
+    tipo: &Type,
+    zk_identifier: TokenStream,
+) -> TokenStream {
     let type_identifier = type_to_identifier(tipo);
     let tracker = ident(TRACKER);
     let memory = ident(&format!("{}_{}", MEMORY, type_identifier));
     let function_name = ident(CREATE_EMPTY_UNDER_CONSTRUCTION_ARRAY);
     quote! {
-        #tracker.#memory.#function_name()
+        #tracker.#memory.#function_name(#zk_identifier)
     }
 }
 
@@ -160,5 +171,21 @@ pub fn define_stage(stage_index: usize, body: TokenStream) -> TokenStream {
         pub fn #function_name(&mut self, #tracker: &mut #tracker_struct) {
             #body
         }
+    }
+}
+
+pub fn get_call_index(function_name: &String, function_field: TokenStream) -> TokenStream {
+    let tracker = ident(TRACKER);
+    let tracker_field = ident(&format!("{}_{}", function_name, CALL_COUNTER));
+    quote! {
+        #function_field = #tracker.#tracker_field;
+        #tracker.#tracker_field += 1;
+    }
+}
+
+pub fn calc_zk_identifier(statement_index: usize) -> TokenStream {
+    let function_name = ident(CALC_ZK_IDENTIFIER);
+    quote! {
+        self.#function_name(#statement_index)
     }
 }

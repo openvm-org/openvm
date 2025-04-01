@@ -1,6 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
+use crate::air::constructor::AirConstructor;
 use crate::{
     core::{
         ir::{AlgebraicTypeDeclaration, Type, BOOLEAN_TYPE_NAME},
@@ -10,7 +11,7 @@ use crate::{
     execution::{constants::*, helpers::rust_helpers, memory::rust_memory},
 };
 
-pub fn rust_tracker(types_in_memory: Vec<Type>) -> TokenStream {
+pub fn rust_tracker(program: &Stage2Program, types_in_memory: Vec<Type>) -> TokenStream {
     let mut distinct_types = vec![];
     for tipo in types_in_memory {
         if !distinct_types
@@ -22,6 +23,12 @@ pub fn rust_tracker(types_in_memory: Vec<Type>) -> TokenStream {
     }
 
     let mut fields = vec![];
+    for function_name in program.functions.keys() {
+        let field_name = ident(&format!("{}_{}", function_name, CALL_COUNTER));
+        fields.push(quote! {
+            pub #field_name: usize,
+        })
+    }
     for tipo in distinct_types {
         let identifier = type_to_identifier(&tipo);
         let field_name = ident(&format!("{}_{}", MEMORY, identifier));
@@ -92,7 +99,7 @@ impl Stage2Program {
             .algebraic_types
             .values()
             .map(|tipo| tipo.transpile(&self.types));
-        let tracker = rust_tracker(types_in_memory);
+        let tracker = rust_tracker(self, types_in_memory);
         let memory = rust_memory();
         let helpers = rust_helpers();
 

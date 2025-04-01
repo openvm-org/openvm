@@ -38,6 +38,9 @@ pub fn name_field_according_to_scope(scope: &ScopePath, name: &str) -> TokenStre
 }
 
 impl<'a> FieldNamer<'a> {
+    pub fn call_index(&self) -> TokenStream {
+        ident("call_index")
+    }
     pub fn scope_name(&self, scope: &ScopePath) -> TokenStream {
         assert!(!scope.0.is_empty());
         let mut full_name = "scope".to_string();
@@ -81,6 +84,9 @@ impl<'a> VariableNamer<'a> {
         quote! {
             self.#name
         }
+    }
+    pub fn call_index(&self) -> TokenStream {
+        self.refer_to_field(self.field_namer.call_index())
     }
     pub fn scope_name(&self, scope: &ScopePath) -> TokenStream {
         self.refer_to_field(self.field_namer.scope_name(scope))
@@ -345,7 +351,8 @@ impl FlatStatement {
             } => {
                 let type_identifier = type_to_identifier(data.get_type());
                 let data = data.transpile_defined(scope, &namer, type_set);
-                let reference = create_ref(type_identifier, data);
+                let zk_identifier = calc_zk_identifier(index);
+                let reference = create_ref(type_identifier, data, zk_identifier);
                 let (init, this) = match material {
                     Material::Materialized => {
                         let ref_name = namer.reference_name(index);
@@ -389,12 +396,15 @@ impl FlatStatement {
             StatementVariant::EmptyPrefix {
                 prefix: array,
                 elem_type,
-            } => array.transpile_top_down(
-                scope,
-                &create_empty_under_construction_array(elem_type),
-                namer,
-                type_set,
-            ),
+            } => {
+                let zk_identifier = calc_zk_identifier(index);
+                array.transpile_top_down(
+                    scope,
+                    &create_empty_under_construction_array(elem_type, zk_identifier),
+                    namer,
+                    type_set,
+                )
+            }
             StatementVariant::PrefixAppend {
                 new_prefix: new_array,
                 elem,

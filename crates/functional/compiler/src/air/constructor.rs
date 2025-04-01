@@ -37,6 +37,7 @@ pub struct AirConstructor {
 }
 
 impl AirConstructor {
+    pub const MAX_HEIGHT: usize = 1 << 24;
     pub fn make_cell(&mut self) -> usize {
         let cell = self.next_cell;
         self.next_cell += 1;
@@ -280,7 +281,9 @@ impl FlattenedFunction {
             }
             let row_index_cell = AirExpression::single_cell(air_constructor.have_row_index_cell());
             let num_addresses = AirExpression::constant(offsets.len() as isize);
-            let base = row_index_cell.times(&num_addresses);
+            let base =
+                AirExpression::constant((self.function_id * AirConstructor::MAX_HEIGHT) as isize)
+                    .plus(&row_index_cell.times(&num_addresses));
             for (i, offset) in offsets {
                 air_constructor.set_reference_address_expression(
                     i,

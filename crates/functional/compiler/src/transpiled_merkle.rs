@@ -3,42 +3,60 @@ use std::ops::Neg;
 type F = openvm_stark_sdk::p3_baby_bear::BabyBear;
 #[derive(Default, Debug)]
 pub struct Tracker {
+    pub merkle_verify_call_counter: usize,
+    pub main_call_counter: usize,
     pub memory_ConstArray8_F: Memory<[F; 8usize]>,
     pub memory_Bool: Memory<bool>,
 }
 #[derive(Clone, Copy, Default, Debug)]
-pub struct TLRef(usize);
+pub struct TLRef {
+    execution_index: usize,
+    zk_identifier: usize,
+}
 #[derive(Clone, Copy, Default, Debug)]
-pub struct TLArray(usize, usize);
+pub struct TLArray {
+    execution_index: usize,
+    zk_identifier: usize,
+}
 #[derive(Default, Debug)]
 pub struct Memory<T: Copy + Clone> {
     pub references: Vec<T>,
-    pub reference_timestamps: Vec<usize>,
+    pub reference_num_accesses: Vec<usize>,
     pub arrays: Vec<Vec<T>>,
-    pub array_timestamps: Vec<usize>,
+    pub array_num_accesses: Vec<Vec<usize>>,
 }
 impl<T: Copy + Clone> Memory<T> {
-    pub fn create_ref(&mut self, value: T) -> TLRef {
+    pub fn create_ref(&mut self, value: T, zk_identifier: usize) -> TLRef {
         let index = self.references.len();
         self.references.push(value);
-        self.reference_timestamps.push(0);
-        TLRef(index)
+        self.reference_num_accesses.push(0);
+        TLRef {
+            execution_index: index,
+            zk_identifier,
+        }
     }
-    pub fn dereference(&self, reference: TLRef) -> T {
-        self.references[reference.0]
+    pub fn dereference(&mut self, reference: TLRef) -> T {
+        self.reference_num_accesses[reference.execution_index] += 1;
+        self.references[reference.execution_index]
     }
-    pub fn create_empty_under_construction_array(&mut self) -> TLArray {
+    pub fn create_empty_under_construction_array(&mut self, zk_identifier: usize) -> TLArray {
         let index = self.arrays.len();
         self.arrays.push(vec![]);
-        self.array_timestamps.push(0);
-        TLArray(index, 0)
+        self.array_num_accesses.push(vec![]);
+        TLArray {
+            execution_index: index,
+            zk_identifier,
+        }
     }
     pub fn append_under_construction_array(&mut self, array: TLArray, value: T) -> TLArray {
-        self.arrays[array.0].push(value);
-        TLArray(array.0, array.1 + 1)
+        self.arrays[array.execution_index].push(value);
+        self.array_num_accesses[array.execution_index].push(0);
+        array
     }
-    pub fn array_access(&self, array: TLArray, index: F) -> T {
-        self.arrays[array.0][index.as_canonical_u32() as usize]
+    pub fn array_access(&mut self, array: TLArray, index: F) -> T {
+        let index = index.as_canonical_u32() as usize;
+        self.array_num_accesses[array.execution_index][index] += 1;
+        self.arrays[array.execution_index][index]
     }
 }
 pub fn isize_to_field_elem(x: isize) -> F {
@@ -51,21 +69,22 @@ pub fn isize_to_field_elem(x: isize) -> F {
 }
 #[derive(Default, Debug)]
 pub struct TLFunction_merkle_verify {
+    pub call_index: usize,
+    pub leaf: [F; 8usize],
+    pub inline0_right: [F; 8usize],
+    pub sibling_0_False: [F; 8usize],
+    pub hash_result: [F; 8usize],
     pub right: [F; 8usize],
     pub siblings: TLArray,
-    pub left: [F; 8usize],
-    pub i_0_False: F,
-    pub inline0_right: [F; 8usize],
-    pub inline0_left: [F; 8usize],
     pub commit: [F; 8usize],
     pub bits: TLArray,
-    pub sibling_0_False: [F; 8usize],
-    pub bit_0_False: bool,
-    pub leaf: [F; 8usize],
-    pub length: F,
-    pub inline0_result: [F; 8usize],
+    pub inline0_left: [F; 8usize],
     pub child_0_False: [F; 8usize],
-    pub hash_result: [F; 8usize],
+    pub length: F,
+    pub bit_0_False: bool,
+    pub inline0_result: [F; 8usize],
+    pub left: [F; 8usize],
+    pub i_0_False: F,
     pub scope_0_True: bool,
     pub scope_0_False: bool,
     pub scope_0_False_0_True: bool,
@@ -73,7 +92,10 @@ pub struct TLFunction_merkle_verify {
     pub callee_0: Box<Option<TLFunction_merkle_verify>>,
 }
 impl TLFunction_merkle_verify {
+    const FUNCTION_ID: usize = 0usize;
     pub fn stage_0(&mut self, tracker: &mut Tracker) {
+        self.call_index = tracker.merkle_verify_call_counter;
+        tracker.merkle_verify_call_counter += 1;
         match self.length == isize_to_field_elem(0isize) {
             true => self.scope_0_True = true,
             false => self.scope_0_False = true,
@@ -146,36 +168,40 @@ impl TLFunction_merkle_verify {
             self.commit = self.hash_result;
         }
     }
+    fn calc_zk_identifier(&self, _: usize) -> usize {
+        0
+    }
 }
 #[derive(Default, Debug)]
 pub struct TLFunction_main {
-    pub leaf: [F; 8usize],
-    pub b: [F; 8usize],
-    pub siblings3: TLArray,
+    pub call_index: usize,
     pub inline0_left: [F; 8usize],
-    pub inline1_left: [F; 8usize],
-    pub inline1_result: [F; 8usize],
-    pub inline0_result: [F; 8usize],
-    pub inline1_right: [F; 8usize],
     pub siblings1: TLArray,
+    pub bits: TLArray,
+    pub inline0_result: [F; 8usize],
+    pub inline0_right: [F; 8usize],
+    pub inline1_result: [F; 8usize],
+    pub bits2: TLArray,
+    pub inline1_right: [F; 8usize],
+    pub bits0: TLArray,
+    pub x: [F; 8usize],
+    pub c: [F; 8usize],
+    pub siblings2: TLArray,
+    pub siblings: TLArray,
+    pub a: [F; 8usize],
+    pub inline2_right: [F; 8usize],
+    pub inline1_left: [F; 8usize],
     pub inline2_result: [F; 8usize],
     pub inline2_left: [F; 8usize],
-    pub bits: TLArray,
-    pub a: [F; 8usize],
-    pub x: [F; 8usize],
-    pub siblings2: TLArray,
-    pub bits0: TLArray,
     pub siblings0: TLArray,
     pub bits1: TLArray,
-    pub inline2_right: [F; 8usize],
-    pub root: [F; 8usize],
-    pub y: [F; 8usize],
-    pub bits2: TLArray,
-    pub inline0_right: [F; 8usize],
-    pub bits3: TLArray,
+    pub siblings3: TLArray,
     pub should_fail: bool,
-    pub siblings: TLArray,
-    pub c: [F; 8usize],
+    pub bits3: TLArray,
+    pub b: [F; 8usize],
+    pub y: [F; 8usize],
+    pub root: [F; 8usize],
+    pub leaf: [F; 8usize],
     pub scope_0_False: bool,
     pub scope_0_True: bool,
     pub appended_array_5: TLArray,
@@ -188,14 +214,17 @@ pub struct TLFunction_main {
     pub callee_1: Box<Option<TLFunction_merkle_verify>>,
 }
 impl TLFunction_main {
+    const FUNCTION_ID: usize = 1usize;
     pub fn stage_0(&mut self, tracker: &mut Tracker) {
+        self.call_index = tracker.main_call_counter;
+        tracker.main_call_counter += 1;
         self.leaf = [isize_to_field_elem(0isize); 8usize];
         self.a = [isize_to_field_elem(1isize); 8usize];
         self.b = [isize_to_field_elem(2isize); 8usize];
         self.c = [isize_to_field_elem(3isize); 8usize];
         self.siblings0 = tracker
             .memory_ConstArray8_F
-            .create_empty_under_construction_array();
+            .create_empty_under_construction_array(self.calc_zk_identifier(4usize));
         self.appended_array_5 = self.siblings0;
         self.siblings1 = tracker
             .memory_ConstArray8_F
@@ -209,7 +238,9 @@ impl TLFunction_main {
             .memory_ConstArray8_F
             .append_under_construction_array(self.appended_array_7, self.c);
         self.siblings = self.siblings3;
-        self.bits0 = tracker.memory_Bool.create_empty_under_construction_array();
+        self.bits0 = tracker
+            .memory_Bool
+            .create_empty_under_construction_array(self.calc_zk_identifier(9usize));
         self.appended_array_10 = self.bits0;
         self.bits1 = tracker
             .memory_Bool
@@ -284,5 +315,8 @@ impl TLFunction_main {
             self.callee_1.as_mut().as_mut().unwrap().stage_0(tracker);
             assert_eq!(self.callee_1.as_ref().as_ref().unwrap().commit, self.root);
         }
+    }
+    fn calc_zk_identifier(&self, _: usize) -> usize {
+        0
     }
 }
