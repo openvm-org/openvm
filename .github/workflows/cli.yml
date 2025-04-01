@@ -12,6 +12,7 @@ on:
       - "crates/cli/**"
       - "examples/**"
       - "Cargo.toml"
+      - ".github/workflows/cli.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -70,3 +71,8 @@ jobs:
           export RUST_BACKTRACE=1
           cargo build
           cargo run --bin cargo-openvm -- openvm keygen --config ./example/app_config.toml --output app.pk --vk-output app.vk
+
+      - name: Run CLI tests
+        working-directory: crates/cli
+        run: |
+          cargo nextest run --cargo-profile=fast
