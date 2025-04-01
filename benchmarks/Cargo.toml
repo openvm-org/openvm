@@ -66,3 +66,6 @@ harness = false
 
 [[bin]]
 name = "fib_e2e"
+
+[package.metadata.cargo-shear]
+ignored = ["derive_more"]
