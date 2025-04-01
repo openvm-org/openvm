@@ -348,20 +348,20 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
 
             TokenStream::from(quote! {
                 #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::openvm_circuit::derive::InstructionExecutor, ::derive_more::From, ::openvm_circuit::derive::AnyEnum)]
-                pub enum #executor_type<F: ::openvm_stark_backend::p3_field::PrimeField32> {
+                pub enum #executor_type<F: ::openvm_circuit::openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField32> {
                     #[any_enum]
                     #source_name_upper(#source_executor_type<F>),
                     #(#executor_enum_fields)*
                 }
 
                 #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::derive_more::From, ::openvm_circuit::derive::AnyEnum)]
-                pub enum #periphery_type<F: ::openvm_stark_backend::p3_field::PrimeField32> {
+                pub enum #periphery_type<F: ::openvm_circuit::openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField32> {
                     #[any_enum]
                     #source_name_upper(#source_periphery_type<F>),
                     #(#periphery_enum_fields)*
                 }
 
-                impl<F: ::openvm_stark_backend::p3_field::PrimeField32> ::openvm_circuit::arch::VmConfig<F> for #name {
+                impl<F: ::openvm_circuit::openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField32> ::openvm_circuit::arch::VmConfig<F> for #name {
                     type Executor = #executor_type<F>;
                     type Periphery = #periphery_type<F>;
 
