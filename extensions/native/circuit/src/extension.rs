@@ -6,8 +6,7 @@ use loadstore_native_adapter::NativeLoadStoreAdapterChip;
 use native_vectorized_adapter::NativeVectorizedAdapterChip;
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, SystemPort,
-        VmChipComplex, VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, MemoryConfig, SystemConfig, SystemPort, VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };

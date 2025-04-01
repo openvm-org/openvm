@@ -5,7 +5,7 @@ use openvm_bigint_transpiler::{
 };
 use openvm_circuit::{
     arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex, VmConfig,
+        SystemConfig, SystemPort, VmConfig,
         VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,

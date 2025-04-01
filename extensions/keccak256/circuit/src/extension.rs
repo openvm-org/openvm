@@ -1,7 +1,7 @@
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex, VmConfig,
+        SystemConfig, SystemPort, VmConfig,
         VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
