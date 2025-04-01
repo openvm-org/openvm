@@ -3,6 +3,7 @@ use openvm_circuit::arch::SystemConfig;
 use openvm_circuit_derive::VmConfig;
 use openvm_ecc_circuit::*;
 use openvm_rv32im_circuit::*;
+use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use super::*;
