@@ -10,6 +10,7 @@ on:
       - "crates/circuits/poseidon2-air/**"
       - "crates/circuits/sha256-air/**"
       - "Cargo.toml"
+      - ".github/workflows/primitives.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

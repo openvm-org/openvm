@@ -11,6 +11,7 @@ on:
       - "extensions/native/compiler/**"
       - "extensions/native/recursion/**"
       - "Cargo.toml"
+      - ".github/workflows/recursion.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
