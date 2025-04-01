@@ -7,7 +7,10 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::StdIn;
-use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 fn main() -> Result<()> {
@@ -25,6 +28,11 @@ fn main() -> Result<()> {
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let file_data = include_bytes!("../../programs/rkyv/minecraft_savedata.bin");
         let stdin = StdIn::from_bytes(file_data);
-        args.bench_from_exe("rkyv", Rv32ImConfig::default(), exe, stdin)
+        args.bench_from_exe::<_, BabyBearPoseidon2Engine>(
+            "rkyv",
+            Rv32ImConfig::default(),
+            exe,
+            stdin,
+        )
     })
 }

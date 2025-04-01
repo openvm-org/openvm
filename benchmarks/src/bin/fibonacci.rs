@@ -7,7 +7,10 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::StdIn;
-use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 fn main() -> Result<()> {
@@ -26,6 +29,11 @@ fn main() -> Result<()> {
         let n = 100_000u64;
         let mut stdin = StdIn::default();
         stdin.write(&n);
-        args.bench_from_exe("fibonacci_program", Rv32ImConfig::default(), exe, stdin)
+        args.bench_from_exe::<_, BabyBearPoseidon2Engine>(
+            "fibonacci_program",
+            Rv32ImConfig::default(),
+            exe,
+            stdin,
+        )
     })
 }

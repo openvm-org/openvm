@@ -31,7 +31,10 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
 use serde::{Deserialize, Serialize};
@@ -128,7 +131,7 @@ fn main() -> Result<()> {
                 .map(|s| make_input(&signing_key, s.as_bytes()))
                 .collect::<Vec<_>>(),
         );
-        args.bench_from_exe(
+        args.bench_from_exe::<_, BabyBearPoseidon2Engine>(
             "ecrecover_program",
             Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]),
             exe,

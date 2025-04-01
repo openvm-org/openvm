@@ -3,7 +3,7 @@ use std::sync::Arc;
 use getset::Getters;
 use openvm_circuit::arch::{ContinuationVmProof, VmConfig};
 use openvm_stark_backend::{proof::Proof, Chip};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
+use openvm_stark_sdk::engine::StarkFriEngine;
 use tracing::info_span;
 
 use super::vm::SingleSegmentVmProver;
@@ -13,13 +13,13 @@ use crate::{
 };
 
 #[derive(Getters)]
-pub struct AppProver<VC> {
+pub struct AppProver<VC, E: StarkFriEngine<SC>> {
     pub program_name: Option<String>,
     #[getset(get = "pub")]
-    app_prover: VmLocalProver<SC, VC, BabyBearPoseidon2Engine>,
+    app_prover: VmLocalProver<SC, VC, E>,
 }
 
-impl<VC> AppProver<VC> {
+impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
     pub fn new(
         app_vm_pk: Arc<VmProvingKey<SC, VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
@@ -29,10 +29,7 @@ impl<VC> AppProver<VC> {
     {
         Self {
             program_name: None,
-            app_prover: VmLocalProver::<SC, VC, BabyBearPoseidon2Engine>::new(
-                app_vm_pk,
-                app_committed_exe,
-            ),
+            app_prover: VmLocalProver::<SC, VC, E>::new(app_vm_pk, app_committed_exe),
         }
     }
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {

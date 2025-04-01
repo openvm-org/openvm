@@ -13,7 +13,9 @@ use openvm_sdk::{
     commit::commit_app_exe, config::SdkVmConfig, prover::ContinuationProver,
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
-use openvm_stark_sdk::bench::run_with_metric_collection;
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+};
 use openvm_transpiler::FromElf;
 
 fn main() -> Result<()> {
@@ -78,8 +80,12 @@ fn main() -> Result<()> {
     )?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let mut prover =
-            ContinuationProver::new(&halo2_params_reader, app_pk, app_committed_exe, full_agg_pk);
+        let mut prover = ContinuationProver::<_, BabyBearPoseidon2Engine>::new(
+            &halo2_params_reader,
+            app_pk,
+            app_committed_exe,
+            full_agg_pk,
+        );
         prover.set_program_name("kitchen_sink");
         let stdin = StdIn::default();
         let _proof = prover.generate_proof_for_evm(stdin);

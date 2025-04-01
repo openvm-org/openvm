@@ -8,7 +8,8 @@ use openvm_continuations::verifier::{
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, openvm_stark_backend::proof::Proof,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    openvm_stark_backend::proof::Proof,
 };
 use tracing::info_span;
 
@@ -184,9 +185,9 @@ impl LeafProvingController {
         self
     }
 
-    pub fn generate_proof(
+    pub fn generate_proof<E: StarkFriEngine<SC>>(
         &self,
-        prover: &VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
+        prover: &VmLocalProver<SC, NativeConfig, E>,
         app_proofs: &ContinuationVmProof<SC>,
     ) -> Vec<Proof<SC>> {
         info_span!("agg_layer", group = "leaf").in_scope(|| {

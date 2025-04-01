@@ -8,7 +8,10 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::StdIn;
-use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 fn main() -> Result<()> {
@@ -27,7 +30,7 @@ fn main() -> Result<()> {
         let data = include_str!("../../programs/regex/regex_email.txt");
 
         let fe_bytes = data.to_owned().into_bytes();
-        args.bench_from_exe(
+        args.bench_from_exe::<_, BabyBearPoseidon2Engine>(
             "regex_program",
             Keccak256Rv32Config::default(),
             exe,

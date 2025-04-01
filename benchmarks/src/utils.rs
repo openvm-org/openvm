@@ -20,10 +20,8 @@ use openvm_sdk::{
 };
 use openvm_stark_backend::utils::metrics_span;
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        FriParameters,
-    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
+    engine::StarkFriEngine,
     openvm_stark_backend::Chip,
     p3_baby_bear::BabyBear,
 };
@@ -144,7 +142,7 @@ impl BenchmarkCli {
         build_bench(manifest_dir, profile)
     }
 
-    pub fn bench_from_exe<VC>(
+    pub fn bench_from_exe<VC, E: StarkFriEngine<SC>>(
         &self,
         bench_name: impl ToString,
         vm_config: VC,
@@ -157,7 +155,7 @@ impl BenchmarkCli {
         VC::Periphery: Chip<SC>,
     {
         let app_config = self.app_config(vm_config);
-        bench_from_exe(
+        bench_from_exe::<VC, E>(
             bench_name,
             app_config,
             exe,
@@ -202,7 +200,7 @@ pub fn build_bench(manifest_dir: PathBuf, profile: impl ToString) -> Result<Elf>
 /// 6. Verify STARK proofs.
 ///
 /// Returns the data necessary for proof aggregation.
-pub fn bench_from_exe<VC>(
+pub fn bench_from_exe<VC, E: StarkFriEngine<SC>>(
     bench_name: impl ToString,
     app_config: AppConfig<VC>,
     exe: impl Into<VmExe<F>>,
@@ -231,7 +229,8 @@ where
     // 4. Generate trace
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
     let app_vk = app_pk.get_app_vk();
-    let prover = AppProver::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name);
+    let prover =
+        AppProver::<VC, E>::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name);
     let app_proof = prover.generate_app_proof(input_stream);
     // 6. Verify STARK proofs, including boundary conditions.
     let sdk = Sdk::new();
@@ -239,10 +238,8 @@ where
         .expect("Verification failed");
     if let Some(leaf_vm_config) = leaf_vm_config {
         let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);
-        let leaf_prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(
-            leaf_vm_pk,
-            app_pk.leaf_committed_exe,
-        );
+        let leaf_prover =
+            VmLocalProver::<SC, NativeConfig, E>::new(leaf_vm_pk, app_pk.leaf_committed_exe);
         let leaf_controller = LeafProvingController {
             num_children: DEFAULT_NUM_CHILDREN_LEAF,
         };

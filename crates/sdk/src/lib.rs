@@ -176,7 +176,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe);
+        let app_prover = AppProver::<VC, E>::new(app_pk.app_vm_pk.clone(), app_committed_exe);
         let proof = app_prover.generate_app_proof(inputs);
         Ok(proof)
     }
@@ -241,7 +241,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let stark_prover = StarkProver::new(app_pk, app_exe, agg_stark_pk);
+        let stark_prover = StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk);
         let proof = stark_prover.generate_root_verifier_input(inputs);
         Ok(proof)
     }
@@ -258,7 +258,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let e2e_prover = ContinuationProver::new(reader, app_pk, app_exe, agg_pk);
+        let e2e_prover = ContinuationProver::<VC, E>::new(reader, app_pk, app_exe, agg_pk);
         let proof = e2e_prover.generate_proof_for_evm(inputs);
         Ok(proof)
     }

@@ -12,7 +12,9 @@ use openvm_rv32im_transpiler::{
 use openvm_sdk::{
     commit::commit_app_exe, prover::ContinuationProver, DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
-use openvm_stark_sdk::bench::run_with_metric_collection;
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 const NUM_PUBLIC_VALUES: usize = DEFAULT_MAX_NUM_PUBLIC_VALUES;
@@ -56,8 +58,12 @@ async fn main() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || {
-        let mut e2e_prover =
-            ContinuationProver::new(&halo2_params_reader, app_pk, app_committed_exe, full_agg_pk);
+        let mut e2e_prover = ContinuationProver::<_, BabyBearPoseidon2Engine>::new(
+            &halo2_params_reader,
+            app_pk,
+            app_committed_exe,
+            full_agg_pk,
+        );
         e2e_prover.set_program_name("fib_e2e");
         let _proof = e2e_prover.generate_proof_for_evm(stdin);
     });
