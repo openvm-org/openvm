@@ -10,6 +10,7 @@ on:
       - "crates/vm/**"
       - "extensions/native/**"
       - "Cargo.toml"
+      - ".github/workflows/vm.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

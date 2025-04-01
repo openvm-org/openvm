@@ -22,6 +22,7 @@ rustc-*
 # Bench metrics
 .bench_metrics/
 __pycache__/
+metrics.json
 
 # KZG trusted setup
 **/params

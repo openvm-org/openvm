@@ -1,5 +1,4 @@
 use clap::Parser;
-use derive_more::derive::From;
 use eyre::Result;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use num_bigint::BigUint;
@@ -9,12 +8,8 @@ use openvm_algebra_circuit::{
 use openvm_algebra_transpiler::ModularTranspilerExtension;
 use openvm_benchmarks::utils::BenchmarkCli;
 use openvm_circuit::{
-    arch::{
-        instructions::exe::VmExe, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
-        VmConfig, VmInventoryError,
-    },
-    circuit_derive::{Chip, ChipUsageGetter},
-    derive::{AnyEnum, InstructionExecutor, VmConfig},
+    arch::{instructions::exe::VmExe, SystemConfig},
+    derive::VmConfig,
 };
 use openvm_ecc_circuit::{
     CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
