@@ -12,9 +12,7 @@ use openvm_algebra_circuit::{
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_circuit::{
-    arch::{
-        SystemConfig, VmConfig, VmExecutor,
-    },
+    arch::{SystemConfig, VmExecutor},
     derive::VmConfig,
     utils::air_test,
 };

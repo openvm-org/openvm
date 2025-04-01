@@ -1,7 +1,5 @@
 use openvm_algebra_circuit::*;
-use openvm_circuit::arch::{
-    SystemConfig, VmConfig,
-};
+use openvm_circuit::arch::SystemConfig;
 use openvm_circuit_derive::VmConfig;
 use openvm_ecc_circuit::*;
 use openvm_rv32im_circuit::*;

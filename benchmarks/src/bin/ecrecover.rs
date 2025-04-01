@@ -8,10 +8,7 @@ use openvm_algebra_circuit::{
 use openvm_algebra_transpiler::ModularTranspilerExtension;
 use openvm_benchmarks::utils::BenchmarkCli;
 use openvm_circuit::{
-    arch::{
-        instructions::exe::VmExe, SystemConfig,
-        VmConfig,
-    },
+    arch::{instructions::exe::VmExe, SystemConfig},
     derive::VmConfig,
 };
 use openvm_ecc_circuit::{

@@ -1,7 +1,5 @@
 use num_bigint::BigUint;
-use openvm_circuit::arch::{
-    SystemConfig, VmConfig,
-};
+use openvm_circuit::arch::SystemConfig;
 use openvm_circuit_derive::VmConfig;
 use openvm_rv32im_circuit::*;
 use serde::{Deserialize, Serialize};
