@@ -87,10 +87,12 @@ where
 {
     fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> ContinuationVmProof<SC> {
         assert!(self.pk.vm_config.system().continuation_enabled);
-        let e = E::new(self.pk.fri_params);
-        let trace_height_constraints = self.pk.vm_pk.trace_height_constraints.clone();
-        let mut vm = VirtualMachine::new_with_overridden_trace_heights(
-            e,
+        let span = tracing::Span::current();
+
+        // Initialize engine and VM
+        let engine = E::new(self.pk.fri_params);
+        let vm = VirtualMachine::new_with_overridden_trace_heights(
+            engine,
             self.pk.vm_config.clone(),
             self.overridden_heights.clone(),
         );
@@ -113,7 +115,9 @@ where
             // ===== EXECUTION THREAD =====
             // Executes VM code segments and feeds them to the trace generation pipeline
             let exe_clone = exe.clone();
+            let current_span = span.clone();
             let executor_handle = s.spawn(move || {
+                let _guard = current_span.entered();
                 let executor = &vm.executor;
                 let mem_config = executor.config.system().memory_config;
                 let exe_val = exe_clone;
@@ -133,7 +137,7 @@ where
                 // Execute segments until completion
                 loop {
                     let segment_span = info_span!("execute_segment", segment = segment_idx);
-                    let _span_guard = segment_span.enter();
+                    let _guard = segment_span.enter();
 
                     // Execute current segment
                     let mut segment_result =
@@ -150,7 +154,11 @@ where
 
                     // Send segment data to trace thread
                     segment_tx
-                        .send((segment_idx, segment_result.segment, segment_span.clone()))
+                        .send((
+                            segment_idx,
+                            segment_result.segment,
+                            tracing::Span::current(),
+                        ))
                         .expect("Failed to send segment");
 
                     segment_indices.push(segment_idx);
@@ -178,9 +186,10 @@ where
 
             // ===== TRACE GENERATION THREAD =====
             // Generates proof inputs from execution segments
+            let current_span = span.clone();
             let trace_handle = s.spawn(move || {
+                let _guard = current_span.entered();
                 let committed_program_clone = committed_program.clone();
-
                 for (segment_idx, segment, parent_span) in segment_rx.iter() {
                     let span =
                         parent_span.in_scope(|| info_span!("trace_gen", segment = segment_idx));
@@ -200,7 +209,9 @@ where
             // Generates cryptographic proofs from trace data
             let prove_engine = E::new(self.pk.fri_params);
             let vm_pk_clone = self.pk.vm_pk.clone();
+            let current_span = span.clone();
             let prove_handle = s.spawn(move || {
+                let _guard = current_span.entered();
                 for (segment_idx, proof_input, parent_span) in trace_rx.iter() {
                     let span =
                         parent_span.in_scope(|| info_span!("prove_segment", segment = segment_idx));
@@ -217,7 +228,9 @@ where
 
             // ===== COLLECTOR THREAD =====
             // Collects proofs as they are generated
+            let current_span = span.clone();
             let collector_handle = s.spawn(move || {
+                let _guard = current_span.entered();
                 let mut proofs = Vec::new();
                 for (_, proof) in proof_rx.iter() {
                     proofs.push(proof); // Collect proofs in order
