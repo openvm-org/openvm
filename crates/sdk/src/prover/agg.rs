@@ -7,10 +7,7 @@ use openvm_continuations::verifier::{
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    prover::types::ProofInput,
-};
+use openvm_stark_backend::{config::Val, prover::types::ProofInput};
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     openvm_stark_backend::proof::Proof,
