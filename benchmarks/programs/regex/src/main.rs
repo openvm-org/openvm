@@ -5,7 +5,7 @@ use regex::Regex;
 
 const PATTERN: &str = r"(?m)(\r\n|^)From:([^\r\n]+<)?(?P<email>[^<>]+)>?";
 
-openvm::entry!(main);
+// openvm::entry!(main);
 
 pub fn main() {
     let data = core::hint::black_box(include_str!("../regex_email.txt"));
