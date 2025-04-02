@@ -86,7 +86,6 @@ where
     VC::Periphery: Chip<SC> + Send,
 {
     fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> ContinuationVmProof<SC> {
-        let wall_timer = std::time::Instant::now();
         assert!(self.pk.vm_config.system().continuation_enabled);
         let span = tracing::Span::current();
 
@@ -112,7 +111,7 @@ where
         let (proof_tx, proof_rx) = mpsc::sync_channel::<(usize, Proof<SC>)>(1);
         let (memory_tx, memory_rx) = mpsc::sync_channel(1);
 
-        let proofs = std::thread::scope(|s| {
+        std::thread::scope(|s| {
             // ===== EXECUTION THREAD =====
             // Executes VM code segments and feeds them to the trace generation pipeline
             let exe_clone = exe.clone();
@@ -268,17 +267,7 @@ where
                 per_segment: collected_proofs,
                 user_public_values,
             }
-        });
-
-        tracing::info!(
-            "app proof wall time: {:.3}s",
-            wall_timer.elapsed().as_secs_f64()
-        );
-
-        #[cfg(feature = "bench-metrics")]
-        metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
-
-        proofs
+        })
     }
 }
 
