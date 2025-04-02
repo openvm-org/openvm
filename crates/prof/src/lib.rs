@@ -44,15 +44,19 @@ impl MetricDb {
     // Currently hardcoding aggregations
     pub fn apply_aggregations(&mut self) {
         for metrics in self.flat_dict.values_mut() {
-            let get = |key: &str| metrics.iter().find(|m| m.name == key).map(|m| m.value);
-            let execute_time = get(EXECUTE_TIME_LABEL);
-            let trace_gen_time = get(TRACE_GEN_TIME_LABEL);
-            let prove_excl_trace_time = get(PROVE_EXCL_TRACE_TIME_LABEL);
-            if let (Some(execute_time), Some(trace_gen_time), Some(prove_excl_trace_time)) =
-                (execute_time, trace_gen_time, prove_excl_trace_time)
-            {
-                let total_time = execute_time + trace_gen_time + prove_excl_trace_time;
-                metrics.push(Metric::new(PROOF_TIME_LABEL.to_string(), total_time));
+            if metrics.iter().any(|m| m.name == PROOF_TIME_LABEL) {
+                continue;
+            } else {
+                let get = |key: &str| metrics.iter().find(|m| m.name == key).map(|m| m.value);
+                let execute_time = get(EXECUTE_TIME_LABEL);
+                let trace_gen_time = get(TRACE_GEN_TIME_LABEL);
+                let prove_excl_trace_time = get(PROVE_EXCL_TRACE_TIME_LABEL);
+                if let (Some(execute_time), Some(trace_gen_time), Some(prove_excl_trace_time)) =
+                    (execute_time, trace_gen_time, prove_excl_trace_time)
+                {
+                    let total_time = execute_time + trace_gen_time + prove_excl_trace_time;
+                    metrics.push(Metric::new(PROOF_TIME_LABEL.to_string(), total_time));
+                }
             }
         }
     }
