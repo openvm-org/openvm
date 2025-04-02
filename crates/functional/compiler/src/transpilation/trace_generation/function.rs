@@ -179,8 +179,8 @@ impl FlattenedFunction {
         let num_references_value = representation_table.reference_offsets.len();
         quote! {
             impl #struct_name {
-                const #width_name: usize = #width_value;
-                const #num_references_name: usize = #num_references_value;
+                pub const #width_name: usize = #width_value;
+                pub const #num_references_name: usize = #num_references_value;
                 #generate_trace
                 #calc_zk_identifier
             }

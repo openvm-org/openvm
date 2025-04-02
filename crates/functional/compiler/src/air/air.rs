@@ -1,3 +1,5 @@
+use crate::core::scope::ScopePath;
+
 #[derive(Clone, Copy, Debug)]
 pub enum Term {
     Cell(usize),
@@ -66,6 +68,11 @@ impl AirExpression {
 pub struct Constraint {
     pub left: AirExpression,
     pub right: AirExpression,
+}
+
+pub struct ScopedConstraint {
+    pub scope: ScopePath,
+    pub constraint: Constraint,
 }
 
 #[derive(Clone, Copy)]

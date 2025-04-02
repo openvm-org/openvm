@@ -1230,6 +1230,10 @@ name = "compiler"
 version = "1.0.0"
 dependencies = [
  "itertools 0.14.0",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-stark-backend",
  "openvm-stark-sdk",
  "pest",
  "pest_derive",

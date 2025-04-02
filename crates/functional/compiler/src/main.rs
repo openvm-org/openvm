@@ -1,22 +1,28 @@
+use crate::transpilation::air::proof_input::rust_proof_input;
+use crate::transpiled_merkle::TLFunction_main;
 use crate::{
     core::stage1::stage1,
     parser::parser::parse_program_source,
     transpiled_fibonacci::{isize_to_field_elem, TLFunction_fibonacci},
-    transpiled_merkle::TLFunction_main,
 };
+use openvm_stark_backend::engine::StarkEngine;
+use openvm_stark_sdk::config::baby_bear_blake3::BabyBearBlake3Engine;
+use openvm_stark_sdk::config::FriParameters;
+use openvm_stark_sdk::engine::StarkFriEngine;
 use std::env::set_var;
+use std::io::Write;
 
 pub mod air;
 pub mod core;
 pub mod parser;
 mod transpilation;
 pub mod transpiled_fibonacci;
-pub mod transpiled_merkle;
+mod transpiled_merkle;
 
 fn main() {
     println!("Hello, world!");
     unsafe {
-        set_var("RUST_BACKTRACE", "1");
+        set_var("RUST_BACKTRACE", "0");
     }
     // parse_and_compile_and_transpile_fibonacci();
     // test_fibonacci();
@@ -59,8 +65,20 @@ fn parse_and_compile_and_transpile_merkle() {
     let execution = stage2_program.transpile_execution();
     let air_set = stage2_program.construct_airs();
     let trace_generation = stage2_program.transpile_trace_generation(&air_set);
-    println!("{}", execution);
-    println!("{}", trace_generation);
+    let airs = air_set.transpile_airs();
+    let proof_input = rust_proof_input(&stage2_program);
+    //println!("{}", execution);
+    //println!("{}", trace_generation);
+    //println!("{}", airs);
+    //println!("{}", proof_input);
+    let file = std::fs::File::create("src/transpiled_merkle.rs").unwrap();
+    let mut file = std::io::BufWriter::new(file);
+    file.write_all(format!("{}", execution).as_bytes()).unwrap();
+    file.write_all(format!("{}", trace_generation).as_bytes())
+        .unwrap();
+    file.write_all(format!("{}", airs).as_bytes()).unwrap();
+    file.write_all(format!("{}", proof_input).as_bytes())
+        .unwrap();
 }
 
 fn test_merkle(should_fail: bool) {
@@ -81,4 +99,9 @@ fn test_merkle(should_fail: bool) {
         "trace_set.merkle_verify_trace length = {}",
         trace_set.merkle_verify_trace.len()
     );
+    let proof_input = transpiled_merkle::ProofInput::new(trace_set);
+    let engine = BabyBearBlake3Engine::new(FriParameters::new_for_testing(1));
+    let result = engine.run_test_impl(proof_input.airs, proof_input.inputs);
+    result.expect("Verification failed");
+    println!("success");
 }

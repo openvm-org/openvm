@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use itertools::Itertools;
 
+use crate::air::air::ScopedConstraint;
 use crate::{
     air::{
         air::{AirExpression, Bus, Constraint, Direction, Interaction},
@@ -24,7 +25,8 @@ pub struct CellUsage {
 
 #[derive(Default)]
 pub struct AirConstructor {
-    constraints: Vec<Constraint>,
+    pub(crate) constraints: Vec<Constraint>,
+    pub(crate) scoped_constraints: Vec<ScopedConstraint>,
     pub(crate) interactions: Vec<Interaction>,
     pub(crate) row_index_cell: Option<usize>,
 
@@ -87,10 +89,7 @@ impl AirConstructor {
         assert_eq!(left.len(), right.len());
         for (left, right) in left.into_iter().zip_eq(right.into_iter()) {
             if let Some(right) = right {
-                let scope_expression = self.get_scope_expression(scope);
-                let left = left.times(scope_expression);
-                let right = right.times(scope_expression);
-                self.add_single_constraint(left, right);
+                self.add_scoped_single_constraint(scope, left, right.clone());
             } else {
                 *right = Some(left);
             }
@@ -103,7 +102,10 @@ impl AirConstructor {
         left: AirExpression,
         right: AirExpression,
     ) {
-        self.add_scoped_constraint(scope, vec![left], &mut vec![Some(right)]);
+        self.scoped_constraints.push(ScopedConstraint {
+            scope: scope.clone(),
+            constraint: Constraint { left, right },
+        });
     }
 
     pub fn add_scoped_interaction(&mut self, scope: &ScopePath, mut interaction: Interaction) {

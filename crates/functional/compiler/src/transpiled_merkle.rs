@@ -84,21 +84,21 @@ pub fn isize_to_field_elem(x: isize) -> F {
 pub struct TLFunction_merkle_verify {
     pub materialized: bool,
     pub call_index: usize,
-    pub siblings: TLArray,
-    pub inline0_right: [F; 8usize],
-    pub inline0_left: [F; 8usize],
-    pub child_0_False: [F; 8usize],
-    pub bit_0_False: bool,
-    pub inline0_result: [F; 8usize],
-    pub left: [F; 8usize],
     pub i_0_False: F,
+    pub length: F,
+    pub inline0_result: [F; 8usize],
+    pub siblings: TLArray,
+    pub right: [F; 8usize],
     pub sibling_0_False: [F; 8usize],
+    pub inline0_left: [F; 8usize],
+    pub bit_0_False: bool,
+    pub hash_result: [F; 8usize],
+    pub child_0_False: [F; 8usize],
     pub leaf: [F; 8usize],
     pub bits: TLArray,
+    pub inline0_right: [F; 8usize],
+    pub left: [F; 8usize],
     pub commit: [F; 8usize],
-    pub right: [F; 8usize],
-    pub length: F,
-    pub hash_result: [F; 8usize],
     pub scope_0_True: bool,
     pub scope_0_False: bool,
     pub scope_0_False_0_True: bool,
@@ -196,33 +196,33 @@ impl TLFunction_merkle_verify {
 pub struct TLFunction_main {
     pub materialized: bool,
     pub call_index: usize,
+    pub x: [F; 8usize],
+    pub inline2_left: [F; 8usize],
+    pub a: [F; 8usize],
+    pub inline1_right: [F; 8usize],
     pub inline0_left: [F; 8usize],
+    pub b: [F; 8usize],
+    pub y: [F; 8usize],
+    pub should_fail: bool,
+    pub siblings3: TLArray,
+    pub bits1: TLArray,
+    pub siblings2: TLArray,
+    pub bits3: TLArray,
+    pub siblings0: TLArray,
+    pub bits: TLArray,
+    pub siblings: TLArray,
+    pub inline0_result: [F; 8usize],
+    pub inline1_result: [F; 8usize],
+    pub root: [F; 8usize],
+    pub inline0_right: [F; 8usize],
+    pub inline2_right: [F; 8usize],
+    pub leaf: [F; 8usize],
+    pub c: [F; 8usize],
     pub bits2: TLArray,
     pub bits0: TLArray,
-    pub inline0_right: [F; 8usize],
-    pub bits1: TLArray,
-    pub a: [F; 8usize],
     pub inline1_left: [F; 8usize],
-    pub inline1_right: [F; 8usize],
-    pub siblings1: TLArray,
-    pub c: [F; 8usize],
-    pub siblings2: TLArray,
-    pub siblings: TLArray,
-    pub b: [F; 8usize],
-    pub siblings3: TLArray,
-    pub should_fail: bool,
-    pub y: [F; 8usize],
-    pub root: [F; 8usize],
-    pub leaf: [F; 8usize],
     pub inline2_result: [F; 8usize],
-    pub inline2_left: [F; 8usize],
-    pub inline0_result: [F; 8usize],
-    pub siblings0: TLArray,
-    pub inline2_right: [F; 8usize],
-    pub bits: TLArray,
-    pub inline1_result: [F; 8usize],
-    pub bits3: TLArray,
-    pub x: [F; 8usize],
+    pub siblings1: TLArray,
     pub scope_0_False: bool,
     pub scope_0_True: bool,
     pub appended_array_10: TLArray,
@@ -373,8 +373,8 @@ impl TraceSet {
     }
 }
 impl TLFunction_merkle_verify {
-    const TRACE_WIDTH: usize = 29usize;
-    const NUM_REFERENCES: usize = 0usize;
+    pub const TRACE_WIDTH: usize = 29usize;
+    pub const NUM_REFERENCES: usize = 0usize;
     pub fn generate_trace(&self, tracker: &Tracker, trace_set: &mut TraceSet) {
         if self.scope_0_False {
             self.callee_0
@@ -386,27 +386,20 @@ impl TLFunction_merkle_verify {
         let row = &mut trace_set.merkle_verify_trace
             [self.call_index * Self::TRACE_WIDTH..(self.call_index + 1) * Self::TRACE_WIDTH];
         if self.scope_0_True {
-            row[0usize] = F::ONE;
-        }
-        if self.scope_0_False_0_True {
-            row[1usize] = F::ONE;
+            row[2usize] = F::ONE;
         }
         if self.scope_0_False_0_False {
-            row[2usize] = F::ONE;
+            row[1usize] = F::ONE;
+        }
+        if self.scope_0_False_0_True {
+            row[0usize] = F::ONE;
         }
         let mut as_cells = [F::ZERO; 1usize];
         to_cells_F(self.length, &mut as_cells);
         row[11usize] = as_cells[0usize];
-        let mut as_cells = [F::ZERO; 8usize];
-        to_cells_ConstArray8_F(self.left, &mut as_cells);
-        row[13usize] = as_cells[0usize];
-        row[14usize] = as_cells[1usize];
-        row[15usize] = as_cells[2usize];
-        row[16usize] = as_cells[3usize];
-        row[17usize] = as_cells[4usize];
-        row[18usize] = as_cells[5usize];
-        row[19usize] = as_cells[6usize];
-        row[20usize] = as_cells[7usize];
+        let mut as_cells = [F::ZERO; 1usize];
+        to_cells_Array_Bool(self.bits, &mut as_cells);
+        row[12usize] = as_cells[0usize];
         let mut as_cells = [F::ZERO; 8usize];
         to_cells_ConstArray8_F(self.leaf, &mut as_cells);
         row[3usize] = as_cells[0usize];
@@ -418,6 +411,16 @@ impl TLFunction_merkle_verify {
         row[9usize] = as_cells[6usize];
         row[10usize] = as_cells[7usize];
         let mut as_cells = [F::ZERO; 8usize];
+        to_cells_ConstArray8_F(self.left, &mut as_cells);
+        row[13usize] = as_cells[0usize];
+        row[14usize] = as_cells[1usize];
+        row[15usize] = as_cells[2usize];
+        row[16usize] = as_cells[3usize];
+        row[17usize] = as_cells[4usize];
+        row[18usize] = as_cells[5usize];
+        row[19usize] = as_cells[6usize];
+        row[20usize] = as_cells[7usize];
+        let mut as_cells = [F::ZERO; 8usize];
         to_cells_ConstArray8_F(self.right, &mut as_cells);
         row[21usize] = as_cells[0usize];
         row[22usize] = as_cells[1usize];
@@ -427,14 +430,11 @@ impl TLFunction_merkle_verify {
         row[26usize] = as_cells[5usize];
         row[27usize] = as_cells[6usize];
         row[28usize] = as_cells[7usize];
-        let mut as_cells = [F::ZERO; 1usize];
-        to_cells_Array_Bool(self.bits, &mut as_cells);
-        row[12usize] = as_cells[0usize];
     }
 }
 impl TLFunction_main {
-    const TRACE_WIDTH: usize = 7usize;
-    const NUM_REFERENCES: usize = 1usize;
+    pub const TRACE_WIDTH: usize = 7usize;
+    pub const NUM_REFERENCES: usize = 1usize;
     pub fn generate_trace(&self, tracker: &Tracker, trace_set: &mut TraceSet) {
         if self.scope_0_False {
             self.callee_0
@@ -462,15 +462,15 @@ impl TLFunction_main {
         let mut as_cells = [F::ZERO; 1usize];
         to_cells_Bool(self.should_fail, &mut as_cells);
         row[3usize] = as_cells[0usize];
-        row[6usize] = F::from_canonical_usize(
-            tracker
-                .memory_Bool
-                .get_array_multiplicity(self.appended_array_12, self.appended_index_12),
-        );
         row[5usize] = F::from_canonical_usize(
             tracker
                 .memory_Bool
                 .get_array_multiplicity(self.appended_array_11, self.appended_index_11),
+        );
+        row[6usize] = F::from_canonical_usize(
+            tracker
+                .memory_Bool
+                .get_array_multiplicity(self.appended_array_12, self.appended_index_12),
         );
         row[4usize] = F::from_canonical_usize(
             tracker
@@ -486,6 +486,9 @@ impl TLFunction_main {
         (Self::FUNCTION_ID * MAX_TRACE_HEIGHT) + (self.call_index * Self::NUM_REFERENCES) + offset
     }
 }
+fn to_cells_F(value: F, result: &mut [F]) {
+    result[0] = value;
+}
 fn to_cells_ConstArray8_F(value: [F; 8usize], result: &mut [F]) {
     to_cells_F(value[0usize], &mut result[0usize..1usize]);
     to_cells_F(value[1usize], &mut result[1usize..2usize]);
@@ -499,12 +502,392 @@ fn to_cells_ConstArray8_F(value: [F; 8usize], result: &mut [F]) {
 fn to_cells_Bool(value: bool, result: &mut [F]) {
     result[0] = F::from_bool(value)
 }
-fn to_cells_F(value: F, result: &mut [F]) {
-    result[0] = value;
-}
 fn to_cells_Array_Bool(value: TLArray, result: &mut [F]) {
     result[0] = F::from_canonical_usize(value.zk_identifier);
 }
 fn to_cells_AppendablePrefix_Bool(value: TLArray, result: &mut [F]) {
     result[0] = F::from_canonical_usize(value.zk_identifier);
+}
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::Field,
+    p3_matrix::Matrix,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Air_merkle_verify;
+impl<F: Field> BaseAir<F> for Air_merkle_verify {
+    fn width(&self) -> usize {
+        29usize
+    }
+}
+impl<F: Field> BaseAirWithPublicValues<F> for Air_merkle_verify {}
+impl<F: Field> PartitionedBaseAir<F> for Air_merkle_verify {}
+impl<AB: InteractionBuilder> Air<AB> for Air_merkle_verify {
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let local = main.row_slice(0);
+        let next = main.row_slice(1);
+        let cell = |i: usize| local[i].into();
+        builder.assert_eq(cell(0), cell(0) * cell(0));
+        builder.assert_eq(cell(1), cell(1) * cell(1));
+        builder.assert_eq(
+            cell(0) + cell(1),
+            (cell(0) * cell(0)) + (cell(0) * cell(1)) + (cell(1) * cell(0)) + (cell(1) * cell(1)),
+        );
+        builder.assert_eq(cell(2), cell(2) * cell(2));
+        builder.assert_eq(
+            cell(0) + cell(1) + cell(2),
+            (cell(0) * cell(0))
+                + (cell(0) * cell(1))
+                + (cell(0) * cell(2))
+                + (cell(1) * cell(0))
+                + (cell(1) * cell(1))
+                + (cell(1) * cell(2))
+                + (cell(2) * cell(0))
+                + (cell(2) * cell(1))
+                + (cell(2) * cell(2)),
+        );
+        builder
+            .when(cell(2))
+            .assert_eq(cell(11), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(13), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(14), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(15), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(16), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(17), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(18), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(19), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(20), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(21), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(22), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(23), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(24), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(25), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(26), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(27), AB::Expr::from_canonical_usize(0));
+        builder
+            .when(cell(2))
+            .assert_eq(cell(28), AB::Expr::from_canonical_usize(0));
+        builder.when(cell(0)).assert_eq(cell(21), cell(21));
+        builder.when(cell(0)).assert_eq(cell(22), cell(22));
+        builder.when(cell(0)).assert_eq(cell(23), cell(23));
+        builder.when(cell(0)).assert_eq(cell(24), cell(24));
+        builder.when(cell(0)).assert_eq(cell(25), cell(25));
+        builder.when(cell(0)).assert_eq(cell(26), cell(26));
+        builder.when(cell(0)).assert_eq(cell(27), cell(27));
+        builder.when(cell(0)).assert_eq(cell(28), cell(28));
+        builder.when(cell(1)).assert_eq(cell(13), cell(13));
+        builder.when(cell(1)).assert_eq(cell(14), cell(14));
+        builder.when(cell(1)).assert_eq(cell(15), cell(15));
+        builder.when(cell(1)).assert_eq(cell(16), cell(16));
+        builder.when(cell(1)).assert_eq(cell(17), cell(17));
+        builder.when(cell(1)).assert_eq(cell(18), cell(18));
+        builder.when(cell(1)).assert_eq(cell(19), cell(19));
+        builder.when(cell(1)).assert_eq(cell(20), cell(20));
+        builder.push_interaction(
+            2u16,
+            [
+                cell(12),
+                cell(11) + (AB::Expr::from_canonical_usize(1) * -AB::F::from_canonical_usize(1)),
+                (cell(0) * AB::Expr::from_canonical_usize(0))
+                    + (cell(1) * AB::Expr::from_canonical_usize(1)),
+            ],
+            cell(0) + cell(1),
+            1,
+        );
+        builder.push_interaction(
+            0u16,
+            [
+                AB::Expr::from_canonical_usize(0),
+                cell(3),
+                cell(4),
+                cell(5),
+                cell(6),
+                cell(7),
+                cell(8),
+                cell(9),
+                cell(10),
+                cell(11) + (AB::Expr::from_canonical_usize(1) * -AB::F::from_canonical_usize(1)),
+                cell(12),
+                (cell(21) * cell(0)) + (cell(13) * cell(1)),
+                (cell(22) * cell(0)) + (cell(14) * cell(1)),
+                (cell(23) * cell(0)) + (cell(15) * cell(1)),
+                (cell(24) * cell(0)) + (cell(16) * cell(1)),
+                (cell(25) * cell(0)) + (cell(17) * cell(1)),
+                (cell(26) * cell(0)) + (cell(18) * cell(1)),
+                (cell(27) * cell(0)) + (cell(19) * cell(1)),
+                (cell(28) * cell(0)) + (cell(20) * cell(1)),
+            ],
+            cell(0) + cell(1),
+            1,
+        );
+        builder.push_interaction(
+            0u16,
+            [
+                AB::Expr::from_canonical_usize(0),
+                cell(3),
+                cell(4),
+                cell(5),
+                cell(6),
+                cell(7),
+                cell(8),
+                cell(9),
+                cell(10),
+                cell(11),
+                cell(12),
+                (cell(3) * cell(2))
+                    + (cell(13) * cell(0))
+                    + (cell(13) * cell(1))
+                    + (cell(21) * cell(0))
+                    + (cell(21) * cell(1)),
+                (cell(4) * cell(2))
+                    + (cell(14) * cell(22) * cell(0))
+                    + (cell(14) * cell(22) * cell(1)),
+                (cell(5) * cell(2))
+                    + (cell(15) * cell(0))
+                    + (cell(15) * cell(1))
+                    + (cell(23) * -AB::F::from_canonical_usize(1) * cell(0))
+                    + (cell(23) * -AB::F::from_canonical_usize(1) * cell(1)),
+                (cell(6) * cell(2)) + (cell(16) * cell(0)) + (cell(16) * cell(1)),
+                (cell(7) * cell(2)) + (cell(25) * cell(0)) + (cell(25) * cell(1)),
+                (cell(8) * cell(2))
+                    + (AB::Expr::from_canonical_usize(115) * cell(0))
+                    + (AB::Expr::from_canonical_usize(115) * cell(1)),
+                (cell(9) * cell(2))
+                    + (cell(19) * cell(20) * cell(0))
+                    + (cell(19) * cell(20) * cell(1)),
+                (cell(10) * cell(2))
+                    + (cell(27) * cell(28) * cell(0))
+                    + (cell(27) * cell(28) * cell(1)),
+            ],
+            -(cell(0) + cell(1) + cell(2)),
+            1,
+        );
+    }
+}
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Air_main;
+impl<F: Field> BaseAir<F> for Air_main {
+    fn width(&self) -> usize {
+        7usize
+    }
+}
+impl<F: Field> BaseAirWithPublicValues<F> for Air_main {}
+impl<F: Field> PartitionedBaseAir<F> for Air_main {}
+impl<AB: InteractionBuilder> Air<AB> for Air_main {
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let local = main.row_slice(0);
+        let next = main.row_slice(1);
+        let cell = |i: usize| local[i].into();
+        builder.when_first_row().assert_zero(cell(2));
+        builder
+            .when_transition()
+            .assert_eq(next[2usize], cell(2) + AB::F::ONE);
+        builder.assert_eq(cell(0), cell(0) * cell(0));
+        builder.assert_eq(cell(1), cell(1) * cell(1));
+        builder.assert_eq(
+            cell(0) + cell(1),
+            (cell(0) * cell(0)) + (cell(0) * cell(1)) + (cell(1) * cell(0)) + (cell(1) * cell(1)),
+        );
+        builder.when(cell(0) + cell(1)).assert_eq(
+            cell(3),
+            (cell(0) * AB::Expr::from_canonical_usize(0))
+                + (cell(1) * AB::Expr::from_canonical_usize(1)),
+        );
+        builder.push_interaction(
+            2u16,
+            [
+                AB::Expr::from_canonical_usize(16777216)
+                    + (cell(2) * AB::Expr::from_canonical_usize(1))
+                    + AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(1),
+            ],
+            -((cell(4) * cell(0)) + (cell(4) * cell(1))),
+            1,
+        );
+        builder.push_interaction(
+            2u16,
+            [
+                AB::Expr::from_canonical_usize(16777216)
+                    + (cell(2) * AB::Expr::from_canonical_usize(1))
+                    + AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0) + AB::Expr::from_canonical_usize(1),
+                AB::Expr::from_canonical_usize(0),
+            ],
+            -((cell(5) * cell(0)) + (cell(5) * cell(1))),
+            1,
+        );
+        builder.push_interaction(
+            2u16,
+            [
+                AB::Expr::from_canonical_usize(16777216)
+                    + (cell(2) * AB::Expr::from_canonical_usize(1))
+                    + AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0)
+                    + AB::Expr::from_canonical_usize(1)
+                    + AB::Expr::from_canonical_usize(1),
+                AB::Expr::from_canonical_usize(1),
+            ],
+            -((cell(6) * cell(0)) + (cell(6) * cell(1))),
+            1,
+        );
+        builder.push_interaction(
+            0u16,
+            [
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(3),
+                AB::Expr::from_canonical_usize(16777216)
+                    + (cell(2) * AB::Expr::from_canonical_usize(1))
+                    + AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(2)
+                    + AB::Expr::from_canonical_usize(0)
+                    + AB::Expr::from_canonical_usize(1)
+                    + AB::Expr::from_canonical_usize(3),
+                AB::Expr::from_canonical_usize(2)
+                    * AB::Expr::from_canonical_usize(0)
+                    * AB::Expr::from_canonical_usize(1)
+                    * AB::Expr::from_canonical_usize(3),
+                AB::Expr::from_canonical_usize(2)
+                    + (AB::Expr::from_canonical_usize(0) * -AB::F::from_canonical_usize(1))
+                    + (AB::Expr::from_canonical_usize(1)
+                        * -AB::F::from_canonical_usize(1)
+                        * -AB::F::from_canonical_usize(1))
+                    + (AB::Expr::from_canonical_usize(3) * -AB::F::from_canonical_usize(1)),
+                AB::Expr::from_canonical_usize(2),
+                AB::Expr::from_canonical_usize(3),
+                AB::Expr::from_canonical_usize(115),
+                AB::Expr::from_canonical_usize(2)
+                    * AB::Expr::from_canonical_usize(2)
+                    * AB::Expr::from_canonical_usize(0)
+                    * AB::Expr::from_canonical_usize(0)
+                    * AB::Expr::from_canonical_usize(1)
+                    * AB::Expr::from_canonical_usize(1),
+                AB::Expr::from_canonical_usize(3) * AB::Expr::from_canonical_usize(3),
+            ],
+            cell(0),
+            1,
+        );
+        builder.push_interaction(
+            0u16,
+            [
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(2),
+                AB::Expr::from_canonical_usize(16777216)
+                    + (cell(2) * AB::Expr::from_canonical_usize(1))
+                    + AB::Expr::from_canonical_usize(0),
+                AB::Expr::from_canonical_usize(2)
+                    + AB::Expr::from_canonical_usize(0)
+                    + AB::Expr::from_canonical_usize(1)
+                    + AB::Expr::from_canonical_usize(3),
+                AB::Expr::from_canonical_usize(2)
+                    * AB::Expr::from_canonical_usize(0)
+                    * AB::Expr::from_canonical_usize(1)
+                    * AB::Expr::from_canonical_usize(3),
+                AB::Expr::from_canonical_usize(2)
+                    + (AB::Expr::from_canonical_usize(0) * -AB::F::from_canonical_usize(1))
+                    + (AB::Expr::from_canonical_usize(1)
+                        * -AB::F::from_canonical_usize(1)
+                        * -AB::F::from_canonical_usize(1))
+                    + (AB::Expr::from_canonical_usize(3) * -AB::F::from_canonical_usize(1)),
+                AB::Expr::from_canonical_usize(2),
+                AB::Expr::from_canonical_usize(3),
+                AB::Expr::from_canonical_usize(115),
+                AB::Expr::from_canonical_usize(2)
+                    * AB::Expr::from_canonical_usize(2)
+                    * AB::Expr::from_canonical_usize(0)
+                    * AB::Expr::from_canonical_usize(0)
+                    * AB::Expr::from_canonical_usize(1)
+                    * AB::Expr::from_canonical_usize(1),
+                AB::Expr::from_canonical_usize(3) * AB::Expr::from_canonical_usize(3),
+            ],
+            cell(1),
+            1,
+        );
+        builder.push_interaction(
+            0u16,
+            [AB::Expr::from_canonical_usize(1), cell(3)],
+            -(cell(0) + cell(1)),
+            1,
+        );
+    }
+}
+use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
+use openvm_stark_backend::{prover::types::AirProofInput, AirRef};
+use openvm_stark_sdk::p3_blake3::Blake3;
+use std::sync::Arc;
+type SC = openvm_stark_sdk::config::baby_bear_bytehash::BabyBearByteHashConfig<Blake3>;
+pub struct ProofInput {
+    pub airs: Vec<AirRef<SC>>,
+    pub inputs: Vec<AirProofInput<SC>>,
+}
+impl ProofInput {
+    pub fn new(trace_set: TraceSet) -> Self {
+        let mut airs: Vec<AirRef<SC>> = vec![];
+        let mut inputs: Vec<AirProofInput<SC>> = vec![];
+        if !trace_set.merkle_verify_trace.is_empty() {
+            airs.push(Arc::new(Air_merkle_verify::default()));
+            inputs.push(AirProofInput::simple_no_pis(RowMajorMatrix::new(
+                trace_set.merkle_verify_trace,
+                TLFunction_merkle_verify::TRACE_WIDTH,
+            )));
+        }
+        if !trace_set.main_trace.is_empty() {
+            airs.push(Arc::new(Air_main::default()));
+            inputs.push(AirProofInput::simple_no_pis(RowMajorMatrix::new(
+                trace_set.main_trace,
+                TLFunction_main::TRACE_WIDTH,
+            )));
+        }
+        Self { airs, inputs }
+    }
 }

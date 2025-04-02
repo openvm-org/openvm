@@ -538,6 +538,8 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .when(end_top_level)
             .when(incorporate_sibling)
             .assert_eq(initial_opened_index, opened_length);
+        
+        builder.push_interaction()
 
         builder
             .when(incorporate_sibling)
@@ -551,6 +553,8 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                 &read_initial_height_or_sibling_is_on_right,
             )
             .eval(builder, incorporate_sibling);
+        
+        
 
         for i in 0..CHUNK {
             builder
@@ -706,6 +710,7 @@ impl VerifyBatchBus {
             initial_opened_index.into(),
             final_opened_index.into(),
         ];
+        builder.push_interaction()
         fields.extend(hash.into_iter().map(Into::into));
         if send {
             self.inner.send(builder, fields, enabled.into());

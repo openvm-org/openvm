@@ -38,6 +38,17 @@ impl Representation {
         }
     }
 
+    pub fn scoped(&self, scope_expression: &AirExpression) -> Self {
+        Representation {
+            expressions: self
+                .expressions
+                .iter()
+                .map(|x| x.times(scope_expression))
+                .collect(),
+            owned: vec![None; self.expressions.len()],
+        }
+    }
+
     pub fn all_some(options: &[Option<AirExpression>]) -> Self {
         Self {
             expressions: options
@@ -109,13 +120,14 @@ impl<'a> RepresentationTable<'a> {
                 *right = Some(expression);
             }
         }
-        self.insert_representation(scope, name, representation);
+        self.insert_representation(scope, name, representation, air_constructor);
     }
     pub fn add_representation(
         &mut self,
         scope: &ScopePath,
         name: &String,
         representation: Vec<AirExpression>,
+        air_constructor: &AirConstructor,
     ) {
         let representation_len = representation.len();
         self.insert_representation(
@@ -125,6 +137,7 @@ impl<'a> RepresentationTable<'a> {
                 expressions: representation,
                 owned: vec![None; representation_len],
             },
+            air_constructor,
         );
     }
     fn insert_representation(
@@ -132,19 +145,20 @@ impl<'a> RepresentationTable<'a> {
         scope: &ScopePath,
         name: &str,
         representation: Representation,
+        air_constructor: &AirConstructor,
     ) {
         let mut ancestor = self.declaration_set.get_declaration_scope(scope, name);
         while ancestor.0.len() < scope.0.len() {
+            let scoped_representation =
+                representation.scoped(air_constructor.get_scope_expression(scope));
             if let Some(current_representation) = self
                 .representations
                 .get_mut(&(ancestor.clone(), name.to_string()))
             {
-                current_representation.add(&representation);
+                current_representation.add(&scoped_representation);
             } else {
-                self.representations.insert(
-                    (ancestor.clone(), name.to_string()),
-                    representation.unowned(),
-                );
+                self.representations
+                    .insert((ancestor.clone(), name.to_string()), scoped_representation);
             }
             let i = ancestor.0.len();
             ancestor = ancestor.then(scope.0[i].0, scope.0[i].1.clone());
@@ -552,6 +566,7 @@ impl FlatMatch {
                                 &scope,
                                 &component.name,
                                 representation[offset..offset + type_size].to_vec(),
+                                air_constructor,
                             );
                         }
                         offset += type_size;
@@ -620,6 +635,7 @@ impl FlatMatch {
                                 &scope,
                                 &component.name,
                                 representation[offset..offset + type_size].to_vec(),
+                                air_constructor,
                             );
                         }
                         offset += type_size;
