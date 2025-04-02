@@ -27,13 +27,10 @@ fn benchmark_function(c: &mut Criterion) {
     let config = Keccak256Rv32Config::default();
     let executor = VmExecutor::<BabyBear, Keccak256Rv32Config>::new(config);
 
-    let data = include_str!("../programs/regex/regex_email.txt");
-
-    let fe_bytes = data.to_owned().into_bytes();
     group.bench_function("execute", |b| {
         b.iter(|| {
             executor
-                .execute(exe.clone(), black_box(StdIn::from_bytes(&fe_bytes)))
+                .execute(exe.clone(), black_box(StdIn::default()))
                 .unwrap();
         })
     });

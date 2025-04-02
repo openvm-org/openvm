@@ -16,16 +16,29 @@ extern crate alloc;
 
 #[inline(always)]
 pub fn terminate<const EXIT_CODE: u8>() {
-    #[cfg(target_os = "zkvm")]
-    crate::custom_insn_i!(
-        opcode = SYSTEM_OPCODE,
-        funct3 = 0,
-        rd = Const "x0",
-        rs1 = Const "x0",
-        imm = Const EXIT_CODE
-    );
-    #[cfg(not(target_os = "zkvm"))]
-    {
-        unimplemented!()
+    #[cfg(target_arch = "riscv32")]
+    unsafe {
+        core::arch::asm!(
+            "li a7, 93", // exit syscall number in Linux
+            "li a0, 0",  // exit code
+            "ecall",     // make system call
+            options(noreturn)
+        );
     }
+    #[cfg(not(target_arch = "riscv32"))]
+    {
+        unimplemented!("terminate is only implemented for RISC-V 32-bit target architecture");
+    }
+    // #[cfg(target_os = "zkvm")]
+    // crate::custom_insn_i!(
+    //     opcode = SYSTEM_OPCODE,
+    //     funct3 = 0,
+    //     rd = Const "x0",
+    //     rs1 = Const "x0",
+    //     imm = Const EXIT_CODE
+    // );
+    // #[cfg(not(target_os = "zkvm"))]
+    // {
+    //     unimplemented!()
+    // }
 }

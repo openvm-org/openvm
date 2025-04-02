@@ -25,11 +25,7 @@ fn main() {
     let config = Keccak256Rv32Config::default();
     let executor = VmExecutor::<BabyBear, Keccak256Rv32Config>::new(config);
 
-    let data = include_str!("../programs/regex/regex_email.txt");
-
     let timer = std::time::Instant::now();
-    executor
-        .execute(exe.clone(), StdIn::from_bytes(data.as_bytes()))
-        .unwrap();
+    executor.execute(exe.clone(), StdIn::default()).unwrap();
     println!("execute_time: {:?}", timer.elapsed());
 }

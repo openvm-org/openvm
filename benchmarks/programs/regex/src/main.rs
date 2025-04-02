@@ -2,16 +2,17 @@ use regex::Regex;
 
 const PATTERN: &str = r"(?m)(\r\n|^)From:([^\r\n]+<)?(?P<email>[^<>]+)>?";
 
+openvm::entry!(main);
+
 pub fn main() {
-    let data = openvm::io::read_vec();
-    let data = core::str::from_utf8(&data).expect("Invalid UTF-8");
+    let data = core::hint::black_box(include_str!("../regex_email.txt"));
 
     // Compile the regex
     let re = Regex::new(PATTERN).expect("Invalid regex");
 
     let caps = re.captures(data).expect("No match found.");
     let email = caps.name("email").expect("No email found.");
-    let email_hash = openvm_keccak256_guest::keccak256(email.as_str().as_bytes());
+    // let email_hash = openvm_keccak256_guest::keccak256(email.as_str().as_bytes());
 
-    openvm::io::reveal_bytes32(email_hash);
+    // openvm::io::reveal_bytes32(email_hash);
 }

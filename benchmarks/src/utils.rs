@@ -177,11 +177,11 @@ pub fn get_programs_dir() -> PathBuf {
 }
 
 pub fn build_bench(manifest_dir: PathBuf, profile: impl ToString) -> Result<Elf> {
+    let target_dir = manifest_dir.join("target"); // tempdir()?;
     let pkg = get_package(manifest_dir);
-    let target_dir = tempdir()?;
     // Build guest with default features
     let guest_opts = GuestOptions::default()
-        .with_target_dir(target_dir.path())
+        .with_target_dir(&target_dir)
         .with_profile(profile.to_string());
     if let Err(Some(code)) = build_guest_package(&pkg, &guest_opts, None, &None) {
         std::process::exit(code);
