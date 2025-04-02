@@ -1,5 +1,3 @@
-use std::sync::mpsc;
-
 use async_trait::async_trait;
 use openvm_circuit::arch::{SingleSegmentVmExecutor, Streams};
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
@@ -8,7 +6,7 @@ use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine, FriParameters},
     engine::{StarkEngine, StarkFriEngine},
-    openvm_stark_backend::{config::Val, proof::Proof, prover::types::ProofInput},
+    openvm_stark_backend::proof::Proof,
 };
 
 use crate::{
@@ -80,22 +78,6 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         }
         let e = BabyBearPoseidon2RootEngine::new(*self.fri_params());
         e.prove(&self.root_verifier_pk.vm_pk.vm_pk, proof_input)
-    }
-
-    fn spawn_trace_worker(
-        &self,
-        _input_rx: mpsc::Receiver<Streams<Val<RootSC>>>,
-        _proof_tx: mpsc::SyncSender<(ProofInput<RootSC>, tracing::Span)>,
-    ) -> std::thread::JoinHandle<()> {
-        unimplemented!()
-    }
-
-    fn spawn_prove_worker(
-        &self,
-        _proof_input_rx: mpsc::Receiver<(ProofInput<RootSC>, tracing::Span)>,
-        _proof_tx: mpsc::SyncSender<Proof<RootSC>>,
-    ) -> std::thread::JoinHandle<()> {
-        unimplemented!()
     }
 }
 

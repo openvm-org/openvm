@@ -303,98 +303,41 @@ where
         let vm = VirtualMachine::new(e, executor.config);
         vm.prove_single(&self.pk.vm_pk, proof_input)
     }
+}
 
-    fn spawn_trace_worker(
+#[async_trait]
+impl<
+        SC: StarkGenericConfig + 'static,
+        VC: VmConfig<Val<SC>> + Send + 'static,
+        E: StarkFriEngine<SC> + Send + 'static,
+    > AsyncContinuationVmProver<SC> for VmLocalProver<SC, VC, E>
+where
+    VmLocalProver<SC, VC, E>: Send + Sync,
+    Val<SC>: PrimeField32,
+    VC::Executor: Chip<SC> + Send,
+    VC::Periphery: Chip<SC> + Send,
+{
+    async fn prove(
         &self,
-        input_rx: mpsc::Receiver<Streams<Val<SC>>>,
-        proof_tx: mpsc::SyncSender<(ProofInput<SC>, tracing::Span)>,
-    ) -> std::thread::JoinHandle<()> {
-        let committed_exe = self.committed_exe.clone();
-        let vm_config = self.pk.vm_config.clone();
-        let executor = SingleSegmentVmExecutor::new(vm_config.clone());
-        std::thread::spawn(move || {
-            for input in input_rx.iter() {
-                let span = info_span!("execute_and_trace_gen");
-                let _guard = span.enter();
-
-                // Create executor and generate proof input
-                let proof_input = executor
-                    .execute_and_generate(committed_exe.clone(), input)
-                    .unwrap();
-
-                // Send proof input to the next stage
-                proof_tx
-                    .send((proof_input, span.clone()))
-                    .expect("Failed to send proof input");
-            }
-            // Close the channel when done
-            drop(proof_tx);
-        })
-    }
-
-    fn spawn_prove_worker(
-        &self,
-        proof_input_rx: mpsc::Receiver<(ProofInput<SC>, tracing::Span)>,
-        proof_tx: mpsc::SyncSender<Proof<SC>>,
-    ) -> std::thread::JoinHandle<()> {
-        // Create the proving engine
-        let vm_pk = self.pk.clone();
-        let vm_config = self.pk.vm_config.clone();
-        let fri_params = self.pk.fri_params;
-
-        std::thread::spawn(move || {
-            let prove_engine = E::new(fri_params);
-            let vm = VirtualMachine::new(prove_engine, vm_config.clone());
-
-            for (proof_input, parent_span) in proof_input_rx.iter() {
-                let span = parent_span.in_scope(|| info_span!("prove_segment"));
-                let _guard = span.enter();
-
-                // Generate the proof
-                let proof = vm.prove_single(&vm_pk.vm_pk, proof_input);
-
-                // Send the proof to the collector
-                proof_tx.send(proof).expect("Failed to send proof");
-            }
-            // Close the channel when done
-            drop(proof_tx);
-        })
+        input: impl Into<Streams<Val<SC>>> + Send + Sync,
+    ) -> ContinuationVmProof<SC> {
+        ContinuationVmProver::prove(self, input)
     }
 }
 
-// #[async_trait]
-// impl<
-//         SC: StarkGenericConfig + 'static,
-//         VC: VmConfig<Val<SC>> + 'static,
-//         E: StarkFriEngine<SC> + 'static,
-//     > AsyncContinuationVmProver<SC> for VmLocalProver<SC, VC, E>
-// where
-//     VmLocalProver<SC, VC, E>: Send + Sync,
-//     Val<SC>: PrimeField32,
-//     VC::Executor: Chip<SC> + Send,
-//     VC::Periphery: Chip<SC> + Send,
-// {
-//     async fn prove(
-//         &self,
-//         input: impl Into<Streams<Val<SC>>> + Send + Sync,
-//     ) -> ContinuationVmProof<SC> {
-//         ContinuationVmProver::prove(self, input)
-//     }
-// }
-
-// #[async_trait]
-// impl<
-//         SC: StarkGenericConfig + 'static,
-//         VC: VmConfig<Val<SC>> + 'static,
-//         E: StarkFriEngine<SC> + 'static,
-//     > AsyncSingleSegmentVmProver<SC> for VmLocalProver<SC, VC, E>
-// where
-//     VmLocalProver<SC, VC, E>: Send + Sync,
-//     Val<SC>: PrimeField32,
-//     VC::Executor: Chip<SC> + Send,
-//     VC::Periphery: Chip<SC> + Send,
-// {
-//     async fn prove(&self, input: impl Into<Streams<Val<SC>>> + Send + Sync) -> Proof<SC> {
-//         SingleSegmentVmProver::prove(self, input)
-//     }
-// }
+#[async_trait]
+impl<
+        SC: StarkGenericConfig + 'static,
+        VC: VmConfig<Val<SC>> + Send + Sync + 'static,
+        E: StarkFriEngine<SC> + Send + 'static,
+    > AsyncSingleSegmentVmProver<SC> for VmLocalProver<SC, VC, E>
+where
+    VmLocalProver<SC, VC, E>: Send + Sync,
+    Val<SC>: PrimeField32,
+    VC::Executor: Chip<SC> + Send,
+    VC::Periphery: Chip<SC> + Send,
+{
+    async fn prove(&self, input: impl Into<Streams<Val<SC>>> + Send + Sync) -> Proof<SC> {
+        SingleSegmentVmProver::prove(self, input)
+    }
+}
