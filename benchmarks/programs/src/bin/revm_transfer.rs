@@ -1,8 +1,9 @@
 use clap::Parser;
 use eyre::Result;
-use openvm_benchmarks::utils::BenchmarkCli;
+use openvm_benchmarks_utils::BenchmarkCli;
 use openvm_circuit::arch::instructions::exe::VmExe;
-use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_keccak256_circuit::Keccak256Rv32Config;
+use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -12,18 +13,21 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
-
-    let elf = args.build_bench_program("bincode")?;
+    let elf = args.build_bench_program("revm_transfer")?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
             .with_extension(Rv32ITranspilerExtension)
             .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension),
+            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(Keccak256TranspilerExtension),
     )?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let file_data = include_bytes!("../../programs/bincode/minecraft_savedata.bin");
-        let stdin = StdIn::from_bytes(file_data);
-        args.bench_from_exe("bincode", Rv32ImConfig::default(), exe, stdin)
+        args.bench_from_exe(
+            "revm_100_transfers",
+            Keccak256Rv32Config::default(),
+            exe,
+            StdIn::default(),
+        )
     })
 }

@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use openvm_benchmarks::utils::{build_bench, get_programs_dir};
+use openvm_benchmarks_utils::{build_bench, get_programs_dir};
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_keccak256_circuit::Keccak256Rv32Config;
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -27,7 +27,7 @@ fn benchmark_function(c: &mut Criterion) {
     let config = Keccak256Rv32Config::default();
     let executor = VmExecutor::<BabyBear, Keccak256Rv32Config>::new(config);
 
-    let data = include_str!("../programs/regex/regex_email.txt");
+    let data = include_str!("../../programs/guest/regex/regex_email.txt");
 
     let fe_bytes = data.to_owned().into_bytes();
     group.bench_function("execute", |b| {

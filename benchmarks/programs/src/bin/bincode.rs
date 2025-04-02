@@ -1,6 +1,6 @@
 use clap::Parser;
 use eyre::Result;
-use openvm_benchmarks::utils::BenchmarkCli;
+use openvm_benchmarks_utils::BenchmarkCli;
 use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
@@ -13,7 +13,7 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let elf = args.build_bench_program("rkyv")?;
+    let elf = args.build_bench_program("bincode")?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
@@ -21,10 +21,9 @@ fn main() -> Result<()> {
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension),
     )?;
-
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let file_data = include_bytes!("../../programs/rkyv/minecraft_savedata.bin");
+        let file_data = include_bytes!("../../guest/bincode/minecraft_savedata.bin");
         let stdin = StdIn::from_bytes(file_data);
-        args.bench_from_exe("rkyv", Rv32ImConfig::default(), exe, stdin)
+        args.bench_from_exe("bincode", Rv32ImConfig::default(), exe, stdin)
     })
 }

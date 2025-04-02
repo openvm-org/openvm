@@ -3298,7 +3298,85 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-benchmarks"
+name = "openvm-benchmarks-execute"
+version = "1.0.0"
+dependencies = [
+ "clap",
+ "criterion",
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "eyre",
+ "k256",
+ "num-bigint 0.4.6",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-benchmarks-utils",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-ecc-circuit",
+ "openvm-ecc-transpiler",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-native-circuit",
+ "openvm-native-compiler",
+ "openvm-native-recursion",
+ "openvm-pairing-circuit",
+ "openvm-pairing-guest",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-transpiler",
+ "rand_chacha",
+ "serde",
+ "tempfile",
+ "tiny-keccak",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-benchmarks-programs"
+version = "1.0.0"
+dependencies = [
+ "clap",
+ "criterion",
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "eyre",
+ "k256",
+ "num-bigint 0.4.6",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-benchmarks-utils",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-ecc-circuit",
+ "openvm-ecc-transpiler",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-native-circuit",
+ "openvm-native-compiler",
+ "openvm-native-recursion",
+ "openvm-pairing-circuit",
+ "openvm-pairing-guest",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-transpiler",
+ "rand_chacha",
+ "serde",
+ "tempfile",
+ "tiny-keccak",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-benchmarks-utils"
 version = "1.0.0"
 dependencies = [
  "clap",

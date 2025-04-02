@@ -9,7 +9,9 @@ license = "MIT"
 
 [workspace]
 members = [
-    "benchmarks",
+    "benchmarks/utils",
+    "benchmarks/execute",
+    "benchmarks/programs",
     "crates/prof",
     "crates/sdk",
     "crates/cli",
@@ -158,6 +160,9 @@ openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = f
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
+
+# Benchmarking
+openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
 
 # Plonky3
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }

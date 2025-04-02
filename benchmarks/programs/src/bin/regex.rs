@@ -1,6 +1,6 @@
 use clap::Parser;
 use eyre::Result;
-use openvm_benchmarks::utils::BenchmarkCli;
+use openvm_benchmarks_utils::BenchmarkCli;
 use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_keccak256_circuit::Keccak256Rv32Config;
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -14,22 +14,21 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let elf = args.build_bench_program("base64_json")?;
+    let elf = args.build_bench_program("regex")?;
     let exe = VmExe::from_elf(
-        elf,
+        elf.clone(),
         Transpiler::<BabyBear>::default()
             .with_extension(Rv32ITranspilerExtension)
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(Keccak256TranspilerExtension),
     )?;
-
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let data = include_str!("../../programs/base64_json/json_payload_encoded.txt");
+        let data = include_str!("../../guest/regex/regex_email.txt");
 
         let fe_bytes = data.to_owned().into_bytes();
         args.bench_from_exe(
-            "base64_json",
+            "regex_program",
             Keccak256Rv32Config::default(),
             exe,
             StdIn::from_bytes(&fe_bytes),

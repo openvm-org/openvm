@@ -1,7 +1,7 @@
 use clap::Parser;
 use eyre::Result;
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
-use openvm_benchmarks::utils::BenchmarkCli;
+use openvm_benchmarks_utils::BenchmarkCli;
 use openvm_circuit::arch::SystemConfig;
 use openvm_ecc_circuit::WeierstrassExtension;
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};

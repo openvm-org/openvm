@@ -1,6 +1,6 @@
 use clap::Parser;
 use eyre::Result;
-use openvm_benchmarks::utils::BenchmarkCli;
+use openvm_benchmarks_utils::BenchmarkCli;
 use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
