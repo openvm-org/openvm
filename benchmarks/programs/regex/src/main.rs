@@ -1,3 +1,6 @@
+#![no_std]
+#![no_main]
+
 use regex::Regex;
 
 const PATTERN: &str = r"(?m)(\r\n|^)From:([^\r\n]+<)?(?P<email>[^<>]+)>?";
