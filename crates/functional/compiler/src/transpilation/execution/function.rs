@@ -141,7 +141,11 @@ impl FlattenedFunction {
         }
     }
     pub fn get_declaration_types(&self) -> Vec<Type> {
-        self.declaration_set.declarations.values().cloned().collect()
+        self.declaration_set
+            .declarations
+            .values()
+            .cloned()
+            .collect()
     }
 
     pub fn get_types_in_memory(&self) -> Vec<Type> {

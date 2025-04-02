@@ -69,7 +69,12 @@ impl<'a> RepresentationTable<'a> {
             reference_offsets: HashMap::new(),
         }
     }
-    pub fn get_representation(&self, scope: &ScopePath, name: &str, type_set: &TypeSet) -> Vec<AirExpression> {
+    pub fn get_representation(
+        &self,
+        scope: &ScopePath,
+        name: &str,
+        type_set: &TypeSet,
+    ) -> Vec<AirExpression> {
         let tipo = self.declaration_set.get_declaration_type(scope, name);
         if type_set.calc_type_size(tipo) == 0 {
             return vec![];
@@ -582,8 +587,11 @@ impl FlatMatch {
                     for (component, tipo) in branch.components.iter().zip_eq(type_components.iter())
                     {
                         if !component.represents {
-                            let component_representation =
-                                representation_table.get_representation(&scope, &component.name, type_set);
+                            let component_representation = representation_table.get_representation(
+                                &scope,
+                                &component.name,
+                                type_set,
+                            );
                             for (i, expression) in component_representation.iter().enumerate() {
                                 representation[offset + i] = Some(expression.clone());
                             }

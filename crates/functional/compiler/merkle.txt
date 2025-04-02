@@ -12,7 +12,7 @@ fn merkle_verify(in<[F; 8]> leaf, in<F> length, in<@[Bool]> bits, in<{@[[F; 8]]}
             fix commit = leaf;
         )
         False => (
-            merkle_verify(leaf, length - 1, bits, siblings, def child);
+            merkle_verify(leaf, length - 1, bits, siblings, let child);
             def i = length - 1;
             let bit <- bits !! i;
             {let sibling <- siblings !! i};
@@ -20,9 +20,11 @@ fn merkle_verify(in<[F; 8]> leaf, in<F> length, in<@[Bool]> bits, in<{@[[F; 8]]}
                 True => (
                     {set left = sibling};
                     set right = child;
+                    rep child = right;
                 )
                 False => (
                     set left = child;
+                    rep child = left;
                     {set right = sibling};
                 )
             )

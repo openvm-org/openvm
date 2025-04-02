@@ -1,10 +1,10 @@
-use std::env::set_var;
 use crate::{
     core::stage1::stage1,
     parser::parser::parse_program_source,
     transpiled_fibonacci::{isize_to_field_elem, TLFunction_fibonacci},
     transpiled_merkle::TLFunction_main,
 };
+use std::env::set_var;
 
 pub mod air;
 pub mod core;
@@ -15,7 +15,9 @@ pub mod transpiled_merkle;
 
 fn main() {
     println!("Hello, world!");
-    unsafe { set_var("RUST_BACKTRACE", "1"); }
+    unsafe {
+        set_var("RUST_BACKTRACE", "1");
+    }
     // parse_and_compile_and_transpile_fibonacci();
     // test_fibonacci();
 
@@ -75,5 +77,8 @@ fn test_merkle(should_fail: bool) {
     let mut trace_set = transpiled_merkle::TraceSet::new(&tracker);
     main.generate_trace(&tracker, &mut trace_set);
     println!("trace_set = {:?}", trace_set);
-    println!("trace_set.merkle_verify_trace length = {}", trace_set.merkle_verify_trace.len());
+    println!(
+        "trace_set.merkle_verify_trace length = {}",
+        trace_set.merkle_verify_trace.len()
+    );
 }

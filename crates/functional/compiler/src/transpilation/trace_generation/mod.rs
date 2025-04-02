@@ -23,23 +23,21 @@ impl Stage2Program {
                 self,
             ));
         }
-        
+
         let mut distinct_types = vec![];
         for tipo in declaration_types {
             if self.types.calc_type_size(&tipo) > 0
-                && !distinct_types
-                .iter()
-                .any(|other| tipo.eq(other))
+                && !distinct_types.iter().any(|other| tipo.eq(other))
             {
                 distinct_types.push(tipo);
             }
         }
-        
+
         let mut type_conversions = vec![];
         for tipo in distinct_types {
             type_conversions.push(tipo.transpile_to_cells(&self.types));
         }
-        
+
         let trace_set = rust_trace_set(self);
         let max_trace_height_name = max_trace_height_const_name();
         let max_trace_height_value = AirConstructor::MAX_HEIGHT;

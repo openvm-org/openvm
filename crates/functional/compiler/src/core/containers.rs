@@ -147,7 +147,7 @@ impl DeclarationSet {
             .unwrap()
             .clone()
     }
-    
+
     pub fn get_declaration_type(&self, curr: &ScopePath, name: &str) -> &Type {
         let scope = self.get_declaration_scope(curr, name);
         &self.declarations[&(scope, name.to_string())]

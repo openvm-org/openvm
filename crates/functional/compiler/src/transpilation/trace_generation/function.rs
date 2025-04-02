@@ -31,9 +31,12 @@ impl FlattenedFunction {
         for (i, function_call) in self.function_calls.iter().enumerate() {
             if function_call.material == Material::Materialized {
                 let callee = namer.callee_name(i);
-                pieces.push(namer.scoped(&function_call.scope, quote! {
-                    #callee.as_ref().as_ref().unwrap().#generate_trace(#tracker, #trace_set);
-                }));
+                pieces.push(namer.scoped(
+                    &function_call.scope,
+                    quote! {
+                        #callee.as_ref().as_ref().unwrap().#generate_trace(#tracker, #trace_set);
+                    },
+                ));
             }
         }
 
@@ -48,19 +51,14 @@ impl FlattenedFunction {
             });
         }
         for (scope, cell) in air_constructor.leaf_scopes.iter() {
-            pieces.push(namer.scoped(scope, quote! {
-                #row[#cell] = F::ONE;
-            }));
+            pieces.push(namer.scoped(
+                scope,
+                quote! {
+                    #row[#cell] = F::ONE;
+                },
+            ));
         }
-        println!("#####");
         for ((scope, name), representation) in representation_table.representations.iter() {
-            if self.name == "merkle_verify" {
-                println!();
-                println!("scope = {:?}", scope);
-                println!("name = {:?}", name);
-                println!("representation expressions = {:?}", representation.expressions);
-                println!("representation owned = {:?}", representation.owned);
-            }
             let cells_to_set = (0..representation.len())
                 .filter(|&i| representation.owned[i].is_some())
                 .collect_vec();
@@ -82,9 +80,12 @@ impl FlattenedFunction {
                         #row[#cell] = #as_cells[#i];
                     });
                 }
-                pieces.push(namer.scoped(scope, quote! {
-                    #(#here)*
-                }));
+                pieces.push(namer.scoped(
+                    scope,
+                    quote! {
+                        #(#here)*
+                    },
+                ));
             }
         }
         for (&index, &cell) in representation_table.reference_multiplicity_cells.iter() {
@@ -112,9 +113,12 @@ impl FlattenedFunction {
                 _ => unreachable!(),
             };
             let multiplicity = usize_to_field_elem(multiplicity);
-            pieces.push(namer.scoped(scope, quote! {
-                #row[#cell] = #multiplicity;
-            }));
+            pieces.push(namer.scoped(
+                scope,
+                quote! {
+                    #row[#cell] = #multiplicity;
+                },
+            ));
         }
 
         quote! {

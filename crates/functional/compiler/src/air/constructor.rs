@@ -265,7 +265,7 @@ impl FlattenedFunction {
 
         let mut air_constructor = AirConstructor::default();
         let mut representation_table = RepresentationTable::new(&self.declaration_set);
-        
+
         air_tree.calc_scope_expressions(&mut air_constructor);
 
         if self.creates_addresses {
@@ -438,7 +438,11 @@ impl FlattenedFunction {
         }
 
         let argument_representations = self.arguments.iter().flat_map(|argument| {
-            representation_table.get_representation(&ScopePath::empty(), &argument.name, &program.types)
+            representation_table.get_representation(
+                &ScopePath::empty(),
+                &argument.name,
+                &program.types,
+            )
         });
         let own_call_interaction = Interaction {
             bus: Bus::Function,
