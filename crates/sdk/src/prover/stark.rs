@@ -13,7 +13,7 @@ use crate::{
 
 pub struct StarkProver<VC, E: StarkFriEngine<SC>> {
     app_prover: AppProver<VC, E>,
-    agg_prover: AggStarkProver,
+    agg_prover: AggStarkProver<E>,
 }
 impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
     pub fn new(
