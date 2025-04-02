@@ -266,12 +266,14 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
                     collector_handle.join().expect("Collector thread panicked")
                 })
             });
-
             internal_node_height += 1;
             tracing::info!(
-                "internal.{internal_node_height} wall time: {:?}",
-                wall_timer.elapsed()
+                "agg_layer wall time, group = internal.{internal_node_height}: {:.3}s",
+                wall_timer.elapsed().as_secs_f64()
             );
+
+            #[cfg(feature = "bench-metrics")]
+            metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
         }
 
         proofs.pop().unwrap()
@@ -380,7 +382,13 @@ impl LeafProvingController {
                 collector_handle.join().expect("Collector thread panicked")
             });
 
-            tracing::info!("leaf wall time: {:?}", wall_timer.elapsed());
+            tracing::info!(
+                "agg_layer wall time, group = leaf: {:.3}s",
+                wall_timer.elapsed().as_secs_f64()
+            );
+            #[cfg(feature = "bench-metrics")]
+            metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
+
             proofs
         })
     }
