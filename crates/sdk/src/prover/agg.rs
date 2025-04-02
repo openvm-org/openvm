@@ -157,7 +157,7 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
                 }
 
                 // Use parallel processing with expanded SingleSegmentVmProver::prove
-                std::thread::scope(|s| {
+                let proofs = std::thread::scope(|s| {
                     // Create channels
                     let (input_tx, input_rx) =
                         mpsc::sync_channel::<(usize, Streams<Val<SC>>, tracing::Span)>(1);
@@ -259,16 +259,18 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
                     prove_handle.join().expect("Prove thread panicked");
 
                     collector_handle.join().expect("Collector thread panicked")
-                })
+                });
+
+                tracing::info!(
+                    "agg_layer wall time, group = internal.{internal_node_height}: {:.3}s",
+                    wall_timer.elapsed().as_secs_f64()
+                );
+                #[cfg(feature = "bench-metrics")]
+                metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
+
+                proofs
             });
             internal_node_height += 1;
-            tracing::info!(
-                "agg_layer wall time, group = internal.{internal_node_height}: {:.3}s",
-                wall_timer.elapsed().as_secs_f64()
-            );
-
-            #[cfg(feature = "bench-metrics")]
-            metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
         }
 
         proofs.pop().unwrap()

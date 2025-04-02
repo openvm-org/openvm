@@ -415,6 +415,8 @@ impl AggProvingKey {
         reader: &impl Halo2ParamsReader,
         pv_handler: &impl StaticVerifierPvHandler,
     ) -> Self {
+        let wall_timer = std::time::Instant::now();
+
         let AggConfig {
             agg_stark_config,
             halo2_config,
@@ -440,6 +442,14 @@ impl AggProvingKey {
             wrapper,
             profiling: halo2_config.profiling,
         };
+
+        tracing::info!(
+            "agg_keygen wall time: {:.3}s",
+            wall_timer.elapsed().as_secs_f64()
+        );
+        #[cfg(feature = "bench-metrics")]
+        metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
+
         Self {
             agg_stark_pk,
             halo2_pk,

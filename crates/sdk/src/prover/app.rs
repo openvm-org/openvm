@@ -60,10 +60,21 @@ impl<VC: 'static, E: StarkFriEngine<SC>> AppProver<VC, E> {
                 .unwrap_or(&"app_proof".to_string())
         )
         .in_scope(|| {
+            let wall_timer = std::time::Instant::now();
             #[cfg(feature = "bench-metrics")]
             metrics::counter!("fri.log_blowup")
                 .absolute(self.app_prover.pk.fri_params.log_blowup as u64);
-            ContinuationVmProver::prove(&self.app_prover, input)
+
+            let proofs = ContinuationVmProver::prove(&self.app_prover, input);
+
+            tracing::info!(
+                "app proof wall time: {:.3}s",
+                wall_timer.elapsed().as_secs_f64()
+            );
+            #[cfg(feature = "bench-metrics")]
+            metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
+
+            proofs
         })
     }
 

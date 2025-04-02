@@ -44,7 +44,7 @@ tracing.workspace = true
 
 [features]
 default = ["parallel", "jemalloc", "bench-metrics"]
-bench-metrics = ["openvm-native-recursion/bench-metrics"]
+bench-metrics = ["openvm-native-recursion/bench-metrics", "openvm-sdk/bench-metrics"]
 profiling = ["openvm-sdk/profiling"]
 aggregation = []
 parallel = ["openvm-native-recursion/parallel"]
