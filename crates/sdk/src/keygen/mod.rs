@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derivative::Derivative;
 use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
-    arch::{VirtualMachine, VmConfig},
+    arch::{VirtualMachine, VmComplexTraceHeights, VmConfig},
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
 use openvm_continuations::{
@@ -333,7 +333,7 @@ impl AggStarkProvingKey {
             let mut vm_pk = vm.keygen();
             assert!(vm_pk.max_constraint_degree <= config.root_fri_params.max_constraint_degree());
 
-            let (air_heights, _internal_heights) = compute_root_proof_heights(
+            let (air_heights, internal_heights) = compute_root_proof_heights(
                 root_vm_config.clone(),
                 root_committed_exe.exe.clone(),
                 &internal_proof,
@@ -349,6 +349,7 @@ impl AggStarkProvingKey {
                 }),
                 root_committed_exe,
                 air_heights,
+                internal_heights,
             }
         };
         (
@@ -392,9 +393,8 @@ pub struct RootVerifierProvingKey {
     pub root_committed_exe: Arc<VmCommittedExe<RootSC>>,
     /// The constant trace heights, ordered by AIR ID.
     pub air_heights: Vec<usize>,
-    // The following is currently not used:
-    // The constant trace heights, ordered according to an internal ordering determined by the `NativeConfig`.
-    // pub internal_heights: VmComplexTraceHeights,
+    /// The constant trace heights in a semaantic way.
+    pub internal_heights: VmComplexTraceHeights,
 }
 
 impl RootVerifierProvingKey {
