@@ -376,7 +376,7 @@ pub struct SingleSegmentVmExecutionResult<F> {
     /// Heights of each AIR, ordered by AIR ID.
     pub air_heights: Vec<usize>,
     /// Heights of (SystemBase, Inventory), in an internal ordering.
-    pub internal_heights: VmComplexTraceHeights,
+    pub vm_heights: VmComplexTraceHeights,
 }
 
 impl<F, VC> SingleSegmentVmExecutor<F, VC>
@@ -424,7 +424,7 @@ where
             segment
         };
         let air_heights = segment.chip_complex.current_trace_heights();
-        let internal_heights = segment.chip_complex.get_internal_trace_heights();
+        let vm_heights = segment.chip_complex.get_internal_trace_heights();
         let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {
             pv_chip.core.get_custom_public_values()
         } else {
@@ -433,7 +433,7 @@ where
         Ok(SingleSegmentVmExecutionResult {
             public_values,
             air_heights,
-            internal_heights,
+            vm_heights,
         })
     }
 

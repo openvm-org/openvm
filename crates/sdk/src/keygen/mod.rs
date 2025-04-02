@@ -333,7 +333,7 @@ impl AggStarkProvingKey {
             let mut vm_pk = vm.keygen();
             assert!(vm_pk.max_constraint_degree <= config.root_fri_params.max_constraint_degree());
 
-            let (air_heights, internal_heights) = compute_root_proof_heights(
+            let (air_heights, vm_heights) = compute_root_proof_heights(
                 root_vm_config.clone(),
                 root_committed_exe.exe.clone(),
                 &internal_proof,
@@ -349,7 +349,7 @@ impl AggStarkProvingKey {
                 }),
                 root_committed_exe,
                 air_heights,
-                internal_heights,
+                vm_heights,
             }
         };
         (
@@ -393,8 +393,8 @@ pub struct RootVerifierProvingKey {
     pub root_committed_exe: Arc<VmCommittedExe<RootSC>>,
     /// The constant trace heights, ordered by AIR ID.
     pub air_heights: Vec<usize>,
-    /// The constant trace heights in a semaantic way.
-    pub internal_heights: VmComplexTraceHeights,
+    /// The constant trace heights in a semantic way for VM.
+    pub vm_heights: VmComplexTraceHeights,
 }
 
 impl RootVerifierProvingKey {
