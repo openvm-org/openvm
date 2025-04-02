@@ -35,14 +35,14 @@ pub fn rust_trace_set(program: &Stage2Program) -> TokenStream {
     let tracker_struct = tracker_struct_name();
     let impl_block = quote! {
         impl #struct_name {
-            pub fn new(tracker: #tracker_struct) -> Self {
+            pub fn new(tracker: &#tracker_struct) -> Self {
                 Self {
                     #(#init_calls)*
                 }
             }
-            pub fn init_trace(num_calls: usize, width: usize) -> Self {
-                let height = width.next_power_of_two();
-                vec![F::ZERO; height * num_calls]
+            pub fn init_trace(num_calls: usize, width: usize) -> Vec<F> {
+                let height = num_calls.next_power_of_two();
+                vec![F::ZERO; height * width]
             }
         }
     };

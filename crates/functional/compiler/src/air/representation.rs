@@ -69,7 +69,11 @@ impl<'a> RepresentationTable<'a> {
             reference_offsets: HashMap::new(),
         }
     }
-    pub fn get_representation(&self, scope: &ScopePath, name: &str) -> Vec<AirExpression> {
+    pub fn get_representation(&self, scope: &ScopePath, name: &str, type_set: &TypeSet) -> Vec<AirExpression> {
+        let tipo = self.declaration_set.get_declaration_type(scope, name);
+        if type_set.calc_type_size(tipo) == 0 {
+            return vec![];
+        }
         for prefix in scope.prefixes().rev() {
             let representation = self
                 .representations
@@ -187,7 +191,7 @@ impl ExpressionContainer {
                 name, represents, ..
             } => {
                 assert!(!*represents);
-                representation_table.get_representation(scope, name)
+                representation_table.get_representation(scope, name, type_set)
             }
             Expression::Algebraic {
                 constructor,
@@ -579,7 +583,7 @@ impl FlatMatch {
                     {
                         if !component.represents {
                             let component_representation =
-                                representation_table.get_representation(&scope, &component.name);
+                                representation_table.get_representation(&scope, &component.name, type_set);
                             for (i, expression) in component_representation.iter().enumerate() {
                                 representation[offset + i] = Some(expression.clone());
                             }
@@ -637,7 +641,7 @@ impl FlatFunctionCall {
             interaction.fields.extend(argument.calc_representation(
                 type_set,
                 representation_table,
-                &ScopePath::empty(),
+                &self.scope,
             ));
         }
         for i in stage.mid..stage.end {
@@ -647,7 +651,7 @@ impl FlatFunctionCall {
                     type_set,
                     representation_table,
                     air_constructor,
-                    &ScopePath::empty(),
+                    &self.scope,
                 ));
         }
     }

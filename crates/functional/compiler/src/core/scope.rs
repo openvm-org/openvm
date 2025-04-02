@@ -48,8 +48,9 @@ impl ScopePath {
     }
 
     pub fn is_prefix(&self, other: &Self, index: usize) -> bool {
-        other.0.len() < self.0.len()
+        let result = other.0.len() < self.0.len()
             && self.0[..other.0.len()] == other.0
-            && self.0[other.0.len()].0 == index
+            && self.0[other.0.len()].0 == index;
+        result
     }
 }

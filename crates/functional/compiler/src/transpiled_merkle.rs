@@ -85,20 +85,20 @@ pub struct TLFunction_merkle_verify {
     pub materialized: bool,
     pub call_index: usize,
     pub child_0_False: [F; 8usize],
-    pub hash_result: [F; 8usize],
-    pub right: [F; 8usize],
-    pub commit: [F; 8usize],
-    pub left: [F; 8usize],
-    pub inline0_left: [F; 8usize],
-    pub inline0_result: [F; 8usize],
-    pub siblings: TLArray,
-    pub i_0_False: F,
-    pub inline0_right: [F; 8usize],
     pub leaf: [F; 8usize],
+    pub left: [F; 8usize],
+    pub i_0_False: F,
     pub bits: TLArray,
-    pub sibling_0_False: [F; 8usize],
+    pub inline0_left: [F; 8usize],
+    pub hash_result: [F; 8usize],
+    pub commit: [F; 8usize],
+    pub right: [F; 8usize],
+    pub inline0_result: [F; 8usize],
     pub length: F,
+    pub inline0_right: [F; 8usize],
     pub bit_0_False: bool,
+    pub sibling_0_False: [F; 8usize],
+    pub siblings: TLArray,
     pub scope_0_True: bool,
     pub scope_0_False: bool,
     pub scope_0_False_0_True: bool,
@@ -185,49 +185,40 @@ impl TLFunction_merkle_verify {
             self.commit = self.hash_result;
         }
     }
-    fn calc_zk_identifier(&self, _: usize) -> usize {
-        0
-    }
 }
 #[derive(Default, Debug)]
 pub struct TLFunction_main {
     pub materialized: bool,
     pub call_index: usize,
-    pub bits2: TLArray,
-    pub bits3: TLArray,
     pub inline1_right: [F; 8usize],
+    pub x: [F; 8usize],
+    pub siblings2: TLArray,
+    pub inline2_left: [F; 8usize],
+    pub siblings1: TLArray,
+    pub a: [F; 8usize],
+    pub b: [F; 8usize],
+    pub inline2_right: [F; 8usize],
+    pub bits2: TLArray,
+    pub bits0: TLArray,
+    pub bits: TLArray,
+    pub root: [F; 8usize],
+    pub inline0_right: [F; 8usize],
+    pub inline2_result: [F; 8usize],
+    pub y: [F; 8usize],
+    pub bits3: TLArray,
     pub c: [F; 8usize],
-    pub bits1: TLArray,
+    pub siblings3: TLArray,
+    pub leaf: [F; 8usize],
     pub should_fail: bool,
     pub inline1_result: [F; 8usize],
-    pub bits: TLArray,
-    pub a: [F; 8usize],
     pub inline0_result: [F; 8usize],
-    pub inline2_result: [F; 8usize],
-    pub inline2_right: [F; 8usize],
-    pub siblings2: TLArray,
-    pub siblings3: TLArray,
     pub siblings: TLArray,
-    pub x: [F; 8usize],
-    pub inline0_right: [F; 8usize],
-    pub inline2_left: [F; 8usize],
-    pub bits0: TLArray,
-    pub root: [F; 8usize],
-    pub siblings1: TLArray,
     pub siblings0: TLArray,
-    pub leaf: [F; 8usize],
-    pub y: [F; 8usize],
     pub inline0_left: [F; 8usize],
-    pub b: [F; 8usize],
+    pub bits1: TLArray,
     pub inline1_left: [F; 8usize],
     pub scope_0_False: bool,
     pub scope_0_True: bool,
-    pub appended_array_5: TLArray,
-    pub appended_index_5: usize,
-    pub appended_array_6: TLArray,
-    pub appended_index_6: usize,
-    pub appended_array_7: TLArray,
-    pub appended_index_7: usize,
     pub appended_array_10: TLArray,
     pub appended_index_10: usize,
     pub appended_array_11: TLArray,
@@ -250,25 +241,22 @@ impl TLFunction_main {
         self.c = [isize_to_field_elem(3isize); 8usize];
         self.siblings0 = tracker
             .memory_ConstArray8_F
-            .create_empty_under_construction_array(self.calc_zk_identifier(4usize));
-        self.appended_array_5 = self.siblings0;
-        let (temp_2, temp_1) = tracker
+            .create_empty_under_construction_array(0);
+        let temp_1 = self.siblings0;
+        let (_, temp_2) = tracker
             .memory_ConstArray8_F
-            .append_under_construction_array(self.appended_array_5, self.a);
-        self.appended_index_5 = temp_2;
-        self.siblings1 = temp_1;
-        self.appended_array_6 = self.siblings1;
-        let (temp_4, temp_3) = tracker
+            .append_under_construction_array(temp_1, self.a);
+        self.siblings1 = temp_2;
+        let temp_3 = self.siblings1;
+        let (_, temp_4) = tracker
             .memory_ConstArray8_F
-            .append_under_construction_array(self.appended_array_6, self.b);
-        self.appended_index_6 = temp_4;
-        self.siblings2 = temp_3;
-        self.appended_array_7 = self.siblings2;
-        let (temp_6, temp_5) = tracker
+            .append_under_construction_array(temp_3, self.b);
+        self.siblings2 = temp_4;
+        let temp_5 = self.siblings2;
+        let (_, temp_6) = tracker
             .memory_ConstArray8_F
-            .append_under_construction_array(self.appended_array_7, self.c);
-        self.appended_index_7 = temp_6;
-        self.siblings3 = temp_5;
+            .append_under_construction_array(temp_5, self.c);
+        self.siblings3 = temp_6;
         self.siblings = self.siblings3;
         self.bits0 = tracker
             .memory_Bool
@@ -356,7 +344,174 @@ impl TLFunction_main {
             assert_eq!(self.callee_1.as_ref().as_ref().unwrap().commit, self.root);
         }
     }
-    fn calc_zk_identifier(&self, _: usize) -> usize {
-        0
+}
+const MAX_TRACE_HEIGHT: usize = 16777216usize;
+#[derive(Default, Debug)]
+pub struct TraceSet {
+    pub merkle_verify_trace: Vec<F>,
+    pub main_trace: Vec<F>,
+}
+impl TraceSet {
+    pub fn new(tracker: &Tracker) -> Self {
+        Self {
+            merkle_verify_trace: Self::init_trace(
+                tracker.merkle_verify_call_counter,
+                TLFunction_merkle_verify::TRACE_WIDTH,
+            ),
+            main_trace: Self::init_trace(tracker.main_call_counter, TLFunction_main::TRACE_WIDTH),
+        }
     }
+    pub fn init_trace(num_calls: usize, width: usize) -> Vec<F> {
+        let height = num_calls.next_power_of_two();
+        vec![F::ZERO; height * width]
+    }
+}
+impl TLFunction_merkle_verify {
+    const TRACE_WIDTH: usize = 37usize;
+    const NUM_REFERENCES: usize = 0usize;
+    pub fn generate_trace(&self, tracker: &Tracker, trace_set: &mut TraceSet) {
+        if self.scope_0_False {
+            self.callee_0
+                .as_ref()
+                .as_ref()
+                .unwrap()
+                .generate_trace(tracker, trace_set);
+        }
+        let row = &mut trace_set.merkle_verify_trace
+            [self.call_index * Self::TRACE_WIDTH..(self.call_index + 1) * Self::TRACE_WIDTH];
+        if self.scope_0_False_0_False {
+            row[2usize] = F::ONE;
+        }
+        if self.scope_0_False_0_True {
+            row[1usize] = F::ONE;
+        }
+        if self.scope_0_True {
+            row[0usize] = F::ONE;
+        }
+        let mut as_cells = [F::ZERO; 8usize];
+        to_cells_ConstArray8_F(self.leaf, &mut as_cells);
+        row[3usize] = as_cells[0usize];
+        row[4usize] = as_cells[1usize];
+        row[5usize] = as_cells[2usize];
+        row[6usize] = as_cells[3usize];
+        row[7usize] = as_cells[4usize];
+        row[8usize] = as_cells[5usize];
+        row[9usize] = as_cells[6usize];
+        row[10usize] = as_cells[7usize];
+        if self.scope_0_False {
+            let mut as_cells = [F::ZERO; 8usize];
+            to_cells_ConstArray8_F(self.child_0_False, &mut as_cells);
+            row[29usize] = as_cells[0usize];
+            row[30usize] = as_cells[1usize];
+            row[31usize] = as_cells[2usize];
+            row[32usize] = as_cells[3usize];
+            row[33usize] = as_cells[4usize];
+            row[34usize] = as_cells[5usize];
+            row[35usize] = as_cells[6usize];
+            row[36usize] = as_cells[7usize];
+        }
+        let mut as_cells = [F::ZERO; 1usize];
+        to_cells_F(self.length, &mut as_cells);
+        row[11usize] = as_cells[0usize];
+        let mut as_cells = [F::ZERO; 1usize];
+        to_cells_Array_Bool(self.bits, &mut as_cells);
+        row[12usize] = as_cells[0usize];
+        let mut as_cells = [F::ZERO; 8usize];
+        to_cells_ConstArray8_F(self.right, &mut as_cells);
+        row[21usize] = as_cells[0usize];
+        row[22usize] = as_cells[1usize];
+        row[23usize] = as_cells[2usize];
+        row[24usize] = as_cells[3usize];
+        row[25usize] = as_cells[4usize];
+        row[26usize] = as_cells[5usize];
+        row[27usize] = as_cells[6usize];
+        row[28usize] = as_cells[7usize];
+        let mut as_cells = [F::ZERO; 8usize];
+        to_cells_ConstArray8_F(self.left, &mut as_cells);
+        row[13usize] = as_cells[0usize];
+        row[14usize] = as_cells[1usize];
+        row[15usize] = as_cells[2usize];
+        row[16usize] = as_cells[3usize];
+        row[17usize] = as_cells[4usize];
+        row[18usize] = as_cells[5usize];
+        row[19usize] = as_cells[6usize];
+        row[20usize] = as_cells[7usize];
+        println!("row = {:?}", row);
+    }
+}
+impl TLFunction_main {
+    const TRACE_WIDTH: usize = 7usize;
+    const NUM_REFERENCES: usize = 1usize;
+    pub fn generate_trace(&self, tracker: &Tracker, trace_set: &mut TraceSet) {
+        if self.scope_0_False {
+            self.callee_0
+                .as_ref()
+                .as_ref()
+                .unwrap()
+                .generate_trace(tracker, trace_set);
+        }
+        if self.scope_0_True {
+            self.callee_1
+                .as_ref()
+                .as_ref()
+                .unwrap()
+                .generate_trace(tracker, trace_set);
+        }
+        let row = &mut trace_set.main_trace
+            [self.call_index * Self::TRACE_WIDTH..(self.call_index + 1) * Self::TRACE_WIDTH];
+        row[2usize] = F::from_canonical_usize(self.call_index);
+        if self.scope_0_True {
+            row[0usize] = F::ONE;
+        }
+        if self.scope_0_False {
+            row[1usize] = F::ONE;
+        }
+        let mut as_cells = [F::ZERO; 1usize];
+        to_cells_Bool(self.should_fail, &mut as_cells);
+        row[3usize] = as_cells[0usize];
+        row[4usize] = F::from_canonical_usize(
+            tracker
+                .memory_Bool
+                .get_array_multiplicity(self.appended_array_10, self.appended_index_10),
+        );
+        row[6usize] = F::from_canonical_usize(
+            tracker
+                .memory_Bool
+                .get_array_multiplicity(self.appended_array_12, self.appended_index_12),
+        );
+        row[5usize] = F::from_canonical_usize(
+            tracker
+                .memory_Bool
+                .get_array_multiplicity(self.appended_array_11, self.appended_index_11),
+        );
+    }
+    pub fn calc_zk_identifier(&self, i: usize) -> usize {
+        let offset = match i {
+            9usize => 0usize,
+            _ => unreachable!(),
+        };
+        (Self::FUNCTION_ID * MAX_TRACE_HEIGHT) + (self.call_index * Self::NUM_REFERENCES) + offset
+    }
+}
+fn to_cells_ConstArray8_F(value: [F; 8usize], result: &mut [F]) {
+    to_cells_F(value[0usize], &mut result[0usize..1usize]);
+    to_cells_F(value[1usize], &mut result[1usize..2usize]);
+    to_cells_F(value[2usize], &mut result[2usize..3usize]);
+    to_cells_F(value[3usize], &mut result[3usize..4usize]);
+    to_cells_F(value[4usize], &mut result[4usize..5usize]);
+    to_cells_F(value[5usize], &mut result[5usize..6usize]);
+    to_cells_F(value[6usize], &mut result[6usize..7usize]);
+    to_cells_F(value[7usize], &mut result[7usize..8usize]);
+}
+fn to_cells_F(value: F, result: &mut [F]) {
+    result[0] = value;
+}
+fn to_cells_Array_Bool(value: TLArray, result: &mut [F]) {
+    result[0] = F::from_canonical_usize(value.zk_identifier);
+}
+fn to_cells_Bool(value: bool, result: &mut [F]) {
+    result[0] = F::from_bool(value)
+}
+fn to_cells_AppendablePrefix_Bool(value: TLArray, result: &mut [F]) {
+    result[0] = F::from_canonical_usize(value.zk_identifier);
 }

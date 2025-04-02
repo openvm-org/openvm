@@ -31,39 +31,50 @@ impl FlattenedFunction {
         for (i, function_call) in self.function_calls.iter().enumerate() {
             if function_call.material == Material::Materialized {
                 let callee = namer.callee_name(i);
-                pieces.push(quote! {
+                pieces.push(namer.scoped(&function_call.scope, quote! {
                     #callee.as_ref().as_ref().unwrap().#generate_trace(#tracker, #trace_set);
-                })
+                }));
             }
         }
 
         let row = quote! { row };
         let call_index = namer.call_index();
         pieces.push(quote! {
-            let #row = &mut #trace_set.#trace_set_field_name(&self.name)[#call_index * Self::#width_name..(#call_index + 1) * Self::#width_name];
+            let #row = &mut #trace_set.#trace_set_field_name[#call_index * Self::#width_name..(#call_index + 1) * Self::#width_name];
         });
-        for (scope, cell) in air_constructor.leaf_scopes.iter() {
-            let scope_field = namer.scope_name(scope);
+        if let Some(row_index_cell) = air_constructor.row_index_cell {
             pieces.push(quote! {
-                if #scope_field {
-                    #row[#cell] = F::ONE;
-                }
+                #row[#row_index_cell] = F::from_canonical_usize(#call_index);
             });
         }
+        for (scope, cell) in air_constructor.leaf_scopes.iter() {
+            pieces.push(namer.scoped(scope, quote! {
+                #row[#cell] = F::ONE;
+            }));
+        }
+        println!("#####");
         for ((scope, name), representation) in representation_table.representations.iter() {
+            if self.name == "merkle_verify" {
+                println!();
+                println!("scope = {:?}", scope);
+                println!("name = {:?}", name);
+                println!("representation expressions = {:?}", representation.expressions);
+                println!("representation owned = {:?}", representation.owned);
+            }
             let cells_to_set = (0..representation.len())
                 .filter(|&i| representation.owned[i].is_some())
                 .collect_vec();
             if !cells_to_set.is_empty() {
-                let scope_field = namer.scope_name(scope);
-                let declaration_scope = self.declaration_set.get_declaration_scope(scope, name);
-                let tipo = &self.declaration_set.declarations[&(declaration_scope, name.clone())];
+                let field_name = namer.variable_name(scope, name);
+                let tipo = self.declaration_set.get_declaration_type(scope, name);
                 let size = program.types.calc_type_size(tipo);
                 let as_cells = quote! { as_cells };
 
                 let mut here = vec![];
+                let to_cells = tipo.to_cells(field_name, quote! { &mut #as_cells });
                 here.push(quote! {
-                    let #as_cells = [F; #size];
+                    let mut #as_cells = [F::ZERO; #size];
+                    #to_cells
                 });
                 for i in cells_to_set {
                     let cell = representation.owned[i].unwrap();
@@ -71,16 +82,13 @@ impl FlattenedFunction {
                         #row[#cell] = #as_cells[#i];
                     });
                 }
-                pieces.push(quote! {
-                    if #scope_field {
-                        #(#here)*
-                    }
-                });
+                pieces.push(namer.scoped(scope, quote! {
+                    #(#here)*
+                }));
             }
         }
         for (&index, &cell) in representation_table.reference_multiplicity_cells.iter() {
             let scope = &self.statements[index].scope;
-            let scope_field = namer.scope_name(scope);
             let multiplicity = match &self.statements[index].statement {
                 StatementVariant::Reference { data, .. } => {
                     let reference = namer.reference_name(index);
@@ -104,15 +112,13 @@ impl FlattenedFunction {
                 _ => unreachable!(),
             };
             let multiplicity = usize_to_field_elem(multiplicity);
-            pieces.push(quote! {
-                if #scope_field {
-                    #row[#cell] = #multiplicity;
-                }
-            });
+            pieces.push(namer.scoped(scope, quote! {
+                #row[#cell] = #multiplicity;
+            }));
         }
 
         quote! {
-            fn #generate_trace(&self, #tracker: &#tracker_struct, #trace_set: &mut #trace_set_struct) -> Vec<F> {
+            pub fn #generate_trace(&self, #tracker: &#tracker_struct, #trace_set: &mut #trace_set_struct) {
                 #(#pieces)*
             }
         }
@@ -123,6 +129,9 @@ impl FlattenedFunction {
         namer: &VariableNamer,
         representation_table: &RepresentationTable,
     ) -> TokenStream {
+        if representation_table.reference_offsets.is_empty() {
+            return quote! {};
+        }
         let mut branches = vec![];
         for (i, offset) in representation_table.reference_offsets.iter() {
             branches.push(quote! {
@@ -139,7 +148,7 @@ impl FlattenedFunction {
         let num_references_name = num_references_const_name();
 
         quote! {
-            fn #calc_zk_identifier(&self, i: usize) -> usize {
+            pub fn #calc_zk_identifier(&self, i: usize) -> usize {
                 let offset = match i {
                     #(#branches)*
                 };

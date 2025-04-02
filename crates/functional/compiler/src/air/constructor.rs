@@ -26,7 +26,7 @@ pub struct CellUsage {
 pub struct AirConstructor {
     constraints: Vec<Constraint>,
     pub(crate) interactions: Vec<Interaction>,
-    row_index_cell: Option<usize>,
+    pub(crate) row_index_cell: Option<usize>,
 
     next_cell: usize,
     normal_cells: Vec<(usize, CellUsage)>,
@@ -172,6 +172,7 @@ impl TypeSet {
     }
 }
 
+#[derive(Debug)]
 pub struct AirTree {
     children: HashMap<usize, HashMap<String, AirTree>>,
     path_here: ScopePath,
@@ -197,6 +198,7 @@ impl AirTree {
                     child.init(node, relevant_scopes);
                     map.insert(name.clone(), child);
                 }
+                self.children.insert(i, map);
             }
         }
     }
@@ -263,6 +265,8 @@ impl FlattenedFunction {
 
         let mut air_constructor = AirConstructor::default();
         let mut representation_table = RepresentationTable::new(&self.declaration_set);
+        
+        air_tree.calc_scope_expressions(&mut air_constructor);
 
         if self.creates_addresses {
             let mut offsets = HashMap::new();
@@ -434,7 +438,7 @@ impl FlattenedFunction {
         }
 
         let argument_representations = self.arguments.iter().flat_map(|argument| {
-            representation_table.get_representation(&ScopePath::empty(), &argument.name)
+            representation_table.get_representation(&ScopePath::empty(), &argument.name, &program.types)
         });
         let own_call_interaction = Interaction {
             bus: Bus::Function,

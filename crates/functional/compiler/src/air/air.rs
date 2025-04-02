@@ -1,10 +1,10 @@
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Term {
     Cell(usize),
     Constant(isize),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AirExpression {
     pub sum: Vec<Vec<Term>>,
 }

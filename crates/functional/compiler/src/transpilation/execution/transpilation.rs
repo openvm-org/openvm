@@ -363,7 +363,10 @@ impl FlatStatement {
             } => {
                 let type_identifier = type_to_identifier_execution(data.get_type());
                 let data = data.transpile_defined(scope, &namer, type_set);
-                let zk_identifier = calc_zk_identifier(index);
+                let zk_identifier = match material {
+                    Material::Materialized => calc_zk_identifier(index),
+                    Material::Dematerialized => quote! { 0 },
+                };
                 let reference = create_ref(type_identifier, data, zk_identifier);
                 let (init, this) = match material {
                     Material::Materialized => {
@@ -409,7 +412,10 @@ impl FlatStatement {
                 prefix: array,
                 elem_type,
             } => {
-                let zk_identifier = calc_zk_identifier(index);
+                let zk_identifier = match material {
+                    Material::Materialized => calc_zk_identifier(index),
+                    Material::Dematerialized => quote! { 0 },
+                };
                 array.transpile_top_down(
                     scope,
                     &create_empty_under_construction_array(elem_type, zk_identifier),
@@ -445,7 +451,10 @@ impl FlatStatement {
                     }
                 };
                 let new_array_name = namer.new_temporary_name();
-                let index_name = namer.new_temporary_name();
+                let index_name = match material {
+                    Material::Materialized => namer.new_temporary_name(),
+                    Material::Dematerialized => quote! { _ },
+                };
                 let elem = elem.transpile_defined(scope, namer, type_set);
                 let append = append_under_construction_array(tipo, this, elem);
                 let append = quote! {

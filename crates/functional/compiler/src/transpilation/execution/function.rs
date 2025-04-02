@@ -140,6 +140,9 @@ impl FlattenedFunction {
             #implementation
         }
     }
+    pub fn get_declaration_types(&self) -> Vec<Type> {
+        self.declaration_set.declarations.values().cloned().collect()
+    }
 
     pub fn get_types_in_memory(&self) -> Vec<Type> {
         let mut result = Vec::new();

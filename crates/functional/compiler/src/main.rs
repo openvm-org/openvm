@@ -1,3 +1,4 @@
+use std::env::set_var;
 use crate::{
     core::stage1::stage1,
     parser::parser::parse_program_source,
@@ -14,6 +15,7 @@ pub mod transpiled_merkle;
 
 fn main() {
     println!("Hello, world!");
+    unsafe { set_var("RUST_BACKTRACE", "1"); }
     // parse_and_compile_and_transpile_fibonacci();
     // test_fibonacci();
 
@@ -53,19 +55,25 @@ fn parse_and_compile_and_transpile_merkle() {
     let program = parse_program_source(&source).unwrap();
     let stage2_program = stage1(program).unwrap();
     let execution = stage2_program.transpile_execution();
-    println!("{}", execution);
     let air_set = stage2_program.construct_airs();
     let trace_generation = stage2_program.transpile_trace_generation(&air_set);
+    println!("{}", execution);
     println!("{}", trace_generation);
 }
 
 fn test_merkle(should_fail: bool) {
     let mut tracker = transpiled_merkle::Tracker::default();
     let mut main = TLFunction_main::default();
+    main.materialized = true;
     main.should_fail = should_fail;
     main.stage_0(&mut tracker);
     println!(
         "commit = {:?}",
         main.callee_0.as_ref().as_ref().unwrap().commit
     );
+    println!("tracker = {:?}", tracker);
+    let mut trace_set = transpiled_merkle::TraceSet::new(&tracker);
+    main.generate_trace(&tracker, &mut trace_set);
+    println!("trace_set = {:?}", trace_set);
+    println!("trace_set.merkle_verify_trace length = {}", trace_set.merkle_verify_trace.len());
 }

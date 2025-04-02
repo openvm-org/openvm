@@ -19,7 +19,7 @@ impl Type {
             type_to_identifier_trace_generation(self)
         ));
         quote! {
-            #function_name(#value);
+            #function_name(#value, #result);
         }
     }
     pub fn transpile_to_cells(&self, type_set: &TypeSet) -> TokenStream {
@@ -29,7 +29,7 @@ impl Type {
             Type::Field => quote! { #result[0] = #value; },
             Type::NamedType(name) => {
                 if name == BOOLEAN_TYPE_NAME {
-                    quote! { F::from_bool(#value) }
+                    quote! { #result[0] = F::from_bool(#value) }
                 } else {
                     let mut branches = vec![];
                     let algebraic_type = type_set
@@ -44,12 +44,14 @@ impl Type {
                         let mut offset = 1;
                         for (i, component) in variant.components.iter().enumerate() {
                             let size = type_set.calc_type_size(component);
-                            let new_offset = offset + size;
-                            body.push(component.to_cells(
-                                quote! { #value.#i },
-                                quote! { &#result[#offset..#new_offset] },
-                            ));
-                            offset = new_offset;
+                            if size > 0 {
+                                let new_offset = offset + size;
+                                body.push(component.to_cells(
+                                    quote! { #value.#i },
+                                    quote! { &mut #result[#offset..#new_offset] },
+                                ));
+                                offset = new_offset;
+                            }
                         }
                         let constructor = ident(&variant.name);
                         branches.push(quote! {
@@ -70,9 +72,10 @@ impl Type {
             | Type::ReadablePrefix(_, _)
             | Type::Array(_) => {
                 let zk_identifier = ident(ZK_IDENTIFIER);
-                usize_to_field_elem(quote! {
-                    #result[0] = #value.#zk_identifier;
-                })
+                let x = usize_to_field_elem(quote! { #value.#zk_identifier });
+                quote! {
+                    #result[0] = #x;
+                }
             }
             Type::Unmaterialized(_) => unreachable!(),
             Type::ConstArray(elem_type, length) => {
@@ -80,7 +83,7 @@ impl Type {
                 let inside = (0..*length).map(|i| {
                     let from = i * elem_length;
                     let to = (i + 1) * elem_length;
-                    elem_type.to_cells(quote! { #value[#i] }, quote! { &#result[#from..#to] })
+                    elem_type.to_cells(quote! { #value[#i] }, quote! { &mut #result[#from..#to] })
                 });
                 quote! {
                     #(#inside)*
@@ -94,7 +97,7 @@ impl Type {
         ));
         let rust_type = type_to_rust(self);
         quote! {
-            fn #function_name(#value: #rust_type, #result: &[F]) {
+            fn #function_name(#value: #rust_type, #result: &mut [F]) {
                 #body
             }
         }
