@@ -20,7 +20,10 @@ use openvm_sdk::{
 };
 use openvm_stark_backend::utils::metrics_span;
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
+    config::{
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        FriParameters,
+    },
     engine::StarkFriEngine,
     openvm_stark_backend::Chip,
     p3_baby_bear::BabyBear,
@@ -142,7 +145,7 @@ impl BenchmarkCli {
         build_bench(manifest_dir, profile)
     }
 
-    pub fn bench_from_exe<VC, E: StarkFriEngine<SC>>(
+    pub fn bench_from_exe<VC>(
         &self,
         bench_name: impl ToString,
         vm_config: VC,
@@ -155,7 +158,7 @@ impl BenchmarkCli {
         VC::Periphery: Chip<SC>,
     {
         let app_config = self.app_config(vm_config);
-        bench_from_exe::<VC, E>(
+        bench_from_exe::<VC, BabyBearPoseidon2Engine>(
             bench_name,
             app_config,
             exe,

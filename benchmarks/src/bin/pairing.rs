@@ -7,9 +7,7 @@ use openvm_ecc_circuit::WeierstrassExtension;
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
 use openvm_pairing_guest::bn254::{BN254_MODULUS, BN254_ORDER};
 use openvm_sdk::{config::SdkVmConfig, Sdk, StdIn};
-use openvm_stark_sdk::{
-    bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
-};
+use openvm_stark_sdk::bench::run_with_metric_collection;
 
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
@@ -35,11 +33,6 @@ fn main() -> Result<()> {
     let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        args.bench_from_exe::<_, BabyBearPoseidon2Engine>(
-            "pairing",
-            vm_config,
-            exe,
-            StdIn::default(),
-        )
+        args.bench_from_exe("pairing", vm_config, exe, StdIn::default())
     })
 }
