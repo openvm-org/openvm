@@ -277,12 +277,21 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
     }
 
     fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<RootSC> {
-        info_span!("agg_layer", group = "root", idx = 0).in_scope(|| {
+        info_span!("agg_layer", group = "root").in_scope(|| {
+            let wall_timer = std::time::Instant::now();
             let input = root_input.write();
             #[cfg(feature = "bench-metrics")]
             metrics::counter!("fri.log_blowup")
                 .absolute(self.root_prover.fri_params().log_blowup as u64);
-            SingleSegmentVmProver::prove(&self.root_prover, input)
+            let proof = SingleSegmentVmProver::prove(&self.root_prover, input);
+            tracing::info!(
+                "agg_layer wall time, group = root: {:.3}s",
+                wall_timer.elapsed().as_secs_f64()
+            );
+            #[cfg(feature = "bench-metrics")]
+            metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
+
+            proof
         })
     }
 }
