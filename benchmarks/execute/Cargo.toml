@@ -28,6 +28,7 @@ openvm-pairing-guest.workspace = true
 openvm-native-circuit.workspace = true
 openvm-native-compiler.workspace = true
 openvm-native-recursion = { workspace = true, features = ["test-utils"] }
+openvm-bigint-circuit.workspace = true
 
 clap = { version = "4.5.9", features = ["derive", "env"] }
 eyre.workspace = true

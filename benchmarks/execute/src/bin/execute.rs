@@ -2,6 +2,7 @@ use eyre::Result;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use openvm_benchmarks_utils::{build_and_load_elf, get_programs_dir};
+use openvm_bigint_circuit::Int256;
 use openvm_circuit::arch::{instructions::exe::VmExe, SystemConfig, VmExecutor};
 use openvm_ecc_circuit::{WeierstrassExtension, SECP256K1_CONFIG};
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
@@ -251,7 +252,7 @@ static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
-        name: "keccak256-iter",
+        name: "keccak256_iter",
         vm_config: || {
             SdkVmConfig::builder()
                 .system(SystemConfig::default().with_continuations().into())
@@ -277,7 +278,7 @@ static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
-        name: "sha256-iter",
+        name: "sha256_iter",
         vm_config: || {
             SdkVmConfig::builder()
                 .system(SystemConfig::default().with_continuations().into())
@@ -285,6 +286,117 @@ static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
                 .rv32m(Default::default())
                 .io(Default::default())
                 .sha256(Default::default())
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "revm_ecrecover",
+        vm_config: || {
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .modular(ModularExtension::new(vec![
+                    SECP256K1_CONFIG.modulus.clone(),
+                    SECP256K1_CONFIG.scalar.clone(),
+                ]))
+                .keccak(Default::default())
+                .ecc(WeierstrassExtension::new(vec![SECP256K1_CONFIG.clone()]))
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "revm_ecadd",
+        vm_config: || {
+            let bn_config = PairingCurve::Bn254.curve_config();
+
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .modular(ModularExtension::new(vec![
+                    bn_config.modulus.clone(),
+                    bn_config.scalar.clone(),
+                ]))
+                .ecc(WeierstrassExtension::new(vec![bn_config.clone()]))
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "revm_ecmul",
+        vm_config: || {
+            let bn_config = PairingCurve::Bn254.curve_config();
+
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .modular(ModularExtension::new(vec![
+                    bn_config.modulus.clone(),
+                    bn_config.scalar.clone(),
+                ]))
+                .ecc(WeierstrassExtension::new(vec![bn_config.clone()]))
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "revm_ecpairing",
+        vm_config: || {
+            let bn_config = PairingCurve::Bn254.curve_config();
+
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .modular(ModularExtension::new(vec![
+                    bn_config.modulus.clone(),
+                    bn_config.scalar.clone(),
+                ]))
+                .fp2(Fp2Extension::new(vec![bn_config.modulus.clone()]))
+                .ecc(WeierstrassExtension::new(vec![bn_config.clone()]))
+                .pairing(PairingExtension::new(vec![PairingCurve::Bn254]))
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "revm_kzg_point_evaluation",
+        vm_config: || {
+            let bls_config = PairingCurve::Bls12_381.curve_config();
+
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .modular(ModularExtension::new(vec![
+                    bls_config.modulus.clone(),
+                    bls_config.scalar.clone(),
+                ]))
+                .fp2(Fp2Extension::new(vec![bls_config.modulus.clone()]))
+                .ecc(WeierstrassExtension::new(vec![bls_config.clone()]))
+                .pairing(PairingExtension::new(vec![PairingCurve::Bls12_381]))
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "revm_modexp",
+        vm_config: || {
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .bigint(Int256::default())
                 .build()
         },
         setup_stdin: || StdIn::default(),

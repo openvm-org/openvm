@@ -3350,6 +3350,7 @@ dependencies = [
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
  "openvm-benchmarks-utils",
+ "openvm-bigint-circuit",
  "openvm-build",
  "openvm-circuit",
  "openvm-ecc-circuit",

@@ -17,5 +17,6 @@ pub fn main() {
     }
 
     // Prevent optimizer from optimizing away the computation
-    black_box(keccak256(&black_box(input)));
+    let input = black_box(input);
+    black_box(keccak256(&input));
 }

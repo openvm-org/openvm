@@ -1,0 +1,31 @@
+[workspace]
+[package]
+name = "openvm-revm-ecrecover-program"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../crates/toolchain/openvm", features = ["std"] }
+openvm-algebra-guest = { path = "../../../../extensions/algebra/guest", default-features = false }
+openvm-ecc-guest = { path = "../../../../extensions/ecc/guest", default-features = false, features = [
+    "k256",
+] }
+
+revm-precompile = { git = "https://github.com/axiom-crypto/revm", branch = "v43-openvm", default-features = false, features = [
+    "std",
+    "openvm-k256",
+] }
+hex-literal = "0.4.1"
+
+[features]
+default = []
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false
+
+[patch."https://github.com/openvm-org/openvm.git"]
+openvm = { path = "../../../../crates/toolchain/openvm" }
+openvm-ecc-guest = { path = "../../../../extensions/ecc/guest" }
+openvm-keccak256-guest = { path = "../../../../extensions/keccak256/guest" }

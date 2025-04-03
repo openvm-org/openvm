@@ -5,7 +5,8 @@ use core::hint::black_box;
 const N: u64 = 25;
 
 pub fn main() {
-    black_box(fibonacci(black_box(N)));
+    let n = black_box(N);
+    black_box(fibonacci(n));
 }
 
 fn fibonacci(n: u64) -> u64 {
