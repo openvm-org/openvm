@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "openvm-sha256-program"
+name = "openvm-sha256-iter-program"
 version = "0.0.0"
 edition = "2021"
 

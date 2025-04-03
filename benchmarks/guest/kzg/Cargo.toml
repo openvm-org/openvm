@@ -1,12 +1,13 @@
 [workspace]
 [package]
-name = "openvm-sha256-program"
+name = "openvm-kzg-program"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../../crates/toolchain/openvm", features = ["std"] }
-openvm-sha256-guest = { path = "../../../../extensions/sha256/guest" }
+openvm-keccak256-guest = { path = "../../../../extensions/keccak256/guest" }
+hex = { version = "0.4.3" }
 
 [features]
 default = []

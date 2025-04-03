@@ -1,13 +1,12 @@
 [workspace]
 [package]
-name = "openvm-keccak-program"
+name = "openvm-keccak256-iter-program"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../../crates/toolchain/openvm", features = ["std"] }
 openvm-keccak256-guest = { path = "../../../../extensions/keccak256/guest" }
-hex = { version = "0.4.3" }
 
 [features]
 default = []

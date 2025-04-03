@@ -18,7 +18,7 @@ struct ProgramConfig {
     setup_stdin: fn() -> StdIn,
 }
 
-static PROGRAMS_TO_RUN: [ProgramConfig; 9] = [
+static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
     ProgramConfig {
         name: "fibonacci",
         vm_config: || {
@@ -35,6 +35,54 @@ static PROGRAMS_TO_RUN: [ProgramConfig; 9] = [
             stdin.write(&n);
             stdin
         },
+    },
+    ProgramConfig {
+        name: "fibonacci_recursive",
+        vm_config: || {
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "fibonacci_iterative",
+        vm_config: || {
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "quicksort",
+        vm_config: || {
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "bubblesort",
+        vm_config: || {
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "revm_transfer",
@@ -190,7 +238,20 @@ static PROGRAMS_TO_RUN: [ProgramConfig; 9] = [
         },
     },
     ProgramConfig {
-        name: "keccak",
+        name: "keccak256",
+        vm_config: || {
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .keccak(Default::default())
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "keccak256-iter",
         vm_config: || {
             SdkVmConfig::builder()
                 .system(SystemConfig::default().with_continuations().into())
@@ -215,13 +276,26 @@ static PROGRAMS_TO_RUN: [ProgramConfig; 9] = [
         },
         setup_stdin: || StdIn::default(),
     },
+    ProgramConfig {
+        name: "sha256-iter",
+        vm_config: || {
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .sha256(Default::default())
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
 ];
 
 fn main() -> Result<()> {
     tracing::info!("Starting benchmarks with metric collection");
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        for program in &PROGRAMS_TO_RUN {
+        for program in PROGRAMS_TO_RUN {
             tracing::info!("Running program: {}", program.name);
 
             let program_dir = get_programs_dir().join(program.name);

@@ -2,7 +2,7 @@ extern crate openvm;
 
 use core::hint::black_box;
 
-use openvm_sha256_guest::sha256;
+use openvm_keccak256_guest::keccak256;
 
 const INPUT_LENGTH_BYTES: usize = 100 * 1024; // 100 KB
 
@@ -17,5 +17,5 @@ pub fn main() {
     }
 
     // Prevent optimizer from optimizing away the computation
-    black_box(sha256(&black_box(input)));
+    black_box(keccak256(&black_box(input)));
 }
