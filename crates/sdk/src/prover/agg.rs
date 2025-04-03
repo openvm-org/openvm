@@ -1,17 +1,21 @@
-use std::sync::{mpsc, Arc};
+#[cfg(feature = "pipeline")]
+use std::sync::mpsc;
+use std::sync::Arc;
 
-use openvm_circuit::arch::{ContinuationVmProof, SingleSegmentVmExecutor, Streams, VirtualMachine};
+use openvm_circuit::arch::ContinuationVmProof;
+#[cfg(feature = "pipeline")]
+use openvm_circuit::arch::{SingleSegmentVmExecutor, Streams, VirtualMachine};
 use openvm_continuations::verifier::{
     internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
     root::types::RootVmVerifierInput,
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
+#[cfg(feature = "pipeline")]
 use openvm_stark_backend::{config::Val, prover::types::ProofInput};
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    openvm_stark_backend::proof::Proof,
-};
+#[cfg(feature = "pipeline")]
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
+use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proof};
 use tracing::info_span;
 
 use crate::{
@@ -40,7 +44,7 @@ pub struct LeafProvingController {
     pub num_children: usize,
 }
 
-impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
+impl<E: StarkFriEngine<SC> + Send + 'static> AggStarkProver<E> {
     pub fn new(
         agg_stark_pk: AggStarkProvingKey,
         leaf_committed_exe: Arc<NonRootCommittedExe>,
@@ -112,7 +116,72 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
         let mut proofs = leaf_proofs;
         let mut wrapper_layers = 0;
 
+        #[cfg(not(feature = "pipeline"))]
         loop {
+            #[cfg(feature = "bench-metrics")]
+            let wall_timer = std::time::Instant::now();
+
+            if proofs.len() == 1 {
+                let actual_air_heights =
+                    self.root_prover
+                        .execute_for_air_heights(RootVmVerifierInput {
+                            proofs: vec![proofs[0].clone()],
+                            public_values: public_values.to_vec(),
+                        });
+                // Root verifier can handle the internal proof. We can stop here.
+                if heights_le(
+                    &actual_air_heights,
+                    &self.root_prover.root_verifier_pk.air_heights,
+                ) {
+                    break;
+                }
+                if wrapper_layers >= self.max_internal_wrapper_layers {
+                    panic!("The heights of the root verifier still exceed the required heights after {} wrapper layers", self.max_internal_wrapper_layers);
+                }
+                wrapper_layers += 1;
+            }
+            let internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
+                self.internal_prover
+                    .committed_exe
+                    .get_program_commit()
+                    .into(),
+                &proofs,
+                self.num_children_internal,
+            );
+            proofs = info_span!(
+                "agg_layer",
+                group = format!("internal.{internal_node_height}")
+            )
+            .in_scope(|| {
+                #[cfg(feature = "bench-metrics")]
+                {
+                    metrics::counter!("fri.log_blowup")
+                        .absolute(self.internal_prover.fri_params().log_blowup as u64);
+                    metrics::counter!("num_children").absolute(self.num_children_internal as u64);
+                }
+                let proofs = internal_inputs
+                    .into_iter()
+                    .map(|input| {
+                        internal_node_idx += 1;
+                        info_span!("single_internal_agg", idx = internal_node_idx,).in_scope(|| {
+                            SingleSegmentVmProver::prove(&self.internal_prover, input.write())
+                        })
+                    })
+                    .collect();
+
+                #[cfg(feature = "bench-metrics")]
+                metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
+
+                proofs
+            });
+            internal_node_height += 1;
+        }
+
+        #[cfg(feature = "pipeline")]
+        loop {
+            tracing::info!(
+                "AggStarkProver::generate_internal_proof_impl() pipeline feature enabled"
+            );
             let wall_timer = std::time::Instant::now();
             if proofs.len() == 1 {
                 let actual_air_heights =
@@ -302,7 +371,7 @@ impl LeafProvingController {
         self
     }
 
-    pub fn generate_proof<E: StarkFriEngine<SC>>(
+    pub fn generate_proof<E: StarkFriEngine<SC> + Send + 'static>(
         &self,
         prover: &VmLocalProver<SC, NativeConfig, E>,
         app_proofs: &ContinuationVmProof<SC>,
@@ -318,7 +387,19 @@ impl LeafProvingController {
                 LeafVmVerifierInput::chunk_continuation_vm_proof(app_proofs, self.num_children);
             tracing::info!("num_leaf_proofs={}", leaf_inputs.len());
 
+            #[cfg(not(feature = "pipeline"))]
+            let proofs = leaf_inputs
+                .into_iter()
+                .enumerate()
+                .map(|(leaf_node_idx, input)| {
+                    info_span!("single_leaf_agg", idx = leaf_node_idx)
+                        .in_scope(|| SingleSegmentVmProver::prove(prover, input.write_to_stream()))
+                })
+                .collect::<Vec<_>>();
+
+            #[cfg(feature = "pipeline")]
             let proofs = std::thread::scope(|s| {
+                tracing::info!("LeafProvingController::generate_proof() pipeline feature enabled");
                 let (input_tx, input_rx) =
                     mpsc::sync_channel::<(Streams<Val<SC>>, tracing::Span)>(1);
                 let (proof_input_tx, proof_input_rx) =
