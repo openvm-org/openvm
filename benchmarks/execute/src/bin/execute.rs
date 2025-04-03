@@ -18,7 +18,7 @@ struct ProgramConfig {
     setup_stdin: fn() -> StdIn,
 }
 
-static PROGRAMS_TO_RUN: [ProgramConfig; 7] = [
+static PROGRAMS_TO_RUN: [ProgramConfig; 9] = [
     ProgramConfig {
         name: "fibonacci",
         vm_config: || {
@@ -188,6 +188,32 @@ static PROGRAMS_TO_RUN: [ProgramConfig; 7] = [
             let file_data = include_bytes!("../../../guest/src/rkyv/minecraft_savedata.bin");
             StdIn::from_bytes(file_data)
         },
+    },
+    ProgramConfig {
+        name: "keccak",
+        vm_config: || {
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .keccak(Default::default())
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "sha256",
+        vm_config: || {
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
+                .sha256(Default::default())
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
     },
 ];
 
