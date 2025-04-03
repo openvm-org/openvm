@@ -37,7 +37,7 @@ mod evm {
         pub halo2_prover: Halo2Prover,
     }
 
-    impl<VC: 'static, E: StarkFriEngine<SC>> EvmHalo2Prover<VC, E> {
+    impl<VC: 'static, E: StarkFriEngine<SC> + Send + 'static> EvmHalo2Prover<VC, E> {
         pub fn new(
             reader: &impl Halo2ParamsReader,
             app_pk: Arc<AppProvingKey<VC>>,

@@ -109,7 +109,7 @@ impl<E: StarkFriEngine<SC>> Default for GenericSdk<E> {
 
 pub type Sdk = GenericSdk<BabyBearPoseidon2Engine>;
 
-impl<E: StarkFriEngine<SC>> GenericSdk<E> {
+impl<E: StarkFriEngine<SC> + Send + 'static> GenericSdk<E> {
     pub fn new() -> Self {
         Self::default()
     }
