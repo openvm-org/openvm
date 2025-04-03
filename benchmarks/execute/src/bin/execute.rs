@@ -19,6 +19,7 @@ struct ProgramConfig {
     setup_stdin: fn() -> StdIn,
 }
 
+// TODO: use opevm.toml instead
 static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
     ProgramConfig {
         name: "fibonacci",
@@ -397,6 +398,18 @@ static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
                 .rv32m(Default::default())
                 .io(Default::default())
                 .bigint(Int256::default())
+                .build()
+        },
+        setup_stdin: || StdIn::default(),
+    },
+    ProgramConfig {
+        name: "revm_snailtracer",
+        vm_config: || {
+            SdkVmConfig::builder()
+                .system(SystemConfig::default().with_continuations().into())
+                .rv32i(Default::default())
+                .rv32m(Default::default())
+                .io(Default::default())
                 .build()
         },
         setup_stdin: || StdIn::default(),
