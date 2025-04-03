@@ -1,0 +1,17 @@
+# [build]
+# target = "riscv32gc-unknown-linux-gnu"
+
+# # [target.riscv32gc-unknown-linux-gnu]
+# # linker = "riscv32-unknown-linux-gnu-gcc"
+
+# # [target.riscv32gc-unknown-linux-gnu]
+# # linker = "/home/ubuntu/riscv/bin/riscv32-unknown-linux-gnu-gcc"
+# # rustflags = [
+# #     "-C",
+# #     "target-feature=+crt-static",
+# #     "-C",
+# #     "link-arg=-Wl,--allow-multiple-definition",
+# # ]
+
+# [unstable]
+# build-std = ["alloc", "core", "proc_macro", "panic_abort", "std"]

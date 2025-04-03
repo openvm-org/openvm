@@ -1,5 +1,6 @@
 use std::{fs::read, path::PathBuf, sync::Arc};
 
+use cargo_metadata::Package;
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
@@ -141,7 +142,7 @@ impl BenchmarkCli {
         }
         .to_string();
         let manifest_dir = get_programs_dir().join(program_name);
-        build_bench(manifest_dir, profile)
+        build_and_load_elf(manifest_dir, profile, false)
     }
 
     pub fn bench_from_exe<VC>(
@@ -171,25 +172,66 @@ impl BenchmarkCli {
 }
 
 pub fn get_programs_dir() -> PathBuf {
-    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    dir.push("guest");
-    dir
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../guest/src")
 }
 
-pub fn build_bench(manifest_dir: PathBuf, profile: impl ToString) -> Result<Elf> {
-    let pkg = get_package(manifest_dir);
-    let target_dir = tempdir()?;
+pub fn build_and_load_elf(
+    manifest_dir: PathBuf,
+    profile: impl ToString,
+    force_build: bool,
+) -> Result<Elf> {
+    let pkg = get_package(manifest_dir.clone());
+    let elf_path = get_elf_path(&pkg);
+
+    // Use existing ELF if available and not force building
+    if !force_build && elf_path.exists() {
+        return read_elf_file(&elf_path);
+    }
+
+    build_and_save_elf(&pkg, &elf_path, profile)?;
+    read_elf_file(&elf_path)
+}
+
+pub fn build_and_save_elf(pkg: &Package, elf_path: &PathBuf, profile: impl ToString) -> Result<()> {
+    // Use a temporary directory for the build
+    let temp_dir = tempdir()?;
+    let target_dir = temp_dir.path();
+
     // Build guest with default features
     let guest_opts = GuestOptions::default()
-        .with_target_dir(target_dir.path())
+        .with_target_dir(target_dir)
         .with_profile(profile.to_string());
-    if let Err(Some(code)) = build_guest_package(&pkg, &guest_opts, None, &None) {
+
+    if let Err(Some(code)) = build_guest_package(pkg, &guest_opts, None, &None) {
         std::process::exit(code);
     }
+
     // Assumes the package has a single target binary
-    let elf_path = guest_methods(&pkg, &target_dir, &guest_opts.features, &guest_opts.profile)
+    let temp_elf_path = guest_methods(pkg, target_dir, &guest_opts.features, &guest_opts.profile)
         .pop()
         .unwrap();
+
+    // Create elf directory if it doesn't exist
+    if let Some(parent) = elf_path.parent() {
+        if !parent.exists() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+
+    // Copy the built ELF to the final location
+    std::fs::copy(&temp_elf_path, elf_path)?;
+
+    Ok(())
+}
+
+pub fn get_elf_path(pkg: &Package) -> PathBuf {
+    let elf_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../guest/elf");
+    let package_name = pkg.name.clone();
+    let elf_file_name = format!("{}.elf", package_name);
+    elf_dir.join(elf_file_name)
+}
+
+pub fn read_elf_file(elf_path: &PathBuf) -> Result<Elf> {
     let data = read(elf_path)?;
     Elf::decode(&data, MEM_SIZE as u32)
 }

@@ -1,5 +1,7 @@
+use std::path::PathBuf;
+
 use criterion::{criterion_group, criterion_main, Criterion};
-use openvm_benchmarks_utils::{build_bench, get_programs_dir};
+use openvm_benchmarks_utils::{build_bench, get_programs_dir, read_elf_file};
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
@@ -10,7 +12,11 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 fn benchmark_function(c: &mut Criterion) {
-    let elf = build_bench(get_programs_dir().join("fibonacci"), "release").unwrap();
+    // let elf = build_bench(get_programs_dir().join("fibonacci"), "release").unwrap();
+    let elf_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../guest/elf/openvm-fibonacci-program");
+    let elf = read_elf_file(&elf_path).unwrap();
+
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()

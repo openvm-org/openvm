@@ -1,5 +1,5 @@
 [package]
-name = "openvm-benchmarks-utils"
+name = "openvm-benchmarks-e2e"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,6 +8,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+openvm-benchmarks-utils.workspace = true
 openvm-build.workspace = true
 openvm-circuit.workspace = true
 openvm-sdk.workspace = true
@@ -28,7 +29,6 @@ openvm-native-circuit.workspace = true
 openvm-native-compiler.workspace = true
 openvm-native-recursion = { workspace = true, features = ["test-utils"] }
 
-cargo_metadata.workspace = true
 clap = { version = "4.5.9", features = ["derive", "env"] }
 eyre.workspace = true
 tempfile.workspace = true

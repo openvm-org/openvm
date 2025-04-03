@@ -1,5 +1,3 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use openvm_benchmarks_utils::{build_bench, get_programs_dir};
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_keccak256_circuit::Keccak256Rv32Config;
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -8,10 +6,12 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_sdk::StdIn;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use openvm_transpiler::{transpiler::Transpiler, FromElf};
+use openvm_transpiler::{
+    elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
+};
 
-fn benchmark_function(c: &mut Criterion) {
-    let elf = build_bench(get_programs_dir().join("regex"), "release").unwrap();
+fn main() {
+    let elf = Elf::decode(include_bytes!("regex-elf"), MEM_SIZE as u32).unwrap();
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
@@ -22,24 +22,14 @@ fn benchmark_function(c: &mut Criterion) {
     )
     .unwrap();
 
-    let mut group = c.benchmark_group("regex");
-    group.sample_size(10);
     let config = Keccak256Rv32Config::default();
     let executor = VmExecutor::<BabyBear, Keccak256Rv32Config>::new(config);
 
-    let data = include_str!("../../guest/regex/regex_email.txt");
+    let data = include_str!("../../guest/src/regex/regex_email.txt");
 
-    let fe_bytes = data.to_owned().into_bytes();
-    group.bench_function("execute", |b| {
-        b.iter(|| {
-            executor
-                .execute(exe.clone(), black_box(StdIn::from_bytes(&fe_bytes)))
-                .unwrap();
-        })
-    });
-
-    group.finish();
+    let timer = std::time::Instant::now();
+    executor
+        .execute(exe.clone(), StdIn::from_bytes(data.as_bytes()))
+        .unwrap();
+    println!("execute_time: {:?}", timer.elapsed());
 }
-
-criterion_group!(benches, benchmark_function);
-criterion_main!(benches);
