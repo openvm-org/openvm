@@ -203,7 +203,7 @@ pub fn build_bench(manifest_dir: PathBuf, profile: impl ToString) -> Result<Elf>
 /// 6. Verify STARK proofs.
 ///
 /// Returns the data necessary for proof aggregation.
-pub fn bench_from_exe<VC, E: StarkFriEngine<SC>>(
+pub fn bench_from_exe<VC, E: StarkFriEngine<SC> + Send + 'static>(
     bench_name: impl ToString,
     app_config: AppConfig<VC>,
     exe: impl Into<VmExe<F>>,

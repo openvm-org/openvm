@@ -73,7 +73,8 @@ impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
     }
 }
 
-const MAX_SEGMENTATION_RETRIES: usize = 4;
+// const MAX_SEGMENTATION_RETRIES: usize = 4;
+// TODO: add back in
 
 impl<
         SC: StarkGenericConfig + 'static,
@@ -96,8 +97,8 @@ where
             self.pk.vm_config.clone(),
             self.overridden_heights.clone(),
         );
-        vm.set_trace_height_constraints(trace_height_constraints.clone());
-        let mut final_memory = None;
+        // vm.set_trace_height_constraints(trace_height_constraints.clone());
+        // let mut final_memory = None;
         let VmCommittedExe {
             exe,
             committed_program,
@@ -199,7 +200,11 @@ where
                         segment.generate_proof_input(Some(committed_program_clone.clone()));
 
                     trace_tx
-                        .send((segment_idx, proof_input.expect("Failed to generate proof input"), parent_span.clone()))
+                        .send((
+                            segment_idx,
+                            proof_input.expect("Failed to generate proof input"),
+                            parent_span.clone(),
+                        ))
                         .expect("Failed to send trace data");
                 }
                 drop(trace_tx);

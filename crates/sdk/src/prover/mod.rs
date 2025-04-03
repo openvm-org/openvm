@@ -29,7 +29,7 @@ pub struct ContinuationProver<VC, E: StarkFriEngine<SC>> {
     halo2_prover: Halo2Prover,
 }
 
-impl<VC: 'static, E: StarkFriEngine<SC>> ContinuationProver<VC, E> {
+impl<VC: 'static, E: StarkFriEngine<SC> + Send + 'static> ContinuationProver<VC, E> {
     pub fn new(
         reader: &impl Halo2ParamsReader,
         app_pk: Arc<AppProvingKey<VC>>,
