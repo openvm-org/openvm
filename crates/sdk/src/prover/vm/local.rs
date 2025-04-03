@@ -199,7 +199,7 @@ where
                         segment.generate_proof_input(Some(committed_program_clone.clone()));
 
                     trace_tx
-                        .send((segment_idx, proof_input, parent_span.clone()))
+                        .send((segment_idx, proof_input.expect("Failed to generate proof input"), parent_span.clone()))
                         .expect("Failed to send trace data");
                 }
                 drop(trace_tx);
