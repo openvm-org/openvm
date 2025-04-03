@@ -19,7 +19,7 @@ pub struct AppProver<VC, E: StarkFriEngine<SC>> {
     app_prover: VmLocalProver<SC, VC, E>,
 }
 
-impl<VC: 'static, E: StarkFriEngine<SC>> AppProver<VC, E> {
+impl<VC: 'static, E: StarkFriEngine<SC> + Send + 'static> AppProver<VC, E> {
     pub fn new(
         app_vm_pk: Arc<VmProvingKey<SC, VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,

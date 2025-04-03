@@ -16,7 +16,7 @@ pub struct StarkProver<VC, E: StarkFriEngine<SC>> {
     pub app_prover: AppProver<VC, E>,
     pub agg_prover: AggStarkProver<E>,
 }
-impl<VC: 'static, E: StarkFriEngine<SC>> StarkProver<VC, E> {
+impl<VC: 'static, E: StarkFriEngine<SC> + Send + 'static> StarkProver<VC, E> {
     pub fn new(
         app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
