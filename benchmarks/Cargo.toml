@@ -46,7 +46,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
 default = ["parallel", "mimalloc", "bench-metrics"]
-bench-metrics = ["openvm-native-recursion/bench-metrics"]
+bench-metrics = ["openvm-native-recursion/bench-metrics", "openvm-sdk/bench-metrics"]
 profiling = ["openvm-sdk/profiling"]
 aggregation = []
 static-verifier = ["openvm-native-recursion/static-verifier"]
