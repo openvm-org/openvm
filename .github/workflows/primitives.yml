@@ -8,7 +8,7 @@ on:
     paths:
       - "crates/circuits/primitives/**"
       - "crates/circuits/poseidon2-air/**"
-      - "crates/circuits/sha-air/**"
+      - "crates/circuits/sha2-air/**"
       - "crates/circuits/mod-builder/**"
       - "Cargo.toml"
       - ".github/workflows/primitives.yml"
@@ -47,8 +47,8 @@ jobs:
         run: |
           cargo nextest run --cargo-profile fast --features parallel
 
-      - name: Run tests for sha-air
-        working-directory: crates/circuits/sha-air
+      - name: Run tests for sha2-air
+        working-directory: crates/circuits/sha2-air
         run: |
           cargo nextest run --cargo-profile fast --features parallel
 

@@ -1,9 +1,9 @@
-use openvm_sha_air::{Sha256Config, ShaConfig};
+use openvm_sha2_air::{Sha256Config, Sha2Config};
 use openvm_sha_macros::ColsRef;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
-#[config(ShaConfig)]
+#[config(Sha2Config)]
 pub struct ShaFlagsCols<T, const ROW_VAR_CNT: usize> {
     pub is_round_row: T,
     /// A flag that indicates if the current row is among the first 4 rows of a block

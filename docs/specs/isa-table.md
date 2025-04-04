@@ -134,7 +134,9 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| SHA2-256 | `Rv32Sha256Opcode::SHA256` | SHA256_RV32 |
+| SHA2-256 | `Rv32Sha2Opcode::SHA256` | SHA256_RV32 |
+| SHA2-512 | `Rv32Sha2Opcode::SHA512` | SHA512_RV32 |
+| SHA2-384 | `Rv32Sha2Opcode::SHA384` | SHA384_RV32 |
 
 ## BigInt Extension
 

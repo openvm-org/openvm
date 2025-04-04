@@ -1,9 +1,9 @@
-use openvm_sha_air::{Sha256Config, ShaConfig};
+use openvm_sha2_air::{Sha256Config, Sha2Config};
 use openvm_sha_macros::ColsRef;
 
 #[allow(dead_code)]
 #[derive(ColsRef)]
-#[config(ShaConfig)]
+#[config(Sha2Config)]
 struct Test<T, const WORD_BITS: usize, const ROUNDS_PER_ROW: usize, const WORD_U16S: usize> {
     a: T,
     b: [T; WORD_BITS],

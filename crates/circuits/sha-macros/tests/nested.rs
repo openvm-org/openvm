@@ -1,9 +1,9 @@
-use openvm_sha_air::{Sha256Config, ShaConfig};
+use openvm_sha2_air::{Sha256Config, Sha2Config};
 use openvm_sha_macros::ColsRef;
 
 #[allow(dead_code)]
 #[derive(ColsRef)]
-#[config(ShaConfig)]
+#[config(Sha2Config)]
 struct Test1Cols<T, const WORD_BITS: usize> {
     pub a: T,
     pub nested: Test2Cols<T, WORD_BITS>,
@@ -11,7 +11,7 @@ struct Test1Cols<T, const WORD_BITS: usize> {
 
 #[allow(dead_code)]
 #[derive(ColsRef)]
-#[config(ShaConfig)]
+#[config(Sha2Config)]
 struct Test2Cols<T, const WORD_BITS: usize> {
     pub b: T,
     pub c: [T; WORD_BITS],

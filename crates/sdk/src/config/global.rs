@@ -35,8 +35,8 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha2, Sha2Executor, Sha2Periphery};
-use openvm_sha256_transpiler::Sha2TranspilerExtension;
+use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2Periphery};
+use openvm_sha2_transpiler::Sha2TranspilerExtension;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
@@ -51,7 +51,7 @@ pub struct SdkVmConfig {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
-    pub sha256: Option<UnitStruct>,
+    pub sha2: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
     pub castf: Option<UnitStruct>,
 
@@ -135,7 +135,7 @@ impl SdkVmConfig {
         if self.keccak.is_some() {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
         }
-        if self.sha256.is_some() {
+        if self.sha2.is_some() {
             transpiler = transpiler.with_extension(Sha2TranspilerExtension);
         }
         if self.rv32m.is_some() {
@@ -186,7 +186,7 @@ impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
         if self.keccak.is_some() {
             complex = complex.extend(&Keccak256)?;
         }
-        if self.sha256.is_some() {
+        if self.sha2.is_some() {
             complex = complex.extend(&Sha2)?;
         }
         if self.native.is_some() {
