@@ -22,7 +22,7 @@ fn main() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let file_data = include_bytes!("../../../guest/src/bincode/minecraft_savedata.bin");
+        let file_data = include_bytes!("../../../guest/bincode/minecraft_savedata.bin");
         let stdin = StdIn::from_bytes(file_data);
         args.bench_from_exe("bincode", Rv32ImConfig::default(), exe, stdin)
     })

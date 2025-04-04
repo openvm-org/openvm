@@ -25,7 +25,7 @@ fn main() -> Result<()> {
     )?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let data = include_str!("../../../guest/src/base64_json/json_payload_encoded.txt");
+        let data = include_str!("../../../guest/base64_json/json_payload_encoded.txt");
 
         let fe_bytes = data.to_owned().into_bytes();
         args.bench_from_exe(

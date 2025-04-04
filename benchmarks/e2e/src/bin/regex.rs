@@ -24,7 +24,7 @@ fn main() -> Result<()> {
             .with_extension(Keccak256TranspilerExtension),
     )?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let data = include_str!("../../../guest/src/regex/regex_email.txt");
+        let data = include_str!("../../../guest/regex/regex_email.txt");
 
         let fe_bytes = data.to_owned().into_bytes();
         args.bench_from_exe(

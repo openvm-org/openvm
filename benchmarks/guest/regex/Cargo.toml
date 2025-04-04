@@ -1,0 +1,18 @@
+[workspace]
+[package]
+version = "0.1.0"
+name = "openvm-regex-program"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
+openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest" }
+regex = { version = "1.11.1", default-features = false }
+
+[features]
+default = []
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false
