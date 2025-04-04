@@ -33,3 +33,6 @@ metrics.json
 # Profiling
 **/flamegraph.svg
 **/profile.json
+
+# openvm generated files
+crates/cli/openvm/

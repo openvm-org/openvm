@@ -1,0 +1,24 @@
+[workspace]
+[package]
+name = "openvm-revm-ripemd160-program"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
+
+revm-precompile = { git = "https://github.com/axiom-crypto/revm", branch = "v43-openvm", default-features = false, features = [
+    "std",
+] }
+hex-literal = "0.4.1"
+
+[features]
+default = []
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false
+
+[patch."https://github.com/openvm-org/openvm.git"]
+openvm = { path = "../../../crates/toolchain/openvm" }
