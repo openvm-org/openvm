@@ -142,7 +142,7 @@ impl BenchmarkCli {
         }
         .to_string();
         let manifest_dir = get_programs_dir().join(program_name);
-        build_and_load_elf(manifest_dir, profile, false)
+        build_and_load_elf(&manifest_dir, profile, false)
     }
 
     pub fn bench_from_exe<VC>(
@@ -176,11 +176,11 @@ pub fn get_programs_dir() -> PathBuf {
 }
 
 pub fn build_and_load_elf(
-    manifest_dir: PathBuf,
+    manifest_dir: &PathBuf,
     profile: impl ToString,
     force_build: bool,
 ) -> Result<Elf> {
-    let pkg = get_package(manifest_dir.clone());
+    let pkg = get_package(manifest_dir);
     let elf_path = get_elf_path(&pkg);
 
     // Use existing ELF if available and not force building

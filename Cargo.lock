@@ -3340,6 +3340,7 @@ dependencies = [
 name = "openvm-benchmarks-execute"
 version = "1.0.0"
 dependencies = [
+ "cargo-openvm",
  "clap",
  "criterion",
  "derive-new 0.6.0",

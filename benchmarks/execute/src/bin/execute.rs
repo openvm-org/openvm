@@ -1,3 +1,4 @@
+use cargo_openvm::util::read_config_toml_or_default;
 use eyre::Result;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
@@ -15,7 +16,6 @@ use tiny_keccak::{Hasher, Keccak};
 
 struct ProgramConfig {
     name: &'static str,
-    vm_config: fn() -> SdkVmConfig,
     setup_stdin: fn() -> StdIn,
 }
 
@@ -23,14 +23,6 @@ struct ProgramConfig {
 static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
     ProgramConfig {
         name: "fibonacci",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .build()
-        },
         setup_stdin: || {
             let n = 100_000u64;
             let mut stdin = StdIn::default();
@@ -40,76 +32,26 @@ static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
     },
     ProgramConfig {
         name: "fibonacci_recursive",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "fibonacci_iterative",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "quicksort",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "bubblesort",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "revm_transfer",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .keccak(Default::default())
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "base64_json",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .keccak(Default::default())
-                .build()
-        },
         setup_stdin: || {
             let data = include_str!("../../../guest/src/base64_json/json_payload_encoded.txt");
             let fe_bytes = data.to_owned().into_bytes();
@@ -118,14 +60,6 @@ static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
     },
     ProgramConfig {
         name: "bincode",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .build()
-        },
         setup_stdin: || {
             let file_data = include_bytes!("../../../guest/src/bincode/minecraft_savedata.bin");
             StdIn::from_bytes(file_data)
@@ -187,37 +121,10 @@ static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
     // },
     ProgramConfig {
         name: "pairing",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .keccak(Default::default())
-                .modular(ModularExtension::new(vec![
-                    BN254_MODULUS.clone(),
-                    BN254_ORDER.clone(),
-                ]))
-                .fp2(Fp2Extension::new(vec![BN254_MODULUS.clone()]))
-                .ecc(WeierstrassExtension::new(vec![
-                    PairingCurve::Bn254.curve_config()
-                ]))
-                .pairing(PairingExtension::new(vec![PairingCurve::Bn254]))
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "regex",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .keccak(Default::default())
-                .build()
-        },
         setup_stdin: || {
             let data = include_str!("../../../guest/src/regex/regex_email.txt");
             let fe_bytes = data.to_owned().into_bytes();
@@ -226,14 +133,6 @@ static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
     },
     ProgramConfig {
         name: "rkyv",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .build()
-        },
         setup_stdin: || {
             let file_data = include_bytes!("../../../guest/src/rkyv/minecraft_savedata.bin");
             StdIn::from_bytes(file_data)
@@ -241,177 +140,46 @@ static PROGRAMS_TO_RUN: &[ProgramConfig] = &[
     },
     ProgramConfig {
         name: "keccak256",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .keccak(Default::default())
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "keccak256_iter",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .keccak(Default::default())
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "sha256",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .sha256(Default::default())
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "sha256_iter",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .sha256(Default::default())
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "revm_ecrecover",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .modular(ModularExtension::new(vec![
-                    SECP256K1_CONFIG.modulus.clone(),
-                    SECP256K1_CONFIG.scalar.clone(),
-                ]))
-                .keccak(Default::default())
-                .ecc(WeierstrassExtension::new(vec![SECP256K1_CONFIG.clone()]))
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "revm_ecadd",
-        vm_config: || {
-            let bn_config = PairingCurve::Bn254.curve_config();
-
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .modular(ModularExtension::new(vec![
-                    bn_config.modulus.clone(),
-                    bn_config.scalar.clone(),
-                ]))
-                .ecc(WeierstrassExtension::new(vec![bn_config.clone()]))
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "revm_ecmul",
-        vm_config: || {
-            let bn_config = PairingCurve::Bn254.curve_config();
-
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .modular(ModularExtension::new(vec![
-                    bn_config.modulus.clone(),
-                    bn_config.scalar.clone(),
-                ]))
-                .ecc(WeierstrassExtension::new(vec![bn_config.clone()]))
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "revm_ecpairing",
-        vm_config: || {
-            let bn_config = PairingCurve::Bn254.curve_config();
-
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .modular(ModularExtension::new(vec![
-                    bn_config.modulus.clone(),
-                    bn_config.scalar.clone(),
-                ]))
-                .fp2(Fp2Extension::new(vec![bn_config.modulus.clone()]))
-                .ecc(WeierstrassExtension::new(vec![bn_config.clone()]))
-                .pairing(PairingExtension::new(vec![PairingCurve::Bn254]))
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "revm_kzg_point_evaluation",
-        vm_config: || {
-            let bls_config = PairingCurve::Bls12_381.curve_config();
-
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .modular(ModularExtension::new(vec![
-                    bls_config.modulus.clone(),
-                    bls_config.scalar.clone(),
-                ]))
-                .fp2(Fp2Extension::new(vec![bls_config.modulus.clone()]))
-                .ecc(WeierstrassExtension::new(vec![bls_config.clone()]))
-                .pairing(PairingExtension::new(vec![PairingCurve::Bls12_381]))
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "revm_modexp",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .bigint(Int256::default())
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
     ProgramConfig {
         name: "revm_snailtracer",
-        vm_config: || {
-            SdkVmConfig::builder()
-                .system(SystemConfig::default().with_continuations().into())
-                .rv32i(Default::default())
-                .rv32m(Default::default())
-                .io(Default::default())
-                .build()
-        },
         setup_stdin: || StdIn::default(),
     },
 ];
@@ -424,9 +192,11 @@ fn main() -> Result<()> {
             tracing::info!("Running program: {}", program.name);
 
             let program_dir = get_programs_dir().join(program.name);
-            let elf = build_and_load_elf(program_dir, "release", false)?;
+            let elf = build_and_load_elf(&program_dir, "release", false)?;
 
-            let vm_config = (program.vm_config)();
+            let config_path = program_dir.join("openvm.toml");
+            let vm_config = read_config_toml_or_default(&config_path)?.app_vm_config;
+
             let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
 
             let executor = VmExecutor::new(vm_config);
