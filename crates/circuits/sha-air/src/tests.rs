@@ -1,4 +1,4 @@
-use crate::{ShaDigestColsRefMut, ShaRoundColsRef, ShaRoundColsRefMut};
+use crate::{Sha384Config, ShaDigestColsRefMut, ShaRoundColsRef, ShaRoundColsRefMut};
 use std::{borrow::BorrowMut, cmp::max, sync::Arc};
 
 use openvm_circuit::arch::{
@@ -22,7 +22,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
 
-use crate::{compose, small_sig0_field, Sha256Config, Sha512Config, Sha2Air, ShaConfig};
+use crate::{compose, small_sig0_field, Sha256Config, Sha2Air, Sha512Config, ShaConfig};
 
 // A wrapper AIR purely for testing purposes
 #[derive(Clone, Debug)]
@@ -119,6 +119,11 @@ fn rand_sha256_test() {
 #[test]
 fn rand_sha512_test() {
     rand_sha_test::<Sha512Config>();
+}
+
+#[test]
+fn rand_sha384_test() {
+    rand_sha_test::<Sha384Config>();
 }
 
 // A wrapper Chip to test that the final_hash is properly constrained.
@@ -281,4 +286,10 @@ fn test_sha256_final_hash_constraints() {
 #[should_panic]
 fn test_sha512_final_hash_constraints() {
     test_sha_final_hash_constraints::<Sha512Config>();
+}
+
+#[test]
+#[should_panic]
+fn test_sha384_final_hash_constraints() {
+    test_sha_final_hash_constraints::<Sha384Config>();
 }

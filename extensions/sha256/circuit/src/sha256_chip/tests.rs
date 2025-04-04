@@ -7,7 +7,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_sha256_transpiler::Rv32Sha2Opcode::{self, *};
-use openvm_sha_air::{get_random_message, Sha256Config, Sha512Config};
+use openvm_sha_air::{get_random_message, Sha256Config, Sha384Config, Sha512Config};
 use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -122,6 +122,11 @@ fn rand_sha512_test() {
     rand_sha_test::<Sha512Config>(SHA512);
 }
 
+#[test]
+fn rand_sha384_test() {
+    rand_sha_test::<Sha384Config>(SHA384);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///
@@ -171,12 +176,43 @@ fn sha512_roundtrip_sanity_test() {
 }
 
 #[test]
+fn sha384_roundtrip_sanity_test() {
+    execute_roundtrip_sanity_test::<Sha384Config>(SHA384);
+}
+
+#[test]
 fn sha256_solve_sanity_check() {
     let input = b"Axiom is the best! Axiom is the best! Axiom is the best! Axiom is the best!";
     let output = sha2_solve::<Sha256Config>(input);
     let expected: [u8; 32] = [
         99, 196, 61, 185, 226, 212, 131, 80, 154, 248, 97, 108, 157, 55, 200, 226, 160, 73, 207,
         46, 245, 169, 94, 255, 42, 136, 193, 15, 40, 133, 173, 22,
+    ];
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn sha512_solve_sanity_check() {
+    let input = b"Axiom is the best! Axiom is the best! Axiom is the best! Axiom is the best!";
+    let output = sha2_solve::<Sha512Config>(input);
+    // verified manually against the sha512 command line tool
+    let expected: [u8; 64] = [
+        0, 8, 195, 142, 70, 71, 97, 208, 132, 132, 243, 53, 179, 186, 8, 162, 71, 75, 126, 21, 130,
+        203, 245, 126, 207, 65, 119, 60, 64, 79, 200, 2, 194, 17, 189, 137, 164, 213, 107, 197,
+        152, 11, 242, 165, 146, 80, 96, 105, 249, 27, 139, 14, 244, 21, 118, 31, 94, 87, 32, 145,
+        149, 98, 235, 75,
+    ];
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn sha384_solve_sanity_check() {
+    let input = b"Axiom is the best! Axiom is the best! Axiom is the best! Axiom is the best!";
+    let output = sha2_solve::<Sha384Config>(input);
+    let expected: [u8; 48] = [
+        134, 227, 167, 229, 35, 110, 115, 174, 10, 27, 197, 116, 56, 144, 150, 36, 152, 190, 212,
+        120, 26, 243, 125, 4, 2, 60, 164, 195, 218, 219, 255, 143, 240, 75, 158, 126, 102, 105, 8,
+        202, 142, 240, 230, 161, 162, 152, 111, 71,
     ];
     assert_eq!(output, expected);
 }

@@ -157,6 +157,7 @@ Each VM extension's behavior is specified below.
 | ----------- | ----------------------------------------------- |
 | sha256      | SHA256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2` |
 | sha512      | SHA512_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2` |
+| sha384      | SHA384_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2` |
 
 ### BigInt Extension
 

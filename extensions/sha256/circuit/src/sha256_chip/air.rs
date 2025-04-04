@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::convert::TryInto;
 
 use openvm_circuit::{
     arch::ExecutionBridge,
@@ -457,7 +458,7 @@ impl<C: ShaChipConfig> Sha2VmAir<C> {
             .when(not::<AB::Expr>(is_last_row.clone()))
             .assert_eq(*next_cols.control.len, *local_cols.control.len);
 
-        // Read ptr should increment by [SHA256_READ_SIZE] for the first 4 rows and stay the same otherwise
+        // Read ptr should increment by [C::READ_SIZE] for the first 4 rows and stay the same otherwise
         let read_ptr_delta =
             *local_cols.inner.flags.is_first_4_rows * AB::Expr::from_canonical_usize(C::READ_SIZE);
         builder
@@ -510,7 +511,8 @@ impl<C: ShaChipConfig> Sha2VmAir<C> {
                     )
                     .eval(builder, *local_cols.inner.flags.is_first_4_rows);
             }
-            Sha2Variant::Sha512 => {
+            // Sha512 and Sha384 have the same read size so we put them together
+            Sha2Variant::Sha512 | Sha2Variant::Sha384 => {
                 let message: [AB::Var; Sha512Config::READ_SIZE] =
                     message.try_into().unwrap_or_else(|_| {
                         panic!("message is not the correct size");
@@ -610,10 +612,10 @@ impl<C: ShaChipConfig> Sha2VmAir<C> {
         // the number of reads that happened to read the entire message: we do 4 reads per block
         let time_delta = (*local_cols.inner.flags.local_block_idx + AB::Expr::ONE)
             * AB::Expr::from_canonical_usize(4);
-        // Every time we read the message we increment the read pointer by SHA256_READ_SIZE
+        // Every time we read the message we increment the read pointer by C::READ_SIZE
         let read_ptr_delta = time_delta.clone() * AB::Expr::from_canonical_usize(C::READ_SIZE);
 
-        let result: Vec<AB::Var> = (0..C::DIGEST_SIZE)
+        let result: Vec<AB::Var> = (0..C::HASH_SIZE)
             .map(|i| {
                 // The limbs are written in big endian order to the memory so need to be reversed
                 local_cols.inner.final_hash[[i / C::WORD_U8S, C::WORD_U8S - i % C::WORD_U8S - 1]]
@@ -630,7 +632,7 @@ impl<C: ShaChipConfig> Sha2VmAir<C> {
                 debug_assert_eq!(C::NUM_WRITES, 1);
                 debug_assert_eq!(local_cols.writes_aux_base.len(), 1);
                 debug_assert_eq!(local_cols.writes_aux_prev_data.nrows(), 1);
-                let prev_data: [AB::Var; Sha256Config::DIGEST_SIZE] = local_cols
+                let prev_data: [AB::Var; Sha256Config::HASH_SIZE] = local_cols
                     .writes_aux_prev_data
                     .row(0)
                     .to_vec()
@@ -654,13 +656,20 @@ impl<C: ShaChipConfig> Sha2VmAir<C> {
                     )
                     .eval(builder, is_last_row.clone());
             }
-            Sha2Variant::Sha512 => {
+            Sha2Variant::Sha512 | Sha2Variant::Sha384 => {
                 debug_assert_eq!(C::NUM_WRITES, 2);
                 debug_assert_eq!(local_cols.writes_aux_base.len(), 2);
                 debug_assert_eq!(local_cols.writes_aux_prev_data.nrows(), 2);
+
+                // For Sha384, set the last 16 cells to 0
+                let mut truncated_result: Vec<AB::Expr> =
+                    result.iter().map(|x| (*x).into()).collect();
+                for x in truncated_result.iter_mut().skip(C::DIGEST_SIZE) {
+                    *x = AB::Expr::ZERO;
+                }
+
                 // write the digest in two halves because we only support writes up to 32 bytes
                 for i in 0..Sha512Config::NUM_WRITES {
-                    // for i in 0..1 {
                     let prev_data: [AB::Var; Sha512Config::WRITE_SIZE] = local_cols
                         .writes_aux_prev_data
                         .row(i)
@@ -677,8 +686,9 @@ impl<C: ShaChipConfig> Sha2VmAir<C> {
                                 dst_ptr_val.clone()
                                     + AB::Expr::from_canonical_usize(i * Sha512Config::WRITE_SIZE),
                             ),
-                            result
+                            truncated_result
                                 [i * Sha512Config::WRITE_SIZE..(i + 1) * Sha512Config::WRITE_SIZE]
+                                .to_vec()
                                 .try_into()
                                 .unwrap_or_else(|_| {
                                     panic!("result is not the correct size");

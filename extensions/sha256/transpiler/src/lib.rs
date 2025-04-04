@@ -14,6 +14,7 @@ use strum::{EnumCount, EnumIter, FromRepr};
 pub enum Rv32Sha2Opcode {
     SHA256,
     SHA512,
+    SHA384,
 }
 
 #[derive(Default)]
@@ -44,6 +45,14 @@ impl<F: PrimeField32> TranspilerExtension<F> for Sha2TranspilerExtension {
         } else if dec_insn.funct7 == Sha2BaseFunct7::Sha512 as u32 {
             let instruction = from_r_type(
                 Rv32Sha2Opcode::SHA512.global_opcode().as_usize(),
+                RV32_MEMORY_AS as usize,
+                &dec_insn,
+                true,
+            );
+            Some(TranspilerOutput::one_to_one(instruction))
+        } else if dec_insn.funct7 == Sha2BaseFunct7::Sha384 as u32 {
+            let instruction = from_r_type(
+                Rv32Sha2Opcode::SHA384.global_opcode().as_usize(),
                 RV32_MEMORY_AS as usize,
                 &dec_insn,
                 true,

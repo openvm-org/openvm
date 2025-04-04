@@ -14,7 +14,7 @@ use openvm_rv32im_circuit::{
     Rv32MExecutor, Rv32MPeriphery,
 };
 use openvm_sha256_transpiler::Rv32Sha2Opcode;
-use openvm_sha_air::{Sha256Config, Sha512Config};
+use openvm_sha_air::{Sha256Config, Sha384Config, Sha512Config};
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
@@ -53,6 +53,7 @@ pub struct Sha2;
 pub enum Sha2Executor<F: PrimeField32> {
     Sha256(Sha2VmChip<F, Sha256Config>),
     Sha512(Sha2VmChip<F, Sha512Config>),
+    Sha384(Sha2VmChip<F, Sha384Config>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
@@ -95,12 +96,22 @@ impl<F: PrimeField32> VmExtension<F> for Sha2 {
         let sha512_chip = Sha2VmChip::<F, Sha512Config>::new(
             builder.system_port(),
             builder.system_config().memory_config.pointer_max_bits,
-            bitwise_lu_chip,
+            bitwise_lu_chip.clone(),
             builder.new_bus_idx(),
             Rv32Sha2Opcode::CLASS_OFFSET,
             builder.system_base().offline_memory(),
         );
         inventory.add_executor(sha512_chip, vec![Rv32Sha2Opcode::SHA512.global_opcode()])?;
+
+        let sha384_chip = Sha2VmChip::<F, Sha384Config>::new(
+            builder.system_port(),
+            builder.system_config().memory_config.pointer_max_bits,
+            bitwise_lu_chip,
+            builder.new_bus_idx(),
+            Rv32Sha2Opcode::CLASS_OFFSET,
+            builder.system_base().offline_memory(),
+        );
+        inventory.add_executor(sha384_chip, vec![Rv32Sha2Opcode::SHA384.global_opcode()])?;
 
         Ok(inventory)
     }

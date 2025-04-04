@@ -84,6 +84,7 @@ the guest must take care to validate all data and account for behavior in cases 
 | ----------- | --- | ----------- | ------ | ------ | ---------------------------------------- |
 | sha256      | R   | 0001011     | 100    | 0x1    | `[rd:32]_2 = sha256([rs1..rs1 + rs2]_2)` |
 | sha512      | R   | 0001011     | 100    | 0x2    | `[rd:32]_2 = sha512([rs1..rs1 + rs2]_2)` |
+| sha384      | R   | 0001011     | 100    | 0x3    | `[rd:32]_2 = sha384([rs1..rs1 + rs2]_2)` |
 
 ## BigInt Extension
 

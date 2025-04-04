@@ -1,12 +1,13 @@
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_sha256_transpiler::Rv32Sha2Opcode;
-use openvm_sha_air::{Sha256Config, Sha512Config, ShaConfig};
+use openvm_sha_air::{Sha256Config, Sha384Config, Sha512Config, ShaConfig};
 
 use super::{ShaVmControlColsRef, ShaVmDigestColsRef, ShaVmRoundColsRef};
 
 pub enum Sha2Variant {
     Sha256,
     Sha512,
+    Sha384,
 }
 
 pub trait ShaChipConfig: ShaConfig {
@@ -44,13 +45,15 @@ pub trait ShaChipConfig: ShaConfig {
 
     /// Number of cells to read in a single memory access
     const READ_SIZE: usize = Self::WORD_U8S * Self::ROUNDS_PER_ROW;
-    /// Number of cells in the digest
-    const DIGEST_SIZE: usize = Self::WORD_U8S * Self::HASH_WORDS;
-    /// Digest will be written in NUM_WRITES parts of equal size
-    /// NUM_WRITES must divide DIGEST_SIZE
+    /// Number of cells in the digest before truncation (Sha384 truncates the digest)
+    const HASH_SIZE: usize = Self::WORD_U8S * Self::HASH_WORDS;
+    /// Number of cells in the digest after truncation
+    const DIGEST_SIZE: usize;
+
+    /// Number of parts to write the hash in. Must divide HASH_SIZE
     const NUM_WRITES: usize;
     /// Size of each write
-    const WRITE_SIZE: usize = Self::DIGEST_SIZE / Self::NUM_WRITES;
+    const WRITE_SIZE: usize = Self::HASH_SIZE / Self::NUM_WRITES;
 }
 
 /// Register reads to get dst, src, len
@@ -62,6 +65,8 @@ impl ShaChipConfig for Sha256Config {
     const MESSAGE_LENGTH_BITS: usize = 64;
     const NUM_WRITES: usize = 1;
     const OPCODE: Rv32Sha2Opcode = Rv32Sha2Opcode::SHA256;
+    // no truncation
+    const DIGEST_SIZE: usize = Self::HASH_SIZE;
 }
 
 // Currently same as Sha256Config, but can configure later
@@ -72,4 +77,17 @@ impl ShaChipConfig for Sha512Config {
     // Use 2 writes because we only support writes up to 32 bytes
     const NUM_WRITES: usize = 2;
     const OPCODE: Rv32Sha2Opcode = Rv32Sha2Opcode::SHA512;
+    // no truncation
+    const DIGEST_SIZE: usize = Self::HASH_SIZE;
+}
+
+impl ShaChipConfig for Sha384Config {
+    const VARIANT: Sha2Variant = Sha2Variant::Sha384;
+    const OPCODE_NAME: &'static str = "SHA384";
+    const MESSAGE_LENGTH_BITS: usize = 128;
+    // Use 2 writes because we only support writes up to 32 bytes
+    const NUM_WRITES: usize = 2;
+    const OPCODE: Rv32Sha2Opcode = Rv32Sha2Opcode::SHA384;
+    // Sha284 truncates the output to 48 cells
+    const DIGEST_SIZE: usize = 48;
 }

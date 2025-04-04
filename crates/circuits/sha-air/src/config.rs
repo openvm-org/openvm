@@ -279,6 +279,72 @@ pub const SHA512_H: [u64; 8] = [
     0x5be0cd19137e2179,
 ];
 
+#[derive(Clone)]
+pub struct Sha384Config;
+
+impl ShaConfig for Sha384Config {
+    // ==== Do not change these constants! ====
+    type Word = u64;
+    /// Number of bits in a SHA384 word
+    const WORD_BITS: usize = 64;
+    /// Number of words in a SHA384 block
+    const BLOCK_WORDS: usize = 16;
+    /// Number of rows per block
+    const ROWS_PER_BLOCK: usize = 21;
+    /// Number of rounds per row
+    const ROUNDS_PER_ROW: usize = 4;
+    /// Number of rounds per block
+    const ROUNDS_PER_BLOCK: usize = 80;
+    /// Number of words in a SHA384 hash
+    const HASH_WORDS: usize = 8;
+    /// Number of vars needed to encode the row index with [Encoder]
+    const ROW_VAR_CNT: usize = 6;
+
+    fn get_invalid_carry_a(round_num: usize) -> &'static [u32] {
+        &SHA384_INVALID_CARRY_A[round_num]
+    }
+    fn get_invalid_carry_e(round_num: usize) -> &'static [u32] {
+        &SHA384_INVALID_CARRY_E[round_num]
+    }
+    fn get_k() -> &'static [u64] {
+        &SHA384_K
+    }
+    fn get_h() -> &'static [u64] {
+        &SHA384_H
+    }
+}
+
+pub(crate) const SHA384_INVALID_CARRY_A: [[u32; Sha384Config::WORD_U16S];
+    Sha384Config::ROUNDS_PER_ROW] = [
+    [1571481603, 1428841901, 1050676523, 793575075],
+    [1233315842, 1822329223, 112923808, 1874228927],
+    [1245603842, 927240770, 1579759431, 70557227],
+    [195532801, 594312107, 1429379950, 220407092],
+];
+
+pub(crate) const SHA384_INVALID_CARRY_E: [[u32; Sha384Config::WORD_U16S];
+    Sha384Config::ROUNDS_PER_ROW] = [
+    [1067980802, 1508061099, 1418826213, 1232569491],
+    [1453086722, 1702524575, 152427899, 238512408],
+    [1623674882, 701393097, 1002035664, 4776891],
+    [1888911362, 184963225, 1151849224, 1034237098],
+];
+
+/// SHA384 constant K's
+pub const SHA384_K: [u64; 80] = SHA512_K;
+
+/// SHA384 initial hash values
+pub const SHA384_H: [u64; 8] = [
+    0xcbbb9d5dc1059ed8,
+    0x629a292a367cd507,
+    0x9159015a3070dd17,
+    0x152fecd8f70e5939,
+    0x67332667ffc00b31,
+    0x8eb44a8768581511,
+    0xdb0c2e0d64f98fa7,
+    0x47b5481dbefa4fa4,
+];
+
 // Needed to avoid compile errors in utils.rs
 // not sure why this doesn't inf loop
 pub trait RotateRight {

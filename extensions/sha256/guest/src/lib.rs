@@ -9,6 +9,7 @@ pub const SHA2_FUNCT3: u8 = 0b100;
 pub enum Sha2BaseFunct7 {
     Sha256 = 0x1,
     Sha512 = 0x2,
+    Sha384 = 0x3,
 }
 
 /// The sha256 cryptographic hash function.
@@ -25,6 +26,14 @@ pub fn sha512(input: &[u8]) -> [u8; 64] {
     let mut output = [0u8; 64];
     set_sha512(input, &mut output);
     output
+}
+
+/// The sha384 cryptographic hash function.
+#[inline(always)]
+pub fn sha384(input: &[u8]) -> [u8; 48] {
+    let mut output = [0u8; 64];
+    set_sha384(input, &mut output);
+    output[..48].try_into().unwrap()
 }
 
 /// zkvm native implementation of sha256
@@ -59,6 +68,24 @@ extern "C" fn zkvm_sha512_impl(bytes: *const u8, len: usize, output: *mut u8) {
     openvm_platform::custom_insn_r!(opcode = OPCODE, funct3 = SHA2_FUNCT3, funct7 = Sha2BaseFunct7::Sha512 as u8, rd = In output, rs1 = In bytes, rs2 = In len);
 }
 
+/// zkvm native implementation of sha384
+/// # Safety
+///
+/// The VM accepts the preimage by pointer and length, and writes the
+/// 48-byte hash.
+/// - `bytes` must point to an input buffer at least `len` long.
+/// - `output` must point to a buffer that is at least 64-bytes long.
+///   The first 48 bytes written will be the SHA-384 digest.
+///   The last 16 bytes are zeros.
+///
+/// [`sha2-384`]: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+#[no_mangle]
+extern "C" fn zkvm_sha384_impl(bytes: *const u8, len: usize, output: *mut u8) {
+    openvm_platform::custom_insn_r!(opcode = OPCODE, funct3 = SHA2_FUNCT3, funct7 = Sha2BaseFunct7::Sha384 as u8, rd = In output, rs1 = In bytes, rs2 = In len);
+}
+
 /// Sets `output` to the sha256 hash of `input`.
 pub fn set_sha256(input: &[u8], output: &mut [u8; 32]) {
     #[cfg(not(target_os = "zkvm"))]
@@ -86,5 +113,22 @@ pub fn set_sha512(input: &[u8], output: &mut [u8; 64]) {
     #[cfg(target_os = "zkvm")]
     {
         zkvm_sha512_impl(input.as_ptr(), input.len(), output.as_mut_ptr() as *mut u8);
+    }
+}
+
+/// Sets the first 48 bytes of `output` to the sha384 hash of `input`.
+/// Sets the last 16 bytes to zeros.
+pub fn set_sha384(input: &[u8], output: &mut [u8; 64]) {
+    #[cfg(not(target_os = "zkvm"))]
+    {
+        use sha2::{Digest, Sha384};
+        let mut hasher = Sha384::new();
+        hasher.update(input);
+        output[..48].copy_from_slice(hasher.finalize().as_ref());
+        output[48..].fill(0);
+    }
+    #[cfg(target_os = "zkvm")]
+    {
+        zkvm_sha384_impl(input.as_ptr(), input.len(), output.as_mut_ptr() as *mut u8);
     }
 }

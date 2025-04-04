@@ -563,7 +563,7 @@ impl<C: ShaConfig> Sha2Air<C> {
 
     /// The following functions do the calculations in native field since they will be called on padding rows
     /// which can overflow and we need to make sure it matches the AIR constraints
-    /// Puts the correct carrys in the `next_row`, the resulting carrys can be out of bound
+    /// Puts the correct carries in the `next_row`, the resulting carries can be out of bounds
     pub fn generate_carry_ae<F: PrimeField32>(
         local_cols: ShaRoundColsRef<F>,
         next_cols: &mut ShaRoundColsRefMut<F>,

@@ -53,7 +53,6 @@ pub struct ShaVmDigestCols<
     const ROUNDS_PER_ROW: usize,
     const ROUNDS_PER_ROW_MINUS_ONE: usize,
     const ROW_VAR_CNT: usize,
-    const DIGEST_SIZE: usize,
     const NUM_WRITES: usize,
     const WRITE_SIZE: usize,
 > {
@@ -84,8 +83,6 @@ pub struct ShaVmDigestCols<
     pub writes_aux_base: [MemoryBaseAuxCols<T>; NUM_WRITES],
     pub writes_aux_prev_data: [[T; WRITE_SIZE]; NUM_WRITES],
 }
-
-pub type Sha256VmDigestCols<F> = ShaVmDigestCols<F, 32, 4, 2, 8, 4, 3, 5, 32, 1, 32>;
 
 /// These are the columns that are used on both round and digest rows
 #[repr(C)]

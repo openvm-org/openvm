@@ -311,7 +311,7 @@ where
                                             .zip(writes_aux.prev_data())
                                             .for_each(|(x, y)| *x = *y);
                                     }
-                                    Sha2Variant::Sha512 => {
+                                    Sha2Variant::Sha512 | Sha2Variant::Sha384 => {
                                         debug_assert_eq!(C::NUM_WRITES, 2);
                                         debug_assert_eq!(digest_writes.len(), 2);
                                         debug_assert_eq!(cols.writes_aux_base.len(), 2);
