@@ -11,7 +11,7 @@ license = "MIT"
 members = [
     "benchmarks/utils",
     "benchmarks/execute",
-    "benchmarks/e2e",
+    "benchmarks/prove",
     "crates/prof",
     "crates/sdk",
     "crates/cli",

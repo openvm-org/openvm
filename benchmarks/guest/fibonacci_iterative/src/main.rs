@@ -1,6 +1,5 @@
-extern crate openvm;
-
 use core::hint::black_box;
+use openvm as _;
 
 const N: u64 = 100_000;
 

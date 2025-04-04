@@ -1,4 +1,4 @@
-use std::{hint::black_box, mem::transmute};
+use std::hint::black_box;
 
 use openvm_algebra_guest::IntMod;
 use openvm_bigint_guest::I256;

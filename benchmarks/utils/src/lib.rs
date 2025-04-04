@@ -1,4 +1,8 @@
-use std::{fs::read, path::PathBuf, sync::Arc};
+use std::{
+    fs::read,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use cargo_metadata::Package;
 use clap::{command, Parser};
@@ -142,7 +146,7 @@ impl BenchmarkCli {
         }
         .to_string();
         let manifest_dir = get_programs_dir().join(program_name);
-        build_and_load_elf(&manifest_dir, profile)
+        build_elf(&manifest_dir, profile)
     }
 
     pub fn bench_from_exe<VC>(
@@ -175,14 +179,16 @@ pub fn get_programs_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../guest")
 }
 
-pub fn build_and_load_elf(manifest_dir: &PathBuf, profile: impl ToString) -> Result<Elf> {
+pub fn build_elf(manifest_dir: &PathBuf, profile: impl ToString) -> Result<Elf> {
     let pkg = get_package(manifest_dir);
-    let elf_path = build_elf(&pkg, profile)?;
-
-    read_elf_file(&elf_path)
+    build_elf_with_path(&pkg, profile, None)
 }
 
-pub fn build_elf(pkg: &Package, profile: impl ToString) -> Result<PathBuf> {
+pub fn build_elf_with_path(
+    pkg: &Package,
+    profile: impl ToString,
+    elf_path: Option<&PathBuf>,
+) -> Result<Elf> {
     // Use a temporary directory for the build
     let temp_dir = tempdir()?;
     let target_dir = temp_dir.path();
@@ -201,23 +207,20 @@ pub fn build_elf(pkg: &Package, profile: impl ToString) -> Result<PathBuf> {
         .pop()
         .unwrap();
 
-    Ok(temp_elf_path)
-}
-
-pub fn build_and_save_elf(pkg: &Package, elf_path: &PathBuf, profile: impl ToString) -> Result<()> {
-    let temp_elf_path = build_elf(pkg, profile)?;
-    //
-    // Create elf directory if it doesn't exist
-    if let Some(parent) = elf_path.parent() {
-        if !parent.exists() {
-            std::fs::create_dir_all(parent)?;
+    // If an elf_path is provided, copy the built ELF to that location
+    if let Some(dest_path) = elf_path {
+        // Create parent directories if they don't exist
+        if let Some(parent) = dest_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
         }
+
+        // Copy the built ELF to the destination
+        std::fs::copy(&temp_elf_path, dest_path)?;
     }
 
-    // Copy the built ELF to the final location
-    std::fs::copy(temp_elf_path, elf_path)?;
-
-    Ok(())
+    read_elf_file(&temp_elf_path)
 }
 
 pub fn get_elf_path(manifest_dir: &PathBuf) -> PathBuf {
@@ -225,7 +228,7 @@ pub fn get_elf_path(manifest_dir: &PathBuf) -> PathBuf {
     get_elf_path_with_pkg(manifest_dir, &pkg)
 }
 
-pub fn get_elf_path_with_pkg(manifest_dir: &PathBuf, pkg: &Package) -> PathBuf {
+pub fn get_elf_path_with_pkg(manifest_dir: &Path, pkg: &Package) -> PathBuf {
     let elf_file_name = format!("{}.elf", &pkg.name);
     manifest_dir.join("elf").join(elf_file_name)
 }

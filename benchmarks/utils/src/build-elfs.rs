@@ -1,8 +1,9 @@
+use std::fs;
+
 use clap::{arg, Parser};
 use eyre::Result;
-use openvm_benchmarks_utils::{build_and_save_elf, get_elf_path_with_pkg, get_programs_dir};
+use openvm_benchmarks_utils::{build_elf_with_path, get_elf_path_with_pkg, get_programs_dir};
 use openvm_build::get_package;
-use std::fs;
 use tracing_subscriber::{fmt, EnvFilter};
 
 #[derive(Parser)]
@@ -15,6 +16,10 @@ struct Cli {
     /// Specific program directories to build (builds all if not specified)
     #[arg(value_name = "PROGRAM")]
     programs: Vec<String>,
+
+    /// Programs to skip
+    #[arg(long, value_name = "PROGRAM")]
+    skip: Vec<String>,
 
     /// Build profile (debug or release)
     #[arg(short, long, default_value = "release")]
@@ -64,6 +69,12 @@ fn main() -> Result<()> {
             .collect()
     };
 
+    // Filter out skipped programs
+    let programs_to_build = programs_to_build
+        .into_iter()
+        .filter(|(name, _)| !cli.skip.contains(name))
+        .collect::<Vec<_>>();
+
     if programs_to_build.is_empty() {
         tracing::warn!("No matching programs found to build");
         return Ok(());
@@ -76,7 +87,7 @@ fn main() -> Result<()> {
 
         if cli.force || !elf_path.exists() {
             tracing::info!("Building: {}", dir_name);
-            build_and_save_elf(&pkg, &elf_path, &cli.profile)?;
+            build_elf_with_path(&pkg, &cli.profile, Some(&elf_path))?;
         } else {
             tracing::info!(
                 "Skipping existing build: {} (use --force to rebuild)",

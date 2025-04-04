@@ -1,4 +1,4 @@
-extern crate openvm;
+use openvm as _;
 
 use revm::{
     db::BenchmarkDB,

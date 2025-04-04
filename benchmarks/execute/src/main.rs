@@ -40,6 +40,10 @@ struct Cli {
     #[arg(short, long)]
     programs: Vec<String>,
 
+    /// Programs to skip from benchmarking
+    #[arg(short, long)]
+    skip: Vec<String>,
+
     /// Output path for benchmark results
     #[arg(short, long, default_value = "OUTPUT_PATH")]
     output: String,
@@ -69,7 +73,7 @@ fn main() -> Result<()> {
         tracing_subscriber::fmt::init();
     }
 
-    let programs_to_run = if cli.programs.is_empty() {
+    let mut programs_to_run = if cli.programs.is_empty() {
         AVAILABLE_PROGRAMS.to_vec()
     } else {
         // Validate provided programs
@@ -82,6 +86,21 @@ fn main() -> Result<()> {
         }
         cli.programs.iter().map(|s| s.as_str()).collect()
     };
+
+    // Remove programs that should be skipped
+    if !cli.skip.is_empty() {
+        // Validate skipped programs
+        for program in &cli.skip {
+            if !AVAILABLE_PROGRAMS.contains(&program.as_str()) {
+                eprintln!("Unknown program to skip: {}", program);
+                eprintln!("Use --list to see available programs");
+                std::process::exit(1);
+            }
+        }
+
+        let skip_set: Vec<&str> = cli.skip.iter().map(|s| s.as_str()).collect();
+        programs_to_run.retain(|&program| !skip_set.contains(&program));
+    }
 
     tracing::info!("Starting benchmarks with metric collection");
 

@@ -7,7 +7,7 @@ See the example [fibonacci program](https://github.com/openvm-org/openvm-example
 The guest program should be a `no_std` Rust crate. As long as it is `no_std`, you can import any other
 `no_std` crates and write Rust as you normally would. Import the `openvm` library crate to use `openvm` intrinsic functions (for example `openvm::io::*`).
 
-More examples of guest programs can be found in the [benchmarks/programs](https://github.com/openvm-org/openvm/tree/main/benchmarks/programs) directory.
+More examples of guest programs can be found in the [benchmarks/guest](https://github.com/openvm-org/openvm/tree/main/benchmarks/guest) directory.
 
 ## Handling I/O
 

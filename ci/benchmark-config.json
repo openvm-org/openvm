@@ -3,7 +3,7 @@
     {
       "name": "verify_fibair",
       "id": "verify_fibair",
-      "working_directory": "benchmarks",
+      "working_directory": "benchmarks/prove",
       "e2e_bench": false,
       "run_params": [
         {
@@ -17,7 +17,7 @@
     {
       "name": "fibonacci",
       "id": "fibonacci",
-      "working_directory": "benchmarks",
+      "working_directory": "benchmarks/prove",
       "e2e_bench": false,
       "run_params": [
         {
@@ -31,7 +31,7 @@
     {
       "name": "regex",
       "id": "regex",
-      "working_directory": "benchmarks",
+      "working_directory": "benchmarks/prove",
       "e2e_bench": false,
       "run_params": [
         {
@@ -45,7 +45,7 @@
     {
       "name": "ecrecover",
       "id": "ecrecover",
-      "working_directory": "benchmarks",
+      "working_directory": "benchmarks/prove",
       "e2e_bench": false,
       "run_params": [
         {
@@ -59,7 +59,7 @@
     {
       "name": "pairing",
       "id": "pairing",
-      "working_directory": "benchmarks",
+      "working_directory": "benchmarks/prove",
       "e2e_bench": false,
       "run_params": [
         {
@@ -73,7 +73,7 @@
     {
       "name": "fib_e2e",
       "id": "fib_e2e",
-      "working_directory": "benchmarks",
+      "working_directory": "benchmarks/prove",
       "e2e_bench": true,
       "run_params": [
         {
@@ -90,7 +90,7 @@
     {
       "name": "kitchen_sink",
       "id": "kitchen_sink",
-      "working_directory": "benchmarks",
+      "working_directory": "benchmarks/prove",
       "e2e_bench": true,
       "run_params": [
         {

@@ -5,6 +5,7 @@
 // Copyright adaptation: Based on stream.c by John D. McCalpin
 //-----------------------------------------------------------------------
 
+use openvm as _;
 use std::mem::size_of;
 
 // Constants for the benchmark
@@ -255,5 +256,3 @@ fn main() {
 
     println!("-------------------------------------------------------------");
 }
-
-openvm::entry!(main);

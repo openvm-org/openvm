@@ -9,7 +9,6 @@ license.workspace = true
 
 [dependencies]
 openvm-benchmarks-utils.workspace = true
-openvm-build.workspace = true
 openvm-circuit.workspace = true
 openvm-sdk.workspace = true
 openvm-stark-backend.workspace = true
@@ -31,8 +30,6 @@ openvm-native-recursion = { workspace = true, features = ["test-utils"] }
 
 clap = { version = "4.5.9", features = ["derive", "env"] }
 eyre.workspace = true
-tempfile.workspace = true
-tracing.workspace = true
 tokio = { version = "1.41.1", features = ["rt", "rt-multi-thread", "macros"] }
 rand_chacha = { version = "0.3", default-features = false }
 k256 = { workspace = true, features = ["ecdsa"] }
@@ -43,7 +40,6 @@ num-bigint = { workspace = true, features = ["std", "serde"] }
 serde.workspace = true
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
 default = ["parallel", "mimalloc", "bench-metrics"]

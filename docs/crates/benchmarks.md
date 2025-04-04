@@ -16,7 +16,7 @@ These are run via [github workflows](../../.github/workflows/benchmarks.yml) and
 
 ## How to Add a Benchmark
 
-1. Add a new crate to the [programs](../../benchmarks/programs/) directory.
+1. Add a new crate to the [guest](../../benchmarks/guest/) directory.
 2. Add the [benchmark to CI](#adding-a-benchmark-to-ci).
 
 This is called a "guest program" because it is intended to be run on the OpenVM architecture and
@@ -36,21 +36,21 @@ To support host machine execution, the top of your guest program should have:
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
-You can copy from [fibonacci](../../benchmarks/programs/fibonacci) to get started.
+You can copy from [fibonacci](../../benchmarks/guest/fibonacci) to get started.
 The guest program crate should **not** be included in the main repository workspace. Instead the guest
 `Cargo.toml` should have `[workspace]` at the top to keep it standalone. Your IDE will likely not
 lint or use rust-analyzer on the crate while in the workspace, so the recommended setup is to open a separate IDE workspace from the directory of the guest program.
 
 ### Adding the Benchmark
 
-Our proving benchmarks are written as standalone rust binaries. Add one by making a new file in [bin](../../benchmarks/src/bin) by following the [fibonacci example](../../benchmarks/src/bin/fibonacci.rs). We currently only run aggregation proofs when feature "aggregation" is on (off by default). Any general benchmarking utility functions can be added to the library in [`src`](../../benchmarks/src). There are utility functions `build_bench_program` which compiles the guest program crate with target set to `openvm` and reads the output RISC-V ELF file.
+Our proving benchmarks are written as standalone rust binaries. Add one by making a new file in [bin](../../benchmarks/prove/src/bin) by following the [fibonacci example](../../benchmarks/prove/src/bin/fibonacci.rs). We currently only run aggregation proofs when feature "aggregation" is on (off by default). Any general benchmarking utility functions can be added to the library in [`src`](../../benchmarks/utils/src). There are utility functions `build_bench_program` which compiles the guest program crate with target set to `openvm` and reads the output RISC-V ELF file.
 This can then be fed into `bench_from_exe` which will generate a proof of the execution of the ELF (any other `VmExe`) from a given `VmConfig`.
 
 #### Providing Inputs
 
 Inputs must be directly provided to the `bench_from_exe` function: the `input_stream: Vec<Vec<F>>` is a vector of vectors, where `input_stream[i]` will be what is provided to the guest program on the `i`-th call of `openvm::io::read_vec()`. Currently you must manually convert from `u8` to `F` using `FieldAlgebra::from_canonical_u8`.
 
-You can find an example of passing in a single `Vec<u8>` input in [base64_json](../../benchmarks/src/bin/base64_json.rs).
+You can find an example of passing in a single `Vec<u8>` input in [base64_json](../../benchmarks/prove/src/bin/base64_json.rs).
 
 #### Testing the Guest Program
 
@@ -89,7 +89,7 @@ Running a benchmark locally is simple. Just run the following command:
 OUTPUT_PATH="metrics.json" cargo run --release --bin <benchmark_name>
 ```
 
-where `<benchmark_name>.rs` is one of the files in [`src/bin`](../../benchmarks/src/bin).
+where `<benchmark_name>.rs` is one of the files in [`src/bin`](../../benchmarks/prove/src/bin).
 The `OUTPUT_PATH` environmental variable should be set to the file path where you want the collected metrics to be written to. If unset, then metrics are not printed to file.
 
 To run a benchmark with the leaf aggregation, add `--features aggregation` to the above command.
@@ -157,7 +157,7 @@ The following section discusses traditional profiling of the VM runtime executio
 
 ### Criterion Benchmarks
 
-Most benchmarks are binaries that run once since proving benchmarks take longer. For smaller benchmarks, such as to benchmark VM runtime, we use Criterion. These are in the [`benches`](../../benchmarks/benches) directory.
+Most benchmarks are binaries that run once since proving benchmarks take longer. For smaller benchmarks, such as to benchmark VM runtime, we use Criterion. These are in the [`benches`](../../benchmarks/execute/benches) directory.
 
 ```bash
 cargo bench --bench fibonacci_execute
@@ -166,7 +166,7 @@ cargo bench --bench regex_execute
 
 will run the normal criterion benchmark.
 
-We profile using executables without criterion in [`examples`](../../benchmarks/examples). To prevent the ELF build time from being included in the benchmark, we pre-build the ELF using the CLI. Check that the included ELF file in `examples` is up to date before proceeding.
+We profile using executables without criterion in [`examples`](../../benchmarks/execute/examples). To prevent the ELF build time from being included in the benchmark, we pre-build the ELF using the CLI. Check that the included ELF file in `examples` is up to date before proceeding.
 
 ### Flamegraph
 

@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use openvm_benchmarks_utils::{build_and_load_elf, get_programs_dir};
+use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
@@ -11,7 +11,7 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 fn benchmark_function(c: &mut Criterion) {
     let program_dir = get_programs_dir().join("fibonacci");
-    let elf = build_and_load_elf(&program_dir, "release").unwrap();
+    let elf = build_elf(&program_dir, "release").unwrap();
 
     let exe = VmExe::from_elf(
         elf,

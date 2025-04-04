@@ -1,6 +1,5 @@
-extern crate openvm;
-
 use core::hint::black_box;
+use openvm as _;
 
 use openvm_keccak256_guest::keccak256;
 

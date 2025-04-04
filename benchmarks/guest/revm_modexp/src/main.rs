@@ -1,6 +1,5 @@
-extern crate openvm;
-
 use core::hint::black_box;
+use openvm as _;
 
 use hex_literal::hex;
 use revm_precompile::modexp;
