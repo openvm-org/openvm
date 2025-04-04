@@ -11,7 +11,6 @@ syn = { version = "2.0", features = ["full", "extra-traits"] }
 quote = "1.0"
 itertools = "0.14"
 proc-macro2 = "1.0"
-ndarray = "0.16"
 
 [dev-dependencies]
 openvm-sha-air = { workspace = true }
@@ -20,3 +19,6 @@ ndarray.workspace = true
 
 [lib]
 proc-macro = true
+
+[package.metadata.cargo-shear]
+ignored = ["ndarray"]

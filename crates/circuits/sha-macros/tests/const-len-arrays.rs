@@ -7,6 +7,7 @@ const THREE: usize = 3;
 mod test_config;
 use test_config::{TestConfig, TestConfigImpl};
 
+#[allow(dead_code)]
 #[derive(ColsRef)]
 #[config(TestConfig)]
 struct ConstLenArrayTest<T, const N: usize> {
@@ -18,7 +19,7 @@ struct ConstLenArrayTest<T, const N: usize> {
 
 #[test]
 fn const_len_arrays() {
-    let input = [1; 1 + TestConfigImpl::N * 2 + 1 * 2 * 3];
+    let input = [1; 1 + TestConfigImpl::N * 2 + 2 * 3];
     let test: ConstLenArrayTestRef<u32> = ConstLenArrayTestRef::from::<TestConfigImpl>(&input);
     println!("{}", test.a);
     println!("{}", test.b);

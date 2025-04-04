@@ -4,6 +4,7 @@ use openvm_sha_macros::ColsRef;
 mod test_config;
 use test_config::{TestConfig, TestConfigImpl};
 
+#[allow(dead_code)]
 #[derive(ColsRef)]
 #[config(TestConfig)]
 struct TestCols<T, const N: usize> {
@@ -47,7 +48,7 @@ fn plain_from_mut() {
     test.a[0] = 1;
     test.b.a = 1;
     test.b.b[0] = 1;
-    let test2: TestColsRef<u32> = TestColsRef::from_mut::<TestConfigImpl>(&mut test);
+    let test2: TestColsRef<u32> = TestColsRef::from_mut::<TestConfigImpl>(&test);
     println!("{}", test2.a);
     println!("{:?}", test2.b);
 }

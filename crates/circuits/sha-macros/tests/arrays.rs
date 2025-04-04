@@ -3,6 +3,7 @@ use openvm_sha_macros::ColsRef;
 mod test_config;
 use test_config::{TestConfig, TestConfigImpl};
 
+#[allow(dead_code)]
 #[derive(ColsRef)]
 #[config(TestConfig)]
 struct ArrayTest<T, const N: usize> {

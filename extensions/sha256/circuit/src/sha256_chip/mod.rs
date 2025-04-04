@@ -41,7 +41,6 @@ pub struct Sha2VmChip<F: PrimeField32, C: ShaChipConfig> {
     pub records: Vec<Sha2Record<F>>,
     pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
-    offset: usize,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -65,7 +64,6 @@ impl<F: PrimeField32, C: ShaChipConfig> Sha2VmChip<F, C> {
         address_bits: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
         self_bus_idx: BusIndex,
-        offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         Self {
@@ -79,7 +77,6 @@ impl<F: PrimeField32, C: ShaChipConfig> Sha2VmChip<F, C> {
             ),
             bitwise_lookup_chip,
             records: Vec::new(),
-            offset,
             offline_memory,
         }
     }

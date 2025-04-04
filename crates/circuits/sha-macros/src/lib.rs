@@ -25,13 +25,14 @@ pub fn cols_ref(input: TokenStream) -> TokenStream {
 
     let span = derive_input.ident.span();
     let res = cols_ref_impl(derive_input, config);
-    if res.is_err() {
-        syn::Error::new(span, res.err().unwrap().to_string())
-            .to_compile_error()
-            .into()
-    } else {
-        res.unwrap().into()
-    }
+    res.map_or_else(
+        |err| {
+            syn::Error::new(span, err.to_string())
+                .to_compile_error()
+                .into()
+        },
+        |ok| ok.into(),
+    )
 }
 
 fn cols_ref_impl(

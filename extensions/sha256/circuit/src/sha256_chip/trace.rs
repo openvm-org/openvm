@@ -316,7 +316,7 @@ where
                                         debug_assert_eq!(digest_writes.len(), 2);
                                         debug_assert_eq!(cols.writes_aux_base.len(), 2);
                                         debug_assert_eq!(cols.writes_aux_prev_data.nrows(), 2);
-                                        for i in 0..C::NUM_WRITES {
+                                        for (i, digest_write) in digest_writes.iter().enumerate() {
                                             let prev_data =
                                                 cols.writes_aux_prev_data.row(i).to_vec();
                                             // write to a temporary MemoryWriteAuxCols object and then copy it over to the columns struct
@@ -327,10 +327,8 @@ where
                                                 cols.writes_aux_base[i],
                                                 prev_data.try_into().unwrap(),
                                             );
-                                            memory_aux_cols_factory.generate_write_aux(
-                                                digest_writes[i],
-                                                &mut writes_aux,
-                                            );
+                                            memory_aux_cols_factory
+                                                .generate_write_aux(digest_write, &mut writes_aux);
                                             cols.writes_aux_base[i] = writes_aux.get_base();
                                             cols.writes_aux_prev_data
                                                 .row_mut(i)

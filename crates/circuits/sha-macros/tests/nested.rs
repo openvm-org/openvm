@@ -1,6 +1,7 @@
 use openvm_sha_air::{Sha256Config, ShaConfig};
 use openvm_sha_macros::ColsRef;
 
+#[allow(dead_code)]
 #[derive(ColsRef)]
 #[config(ShaConfig)]
 struct Test1Cols<T, const WORD_BITS: usize> {
@@ -8,6 +9,7 @@ struct Test1Cols<T, const WORD_BITS: usize> {
     pub nested: Test2Cols<T, WORD_BITS>,
 }
 
+#[allow(dead_code)]
 #[derive(ColsRef)]
 #[config(ShaConfig)]
 struct Test2Cols<T, const WORD_BITS: usize> {
@@ -34,8 +36,8 @@ fn nested_mut() {
 #[test]
 fn nested_from_mut() {
     let mut mut_input = [0; 1 + 1 + 32];
-    let mut mut_test: Test1ColsRefMut<u32> = Test1ColsRefMut::from::<Sha256Config>(&mut mut_input);
-    let const_test: Test1ColsRef<u32> = Test1ColsRef::from_mut::<Sha256Config>(&mut mut_test);
+    let mut_test: Test1ColsRefMut<u32> = Test1ColsRefMut::from::<Sha256Config>(&mut mut_input);
+    let const_test: Test1ColsRef<u32> = Test1ColsRef::from_mut::<Sha256Config>(&mut_test);
     println!(
         "{}, {}, {}",
         const_test.a, const_test.nested.b, const_test.nested.c

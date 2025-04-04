@@ -99,7 +99,6 @@ fn rand_sha_test<C: ShaChipConfig + 'static>(opcode: Rv32Sha2Opcode) {
         tester.address_bits(),
         bitwise_chip.clone(),
         BUS_IDX,
-        Rv32Sha2Opcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
@@ -146,7 +145,6 @@ fn execute_roundtrip_sanity_test<C: ShaChipConfig>(opcode: Rv32Sha2Opcode) {
         tester.address_bits(),
         bitwise_chip.clone(),
         BUS_IDX,
-        Rv32Sha2Opcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 

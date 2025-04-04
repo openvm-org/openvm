@@ -1,4 +1,3 @@
-use crate::{Sha384Config, ShaDigestColsRefMut, ShaRoundColsRef, ShaRoundColsRefMut};
 use std::{borrow::BorrowMut, cmp::max, sync::Arc};
 
 use openvm_circuit::arch::{
@@ -22,7 +21,10 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
 
-use crate::{compose, small_sig0_field, Sha256Config, Sha2Air, Sha512Config, ShaConfig};
+use crate::{
+    compose, small_sig0_field, Sha256Config, Sha2Air, Sha384Config, Sha512Config, ShaConfig,
+    ShaDigestColsRefMut, ShaRoundColsRef, ShaRoundColsRefMut,
+};
 
 // A wrapper AIR purely for testing purposes
 #[derive(Clone, Debug)]

@@ -88,7 +88,6 @@ impl<F: PrimeField32> VmExtension<F> for Sha2 {
             builder.system_config().memory_config.pointer_max_bits,
             bitwise_lu_chip.clone(),
             builder.new_bus_idx(),
-            Rv32Sha2Opcode::CLASS_OFFSET,
             builder.system_base().offline_memory(),
         );
         inventory.add_executor(sha256_chip, vec![Rv32Sha2Opcode::SHA256.global_opcode()])?;
@@ -98,7 +97,6 @@ impl<F: PrimeField32> VmExtension<F> for Sha2 {
             builder.system_config().memory_config.pointer_max_bits,
             bitwise_lu_chip.clone(),
             builder.new_bus_idx(),
-            Rv32Sha2Opcode::CLASS_OFFSET,
             builder.system_base().offline_memory(),
         );
         inventory.add_executor(sha512_chip, vec![Rv32Sha2Opcode::SHA512.global_opcode()])?;
@@ -108,7 +106,6 @@ impl<F: PrimeField32> VmExtension<F> for Sha2 {
             builder.system_config().memory_config.pointer_max_bits,
             bitwise_lu_chip,
             builder.new_bus_idx(),
-            Rv32Sha2Opcode::CLASS_OFFSET,
             builder.system_base().offline_memory(),
         );
         inventory.add_executor(sha384_chip, vec![Rv32Sha2Opcode::SHA384.global_opcode()])?;

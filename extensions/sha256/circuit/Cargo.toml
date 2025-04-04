@@ -23,8 +23,7 @@ derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 serde.workspace = true
 sha2 = { version = "0.10", default-features = false }
-strum = { workspace = true }
-ndarray.workspace = true
+ndarray = { workspace = true, default-features = false }
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
@@ -39,3 +38,6 @@ mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 nightly-features = ["openvm-circuit/nightly-features"]
+
+[package.metadata.cargo-shear]
+ignored = ["ndarray"]

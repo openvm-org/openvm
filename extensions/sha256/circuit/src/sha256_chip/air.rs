@@ -1,5 +1,4 @@
-use std::cmp::min;
-use std::convert::TryInto;
+use std::{cmp::min, convert::TryInto};
 
 use openvm_circuit::{
     arch::ExecutionBridge,
