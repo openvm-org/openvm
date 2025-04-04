@@ -5,7 +5,7 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, parse_quote, DeriveInput};
 
-#[proc_macro_derive(ColsRef, attributes(plain, config))]
+#[proc_macro_derive(ColsRef, attributes(aligned_borrow, config, plain_array))]
 pub fn cols_ref(input: TokenStream) -> TokenStream {
     let derive_input: DeriveInput = parse_macro_input!(input as DeriveInput);
 
@@ -166,6 +166,7 @@ fn make_struct(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_mac
 
     quote! {
         #clone_impl
+        #[derive(Debug)]
         #vis struct #name <'a, #generic_type> {
             #( pub #idents: #field_types ),*
         }
@@ -178,6 +179,7 @@ fn make_struct(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_mac
                 }
             }
 
+            // TODO: make this return the size in bytes (to support fields of constant size)
             // returns number of cells in the struct (where each cell has type T)
             pub const fn width<C: #config>() -> usize {
                 0 #( + #length_exprs )*
@@ -200,49 +202,39 @@ fn make_from_mut(
         derive_clone: _,
     } = struct_info;
 
-    let fields = match fields {
-        syn::Fields::Named(fields) => fields.named,
-        _ => {
-            return Err("Fields must be named".to_string());
-        }
-    };
-
     let from_mut_impl = fields
         .iter()
         .map(|f| {
             let ident = f.ident.clone().unwrap();
 
-            if f.attrs.iter().any(|attr| attr.path().is_ident("plain")) {
+            let derives_aligned_borrow = f
+                .attrs
+                .iter()
+                .any(|attr| attr.path().is_ident("aligned_borrow"));
+
+            let is_array = matches!(f.ty, syn::Type::Array(_));
+
+            if is_array {
+                Ok(quote! {
+                    other.#ident.view()
+                })
+            } else if derives_aligned_borrow {
                 Ok(quote! {
                     other.#ident
                 })
+            } else if is_columns_struct(&f.ty) {
+                // lifetime 'b is used in from_mut to allow more flexible lifetime of return value
+                let cols_ref_type =
+                    get_const_cols_ref_type(&f.ty, &generic_type, parse_quote! { 'b });
+                Ok(quote! {
+                    <#cols_ref_type>::from_mut::<C>(&other.#ident)
+                })
+            } else if is_generic_type(&f.ty, &generic_type) {
+                Ok(quote! {
+                    &other.#ident
+                })
             } else {
-                match &f.ty {
-                    syn::Type::Path(type_path) => {
-                        let first_ident =
-                            type_path.path.segments.first().unwrap().ident.to_string();
-                        if first_ident.ends_with("Cols") {
-                            // lifetime 'b is used in from_mut to allow more flexible lifetime of return value
-                            let cols_ref_type =
-                                get_const_cols_ref_type(&f.ty, &generic_type, parse_quote! { 'b });
-                            Ok(quote! {
-                                <#cols_ref_type>::from_mut::<C>(&other.#ident)
-                            })
-                        } else {
-                            // Not a ColsRef type, so the type is T
-                            Ok(quote! {
-                                &other.#ident
-                            })
-                        }
-                    }
-                    syn::Type::Array(_) => {
-                        // type is nested array of T
-                        Ok(quote! {
-                            other.#ident.view()
-                        })
-                    }
-                    _ => Err(format!("Unsupported type: {:?}", f.ty)),
-                }
+                panic!("Unsupported field type: {:?}", f.ty);
             }
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -258,6 +250,7 @@ fn make_from_mut(
     };
 
     Ok(parse_quote! {
+        // lifetime 'b is used in from_mut to allow more flexible lifetime of return value
         impl<'b, #generic_type> #name<'b, #generic_type> {
             pub fn from_mut<'a, C: #config>(other: &'b #mut_struct_type) -> Self
             {
@@ -291,10 +284,111 @@ fn get_const_cols_ref_fields(
     let length_var = format_ident!("{}_length", f.ident.clone().unwrap());
     let slice_var = format_ident!("{}_slice", f.ident.clone().unwrap());
 
-    if f.attrs.iter().any(|attr| attr.path().is_ident("plain")) {
-        // treat the field as a struct that derives AlignedBorrow
+    let derives_aligned_borrow = f
+        .attrs
+        .iter()
+        .any(|attr| attr.path().is_ident("aligned_borrow"));
+
+    let has_plain_array_attribute = f.attrs.iter().any(|attr| attr.path().is_ident("array"));
+    let is_array = matches!(f.ty, syn::Type::Array(_));
+
+    if has_plain_array_attribute && !is_array {
+        panic!("field marked with `plain_array` attribute must be an array");
+    }
+
+    if is_array {
+        let ArrayInfo { dims, elem_type } = get_array_info(&f.ty, const_generics);
+        debug_assert!(
+            !dims.is_empty(),
+            "Array field must have at least one dimension"
+        );
+
+        let ndarray_ident: syn::Ident = format_ident!("ArrayView{}", dims.len());
+        let ndarray_type: syn::Type = parse_quote! {
+            ndarray::#ndarray_ident<'a, #elem_type>
+        };
+
+        // dimensions of the array in terms of number of cells
+        let dim_exprs = dims
+            .iter()
+            .map(|d| match d {
+                // need to prepend C:: for const generic array dimensions
+                Dimension::ConstGeneric(expr) => quote! { C::#expr },
+                Dimension::Other(expr) => quote! { #expr },
+            })
+            .collect_vec();
+
+        if has_plain_array_attribute {
+            Err("unsupported currently".to_string())
+            /*
+            debug_assert!(
+                dims.len() == 1,
+                "field marked with `plain_array` attribute must be a 1D array"
+            );
+
+            let length_expr = quote! {
+                1 #(* #dim_exprs)*
+            };
+
+            Ok(FieldInfo {
+                ty: parse_quote! {
+                    & #f.ty
+                },
+                length_expr: length_expr.clone(),
+                prepare_subslice: quote! {
+                    let (#slice_var, slice) = slice.split_at(#length_expr);
+                    let #slice_var = #slice_var.try_into().unwrap();
+                },
+                initializer: quote! {
+                    #slice_var
+                },
+            })
+            */
+        } else if derives_aligned_borrow {
+            let length_expr = quote! {
+                <#elem_type>::width() #(* #dim_exprs)*
+            };
+
+            Ok(FieldInfo {
+                ty: parse_quote! {
+                    #ndarray_type
+                },
+                length_expr: length_expr.clone(),
+                prepare_subslice: quote! {
+                    let (#slice_var, slice) = slice.split_at(#length_expr);
+                    let #slice_var: &[#elem_type] = unsafe { &*(#slice_var as *const [T] as *const [#elem_type]) };
+                    let #slice_var = ndarray::#ndarray_ident::from_shape( ( #(#dim_exprs),* ) , #slice_var).unwrap();
+                },
+                initializer: quote! {
+                    #slice_var
+                },
+            })
+        } else if is_columns_struct(&elem_type) {
+            panic!("Arrays of columns structs are currently not supported");
+        } else if is_generic_type(&elem_type, generic_type) {
+            let length_expr = quote! {
+                1 #(* #dim_exprs)*
+            };
+            Ok(FieldInfo {
+                ty: parse_quote! {
+                    #ndarray_type
+                },
+                length_expr: length_expr.clone(),
+                prepare_subslice: quote! {
+                    let (#slice_var, slice) = slice.split_at(#length_expr);
+                    let #slice_var = ndarray::#ndarray_ident::from_shape( ( #(#dim_exprs),* ) , #slice_var).unwrap();
+                },
+                initializer: quote! {
+                    #slice_var
+                },
+            })
+        } else {
+            panic!("Unsupported field type: {:?}", f.ty);
+        }
+    } else if derives_aligned_borrow {
+        // treat the field as a struct that derives AlignedBorrow (and doesn't depend on the config)
         let f_ty = &f.ty;
-        return Ok(FieldInfo {
+        Ok(FieldInfo {
             ty: parse_quote! {
                 &'a #f_ty
             },
@@ -311,11 +405,10 @@ fn get_const_cols_ref_fields(
                     #slice_var.borrow()
                 }
             },
-        });
-    }
-
-    match get_const_cols_ref_type(&f.ty, generic_type, parse_quote! { 'a }) {
-        Some(const_cols_ref_type) => Ok(FieldInfo {
+        })
+    } else if is_columns_struct(&f.ty) {
+        let const_cols_ref_type = get_const_cols_ref_type(&f.ty, generic_type, parse_quote! { 'a });
+        Ok(FieldInfo {
             ty: parse_quote! {
                 #const_cols_ref_type
             },
@@ -328,69 +421,27 @@ fn get_const_cols_ref_fields(
                 let #slice_var = <#const_cols_ref_type>::from::<C>(#slice_var);
             },
             initializer: quote! {
-                #slice_var
+            #slice_var
             },
-        }),
-        None => {
-            // Not a ColsRef type, so assume it is T (the generic type) or a nested array of T
-            let dims = get_dims(&f.ty, const_generics).map_err(|e| {
-                format!(
-                    "Failed to parse the type of the field '{}'. {}",
-                    f.ident.clone().unwrap(),
-                    e
-                )
-            })?;
-
-            if dims.is_empty() {
-                // the field has type T
-                Ok(FieldInfo {
-                    ty: parse_quote! {
-                        &'a #generic_type
-                    },
-                    length_expr: quote! {
-                        1
-                    },
-                    prepare_subslice: quote! {
-                        let #length_var = 1;
-                        let (#slice_var, slice) = slice.split_at(#length_var);
-                    },
-                    initializer: quote! {
-                        &#slice_var[0]
-                    },
-                })
-            } else {
-                // nested array of T
-                let ndarray_ident: syn::Ident = format_ident!("ArrayView{}", dims.len());
-                let ndarray_type: syn::Type = parse_quote! {
-                    ndarray::#ndarray_ident<'a, #generic_type>
-                };
-                let dim_exprs = dims
-                    .iter()
-                    .map(|d| match d {
-                        // need to prepend C:: for const generic array dimensions
-                        Dimension::ConstGeneric(expr) => quote! { C::#expr },
-                        Dimension::Other(expr) => quote! { #expr },
-                    })
-                    .collect_vec();
-                let length_expr = quote! {
-                    1 #(* #dim_exprs)*
-                };
-
-                Ok(FieldInfo {
-                    ty: parse_quote! {
-                        #ndarray_type
-                    },
-                    length_expr: length_expr.clone(),
-                    prepare_subslice: quote! {
-                        let (#slice_var, slice) = slice.split_at(#length_expr);
-                        let #slice_var = ndarray::#ndarray_ident::from_shape( ( #(#dim_exprs),* ) , #slice_var).unwrap();
-                    },
-                    initializer: quote! {
-                        #slice_var
-                    },
-                })
-            }
-        }
+        })
+    } else if is_generic_type(&f.ty, generic_type) {
+        Ok(FieldInfo {
+            ty: parse_quote! {
+                &'a #generic_type
+            },
+            length_expr: quote! {
+                1
+            },
+            prepare_subslice: quote! {
+                let #length_var = 1;
+                let (#slice_var, slice) = slice.split_at(#length_var);
+            },
+            initializer: quote! {
+                &#slice_var[0]
+            },
+        })
+    } else {
+        panic!("Unsupported field type: {:?}", f.ty);
     }
 }
 
@@ -403,10 +454,80 @@ fn get_mut_cols_ref_fields(
     let length_var = format_ident!("{}_length", f.ident.clone().unwrap());
     let slice_var = format_ident!("{}_slice", f.ident.clone().unwrap());
 
-    if f.attrs.iter().any(|attr| attr.path().is_ident("plain")) {
-        // treat the field as a struct that derives AlignedBorrow
+    let derives_aligned_borrow = f
+        .attrs
+        .iter()
+        .any(|attr| attr.path().is_ident("aligned_borrow"));
+
+    let is_array = matches!(f.ty, syn::Type::Array(_));
+
+    if is_array {
+        let ArrayInfo { dims, elem_type } = get_array_info(&f.ty, const_generics);
+        debug_assert!(
+            !dims.is_empty(),
+            "Array field must have at least one dimension"
+        );
+
+        let ndarray_ident: syn::Ident = format_ident!("ArrayViewMut{}", dims.len());
+        let ndarray_type: syn::Type = parse_quote! {
+            ndarray::#ndarray_ident<'a, #elem_type>
+        };
+
+        // dimensions of the array in terms of number of cells
+        let dim_exprs = dims
+            .iter()
+            .map(|d| match d {
+                // need to prepend C:: for const generic array dimensions
+                Dimension::ConstGeneric(expr) => quote! { C::#expr },
+                Dimension::Other(expr) => quote! { #expr },
+            })
+            .collect_vec();
+
+        if derives_aligned_borrow {
+            let length_expr = quote! {
+                <#elem_type>::width() #(* #dim_exprs)*
+            };
+
+            Ok(FieldInfo {
+                ty: parse_quote! {
+                    #ndarray_type
+                },
+                length_expr: length_expr.clone(),
+                prepare_subslice: quote! {
+                    let (#slice_var, slice) = slice.split_at_mut (#length_expr);
+                    let #slice_var: &mut [#elem_type] = unsafe { &mut *(#slice_var as *mut [T] as *mut [#elem_type]) };
+                    let #slice_var = ndarray::#ndarray_ident::from_shape( ( #(#dim_exprs),* ) , #slice_var).unwrap();
+                },
+                initializer: quote! {
+                    #slice_var
+                },
+            })
+        } else if is_columns_struct(&elem_type) {
+            panic!("Arrays of columns structs are currently not supported");
+        } else if is_generic_type(&elem_type, generic_type) {
+            let length_expr = quote! {
+                1 #(* #dim_exprs)*
+            };
+            Ok(FieldInfo {
+                ty: parse_quote! {
+                    #ndarray_type
+                },
+                length_expr: length_expr.clone(),
+                prepare_subslice: quote! {
+                    let (#slice_var, slice) = slice.split_at_mut(#length_expr);
+                    let #slice_var = ndarray::#ndarray_ident::from_shape( ( #(#dim_exprs),* ) , #slice_var).unwrap();
+                },
+                initializer: quote! {
+                    #slice_var
+                },
+            })
+        } else {
+            panic!("Unsupported field type: {:?}", f.ty);
+        }
+    } else if derives_aligned_borrow {
+        // treat the field as a struct that derives AlignedBorrow (and doesn't depend on the config)
         let f_ty = &f.ty;
-        return Ok(FieldInfo {
+        Ok(FieldInfo {
             ty: parse_quote! {
                 &'a mut #f_ty
             },
@@ -415,7 +536,7 @@ fn get_mut_cols_ref_fields(
             },
             prepare_subslice: quote! {
                 let #length_var = <#f_ty>::width();
-                let (mut #slice_var, mut slice) = slice.split_at_mut(#length_var);
+                let (#slice_var, slice) = slice.split_at_mut(#length_var);
             },
             initializer: quote! {
                 {
@@ -423,11 +544,10 @@ fn get_mut_cols_ref_fields(
                     #slice_var.borrow_mut()
                 }
             },
-        });
-    }
-
-    match get_mut_cols_ref_type(&f.ty, generic_type) {
-        Some(mut_cols_ref_type) => Ok(FieldInfo {
+        })
+    } else if is_columns_struct(&f.ty) {
+        let mut_cols_ref_type = get_mut_cols_ref_type(&f.ty, generic_type);
+        Ok(FieldInfo {
             ty: parse_quote! {
                 #mut_cols_ref_type
             },
@@ -436,72 +556,45 @@ fn get_mut_cols_ref_fields(
             },
             prepare_subslice: quote! {
                 let #length_var = <#mut_cols_ref_type>::width::<C>();
-                let (mut #slice_var, mut slice) = slice.split_at_mut(#length_var);
+                let (#slice_var, slice) = slice.split_at_mut(#length_var);
                 let #slice_var = <#mut_cols_ref_type>::from::<C>(#slice_var);
             },
             initializer: quote! {
                 #slice_var
             },
-        }),
-        None => {
-            // Not a ColsRef type, so assume it is T (the generic type) or a nested array of T
-            let dims = get_dims(&f.ty, const_generics).map_err(|e| {
-                format!(
-                    "Failed to parse the type of the field '{}'. {}",
-                    f.ident.clone().unwrap(),
-                    e
-                )
-            })?;
+        })
+    } else if is_generic_type(&f.ty, generic_type) {
+        Ok(FieldInfo {
+            ty: parse_quote! {
+                &'a mut #generic_type
+            },
+            length_expr: quote! {
+                1
+            },
+            prepare_subslice: quote! {
+                let #length_var = 1;
+                let (#slice_var, slice) = slice.split_at_mut(#length_var);
+            },
+            initializer: quote! {
+                &mut #slice_var[0]
+            },
+        })
+    } else {
+        panic!("Unsupported field type: {:?}", f.ty);
+    }
+}
 
-            if dims.is_empty() {
-                // the field has type T
-                Ok(FieldInfo {
-                    ty: parse_quote! {
-                        &'a mut #generic_type
-                    },
-                    length_expr: quote! {
-                        1
-                    },
-                    prepare_subslice: quote! {
-                        let #length_var = 1;
-                        let (mut #slice_var, mut slice) = slice.split_at_mut(#length_var);
-                    },
-                    initializer: quote! {
-                        &mut #slice_var[0]
-                    },
-                })
-            } else {
-                // nested array of T
-                let ndarray_ident: syn::Ident = format_ident!("ArrayViewMut{}", dims.len());
-                let ndarray_type: syn::Type = parse_quote! {
-                    ndarray::#ndarray_ident<'a, #generic_type>
-                };
-                let dim_exprs = dims
-                    .iter()
-                    .map(|d| match d {
-                        // need to prepend C:: for const generic array dimensions
-                        Dimension::ConstGeneric(expr) => quote! { C::#expr },
-                        Dimension::Other(expr) => quote! { #expr },
-                    })
-                    .collect_vec();
-                let length_expr = quote! {
-                    1 #(* #dim_exprs)*
-                };
-                Ok(FieldInfo {
-                    ty: parse_quote! {
-                        #ndarray_type
-                    },
-                    length_expr: length_expr.clone(),
-                    prepare_subslice: quote! {
-                        let (mut #slice_var, mut slice) = slice.split_at_mut(#length_expr);
-                        let mut #slice_var = ndarray::#ndarray_ident::from_shape( ( #(#dim_exprs),* ) , #slice_var).unwrap();
-                    },
-                    initializer: quote! {
-                        #slice_var
-                    },
-                })
-            }
-        }
+fn is_columns_struct(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        type_path
+            .path
+            .segments
+            .iter()
+            .last()
+            .map(|s| s.ident.to_string().ends_with("Cols"))
+            .unwrap_or(false)
+    } else {
+        false
     }
 }
 
@@ -511,41 +604,71 @@ fn get_const_cols_ref_type(
     ty: &syn::Type,
     generic_type: &syn::TypeParam,
     lifetime: syn::Lifetime,
-) -> Option<syn::TypePath> {
+) -> syn::TypePath {
+    if !is_columns_struct(ty) {
+        panic!("Expected a columns struct, got {:?}", ty);
+    }
+
     if let syn::Type::Path(type_path) = ty {
-        type_path.path.segments.iter().last().and_then(|s| {
-            if s.ident.to_string().ends_with("Cols") {
-                let const_cols_ref_ident = format_ident!("{}Ref", s.ident);
-                let const_cols_ref_type = parse_quote! {
-                    #const_cols_ref_ident<#lifetime, #generic_type>
-                };
-                Some(const_cols_ref_type)
-            } else {
-                None
-            }
-        })
+        let s = type_path.path.segments.iter().last().unwrap();
+        if s.ident.to_string().ends_with("Cols") {
+            let const_cols_ref_ident = format_ident!("{}Ref", s.ident);
+            let const_cols_ref_type = parse_quote! {
+                #const_cols_ref_ident<#lifetime, #generic_type>
+            };
+            const_cols_ref_type
+        } else {
+            panic!("is_columns_struct returned true for type {:?} but the last segment is not a columns struct", ty);
+        }
     } else {
-        None
+        panic!(
+            "is_columns_struct returned true but the type {:?} is not a path",
+            ty
+        );
     }
 }
 
 // If 'ty' is a struct that derives ColsRef, return the ColsRefMut struct type
 // Otherwise, return None
-fn get_mut_cols_ref_type(ty: &syn::Type, generic_type: &syn::TypeParam) -> Option<syn::TypePath> {
+fn get_mut_cols_ref_type(ty: &syn::Type, generic_type: &syn::TypeParam) -> syn::TypePath {
+    if !is_columns_struct(ty) {
+        panic!("Expected a columns struct, got {:?}", ty);
+    }
+
     if let syn::Type::Path(type_path) = ty {
-        type_path.path.segments.iter().last().and_then(|s| {
-            if s.ident.to_string().ends_with("Cols") {
-                let mut_cols_ref_ident = format_ident!("{}RefMut", s.ident);
-                let mut_cols_ref_type = parse_quote! {
-                    #mut_cols_ref_ident<'a, #generic_type>
-                };
-                Some(mut_cols_ref_type)
-            } else {
-                None
-            }
-        })
+        let s = type_path.path.segments.iter().last().unwrap();
+        if s.ident.to_string().ends_with("Cols") {
+            let mut_cols_ref_ident = format_ident!("{}RefMut", s.ident);
+            let mut_cols_ref_type = parse_quote! {
+                #mut_cols_ref_ident<'a, #generic_type>
+            };
+            mut_cols_ref_type
+        } else {
+            panic!("is_columns_struct returned true for type {:?} but the last segment is not a columns struct", ty);
+        }
     } else {
-        None
+        panic!(
+            "is_columns_struct returned true but the type {:?} is not a path",
+            ty
+        );
+    }
+}
+
+fn is_generic_type(ty: &syn::Type, generic_type: &syn::TypeParam) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        if type_path.path.segments.len() == 1 {
+            type_path
+                .path
+                .segments
+                .iter()
+                .last()
+                .map(|s| s.ident == generic_type.ident)
+                .unwrap_or(false)
+        } else {
+            false
+        }
+    } else {
+        false
     }
 }
 
@@ -554,14 +677,38 @@ enum Dimension {
     ConstGeneric(syn::Expr),
     Other(syn::Expr),
 }
-fn get_dims(ty: &syn::Type, const_generics: &[&syn::Ident]) -> Result<Vec<Dimension>, String> {
-    get_dims_impl(ty, const_generics).map(|dims| dims.into_iter().rev().collect())
+
+// Describes a nested array
+struct ArrayInfo {
+    dims: Vec<Dimension>,
+    elem_type: syn::Type,
 }
 
-fn get_dims_impl(ty: &syn::Type, const_generics: &[&syn::Ident]) -> Result<Vec<Dimension>, String> {
+fn get_array_info(ty: &syn::Type, const_generics: &[&syn::Ident]) -> ArrayInfo {
+    let dims = get_dims(ty, const_generics);
+    let elem_type = get_elem_type(ty);
+    ArrayInfo { dims, elem_type }
+}
+
+fn get_elem_type(ty: &syn::Type) -> syn::Type {
+    match ty {
+        syn::Type::Array(array) => get_elem_type(array.elem.as_ref()),
+        syn::Type::Path(_) => ty.clone(),
+        _ => panic!("Unsupported type: {:?}", ty),
+    }
+}
+
+fn get_dims(ty: &syn::Type, const_generics: &[&syn::Ident]) -> Vec<Dimension> {
+    get_dims_impl(ty, const_generics)
+        .into_iter()
+        .rev()
+        .collect()
+}
+
+fn get_dims_impl(ty: &syn::Type, const_generics: &[&syn::Ident]) -> Vec<Dimension> {
     match ty {
         syn::Type::Array(array) => {
-            let mut dims = get_dims_impl(array.elem.as_ref(), const_generics)?;
+            let mut dims = get_dims_impl(array.elem.as_ref(), const_generics);
             match &array.len {
                 syn::Expr::Path(syn::ExprPath { path, .. }) => {
                     let len_ident = path.get_ident();
@@ -572,11 +719,11 @@ fn get_dims_impl(ty: &syn::Type, const_generics: &[&syn::Ident]) -> Result<Vec<D
                     }
                 }
                 syn::Expr::Lit(expr_lit) => dims.push(Dimension::Other(expr_lit.clone().into())),
-                _ => return Err("Unsupported array length type".to_string()),
+                _ => panic!("Unsupported array length type"),
             }
-            Ok(dims)
+            dims
         }
-        syn::Type::Path(_) => Ok(Vec::new()),
-        _ => Err("Unsupported field type".to_string()),
+        syn::Type::Path(_) => Vec::new(),
+        _ => panic!("Unsupported field type"),
     }
 }

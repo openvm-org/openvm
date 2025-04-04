@@ -122,12 +122,11 @@ pub struct ShaMessageHelperCols<
 #[config(ShaConfig)]
 pub struct ShaFlagsCols<T, const ROW_VAR_CNT: usize> {
     pub is_round_row: T,
-    /// A flag that indicates if the current row is among the first 4 rows of a block
+    /// A flag that indicates if the current row is among the first 4 rows of a block (the message rows)
     pub is_first_4_rows: T,
     pub is_digest_row: T,
     pub is_last_block: T,
     /// We will encode the row index [0..17) using 5 cells
-    //#[length(ROW_VAR_CNT)]
     pub row_idx: [T; ROW_VAR_CNT],
     /// The global index of the current block
     pub global_block_idx: T,
@@ -150,7 +149,7 @@ impl<O, T: Copy + core::ops::Add<Output = O>, const ROW_VAR_CNT: usize>
     }
 }
 
-impl<'a, O, T: Copy + core::ops::Add<Output = O>> ShaFlagsColsRef<'a, T> {
+impl<O, T: Copy + core::ops::Add<Output = O>> ShaFlagsColsRef<'_, T> {
     pub fn is_not_padding_row(&self) -> O {
         *self.is_round_row + *self.is_digest_row
     }

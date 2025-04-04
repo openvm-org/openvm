@@ -1,5 +1,7 @@
 use std::ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr};
 
+use crate::{ShaDigestColsRef, ShaRoundColsRef};
+
 pub trait ShaConfig: Send + Sync + Clone {
     type Word: 'static
         + Shr<usize, Output = Self::Word>
@@ -44,48 +46,25 @@ pub trait ShaConfig: Send + Sync + Clone {
     const HASH_WORDS: usize;
     /// Number of vars needed to encode the row index with [Encoder]
     const ROW_VAR_CNT: usize;
-
     /// Width of the ShaRoundCols
-    const ROUND_WIDTH: usize = Self::FLAGS_WIDTH
-        + Self::WORK_VARS_WIDTH
-        + Self::MESSAGE_HELPER_WIDTH
-        + Self::MESSAGE_SCHEDULE_WIDTH;
+    const ROUND_WIDTH: usize = ShaRoundColsRef::<u8>::width::<Self>();
     /// Width of the ShaDigestCols
-    const DIGEST_WIDTH: usize = Self::FLAGS_WIDTH
-        + Self::WORK_VARS_WIDTH
-        + Self::MESSAGE_HELPER_WIDTH
-        + Self::MESSAGE_SCHEDULE_WIDTH
-        + Self::WORD_U8S * Self::HASH_WORDS
-        + Self::WORD_U16S * Self::HASH_WORDS;
-    /// Width of the ShaFlagsCols
-    const FLAGS_WIDTH: usize = Self::ROW_VAR_CNT + 6;
-    /// Width of the ShaWorkVarsCols
-    const WORK_VARS_WIDTH: usize =
-        2 * Self::WORD_BITS * Self::ROUNDS_PER_ROW + 2 * Self::WORD_U16S * Self::ROUNDS_PER_ROW;
-    // Width of the ShaMessageHelperCols
-    const MESSAGE_HELPER_WIDTH: usize =
-        Self::WORD_U8S * (Self::ROUNDS_PER_ROW - 1) + 3 * Self::WORD_U16S * Self::ROUNDS_PER_ROW;
-    /// Width of the ShaMessageScheduleCols
-    const MESSAGE_SCHEDULE_WIDTH: usize =
-        Self::WORD_BITS * Self::ROUNDS_PER_ROW + Self::WORD_U8S * Self::ROUNDS_PER_ROW;
-
-    /// Size of the buffer of the first 4 rows of a block (each row's size)
-    const BUFFER_SIZE: usize = Self::ROUNDS_PER_ROW * Self::WORD_U8S;
+    const DIGEST_WIDTH: usize = ShaDigestColsRef::<u8>::width::<Self>();
     /// Width of the ShaCols
     const WIDTH: usize = if Self::ROUND_WIDTH > Self::DIGEST_WIDTH {
         Self::ROUND_WIDTH
     } else {
         Self::DIGEST_WIDTH
     };
-}
+    /// Number of cells used in each message row to store the message
+    const CELLS_PER_ROW: usize = Self::ROUNDS_PER_ROW * Self::WORD_U8S;
 
-/// We can notice that `carry_a`'s and `carry_e`'s are always the same on invalid rows
-/// To optimize the trace generation of invalid rows, we precompute those values.
-/// This trait also stores the constants K and H for the given SHA config.
-pub trait ShaPrecomputedValues<T> {
+    ///  To optimize the trace generation of invalid rows, we precompute those values.
     // these should be appropriately sized for the config
     fn get_invalid_carry_a(round_num: usize) -> &'static [u32];
     fn get_invalid_carry_e(round_num: usize) -> &'static [u32];
+
+    /// We also store the SHA constants K and H
     fn get_k() -> &'static [Self::Word];
     fn get_h() -> &'static [Self::Word];
 }

@@ -10,7 +10,7 @@ use openvm_stark_backend::{
 use sha2::{compress256, compress512, digest::generic_array::GenericArray};
 
 use super::{
-    air::ShaAir, big_sig0_field, big_sig1_field, ch_field, compose, get_flag_pt_array, maj_field,
+    air::Sha2Air, big_sig0_field, big_sig1_field, ch_field, compose, get_flag_pt_array, maj_field,
     small_sig0_field, small_sig1_field, ShaRoundColsRefMut,
 };
 use crate::{
@@ -22,7 +22,7 @@ use crate::{
 /// The trace generation of SHA should be done in two passes.
 /// The first pass should do `get_block_trace` for every block and generate the invalid rows through `get_default_row`
 /// The second pass should go through all the blocks and call `generate_missing_cells`
-impl<C: ShaConfig> ShaAir<C> {
+impl<C: ShaConfig> Sha2Air<C> {
     /// This function takes the input_message (padding not handled), the previous hash,
     /// and returns the new hash after processing the block input
     pub fn get_block_hash(prev_hash: &[C::Word], input: Vec<u8>) -> Vec<C::Word> {
@@ -63,14 +63,14 @@ impl<C: ShaConfig> ShaAir<C> {
         is_last_block: bool,
         global_block_idx: u32,
         local_block_idx: u32,
-        buffer_vals: Vec<&[F]>,
+        buffer_vals: Vec<Vec<F>>,
     ) {
         #[cfg(debug_assertions)]
         {
             assert!(input.len() == C::BLOCK_WORDS);
             assert!(prev_hash.len() == C::HASH_WORDS);
             assert!(buffer_vals.len() == C::MESSAGE_ROWS);
-            assert!(buffer_vals.iter().all(|x| x.len() == C::BUFFER_SIZE));
+            assert!(buffer_vals.iter().all(|x| x.len() == C::CELLS_PER_ROW));
             assert!(trace.len() == trace_width * C::ROWS_PER_BLOCK);
             assert!(trace_start_col + C::WIDTH <= trace_width);
             assert!(self.bitwise_lookup_bus == bitwise_lookup_chip.bus());
@@ -122,9 +122,7 @@ impl<C: ShaConfig> ShaAir<C> {
                             .carry_or_buffer
                             .row_mut(j)
                             .iter_mut()
-                            .zip(
-                                (0..C::WORD_U16S).map(|k| buffer_vals[i][j * C::WORD_U16S * 2 + k]),
-                            )
+                            .zip((0..C::WORD_U8S).map(|k| buffer_vals[i][j * C::WORD_U8S + k]))
                             .for_each(|(x, y)| *x = y);
                     }
                 }
@@ -750,7 +748,7 @@ impl<C: ShaConfig> ShaAir<C> {
 
 /// `records` consists of pairs of `(input_block, is_last_block)`.
 pub fn generate_trace<F: PrimeField32, C: ShaConfig>(
-    sub_air: &ShaAir<C>,
+    sub_air: &Sha2Air<C>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     records: Vec<(Vec<u8>, bool)>,
 ) -> RowMajorMatrix<F> {
@@ -760,7 +758,7 @@ pub fn generate_trace<F: PrimeField32, C: ShaConfig>(
 
     let non_padded_height = records.len() * C::ROWS_PER_BLOCK;
     let height = next_power_of_two_or_zero(non_padded_height);
-    let width = <ShaAir<C> as BaseAir<F>>::width(sub_air);
+    let width = <Sha2Air<C> as BaseAir<F>>::width(sub_air);
     let mut values = F::zero_vec(height * width);
 
     struct BlockContext<C: ShaConfig> {
@@ -788,7 +786,7 @@ pub fn generate_trace<F: PrimeField32, C: ShaConfig>(
             prev_hash = C::get_h().to_vec();
         } else {
             local_block_idx += 1;
-            prev_hash = ShaAir::<C>::get_block_hash(&prev_hash, input);
+            prev_hash = Sha2Air::<C>::get_block_hash(&prev_hash, input);
         }
     }
     // first pass
@@ -812,8 +810,8 @@ pub fn generate_trace<F: PrimeField32, C: ShaConfig>(
                     )
                 })
                 .collect::<Vec<_>>();
-            let empty_buffer = vec![F::ZERO; C::BUFFER_SIZE];
-            let buffer_vals = vec![empty_buffer.as_slice(); C::MESSAGE_ROWS];
+            let empty_buffer = vec![F::ZERO; C::CELLS_PER_ROW];
+            let buffer_vals = vec![empty_buffer.clone(); C::MESSAGE_ROWS];
             sub_air.generate_block_trace(
                 block,
                 width,

@@ -4404,6 +4404,7 @@ version = "1.0.0"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
+ "ndarray",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
@@ -4411,6 +4412,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-rv32im-circuit",
  "openvm-sha-air",
+ "openvm-sha-macros",
  "openvm-sha256-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",

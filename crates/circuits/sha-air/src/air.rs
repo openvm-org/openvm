@@ -24,7 +24,7 @@ use crate::{
 
 /// Expects the message to be padded to a multiple of C::BLOCK_WORDS * C::WORD_BITS bits
 #[derive(Clone, Debug)]
-pub struct ShaAir<C: ShaConfig> {
+pub struct Sha2Air<C: ShaConfig> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub row_idx_encoder: Encoder,
     /// Internal bus for self-interactions in this AIR.
@@ -32,7 +32,7 @@ pub struct ShaAir<C: ShaConfig> {
     _phantom: PhantomData<C>,
 }
 
-impl<C: ShaConfig> ShaAir<C> {
+impl<C: ShaConfig> Sha2Air<C> {
     pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, self_bus_idx: BusIndex) -> Self {
         Self {
             bitwise_lookup_bus,
@@ -43,13 +43,13 @@ impl<C: ShaConfig> ShaAir<C> {
     }
 }
 
-impl<F, C: ShaConfig> BaseAir<F> for ShaAir<C> {
+impl<F, C: ShaConfig> BaseAir<F> for Sha2Air<C> {
     fn width(&self) -> usize {
         max(C::ROUND_WIDTH, C::DIGEST_WIDTH)
     }
 }
 
-impl<AB: InteractionBuilder, C: ShaConfig> SubAir<AB> for ShaAir<C> {
+impl<AB: InteractionBuilder, C: ShaConfig> SubAir<AB> for Sha2Air<C> {
     /// The start column for the sub-air to use
     type AirContext<'a>
         = usize
@@ -69,7 +69,7 @@ impl<AB: InteractionBuilder, C: ShaConfig> SubAir<AB> for ShaAir<C> {
     }
 }
 
-impl<C: ShaConfig> ShaAir<C> {
+impl<C: ShaConfig> Sha2Air<C> {
     /// Implements the single row constraints (i.e. imposes constraints only on local)
     /// Implements some sanity constraints on the row index, flags, and work variables
     fn eval_row<AB: InteractionBuilder>(&self, builder: &mut AB, start_col: usize) {
@@ -211,30 +211,35 @@ impl<C: ShaConfig> ShaAir<C> {
             for j in 0..C::WORD_U16S {
                 let work_var_limb = if i < C::ROUNDS_PER_ROW {
                     compose::<AB::Expr>(
-                        &local
+                        local
                             .work_vars
                             .a
                             .slice(s![C::ROUNDS_PER_ROW - 1 - i, j * 16..(j + 1) * 16])
-                            .as_slice().unwrap(),
+                            .as_slice()
+                            .unwrap(),
                         1,
                     )
                 } else {
                     compose::<AB::Expr>(
-                        &local
+                        local
                             .work_vars
                             .e
                             .slice(s![C::ROUNDS_PER_ROW + 3 - i, j * 16..(j + 1) * 16])
-                            .as_slice().unwrap(),
+                            .as_slice()
+                            .unwrap(),
                         1,
                     )
                 };
                 let final_hash_limb = compose::<AB::Expr>(
-                    &next.final_hash.slice(s![i, j * 2..(j + 1) * 2]).as_slice().unwrap(),
+                    next.final_hash
+                        .slice(s![i, j * 2..(j + 1) * 2])
+                        .as_slice()
+                        .unwrap(),
                     8,
                 );
 
                 carry = AB::Expr::from(AB::F::from_canonical_u32(1 << 16).inverse())
-                    * (next.prev_hash[[i,j]] + work_var_limb + carry - final_hash_limb);
+                    * (next.prev_hash[[i, j]] + work_var_limb + carry - final_hash_limb);
                 builder
                     .when(*next.flags.is_digest_row)
                     .assert_bool(carry.clone());

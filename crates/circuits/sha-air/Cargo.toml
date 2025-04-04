@@ -10,7 +10,7 @@ openvm-stark-backend = { workspace = true }
 sha2 = { version = "0.10", features = ["compress"] }
 rand.workspace = true
 openvm-sha-macros = { workspace = true }
-ndarray = "0.16"
+ndarray.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

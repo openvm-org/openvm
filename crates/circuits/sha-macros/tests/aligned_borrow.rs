@@ -10,13 +10,13 @@ struct TestCols<T, const N: usize> {
     a: [T; N],
     // Forces the field to be treated as a struct that derives AlignedBorrow.
     // In particular, ignores the fact that it ends with `Cols` and doesn't
-    // expect a `PlainTestColsRef` type.
-    #[plain]
-    b: PlainCols<T>,
+    // expect a `AlignedBorrowColsRef` type.
+    #[aligned_borrow]
+    b: AlignedBorrowCols<T>,
 }
 
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
-struct PlainCols<T> {
+struct AlignedBorrowCols<T> {
     a: T,
     b: [T; 4],
 }

@@ -6,22 +6,22 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
-use openvm_sha256_transpiler::Rv32Sha256Opcode::{self, *};
-use openvm_sha_air::get_random_message;
+use openvm_sha256_transpiler::Rv32Sha2Opcode::{self, *};
+use openvm_sha_air::{get_random_message, Sha256Config, Sha512Config};
 use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::Sha256VmChip;
-use crate::{sha256_solve, Sha256VmDigestCols, Sha256VmRoundCols};
+use super::{Sha2VmChip, ShaChipConfig};
+use crate::{sha2_solve, ShaVmDigestColsRef, ShaVmRoundColsRef};
 
 type F = BabyBear;
 const BUS_IDX: BusIndex = 28;
-fn set_and_execute(
+fn set_and_execute<C: ShaChipConfig>(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut Sha256VmChip<F>,
+    chip: &mut Sha2VmChip<F, C>,
     rng: &mut StdRng,
-    opcode: Rv32Sha256Opcode,
+    opcode: Rv32Sha2Opcode,
     message: Option<&[u8]>,
     len: Option<usize>,
 ) {
@@ -40,7 +40,7 @@ fn set_and_execute(
             .borrow()
             .mem_config()
             .pointer_max_bits;
-    let dst_ptr = rng.gen_range(0..max_mem_ptr);
+    let dst_ptr = rng.gen_range(0..max_mem_ptr - C::DIGEST_SIZE as u32);
     let dst_ptr = dst_ptr ^ (dst_ptr & 3);
     tester.write(1, rd, dst_ptr.to_le_bytes().map(F::from_canonical_u8));
     let src_ptr = rng.gen_range(0..(max_mem_ptr - len as u32));
@@ -57,11 +57,25 @@ fn set_and_execute(
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2]),
     );
 
-    let output = sha256_solve(message);
-    assert_eq!(
-        output.map(F::from_canonical_u8),
-        tester.read::<32>(2, dst_ptr as usize)
-    );
+    let output = sha2_solve::<C>(message);
+    if C::OPCODE_NAME == "SHA256" {
+        assert_eq!(
+            output
+                .into_iter()
+                .map(F::from_canonical_u8)
+                .collect::<Vec<_>>(),
+            tester.read::<{ Sha256Config::DIGEST_SIZE }>(2, dst_ptr as usize)
+        );
+    } else if C::OPCODE_NAME == "SHA512" {
+        // TODO: break into two reads
+        assert_eq!(
+            output
+                .into_iter()
+                .map(F::from_canonical_u8)
+                .collect::<Vec<_>>(),
+            tester.read::<{ Sha512Config::DIGEST_SIZE }>(2, dst_ptr as usize)
+        );
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -70,14 +84,13 @@ fn set_and_execute(
 /// Randomly generate computations and execute, ensuring that the generated trace
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
-#[test]
-fn rand_sha256_test() {
+fn rand_sha_test<C: ShaChipConfig + 'static>(opcode: Rv32Sha2Opcode) {
     setup_tracing();
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let mut chip = Sha256VmChip::new(
+    let mut chip = Sha2VmChip::<F, C>::new(
         SystemPort {
             execution_bus: tester.execution_bus(),
             program_bus: tester.program_bus(),
@@ -86,17 +99,27 @@ fn rand_sha256_test() {
         tester.address_bits(),
         bitwise_chip.clone(),
         BUS_IDX,
-        Rv32Sha256Opcode::CLASS_OFFSET,
+        Rv32Sha2Opcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
     let num_tests: usize = 3;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, SHA256, None, None);
+        set_and_execute::<C>(&mut tester, &mut chip, &mut rng, opcode, None, None);
     }
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn rand_sha256_test() {
+    rand_sha_test::<Sha256Config>(SHA256);
+}
+
+#[test]
+fn rand_sha512_test() {
+    rand_sha_test::<Sha512Config>(SHA512);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -104,13 +127,12 @@ fn rand_sha256_test() {
 ///
 /// Ensure that solve functions produce the correct results.
 ///////////////////////////////////////////////////////////////////////////////////////
-#[test]
-fn execute_roundtrip_sanity_test() {
+fn execute_roundtrip_sanity_test<C: ShaChipConfig>(opcode: Rv32Sha2Opcode) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let mut chip = Sha256VmChip::new(
+    let mut chip = Sha2VmChip::<F, C>::new(
         SystemPort {
             execution_bus: tester.execution_bus(),
             program_bus: tester.program_bus(),
@@ -119,28 +141,39 @@ fn execute_roundtrip_sanity_test() {
         tester.address_bits(),
         bitwise_chip.clone(),
         BUS_IDX,
-        Rv32Sha256Opcode::CLASS_OFFSET,
+        Rv32Sha2Opcode::CLASS_OFFSET,
         tester.offline_memory_mutex_arc(),
     );
 
     println!(
-        "Sha256VmDigestCols::width(): {}",
-        Sha256VmDigestCols::<F>::width()
+        "ShaVmDigestColsRef::<F>::width::<C>(): {}",
+        ShaVmDigestColsRef::<F>::width::<C>()
     );
     println!(
-        "Sha256VmRoundCols::width(): {}",
-        Sha256VmRoundCols::<F>::width()
+        "ShaVmRoundColsRef::<F>::width::<C>(): {}",
+        ShaVmRoundColsRef::<F>::width::<C>()
     );
+
     let num_tests: usize = 1;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, SHA256, None, None);
+        set_and_execute::<C>(&mut tester, &mut chip, &mut rng, opcode, None, None);
     }
+}
+
+#[test]
+fn sha256_roundtrip_sanity_test() {
+    execute_roundtrip_sanity_test::<Sha256Config>(SHA256);
+}
+
+#[test]
+fn sha512_roundtrip_sanity_test() {
+    execute_roundtrip_sanity_test::<Sha512Config>(SHA512);
 }
 
 #[test]
 fn sha256_solve_sanity_check() {
     let input = b"Axiom is the best! Axiom is the best! Axiom is the best! Axiom is the best!";
-    let output = sha256_solve(input);
+    let output = sha2_solve::<Sha256Config>(input);
     let expected: [u8; 32] = [
         99, 196, 61, 185, 226, 212, 131, 80, 154, 248, 97, 108, 157, 55, 200, 226, 160, 73, 207,
         46, 245, 169, 94, 255, 42, 136, 193, 15, 40, 133, 173, 22,

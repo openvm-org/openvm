@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "openvm-keccak256-test-programs"
+name = "openvm-sha256-test-programs"
 version = "0.0.0"
 edition = "2021"
 
