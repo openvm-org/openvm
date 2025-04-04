@@ -1,6 +1,6 @@
 # Benchmarks
 
-Documentation for the `openvm-benchmarks` crate. By default, paths will be referenced from the [`benchmarks`](../../benchmarks) directory.
+Documentation for the `openvm-benchmarks-*` crates. By default, paths will be referenced from the [`benchmarks`](../../benchmarks) directory.
 
 - Table of Contents
   - [Latest Benchmark Results](#latest-benchmark-results)
@@ -150,6 +150,51 @@ You can also manually trigger benchmarks by using workflow dispatch from [this p
 To add the benchmark to CI, update the [ci/benchmark-config.json](../../ci/benchmark-config.json) file and set it's configuration parameters. To make the benchmark run on every PR, follow the existing format with `e2e_bench = false`. To make the benchmark run only when label `run_benchmark_e2e` is present, set `e2e_bench = true` and specify values for `root_log_blowup` and `internal_log_blowup`.
 
 The `benchmarks.yml` file reads this JSON and generates a matrix of inputs for the [.github/workflows/benchmark-call.yml](../../.github/workflows/benchmark-call.yml) file, a reusable workflow for running the benchmark, collecting metrics, and storing and displaying results.
+
+## Execution Benchmarks
+
+The crate [`openvm-benchmarks-execute`](../../benchmarks/execute) contains benchmarks for measuring the raw VM execution performance without proving. It includes a CLI tool that allows running various pre-defined benchmark programs to evaluate execution time. Note that this tool doesn't compile the guest ELF files and requires them to be precompiled before running the benchmarks.
+
+### Using the CLI
+
+The CLI provides several options for running execution benchmarks:
+
+```bash
+# Run all benchmark programs
+cargo run --package openvm-benchmarks-execute
+
+# List all available benchmark programs
+cargo run --package openvm-benchmarks-execute -- --list
+
+# Run specific benchmark programs
+cargo run --package openvm-benchmarks-execute -- --programs fibonacci_recursive fibonacci_iterative
+
+# Run all benchmark programs except specified ones
+cargo run --package openvm-benchmarks-execute -- --skip keccak256 sha256
+```
+
+These benchmarks measure pure execution time without proving, making them useful for isolating performance bottlenecks in the VM runtime itself.
+
+### Updating the ELFs
+
+For execution benchmarks, the ELF files need to be compiled before running the benchmarks. The [`openvm-benchmarks-utils`](../../benchmarks/utils) crate provides a CLI tool to build all the benchmark ELFs:
+
+```bash
+# Build all benchmark ELFs
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries
+
+# Build specific benchmark ELFs
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- fibonacci_recursive fibonacci_iterative
+
+# Skip specific programs
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- --skip keccak256 sha256
+
+# Force rebuild even if ELFs already exist (overwrite)
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- --force
+
+# Set build profile (debug or release)
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- --profile debug
+```
 
 ## Profiling Execution
 
