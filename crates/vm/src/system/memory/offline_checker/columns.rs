@@ -19,6 +19,10 @@ pub struct MemoryBaseAuxCols<T> {
     pub(in crate::system::memory) timestamp_lt_aux: LessThanAuxCols<T, AUX_LEN>,
 }
 
+pub trait MemoryWriteAuxColsConfig {
+    const N: usize;
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryWriteAuxCols<T, const N: usize> {
