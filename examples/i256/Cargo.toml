@@ -9,8 +9,9 @@ members = []
 [dependencies]
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
-] }
-openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
+], branch = "develop" }
+openvm-platform = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
+openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
 
 [features]
 default = []
