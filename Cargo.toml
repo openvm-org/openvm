@@ -51,10 +51,10 @@ members = [
     "extensions/keccak256/transpiler",
     "extensions/keccak256/guest",
     "extensions/keccak256/tests",
-    "extensions/sha256/circuit",
-    "extensions/sha256/transpiler",
-    "extensions/sha256/guest",
-    "extensions/sha256/tests",
+    "extensions/sha2/circuit",
+    "extensions/sha2/transpiler",
+    "extensions/sha2/guest",
+    "extensions/sha2/tests",
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
@@ -112,7 +112,7 @@ openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", ta
 openvm-sdk = { path = "crates/sdk", default-features = false }
 openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
 openvm-poseidon2-air = { path = "crates/circuits/poseidon2-air", default-features = false }
-openvm-sha-air = { path = "crates/circuits/sha-air", default-features = false }
+openvm-sha2-air = { path = "crates/circuits/sha2-air", default-features = false }
 openvm-sha-macros = { path = "crates/circuits/sha-macros", default-features = false }
 openvm-circuit-primitives = { path = "crates/circuits/primitives", default-features = false }
 openvm-circuit-primitives-derive = { path = "crates/circuits/primitives/derive", default-features = false }
@@ -141,9 +141,9 @@ openvm-native-recursion = { path = "extensions/native/recursion", default-featur
 openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
-openvm-sha256-circuit = { path = "extensions/sha256/circuit", default-features = false }
-openvm-sha256-transpiler = { path = "extensions/sha256/transpiler", default-features = false }
-openvm-sha256-guest = { path = "extensions/sha256/guest", default-features = false }
+openvm-sha2-circuit = { path = "extensions/sha2/circuit", default-features = false }
+openvm-sha2-transpiler = { path = "extensions/sha2/transpiler", default-features = false }
+openvm-sha2-guest = { path = "extensions/sha2/guest", default-features = false }
 openvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
 openvm-bigint-transpiler = { path = "extensions/bigint/transpiler", default-features = false }
 openvm-bigint-guest = { path = "extensions/bigint/guest", default-features = false }
@@ -212,7 +212,7 @@ rrs-lib = "0.1.0"
 rand = { version = "0.8.5", default-features = false }
 hex = { version = "0.4.3", default-features = false }
 serde-big-array = "0.5.1"
-ndarray = "0.16.1"
+ndarray = { version = "0.16.1", default-features = false }
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }

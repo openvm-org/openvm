@@ -35,8 +35,8 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha2, Sha2Executor, Sha2Periphery};
-use openvm_sha256_transpiler::Sha2TranspilerExtension;
+use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2Periphery};
+use openvm_sha2_transpiler::Sha2TranspilerExtension;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};

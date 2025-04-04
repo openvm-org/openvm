@@ -10,7 +10,7 @@ members = []
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ], branch = "develop" }
-openvm-sha256-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
+openvm-sha2-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
 hex = { version = "0.4.3" }
 
 [features]
