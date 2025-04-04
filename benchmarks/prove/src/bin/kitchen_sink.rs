@@ -4,7 +4,7 @@ use clap::Parser;
 use eyre::Result;
 use num_bigint::BigUint;
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
-use openvm_benchmarks_utils::BenchmarkCli;
+use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::{instructions::exe::VmExe, SystemConfig};
 use openvm_ecc_circuit::{WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG};
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};

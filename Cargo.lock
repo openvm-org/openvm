@@ -3298,7 +3298,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-benchmarks-e2e"
+name = "openvm-benchmarks-execute"
+version = "1.0.0"
+dependencies = [
+ "cargo-openvm",
+ "clap",
+ "criterion",
+ "derive_more 1.0.0",
+ "eyre",
+ "openvm-benchmarks-utils",
+ "openvm-circuit",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-stark-sdk",
+ "openvm-transpiler",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "openvm-benchmarks-prove"
 version = "1.0.0"
 dependencies = [
  "clap",
@@ -3330,28 +3352,7 @@ dependencies = [
  "serde",
  "tiny-keccak",
  "tokio",
-]
-
-[[package]]
-name = "openvm-benchmarks-execute"
-version = "1.0.0"
-dependencies = [
- "cargo-openvm",
- "clap",
- "criterion",
- "derive_more 1.0.0",
- "eyre",
- "openvm-benchmarks-utils",
- "openvm-circuit",
- "openvm-keccak256-circuit",
- "openvm-keccak256-transpiler",
- "openvm-rv32im-circuit",
- "openvm-rv32im-transpiler",
- "openvm-sdk",
- "openvm-stark-sdk",
- "openvm-transpiler",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -3360,15 +3361,8 @@ version = "1.0.0"
 dependencies = [
  "cargo_metadata",
  "clap",
- "derive_more 1.0.0",
  "eyre",
  "openvm-build",
- "openvm-circuit",
- "openvm-native-circuit",
- "openvm-native-compiler",
- "openvm-sdk",
- "openvm-stark-backend",
- "openvm-stark-sdk",
  "openvm-transpiler",
  "tempfile",
  "tracing",

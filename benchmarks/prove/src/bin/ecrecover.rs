@@ -6,7 +6,7 @@ use openvm_algebra_circuit::{
     ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery,
 };
 use openvm_algebra_transpiler::ModularTranspilerExtension;
-use openvm_benchmarks_utils::BenchmarkCli;
+use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::{
     arch::{instructions::exe::VmExe, SystemConfig},
     derive::VmConfig,

@@ -1,8 +1,8 @@
-use std::{fs::read, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 use clap::{command, Parser};
 use eyre::Result;
-use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
+use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{instructions::exe::VmExe, DefaultSegmentationStrategy, VmConfig};
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
@@ -28,8 +28,7 @@ use openvm_stark_sdk::{
     openvm_stark_backend::Chip,
     p3_baby_bear::BabyBear,
 };
-use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
-use tempfile::tempdir;
+use openvm_transpiler::elf::Elf;
 use tracing::info_span;
 
 type F = BabyBear;
@@ -142,7 +141,7 @@ impl BenchmarkCli {
         }
         .to_string();
         let manifest_dir = get_programs_dir().join(program_name);
-        build_bench(manifest_dir, profile)
+        build_elf(&manifest_dir, profile)
     }
 
     pub fn bench_from_exe<VC>(
@@ -169,30 +168,6 @@ impl BenchmarkCli {
             Some(self.agg_config().agg_stark_config.leaf_vm_config()),
         )
     }
-}
-
-pub fn get_programs_dir() -> PathBuf {
-    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    dir.push("programs");
-    dir
-}
-
-pub fn build_bench(manifest_dir: PathBuf, profile: impl ToString) -> Result<Elf> {
-    let pkg = get_package(manifest_dir);
-    let target_dir = tempdir()?;
-    // Build guest with default features
-    let guest_opts = GuestOptions::default()
-        .with_target_dir(target_dir.path())
-        .with_profile(profile.to_string());
-    if let Err(Some(code)) = build_guest_package(&pkg, &guest_opts, None, &None) {
-        std::process::exit(code);
-    }
-    // Assumes the package has a single target binary
-    let elf_path = guest_methods(&pkg, &target_dir, &guest_opts.features, &guest_opts.profile)
-        .pop()
-        .unwrap();
-    let data = read(elf_path)?;
-    Elf::decode(&data, MEM_SIZE as u32)
 }
 
 /// 1. Generate proving key from config.

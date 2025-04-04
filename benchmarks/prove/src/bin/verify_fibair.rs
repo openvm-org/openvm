@@ -1,6 +1,6 @@
 use clap::Parser;
 use eyre::Result;
-use openvm_benchmarks_utils::BenchmarkCli;
+use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;

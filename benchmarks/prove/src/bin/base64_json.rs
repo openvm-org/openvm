@@ -1,6 +1,6 @@
 use clap::Parser;
 use eyre::Result;
-use openvm_benchmarks_utils::BenchmarkCli;
+use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_keccak256_circuit::Keccak256Rv32Config;
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
