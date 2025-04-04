@@ -9,7 +9,9 @@ license = "MIT"
 
 [workspace]
 members = [
-    "benchmarks",
+    "benchmarks/utils",
+    "benchmarks/execute",
+    "benchmarks/prove",
     "crates/prof",
     "crates/sdk",
     "crates/cli",
@@ -127,6 +129,7 @@ openvm-custom-insn = { path = "crates/toolchain/custom_insn", default-features =
 openvm-circuit = { path = "crates/vm", default-features = false }
 openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 openvm-continuations = { path = "crates/continuations", default-features = false }
+cargo-openvm = { path = "crates/cli", default-features = false }
 
 # Extensions
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
@@ -159,6 +162,9 @@ openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
 
+# Benchmarking
+openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
+
 # Plonky3
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
 p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", features = [
@@ -180,6 +186,7 @@ snark-verifier-sdk = { version = "0.2.0", default-features = false, features = [
 ] }
 halo2curves-axiom = "0.7.0"
 
+cargo_metadata = "0.18"
 tracing = "0.1.40"
 bon = "3.2.0"
 serde_json = "1.0.117"

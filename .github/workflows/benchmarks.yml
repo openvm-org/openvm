@@ -7,7 +7,7 @@ on:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
     paths:
-      - "benchmarks/**"
+      - "benchmarks/prove/**"
       - "crates/circuits/**"
       - "crates/toolchain/**"
       - "crates/prof/**"

@@ -15,7 +15,7 @@ pub(crate) fn read_to_struct_toml<T: DeserializeOwned>(path: &PathBuf) -> Result
     Ok(ret)
 }
 
-pub(crate) fn read_config_toml_or_default(config: &PathBuf) -> Result<AppConfig<SdkVmConfig>> {
+pub fn read_config_toml_or_default(config: &PathBuf) -> Result<AppConfig<SdkVmConfig>> {
     if config.exists() {
         read_to_struct_toml(config)
     } else {
