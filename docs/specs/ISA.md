@@ -666,12 +666,13 @@ r32_fp2(a) -> Fp2 {
 
 ### Elliptic Curve Extension
 
-The elliptic curve extension supports arithmetic over elliptic curves `C` in Weierstrass form given by
-equation `C: y^2 = x^3 + C::A * x + C::B` where `C::A` and `C::B` are constants in the coordinate field. We note that
-the definitions of the
-curve arithmetic operations do not depend on `C::B`. The VM configuration will specify a list of supported curves. For
-each Weierstrass curve `C` there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (
-defined below). The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be
+The elliptic curve extension supports arithmetic over elliptic curves `C` in the following forms:
+-  in short Weierstrass form given by equation `C: y^2 = x^3 + C::A * x + C::B` where `C::A` and `C::B` are constants in the coordinate field
+-  in twisted Edwards form given by equation `C: C::A * x^2 + y^2 = 1 + C::D * x^2 * y^2` where `C::A` and `C::D` are constants in the coordinate field
+
+We note that
+the definitions of the curve arithmetic operations for short Weierstrass curves do not depend on `C::B`. The VM configuration will specify a list of supported curves. For
+each curve `C` (of either form) there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (defined below). The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be
 bytes.
 
 An affine curve point `EcPoint(x, y)` is a pair of `x,y` where each element is an array of `C::COORD_SIZE` elements each
@@ -689,12 +690,16 @@ r32_ec_point(a) -> EcPoint {
 }
 ```
 
+The instructions that have prefix `SW_` perform short Weierstrass curve operations, and those with prefix `TE_` perform twisted Edwards curve operations.
+
 | Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
 | -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| EC_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
-| SETUP_EC_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
-| EC_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
-| SETUP_EC_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
+| SW_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
+| SETUP_SW_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS && r32_ec_point(b).y == C::A)` in the chip for SW ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
+| SW_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
+| SETUP_SW_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for SW DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
+| TE_ADD\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve.           |
+| SETUP_TE_ADD\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS && r32_ec_point(b).y == C::A && r32_ec_point(c).x == C::D)` in the chip for TE ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`.                       |
 
 #### Phantom Sub-Instructions
 
@@ -702,8 +707,10 @@ The elliptic curve extension defines the following phantom sub-instructions.
 
 | Name           | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | -------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| HintDecompress | 0x40         | `a,b,c_upper` | Uses `c_upper = C::IDX` to determine the index of the curve `C`, from the list of enabled curves. Read from memory `x = [r32{0}(a): C::COORD_SIZE]_2` for an element in the coordinate field of `C`. Let `rec_id = [r32{0}(b)]_2` be a byte in memory for the recovery id, where the lowest bit is 1 if and only if the `y` coordinate of the corresponding point is odd. If there exists a unique `y` such that `(x, y)` is a point on `C` and `y` has the same parity as `rec_id`, then the sub-instruction resets the hint stream to `[1, 0, 0, 0]` followed by `y: [_; C::COORD_SIZE]`. Otherwise, it resets the hint stream to `[0, 0, 0, 0]` followed by `sqrt: [_; C::COORD_SIZE]` where `sqrt * sqrt == (x^3 + ax + b) * non_qr` (`non_qr` is a quadratic nonresidue of `C::Fp`). |
-| HintNonQr      | 0x41         | `_,_,c_upper` | Reset the hint stream to equal `non_qr: [_; C::COORD_SIZE]` where `non_qr` is a quadratic nonresidue of `C::Fp`. |
+| SwHintDecompress | 0x40         | `a,b,c_upper` | Use `c_upper = C::IDX` to determine the index of the curve `C`, from the list of enabled short Weierstrass curves. Read from memory `x = [r32{0}(a): C::COORD_SIZE]_2` for an element in the coordinate field of `C`. Let `rec_id = [r32{0}(b)]_2` be a byte in memory for the recovery id, where the lowest bit is 1 if and only if the `y` coordinate of the corresponding point is odd. If there exists a unique `y` such that `(x, y)` is a point on `C` and `y` has the same parity as `rec_id`, then the sub-instruction resets the hint stream to `[1, 0, 0, 0]` followed by `y: [_; C::COORD_SIZE]`. Otherwise, it resets the hint stream to `[0, 0, 0, 0]` followed by `sqrt: [_; C::COORD_SIZE]` where `sqrt * sqrt == (x^3 + ax + b) * non_qr` where `non_qr` is a quadratic nonresidue of `C::Fp` that is fixed for the curve. |
+| SwHintNonQr      | 0x41         | `_,_,c_upper` | Reset the hint stream to equal `non_qr: [_; C::COORD_SIZE]` where `non_qr` is a quadratic nonresidue of `C::Fp`. This element is fixed for the curve during VM instantiation so multiple calls to this instruction will always return the same hint. |
+| TeHintDecompress | 0x42         | `a,b,c_upper` | Use `c_upper = C::IDX` to determine the index of the curve `C`, from the list of enabled twisted Edwards curves. Read from memory `y = [r32{0}(a): C::COORD_SIZE]_2` for an element in the coordinate field of `C`. Let `rec_id = [r32{0}(b)]_2` be a byte in memory for the recovery id, where the lowest bit is 1 if and only if the `x` coordinate of the corresponding point is odd. If there exists a unique `x` such that `(x, y)` is a point on `C` and `x` has the same parity as `rec_id`, then the sub-instruction resets the hint stream to `[1, 0, 0, 0]` followed by `x: [_; C::COORD_SIZE]`. Otherwise, it resets the hint stream to `[0, 0, 0, 0]` followed by `sqrt: [_; C::COORD_SIZE]` where `sqrt * sqrt = (y^2 - 1) / (C::D * y^2 - C::A) * non_qr` where `non_qr` is a quadratic nonresidue of `C::Fp` that is fixed for the curve. |
+| TeHintNonQr      | 0x43         | `_,_,c_upper` | Reset the hint stream to equal `non_qr: [_; C::COORD_SIZE]` where `non_qr` is a quadratic nonresidue of `C::Fp`. This element is fixed for the curve during VM instantiation so multiple calls to this instruction will always return the same hint. |
 
 ### Pairing Extension
 

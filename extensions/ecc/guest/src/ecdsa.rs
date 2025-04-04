@@ -5,10 +5,7 @@ use ecdsa::{self, hazmat::bits2field, Error, RecoveryId, Result};
 use elliptic_curve::{sec1::Tag, PrimeCurve};
 use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
 
-use crate::{
-    weierstrass::{FromCompressed, IntrinsicCurve, WeierstrassPoint},
-    CyclicGroup, Group,
-};
+use crate::{weierstrass::WeierstrassPoint, CyclicGroup, FromCompressed, Group, IntrinsicCurve};
 
 pub type Coordinate<C> = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::Coordinate;
 pub type Scalar<C> = <C as IntrinsicCurve>::Scalar;

@@ -31,7 +31,7 @@ openvm_ecc_guest::sw_macros::sw_init! {
 
 pub fn main() {
     setup_all_moduli();
-    setup_all_curves();
+    setup_all_sw_curves();
     // ...
 }
 ```
@@ -87,13 +87,13 @@ pub fn setup_sw_Secp256k1Point() {
         // ...
     }
 }
-pub fn setup_all_curves() {
+pub fn setup_all_sw_curves() {
     setup_sw_Secp256k1Point();
     // other setups
 }
 ```
 
-3. Again, the `setup` function for every used curve must be called before any other instructions for that curve. If all curves are used, one can call `setup_all_curves()` to setup all of them.
+3. Again, the `setup` function for every used curve must be called before any other instructions for that curve. If all curves are used, one can call `setup_all_sw_curves()` to setup all of them.
 
 4. The order of the items in `sw_init!` **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of `CurveConfig`s in `WeierstrassExtension::supported_curves`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file).
 

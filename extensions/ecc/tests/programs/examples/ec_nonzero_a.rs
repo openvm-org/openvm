@@ -2,8 +2,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use hex_literal::hex;
-use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
+    algebra::IntMod,
     p256::{P256Coord, P256Point},
     weierstrass::WeierstrassPoint,
     CyclicGroup, Group,
@@ -22,7 +22,7 @@ openvm_ecc_sw_macros::sw_init! {
 
 pub fn main() {
     setup_all_moduli();
-    setup_all_curves();
+    setup_all_sw_curves();
 
     // Sample points got from https://asecuritysite.com/ecc/p256p
     let x1 = P256Coord::from_u32(5);
