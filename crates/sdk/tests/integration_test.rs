@@ -37,7 +37,6 @@ use openvm_sdk::{
     codec::{Decode, Encode},
     commit::AppExecutionCommit,
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkSystemConfig, SdkVmConfig},
-    fs::{read_agg_pk_from_file, write_agg_pk_to_file},
     keygen::AppProvingKey,
     types::{EvmHalo2Verifier, EvmProof},
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
@@ -392,8 +391,7 @@ fn test_static_verifier_custom_pv_handler() {
         .clone()
         .try_into()
         .expect("failed to convert evm proof");
-    Halo2WrapperProvingKey::evm_verify(&evm_verifier, &evm_proof)
-        .unwrap();
+    Halo2WrapperProvingKey::evm_verify(&evm_verifier, &evm_proof).unwrap();
 }
 
 #[test]
@@ -434,22 +432,13 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
     let app_pk = sdk.app_keygen(app_config).unwrap();
 
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
-    let agg_pk = match read_agg_pk_from_file("./temp") {
-        Ok(agg_pk) => agg_pk,
-        Err(_) => {
-            let a = sdk
-                .agg_keygen(
-                    agg_config_for_test(),
-                    &params_reader,
-                    &DefaultStaticVerifierPvHandler,
-                )
-                .unwrap();
-
-            write_agg_pk_to_file(a.clone(), "./temp").expect("failed to write agg pk to file");
-
-            a
-        }
-    };
+    let agg_pk = sdk
+        .agg_keygen(
+            agg_config_for_test(),
+            &params_reader,
+            &DefaultStaticVerifierPvHandler,
+        )
+        .unwrap();
 
     let evm_verifier = sdk
         .generate_halo2_verifier_solidity(&params_reader, &agg_pk)
@@ -465,8 +454,7 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
         )
         .unwrap();
 
-    verify_evm_halo2_proof_with_fallback(&evm_verifier, &evm_proof)
-        .unwrap();
+    verify_evm_halo2_proof_with_fallback(&evm_verifier, &evm_proof).unwrap();
     sdk.verify_evm_halo2_proof(&evm_verifier, &evm_proof)
         .unwrap();
 }
