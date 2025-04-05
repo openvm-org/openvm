@@ -24,8 +24,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "--exe-output",
             temp_exe.to_str().unwrap(),
         ],
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e));
+    )?;
 
     run_cmd(
         "cargo",
@@ -39,8 +38,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "--vk-output",
             temp_vk.to_str().unwrap(),
         ],
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e));
+    )?;
 
     run_cmd(
         "cargo",
@@ -52,8 +50,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "--config",
             "example/openvm.toml",
         ],
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e));
+    )?;
 
     run_cmd(
         "cargo",
@@ -68,8 +65,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "--output",
             temp_proof.to_str().unwrap(),
         ],
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e));
+    )?;
 
     run_cmd(
         "cargo",
@@ -82,8 +78,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "--proof",
             temp_proof.to_str().unwrap(),
         ],
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e));
+    )?;
 
     Ok(())
 }
