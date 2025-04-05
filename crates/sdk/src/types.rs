@@ -12,7 +12,7 @@ pub const NUM_BN254_ACCUMULATORS: usize = 12;
 const NUM_BN254_PROOF: usize = 43;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct OpenVmEvmHalo2Verifier {
+pub struct EvmHalo2Verifier {
     pub halo2_verifier_code: String,
     pub openvm_verifier_code: String,
     pub openvm_verifier_interface: String,

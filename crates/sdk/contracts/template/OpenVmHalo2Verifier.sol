@@ -39,12 +39,12 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
     /// proof[12 * 32..13 * 32]: app exe commit
     /// proof[13 * 32..14 * 32]: app vm commit
     /// proof[14 * 32..(14 + PUBLIC_VALUES_LENGTH) * 32]: publicValues[0..PUBLIC_VALUES_LENGTH]
-    /// proof[(14 + PUBLIC_VALUES_LENGTH) * 32..]: Public Values Suffix
+    /// proof[(14 + PUBLIC_VALUES_LENGTH) * 32..]: Proof Suffix
     ///
     /// @param publicValues The PVs revealed by the OpenVM guest program.
     /// @param proofData All components of the proof except the public values and
     /// app exe and vm commits. The expected format is:
-    /// `abi.encodePacked(kzgAccumulators, pvsSuffix)`
+    /// `abi.encodePacked(kzgAccumulators, proofSuffix)`
     /// @param appExeCommit The commitment to the OpenVM application executable whose execution
     /// is being verified.
     /// @param appVmCommit The commitment to the VM configuration.
@@ -99,7 +99,7 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
         // proof[0x180..0x1a0]: app exe commit
         // proof[0x1a0..0x1c0]: app vm commit
         // proof[0x1c0..(0x1c0 + PUBLIC_VALUES_LENGTH * 32)]: publicValues[0..PUBLIC_VALUES_LENGTH]
-        // proof[(0x1c0 + PUBLIC_VALUES_LENGTH * 32)..]: Public Values Suffix
+        // proof[(0x1c0 + PUBLIC_VALUES_LENGTH * 32)..]: Proof Suffix
 
         /// @solidity memory-safe-assembly
         assembly {
@@ -115,14 +115,14 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
             mstore(add(proofPtr, 0x180), appExeCommit)
             mstore(add(proofPtr, 0x1a0), appVmCommit)
 
-            // Copy the Public Values Suffix (length 43 * 32 = 0x560) into the
+            // Copy the Proof Suffix (length 43 * 32 = 0x560) into the
             // end of the memory buffer, leaving PUBLIC_VALUES_LENGTH words in
             // between for the publicValuesPayload.
             //
             // Begin copying from the end of the KZG accumulators in the
             // calldata buffer (0x180)
-            let pvsSuffixOffset := add(0x1c0, shl(5, PUBLIC_VALUES_LENGTH))
-            calldatacopy(add(proofPtr, pvsSuffixOffset), add(proofData.offset, 0x180), 0x560)
+            let proofSuffixOffset := add(0x1c0, shl(5, PUBLIC_VALUES_LENGTH))
+            calldatacopy(add(proofPtr, proofSuffixOffset), add(proofData.offset, 0x180), 0x560)
 
             // Copy each byte of the public values into the proof. It copies the
             // most significant bytes of public values first.

@@ -50,11 +50,11 @@ contract TemplateTest is Test {
     fallback(bytes calldata proof) external returns (bytes memory) {
         bytes memory proofDataExpected = proofData;
 
-        uint256 guestPvsSuffixOffset = 0x1c0 + (32 * publicValuesLength);
+        uint256 proofSuffixOffset = 0x1c0 + (32 * publicValuesLength);
 
         bytes memory kzgAccumulators = proof[0:0x180];
-        bytes memory guestPvsSuffix = proof[guestPvsSuffixOffset:];
-        bytes memory _proofData = abi.encodePacked(kzgAccumulators, guestPvsSuffix);
+        bytes memory proofSuffix = proof[proofSuffixOffset:];
+        bytes memory _proofData = abi.encodePacked(kzgAccumulators, proofSuffix);
 
         require(keccak256(_proofData) == keccak256(proofDataExpected), "Partial proof mismatch");
 

@@ -32,11 +32,7 @@ pub use openvm_continuations::{
     static_verifier::{DefaultStaticVerifierPvHandler, StaticVerifierPvHandler},
     RootSC, C, F, SC,
 };
-use openvm_native_recursion::halo2::{
-    utils::Halo2ParamsReader,
-    wrapper::{EvmVerifier, EvmVerifierByteCode, Halo2WrapperProvingKey},
-    RawEvmProof,
-};
+use openvm_native_recursion::halo2::{utils::Halo2ParamsReader, wrapper::EvmVerifierByteCode};
 use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -50,22 +46,20 @@ use openvm_transpiler::{
     FromElf,
 };
 use snark_verifier_sdk::{
-    evm::{evm_verify, gen_evm_verifier_sol_code},
-    halo2::aggregation::AggregationCircuit,
-    snark_verifier::halo2_base::halo2_proofs::poly::commitment::Params,
-    SHPLONK,
+    evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit,
+    snark_verifier::halo2_base::halo2_proofs::poly::commitment::Params, SHPLONK,
 };
 use tempfile::tempdir;
 
 use crate::{
     config::AggConfig,
     fs::{
-        OPENVM_HALO2_VERIFIER_BASE_NAME, OPENVM_HALO2_VERIFIER_INTERFACE_NAME,
-        OPENVM_HALO2_VERIFIER_PARENT_NAME,
+        EVM_HALO2_VERIFIER_BASE_NAME, EVM_HALO2_VERIFIER_INTERFACE_NAME,
+        EVM_HALO2_VERIFIER_PARENT_NAME,
     },
     keygen::{AggProvingKey, AggStarkProvingKey},
     prover::{AppProver, ContinuationProver, StarkProver},
-    types::{EvmProof, OpenVmEvmHalo2Verifier, NUM_BN254_ACCUMULATORS},
+    types::{EvmHalo2Verifier, EvmProof, NUM_BN254_ACCUMULATORS},
 };
 
 pub mod codec;
@@ -82,9 +76,9 @@ pub mod types;
 
 pub type NonRootCommittedExe = VmCommittedExe<SC>;
 
-pub const OPENVM_HALO2_VERIFIER_INTERFACE: &str =
+pub const EVM_HALO2_VERIFIER_INTERFACE: &str =
     include_str!("../contracts/src/IOpenVmHalo2Verifier.sol");
-pub const OPENVM_HALO2_VERIFIER_TEMPLATE: &str =
+pub const EVM_HALO2_VERIFIER_TEMPLATE: &str =
     include_str!("../contracts/template/OpenVmHalo2Verifier.sol");
 
 sol! {
@@ -292,21 +286,11 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(proof)
     }
 
-    pub fn generate_snark_verifier_contract(
+    pub fn generate_halo2_verifier_solidity(
         &self,
         reader: &impl Halo2ParamsReader,
         agg_pk: &AggProvingKey,
-    ) -> Result<EvmVerifier> {
-        let params = reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
-        let evm_verifier = agg_pk.halo2_pk.wrapper.generate_evm_verifier(&params);
-        Ok(evm_verifier)
-    }
-
-    pub fn generate_openvm_halo2_verifier_contract(
-        &self,
-        reader: &impl Halo2ParamsReader,
-        agg_pk: &AggProvingKey,
-    ) -> Result<OpenVmEvmHalo2Verifier> {
+    ) -> Result<EvmHalo2Verifier> {
         let params = reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
         let pinning = &agg_pk.halo2_pk.wrapper.pinning;
 
@@ -338,7 +322,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         );
 
         // Fill out the public values length and OpenVM version in the template
-        let openvm_verifier_code = OPENVM_HALO2_VERIFIER_TEMPLATE
+        let openvm_verifier_code = EVM_HALO2_VERIFIER_TEMPLATE
             .replace("{PUBLIC_VALUES_LENGTH}", &pvs_length.to_string())
             .replace("{OPENVM_VERSION}", env!("CARGO_PKG_VERSION"));
 
@@ -353,15 +337,15 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         // Write the files to the temp dir. This is only for compilation
         // purposes.
         write(
-            interfaces_path.join(OPENVM_HALO2_VERIFIER_INTERFACE_NAME),
-            OPENVM_HALO2_VERIFIER_INTERFACE,
+            interfaces_path.join(EVM_HALO2_VERIFIER_INTERFACE_NAME),
+            EVM_HALO2_VERIFIER_INTERFACE,
         )?;
         write(
-            temp_path.join(OPENVM_HALO2_VERIFIER_PARENT_NAME),
+            temp_path.join(EVM_HALO2_VERIFIER_PARENT_NAME),
             &halo2_verifier_code,
         )?;
         write(
-            temp_path.join(OPENVM_HALO2_VERIFIER_BASE_NAME),
+            temp_path.join(EVM_HALO2_VERIFIER_BASE_NAME),
             &openvm_verifier_code,
         )?;
 
@@ -384,15 +368,15 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             );
         }
 
-        let bytecode = Self::extract_binary(
+        let bytecode = extract_binary(
             &output.stdout,
             "OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier",
         );
 
-        let evm_verifier = OpenVmEvmHalo2Verifier {
+        let evm_verifier = EvmHalo2Verifier {
             halo2_verifier_code,
             openvm_verifier_code,
-            openvm_verifier_interface: OPENVM_HALO2_VERIFIER_INTERFACE.to_string(),
+            openvm_verifier_interface: EVM_HALO2_VERIFIER_INTERFACE.to_string(),
             artifact: EvmVerifierByteCode {
                 sol_compiler_version: "0.8.19".to_string(),
                 sol_compiler_options: "--no-optimize-yul --bin --optimize --optimize-runs 100000"
@@ -403,84 +387,10 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(evm_verifier)
     }
 
-    /// We will split the output by whitespace and look for the following
-    /// sequence:
-    /// [
-    ///     ...
-    ///     "=======",
-    ///     "OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier",
-    ///     "=======",
-    ///     "Binary:"
-    ///     "[compiled bytecode]"
-    ///     ...
-    /// ]
-    ///
-    /// Once we find "OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier," we can skip
-    /// to the appropriate offset to get the compiled bytecode.
-    fn extract_binary(output: &[u8], contract_name: &str) -> Vec<u8> {
-        let split = Self::split_by_ascii_whitespace(output);
-        let contract_name_bytes = contract_name.as_bytes();
-
-        for i in 0..split.len().saturating_sub(3) {
-            if split[i] == contract_name_bytes {
-                return hex::decode(split[i + 3]).expect("Invalid hex in Binary");
-            }
-        }
-
-        panic!("Contract '{}' not found", contract_name);
-    }
-
-    fn split_by_ascii_whitespace(bytes: &[u8]) -> Vec<&[u8]> {
-        let mut split = Vec::new();
-        let mut start = None;
-        for (idx, byte) in bytes.iter().enumerate() {
-            if byte.is_ascii_whitespace() {
-                if let Some(start) = start.take() {
-                    split.push(&bytes[start..idx]);
-                }
-            } else if start.is_none() {
-                start = Some(idx);
-            }
-        }
-        if let Some(last) = start {
-            split.push(&bytes[last..]);
-        }
-        split
-    }
-
-    pub fn verify_evm_proof(
-        &self,
-        evm_verifier: &EvmVerifier,
-        evm_proof: &EvmProof,
-    ) -> Result<u64> {
-        let evm_proof: RawEvmProof = evm_proof.clone().try_into()?;
-        let gas_cost = Halo2WrapperProvingKey::evm_verify(evm_verifier, &evm_proof)
-            .map_err(|reason| eyre::eyre!("Sdk::verify_evm_proof: {reason:?}"))?;
-        Ok(gas_cost)
-    }
-
-    /// `OpenVmHalo2Verifier` wraps the `snark-verifer` contract, meaning that
-    /// the default `fallback` interface can still be used. This function uses
-    /// the fallback interface as opposed to the `verify(..)` interface.
-    pub fn verify_openvm_halo2_proof(
-        &self,
-        openvm_verifier: &OpenVmEvmHalo2Verifier,
-        evm_proof: &EvmProof,
-    ) -> Result<u64> {
-        let evm_proof: RawEvmProof = evm_proof.clone().try_into()?;
-        let gas_cost = evm_verify(
-            openvm_verifier.artifact.bytecode.clone(),
-            vec![evm_proof.instances.clone()],
-            evm_proof.proof.clone(),
-        )
-        .map_err(|reason| eyre::eyre!("Sdk::verify_openvm_evm_proof: {reason:?}"))?;
-        Ok(gas_cost)
-    }
-
     /// Uses the `verify(..)` interface of the `OpenVmHalo2Verifier` contract.
-    pub fn verify_openvm_halo2_proof_with_wrapped_interface(
+    pub fn verify_evm_halo2_proof(
         &self,
-        openvm_verifier: &OpenVmEvmHalo2Verifier,
+        openvm_verifier: &EvmHalo2Verifier,
         evm_proof: &EvmProof,
     ) -> Result<u64> {
         let EvmProof {
@@ -535,4 +445,49 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
 
         Ok(gas_cost)
     }
+}
+
+/// We will split the output by whitespace and look for the following
+/// sequence:
+/// [
+///     ...
+///     "=======",
+///     "OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier",
+///     "=======",
+///     "Binary:"
+///     "[compiled bytecode]"
+///     ...
+/// ]
+///
+/// Once we find "OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier," we can skip
+/// to the appropriate offset to get the compiled bytecode.
+fn extract_binary(output: &[u8], contract_name: &str) -> Vec<u8> {
+    let split = split_by_ascii_whitespace(output);
+    let contract_name_bytes = contract_name.as_bytes();
+
+    for i in 0..split.len().saturating_sub(3) {
+        if split[i] == contract_name_bytes {
+            return hex::decode(split[i + 3]).expect("Invalid hex in Binary");
+        }
+    }
+
+    panic!("Contract '{}' not found", contract_name);
+}
+
+fn split_by_ascii_whitespace(bytes: &[u8]) -> Vec<&[u8]> {
+    let mut split = Vec::new();
+    let mut start = None;
+    for (idx, byte) in bytes.iter().enumerate() {
+        if byte.is_ascii_whitespace() {
+            if let Some(start) = start.take() {
+                split.push(&bytes[start..idx]);
+            }
+        } else if start.is_none() {
+            start = Some(idx);
+        }
+    }
+    if let Some(last) = start {
+        split.push(&bytes[last..]);
+    }
+    split
 }

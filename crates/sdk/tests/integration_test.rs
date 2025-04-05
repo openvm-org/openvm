@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, path::PathBuf, sync::Arc};
 
+use eyre::Result;
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
@@ -20,7 +21,13 @@ use openvm_continuations::{
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use openvm_native_recursion::{
-    config::outer::OuterConfig, halo2::utils::CacheHalo2ParamsReader, types::InnerConfig,
+    config::outer::OuterConfig,
+    halo2::{
+        utils::{CacheHalo2ParamsReader, Halo2ParamsReader},
+        wrapper::Halo2WrapperProvingKey,
+        RawEvmProof,
+    },
+    types::InnerConfig,
     vars::StarkProofVariable,
 };
 use openvm_rv32im_transpiler::{
@@ -32,6 +39,7 @@ use openvm_sdk::{
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkSystemConfig, SdkVmConfig},
     fs::{read_agg_pk_from_file, write_agg_pk_to_file},
     keygen::AppProvingKey,
+    types::{EvmHalo2Verifier, EvmProof},
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
 use openvm_stark_backend::{keygen::types::LinearConstraint, p3_matrix::Matrix};
@@ -46,6 +54,7 @@ use openvm_stark_sdk::{
     p3_bn254_fr::Bn254Fr,
 };
 use openvm_transpiler::transpiler::Transpiler;
+use snark_verifier_sdk::evm::evm_verify;
 
 type SC = BabyBearPoseidon2Config;
 type C = InnerConfig;
@@ -55,6 +64,23 @@ const NUM_PUB_VALUES: usize = 16;
 const LEAF_LOG_BLOWUP: usize = 2;
 const INTERNAL_LOG_BLOWUP: usize = 3;
 const ROOT_LOG_BLOWUP: usize = 4;
+
+/// `OpenVmHalo2Verifier` wraps the `snark-verifer` contract, meaning that
+/// the default `fallback` interface can still be used. This function uses
+/// the fallback interface as opposed to the `verify(..)` interface.
+fn verify_evm_halo2_proof_with_fallback(
+    openvm_verifier: &EvmHalo2Verifier,
+    evm_proof: &EvmProof,
+) -> Result<u64> {
+    let evm_proof: RawEvmProof = evm_proof.clone().try_into()?;
+    let gas_cost = evm_verify(
+        openvm_verifier.artifact.bytecode.clone(),
+        vec![evm_proof.instances.clone()],
+        evm_proof.proof.clone(),
+    )
+    .map_err(|reason| eyre::eyre!("Sdk::verify_openvm_evm_proof: {reason:?}"))?;
+    Ok(gas_cost)
+}
 
 fn run_leaf_verifier<VC: VmConfig<F>>(
     leaf_vm: &SingleSegmentVmExecutor<F, VC>,
@@ -343,9 +369,12 @@ fn test_static_verifier_custom_pv_handler() {
 
     // Generate verifier contract
     println!("generate verifier contract");
-    let evm_verifier = sdk
-        .generate_snark_verifier_contract(&params_reader, &agg_pk)
-        .unwrap();
+    let params =
+        params_reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
+    let evm_verifier = agg_pk
+        .halo2_pk
+        .wrapper
+        .generate_fallback_evm_verifier(&params);
 
     // Generate and verify proof
     println!("generate and verify proof");
@@ -358,41 +387,13 @@ fn test_static_verifier_custom_pv_handler() {
             StdIn::default(),
         )
         .unwrap();
-    assert!(sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
-}
 
-#[test]
-fn test_e2e_proof_generation_and_verification() {
-    let app_log_blowup = 1;
-    let app_config = small_test_app_config(app_log_blowup);
-    let sdk = Sdk::new();
-    let app_pk = sdk.app_keygen(app_config).unwrap();
-    let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
-    let agg_pk = sdk
-        .agg_keygen(
-            agg_config_for_test(),
-            &params_reader,
-            &DefaultStaticVerifierPvHandler,
-        )
+    let evm_proof: RawEvmProof = evm_proof
+        .clone()
+        .try_into()
+        .expect("failed to convert evm proof");
+    Halo2WrapperProvingKey::evm_verify(&evm_verifier, &evm_proof)
         .unwrap();
-    let evm_verifier = sdk
-        .generate_openvm_halo2_verifier_contract(&params_reader, &agg_pk)
-        .unwrap();
-
-    let evm_proof = sdk
-        .generate_evm_proof(
-            &params_reader,
-            Arc::new(app_pk),
-            app_committed_exe_for_test(app_log_blowup),
-            agg_pk,
-            StdIn::default(),
-        )
-        .unwrap();
-
-    sdk.verify_openvm_halo2_proof(&evm_verifier, &evm_proof)
-        .unwrap_or_else(|e| panic!("{:?}", e));
-    sdk.verify_openvm_halo2_proof_with_wrapped_interface(&evm_verifier, &evm_proof)
-        .unwrap_or_else(|e| panic!("{:?}", e));
 }
 
 #[test]
@@ -451,7 +452,7 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
     };
 
     let evm_verifier = sdk
-        .generate_openvm_halo2_verifier_contract(&params_reader, &agg_pk)
+        .generate_halo2_verifier_solidity(&params_reader, &agg_pk)
         .unwrap();
 
     let evm_proof = sdk
@@ -464,11 +465,10 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
         )
         .unwrap();
 
-    assert!(sdk
-        .verify_openvm_halo2_proof(&evm_verifier, &evm_proof)
-        .is_ok());
-    sdk.verify_openvm_halo2_proof_with_wrapped_interface(&evm_verifier, &evm_proof)
-        .unwrap_or_else(|e| panic!("{:?}", e));
+    verify_evm_halo2_proof_with_fallback(&evm_verifier, &evm_proof)
+        .unwrap();
+    sdk.verify_evm_halo2_proof(&evm_verifier, &evm_proof)
+        .unwrap();
 }
 
 #[test]
