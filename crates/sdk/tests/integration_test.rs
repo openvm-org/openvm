@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, path::PathBuf, sync::Arc};
 
+use eyre::Result;
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
@@ -20,15 +21,24 @@ use openvm_continuations::{
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use openvm_native_recursion::{
-    config::outer::OuterConfig, halo2::utils::CacheHalo2ParamsReader, types::InnerConfig,
+    config::outer::OuterConfig,
+    halo2::{
+        utils::{CacheHalo2ParamsReader, Halo2ParamsReader},
+        wrapper::Halo2WrapperProvingKey,
+        RawEvmProof,
+    },
+    types::InnerConfig,
     vars::StarkProofVariable,
 };
-use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
+use openvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
 use openvm_sdk::{
     codec::{Decode, Encode},
     commit::AppExecutionCommit,
-    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkVmConfig},
+    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkSystemConfig, SdkVmConfig},
     keygen::AppProvingKey,
+    types::{EvmHalo2Verifier, EvmProof},
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
 use openvm_stark_backend::{keygen::types::LinearConstraint, p3_matrix::Matrix};
@@ -43,6 +53,7 @@ use openvm_stark_sdk::{
     p3_bn254_fr::Bn254Fr,
 };
 use openvm_transpiler::transpiler::Transpiler;
+use snark_verifier_sdk::evm::evm_verify;
 
 type SC = BabyBearPoseidon2Config;
 type C = InnerConfig;
@@ -52,6 +63,23 @@ const NUM_PUB_VALUES: usize = 16;
 const LEAF_LOG_BLOWUP: usize = 2;
 const INTERNAL_LOG_BLOWUP: usize = 3;
 const ROOT_LOG_BLOWUP: usize = 4;
+
+/// `OpenVmHalo2Verifier` wraps the `snark-verifer` contract, meaning that
+/// the default `fallback` interface can still be used. This function uses
+/// the fallback interface as opposed to the `verify(..)` interface.
+fn verify_evm_halo2_proof_with_fallback(
+    openvm_verifier: &EvmHalo2Verifier,
+    evm_proof: &EvmProof,
+) -> Result<u64> {
+    let evm_proof: RawEvmProof = evm_proof.clone().try_into()?;
+    let gas_cost = evm_verify(
+        openvm_verifier.artifact.bytecode.clone(),
+        vec![evm_proof.instances.clone()],
+        evm_proof.proof.clone(),
+    )
+    .map_err(|reason| eyre::eyre!("Sdk::verify_openvm_evm_proof: {reason:?}"))?;
+    Ok(gas_cost)
+}
 
 fn run_leaf_verifier<VC: VmConfig<F>>(
     leaf_vm: &SingleSegmentVmExecutor<F, VC>,
@@ -340,9 +368,12 @@ fn test_static_verifier_custom_pv_handler() {
 
     // Generate verifier contract
     println!("generate verifier contract");
-    let evm_verifier = sdk
-        .generate_snark_verifier_contract(&params_reader, &agg_pk)
-        .unwrap();
+    let params =
+        params_reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
+    let evm_verifier = agg_pk
+        .halo2_pk
+        .wrapper
+        .generate_fallback_evm_verifier(&params);
 
     // Generate and verify proof
     println!("generate and verify proof");
@@ -355,15 +386,51 @@ fn test_static_verifier_custom_pv_handler() {
             StdIn::default(),
         )
         .unwrap();
-    assert!(sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
+
+    let evm_proof: RawEvmProof = evm_proof
+        .clone()
+        .try_into()
+        .expect("failed to convert evm proof");
+    Halo2WrapperProvingKey::evm_verify(&evm_verifier, &evm_proof).unwrap();
 }
 
 #[test]
-fn test_e2e_proof_generation_and_verification() {
-    let app_log_blowup = 1;
-    let app_config = small_test_app_config(app_log_blowup);
+fn test_e2e_proof_generation_and_verification_with_pvs() {
+    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
+    pkg_dir.push("guest");
+
+    let vm_config = SdkVmConfig::builder()
+        .system(SdkSystemConfig {
+            config: SystemConfig::default()
+                .with_max_segment_len(200)
+                .with_continuations()
+                .with_public_values(NUM_PUB_VALUES),
+        })
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .native(Default::default())
+        .build();
+
     let sdk = Sdk::new();
+    let elf = sdk
+        .build(Default::default(), pkg_dir, &Default::default())
+        .unwrap();
+    let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
+
+    let app_log_blowup = 1;
+    let app_fri_params = FriParameters::new_for_testing(app_log_blowup);
+    let leaf_fri_params = FriParameters::new_for_testing(LEAF_LOG_BLOWUP);
+    let mut app_config =
+        AppConfig::new_with_leaf_fri_params(app_fri_params, vm_config, leaf_fri_params);
+    app_config.compiler_options.enable_cycle_tracker = true;
+
+    let app_committed_exe = sdk
+        .commit_app_exe(app_fri_params, exe)
+        .expect("failed to commit exe");
+
     let app_pk = sdk.app_keygen(app_config).unwrap();
+
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
     let agg_pk = sdk
         .agg_keygen(
@@ -372,20 +439,24 @@ fn test_e2e_proof_generation_and_verification() {
             &DefaultStaticVerifierPvHandler,
         )
         .unwrap();
+
     let evm_verifier = sdk
-        .generate_snark_verifier_contract(&params_reader, &agg_pk)
+        .generate_halo2_verifier_solidity(&params_reader, &agg_pk)
         .unwrap();
 
     let evm_proof = sdk
         .generate_evm_proof(
             &params_reader,
             Arc::new(app_pk),
-            app_committed_exe_for_test(app_log_blowup),
+            app_committed_exe,
             agg_pk,
             StdIn::default(),
         )
         .unwrap();
-    assert!(sdk.verify_evm_proof(&evm_verifier, &evm_proof).is_ok());
+
+    verify_evm_halo2_proof_with_fallback(&evm_verifier, &evm_proof).unwrap();
+    sdk.verify_evm_halo2_proof(&evm_verifier, &evm_proof)
+        .unwrap();
 }
 
 #[test]
@@ -407,7 +478,8 @@ fn test_sdk_guest_build_and_transpile() {
     assert_eq!(one.instructions, two.instructions);
     let transpiler = Transpiler::<F>::default()
         .with_extension(Rv32ITranspilerExtension)
-        .with_extension(Rv32MTranspilerExtension);
+        .with_extension(Rv32MTranspilerExtension)
+        .with_extension(Rv32IoTranspilerExtension);
     let _exe = sdk.transpile(one, transpiler).unwrap();
 }
 
@@ -418,10 +490,18 @@ fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest");
     let elf = sdk.build(Default::default(), pkg_dir, &Default::default())?;
+
     let vm_config = SdkVmConfig::builder()
-        .system(Default::default())
+        .system(SdkSystemConfig {
+            config: SystemConfig::default()
+                .with_max_segment_len(200)
+                .with_continuations()
+                .with_public_values(NUM_PUB_VALUES),
+        })
         .rv32i(Default::default())
         .rv32m(Default::default())
+        .io(Default::default())
+        .native(Default::default())
         .build();
     assert!(vm_config.system.config.continuation_enabled);
     let exe = sdk.transpile(elf, vm_config.transpiler())?;

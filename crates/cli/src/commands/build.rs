@@ -1,5 +1,5 @@
 use std::{
-    fs::{read, write},
+    fs::{create_dir_all, read, write},
     path::PathBuf,
 };
 
@@ -146,6 +146,9 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         let exe = Sdk::new().transpile(elf, transpiler)?;
         let committed_exe = commit_app_exe(app_config.app_fri_params.fri_params, exe.clone());
         write_exe_to_file(exe, output_path)?;
+        if let Some(parent) = build_args.committed_exe_output.parent() {
+            create_dir_all(parent)?;
+        }
         write(
             &build_args.committed_exe_output,
             committed_exe_as_bn254(&committed_exe).value.to_bytes(),

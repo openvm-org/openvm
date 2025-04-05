@@ -4,8 +4,9 @@ use openvm_stark_sdk::config::FriParameters;
 pub const DEFAULT_MANIFEST_DIR: &str = ".";
 
 pub const DEFAULT_AGG_PK_PATH: &str = concat!(env!("HOME"), "/.openvm/agg.pk");
-pub const DEFAULT_VERIFIER_FOLDER: &str = concat!(env!("HOME"), "/.openvm/");
 pub const DEFAULT_PARAMS_DIR: &str = concat!(env!("HOME"), "/.openvm/params/");
+
+pub const DEFAULT_EVM_HALO2_VERIFIER_PATH: &str = concat!(env!("HOME"), "/.openvm/halo2/");
 
 pub const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 pub const DEFAULT_APP_EXE_PATH: &str = "./openvm/app.vmexe";

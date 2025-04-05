@@ -39,6 +39,9 @@ jobs:
       - name: Install solc # svm should support arm64 linux
         run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
       - name: Install architecture specific tools
         run: |
           arch=$(uname -m)
@@ -74,8 +77,24 @@ jobs:
         run: |
           bash ../../extensions/native/recursion/trusted_setup_s3.sh
 
+      - name: Run openvm-sdk contracts/ tests
+        working-directory: crates/sdk/contracts
+        run: |
+          forge fmt --check
+          forge build --sizes
+          forge test
+
+      - name: Check IOpenVmHalo2Verifier.sol abi correctness
+        working-directory: crates/sdk/contracts
+        run: |
+          forge build
+          jq -S '.abi' ./out/IOpenVmHalo2Verifier.sol/IOpenVmHalo2Verifier.json > compiled_abi.json
+          jq -S . ./abi/IOpenVmHalo2Verifier.json > expected_abi_sorted.json
+          diff -u expected_abi_sorted.json compiled_abi.json
+
       - name: Run openvm-sdk crate tests
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
           cargo nextest run --cargo-profile=fast --test-threads=2 --features parallel
+

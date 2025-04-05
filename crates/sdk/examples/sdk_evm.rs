@@ -96,7 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // 9. Generate the SNARK verifier smart contract
-    let verifier = sdk.generate_snark_verifier_contract(&halo2_params_reader, &agg_pk)?;
+    let verifier = sdk.generate_halo2_verifier_solidity(&halo2_params_reader, &agg_pk)?;
 
     // 10. Generate an EVM proof
     let proof = sdk.generate_evm_proof(
@@ -108,7 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // 11. Verify the EVM proof
-    sdk.verify_evm_proof(&verifier, &proof)?;
+    sdk.verify_evm_halo2_proof(&verifier, &proof)?;
     // ANCHOR_END: evm_verification
 
     Ok(())

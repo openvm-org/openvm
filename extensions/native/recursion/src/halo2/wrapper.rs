@@ -27,8 +27,10 @@ use crate::halo2::{
     Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, RawEvmProof,
 };
 
+/// `FallbackEvmVerifier` is for the raw verifier contract outputted by
+/// `snark-verifier`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvmVerifier {
+pub struct FallbackEvmVerifier {
     pub sol_code: String,
     pub artifact: EvmVerifierByteCode,
 }
@@ -86,7 +88,10 @@ impl Halo2WrapperProvingKey {
         }
     }
     /// A helper function for testing to verify the proof of this circuit with evm verifier.
-    pub fn evm_verify(evm_verifier: &EvmVerifier, evm_proof: &RawEvmProof) -> Result<u64, String> {
+    pub fn evm_verify(
+        evm_verifier: &FallbackEvmVerifier,
+        evm_proof: &RawEvmProof,
+    ) -> Result<u64, String> {
         evm_verify(
             evm_verifier.artifact.bytecode.clone(),
             vec![evm_proof.instances.clone()],
@@ -94,7 +99,7 @@ impl Halo2WrapperProvingKey {
         )
     }
     /// Return deployment code for EVM verifier which can verify the snark of this circuit.
-    pub fn generate_evm_verifier(&self, params: &Halo2Params) -> EvmVerifier {
+    pub fn generate_fallback_evm_verifier(&self, params: &Halo2Params) -> FallbackEvmVerifier {
         assert_eq!(
             self.pinning.metadata.config_params.k as u32,
             params.k(),
@@ -209,11 +214,11 @@ fn gen_evm_verifier(
     params: &Halo2Params,
     vk: &VerifyingKey<G1Affine>,
     num_instance: Vec<usize>,
-) -> EvmVerifier {
+) -> FallbackEvmVerifier {
     let sol_code =
         gen_evm_verifier_sol_code::<AggregationCircuit, SHPLONK>(params, vk, num_instance);
     let byte_code = compile_solidity(&sol_code);
-    EvmVerifier {
+    FallbackEvmVerifier {
         sol_code,
         artifact: EvmVerifierByteCode {
             sol_compiler_version: "0.8.19".to_string(),

@@ -11,13 +11,13 @@ use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
     config::AggConfig,
     fs::{
-        write_agg_pk_to_file, write_evm_verifier_to_folder, EVM_VERIFIER_ARTIFACT_FILENAME,
-        EVM_VERIFIER_SOL_FILENAME,
+        write_agg_pk_to_file, write_evm_halo2_verifier_to_folder, EVM_HALO2_VERIFIER_BASE_NAME,
+        EVM_HALO2_VERIFIER_INTERFACE_NAME, EVM_HALO2_VERIFIER_PARENT_NAME,
     },
     DefaultStaticVerifierPvHandler, Sdk,
 };
 
-use crate::default::{DEFAULT_AGG_PK_PATH, DEFAULT_PARAMS_DIR, DEFAULT_VERIFIER_FOLDER};
+use crate::default::{DEFAULT_AGG_PK_PATH, DEFAULT_EVM_HALO2_VERIFIER_PATH, DEFAULT_PARAMS_DIR};
 
 #[derive(Parser)]
 #[command(
@@ -29,11 +29,15 @@ pub struct EvmProvingSetupCmd {}
 impl EvmProvingSetupCmd {
     pub async fn run(&self) -> Result<()> {
         if PathBuf::from(DEFAULT_AGG_PK_PATH).exists()
-            && PathBuf::from(DEFAULT_VERIFIER_FOLDER)
-                .join(EVM_VERIFIER_ARTIFACT_FILENAME)
+            && PathBuf::from(DEFAULT_EVM_HALO2_VERIFIER_PATH)
+                .join(EVM_HALO2_VERIFIER_PARENT_NAME)
                 .exists()
-            && PathBuf::from(DEFAULT_VERIFIER_FOLDER)
-                .join(EVM_VERIFIER_SOL_FILENAME)
+            && PathBuf::from(DEFAULT_EVM_HALO2_VERIFIER_PATH)
+                .join(EVM_HALO2_VERIFIER_BASE_NAME)
+                .exists()
+            && PathBuf::from(DEFAULT_EVM_HALO2_VERIFIER_PATH)
+                .join("interfaces")
+                .join(EVM_HALO2_VERIFIER_INTERFACE_NAME)
                 .exists()
         {
             println!("Aggregation proving key and verifier contract already exist");
@@ -53,13 +57,13 @@ impl EvmProvingSetupCmd {
         let agg_pk = sdk.agg_keygen(agg_config, &params_reader, &DefaultStaticVerifierPvHandler)?;
 
         println!("Generating verifier contract...");
-        let verifier = sdk.generate_snark_verifier_contract(&params_reader, &agg_pk)?;
+        let verifier = sdk.generate_halo2_verifier_solidity(&params_reader, &agg_pk)?;
 
         println!("Writing proving key to file...");
         write_agg_pk_to_file(agg_pk, DEFAULT_AGG_PK_PATH)?;
 
         println!("Writing verifier contract to file...");
-        write_evm_verifier_to_folder(verifier, DEFAULT_VERIFIER_FOLDER)?;
+        write_evm_halo2_verifier_to_folder(verifier, DEFAULT_EVM_HALO2_VERIFIER_PATH)?;
 
         Ok(())
     }
