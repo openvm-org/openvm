@@ -9,8 +9,8 @@ use openvm_ecc_guest::{
 
 // ANCHOR: init
 openvm_algebra_guest::moduli_macros::moduli_init! {
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
+    "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F",
+    "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141"
 }
 
 openvm_ecc_guest::sw_macros::sw_init! {
@@ -22,18 +22,20 @@ openvm_ecc_guest::sw_macros::sw_init! {
 pub fn main() {
     setup_all_moduli();
     setup_all_curves();
-    let x1 = Secp256k1Coord::from_u32(1);
-    let y1 = Secp256k1Coord::from_le_bytes(&hex!(
-        "EEA7767E580D75BC6FDD7F58D2A84C2614FB22586068DB63B346C6E60AF21842"
+
+    // Generator point G (valid on secp256k1)
+    let x1 = Secp256k1Coord::from_be_bytes(&hex!(
+        "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798"
+    ));
+    let y1 = Secp256k1Coord::from_be_bytes(&hex!(
+        "483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8"
     ));
     let p1 = Secp256k1Point::from_xy_nonidentity(x1, y1).unwrap();
 
-    let x2 = Secp256k1Coord::from_u32(2);
-    let y2 = Secp256k1Coord::from_le_bytes(&hex!(
-        "D1A847A8F879E0AEE32544DA5BA0B3BD1703A1F52867A5601FF6454DD8180499"
-    ));
-    let p2 = Secp256k1Point::from_xy_nonidentity(x2, y2).unwrap();
+    // 2G (also valid)
+    let p2 = &p1 + &p1;
 
+    // Use the points
     let _p3 = &p1 + &p2;
 }
 // ANCHOR_END: main
