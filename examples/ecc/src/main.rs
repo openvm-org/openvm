@@ -31,6 +31,7 @@ pub fn main() {
         "483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8"
     ));
     let p1 = Secp256k1Point::from_xy_nonidentity(x1, y1).unwrap();
+    let p1 = Secp256k1Point::generator();
 
     // 2G (also valid)
     let p2 = &p1 + &p1;
