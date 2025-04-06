@@ -55,20 +55,21 @@ fn test<const CHUNK: usize>(
         let label = pointer / CHUNK as u32;
         assert!(address_space - as_offset < (1 << as_height));
         assert!(pointer < ((CHUNK << address_height).div_ceil(PAGE_SIZE) * PAGE_SIZE) as u32);
-        if initial_memory.get(&(address_space, pointer)) != Some(&value) {
+        if unsafe { initial_memory.get((address_space, pointer)) } != Some(&value) {
             assert!(touched_labels.contains(&(address_space, label)));
         }
     }
     for key in initial_memory.items().map(|(key, _)| key) {
-        assert!(final_memory.get(&key).is_some());
+        assert!(unsafe { final_memory.get(key).is_some() });
     }
     for &(address_space, label) in touched_labels.iter() {
         let mut contains_some_key = false;
         for i in 0..CHUNK {
-            if final_memory
-                .get(&(address_space, label * CHUNK as u32 + i as u32))
-                .is_some()
-            {
+            if unsafe {
+                final_memory
+                    .get((address_space, label * CHUNK as u32 + i as u32))
+                    .is_some()
+            } {
                 contains_some_key = true;
                 break;
             }
@@ -126,12 +127,11 @@ fn test<const CHUNK: usize>(
     };
 
     for (address_space, address_label) in touched_labels {
-        let initial_values = array::from_fn(|i| {
-            initial_memory
-                .get(&(address_space, address_label * CHUNK as u32 + i as u32))
-                .copied()
-                .unwrap_or_default()
-        });
+        let initial_values = unsafe {
+            array::from_fn(|i| {
+                initial_memory.get((address_space, address_label * CHUNK as u32 + i as u32))
+            })
+        };
         let as_label = address_space - as_offset;
         interaction(
             PermutationInteractionType::Send,
@@ -221,15 +221,19 @@ fn random_test<const CHUNK: usize>(
             if is_initial && num_initial_addresses != 0 {
                 num_initial_addresses -= 1;
                 let value = BabyBear::from_canonical_u32(next_u32() % max_value);
-                initial_memory.insert(&(address_space, pointer), value);
-                final_memory.insert(&(address_space, pointer), value);
+                unsafe {
+                    initial_memory.insert((address_space, pointer), value);
+                    final_memory.insert((address_space, pointer), value);
+                }
             }
             if is_touched && num_touched_addresses != 0 {
                 num_touched_addresses -= 1;
                 touched_labels.insert((address_space, label));
                 if value_changes || !is_initial {
                     let value = BabyBear::from_canonical_u32(next_u32() % max_value);
-                    final_memory.insert(&(address_space, pointer), value);
+                    unsafe {
+                        final_memory.insert((address_space, pointer), value);
+                    }
                 }
             }
         }

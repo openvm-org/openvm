@@ -226,10 +226,10 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
 
         let mut reads = Vec::with_capacity(R);
         if R >= 1 {
-            reads.push(memory.read::<1>(e, b));
+            reads.push(memory.read::<F, 1>(e, b));
         }
         if R >= 2 {
-            reads.push(memory.read::<1>(f, c));
+            reads.push(memory.read::<F, 1>(f, c));
         }
         let i_reads: [_; R] = std::array::from_fn(|i| reads[i].1);
 
