@@ -1163,6 +1163,7 @@ version = "1.0.0"
 dependencies = [
  "aws-config",
  "aws-sdk-s3",
+ "bitcode",
  "clap",
  "eyre",
  "hex",

@@ -36,6 +36,7 @@ hex = "0.4.3"
 target-lexicon = "0.12.15"
 tempfile = "3.10.1"
 toml = { workspace = true }
+bitcode.workspace = true
 
 [features]
 default = []
