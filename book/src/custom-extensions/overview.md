@@ -5,7 +5,7 @@ You can seamlessly integrate certain performance-optimized extensions maintained
 In this chapter, we will explain how to use the following existing extensions:
 
 - [`openvm-keccak-guest`](./keccak.md) - Keccak256 hash function.
-- [`openvm-sha2-guest`](./sha2.md) - SHA2 hash functions.
+- [`openvm-sha2-guest`](./sha2.md) - SHA-2 hash functions.
 - [`openvm-bigint-guest`](./bigint.md) - Big integer arithmetic for 256-bit signed and unsigned integers.
 - [`openvm-algebra-guest`](./algebra.md) - Modular arithmetic and complex field extensions.
 - [`openvm-ecc-guest`](./ecc.md) - Elliptic curve cryptography.
@@ -35,7 +35,7 @@ The template `openvm.toml` file is as follows:
 [app_vm_config.rv32m]
 [app_vm_config.io]
 [app_vm_config.keccak]
-[app_vm_config.sha256]
+[app_vm_config.sha2]
 [app_vm_config.native]
 [app_vm_config.bigint]
 [app_vm_config.modular]
