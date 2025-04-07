@@ -44,7 +44,7 @@ struct ExampleCols<T, const N: usize> {
 which will generate a columns struct that uses references to the fields.
 ```rust
 struct ExampleColsRef<'a, T, const N: usize> {
-    arr: &'a [T; N],
+    arr: ndarray::ArrayView1<'a, T>, // an n-dimensional view into the input slice (ArrayView2 for 2D arrays, etc.)
     sum: &'a T,
 }
 ```
@@ -89,6 +89,7 @@ The fields of `ExampleColsRef` have the same names as the fields of `ExampleCols
 - fields with names that end in `Cols` are assumed to be a columns struct that derives `ColsRef` and are transformed into the appropriate `ColsRef` type recursively
     - one restriction is that any nested `ColsRef` type must have the same config as the outer `ColsRef` type
 - fields that are annotated with `#[aligned_borrow]` are assumed to derive `AlignedBorrow` and are borrowed from the input slice. The new type is a reference to the `AlignedBorrow` type
+    - if a field whose name ends in `Cols` is annotated with `#[aligned_borrow]`, then the aligned borrow takes precedence, and the field is not transformed into an `ArrayView`
 - nested arrays of `U` become `&ArrayViewX<U>` where `X` is the number of dimensions in the nested array type
     - `U` can be either the generic type `T` or a type that derives `AlignedBorrow`. In the latter case, the field must be annotated with `#[aligned_borrow]`
     - the `ArrayViewX` type provides a `X`-dimensional view into the row slice 
