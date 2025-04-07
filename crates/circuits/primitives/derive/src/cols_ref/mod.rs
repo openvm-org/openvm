@@ -7,7 +7,7 @@ use syn::{parse_quote, DeriveInput};
 pub fn cols_ref_impl(
     derive_input: DeriveInput,
     config: proc_macro2::Ident,
-) -> Result<proc_macro2::TokenStream, String> {
+) -> proc_macro2::TokenStream {
     let DeriveInput {
         ident,
         generics,
@@ -29,7 +29,7 @@ pub fn cols_ref_impl(
         .collect::<Vec<_>>();
 
     if generic_types.len() != 1 {
-        return Err("Struct must have exactly one generic type parameter".to_string());
+        panic!("Struct must have exactly one generic type parameter");
     }
 
     let generic_type = generic_types[0];
@@ -43,8 +43,7 @@ pub fn cols_ref_impl(
                 .fields
                 .iter()
                 .map(|f| get_const_cols_ref_fields(f, generic_type, &const_generics))
-                .collect::<Result<Vec<_>, String>>()
-                .map_err(|e| format!("Failed to process fields. {}", e))?;
+                .collect_vec();
 
             // The ColsRef struct is named by appending `Ref` to the struct name
             let const_cols_ref_name = syn::Ident::new(&format!("{}Ref", ident), ident.span());
@@ -67,15 +66,14 @@ pub fn cols_ref_impl(
             let const_cols_ref_struct = make_struct(struct_info.clone(), &config);
 
             // Generate the `from_mut` method for the ColsRef struct
-            let from_mut_impl = make_from_mut(struct_info, &config)?;
+            let from_mut_impl = make_from_mut(struct_info, &config);
 
             // Process the fields of the struct, transforming the types for use in ColsRefMut struct
             let mut_field_infos: Vec<FieldInfo> = data_struct
                 .fields
                 .iter()
                 .map(|f| get_mut_cols_ref_fields(f, generic_type, &const_generics))
-                .collect::<Result<Vec<_>, String>>()
-                .map_err(|e| format!("Failed to process fields. {}", e))?;
+                .collect_vec();
 
             // The ColsRefMut struct is named by appending `RefMut` to the struct name
             let mut_cols_ref_name = syn::Ident::new(&format!("{}RefMut", ident), ident.span());
@@ -97,13 +95,13 @@ pub fn cols_ref_impl(
             // Generate the ColsRefMut struct
             let mut_cols_ref_struct = make_struct(struct_info, &config);
 
-            Ok(quote! {
+            quote! {
                 #const_cols_ref_struct
                 #from_mut_impl
                 #mut_cols_ref_struct
-            })
+            }
         }
-        _ => Err("ColsRef can only be derived for structs".to_string()),
+        _ => panic!("ColsRef can only be derived for structs"),
     }
 }
 
@@ -177,10 +175,7 @@ fn make_struct(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_mac
 }
 
 // Generate the `from_mut` method for the ColsRef struct
-fn make_from_mut(
-    struct_info: StructInfo,
-    config: &proc_macro2::Ident,
-) -> Result<proc_macro2::TokenStream, String> {
+fn make_from_mut(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_macro2::TokenStream {
     let StructInfo {
         name,
         vis: _,
@@ -205,32 +200,32 @@ fn make_from_mut(
 
             if is_array {
                 // calling view() on ArrayViewMut returns an ArrayView
-                Ok(quote! {
+                quote! {
                     other.#ident.view()
-                })
+                }
             } else if derives_aligned_borrow {
                 // implicitly converts a mutable reference to an immutable reference, so leave the field value unchanged
-                Ok(quote! {
+                quote! {
                     other.#ident
-                })
+                }
             } else if is_columns_struct(&f.ty) {
                 // lifetime 'b is used in from_mut to allow more flexible lifetime of return value
                 let cols_ref_type =
                     get_const_cols_ref_type(&f.ty, &generic_type, parse_quote! { 'b });
                 // Recursively call `from_mut` on the ColsRef field
-                Ok(quote! {
+                quote! {
                     <#cols_ref_type>::from_mut::<C>(&other.#ident)
-                })
+                }
             } else if is_generic_type(&f.ty, &generic_type) {
                 // implicitly converts a mutable reference to an immutable reference, so leave the field value unchanged
-                Ok(quote! {
+                quote! {
                     &other.#ident
-                })
+                }
             } else {
                 panic!("Unsupported field type: {:?}", f.ty);
             }
         })
-        .collect::<Result<Vec<_>, String>>()?;
+        .collect_vec();
 
     let field_idents = fields
         .iter()
@@ -242,7 +237,7 @@ fn make_from_mut(
         #mut_struct_ident<'a, #generic_type>
     };
 
-    Ok(parse_quote! {
+    parse_quote! {
         // lifetime 'b is used in from_mut to allow more flexible lifetime of return value
         impl<'b, #generic_type> #name<'b, #generic_type> {
             pub fn from_mut<'a, C: #config>(other: &'b #mut_struct_type) -> Self
@@ -252,7 +247,7 @@ fn make_from_mut(
                 }
             }
         }
-    })
+    }
 }
 
 // Information about a field that is used to generate the ColsRef and ColsRefMut structs
@@ -275,7 +270,7 @@ fn get_const_cols_ref_fields(
     f: &syn::Field,
     generic_type: &syn::TypeParam,
     const_generics: &[&syn::Ident],
-) -> Result<FieldInfo, String> {
+) -> FieldInfo {
     let length_var = format_ident!("{}_length", f.ident.clone().unwrap());
     let slice_var = format_ident!("{}_slice", f.ident.clone().unwrap());
 
@@ -313,7 +308,7 @@ fn get_const_cols_ref_fields(
                 <#elem_type>::width() #(* #dim_exprs)*
             };
 
-            Ok(FieldInfo {
+            FieldInfo {
                 ty: parse_quote! {
                     #ndarray_type
                 },
@@ -326,14 +321,14 @@ fn get_const_cols_ref_fields(
                 initializer: quote! {
                     #slice_var
                 },
-            })
+            }
         } else if is_columns_struct(&elem_type) {
             panic!("Arrays of columns structs are currently not supported");
         } else if is_generic_type(&elem_type, generic_type) {
             let length_expr = quote! {
                 1 #(* #dim_exprs)*
             };
-            Ok(FieldInfo {
+            FieldInfo {
                 ty: parse_quote! {
                     #ndarray_type
                 },
@@ -345,14 +340,14 @@ fn get_const_cols_ref_fields(
                 initializer: quote! {
                     #slice_var
                 },
-            })
+            }
         } else {
             panic!("Unsupported field type: {:?}", f.ty);
         }
     } else if derives_aligned_borrow {
         // treat the field as a struct that derives AlignedBorrow (and doesn't depend on the config)
         let f_ty = &f.ty;
-        Ok(FieldInfo {
+        FieldInfo {
             ty: parse_quote! {
                 &'a #f_ty
             },
@@ -369,10 +364,10 @@ fn get_const_cols_ref_fields(
                     #slice_var.borrow()
                 }
             },
-        })
+        }
     } else if is_columns_struct(&f.ty) {
         let const_cols_ref_type = get_const_cols_ref_type(&f.ty, generic_type, parse_quote! { 'a });
-        Ok(FieldInfo {
+        FieldInfo {
             ty: parse_quote! {
                 #const_cols_ref_type
             },
@@ -387,9 +382,9 @@ fn get_const_cols_ref_fields(
             initializer: quote! {
             #slice_var
             },
-        })
+        }
     } else if is_generic_type(&f.ty, generic_type) {
-        Ok(FieldInfo {
+        FieldInfo {
             ty: parse_quote! {
                 &'a #generic_type
             },
@@ -403,7 +398,7 @@ fn get_const_cols_ref_fields(
             initializer: quote! {
                 &#slice_var[0]
             },
-        })
+        }
     } else {
         panic!("Unsupported field type: {:?}", f.ty);
     }
@@ -414,7 +409,7 @@ fn get_mut_cols_ref_fields(
     f: &syn::Field,
     generic_type: &syn::TypeParam,
     const_generics: &[&syn::Ident],
-) -> Result<FieldInfo, String> {
+) -> FieldInfo {
     let length_var = format_ident!("{}_length", f.ident.clone().unwrap());
     let slice_var = format_ident!("{}_slice", f.ident.clone().unwrap());
 
@@ -452,7 +447,7 @@ fn get_mut_cols_ref_fields(
                 <#elem_type>::width() #(* #dim_exprs)*
             };
 
-            Ok(FieldInfo {
+            FieldInfo {
                 ty: parse_quote! {
                     #ndarray_type
                 },
@@ -465,14 +460,14 @@ fn get_mut_cols_ref_fields(
                 initializer: quote! {
                     #slice_var
                 },
-            })
+            }
         } else if is_columns_struct(&elem_type) {
             panic!("Arrays of columns structs are currently not supported");
         } else if is_generic_type(&elem_type, generic_type) {
             let length_expr = quote! {
                 1 #(* #dim_exprs)*
             };
-            Ok(FieldInfo {
+            FieldInfo {
                 ty: parse_quote! {
                     #ndarray_type
                 },
@@ -484,14 +479,14 @@ fn get_mut_cols_ref_fields(
                 initializer: quote! {
                     #slice_var
                 },
-            })
+            }
         } else {
             panic!("Unsupported field type: {:?}", f.ty);
         }
     } else if derives_aligned_borrow {
         // treat the field as a struct that derives AlignedBorrow (and doesn't depend on the config)
         let f_ty = &f.ty;
-        Ok(FieldInfo {
+        FieldInfo {
             ty: parse_quote! {
                 &'a mut #f_ty
             },
@@ -508,10 +503,10 @@ fn get_mut_cols_ref_fields(
                     #slice_var.borrow_mut()
                 }
             },
-        })
+        }
     } else if is_columns_struct(&f.ty) {
         let mut_cols_ref_type = get_mut_cols_ref_type(&f.ty, generic_type);
-        Ok(FieldInfo {
+        FieldInfo {
             ty: parse_quote! {
                 #mut_cols_ref_type
             },
@@ -526,9 +521,9 @@ fn get_mut_cols_ref_fields(
             initializer: quote! {
                 #slice_var
             },
-        })
+        }
     } else if is_generic_type(&f.ty, generic_type) {
-        Ok(FieldInfo {
+        FieldInfo {
             ty: parse_quote! {
                 &'a mut #generic_type
             },
@@ -542,7 +537,7 @@ fn get_mut_cols_ref_fields(
             initializer: quote! {
                 &mut #slice_var[0]
             },
-        })
+        }
     } else {
         panic!("Unsupported field type: {:?}", f.ty);
     }

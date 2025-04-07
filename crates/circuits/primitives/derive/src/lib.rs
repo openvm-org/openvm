@@ -420,14 +420,6 @@ pub fn cols_ref_derive(input: TokenStream) -> TokenStream {
         .parse_args()
         .expect("Failed to parse config");
 
-    let span = derive_input.ident.span();
     let res = cols_ref_impl(derive_input, config);
-    res.map_or_else(
-        |err| {
-            syn::Error::new(span, err.to_string())
-                .to_compile_error()
-                .into()
-        },
-        |ok| ok.into(),
-    )
+    res.into()
 }
