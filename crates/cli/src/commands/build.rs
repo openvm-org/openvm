@@ -1,6 +1,7 @@
 use std::{
     fs::{create_dir_all, read, write},
     path::PathBuf,
+    sync::Arc,
 };
 
 use clap::Parser;
@@ -18,7 +19,7 @@ use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 use crate::{
     default::{
         DEFAULT_APP_CONFIG_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_COMMITTED_APP_EXE_PATH,
-        DEFAULT_MANIFEST_DIR,
+        DEFAULT_EXE_COMMIT_PATH, DEFAULT_MANIFEST_DIR,
     },
     util::read_config_toml_or_default,
 };
@@ -83,6 +84,13 @@ pub struct BuildArgs {
     )]
     pub committed_exe_output: PathBuf,
 
+    #[arg(
+        long,
+        default_value = DEFAULT_EXE_COMMIT_PATH,
+        help = "Output path for the exe commit (bn254 commit of committed program)"
+    )]
+    pub exe_commit_output: PathBuf,
+
     #[arg(long, default_value = "release", help = "Build profile")]
     pub profile: String,
 }
@@ -146,12 +154,24 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         let exe = Sdk::new().transpile(elf, transpiler)?;
         let committed_exe = commit_app_exe(app_config.app_fri_params.fri_params, exe.clone());
         write_exe_to_file(exe, output_path)?;
-        if let Some(parent) = build_args.committed_exe_output.parent() {
+
+        if let Some(parent) = build_args.exe_commit_output.parent() {
             create_dir_all(parent)?;
         }
         write(
-            &build_args.committed_exe_output,
+            &build_args.exe_commit_output,
             committed_exe_as_bn254(&committed_exe).value.to_bytes(),
+        )?;
+        if let Some(parent) = build_args.committed_exe_output.parent() {
+            create_dir_all(parent)?;
+        }
+        let committed_exe = match Arc::try_unwrap(committed_exe) {
+            Ok(exe) => exe,
+            Err(_) => return Err(eyre::eyre!("Failed to unwrap committed_exe Arc")),
+        };
+        write(
+            &build_args.committed_exe_output,
+            bitcode::serialize(&committed_exe)?,
         )?;
 
         println!(
@@ -192,6 +212,7 @@ mod tests {
             config: PathBuf::from(DEFAULT_APP_CONFIG_PATH),
             exe_output: PathBuf::from(DEFAULT_APP_EXE_PATH),
             committed_exe_output: PathBuf::from(DEFAULT_COMMITTED_APP_EXE_PATH),
+            exe_commit_output: PathBuf::from(DEFAULT_EXE_COMMIT_PATH),
             profile: "dev".to_string(),
             target_dir: Some(target_dir.to_path_buf()),
         };

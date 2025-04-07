@@ -10,7 +10,8 @@ pub const DEFAULT_EVM_HALO2_VERIFIER_PATH: &str = concat!(env!("HOME"), "/.openv
 
 pub const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 pub const DEFAULT_APP_EXE_PATH: &str = "./openvm/app.vmexe";
-pub const DEFAULT_COMMITTED_APP_EXE_PATH: &str = "./openvm/committed_app_exe.bytes";
+pub const DEFAULT_EXE_COMMIT_PATH: &str = "./openvm/exe_commit.bytes";
+pub const DEFAULT_COMMITTED_APP_EXE_PATH: &str = "./openvm/committed_app_exe.bc";
 pub const DEFAULT_APP_PK_PATH: &str = "./openvm/app.pk";
 pub const DEFAULT_APP_VK_PATH: &str = "./openvm/app.vk";
 pub const DEFAULT_APP_PROOF_PATH: &str = "./openvm/app.proof";
