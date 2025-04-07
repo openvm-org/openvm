@@ -14,18 +14,17 @@ In short the SHA-256 algorithm works as follows.
 1. Pad the message to 512 bits and split it into 512-bit 'blocks'.
 2. Initialize a hash state consisting of eight 32-bit words to a specific constant value.
 3. For each block, 
-    1. split the message into 16 32-bit words and produce 48 more words based on them. The 16 message word together with the 48 additional words are called the 'message schedule'.
+    1. split the message into 16 32-bit words and produce 48 more words based on them. The 16 message words together with the 48 additional words are called the 'message schedule'.
     2. apply a scrambling function 64 times to the hash state to update it based on the message schedule. We call each update a 'round'.
-    3. add the previous block's final hash state to the current hash state (modulo `2^32`).
+    3. add the previous block's final hash state to the current hash state (modulo $2^{32}$).
 4. The output is the final hash state
 
 The differences with the SHA-512 algorithm are that:
-- it uses 64-bit words, 1024-bit blocks, performs 80 rounds, and produces a 512-bit output. 
-- all the arithmetic is done modulo `2^64`.
+- SHA-512 uses 64-bit words, 1024-bit blocks, performs 80 rounds, and produces a 512-bit output. 
+- all the arithmetic is done modulo $2^{64}$.
 - the initial hash state is different.
 
-The SHA-384 algorithm is almost exactly a truncation of the SHA-512 output to 384 bits. 
-The only difference is that the initial hash state is different.
+The SHA-384 algorithm is a truncation of the SHA-512 output to 384 bits, and the only difference is that the initial hash state is different.
 
 ## Design Overview
 
@@ -38,7 +37,7 @@ The first $R$ rows of each block are called 'round rows', and each of them const
 Each row constrains updates to the working variables on each round, and also constrains the message schedule words based on previous rounds.
 The final row of each block is called a 'digest row' and it produces a final hash for the block, computed as the sum of the working variables and the previous block's final hash.
 
-Note that this chip only supports messages of length less than `2^29` bytes.
+Note that this chip only supports messages of length less than $2^{29}$ bytes.
 
 ### Storing working variables
 
@@ -98,7 +97,7 @@ The `local_block_idx` is used to calculate the length of the message processed s
 The SHA-2 VM extension chip uses the `Sha2Air` SubAir to help constrain the appropriate SHA-2 hash algorithm.
 The SubAir is also parameterized by the specific SHA-2 variant's constants.
 The VM extension AIR constrains the correctness of the message padding, while the SubAir adds all other constraints related to the hash algorithm.
-The VM extension air also constrains memory reads and writes.
+The VM extension AIR also constrains memory reads and writes.
 
 ### A gotcha about padding rows
 
