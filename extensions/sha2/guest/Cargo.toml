@@ -1,9 +1,9 @@
 [package]
-name = "openvm-sha256-guest"
+name = "openvm-sha2-guest"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Guest extension for Sha256"
+description = "Guest extension for SHA-2"
 
 [dependencies]
 openvm-platform = { workspace = true }
