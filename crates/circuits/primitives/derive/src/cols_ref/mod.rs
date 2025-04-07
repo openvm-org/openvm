@@ -1,3 +1,5 @@
+extern crate proc_macro;
+
 use itertools::Itertools;
 use quote::{format_ident, quote};
 use syn::{parse_quote, DeriveInput};
@@ -36,6 +38,7 @@ pub fn cols_ref_impl(
 
     match data {
         syn::Data::Struct(data_struct) => {
+            // Process the fields of the struct, transforming the types for use in ColsRef struct
             let const_field_infos: Vec<FieldInfo> = data_struct
                 .fields
                 .iter()
@@ -43,9 +46,13 @@ pub fn cols_ref_impl(
                 .collect::<Result<Vec<_>, String>>()
                 .map_err(|e| format!("Failed to process fields. {}", e))?;
 
+            // The ColsRef struct is named by appending `Ref` to the struct name
             let const_cols_ref_name = syn::Ident::new(&format!("{}Ref", ident), ident.span());
+
+            // the args to the `from` method will be different for the ColsRef and ColsRefMut structs
             let from_args = quote! { slice: &'a [#generic_type] };
 
+            // Package all the necessary information to generate the ColsRef struct
             let struct_info = StructInfo {
                 name: const_cols_ref_name,
                 vis: vis.clone(),
@@ -56,10 +63,13 @@ pub fn cols_ref_impl(
                 derive_clone: true,
             };
 
+            // Generate the ColsRef struct
             let const_cols_ref_struct = make_struct(struct_info.clone(), &config);
 
+            // Generate the `from_mut` method for the ColsRef struct
             let from_mut_impl = make_from_mut(struct_info, &config)?;
 
+            // Process the fields of the struct, transforming the types for use in ColsRefMut struct
             let mut_field_infos: Vec<FieldInfo> = data_struct
                 .fields
                 .iter()
@@ -67,9 +77,13 @@ pub fn cols_ref_impl(
                 .collect::<Result<Vec<_>, String>>()
                 .map_err(|e| format!("Failed to process fields. {}", e))?;
 
+            // The ColsRefMut struct is named by appending `RefMut` to the struct name
             let mut_cols_ref_name = syn::Ident::new(&format!("{}RefMut", ident), ident.span());
+
+            // the args to the `from` method will be different for the ColsRef and ColsRefMut structs
             let from_args = quote! { slice: &'a mut [#generic_type] };
 
+            // Package all the necessary information to generate the ColsRefMut struct
             let struct_info = StructInfo {
                 name: mut_cols_ref_name,
                 vis,
@@ -80,6 +94,7 @@ pub fn cols_ref_impl(
                 derive_clone: false,
             };
 
+            // Generate the ColsRefMut struct
             let mut_cols_ref_struct = make_struct(struct_info, &config);
 
             Ok(quote! {
@@ -103,6 +118,12 @@ struct StructInfo {
     derive_clone: bool,
 }
 
+// Generate the ColsRef and ColsRefMut structs, depending on the value of `struct_info`
+// This function is meant to reduce code duplication between the code needed to generate the two structs
+// Notable differences between the two structs are:
+//   - the types of the fields
+//   - ColsRef derives Clone, but ColsRefMut cannot (since it stores mutable references)
+//   - the `from` method parameter is a reference to a slice for ColsRef and a mutable reference to a slice for ColsRefMut
 fn make_struct(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_macro2::TokenStream {
     let StructInfo {
         name,
@@ -147,7 +168,6 @@ fn make_struct(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_mac
                 }
             }
 
-            // TODO: make this return the size in bytes (to support fields of constant size)
             // returns number of cells in the struct (where each cell has type T)
             pub const fn width<C: #config>() -> usize {
                 0 #( + #length_exprs )*
@@ -156,6 +176,7 @@ fn make_struct(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_mac
     }
 }
 
+// Generate the `from_mut` method for the ColsRef struct
 fn make_from_mut(
     struct_info: StructInfo,
     config: &proc_macro2::Ident,
@@ -183,10 +204,12 @@ fn make_from_mut(
             let is_array = matches!(f.ty, syn::Type::Array(_));
 
             if is_array {
+                // calling view() on ArrayViewMut returns an ArrayView
                 Ok(quote! {
                     other.#ident.view()
                 })
             } else if derives_aligned_borrow {
+                // implicitly converts a mutable reference to an immutable reference, so leave the field value unchanged
                 Ok(quote! {
                     other.#ident
                 })
@@ -194,10 +217,12 @@ fn make_from_mut(
                 // lifetime 'b is used in from_mut to allow more flexible lifetime of return value
                 let cols_ref_type =
                     get_const_cols_ref_type(&f.ty, &generic_type, parse_quote! { 'b });
+                // Recursively call `from_mut` on the ColsRef field
                 Ok(quote! {
                     <#cols_ref_type>::from_mut::<C>(&other.#ident)
                 })
             } else if is_generic_type(&f.ty, &generic_type) {
+                // implicitly converts a mutable reference to an immutable reference, so leave the field value unchanged
                 Ok(quote! {
                     &other.#ident
                 })
@@ -230,6 +255,8 @@ fn make_from_mut(
     })
 }
 
+// Information about a field that is used to generate the ColsRef and ColsRefMut structs
+// See the `make_struct` function to see how this information is used
 #[derive(Debug, Clone)]
 struct FieldInfo {
     // type for struct definition
@@ -257,12 +284,7 @@ fn get_const_cols_ref_fields(
         .iter()
         .any(|attr| attr.path().is_ident("aligned_borrow"));
 
-    let has_plain_array_attribute = f.attrs.iter().any(|attr| attr.path().is_ident("array"));
     let is_array = matches!(f.ty, syn::Type::Array(_));
-
-    if has_plain_array_attribute && !is_array {
-        panic!("field marked with `plain_array` attribute must be an array");
-    }
 
     if is_array {
         let ArrayInfo { dims, elem_type } = get_array_info(&f.ty, const_generics);
@@ -286,33 +308,7 @@ fn get_const_cols_ref_fields(
             })
             .collect_vec();
 
-        if has_plain_array_attribute {
-            Err("unsupported currently".to_string())
-            /*
-            debug_assert!(
-                dims.len() == 1,
-                "field marked with `plain_array` attribute must be a 1D array"
-            );
-
-            let length_expr = quote! {
-                1 #(* #dim_exprs)*
-            };
-
-            Ok(FieldInfo {
-                ty: parse_quote! {
-                    & #f.ty
-                },
-                length_expr: length_expr.clone(),
-                prepare_subslice: quote! {
-                    let (#slice_var, slice) = slice.split_at(#length_expr);
-                    let #slice_var = #slice_var.try_into().unwrap();
-                },
-                initializer: quote! {
-                    #slice_var
-                },
-            })
-            */
-        } else if derives_aligned_borrow {
+        if derives_aligned_borrow {
             let length_expr = quote! {
                 <#elem_type>::width() #(* #dim_exprs)*
             };
@@ -552,6 +548,8 @@ fn get_mut_cols_ref_fields(
     }
 }
 
+// Helper functions
+
 fn is_columns_struct(ty: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = ty {
         type_path
@@ -666,6 +664,8 @@ fn get_elem_type(ty: &syn::Type) -> syn::Type {
     }
 }
 
+// Get a vector of the dimensions of the array
+// Each dimension is either a constant generic or a literal integer value
 fn get_dims(ty: &syn::Type, const_generics: &[&syn::Ident]) -> Vec<Dimension> {
     get_dims_impl(ty, const_generics)
         .into_iter()

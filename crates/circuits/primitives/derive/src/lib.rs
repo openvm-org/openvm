@@ -402,8 +402,8 @@ pub fn bytes_stateful_derive(input: TokenStream) -> TokenStream {
     }
 }
 
-#[proc_macro_derive(ColsRef, attributes(aligned_borrow, config, plain_array))]
-pub fn cols_ref(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(ColsRef, attributes(aligned_borrow, config))]
+pub fn cols_ref_derive(input: TokenStream) -> TokenStream {
     let derive_input: DeriveInput = parse_macro_input!(input as DeriveInput);
 
     let config = derive_input
