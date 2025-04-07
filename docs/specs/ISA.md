@@ -6,7 +6,7 @@ This specification describes the overall architecture and default VM extensions 
 - [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
 - [Native](#native-extension): An extension supporting native field arithmetic for proof recursion and aggregation.
 - [Keccak-256](#keccak-extension): An extension implementing the Keccak-256 hash function compatibly with RISC-V memory.
-- [SHA2-256](#sha2-256-extension): An extension implementing the SHA2-256 hash function compatibly with RISC-V memory.
+- [SHA2](#sha2-extension): An extension implementing the SHA-256, SHA-512, and SHA-384 hash functions compatibly with RISC-V memory.
 - [BigInt](#bigint-extension): An extension supporting 256-bit signed and unsigned integer arithmetic, including
   multiplication. This extension respects the RISC-V memory format.
 - [Algebra](#algebra-extension): An extension supporting modular arithmetic over arbitrary fields and their complex
@@ -541,14 +541,16 @@ all memory cells are constrained to be bytes.
 | -------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
 | KECCAK256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Performs memory accesses with block size `4`. |
 
-### SHA2-256 Extension
+### SHA-2 Extension
 
-The SHA2-256 extension supports the SHA2-256 hash function. The extension operates on address spaces `1` and `2`,
+The SHA-2 extension supports the SHA-256 and SHA-512 hash functions. The extension operates on address spaces `1` and `2`,
 meaning all memory cells are constrained to be bytes.
 
 | Name        | Operands    | Description                                                                                                                                                              |
 | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | SHA256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = sha256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `16` and writes with block size `32`. |
+| SHA512_RV32 | `a,b,c,1,2` | `[r32{0}(a):64]_2 = sha512([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `16` and writes with block size `32`. |
+| SHA384_RV32 | `a,b,c,1,2` | `[r32{0}(a):64]_2 = sha384([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `16` and writes with block size `32`. Writes 64 bytes to memory: the first 48 are the SHA-384 digest and the last 16 are zeros. |
 
 ### BigInt Extension
 
