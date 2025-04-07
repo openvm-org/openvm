@@ -35,7 +35,7 @@ pub fn set_sha256(input: &[u8], output: &mut [u8; 32]) {
     }
     #[cfg(target_os = "zkvm")]
     {
-        openvm_sha256_guest::zkvm_sha256_impl(
+        openvm_sha2_guest::zkvm_sha256_impl(
             input.as_ptr(),
             input.len(),
             output.as_mut_ptr() as *mut u8,

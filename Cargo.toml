@@ -51,9 +51,9 @@ members = [
     "extensions/keccak256/circuit",
     "extensions/keccak256/transpiler",
     "extensions/keccak256/guest",
-    "extensions/sha256/circuit",
-    "extensions/sha256/transpiler",
-    "extensions/sha256/guest",
+    "extensions/sha2/circuit",
+    "extensions/sha2/transpiler",
+    "extensions/sha2/guest",
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
@@ -226,6 +226,7 @@ rrs-lib = "0.1.0"
 rand = { version = "0.8.5", default-features = false }
 hex = { version = "0.4.3", default-features = false }
 serde-big-array = "0.5.1"
+ndarray = { version = "0.16.1", default-features = false }
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }

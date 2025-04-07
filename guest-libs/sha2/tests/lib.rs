@@ -15,10 +15,10 @@ mod tests {
     type F = BabyBear;
 
     #[test]
-    fn test_sha256() -> Result<()> {
-        let config = Sha256Rv32Config::default();
+    fn test_sha2() -> Result<()> {
+        let config = Sha2Rv32Config::default();
         let elf =
-            build_example_program_at_path(get_programs_dir!("tests/programs"), "sha", &config)?;
+            build_example_program_at_path(get_programs_dir!("tests/programs"), "sha2", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()

@@ -50,7 +50,7 @@ impl Default for Sha2Rv32Config {
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Sha256Rv32Config {}
+impl InitFileGenerator for Sha2Rv32Config {}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Sha2;

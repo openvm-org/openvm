@@ -24,7 +24,7 @@ pub enum Sha2BaseFunct7 {
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
-extern "C" fn zkvm_sha256_impl(bytes: *const u8, len: usize, output: *mut u8) {
+pub extern "C" fn zkvm_sha256_impl(bytes: *const u8, len: usize, output: *mut u8) {
     openvm_platform::custom_insn_r!(opcode = OPCODE, funct3 = SHA2_FUNCT3, funct7 = Sha2BaseFunct7::Sha256 as u8, rd = In output, rs1 = In bytes, rs2 = In len);
 }
 
@@ -40,7 +40,7 @@ extern "C" fn zkvm_sha256_impl(bytes: *const u8, len: usize, output: *mut u8) {
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
-extern "C" fn zkvm_sha512_impl(bytes: *const u8, len: usize, output: *mut u8) {
+pub extern "C" fn zkvm_sha512_impl(bytes: *const u8, len: usize, output: *mut u8) {
     openvm_platform::custom_insn_r!(opcode = OPCODE, funct3 = SHA2_FUNCT3, funct7 = Sha2BaseFunct7::Sha512 as u8, rd = In output, rs1 = In bytes, rs2 = In len);
 }
 
@@ -57,6 +57,6 @@ extern "C" fn zkvm_sha512_impl(bytes: *const u8, len: usize, output: *mut u8) {
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
-extern "C" fn zkvm_sha384_impl(bytes: *const u8, len: usize, output: *mut u8) {
+pub extern "C" fn zkvm_sha384_impl(bytes: *const u8, len: usize, output: *mut u8) {
     openvm_platform::custom_insn_r!(opcode = OPCODE, funct3 = SHA2_FUNCT3, funct7 = Sha2BaseFunct7::Sha384 as u8, rd = In output, rs1 = In bytes, rs2 = In len);
 }
