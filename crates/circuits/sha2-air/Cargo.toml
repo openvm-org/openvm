@@ -7,9 +7,9 @@ edition.workspace = true
 [dependencies]
 openvm-circuit-primitives = { workspace = true }
 openvm-stark-backend = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
 sha2 = { version = "0.10", features = ["compress"] }
 rand.workspace = true
-openvm-sha-macros = { workspace = true }
 ndarray.workspace = true
 
 [dev-dependencies]

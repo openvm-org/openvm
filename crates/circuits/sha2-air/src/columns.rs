@@ -1,7 +1,7 @@
 //! WARNING: the order of fields in the structs is important, do not change it
 
 use openvm_circuit_primitives::utils::not;
-use openvm_sha_macros::ColsRef;
+use openvm_circuit_primitives_derive::ColsRef;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 
 use crate::Sha2Config;

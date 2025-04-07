@@ -4,12 +4,12 @@ use openvm_circuit::{
     arch::ExecutionState,
     system::memory::offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols},
 };
+use openvm_circuit_primitives_derive::ColsRef;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_sha2_air::{
     ShaDigestCols, ShaDigestColsRef, ShaDigestColsRefMut, ShaRoundCols, ShaRoundColsRef,
     ShaRoundColsRefMut,
 };
-use openvm_sha_macros::ColsRef;
 
 use super::SHA_REGISTER_READS;
 use crate::ShaChipConfig;

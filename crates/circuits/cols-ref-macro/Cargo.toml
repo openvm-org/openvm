@@ -1,5 +1,5 @@
 [package]
-name = "openvm-sha-macros"
+name = "todo-delete"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

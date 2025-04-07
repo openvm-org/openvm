@@ -7,6 +7,9 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericParam, LitStr, Meta};
 
+mod cols_ref;
+use cols_ref::cols_ref_impl;
+
 #[proc_macro_derive(AlignedBorrow)]
 pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
@@ -397,4 +400,34 @@ pub fn bytes_stateful_derive(input: TokenStream) -> TokenStream {
         }
         _ => unimplemented!(),
     }
+}
+
+#[proc_macro_derive(ColsRef, attributes(aligned_borrow, config, plain_array))]
+pub fn cols_ref(input: TokenStream) -> TokenStream {
+    let derive_input: DeriveInput = parse_macro_input!(input as DeriveInput);
+
+    let config = derive_input
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("config"));
+    if config.is_none() {
+        return syn::Error::new(derive_input.ident.span(), "Config attribute is required")
+            .to_compile_error()
+            .into();
+    }
+    let config: proc_macro2::Ident = config
+        .unwrap()
+        .parse_args()
+        .expect("Failed to parse config");
+
+    let span = derive_input.ident.span();
+    let res = cols_ref_impl(derive_input, config);
+    res.map_or_else(
+        |err| {
+            syn::Error::new(span, err.to_string())
+                .to_compile_error()
+                .into()
+        },
+        |ok| ok.into(),
+    )
 }
