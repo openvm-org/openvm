@@ -151,7 +151,7 @@ Each VM extension's behavior is specified below.
 | ----------- | -------------------------------------------------- |
 | keccak256   | KECCAK256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2` |
 
-### SHA2 Extension
+### SHA-2 Extension
 
 | RISC-V Inst | OpenVM Instruction                              |
 | ----------- | ----------------------------------------------- |

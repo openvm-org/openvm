@@ -5,7 +5,7 @@ The default VM extensions that support transpilation are:
 
 - [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
 - [Keccak-256](#keccak-extension): An extension implementing the Keccak-256 hash function compatibly with RISC-V memory.
-- [SHA2](#sha2-extension): An extension implementing the SHA2-256 and SHA2-512 hash functions compatibly with RISC-V memory.
+- [SHA2](#sha2-extension): An extension implementing the SHA-256, SHA-512, and SHA-384 hash functions compatibly with RISC-V memory.
 - [BigInt](#bigint-extension): An extension supporting 256-bit signed and unsigned integer arithmetic, including multiplication. This extension respects the RISC-V memory format.
 - [Algebra](#algebra-extension): An extension supporting modular arithmetic over arbitrary fields and their complex field extensions. This extension respects the RISC-V memory format.
 - [Elliptic curve](#elliptic-curve-extension): An extension for elliptic curve operations over Weierstrass curves, including addition and doubling. This can be used to implement multi-scalar multiplication and ECDSA scalar multiplication. This extension respects the RISC-V memory format.
@@ -78,13 +78,13 @@ the guest must take care to validate all data and account for behavior in cases 
 | ----------- | --- | ----------- | ------ | ------ | ------------------------------------------- |
 | keccak256   | R   | 0001011     | 100    | 0x0    | `[rd:32]_2 = keccak256([rs1..rs1 + rs2]_2)` |
 
-## SHA2 Extension
+## SHA-2 Extension
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes             |
 | ----------- | --- | ----------- | ------ | ------ | ---------------------------------------- |
 | sha256      | R   | 0001011     | 100    | 0x1    | `[rd:32]_2 = sha256([rs1..rs1 + rs2]_2)` |
-| sha512      | R   | 0001011     | 100    | 0x2    | `[rd:32]_2 = sha512([rs1..rs1 + rs2]_2)` |
-| sha384      | R   | 0001011     | 100    | 0x3    | `[rd:32]_2 = sha384([rs1..rs1 + rs2]_2)` |
+| sha512      | R   | 0001011     | 100    | 0x2    | `[rd:64]_2 = sha512([rs1..rs1 + rs2]_2)` |
+| sha384      | R   | 0001011     | 100    | 0x3    | `[rd:64]_2 = sha384([rs1..rs1 + rs2]_2)`. Last 16 bytes will be set to zeros. |
 
 ## BigInt Extension
 

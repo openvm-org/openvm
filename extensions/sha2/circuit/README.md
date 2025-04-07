@@ -29,7 +29,7 @@ The only difference is that the initial hash state is different.
 
 ## Design Overview
 
-We re-use the same AIR code to produce circuits for all three algorithms.
+We reuse the same AIR code to produce circuits for all three algorithms.
 To achieve this, we parameterize the AIR by constants (such as the word size, number of rounds, and block size) that are specific to each algorithm.
 
 This chip produces an AIR that consists of $R+1$ rows for each block of the message, and no more rows
