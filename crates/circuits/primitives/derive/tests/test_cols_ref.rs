@@ -10,7 +10,7 @@ impl TestConfig for TestConfigImpl {
     const M: usize = 2;
 }
 
-#[allow(dead_code)] // TestCols isn't acutally used in the code. silence clippy warning
+#[allow(dead_code)] // TestCols isn't actually used in the code. silence clippy warning
 #[derive(ColsRef)]
 #[config(TestConfig)]
 struct TestCols<T, const N: usize, const M: usize> {
@@ -24,7 +24,7 @@ struct TestCols<T, const N: usize, const M: usize> {
     nested_array_of_aligned_borrow: [[TestAlignedBorrow<T>; N]; N],
 }
 
-#[allow(dead_code)] // TestSubCols isn't acutally used in the code. silence clippy warning
+#[allow(dead_code)] // TestSubCols isn't actually used in the code. silence clippy warning
 #[derive(ColsRef, Debug)]
 #[config(TestConfig)]
 struct TestSubCols<T, const M: usize> {
