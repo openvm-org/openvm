@@ -1,5 +1,5 @@
-mod sha256_chip;
-pub use sha256_chip::*;
+mod sha2_chip;
+pub use sha2_chip::*;
 
 mod extension;
 pub use extension::*;

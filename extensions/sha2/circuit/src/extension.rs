@@ -16,15 +16,15 @@ use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
 };
-use openvm_sha256_transpiler::Rv32Sha256Opcode;
+use openvm_sha2_air::{Sha256Config, Sha384Config, Sha512Config};
+use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
 
 use crate::*;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Sha256Rv32Config {
+pub struct Sha2Rv32Config {
     #[system]
     pub system: SystemConfig,
     #[extension]
@@ -34,17 +34,17 @@ pub struct Sha256Rv32Config {
     #[extension]
     pub io: Rv32Io,
     #[extension]
-    pub sha256: Sha256,
+    pub sha2: Sha2,
 }
 
-impl Default for Sha256Rv32Config {
+impl Default for Sha2Rv32Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default().with_continuations(),
             rv32i: Rv32I,
             rv32m: Rv32M::default(),
             io: Rv32Io,
-            sha256: Sha256,
+            sha2: Sha2,
         }
     }
 }
@@ -53,22 +53,24 @@ impl Default for Sha256Rv32Config {
 impl InitFileGenerator for Sha256Rv32Config {}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-pub struct Sha256;
+pub struct Sha2;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
-pub enum Sha256Executor<F: PrimeField32> {
-    Sha256(Sha256VmChip<F>),
+pub enum Sha2Executor<F: PrimeField32> {
+    Sha256(Sha2VmChip<F, Sha256Config>),
+    Sha512(Sha2VmChip<F, Sha512Config>),
+    Sha384(Sha2VmChip<F, Sha384Config>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
-pub enum Sha256Periphery<F: PrimeField32> {
+pub enum Sha2Periphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     Phantom(PhantomChip<F>),
 }
 
-impl<F: PrimeField32> VmExtension<F> for Sha256 {
-    type Executor = Sha256Executor<F>;
-    type Periphery = Sha256Periphery<F>;
+impl<F: PrimeField32> VmExtension<F> for Sha2 {
+    type Executor = Sha2Executor<F>;
+    type Periphery = Sha2Periphery<F>;
 
     fn build(
         &self,
@@ -87,18 +89,32 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
             chip
         };
 
-        let sha256_chip = Sha256VmChip::new(
+        let sha256_chip = Sha2VmChip::<F, Sha256Config>::new(
+            builder.system_port(),
+            builder.system_config().memory_config.pointer_max_bits,
+            bitwise_lu_chip.clone(),
+            builder.new_bus_idx(),
+            builder.system_base().offline_memory(),
+        );
+        inventory.add_executor(sha256_chip, vec![Rv32Sha2Opcode::SHA256.global_opcode()])?;
+
+        let sha512_chip = Sha2VmChip::<F, Sha512Config>::new(
+            builder.system_port(),
+            builder.system_config().memory_config.pointer_max_bits,
+            bitwise_lu_chip.clone(),
+            builder.new_bus_idx(),
+            builder.system_base().offline_memory(),
+        );
+        inventory.add_executor(sha512_chip, vec![Rv32Sha2Opcode::SHA512.global_opcode()])?;
+
+        let sha384_chip = Sha2VmChip::<F, Sha384Config>::new(
             builder.system_port(),
             builder.system_config().memory_config.pointer_max_bits,
             bitwise_lu_chip,
             builder.new_bus_idx(),
-            Rv32Sha256Opcode::CLASS_OFFSET,
             builder.system_base().offline_memory(),
         );
-        inventory.add_executor(
-            sha256_chip,
-            Rv32Sha256Opcode::iter().map(|x| x.global_opcode()),
-        )?;
+        inventory.add_executor(sha384_chip, vec![Rv32Sha2Opcode::SHA384.global_opcode()])?;
 
         Ok(inventory)
     }

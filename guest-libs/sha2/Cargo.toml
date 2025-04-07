@@ -10,7 +10,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-openvm-sha256-guest = { workspace = true }
+openvm-sha2-guest = { workspace = true }
 
 [dev-dependencies]
 openvm-instructions = { workspace = true }
