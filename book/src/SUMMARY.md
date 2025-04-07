@@ -19,7 +19,7 @@
 
 - [Overview](./custom-extensions/overview.md)
 - [Keccak](./custom-extensions/keccak.md)
-- [SHA-256](./custom-extensions/sha256.md)
+- [SHA-2](./custom-extensions/sha2.md)
 - [Big Integer](./custom-extensions/bigint.md)
 - [Algebra (Modular Arithmetic)](./custom-extensions/algebra.md)
 - [Elliptic Curve Cryptography](./custom-extensions/ecc.md)

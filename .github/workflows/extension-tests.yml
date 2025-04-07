@@ -28,7 +28,7 @@ jobs:
           - { name: "rv32im", path: "rv32im" }
           - { name: "native", path: "native" }
           - { name: "keccak256", path: "keccak256" }
-          - { name: "sha256", path: "sha256" }
+          - { name: "sha2", path: "sha2" }
           - { name: "bigint", path: "bigint" }
           - { name: "algebra", path: "algebra" }
           - { name: "ecc", path: "ecc" }
