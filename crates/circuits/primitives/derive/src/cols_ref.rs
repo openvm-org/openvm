@@ -1,7 +1,6 @@
 use itertools::Itertools;
-use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, parse_quote, DeriveInput};
+use syn::{parse_quote, DeriveInput};
 
 pub fn cols_ref_impl(
     derive_input: DeriveInput,
