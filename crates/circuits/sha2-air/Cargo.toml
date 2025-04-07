@@ -1,5 +1,5 @@
 [package]
-name = "openvm-sha256-air"
+name = "openvm-sha2-air"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,8 +7,10 @@ edition.workspace = true
 [dependencies]
 openvm-circuit-primitives = { workspace = true }
 openvm-stark-backend = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
 sha2 = { version = "0.10", features = ["compress"] }
 rand.workspace = true
+ndarray.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
