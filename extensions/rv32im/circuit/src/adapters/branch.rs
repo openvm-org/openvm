@@ -168,11 +168,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_REGISTER_AS);
 
-        let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, a);
-        let rs2 = memory.read::<RV32_REGISTER_NUM_LIMBS>(e, b);
+        let rs1 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, a);
+        let rs2 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(e, b);
 
         Ok((
-            [rs1.1, rs2.1],
+            [
+                rs1.1.map(F::from_canonical_u8),
+                rs2.1.map(F::from_canonical_u8),
+            ],
             Self::ReadRecord {
                 rs1: rs1.0,
                 rs2: rs2.0,

@@ -221,7 +221,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for JalRangeCheckChip<F> {
         } else if instruction.opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode() {
             let d = F::from_canonical_u32(AS::Native as u32);
             // This is a read, but we make the record have prev_data
-            let a_val = memory.unsafe_read_cell(d, instruction.a);
+            let a_val = memory.unsafe_read_cell::<F>(d, instruction.a);
             let (record_id, _) = memory.write(d, instruction.a, [a_val]);
             let a_val = a_val.as_canonical_u32();
             let b = instruction.b.as_canonical_u32();

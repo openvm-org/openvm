@@ -571,7 +571,7 @@ mod tests {
     }
 
     fn setup_test(
-        initial_memory: MemoryImage<BabyBear>,
+        initial_memory: MemoryImage,
         initial_block_size: usize,
     ) -> (OfflineMemory<BabyBear>, AccessAdapterInventory<BabyBear>) {
         let memory_bus = MemoryBus::new(0);

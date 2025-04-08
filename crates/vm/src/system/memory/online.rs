@@ -55,7 +55,9 @@ impl Memory {
     }
 
     fn last_record_id(&self) -> RecordId {
-        RecordId(self.log.len() - 1)
+        // TEMP[jpw]
+        RecordId(0)
+        // RecordId(self.log.len() - 1)
     }
 
     /// Writes an array of values to the memory at the specified address space and start index.
@@ -133,17 +135,8 @@ impl Memory {
 
 #[cfg(test)]
 mod tests {
-    use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
-
     use super::Memory;
     use crate::arch::MemoryConfig;
-
-    macro_rules! bba {
-        [$($x:expr),*] => {
-            [$(BabyBear::from_canonical_u32($x)),*]
-        }
-    }
 
     #[test]
     fn test_write_read() {
@@ -151,15 +144,15 @@ mod tests {
         let address_space = 1;
 
         unsafe {
-            memory.write(address_space, 0, bba![1, 2, 3, 4]);
+            memory.write(address_space, 0, [1u8, 2, 3, 4]);
 
-            let (_, data) = memory.read::<2>(address_space, 0);
-            assert_eq!(data, bba![1, 2]);
+            let (_, data) = memory.read::<u8, 2>(address_space, 0);
+            assert_eq!(data, [1u8, 2]);
 
-            memory.write(address_space, 2, bba![100]);
+            memory.write(address_space, 2, [100u8]);
 
-            let (_, data) = memory.read::<4>(address_space, 0);
-            assert_eq!(data, bba![1, 2, 100, 4]);
+            let (_, data) = memory.read::<u8, 4>(address_space, 0);
+            assert_eq!(data, [1u8, 2, 100, 4]);
         }
     }
 }

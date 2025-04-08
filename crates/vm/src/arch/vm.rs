@@ -169,14 +169,13 @@ where
         let mem_config = self.config.system().memory_config;
         let exe = exe.into();
         let mut segment_results = vec![];
-        let memory = unsafe {
-            AddressMap::from_iter(
-                mem_config.as_offset,
-                1 << mem_config.as_height,
-                1 << mem_config.pointer_max_bits,
-                exe.init_memory.clone(),
-            )
-        };
+        let memory = AddressMap::from_sparse(
+            mem_config.as_offset,
+            1 << mem_config.as_height,
+            1 << mem_config.pointer_max_bits,
+            exe.init_memory.clone(),
+        );
+
         let pc = exe.pc_start;
         let mut state = VmExecutorNextSegmentState::new(memory, input, pc);
         let mut segment_idx = 0;

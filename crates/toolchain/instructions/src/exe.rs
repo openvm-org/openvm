@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::program::Program;
 
-/// Memory image is a map from (address space, address) to word.
-pub type MemoryImage<F> = BTreeMap<(u32, u32), F>;
+// TODO[jpw]: delete this
+/// Memory image is a map from (address space, address * size_of<CellType>) to u8.
+pub type SparseMemoryImage = BTreeMap<(u32, u32), u8>;
 /// Stores the starting address, end address, and name of a set of function.
 pub type FnBounds = BTreeMap<u32, FnBound>;
 
@@ -22,7 +23,7 @@ pub struct VmExe<F> {
     /// Start address of pc.
     pub pc_start: u32,
     /// Initial memory image.
-    pub init_memory: MemoryImage<F>,
+    pub init_memory: SparseMemoryImage,
     /// Starting + ending bounds for each function.
     pub fn_bounds: FnBounds,
 }
@@ -40,7 +41,7 @@ impl<F> VmExe<F> {
         self.pc_start = pc_start;
         self
     }
-    pub fn with_init_memory(mut self, init_memory: MemoryImage<F>) -> Self {
+    pub fn with_init_memory(mut self, init_memory: SparseMemoryImage) -> Self {
         self.init_memory = init_memory;
         self
     }

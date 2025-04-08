@@ -867,7 +867,7 @@ mod tests {
                 let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
                 memory_controller.write(address_space, pointer, [data]);
             } else {
-                memory_controller.read::<1>(address_space, pointer);
+                memory_controller.read::<F, 1>(address_space, pointer);
             }
         }
         assert!(memory_controller

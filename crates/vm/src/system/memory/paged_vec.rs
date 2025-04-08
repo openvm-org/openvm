@@ -1,6 +1,7 @@
 use std::{marker::PhantomData, mem::MaybeUninit, ptr};
 
 use itertools::{zip_eq, Itertools};
+use openvm_instructions::exe::SparseMemoryImage;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
@@ -197,7 +198,7 @@ impl<T: Copy, const PAGE_SIZE: usize> Iterator for PagedVecIter<'_, T, PAGE_SIZE
 pub struct AddressMap<const PAGE_SIZE: usize> {
     pub paged_vecs: Vec<PagedVec<PAGE_SIZE>>,
     /// byte size of cells per address space
-    cell_size: Vec<usize>,
+    pub cell_size: Vec<usize>,
     pub as_offset: u32,
 }
 
@@ -280,18 +281,19 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
         self.paged_vecs.iter().all(|page| page.is_empty())
     }
 
+    // TODO[jpw]: stabilize the boundary memory image format and how to construct
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub unsafe fn from_iter<T: Copy>(
+    pub fn from_sparse(
         as_offset: u32,
         as_cnt: usize,
         mem_size: usize,
-        iter: impl IntoIterator<Item = (Address, T)>,
+        sparse_map: SparseMemoryImage,
     ) -> Self {
         let mut vec = Self::new(as_offset, as_cnt, mem_size);
-        for (address, data) in iter {
-            vec.insert(address, &data);
+        for ((addr_space, index), data_byte) in sparse_map.into_iter() {
+            vec.paged_vecs[(addr_space - as_offset) as usize].set(index as usize, data_byte);
         }
         vec
     }
@@ -321,7 +323,8 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     ) -> [T; N] {
         debug_assert_eq!(
             size_of::<T>(),
-            self.cell_size[(addr_space - self.as_offset) as usize]
+            self.cell_size[(addr_space - self.as_offset) as usize],
+            "addr_space={addr_space}"
         );
         self.paged_vecs
             .get_unchecked_mut((addr_space - self.as_offset) as usize)
@@ -336,9 +339,9 @@ mod tests {
     #[test]
     fn test_basic_get_set() {
         let mut v = PagedVec::<16>::new(3);
-        assert_eq!(v.get(0), 0u32);
+        assert_eq!(v.get::<u32>(0), 0u32);
         v.set(0, 42u32);
-        assert_eq!(v.get(0), 42u32);
+        assert_eq!(v.get::<u32>(0), 42u32);
     }
 
     // TEMP: disable tests (need to update indexing * size_of<u32>)

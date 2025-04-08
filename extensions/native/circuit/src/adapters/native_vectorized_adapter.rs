@@ -172,8 +172,8 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
     )> {
         let Instruction { b, c, d, e, .. } = *instruction;
 
-        let y_val = memory.read::<N>(d, b);
-        let z_val = memory.read::<N>(e, c);
+        let y_val = memory.read::<F, N>(d, b);
+        let z_val = memory.read::<F, N>(e, c);
 
         Ok((
             [y_val.1, z_val.1],
