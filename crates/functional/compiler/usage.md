@@ -1,0 +1,141 @@
+# Current Usage Instructions for ZK Functional Language
+
+Using the language consists of the following steps:
+- Write a program in the language
+- Run the compiler on your program to transpile it to a Rust program
+- Interact with the transpiled Rust program
+
+See the language guide for an explanation on how to write programs in the language.
+We will provide general instructions on running the compiler and interacting with the program,
+but we will also provide specific instructions that assume that the program and compiler output will be stored in files.
+These instructions will assume that the program is stored in a file called `program.txt` in the working directory.
+
+## Running the compiler
+
+The compiler involves many stages; however, these are handled for you by the `compile` function in the `all` module.
+The `compile` function takes as input the source code of the program as a `&str`,
+and produces as output the source code of the transpiled Rust program as a `String`.
+
+As an example, to compile the program in `program.txt` and store the result in `program.rs`:
+```rust
+use openvm::functional::compiler::all::compile;
+
+fn main() {
+    let source = std::fs::read_to_string("program.txt").unwrap();
+    let result = compile(&source);
+    std::fs::write("program.rs", result).unwrap();
+}
+```
+
+## Execution and proving
+
+For this section, you will need to have access to the transpiled Rust program as a module. A complete program in the language should have a main function; in this case,
+the transpiled Rust program will have a struct called `TLFunction_main` -- this corresponds to said main function.
+Additionally, the Rust program will always have the following structs which we will interact with:
+- `Tracker`: This struct stores global information about the execution of the program such as memory and information needed for trace generation.
+- `TraceSet`: This struct stores the generated trace for each function.
+- `ProofInput`: The struct serves as the final output of the trace generation process, and has one field for the AIRs and one for the traces (in the same order).
+
+### Execution
+
+To execute the program, perform the following steps:
+1. Create an instance of `TLFunction_main` and `Tracker`. Both implement the `Default` trait, so you can use `Default::default()` to create them.
+2. If you intend to prove the execution later on, set the `materialized` field of the `TLFunction_main` struct to `true`. If this is not done, the generated traces will be empty.
+3. If `main` has any arguments, set the corresponding fields to the intended values. The field names will be identical to the names of the arguments in the program.
+4. Call the `stage_0` function on the `TLFunction_main` struct; the only argument will be a mutable reference to the `Tracker` struct.
+
+Example:
+```rust
+use crate::program::{TLFunction_main, Tracker};
+
+fn main() {
+    let mut tracker = transpiled_merkle::Tracker::default();
+    let mut main = TLFunction_main::default();
+
+    main.materialized = true;
+    main.arg1 = true;
+    main.stage_0(&mut tracker);
+}
+```
+
+After this, the proram will have executed and any outputs of the `main` function will be stored in the `TLFunction_main` struct;
+like before, the field names will be identical to the names of the output arguments in the program.
+
+### Trace generation
+
+To perform trace generation, perform the following steps:
+1. Create an instance of `TraceSet`; like before, it implements `Default`.
+2. Call the `generate_trace` function on the `TLFunction_main` struct; 
+the first argument will be a reference to the `Tracker` struct, and the second argument will be a mutable reference to the `TraceSet` struct.
+3. Create an instance of `ProofInput` by calling `ProofInput::new` with the `TraceSet` struct as the only argument.
+
+Example:
+```rust
+use crate::program::{TLFunction_main, Tracker, TraceSet, ProofInput};
+
+fn main() {
+    ...
+        
+    let mut trace_set = TraceSet::default();
+    main.generate_trace(&tracker, &mut trace_set);
+    let proof_input = ProofInput::new(trace_set);
+}
+```
+After this, you will have a `ProofInput` struct which contains the AIRs and the traces, i.e. all the structs needed for proving.
+If desired, you can also look at the traces themselves by accessing the fields of the `TraceSet` instance before creating the `ProofInput` instance.
+
+### Proving
+
+Simply pass the `airs` field of type `Vec<AirRef<SC>>` and the `inputs` field of type `Vec<AirProofInput<SC>>` to a proving function.
+
+Example:
+```rust
+
+use crate::program::{TLFunction_main, Tracker, TraceSet, ProofInput};
+
+use openvm_stark_backend::engine::StarkEngine;
+use openvm_stark_sdk::config::baby_bear_blake3::BabyBearBlake3Engine;
+use openvm_stark_sdk::config::FriParameters;
+use openvm_stark_sdk::engine::StarkFriEngine;
+
+fn main() {
+    ...
+        
+    let engine = BabyBearBlake3Engine::new(FriParameters::new_for_testing(1));
+    let result = engine.run_test_impl(proof_input.airs, proof_input.inputs);
+    result.expect("Verification failed");
+    println!("success");
+}
+```
+
+### Full Example
+
+```rust
+use crate::program::{TLFunction_main, Tracker, TraceSet, ProofInput};
+
+use openvm_stark_backend::engine::StarkEngine;
+use openvm_stark_sdk::config::baby_bear_blake3::BabyBearBlake3Engine;
+use openvm_stark_sdk::config::FriParameters;
+use openvm_stark_sdk::engine::StarkFriEngine;
+
+fn main() {
+    // execution
+    let mut tracker = transpiled_merkle::Tracker::default();
+    let mut main = TLFunction_main::default();
+
+    main.materialized = true;
+    main.arg1 = true;
+    main.stage_0(&mut tracker);
+
+    // trace generation
+    let mut trace_set = TraceSet::default();
+    main.generate_trace(&tracker, &mut trace_set);
+    let proof_input = ProofInput::new(trace_set);
+    
+    // proving
+    let engine = BabyBearBlake3Engine::new(FriParameters::new_for_testing(1));
+    let result = engine.run_test_impl(proof_input.airs, proof_input.inputs);
+    result.expect("Verification failed");
+    println!("success");
+}
+```

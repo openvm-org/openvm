@@ -1,18 +1,21 @@
-use crate::transpilation::air::proof_input::rust_proof_input;
+use std::env::set_var;
+use std::io::Write;
+
+use openvm_stark_backend::engine::StarkEngine;
+use openvm_stark_sdk::config::baby_bear_blake3::BabyBearBlake3Engine;
+use openvm_stark_sdk::config::FriParameters;
+use openvm_stark_sdk::engine::StarkFriEngine;
+
+use crate::all::compile;
 use crate::transpiled_merkle::TLFunction_main;
 use crate::{
     core::stage1::stage1,
     parser::parser::parse_program_source,
     transpiled_fibonacci::{isize_to_field_elem, TLFunction_fibonacci},
 };
-use openvm_stark_backend::engine::StarkEngine;
-use openvm_stark_sdk::config::baby_bear_blake3::BabyBearBlake3Engine;
-use openvm_stark_sdk::config::FriParameters;
-use openvm_stark_sdk::engine::StarkFriEngine;
-use std::env::set_var;
-use std::io::Write;
 
 pub mod air;
+pub mod all;
 pub mod core;
 pub mod parser;
 mod transpilation;
@@ -60,25 +63,10 @@ fn parse_and_compile_and_transpile_fibonacci() {
 
 fn parse_and_compile_and_transpile_merkle() {
     let source = std::fs::read_to_string("merkle.txt").unwrap();
-    let program = parse_program_source(&source).unwrap();
-    let stage2_program = stage1(program).unwrap();
-    let execution = stage2_program.transpile_execution();
-    let air_set = stage2_program.construct_airs();
-    let trace_generation = stage2_program.transpile_trace_generation(&air_set);
-    let airs = air_set.transpile_airs();
-    let proof_input = rust_proof_input(&stage2_program);
-    //println!("{}", execution);
-    //println!("{}", trace_generation);
-    //println!("{}", airs);
-    //println!("{}", proof_input);
+    let result = compile(&source);
     let file = std::fs::File::create("src/transpiled_merkle.rs").unwrap();
     let mut file = std::io::BufWriter::new(file);
-    file.write_all(format!("{}", execution).as_bytes()).unwrap();
-    file.write_all(format!("{}", trace_generation).as_bytes())
-        .unwrap();
-    file.write_all(format!("{}", airs).as_bytes()).unwrap();
-    file.write_all(format!("{}", proof_input).as_bytes())
-        .unwrap();
+    file.write_all(result.as_bytes()).unwrap();
 }
 
 fn test_merkle(should_fail: bool) {
