@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use itertools::Itertools;
 
 use crate::air::air::ScopedConstraint;
+use crate::core::function_resolution::MAIN_FUNCTION_NAME;
 use crate::{
     air::{
         air::{AirExpression, Bus, Constraint, Direction, Interaction},
@@ -446,16 +447,19 @@ impl FlattenedFunction {
                 &program.types,
             )
         });
-        let own_call_interaction = Interaction {
-            bus: Bus::Function,
-            direction: Direction::Receive,
-            multiplicity: AirExpression::one(),
-            fields: vec![AirExpression::constant(self.function_id as isize)]
-                .into_iter()
-                .chain(argument_representations)
-                .collect(),
-        };
-        air_constructor.add_scoped_interaction(&ScopePath::empty(), own_call_interaction);
+
+        if self.name != MAIN_FUNCTION_NAME {
+            let own_call_interaction = Interaction {
+                bus: Bus::Function,
+                direction: Direction::Receive,
+                multiplicity: AirExpression::one(),
+                fields: vec![AirExpression::constant(self.function_id as isize)]
+                    .into_iter()
+                    .chain(argument_representations)
+                    .collect(),
+            };
+            air_constructor.add_scoped_interaction(&ScopePath::empty(), own_call_interaction);
+        }
 
         for assertion in self.assertions.iter() {
             let left_representation = assertion.left.calc_representation(

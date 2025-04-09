@@ -6,6 +6,7 @@ use super::{
     ir::{Body, StatementVariant},
     type_resolution::TypeSet,
 };
+use crate::core::function_resolution::MAIN_FUNCTION_NAME;
 use crate::{
     core::{
         containers::{Assertion, DeclarationSet, ExpressionContainer, RootContainer},
@@ -302,6 +303,11 @@ impl FlattenedFunction {
             disp_steps.push(DeclarationResolutionStep::Match(i));
         }
         for (i, function_call) in self.function_calls.iter().enumerate() {
+            if function_call.function_name == MAIN_FUNCTION_NAME {
+                return Err(CompilationError::CannotCallMain(
+                    function_call.parser_metadata.clone(),
+                ));
+            }
             let callee = &root_container
                 .function_set
                 .get_function(&function_call.function_name, &function_call.parser_metadata)?

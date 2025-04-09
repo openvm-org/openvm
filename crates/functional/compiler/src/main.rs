@@ -84,6 +84,7 @@ fn parse_and_compile_and_transpile_merkle() {
 fn test_merkle(should_fail: bool) {
     let mut tracker = transpiled_merkle::Tracker::default();
     let mut main = TLFunction_main::default();
+
     main.materialized = true;
     main.should_fail = should_fail;
     main.stage_0(&mut tracker);
@@ -98,6 +99,10 @@ fn test_merkle(should_fail: bool) {
     println!(
         "trace_set.merkle_verify_trace length = {}",
         trace_set.merkle_verify_trace.len()
+    );
+    println!(
+        "trace_set.main_trace length = {}",
+        trace_set.main_trace.len()
     );
     let proof_input = transpiled_merkle::ProofInput::new(trace_set);
     let engine = BabyBearBlake3Engine::new(FriParameters::new_for_testing(1));

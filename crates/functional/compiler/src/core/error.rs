@@ -57,4 +57,6 @@ pub enum CompilationError {
     DuplicateTypeName(ParserMetadata, String),
     TypeNameCannotBeF(ParserMetadata),
     AlgebraicTypeCannotBeEmpty(ParserMetadata, String),
+
+    CannotCallMain(ParserMetadata),
 }

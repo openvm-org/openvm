@@ -3,7 +3,8 @@ enum Bool ( True, False )
 fn merkle_verify(in<[F; 8]> leaf, in<F> length, in<@[Bool]> bits, in<{@[[F; 8]]}> siblings, out<[F; 8]> commit) (
     alloc<[F; 8]> left;
     alloc<[F; 8]> right;
-    hash(left, right, def hash_result);
+    alloc<[F; 8]> hash_result;
+    hash(left, right, set hash_result);
     {match length == 0} (
         True => (
             length = 0;
@@ -31,13 +32,7 @@ fn merkle_verify(in<[F; 8]> leaf, in<F> length, in<@[Bool]> bits, in<{@[[F; 8]]}
             fix commit = hash_result;
         )
     )
-)/*
-
- columns:
- - 3: state
- - 8: left
-
- */
+)
 
 inline hash(in<[F; 8]> left, in<[F; 8]> right, out<[F; 8]> result) (
     fix result = [

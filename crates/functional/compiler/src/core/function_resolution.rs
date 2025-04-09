@@ -6,6 +6,8 @@ use super::{
 };
 use crate::parser::metadata::ParserMetadata;
 
+pub const MAIN_FUNCTION_NAME: &str = "main";
+
 pub struct FunctionSet {
     pub(crate) functions: HashMap<String, FunctionContainer>,
     pub(crate) function_order: Vec<String>,
