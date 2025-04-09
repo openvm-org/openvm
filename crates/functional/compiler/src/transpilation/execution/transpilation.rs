@@ -361,13 +361,13 @@ impl FlatStatement {
                 reference: reference_expression,
                 data,
             } => {
-                let type_identifier = type_to_identifier_execution(data.get_type());
+                let tipo = data.get_type();
                 let data = data.transpile_defined(scope, &namer, type_set);
                 let zk_identifier = match material {
                     Material::Materialized => calc_zk_identifier(index),
                     Material::Dematerialized => quote! { 0 },
                 };
-                let reference = create_ref(type_identifier, data, zk_identifier);
+                let reference = create_ref(tipo, data, zk_identifier);
                 let (init, this) = match material {
                     Material::Materialized => {
                         let ref_name = namer.reference_name(index);
@@ -395,18 +395,10 @@ impl FlatStatement {
                     #following
                 }
             }
-            StatementVariant::Dereference {
-                data: data_expression,
-                reference,
-            } => {
-                let tipo = reference.get_type();
+            StatementVariant::Dereference { data, reference } => {
+                let tipo = data.get_type();
                 let reference = reference.transpile_defined(scope, &namer, type_set);
-                data_expression.transpile_top_down(
-                    scope,
-                    &dereference(tipo, reference),
-                    namer,
-                    type_set,
-                )
+                data.transpile_top_down(scope, &dereference(tipo, reference), namer, type_set)
             }
             StatementVariant::EmptyPrefix {
                 prefix: array,

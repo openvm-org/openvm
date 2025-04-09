@@ -1,16 +1,15 @@
 enum Bool ( True, False )
 
-fn merkle_verify(in<[F; 8]> leaf, in<F> length, in<@[Bool]> bits, in<{@[[F; 8]]}> siblings, out<[F; 8]> commit) (
+fn merkle_verify(in<&[F; 8]> leaf, in<F> length, in<@[Bool]> bits, in<{@[[F; 8]]}> siblings, out alloc<[F; 8]> commit) (
     alloc<[F; 8]> left;
     alloc<[F; 8]> right;
-    alloc<[F; 8]> hash_result;
-    hash(left, right, set hash_result);
+    hash(left, right, def hash_result);
     {match length == 0} (
         True => (
             length = 0;
             set left = [0; 8];
             set right = [0; 8];
-            fix commit = leaf;
+            set commit <- leaf;
         )
         False => (
             merkle_verify(leaf, length - 1, bits, siblings, let child);
@@ -29,7 +28,7 @@ fn merkle_verify(in<[F; 8]> leaf, in<F> length, in<@[Bool]> bits, in<{@[[F; 8]]}
                     {set right = sibling};
                 )
             )
-            fix commit = hash_result;
+            set commit = hash_result;
         )
     )
 )
@@ -49,6 +48,7 @@ inline hash(in<[F; 8]> left, in<[F; 8]> right, out<[F; 8]> result) (
 
 fn main(in<Bool> should_fail) (
     def leaf = [0; 8];
+    def leaf_ref -> leaf;
     def a = [1; 8];
     def b = [2; 8];
     def c = [3; 8];
@@ -71,10 +71,10 @@ fn main(in<Bool> should_fail) (
 
     match should_fail (
         False => (
-            merkle_verify(leaf, 3, bits, siblings, root);
+            merkle_verify(leaf_ref, 3, bits, siblings, root);
         )
         True => (
-            merkle_verify(leaf, 2, bits, siblings, root);
+            merkle_verify(leaf_ref, 2, bits, siblings, root);
         )
     )
 )

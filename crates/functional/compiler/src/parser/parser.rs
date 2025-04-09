@@ -377,7 +377,7 @@ fn parse_statement_variant(pair: Pair<Rule>) -> StatementVariant {
                     let mut inner = inside.into_inner();
                     let data = parse_expression(inner.next().unwrap());
                     let reference = parse_expression(inner.next().unwrap());
-                    StatementVariant::Reference { reference, data }
+                    StatementVariant::Dereference { reference, data }
                 }
                 Rule::empty_prefix => {
                     let mut inner = inside.into_inner();

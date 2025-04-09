@@ -136,15 +136,13 @@ pub fn usize_to_field_elem(x: impl ToTokens) -> TokenStream {
     }
 }
 
-pub fn create_ref(
-    type_identifier: String,
-    x: impl ToTokens,
-    zk_identifier: TokenStream,
-) -> TokenStream {
+pub fn create_ref(tipo: &Type, x: impl ToTokens, zk_identifier: TokenStream) -> TokenStream {
+    let type_identifier = type_to_identifier_execution(tipo);
     let tracker = ident(TRACKER);
-    let function_name = ident(&format!("{}_{}", CREATE_REF, type_identifier));
+    let memory = ident(&format!("{}_{}", MEMORY, type_identifier));
+    let function_name = ident(CREATE_REF);
     quote! {
-        #tracker.#function_name(#x, #zk_identifier)
+        #tracker.#memory.#function_name(#x, #zk_identifier)
     }
 }
 
