@@ -30,7 +30,7 @@ openvm-native-recursion = { workspace = true, features = ["test-utils"] }
 
 clap = { version = "4.5.9", features = ["derive", "env"] }
 eyre.workspace = true
-tokio = { version = "1.41.1", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1.43.1", features = ["rt", "rt-multi-thread", "macros"] }
 rand_chacha = { version = "0.3", default-features = false }
 k256 = { workspace = true, features = ["ecdsa"] }
 tiny-keccak.workspace = true
