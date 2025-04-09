@@ -387,9 +387,9 @@ fn test_symbolic_limbs_mul() {
         Box::new(SymbolicExpr::Var(0)),
         Box::new(SymbolicExpr::Var(1)),
     );
-    // x * y = pq, q can be up to p so can limbs as p.
-    // x * y and p * q  both have 63 limbs.
-    let expected_q = 32;
-    let expected_carry = 63;
+    // x * y = pq, and x,y can be up to 2^256 - 1 so q can be up to ceil((2^256 - 1)^2 / p) which has 257 bits, which is 33 limbs
+    // x * y has 63 limbs, but p * q can have 64 limbs since q is 33 limbs
+    let expected_q = 33;
+    let expected_carry = 64;
     test_symbolic_limbs(expr, expected_q, expected_carry);
 }

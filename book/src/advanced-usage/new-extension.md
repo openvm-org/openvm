@@ -10,6 +10,7 @@ Extensions in OpenVM let you introduce additional functionality without disrupti
 This modular architecture means the extension cleanly adds new capabilities while leaving the rest of OpenVM untouched. The entire system, including the extension’s operations, can still be proven correct.
 
 Conceptually, a new extension consists of three parts:
+
 - **Guest**: High-level Rust code that defines and uses the new operations.
 - **Transpiler**: Logic that converts custom RISC-V instructions into corresponding OpenVM instructions.
 - **Circuit**: The special chips that enforce correctness of instruction execution through polynomial constraints.
@@ -36,6 +37,5 @@ The circuit component is where the extension’s logic is enforced in a zero-kno
 
 - Implements the computing logic, so that the output always corresponds to the correct result of the new operation. The chip has access to the memory shared with the other chips from the VM via [our special architecture](https://github.com/openvm-org/openvm/blob/main/docs/specs/ISA.md).
 - Properly constrains all the inputs, outputs and intermediate variables using polynomial equations in such a way that there is no way to fill these variables with values that correspond to an incorrect output while fitting the constraints.
-
 
 For more technical details on writing circuits and constraints, consult the OpenVM [contributor documentation](https://github.com/openvm-org/openvm/blob/main/docs/specs/README.md), which provides specifications and guidelines for integrating your extension into the OpenVM framework.

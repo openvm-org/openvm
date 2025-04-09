@@ -3,7 +3,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use derive_more::derive::From;
 use eyre::Result;
 use num_bigint::BigUint;
 use openvm_algebra_circuit::{
@@ -13,14 +12,10 @@ use openvm_algebra_circuit::{
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_circuit::{
-    arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExecutor,
-        VmInventoryError,
-    },
-    derive::{AnyEnum, InstructionExecutor, VmConfig},
+    arch::{SystemConfig, VmExecutor},
+    derive::VmConfig,
     utils::air_test,
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;

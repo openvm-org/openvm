@@ -251,11 +251,23 @@ impl<const NUM_BITS: usize> ChipUsageGetter for SharedBitwiseOperationLookupChip
         self.0.air_name()
     }
 
+    fn constant_trace_height(&self) -> Option<usize> {
+        self.0.constant_trace_height()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.0.current_trace_height()
     }
 
     fn trace_width(&self) -> usize {
         self.0.trace_width()
+    }
+}
+
+impl<const NUM_BITS: usize> AsRef<BitwiseOperationLookupChip<NUM_BITS>>
+    for SharedBitwiseOperationLookupChip<NUM_BITS>
+{
+    fn as_ref(&self) -> &BitwiseOperationLookupChip<NUM_BITS> {
+        &self.0
     }
 }

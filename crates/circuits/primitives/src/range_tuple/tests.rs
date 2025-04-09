@@ -87,24 +87,18 @@ fn negative_test_range_tuple_chip() {
     let bus = RangeTupleCheckerBus::new(bus_index, sizes);
     let range_checker = RangeTupleCheckerChip::new(bus);
 
-    let height = sizes.iter().product();
-    let range_trace = RowMajorMatrix::new(
-        (1..=height)
-            .flat_map(|idx| {
-                let mut idx = idx;
-                let mut v = vec![];
-                for size in sizes.iter().rev() {
-                    let val = idx % size;
-                    idx /= size;
-                    v.push(val);
-                }
-                v.reverse();
-                v.into_iter().chain(iter::once(0))
-            })
-            .map(FieldAlgebra::from_wrapped_u32)
-            .collect(),
-        sizes.len() + 1,
-    );
+    let valid_tuples: Vec<Vec<u32>> = (0..2)
+        .flat_map(|i| (0..2).flat_map(move |j| (0..8).map(move |k| vec![i, j, k])))
+        .collect();
+
+    for tuple in &valid_tuples {
+        range_checker.add_count(tuple);
+    }
+
+    let mut range_trace = range_checker.generate_trace();
+
+    // Corrupt the trace to make it invalid
+    range_trace.values[0] = BabyBear::from_wrapped_u32(99);
 
     disable_debug_builder();
     assert_eq!(

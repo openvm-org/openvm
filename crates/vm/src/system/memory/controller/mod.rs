@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use getset::Getters;
+use getset::{Getters, MutGetters};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_zero::IsZeroSubAir,
@@ -88,25 +88,20 @@ pub type TimestampedEquipartition<F, const N: usize> =
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
 pub type Equipartition<F, const N: usize> = BTreeMap<(u32, u32), [F; N]>;
 
-#[derive(Getters)]
+#[derive(Getters, MutGetters)]
 pub struct MemoryController<F> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
-
     #[getset(get = "pub")]
     pub(crate) mem_config: MemoryConfig,
     pub range_checker: SharedVariableRangeCheckerChip,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
-
     // addr_space -> Memory data structure
     memory: Memory<F>,
-
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-
-    access_adapters: AccessAdapterInventory<F>,
-
+    pub access_adapters: AccessAdapterInventory<F>,
     // Filled during finalization.
     final_state: Option<FinalState<F>>,
 }
@@ -461,6 +456,13 @@ impl<F: PrimeField32> MemoryController<F> {
 
     fn replay_access_log(&mut self) {
         let log = mem::take(&mut self.memory.log);
+        if log.is_empty() {
+            // Online memory logs may be empty, but offline memory may be replayed from external sources.
+            // In these cases, we skip the calls to replay access logs because `set_log_capacity` would
+            // panic.
+            tracing::debug!("skipping replay_access_log");
+            return;
+        }
 
         let mut offline_memory = self.offline_memory.lock().unwrap();
         offline_memory.set_log_capacity(log.len());
@@ -475,7 +477,8 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    fn replay_access(
+    /// Low-level API to replay a single memory access log entry and populate the [OfflineMemory], [MemoryInterface], and `AccessAdapterInventory`.
+    pub fn replay_access(
         entry: MemoryLogEntry<F>,
         offline_memory: &mut OfflineMemory<F>,
         interface_chip: &mut MemoryInterface<F>,
@@ -652,6 +655,7 @@ impl<F: PrimeField32> MemoryController<F> {
             }),
         }
     }
+
     pub fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
         let access_adapters = vec![1; self.access_adapters.num_access_adapters()];
         match &self.interface_chip {

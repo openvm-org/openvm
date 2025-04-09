@@ -163,9 +163,10 @@ impl<F: PrimeField32> OfflineMemory<F> {
         range_checker: SharedVariableRangeCheckerChip,
         config: MemoryConfig,
     ) -> Self {
+        assert_eq!(initial_memory.as_offset, config.as_offset);
         Self {
             block_data: BlockMap::from_mem_config(&config, initial_block_size),
-            data: Self::memory_image_to_paged_vec(initial_memory, config),
+            data: initial_memory.paged_vecs,
             as_offset: config.as_offset,
             timestamp: INITIAL_TIMESTAMP + 1,
             timestamp_max_bits: config.clk_max_bits,
@@ -177,23 +178,9 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
     pub fn set_initial_memory(&mut self, initial_memory: MemoryImage<F>, config: MemoryConfig) {
         assert_eq!(self.timestamp, INITIAL_TIMESTAMP + 1);
+        assert_eq!(initial_memory.as_offset, config.as_offset);
         self.as_offset = config.as_offset;
-        self.data = Self::memory_image_to_paged_vec(initial_memory, config);
-    }
-
-    fn memory_image_to_paged_vec(
-        memory_image: MemoryImage<F>,
-        config: MemoryConfig,
-    ) -> Vec<PagedVec<F, PAGE_SIZE>> {
-        let mut paged_vec =
-            vec![
-                PagedVec::new((1usize << config.pointer_max_bits).div_ceil(PAGE_SIZE));
-                1 << config.as_height
-            ];
-        for ((addr_space, pointer), value) in memory_image.items() {
-            paged_vec[(addr_space - config.as_offset) as usize].set(pointer as usize, value);
-        }
-        paged_vec
+        self.data = initial_memory.paged_vecs;
     }
 
     pub(super) fn set_log_capacity(&mut self, access_capacity: usize) {
@@ -583,7 +570,7 @@ mod tests {
         let range_checker =
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29));
         let mem_config = MemoryConfig {
-            as_offset: 1,
+            as_offset: initial_memory.as_offset,
             ..Default::default()
         };
         let memory = OfflineMemory::new(

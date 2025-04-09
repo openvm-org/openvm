@@ -9,7 +9,7 @@ use openvm_sdk::{
     prover::AppProver,
     Sdk, StdIn,
 };
-use openvm_stark_sdk::config::FriParameters;
+use openvm_stark_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters};
 use openvm_transpiler::elf::Elf;
 use serde::{Deserialize, Serialize};
 
@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// ```
     // ANCHOR: build
     // 1. Build the VmConfig with the extensions needed.
-    let sdk = Sdk;
+    let sdk = Sdk::new();
 
     // 2a. Build the ELF with guest options and a target filter.
     let guest_opts = GuestOptions::default();
@@ -90,8 +90,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 9a. Generate a proof
     let proof = sdk.generate_app_proof(app_pk.clone(), app_committed_exe.clone(), stdin.clone())?;
     // 9b. Generate a proof with an AppProver with custom fields
-    let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe.clone())
-        .with_program_name("test_program");
+    let app_prover = AppProver::<_, BabyBearPoseidon2Engine>::new(
+        app_pk.app_vm_pk.clone(),
+        app_committed_exe.clone(),
+    )
+    .with_program_name("test_program");
     let proof = app_prover.generate_app_proof(stdin.clone());
     // ANCHOR_END: proof_generation
 

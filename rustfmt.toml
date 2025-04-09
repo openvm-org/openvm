@@ -1,2 +1,4 @@
-group_imports = "StdExternalCrate"
+style_edition = "2021"
 imports_granularity = "Crate"
+# unstable features: use cargo +nightly fmt
+group_imports = "StdExternalCrate"

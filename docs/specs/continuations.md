@@ -29,6 +29,12 @@ wrapper is determined by the following parameters:
 - Number of public values
 - The Aggregation VM chip constraints (but **not** the App VM chips)
 
+Public values:
+- `accumulators`: `12 * 32` bytes representing the KZG accumulator of the SNARK proof.
+- `exe_commit`: one `Bn254Fr` element (as `32` bytes) for the commitment of the app executable.
+- `leaf_commit`: one `Bn254Fr` element (as `32` bytes) for the commitment of the executable verifying app VM proofs.
+- `user_public_values`: sequence of `num_public_values` user-defined public values, each as a `Bn254Fr` element (`32` bytes). The number of user public values is a VM configuration parameter.
+
 ## Continuation Verifier
 
 The continuation verifier is a Halo2 circuit (static verifier) together with some single segment VM circuits (Agg VM).
@@ -47,23 +53,19 @@ Static Verifier Requirements:
 - The height of each trace is fixed.
 - Trace heights are in a descending order.
 
-Public Values Exposed:
-
-- Exe commit encoded in Bn254
-- Leaf commit encoded in Bn254
-- User public values in BabyBear
-
 Parameters (which could result in a different circuit):
-
-- Number of public values (from upper stream)
-- k in Halo2
-- Determines the number of columns of the circuit.
 
 - Number of public values (from upstream)
 - k in Halo2 (determines the number of columns in the circuit)
 - Root VM verifier
   - VK (including the heights of all traces)
   - Root verifier program commitment
+
+Public values:
+- `exe_commit`: one `Bn254Fr` element (as `32` bytes) for the commitment of the app executable.
+- `leaf_commit`: one `Bn254Fr` element (as `32` bytes) for the commitment of the executable verifying app VM proofs.
+- `user_public_values`: sequence of `num_public_values` user-defined public values, each as a `Bn254Fr` element (`32` bytes). The number of user public values is a VM configuration parameter.
+
 
 ### Aggregation VM
 
@@ -88,18 +90,24 @@ The Root VM Verifier verifies 1 or more proofs of:
 
 In practice, Root VM verifier only verifies one proof to guarantee constant heights.
 
-Logical Input:
+Input:
 
-- Root input
+- Root input (`RootVmVerifierInput<SC>` containing proofs and public values)
+
+Output:
+
+- `Proof<RootSC>`
 
 Cached Trace Commit:
 
 - `ProgramAir`: commits the root verifier program
 
-Public values:
+Public Values (`RootVmVerifierPvs`):
+  - `exe_commit: [F; DIGEST_SIZE]` - Original program execution commitment
+  - `leaf_verifier_commit: [F; DIGEST_SIZE]` - Commitment to leaf verifier program
+  - `public_values: Vec<F>` - Original user-defined public values preserved through chain
 
-- `RootVmVerifierPvs`
-  - Note: exe_commit is the commitment of the executable. The way to compute it can be found here.
+**Note:** the verifier program hardcodes the commitment to the internal program as a constant -- that is why it is not among public values.
 
 Parameters:
 
@@ -117,17 +125,23 @@ The Internal VM Verifier validates one or more proofs of:
 - Leaf VM Verifier
 - Internal VM Verifier
 
-Logical Input:
+Input:
 
-- `InternalVmVerifierInput`
+- `Vec<Proof<SC>>` (Leaf of other internal proofs)
+
+Output:
+
+- `Proof<SC>`
 
 Cached Trace Commit:
 
 - `ProgramAir`: commits the internal verifier program. `agg_vm_pk` contains it.
 
-Public values:
-
-- `InternalVmVerifierPvs`
+Public Values (`InternalVmVerifierPvs`):
+  - `vm_verifier_pvs: VmVerifierPvs<F>` - See below
+  - `extra_pvs: InternalVmVerifierExtraPvs<F>`:
+    - `leaf_verifier_commit: [F; DIGEST_SIZE]` - The commitment of the leaf verifier program
+    - `internal_program_commit: [F; DIGEST_SIZE]` - The commitment of the internal program
 
 Parameters:
 
@@ -144,17 +158,29 @@ Verify 1 or more proofs of:
 
 - segment circuits
 
-Logical Input:
+Input:
 
-- `LeafVmVerifierInput`
+- `ContinuationVmProof<SC>`
+
+Output:
+
+- `Vec<Proof<SC>>`
 
 Cached Trace Commit:
 
 - ProgramAir: commits the leaf verifier program. The leaf verifier program commits .
 
-Public values:
-
-- `VmVerifierPvs`
+Public Values (`VmVerifierPvs`):
+  - `app_commit: [F; DIGEST_SIZE]` - Commitment to program code
+  - `connector`: Contains execution metadata:
+    - `is_terminate: F` - Flag indicating if execution terminated
+    - `initial_pc: F` - Starting program counter
+    - `final_pc: F` - Final program counter
+    - `exit_code: F` - Program exit code (0=success)
+  - `memory`: Contains memory state information:
+    - `initial_root: [F; DIGEST_SIZE]` - Merkle root of initial memory
+    - `final_root: [F; DIGEST_SIZE]` - Merkle root of final memory
+  - `public_values_commit: [F; DIGEST_SIZE]` - Merkle root of the subtree corresponding to the user public values
 
 Parameters:
 
@@ -170,9 +196,13 @@ App VM executes an executable with inputs and returns a list of segment proofs.
 
 ## Segment
 
-Logical Input:
+Input:
 
-- App VM input stream
+- App VM input stream (`StdIn`)
+
+Output: `ContinuationVmProof<SC>` containing:
+  - `per_segment`: Collection of STARK proofs for each execution segment
+  - `user_public_values`: Merkle proof of public values from memory Merkle root
 
 Cached Trace Commit:
 

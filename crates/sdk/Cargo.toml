@@ -8,6 +8,8 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+
+p3-fri = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
 openvm-bigint-circuit = { workspace = true }
@@ -33,12 +35,13 @@ openvm-circuit = { workspace = true }
 openvm-continuations = { workspace = true }
 openvm = { workspace = true }
 
+alloy-primitives = { workspace = true }
+alloy-sol-types = { workspace = true, features = ["json"] }
 bitcode = { workspace = true }
 bon = { workspace = true }
 derivative = { workspace = true }
 derive_more = { workspace = true }
 serde = { workspace = true }
-static_assertions.workspace = true
 eyre.workspace = true
 async-trait.workspace = true
 metrics.workspace = true
@@ -49,6 +52,10 @@ clap = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["hex"] }
 serde_json.workspace = true
 thiserror.workspace = true
+snark-verifier = { workspace = true }
+snark-verifier-sdk.workspace = true
+tempfile.workspace = true
+hex.workspace = true
 
 [features]
 default = ["parallel"]

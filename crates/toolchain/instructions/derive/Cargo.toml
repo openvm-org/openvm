@@ -13,9 +13,11 @@ proc-macro = true
 [dependencies]
 syn = { version = "2.0", features = ["parsing"] }
 quote = "1.0"
-proc-macro2 = "1.0"
 
 [dev-dependencies]
 strum.workspace = true
 strum_macros.workspace = true
 openvm-instructions.workspace = true
+
+[package.metadata.cargo-shear]
+ignored = ["strum"]

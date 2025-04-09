@@ -8,9 +8,9 @@ use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
-    segment::{DefaultSegmentationStrategy, SegmentationStrategy},
-    AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
-    VmInventoryError, PUBLIC_VALUES_AIR_ID,
+    segment::DefaultSegmentationStrategy, AnyEnum, InstructionExecutor, SegmentationStrategy,
+    SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex, VmInventoryError,
+    PUBLIC_VALUES_AIR_ID,
 };
 use crate::system::memory::BOUNDARY_AIR_OFFSET;
 
@@ -92,7 +92,7 @@ pub struct SystemConfig {
     pub segmentation_strategy: Arc<dyn SegmentationStrategy>,
 }
 
-pub fn get_default_segmentation_strategy() -> Arc<dyn SegmentationStrategy> {
+pub fn get_default_segmentation_strategy() -> Arc<DefaultSegmentationStrategy> {
     Arc::new(DefaultSegmentationStrategy::default())
 }
 
@@ -150,8 +150,8 @@ impl SystemConfig {
         self
     }
 
-    pub fn set_segmentation_strategy<S: SegmentationStrategy + 'static>(&mut self, strategy: S) {
-        self.segmentation_strategy = Arc::new(strategy);
+    pub fn set_segmentation_strategy(&mut self, strategy: Arc<dyn SegmentationStrategy>) {
+        self.segmentation_strategy = strategy;
     }
 
     pub fn with_profiling(mut self) -> Self {

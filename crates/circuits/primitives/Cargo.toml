@@ -17,17 +17,9 @@ derive-new.workspace = true
 itertools.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
-lazy_static.workspace = true
 tracing.workspace = true
-bitcode.workspace = true
-serde = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
-p3-dft = { workspace = true }
-p3-fri = { workspace = true }
-p3-merkle-tree = { workspace = true }
-p3-poseidon2 = { workspace = true }
-p3-symmetric = { workspace = true }
 test-case.workspace = true
 openvm-stark-sdk = { workspace = true }
 

@@ -52,7 +52,8 @@ impl RootVerifierLocalProver {
 impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
     fn prove(&self, input: impl Into<Streams<F>>) -> Proof<RootSC> {
         let input = input.into();
-        let vm = SingleSegmentVmExecutor::new(self.vm_config().clone());
+        let mut vm = SingleSegmentVmExecutor::new(self.vm_config().clone());
+        vm.set_override_trace_heights(self.root_verifier_pk.vm_heights.clone());
         let mut proof_input = vm
             .execute_and_generate(self.root_verifier_pk.root_committed_exe.clone(), input)
             .unwrap();

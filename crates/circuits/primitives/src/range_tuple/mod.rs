@@ -231,11 +231,21 @@ impl<const N: usize> ChipUsageGetter for SharedRangeTupleCheckerChip<N> {
         self.0.air_name()
     }
 
+    fn constant_trace_height(&self) -> Option<usize> {
+        self.0.constant_trace_height()
+    }
+
     fn current_trace_height(&self) -> usize {
         self.0.current_trace_height()
     }
 
     fn trace_width(&self) -> usize {
         self.0.trace_width()
+    }
+}
+
+impl<const N: usize> AsRef<RangeTupleCheckerChip<N>> for SharedRangeTupleCheckerChip<N> {
+    fn as_ref(&self) -> &RangeTupleCheckerChip<N> {
+        &self.0
     }
 }

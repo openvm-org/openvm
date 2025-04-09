@@ -12,11 +12,7 @@ rand.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
-test-case.workspace = true
-test-log.workspace = true
-lazy_static.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-hex.workspace = true
 
 [features]
 default = ["parallel"]

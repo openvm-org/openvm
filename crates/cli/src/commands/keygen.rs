@@ -38,7 +38,7 @@ pub struct KeygenCmd {
 impl KeygenCmd {
     pub fn run(&self) -> Result<()> {
         let app_config = read_config_toml_or_default(&self.config)?;
-        let app_pk = Sdk.app_keygen(app_config)?;
+        let app_pk = Sdk::new().app_keygen(app_config)?;
         write_app_vk_to_file(app_pk.get_app_vk(), &self.vk_output)?;
         write_app_pk_to_file(app_pk, &self.output)?;
         Ok(())

@@ -7,9 +7,7 @@ use openvm_continuations::verifier::{
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, openvm_stark_backend::proof::Proof,
-};
+use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proof};
 use tracing::info_span;
 
 use crate::{
@@ -25,11 +23,11 @@ pub const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
 const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 2;
 const DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS: usize = 4;
 
-pub struct AggStarkProver {
-    leaf_prover: VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
+pub struct AggStarkProver<E: StarkFriEngine<SC>> {
+    leaf_prover: VmLocalProver<SC, NativeConfig, E>,
     leaf_controller: LeafProvingController,
 
-    internal_prover: VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
+    internal_prover: VmLocalProver<SC, NativeConfig, E>,
     root_prover: RootVerifierLocalProver,
 
     pub num_children_internal: usize,
@@ -41,19 +39,17 @@ pub struct LeafProvingController {
     pub num_children: usize,
 }
 
-impl AggStarkProver {
+impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
     pub fn new(
         agg_stark_pk: AggStarkProvingKey,
         leaf_committed_exe: Arc<NonRootCommittedExe>,
     ) -> Self {
-        let leaf_prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(
-            agg_stark_pk.leaf_vm_pk,
-            leaf_committed_exe,
-        );
+        let leaf_prover =
+            VmLocalProver::<SC, NativeConfig, E>::new(agg_stark_pk.leaf_vm_pk, leaf_committed_exe);
         let leaf_controller = LeafProvingController {
             num_children: DEFAULT_NUM_CHILDREN_LEAF,
         };
-        let internal_prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(
+        let internal_prover = VmLocalProver::<SC, NativeConfig, E>::new(
             agg_stark_pk.internal_vm_pk,
             agg_stark_pk.internal_committed_exe,
         );
@@ -184,9 +180,9 @@ impl LeafProvingController {
         self
     }
 
-    pub fn generate_proof(
+    pub fn generate_proof<E: StarkFriEngine<SC>>(
         &self,
-        prover: &VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
+        prover: &VmLocalProver<SC, NativeConfig, E>,
         app_proofs: &ContinuationVmProof<SC>,
     ) -> Vec<Proof<SC>> {
         info_span!("agg_layer", group = "leaf").in_scope(|| {

@@ -31,6 +31,9 @@ The `SdkVmConfig` struct allows you to specify the extensions and system configu
 {{ #include ../../../crates/sdk/examples/sdk_app.rs:vm_config }}
 ```
 
+> ℹ️
+> When using Rust to write the guest program, the VM system configuration should keep the default value `pointer_max_bits = 29` to match the hardcoded memory limit of the memory allocator. Otherwise, the guest program may fail due to out of bounds memory access in the VM.
+
 ## Running a Program
 
 To run your program and see the public value output, you can do the following:
@@ -77,7 +80,7 @@ After generating a proof, you can verify it. To do so, you need your verifying k
 
 ### Setup
 
-To generate an EVM proof, you'll first need to ensure that you have followed the [CLI installation steps](../../getting-started/install.md). get the appropriate KZG params by running the following command.
+To generate an EVM proof, you'll first need to ensure that you have followed the [CLI installation steps](../getting-started/install.md). get the appropriate KZG params by running the following command.
 
 ```bash
 cargo openvm setup
@@ -121,4 +124,4 @@ You can now run the aggregation keygen, proof, and verification functions for th
 > ⚠️ **WARNING**
 > The aggregation proving key `agg_pk` above is large. Avoid cloning it if possible.
 
-Note that `DEFAULT_PARAMS_DIR` is the directory where Halo2 parameters are stored by the `cargo openvm setup` CLI command. For more information on the setup process, see the `EVM Level` section of the [verify](../../writing-apps/verify.md) doc.
+Note that `DEFAULT_PARAMS_DIR` is the directory where Halo2 parameters are stored by the `cargo openvm setup` CLI command. For more information on the setup process, see the `EVM Level` section of the [verify](../writing-apps/verify.md) doc.

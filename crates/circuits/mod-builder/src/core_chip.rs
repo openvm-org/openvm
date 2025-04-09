@@ -165,7 +165,7 @@ where
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct FieldExpressionRecord {
     #[serde_as(as = "Vec<DisplayFromStr>")]
     pub inputs: Vec<BigUint>,

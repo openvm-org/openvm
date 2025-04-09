@@ -13,7 +13,7 @@
 - [Writing a Program](./writing-apps/write-program.md)
 - [Compiling](./writing-apps/build.md)
 - [Generating Proofs](./writing-apps/prove.md)
-- [Onchain Verification](./writing-apps/verify.md)
+- [Verifying Proofs](./writing-apps/verify.md)
 
 # Using Extensions
 

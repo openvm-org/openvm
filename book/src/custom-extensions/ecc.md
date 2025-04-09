@@ -2,6 +2,8 @@
 
 The OpenVM Elliptic Curve Cryptography Extension provides support for elliptic curve operations through the `openvm-ecc-guest` crate.
 
+The secp256k1 and secp256r1 curves are supported out of the box, and developers can enable arbitrary Weierstrass curves by configuring this extension with the modulus for the coordinate field and the coefficients in the curve equation.
+
 ## Available traits and methods
 
 - `Group` trait:
@@ -61,6 +63,11 @@ To use elliptic curve operations on a struct defined with `sw_declare!`, it is e
 
 For the basic operations provided by the `WeierstrassPoint` trait, the scalar field is not needed. For the ECDSA functions in the `ecdsa` module, the scalar field must also be declared, initialized, and set up.
 
+## ECDSA
+
+The ECC extension supports ECDSA signature verification on any elliptic curve, and pre-defined implementations are provided for the secp256k1 and secp256r1 curves.
+To verify an ECDSA signature, first call the `VerifyingKey::recover_from_prehash_noverify` associated function to recover the verifying key, then call the `VerifyingKey::verify_prehashed` method on the recovered verifying key.
+
 ## Example program
 
 See a working example [here](https://github.com/openvm-org/openvm/blob/main/examples/ecc/src/main.rs).
@@ -102,4 +109,6 @@ a = "0"
 b = "7"
 ```
 
-The `supported_modulus` parameter is a list of moduli that the guest program will use. The `ecc.supported_curves` parameter is a list of supported curves that the guest program will use. They must be provided in decimal format in the `.toml` file. For multiple curves create multiple `[[app_vm_config.ecc.supported_curves]]` sections.
+The `supported_modulus` parameter is a list of moduli that the guest program will use. As mentioned in the [algebra extension](./algebra.md) chapter, the order of moduli in `[app_vm_config.modular]` must match the order in the `moduli_init!` macro.
+
+The `ecc.supported_curves` parameter is a list of supported curves that the guest program will use. They must be provided in decimal format in the `.toml` file. For multiple curves create multiple `[[app_vm_config.ecc.supported_curves]]` sections. The order of curves in `[[app_vm_config.ecc.supported_curves]]` must match the order in the `sw_init!` macro.

@@ -63,9 +63,9 @@ pub(super) fn compute_root_proof_heights(
         .into_iter()
         .map(next_power_of_two_or_zero)
         .collect();
-    let mut internal_heights = res.internal_heights;
-    internal_heights.round_to_next_power_of_two_or_zero();
-    (air_heights, internal_heights)
+    let mut vm_heights = res.vm_heights;
+    vm_heights.round_to_next_power_of_two_or_zero();
+    (air_heights, vm_heights)
 }
 
 pub(super) fn dummy_internal_proof(
@@ -186,9 +186,9 @@ where
         assert_eq!(results.len(), 1, "dummy exe should have only 1 segment");
         let mut result = results.pop().unwrap();
         result.chip_complex.finalize_memory();
-        let mut internal_heights = result.chip_complex.get_internal_trace_heights();
-        internal_heights.round_to_next_power_of_two();
-        internal_heights
+        let mut vm_heights = result.chip_complex.get_internal_trace_heights();
+        vm_heights.round_to_next_power_of_two();
+        vm_heights
     };
     // For the dummy proof, we must override the trace heights.
     let app_prover =

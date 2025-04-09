@@ -2,9 +2,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(rustdoc::broken_intra_doc_links)]
-// #![deny(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-#![feature(thread_local)]
 
 #[macro_use]
 extern crate alloc;

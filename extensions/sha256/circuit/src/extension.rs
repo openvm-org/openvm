@@ -1,9 +1,6 @@
 use derive_more::derive::From;
 use openvm_circuit::{
-    arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExtension,
-        VmInventory, VmInventoryBuilder, VmInventoryError,
-    },
+    arch::{SystemConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};

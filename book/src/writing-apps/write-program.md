@@ -7,7 +7,7 @@ See the example [fibonacci program](https://github.com/openvm-org/openvm-example
 The guest program should be a `no_std` Rust crate. As long as it is `no_std`, you can import any other
 `no_std` crates and write Rust as you normally would. Import the `openvm` library crate to use `openvm` intrinsic functions (for example `openvm::io::*`).
 
-More examples of guest programs can be found in the [benchmarks/programs](https://github.com/openvm-org/openvm/tree/main/benchmarks/programs) directory.
+More examples of guest programs can be found in the [benchmarks/guest](https://github.com/openvm-org/openvm/tree/main/benchmarks/guest) directory.
 
 ## Handling I/O
 
@@ -27,7 +27,7 @@ For debugging purposes, `openvm::io::print` and `openvm::io::println` can be use
 
 > ⚠️ **WARNING**
 >
-> The maximum memory address for an OpenVM program is `2^29`. Majority of that (approximately 480-500 MB depending on transpilation) is available to the guest program, but large reads may exceed the maximum memory and thus fail.
+> The maximum memory address for an OpenVM program is `2^29`. The majority of that (approximately 480-500 MB depending on transpilation) is available to the guest program, but large reads may exceed the maximum memory and thus fail.
 
 ## Rust `std` library support
 
@@ -56,6 +56,7 @@ Binary crates can generally be written using the standard library, although for 
 OpenVM fully supports `no_std` Rust. We refer to the [Embedded Rust Book](https://docs.rust-embedded.org/book/intro/no-std.html) for a more detailed introduction to `no_std` Rust.
 
 ### `no_std` library crates
+
 In a library crate, you should add the following to `lib.rs` to declare your crate as `no_std`:
 
 ```rust
@@ -101,16 +102,20 @@ fn main() {
 ```
 
 If you want to feature gate the usage of the standard library, you can add
+
 ```toml
 [features]
 std = ["openvm/std"]
 ```
+
 to `Cargo.toml` as discussed above. In this case, the `main.rs` header should be modified to:
+
 ```rust
 // main.rs
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
+
 and you still need the `openvm::entry!(main)` line.
 This tells Rust to use the custom `main` handler when the environment is `no_std`, but to use the Rust `std` library and the standard `main` handler when the feature `"std"` is enabled.
 

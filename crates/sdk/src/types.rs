@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use openvm_native_recursion::halo2::{Fr, RawEvmProof};
+use openvm_native_recursion::halo2::{wrapper::EvmVerifierByteCode, Fr, RawEvmProof};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use thiserror::Error;
@@ -7,12 +7,20 @@ use thiserror::Error;
 /// Number of bytes in a Bn254Fr.
 const BN254_BYTES: usize = 32;
 /// Number of Bn254Fr in `accumulators` field.
-const NUM_BN254_ACCUMULATORS: usize = 12;
+pub const NUM_BN254_ACCUMULATORS: usize = 12;
 /// Number of Bn254Fr in `proof` field for a circuit with only 1 advice column.
 const NUM_BN254_PROOF: usize = 43;
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EvmHalo2Verifier {
+    pub halo2_verifier_code: String,
+    pub openvm_verifier_code: String,
+    pub openvm_verifier_interface: String,
+    pub artifact: EvmVerifierByteCode,
+}
+
 #[serde_as]
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EvmProof {
     #[serde_as(as = "serde_with::hex::Hex")]
     /// Bn254Fr public values for accumulators in flatten little-endian bytes. Length is `NUM_BN254_ACCUMULATORS * BN254_BYTES`.

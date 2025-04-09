@@ -19,7 +19,7 @@ use crate::{
         DEFAULT_AGG_PK_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_APP_PK_PATH, DEFAULT_APP_PROOF_PATH,
         DEFAULT_EVM_PROOF_PATH, DEFAULT_PARAMS_DIR,
     },
-    util::{read_to_stdin, Input},
+    input::{read_to_stdin, Input},
 };
 
 #[derive(Parser)]
@@ -61,6 +61,7 @@ enum ProveSubCommand {
 
 impl ProveCmd {
     pub fn run(&self) -> Result<()> {
+        let sdk = Sdk::new();
         match &self.command {
             ProveSubCommand::App {
                 app_pk,
@@ -68,8 +69,9 @@ impl ProveCmd {
                 input,
                 output,
             } => {
-                let (app_pk, committed_exe, input) = Self::prepare_execution(app_pk, exe, input)?;
-                let app_proof = Sdk.generate_app_proof(app_pk, committed_exe, input)?;
+                let (app_pk, committed_exe, input) =
+                    Self::prepare_execution(&sdk, app_pk, exe, input)?;
+                let app_proof = sdk.generate_app_proof(app_pk, committed_exe, input)?;
                 write_app_proof_to_file(app_proof, output)?;
             }
             ProveSubCommand::Evm {
@@ -79,13 +81,14 @@ impl ProveCmd {
                 output,
             } => {
                 let params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
-                let (app_pk, committed_exe, input) = Self::prepare_execution(app_pk, exe, input)?;
+                let (app_pk, committed_exe, input) =
+                    Self::prepare_execution(&sdk, app_pk, exe, input)?;
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 let agg_pk = read_agg_pk_from_file(DEFAULT_AGG_PK_PATH).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
                 let evm_proof =
-                    Sdk.generate_evm_proof(&params_reader, app_pk, committed_exe, agg_pk, input)?;
+                    sdk.generate_evm_proof(&params_reader, app_pk, committed_exe, agg_pk, input)?;
                 write_evm_proof_to_file(evm_proof, output)?;
             }
         }
@@ -93,6 +96,7 @@ impl ProveCmd {
     }
 
     fn prepare_execution(
+        sdk: &Sdk,
         app_pk: &PathBuf,
         exe: &PathBuf,
         input: &Option<Input>,
@@ -103,7 +107,7 @@ impl ProveCmd {
     )> {
         let app_pk: Arc<AppProvingKey<SdkVmConfig>> = Arc::new(read_app_pk_from_file(app_pk)?);
         let app_exe = read_exe_from_file(exe)?;
-        let committed_exe = Sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
+        let committed_exe = sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
 
         let commits = AppExecutionCommit::compute(
             &app_pk.app_vm_pk.vm_config,

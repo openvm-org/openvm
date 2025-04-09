@@ -3,6 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::arch::VmConfig;
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_stark_backend::{proof::Proof, Chip};
+use openvm_stark_sdk::engine::StarkFriEngine;
 
 use crate::{
     keygen::{AggStarkProvingKey, AppProvingKey},
@@ -10,11 +11,11 @@ use crate::{
     NonRootCommittedExe, RootSC, StdIn, F, SC,
 };
 
-pub struct StarkProver<VC> {
-    app_prover: AppProver<VC>,
-    agg_prover: AggStarkProver,
+pub struct StarkProver<VC, E: StarkFriEngine<SC>> {
+    app_prover: AppProver<VC, E>,
+    agg_prover: AggStarkProver<E>,
 }
-impl<VC> StarkProver<VC> {
+impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
     pub fn new(
         app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,

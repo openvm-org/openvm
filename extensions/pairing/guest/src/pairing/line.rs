@@ -1,7 +1,7 @@
 /// A line function on Fp12 x Fp12 in a sparse representation.
-/// Let Fp12 = Fp2[w] / (w^6 - \xi). Then the line function is
-/// L(x,y) = 1 + b (x/y) w' + c (1/y) w'^3
-/// where w' = w for D-type and w' = w^-1 for M-type twists
+/// Let `Fp12 = Fp2[w] / (w^6 - \xi)`. Then the line function is
+/// `L(x,y) = 1 + b (x/y) w' + c (1/y) w'^3`
+/// where `w' = w` for D-type and `w' = w^{-1}` for M-type twists
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct UnevaluatedLine<Fp2> {

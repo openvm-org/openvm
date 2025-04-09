@@ -33,16 +33,10 @@ strum = { workspace = true }
 
 [dev-dependencies]
 p3-symmetric = { workspace = true }
-p3-dft = { workspace = true }
-p3-merkle-tree = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-native-circuit = { workspace = true }
 openvm-stark-sdk = { workspace = true }
-hex.workspace = true
 rand.workspace = true
-test-case.workspace = true
-test-log.workspace = true
-lazy_static.workspace = true
 
 [features]
 default = ["parallel", "halo2-compiler"]

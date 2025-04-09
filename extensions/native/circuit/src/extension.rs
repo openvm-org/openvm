@@ -6,8 +6,8 @@ use loadstore_native_adapter::NativeLoadStoreAdapterChip;
 use native_vectorized_adapter::NativeVectorizedAdapterChip;
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, SystemPort,
-        VmChipComplex, VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, MemoryConfig, SystemConfig, SystemPort, VmExtension, VmInventory,
+        VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -44,10 +44,10 @@ pub struct NativeConfig {
 }
 
 impl NativeConfig {
-    pub fn aggregation(num_public_values: usize, poseidon2_max_constraint_degree: usize) -> Self {
+    pub fn aggregation(num_public_values: usize, max_constraint_degree: usize) -> Self {
         Self {
             system: SystemConfig::new(
-                poseidon2_max_constraint_degree,
+                max_constraint_degree,
                 MemoryConfig {
                     max_access_adapter_n: 8,
                     ..Default::default()

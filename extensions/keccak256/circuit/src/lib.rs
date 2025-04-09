@@ -80,7 +80,7 @@ pub struct KeccakVmChip<F: PrimeField32> {
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct KeccakRecord<F> {
     pub pc: F,
     pub dst_read: RecordId,
@@ -90,7 +90,7 @@ pub struct KeccakRecord<F> {
     pub digest_writes: [RecordId; KECCAK_DIGEST_WRITES],
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct KeccakInputBlock {
     /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES / KECCAK_WORD_SIZE].
     pub reads: Vec<RecordId>,

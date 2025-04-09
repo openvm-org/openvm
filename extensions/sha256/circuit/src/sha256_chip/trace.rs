@@ -12,9 +12,7 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::{
-        IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSliceMut,
-    },
+    p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::get_air_name,
     AirRef, Chip, ChipUsageGetter,

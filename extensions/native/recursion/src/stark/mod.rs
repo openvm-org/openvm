@@ -166,7 +166,7 @@ where
         // (T01b): `num_challenges_to_sample.len() < 2`.
 
         let num_phases = RVar::from(num_challenges_to_sample.len());
-        // Here the shape of `exposed_values_after_challenge` is not verified. But it's verified later.
+        // Here the shape of `exposed_values_after_challenge` is not verified. But it's verified later (T01c).
         assert_cumulative_sums(builder, air_proofs, &num_challenges_to_sample);
 
         let air_perm_by_height = if builder.flags.static_only {
@@ -336,6 +336,7 @@ where
                         let values = builder.get(&exposed_values, phase_idx);
                         let values_len =
                             builder.get(&air_advice.num_exposed_values_after_challenge, phase_idx);
+                        // (T01c): shape of `exposed_values_after_challenge` is verified
                         builder.assert_usize_eq(values_len, values.len());
 
                         iter_zip!(builder, values).for_each(|ptr_vec, builder| {
@@ -347,6 +348,7 @@ where
             });
 
             // Observe single commitment to all trace matrices in this phase.
+            builder.assert_usize_eq(after_challenge_commits.len(), RVar::one());
             let commit = builder.get(after_challenge_commits, phase_idx);
             challenger.observe_digest(builder, commit);
         });
@@ -436,7 +438,7 @@ where
             builder
                 .if_eq(advice.preprocessed_data.len(), RVar::one())
                 .then(|builder| {
-                    // Assumption: (T05b) `opening.values.preprocessed` has been validated.
+                    // Assumption: (T05a) `opening.values.preprocessed` has been validated.
                     let prep = builder.get(&opening.values.preprocessed, round_idx.clone());
                     let batch_commit = builder.get(&advice.preprocessed_data, RVar::zero());
                     let prep_width =
@@ -545,6 +547,7 @@ where
                     );
                 });
         });
+        // T05b: the shape of `opening.values.main` has been validated
         {
             let batch_commit = builder.get(main_trace_commits, main_commit_idx.clone());
             builder.set_value(
@@ -622,6 +625,7 @@ where
                 );
                 builder.assign(&round_idx, round_idx.clone() + RVar::one());
             });
+        // T05c: the shape of `opening.values.main` has been validated
 
         // 4. Quotient domains and openings
 

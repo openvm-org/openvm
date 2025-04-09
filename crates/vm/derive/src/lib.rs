@@ -317,12 +317,15 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                     #field_name_upper(#periphery_name<F>),
                 });
                 create_chip_complex.push(quote! {
-                    let complex: VmChipComplex<F, Self::Executor, Self::Periphery> = complex.extend(&self.#field_name)?;
+                    let complex: ::openvm_circuit::arch::VmChipComplex<F, Self::Executor, Self::Periphery> = complex.extend(&self.#field_name)?;
                 });
             }
 
             let (source_executor_type, source_periphery_type) = match &source {
-                Source::System(_) => (quote! { SystemExecutor }, quote! { SystemPeriphery }),
+                Source::System(_) => (
+                    quote! { ::openvm_circuit::arch::SystemExecutor },
+                    quote! { ::openvm_circuit::arch::SystemPeriphery },
+                ),
                 Source::Config(field_ident) => {
                     let field_type = fields
                         .iter()
@@ -344,34 +347,34 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
             let periphery_type = Ident::new(&format!("{}Periphery", name), name.span());
 
             TokenStream::from(quote! {
-                #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+                #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::openvm_circuit::derive::InstructionExecutor, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
                 pub enum #executor_type<F: PrimeField32> {
                     #[any_enum]
                     #source_name_upper(#source_executor_type<F>),
                     #(#executor_enum_fields)*
                 }
 
-                #[derive(ChipUsageGetter, Chip, From, AnyEnum)]
+                #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
                 pub enum #periphery_type<F: PrimeField32> {
                     #[any_enum]
                     #source_name_upper(#source_periphery_type<F>),
                     #(#periphery_enum_fields)*
                 }
 
-                impl<F: PrimeField32> VmConfig<F> for #name {
+                impl<F: PrimeField32> ::openvm_circuit::arch::VmConfig<F> for #name {
                     type Executor = #executor_type<F>;
                     type Periphery = #periphery_type<F>;
 
-                    fn system(&self) -> &SystemConfig {
-                        VmConfig::<F>::system(&self.#source_name)
+                    fn system(&self) -> &::openvm_circuit::arch::SystemConfig {
+                        ::openvm_circuit::arch::VmConfig::<F>::system(&self.#source_name)
                     }
-                    fn system_mut(&mut self) -> &mut SystemConfig {
-                        VmConfig::<F>::system_mut(&mut self.#source_name)
+                    fn system_mut(&mut self) -> &mut ::openvm_circuit::arch::SystemConfig {
+                        ::openvm_circuit::arch::VmConfig::<F>::system_mut(&mut self.#source_name)
                     }
 
                     fn create_chip_complex(
                         &self,
-                    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
+                    ) -> Result<::openvm_circuit::arch::VmChipComplex<F, Self::Executor, Self::Periphery>, ::openvm_circuit::arch::VmInventoryError> {
                         let complex = self.#source_name.create_chip_complex()?;
                         #(#create_chip_complex)*
                         Ok(complex)

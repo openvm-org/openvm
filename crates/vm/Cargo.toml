@@ -8,7 +8,6 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-p3-symmetric = { workspace = true }
 p3-baby-bear = { workspace = true }
 
 openvm-poseidon2-air = { workspace = true }
@@ -19,7 +18,6 @@ openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true }
 
-bitcode.workspace = true
 itertools.workspace = true
 tracing.workspace = true
 derive-new.workspace = true
@@ -29,49 +27,29 @@ backtrace.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde-big-array.workspace = true
-toml.workspace = true
 cfg-if.workspace = true
 metrics = { workspace = true, optional = true }
-metrics-derive = { workspace = true, optional = true }
 thiserror.workspace = true
 rustc-hash.workspace = true
 eyre.workspace = true
 derivative.workspace = true
 static_assertions.workspace = true
-async-trait.workspace = true
 getset.workspace = true
-rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
-p3-dft = { workspace = true }
-p3-fri = { workspace = true }
-p3-merkle-tree = { workspace = true }
-p3-symmetric = { workspace = true }
-zkhash = { workspace = true }
-rand_xoshiro = "0.6.0"
-ark-ff = { version = "^0.4.0", default-features = false }
-test-case.workspace = true
 test-log.workspace = true
-lazy_static.workspace = true
-hex.workspace = true
 
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk.workspace = true
 openvm-native-circuit.workspace = true
 openvm-native-compiler.workspace = true
 openvm-rv32im-transpiler.workspace = true
-openvm-keccak256-circuit.workspace = true
-openvm-keccak256-transpiler.workspace = true
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["openvm-stark-backend/parallel", "dep:rayon"]
+parallel = ["openvm-stark-backend/parallel"]
 test-utils = ["dep:openvm-stark-sdk"]
-bench-metrics = [
-    "dep:metrics",
-    "dep:metrics-derive",
-    "openvm-stark-backend/bench-metrics",
-]
+bench-metrics = ["dep:metrics", "openvm-stark-backend/bench-metrics"]
 function-span = ["bench-metrics"]
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]

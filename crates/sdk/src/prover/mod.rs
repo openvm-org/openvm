@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::VmConfig;
-use openvm_stark_sdk::openvm_stark_backend::Chip;
+use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::Chip};
 
 use crate::{keygen::AppProvingKey, stdin::StdIn, NonRootCommittedExe, F, SC};
 
@@ -24,12 +24,12 @@ pub use stark::*;
 
 use crate::{keygen::AggProvingKey, prover::halo2::Halo2Prover, types::EvmProof};
 
-pub struct ContinuationProver<VC> {
-    stark_prover: StarkProver<VC>,
+pub struct ContinuationProver<VC, E: StarkFriEngine<SC>> {
+    stark_prover: StarkProver<VC, E>,
     halo2_prover: Halo2Prover,
 }
 
-impl<VC> ContinuationProver<VC> {
+impl<VC, E: StarkFriEngine<SC>> ContinuationProver<VC, E> {
     pub fn new(
         reader: &impl Halo2ParamsReader,
         app_pk: Arc<AppProvingKey<VC>>,

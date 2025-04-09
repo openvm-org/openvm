@@ -132,7 +132,7 @@ fn test_vm_override_executor_height() {
         .unwrap();
     // Memory trace heights are not computed during execution.
     assert_eq!(
-        res.internal_heights.system,
+        res.vm_heights.system,
         SystemTraceHeights {
             memory: MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
                 boundary: 1,
@@ -141,7 +141,7 @@ fn test_vm_override_executor_height() {
         }
     );
     assert_eq!(
-        res.internal_heights.inventory,
+        res.vm_heights.inventory,
         VmInventoryTraceHeights {
             chips: vec![
                 (ChipId::Executor(0), 0),
@@ -717,6 +717,7 @@ fn test_hint_load_1() {
         program,
         vec![vec![F::ONE, F::TWO]].into(),
         None,
+        vec![],
         Default::default(),
     );
     segment.execute_from_pc(0).unwrap();
@@ -753,6 +754,7 @@ fn test_hint_load_2() {
         program,
         vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]].into(),
         None,
+        vec![],
         Default::default(),
     );
     segment.execute_from_pc(0).unwrap();

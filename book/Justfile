@@ -11,10 +11,10 @@ deps:
     pnpm i --frozen-lockfile
 
 # Lint the workspace for all available targets
-lint: lint-book-md-check lint-book-toc-check lint-filenames lint-book-spelling
+lint: lint-book-md-check lint-filenames lint-book-spelling
 
 # Updates all files to fix linting issues
-lint-fix: lint-book-md-fix lint-book-toc
+lint-fix: lint-book-md-fix
 
 # Validates markdown file formatting
 lint-book-md-check:
@@ -23,14 +23,6 @@ lint-book-md-check:
 # Updates markdown files formatting to satisfy lints
 lint-book-md-fix:
     npx markdownlint-cli2 --fix "./src/**/*.md"
-
-# Validates Table of Content Sections with doctoc
-lint-book-toc-check:
-    npx doctoc '--title=**Table of Contents**' ./src && git diff --exit-code ./src
-
-# Updates Table of Content Sections with doctoc
-lint-book-toc:
-    npx doctoc '--title=**Table of Contents**' ./src
 
 # Validates spelling using cspell
 lint-book-spelling:

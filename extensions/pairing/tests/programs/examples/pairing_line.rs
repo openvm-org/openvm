@@ -1,4 +1,3 @@
-#![feature(cfg_match)]
 #![allow(unused_imports)]
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -149,19 +148,18 @@ pub fn main() {
     #[allow(unused_variables)]
     let io = read_vec();
 
-    cfg_match! {
-        cfg(feature = "bn254") => {
-            bn254::setup_0();
-            bn254::setup_all_complex_extensions();
-            bn254::test_mul_013_by_013(&io[..32 * 18]);
-            bn254::test_mul_by_01234(&io[32 * 18..32 * 52]);
-        }
-        cfg(feature = "bls12_381") => {
-            bls12_381::setup_0();
-            bls12_381::setup_all_complex_extensions();
-            bls12_381::test_mul_023_by_023(&io[..48 * 18]);
-            bls12_381::test_mul_by_02345(&io[48 * 18..48 * 52]);
-        }
-        _ => { panic!("No curve feature enabled") }
+    #[cfg(feature = "bn254")]
+    {
+        bn254::setup_0();
+        bn254::setup_all_complex_extensions();
+        bn254::test_mul_013_by_013(&io[..32 * 18]);
+        bn254::test_mul_by_01234(&io[32 * 18..32 * 52]);
+    }
+    #[cfg(feature = "bls12_381")]
+    {
+        bls12_381::setup_0();
+        bls12_381::setup_all_complex_extensions();
+        bls12_381::test_mul_023_by_023(&io[..48 * 18]);
+        bls12_381::test_mul_by_02345(&io[48 * 18..48 * 52]);
     }
 }
