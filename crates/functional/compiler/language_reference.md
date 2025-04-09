@@ -7,15 +7,24 @@ Table of contents:
   - [Functions](#functions)
   - [Algebraic Types](#algebraic-types)
 - [Variables](#variables)
+  - [Scopes](#scopes)
+  - [Declaration, definition, and representation of variables](#declaration-definition-and-representation-of-variables)
 - [Dematerialization](#dematerialization)
 - [Program Features](#program-features)
+  - [Types](#types)
+  - [Expressions](#expressions)
+  - [Statements](#statements)
 - [Guided Examples](#guided-examples)
+  - [Fibonacci](#fibonacci)
+  - [Merkle verify](#merkle-verify)
 
-#### Note on syntax
+#### Notes on syntax
 
 Most languages use `{...}` to define blocks; however, in this language,
 we reserve the use of `{...}` to always refer to dematerialization.
 Therefore, we use `(...)` to define blocks instead, and only use `{...}` for blocks if we want to dematerialize them.
+
+Also note that comments can be used just like in Rust, so you can use `//` for a single-line comment and `/* ... */` for a multiline comment.
 
 ## Program Structure
 
@@ -33,11 +42,11 @@ A function contains the following components:
 - A body
 - Optionally, a specification as an inline function
 The syntax of a function is as follows:
-```text
+```rust
 (fn|inline) name((in|out)[alloc|unalloc]<type1> arg1, ...) body
 ```
 An example, with the body abbreviated for now, is as follows:
-```text
+```rust
 fn fibonacci(in<F> n, out<F> a, out<F> b) (...)
 ```
 
@@ -50,7 +59,7 @@ A function argument has four components:
 - A name
 
 As seen above, the syntax is as follows:
-```text
+```rust
 behavior declaration_type<type> name
 ```
 The name and type are as in most languages.
@@ -98,12 +107,12 @@ meaning that none of said body will be constrained in the proof. For more detail
 
 The syntax of a function call is the same as in Rust, with the key difference that in Rust, function calls are expressions,
 while here, they are an entire statement. Thus:
-```text
+```rust
 function_name(arg1, ...);
 ```
 The callee specifies each argument as either `in` or `out`; correspondingly, each argument either must be specified, or will be determined by the callee.
 An `out` argument can also be specified elsewhere, as in the following example:
-```text
+```rust
 def n = 12;
 def b = 144;
 fibonacci(n, def a, b);
@@ -111,7 +120,7 @@ fibonacci(n, def a, b);
 Here, the `in` argument `n` is specified, the out argument `a` is determined by the callee, and the out argument `b` is specified elsewhere.
 Code like this will constrain the callee's value for `b` to be equal to the caller's; i.e. it is an implicit form of this:
 
-```text
+```rust
 def n = 12;
 fibonacci(n, def a, def b);
 b = 144;
@@ -131,7 +140,7 @@ There are four differences of `match` in the language from Rust:
 - Currently, `match` statements are very simple: they take in an algebraic type, and each arm destructures it into one of its variants.
 
 The syntax of a `match` statement is as follows:
-```text
+```rust
 match expr (
     constructor1([alloc|unalloc] component1, ...) => body1
     ...
@@ -152,7 +161,7 @@ For example, we use `{match a == b}`, then in the `True` branch, constrain `a` a
 
 The language allows for user-defined types in the form of algebraic types.
 Algebraic types are essentially the same as Rust enums, and can be defined with the below syntax that is identical to Rust (other than `(...)` instead of `{...}`):
-```text
+```rust
 enum Name (
     Variant1(ComponentType1, ...),
     Variant2(ComponentType2, ...),
@@ -162,7 +171,7 @@ enum Name (
 Algebraic types include as a special case types with only one variant, which can be specified as above.
 However, this is somewhat cumbersome, and so they can also be specified like `struct`s in Rust:
 
-```text
+```rust
 struct Name (
     ComponentType1,
     ComponentType2,
@@ -206,7 +215,7 @@ This gives rise to 7 keywords for declaring, defining, and representing variable
 The first two keywords correspond to variable declaration statements.
 Variable declarations explicitly specify the type of a variable and don't do anything else.
 There are two ways to declare a variable:
-```text
+```rust
 alloc<type> name;
 unalloc<type> name;
 ```
@@ -322,7 +331,7 @@ User-defined types are referred to by name; see [Algebraic Types](#algebraic-typ
 ### Boolean
 
 The type `Bool` is an algebraic type that is required to be defined as
-```text
+```rust
 enum Bool ( True, False )
 ```
 It is special as it is the return value of the built-in equality operator `==`.
@@ -443,7 +452,9 @@ For more details, see [Variables](#variables).
 
 Given expressions `e_1` and `e_2` of type `T`, the statement
 
-```e_1 = e_2;```
+```rust
+e_1 = e_2;
+```
 
 assigns `e_1` to be equal to `e_2`.
 It therefore relies on `e_2` being defined and `e_1` being assign-ready.
@@ -452,7 +463,9 @@ It therefore relies on `e_2` being defined and `e_1` being assign-ready.
 
 Given an expression `data` of type `T` and an expression `ref` of type `&T`, the statement
 
-```ref -> data;```
+```rust
+ref -> data;
+```
 
 assigns `ref` to be a reference to `data`.
 It therefore relies on `data` being defined and `ref` being assign-ready.
@@ -461,7 +474,9 @@ It therefore relies on `data` being defined and `ref` being assign-ready.
 
 Given an expression `ref` of type `&T` and an expression `data` of type `T`, the statement
 
-```data <- ref;```
+```rust
+data <- ref;
+```
 
 assigns `data` to be the value pointed to by `ref`.
 It therefore relies on `ref` being defined and `data` being assign-ready.
@@ -470,7 +485,9 @@ It therefore relies on `ref` being defined and `data` being assign-ready.
 
 Given an expression `prefix` of type `#..len[T]`, the statement
 
-```prefix -> |T;```
+```rust
+prefix -> |T;
+```
 
 assigns `prefix` to be an empty appendable prefix.
 It therefore relies on `prefix` being assign-ready. It also constrains `len` to be equal to `0`.
@@ -479,7 +496,9 @@ It therefore relies on `prefix` being assign-ready. It also constrains `len` to 
 
 Given an expression `old_prefix` of type `#..len1[T]`, an expression `new_prefix` of type `#..len2[T]`, and an expression `elem` of type `T`, the statement
 
-```new_prefix -> old_prefix | elem;```
+```rust
+new_prefix -> old_prefix | elem;
+```
 
 assigns `new_prefix` to be the appendable prefix formed by appending `elem` to `old_prefix`.
 It therefore relies on `old_prefix` and `elem` being defined and `new_prefix` being assign-ready. It also constrains `len2` to be equal to `len1 + 1`.
@@ -488,9 +507,144 @@ It therefore relies on `old_prefix` and `elem` being defined and `new_prefix` be
 
 Given an expression `array` of type `@[T]`, an expression `index` of type `F`, and an expression `elem` of type `T`, the statement
 
-```elem <- array !! index```
+```rust
+elem <- array !! index
+```
 
 assigns `elem` to be the element of `array` at index `index`.
 It therefore relies on `array` and `index` being defined and `elem` being assign-ready.
 
 ## Guided Examples
+
+### Fibonacci
+
+```rust
+enum Bool ( True, False )
+
+fn fibonacci(in<F> n, out<F> a, out<F> b) (
+    {match n == 0} (
+        True => (
+            n = 0;
+            fix a = 0;
+            fix b = 1;
+        )
+        False => (
+            fibonacci(n - 1, def x, def y);
+            fix a = y;
+            fix b = x + y;
+        )
+    )
+)
+```
+
+The above program defines a function named `fibonacci` with three arguments, all of which are field elements:
+- An input argument `n`, corresponding to the index of the Fibonacci number to compute.
+- An output argument `a`, corresponding to `F_n`.
+- An output argument `b`, corresponding to `F_{n + 1}`.
+
+As `alloc`/`unalloc` were not specified explicitly, `n` is `alloc` and `a, b` are `unalloc` by default,
+meaning that `n` is already represented and `a, b` are not.
+
+The body consists of a match statement, which performs a *dematerialized* check (because of the `{...}` in `{match n == 0}`) on whether `n` is equal to `0` by matching on the expression `n == 0`, which is a `Bool`.
+This match therefore does not introduce any AIR constraints.
+
+In the `True` branch, we importantly constrain `n` to be equal to `0`, verifying that the branch holds since the match itself was unconstrained.
+We then `fix` the variables `a` and `b` to be their correct values, both defining them to both values and representing them as those constants.
+
+In the `False` branch, we recursively call `fibonacci` with `n - 1` as the input arguments;
+for the output arguments, we `def` the variables `x` and `y`, declaring them to be field elements, defining them as the outputs of the recursive call,
+and representing them; since this is a function call, the representation simply introduces a new cell for each.
+We then `fix` the variables `a` and `b` in terms of `y` and `x + y`, both defining them and representing them in terms of those values.
+
+### Merkle verify
+
+The below program is commented inline instead of having a separate explanation.
+
+```rust
+enum Bool ( True, False )
+
+/*
+    `leaf` is a reference to a `[F; 8]`,
+    `bits` is an array of `Bool`s,
+    and `siblings` is an unmaterialized array of `[F; 8]`s.
+    
+    The only output is `commit`, which is an `[F; 8]`;
+    we have explicitly allocated `commit`.
+*/
+fn merkle_verify(in<&[F; 8]> leaf, in<F> length, in<@[Bool]> bits, in<{@[[F; 8]]}> siblings, out alloc<[F; 8]> commit) (
+    // We explicitly allocate `left` and `right` so that they are degree 1
+    alloc<[F; 8]> left;
+    alloc<[F; 8]> right;
+    /* This call to hash is inlined
+       and declares/defines/represents a new variable `hash_result`.
+       The call depends `left` and `right`,
+       which are defined later in each branch;
+       it can only be executed once both are defined in all branches.
+        */
+    hash(left, right, def hash_result);
+    // The match is unmaterialized like in fibonacci
+    {match length == 0} (
+        True => (
+            length = 0;
+            /* In this branch, we define `left`, `right`, and `commit`.
+               We use set as they already have a representation. */
+            set left = [0; 8];
+            set right = [0; 8];
+            // This statement dereferences `leaf` into `commit`
+            set commit <- leaf;
+        )
+        False => (
+            /* Recursive call to `merkle_verify`
+               which declares/defines but does not represent `child` by using `let` */
+            merkle_verify(leaf, length - 1, bits, siblings, let child);
+            def i = length - 1;
+            /* Array access, which again does not represent `bit` */
+            let bit <- bits !! i;
+            /* Dematerialized array access:
+               at execution time we access the siblings array to determine what sibling to use,
+               but in the AIR it is treated as a hint, and no details of the array or access remain. */
+            {let sibling <- siblings !! i};
+            /* Another match, this time materialized;
+               we also use the match to represent `bit`, saving a column */
+            match rep bit (
+                True => (
+                    /* Dematerialized set: because it is dematerialized, the variable `sibling`,
+                       which is of type `{[F; 8]}`,
+                       can be assigned to the variable `left`, which is of type `[F; 8]`,
+                       because those types are identical inside {...}. */
+                     */
+                     
+                    {set left = sibling};
+                    /* We specify that `right` should be the child,
+                       then knowing that, use `right`, which is already represented, to represent `child`,
+                       keeping us from having to allocate cells for `child` and saving 8 cells.
+                        */
+                    set right = child;
+                    rep child = right;
+                )
+                False => (
+                    // Analogous to the True branch
+                    set left = child;
+                    rep child = left;
+                    {set right = sibling};
+                )
+            )
+            set commit = hash_result;
+        )
+    )
+)
+
+// Random dumb hash function
+inline hash(in<[F; 8]> left, in<[F; 8]> right, out<[F; 8]> result) (
+    fix result = [
+        left[0] + right[0],
+        left[1] * right[1],
+        left[2] - right[2],
+        left[3],
+        right[4],
+        115,
+        left[6] * left[7],
+        right[6] * right[7],
+    ];
+)
+```

@@ -5,10 +5,13 @@ Using the language consists of the following steps:
 - Run the compiler on your program to transpile it to a Rust program
 - Interact with the transpiled Rust program
 
-See the language reference for an explanation on how to write programs in the language.
+See the [language reference](language_reference.md) for an explanation on how to write programs in the language.
 We will provide general instructions on running the compiler and interacting with the program,
 but we will also provide specific instructions that assume that the program and compiler output will be stored in files.
 These instructions will assume that the program is stored in a file called `program.txt` in the working directory.
+
+Also note that in order for a program to prove, it must contain a main function such that executing the program
+means calling the main function once.
 
 ## Running the compiler
 

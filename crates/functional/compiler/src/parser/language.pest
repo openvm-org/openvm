@@ -3,7 +3,7 @@ var_identifier = @{ (ASCII_ALPHA_LOWER | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 type_identifier = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_")* }
 
 WHITESPACE = _{ " " | NEWLINE }
-COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+COMMENT = _{ ( "/*" ~ (!"*/" ~ ANY)* ~ "*/" ) | "//" ~ (!NEWLINE ~ ANY)* }
 
 field_type = { "F" }
 reference_type = { "&" ~ tipo }
