@@ -292,17 +292,205 @@ we now describe the different types, expressions, and statements that are availa
 
 ### Types
 
-#### Field element
+#### Field elements
 
 The field element type is `F`, corresponding to whatever field the proof system uses.
 
-#### Reference
+#### References
 
-Given a type `T`, the type `&T` denote a reference to a value of type `T`, just as in Rust.
+Given a type `T`, the type `&T` denote a reference to a value of type `T`, just as in Rust. A `&T` can be created from a `T` and vice versa using the reference and dereference statements.
 There is no functional difference between a `T` and a `&T`, so using `&T` only serves as a performance optimization.
+
+### Arrays and associated types
+
+Given a type `T`, the type `@[T]` denotes an in-memory array of `T`s. An `@[T]` can be accessed at an index to yield a `T`.
+
+To construct an array, we have an additional type known as an appendable prefix. Given a type `T` and an *expression* `len` of type `F`, the type `#..len[T]` denotes an appendable prefix of `T`s of length `len`.
+The type signature itself constrains the length of the prefix to be exactly some value, allowing further appends to occur at the correct location.
+
+Appendable prefixes are a somewhat unique type, as they have a notion of "consumption" of the prefix.
+Appending to a prefix consumes the prefix (and returns a new prefix); appendable prefixes can also be converted to arrays
+(an `#..len[T]` can be converted to a `@[T]`), which also consumes the prefix.
+Furthermore, almost any other generic usage of an appendable prefix will consume it.
+As implied by the name, a prefix can be consumed only once.
+This constrains a prefix to not be appended to more than once at the same index, and also ensures that an array refers to the entirety of a prefix.
+
+### User-defined types
+
+User-defined types are referred to by name; see [Algebraic Types](#algebraic-types) for details on their definition.
+
+### Boolean
+
+The type `Bool` is an algebraic type that is required to be defined as
+```text
+enum Bool ( True, False )
+```
+It is special as it is the return value of the built-in equality operator `==`.
+It is also transpiled to the Rust `bool` type rather than to a new enum.
+
+### Fixed-size arrays
+
+Given a type `T` and a literal number `len`, the type `[T; len]` denotes a fixed-size array of `T`s of length `len`.
+This is a convenience type; it can be simulated by an algebraic type with one variant and `len` components, each equal to `T`.
+
+### Unmaterialized type
+
+GIven a type `T`, the type `{T}` is a type that works identically to `T` during execution,
+but is not materialized in the AIR. See [Dematerialization](#dematerialization) for more information.
 
 ### Expressions
 
+The language has a notion similar to that of lvalues and rvalues in C++.
+Specifically, we will say that a statement depends on some of the expressions it contains being defined,
+and other expressions that it contains being assign-ready.
+We can then define expressions into two categories:
+- Assignable expressions are those that are assign-ready once all of their subexpressions are assign-ready.
+- Unassignable expressions are those that are assign-ready once they are defined.
+
+For example, in the statement `def x = 5;`, the statement depends on `5` being defined and on `x` being assign-ready.
+`x`, being a variable prefixed by `def`, is assignable, and as it does not contain any other expressions, it is always assign-ready.
+In contrast, if we were to write `x + y = 5;`, then this statement would require `x` and `y` to be already defined before it could execute.
+
+An important aspect of the language is that expressions that are not assignable can still be assigned to:
+given an unassignable expression `x` and an expression `y`, a statement which assigns `y` to `x` will actually constrain `x` and `y` to be equal.
+This then allows us to write piecemeal statements such as `Point(1, def x) = Point(y, 4);` which will constrain `y` to be equal to `1` and assign `x` the value `4`.
+
+The following expressions are assignable:
+- Variable expressions when prefixed (directly or indirectly) by `def`, `let`, `fix`, or `set`.
+- Algebraic expressions.
+- Fixed-length arrays.
+
+#### Constant
+
+Number literals are expressions of type `F`.
+
+#### Variable
+
+A variable name is an expression referring to that variable.
+
+#### Variable keywords
+
+The keywords `def, let, fix, set, rep` can precede an expression to specify how any contained variables are being used; see [Variables](#variables) for more information.
+
+#### Algebraic
+
+Given an algebraic type `T` one of whose variants is named `A` and has component types `T_1, ..., T_n`,  and given some expressions `e_1, ..., e_n` of types `T_1, ..., T_n`, the expression `A(e_1, ..., e_n)` is an expression of type `T`.
+
+#### Arithmetic
+
+Given two expressions `e_1` and `e_2` of type `F`, the expressions `e_1 + e_2`, `e_1 - e_2`, and `e_1 * e_2` are expressions of type `F`.
+
+Additionally, given an expression `e` of type `F`, the expression `-e` is an expression of type `F`.
+
+#### Readable view of prefix
+
+Given an expression `e` of type `#..len[T]`, the expression `@..[e]` is an expression of type `@..len[T]`.
+
+#### Prefix into array
+
+Given an expression `e` of type `@..len[T]`, the expression `@[e]` is an expression of type `@[T]` that consumes `e`.
+
+#### Fixed length array
+
+Given a type `T` and expressions `e_1, ..., e_n` of type `T`, the expression `[e_1, ..., e_n]` is an expression of type `[T; n]`.
+
+#### Empty fixed length array
+
+Given a type `T`, the expression `[<T>]` is an expression of type `[T; 0]`.
+
+#### Fixed length array concatenation
+
+Given a type `T` and expressions `e_1` and `e_2` of types `[T; n]` and `[T; m]` respectively, the expression `e_1 ++ e_2` is an expression of type `[T; n + m]`.
+
+#### Fixed length array access
+
+Given an expression `e` of type `[T; n]` and a literal `i` among `0, ..., n - 1`, the expression `e[i]` is an expression of type `T`.
+
+#### Fixed length array slice
+
+Given an expression `e` of type `[T; n]` and literals `i` and `j` with `i <= j` and `j <= n`, the expression `e[i..j]` is an expression of type `[T; j - i]`.
+
+#### Fixed length array repeated
+
+Given an expression `e` of type `T` and a literal `n`, the expression `[e; n]` is an expression of type `[T; n]`.
+`T` cannot contain an appendable prefix.
+
+#### Dematerialized expression
+
+Given an expression `e` of type `T`, the expression `{e}` is an expression of type `{T}`.
+
+#### Expressions that can only be used in a dematerialized context
+
+The following expressions cannot be translated into polynomial expressions, and so are "execution-time only", meaning that in order to use them, you must dematerialize them.
+
+#### Division
+
+Given expressions `e_1` and `e_2` of type `F`, the expression `e_1 / e_2` is an expression of type `F`.
+
+#### Equality
+
+Given expressions `e_1` and `e_2` of type `T`, the expression `e_1 == e_2` is an expression of type `Bool`.
+`T` cannot contain any memory type, meaning that it cannot contain a reference, array, or appendable or readable prefix.
+
 ### Statements
+
+#### Variable declaration
+
+The statements `alloc<T> name;` and `unalloc<T> name;` declare a variable `name` of type `T` in the current scope.
+For more details, see [Variables](#variables).
+
+#### Equality
+
+Given expressions `e_1` and `e_2` of type `T`, the statement
+
+```e_1 = e_2;```
+
+assigns `e_1` to be equal to `e_2`.
+It therefore relies on `e_2` being defined and `e_1` being assign-ready.
+
+#### Reference
+
+Given an expression `data` of type `T` and an expression `ref` of type `&T`, the statement
+
+```ref -> data;```
+
+assigns `ref` to be a reference to `data`.
+It therefore relies on `data` being defined and `ref` being assign-ready.
+
+#### Dereference
+
+Given an expression `ref` of type `&T` and an expression `data` of type `T`, the statement
+
+```data <- ref;```
+
+assigns `data` to be the value pointed to by `ref`.
+It therefore relies on `ref` being defined and `data` being assign-ready.
+
+#### Empty prefix
+
+Given an expression `prefix` of type `#..len[T]`, the statement
+
+```prefix -> |T;```
+
+assigns `prefix` to be an empty appendable prefix.
+It therefore relies on `prefix` being assign-ready. It also constrains `len` to be equal to `0`.
+
+#### Prefix append
+
+Given an expression `old_prefix` of type `#..len1[T]`, an expression `new_prefix` of type `#..len2[T]`, and an expression `elem` of type `T`, the statement
+
+```new_prefix -> old_prefix | elem;```
+
+assigns `new_prefix` to be the appendable prefix formed by appending `elem` to `old_prefix`.
+It therefore relies on `old_prefix` and `elem` being defined and `new_prefix` being assign-ready. It also constrains `len2` to be equal to `len1 + 1`.
+
+#### Array access
+
+Given an expression `array` of type `@[T]`, an expression `index` of type `F`, and an expression `elem` of type `T`, the statement
+
+```elem <- array !! index```
+
+assigns `elem` to be the element of `array` at index `index`.
+It therefore relies on `array` and `index` being defined and `elem` being assign-ready.
 
 ## Guided Examples
