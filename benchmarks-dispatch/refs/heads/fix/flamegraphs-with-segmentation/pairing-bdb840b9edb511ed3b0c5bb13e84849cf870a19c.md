@@ -1,0 +1,240 @@
+| Summary | Proof Time (s) | Parallel Proof Time (s) |
+|:---|---:|---:|
+| Total | <span style='color: red'>(+8 [+157.7%])</span> 12.57 | <span style='color: red'>(+8 [+157.7%])</span> 12.57 |
+| pairing | <span style='color: red'>(+8 [+157.7%])</span> 12.57 | <span style='color: red'>(+8 [+157.7%])</span> 12.57 |
+
+
+| pairing |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` | <span style='color: red'>(+7694 [+157.7%])</span> 12,574 | <span style='color: red'>(+7694 [+157.7%])</span> 12,574 | <span style='color: red'>(+7694 [+157.7%])</span> 12,574 | <span style='color: red'>(+7694 [+157.7%])</span> 12,574 |
+| `main_cells_used     ` |  95,901,985 |  95,901,985 |  95,901,985 |  95,901,985 |
+| `total_cycles        ` |  1,820,695 |  1,820,695 |  1,820,695 |  1,820,695 |
+| `execute_time_ms     ` | <span style='color: red'>(+7679 [+1174.2%])</span> 8,333 | <span style='color: red'>(+7679 [+1174.2%])</span> 8,333 | <span style='color: red'>(+7679 [+1174.2%])</span> 8,333 | <span style='color: red'>(+7679 [+1174.2%])</span> 8,333 |
+| `trace_gen_time_ms   ` | <span style='color: red'>(+9 [+1.0%])</span> 939 | <span style='color: red'>(+9 [+1.0%])</span> 939 | <span style='color: red'>(+9 [+1.0%])</span> 939 | <span style='color: red'>(+9 [+1.0%])</span> 939 |
+| `stark_prove_excluding_trace_time_ms` | <span style='color: red'>(+6 [+0.2%])</span> 3,302 | <span style='color: red'>(+6 [+0.2%])</span> 3,302 | <span style='color: red'>(+6 [+0.2%])</span> 3,302 | <span style='color: red'>(+6 [+0.2%])</span> 3,302 |
+| `main_trace_commit_time_ms` |  651 |  651 |  651 |  651 |
+| `generate_perm_trace_time_ms` | <span style='color: red'>(+17 [+8.6%])</span> 214 | <span style='color: red'>(+17 [+8.6%])</span> 214 | <span style='color: red'>(+17 [+8.6%])</span> 214 | <span style='color: red'>(+17 [+8.6%])</span> 214 |
+| `perm_trace_commit_time_ms` | <span style='color: green'>(-2 [-0.2%])</span> 835 | <span style='color: green'>(-2 [-0.2%])</span> 835 | <span style='color: green'>(-2 [-0.2%])</span> 835 | <span style='color: green'>(-2 [-0.2%])</span> 835 |
+| `quotient_poly_compute_time_ms` |  470 |  470 |  470 |  470 |
+| `quotient_poly_commit_time_ms` | <span style='color: green'>(-5 [-1.4%])</span> 348 | <span style='color: green'>(-5 [-1.4%])</span> 348 | <span style='color: green'>(-5 [-1.4%])</span> 348 | <span style='color: green'>(-5 [-1.4%])</span> 348 |
+| `pcs_opening_time_ms ` | <span style='color: green'>(-5 [-0.6%])</span> 766 | <span style='color: green'>(-5 [-0.6%])</span> 766 | <span style='color: green'>(-5 [-0.6%])</span> 766 | <span style='color: green'>(-5 [-0.6%])</span> 766 |
+
+
+
+<details>
+<summary>Detailed Metrics</summary>
+
+| group | num_segments | keygen_time_ms | commit_exe_time_ms |
+| --- | --- | --- | --- |
+| pairing | 1 | 1,100 | 10 | 
+
+| group | air_name | quotient_deg | interactions | constraints |
+| --- | --- | --- | --- | --- |
+| pairing | AccessAdapterAir<16> | 2 | 5 | 12 | 
+| pairing | AccessAdapterAir<2> | 2 | 5 | 12 | 
+| pairing | AccessAdapterAir<32> | 2 | 5 | 12 | 
+| pairing | AccessAdapterAir<4> | 2 | 5 | 12 | 
+| pairing | AccessAdapterAir<8> | 2 | 5 | 12 | 
+| pairing | BitwiseOperationLookupAir<8> | 2 | 2 | 4 | 
+| pairing | KeccakVmAir | 2 | 321 | 4,513 | 
+| pairing | MemoryMerkleAir<8> | 2 | 4 | 39 | 
+| pairing | PersistentBoundaryAir<8> | 2 | 3 | 7 | 
+| pairing | PhantomAir | 2 | 3 | 5 | 
+| pairing | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 2 | 1 | 286 | 
+| pairing | ProgramAir | 1 | 1 | 4 | 
+| pairing | RangeTupleCheckerAir<2> | 1 | 1 | 4 | 
+| pairing | Rv32HintStoreAir | 2 | 18 | 28 | 
+| pairing | VariableRangeCheckerAir | 1 | 1 | 4 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 2 | 20 | 37 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 2 | 18 | 40 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 2 | 24 | 91 | 
+| pairing | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 2 | 11 | 20 | 
+| pairing | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 2 | 13 | 35 | 
+| pairing | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 2 | 10 | 18 | 
+| pairing | VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8> | 2 | 25 | 225 | 
+| pairing | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 2 | 16 | 20 | 
+| pairing | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | 2 | 18 | 33 | 
+| pairing | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 2 | 17 | 40 | 
+| pairing | VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | 2 | 25 | 84 | 
+| pairing | VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | 2 | 24 | 31 | 
+| pairing | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 2 | 19 | 19 | 
+| pairing | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 2 | 12 | 14 | 
+| pairing | VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir> | 2 | 415 | 480 | 
+| pairing | VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, FieldExpressionCoreAir> | 2 | 158 | 190 | 
+| pairing | VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir> | 2 | 428 | 457 | 
+| pairing | VmConnectorAir | 2 | 5 | 11 | 
+
+| group | air_name | dsl_ir | opcode | segment | cells_used |
+| --- | --- | --- | --- | --- | --- |
+| pairing | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | ADD | 0 | 17,061,264 | 
+| pairing | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | AND | 0 | 4,351,896 | 
+| pairing | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | OR | 0 | 720,144 | 
+| pairing | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | SUB | 0 | 69,228 | 
+| pairing | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> |  | SLTU | 0 | 1,442,519 | 
+| pairing | <Rv32BaseAluAdapterAir,ShiftCoreAir<4, 8>> |  | SLL | 0 | 79,977 | 
+| pairing | <Rv32BaseAluAdapterAir,ShiftCoreAir<4, 8>> |  | SRL | 0 | 4,134 | 
+| pairing | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BEQ | 0 | 1,094,886 | 
+| pairing | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BNE | 0 | 2,066,168 | 
+| pairing | <Rv32BranchAdapterAir,BranchLessThanCoreAir<4, 8>> |  | BGEU | 0 | 71,872 | 
+| pairing | <Rv32BranchAdapterAir,BranchLessThanCoreAir<4, 8>> |  | BLT | 0 | 6,080 | 
+| pairing | <Rv32BranchAdapterAir,BranchLessThanCoreAir<4, 8>> |  | BLTU | 0 | 3,792,800 | 
+| pairing | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | JAL | 0 | 18,144 | 
+| pairing | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | LUI | 0 | 43,650 | 
+| pairing | <Rv32IsEqualModAdapterAir<2, 1, 32, 32>,ModularIsEqualCoreAir<32, 4, 8>> |  | IS_EQ | 0 | 2,822 | 
+| pairing | <Rv32IsEqualModAdapterAir<2, 1, 32, 32>,ModularIsEqualCoreAir<32, 4, 8>> |  | SETUP_ISEQ | 0 | 332 | 
+| pairing | <Rv32JalrAdapterAir,Rv32JalrCoreAir> |  | JALR | 0 | 1,171,660 | 
+| pairing | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | LOADBU | 0 | 62,402 | 
+| pairing | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | LOADW | 0 | 17,039,805 | 
+| pairing | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | STOREB | 0 | 115,661 | 
+| pairing | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | STOREW | 0 | 17,157,803 | 
+| pairing | <Rv32MultAdapterAir,MulHCoreAir<4, 8>> |  | MULHU | 0 | 6,318 | 
+| pairing | <Rv32MultAdapterAir,MultiplicationCoreAir<4, 8>> |  | MUL | 0 | 13,175 | 
+| pairing | <Rv32RdWriteAdapterAir,Rv32AuipcCoreAir> |  | AUIPC | 0 | 418,460 | 
+| pairing | <Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>,FieldExpressionCoreAir> |  | EcDouble | 0 | 547 | 
+| pairing | <Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>,FieldExpressionCoreAir> |  | ModularAddSub | 0 | 7,562 | 
+| pairing | <Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>,FieldExpressionCoreAir> |  | ModularMulDiv | 0 | 189,360 | 
+| pairing | <Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>,FieldExpressionCoreAir> |  | EcAddNe | 0 | 625 | 
+| pairing | <Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>,FieldExpressionCoreAir> |  | Fp2AddSub | 0 | 2,387,061 | 
+| pairing | <Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>,FieldExpressionCoreAir> |  | Fp2MulDiv | 0 | 4,161,878 | 
+| pairing | PhantomAir |  | PHANTOM | 0 | 6 | 
+| pairing | Rv32HintStoreAir |  | HINT_BUFFER | 0 | 6,144 | 
+
+| group | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pairing | AccessAdapterAir<16> | 0 | 262,144 |  | 16 | 25 | 10,747,904 | 
+| pairing | AccessAdapterAir<32> | 0 | 131,072 |  | 16 | 41 | 7,471,104 | 
+| pairing | AccessAdapterAir<4> | 0 | 64 |  | 16 | 13 | 1,856 | 
+| pairing | AccessAdapterAir<8> | 0 | 524,288 |  | 16 | 17 | 17,301,504 | 
+| pairing | BitwiseOperationLookupAir<8> | 0 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| pairing | KeccakVmAir | 0 | 1 |  | 1,056 | 3,163 | 4,219 | 
+| pairing | MemoryMerkleAir<8> | 0 | 32,768 |  | 16 | 32 | 1,572,864 | 
+| pairing | PersistentBoundaryAir<8> | 0 | 32,768 |  | 12 | 20 | 1,048,576 | 
+| pairing | PhantomAir | 0 | 1 |  | 12 | 6 | 18 | 
+| pairing | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 0 | 32,768 |  | 8 | 300 | 10,092,544 | 
+| pairing | ProgramAir | 0 | 32,768 |  | 8 | 10 | 589,824 | 
+| pairing | RangeTupleCheckerAir<2> | 0 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| pairing | Rv32HintStoreAir | 0 | 256 |  | 44 | 32 | 19,456 | 
+| pairing | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 0 | 1,048,576 |  | 52 | 36 | 92,274,688 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 0 | 65,536 |  | 40 | 37 | 5,046,272 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 0 | 2,048 |  | 52 | 53 | 215,040 | 
+| pairing | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 0 | 131,072 |  | 28 | 26 | 7,077,888 | 
+| pairing | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 0 | 131,072 |  | 32 | 32 | 8,388,608 | 
+| pairing | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 0 | 4,096 |  | 28 | 18 | 188,416 | 
+| pairing | VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8> | 0 | 32 |  | 56 | 166 | 7,104 | 
+| pairing | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 0 | 65,536 |  | 36 | 28 | 4,194,304 | 
+| pairing | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 0 | 1,048,576 |  | 52 | 41 | 97,517,568 | 
+| pairing | VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | 0 | 256 |  | 72 | 39 | 28,416 | 
+| pairing | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 0 | 512 |  | 52 | 31 | 42,496 | 
+| pairing | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 0 | 32,768 |  | 28 | 20 | 1,572,864 | 
+| pairing | VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir> | 0 | 1 |  | 836 | 547 | 1,383 | 
+| pairing | VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, FieldExpressionCoreAir> | 0 | 1,024 |  | 320 | 263 | 596,992 | 
+| pairing | VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir> | 0 | 16,384 |  | 860 | 625 | 18,038,784 | 
+| pairing | VmConnectorAir | 0 | 2 | 1 | 16 | 5 | 42 | 
+
+| group | chip_name | segment | rows_used |
+| --- | --- | --- | --- |
+| pairing | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> | 0 | 616,737 | 
+| pairing | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> | 0 | 38,987 | 
+| pairing | <Rv32BaseAluAdapterAir,ShiftCoreAir<4, 8>> | 0 | 1,587 | 
+| pairing | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> | 0 | 121,579 | 
+| pairing | <Rv32BranchAdapterAir,BranchLessThanCoreAir<4, 8>> | 0 | 120,961 | 
+| pairing | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> | 0 | 3,433 | 
+| pairing | <Rv32IsEqualModAdapterAir<2, 1, 32, 32>,ModularIsEqualCoreAir<32, 4, 8>> | 0 | 18 | 
+| pairing | <Rv32JalrAdapterAir,Rv32JalrCoreAir> | 0 | 41,845 | 
+| pairing | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> | 0 | 838,431 | 
+| pairing | <Rv32MultAdapterAir,MulHCoreAir<4, 8>> | 0 | 162 | 
+| pairing | <Rv32MultAdapterAir,MultiplicationCoreAir<4, 8>> | 0 | 425 | 
+| pairing | <Rv32RdWriteAdapterAir,Rv32AuipcCoreAir> | 0 | 20,924 | 
+| pairing | <Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>,FieldExpressionCoreAir> | 0 | 1 | 
+| pairing | <Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>,FieldExpressionCoreAir> | 0 | 719 | 
+| pairing | <Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>,FieldExpressionCoreAir> | 0 | 8,374 | 
+| pairing | AccessAdapter<16> | 0 | 194,478 | 
+| pairing | AccessAdapter<32> | 0 | 97,240 | 
+| pairing | AccessAdapter<4> | 0 | 34 | 
+| pairing | AccessAdapter<8> | 0 | 393,406 | 
+| pairing | Arc<BabyBearParameters>, 1> | 0 | 18,754 | 
+| pairing | BitwiseOperationLookupAir<8> | 0 | 65,536 | 
+| pairing | Boundary | 0 | 21,602 | 
+| pairing | Merkle | 0 | 23,194 | 
+| pairing | PhantomAir | 0 | 1 | 
+| pairing | ProgramChip | 0 | 19,698 | 
+| pairing | RangeTupleCheckerAir<2> | 0 | 524,288 | 
+| pairing | Rv32HintStoreAir | 0 | 192 | 
+| pairing | VariableRangeCheckerAir | 0 | 262,144 | 
+| pairing | VmConnectorAir | 0 | 2 | 
+
+| group | dsl_ir | opcode | segment | frequency |
+| --- | --- | --- | --- | --- |
+| pairing |  | ADD | 0 | 473,924 | 
+| pairing |  | AND | 0 | 120,886 | 
+| pairing |  | AUIPC | 0 | 20,924 | 
+| pairing |  | BEQ | 0 | 42,111 | 
+| pairing |  | BGEU | 0 | 2,246 | 
+| pairing |  | BLT | 0 | 190 | 
+| pairing |  | BLTU | 0 | 118,525 | 
+| pairing |  | BNE | 0 | 79,468 | 
+| pairing |  | EcAddNe | 0 | 1 | 
+| pairing |  | EcDouble | 0 | 1 | 
+| pairing |  | Fp2AddSub | 0 | 6,469 | 
+| pairing |  | Fp2MulDiv | 0 | 8,374 | 
+| pairing |  | HINT_BUFFER | 0 | 1 | 
+| pairing |  | IS_EQ | 0 | 17 | 
+| pairing |  | JAL | 0 | 1,008 | 
+| pairing |  | JALR | 0 | 41,845 | 
+| pairing |  | LOADBU | 0 | 1,522 | 
+| pairing |  | LOADW | 0 | 415,605 | 
+| pairing |  | LUI | 0 | 2,425 | 
+| pairing |  | MUL | 0 | 425 | 
+| pairing |  | MULHU | 0 | 162 | 
+| pairing |  | ModularAddSub | 0 | 38 | 
+| pairing |  | ModularMulDiv | 0 | 720 | 
+| pairing |  | OR | 0 | 20,004 | 
+| pairing |  | PHANTOM | 0 | 1 | 
+| pairing |  | SETUP_ISEQ | 0 | 2 | 
+| pairing |  | SLL | 0 | 1,509 | 
+| pairing |  | SLTU | 0 | 38,987 | 
+| pairing |  | SRL | 0 | 78 | 
+| pairing |  | STOREB | 0 | 2,821 | 
+| pairing |  | STOREW | 0 | 418,483 | 
+| pairing |  | SUB | 0 | 1,923 | 
+
+| group | segment | trace_gen_time_ms | total_proof_time_ms | total_cycles | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| pairing | 0 | 939 | 12,574 | 1,820,695 | 297,675,351 | 3,302 | 470 | 348 | 835 | 766 | 651 | 95,901,985 | 214 | 8,333 | 
+
+| group | segment | trace_height_constraint | weighted_sum | threshold |
+| --- | --- | --- | --- | --- |
+| pairing | 0 | 0 | 5,112,018 | 2,013,265,921 | 
+| pairing | 0 | 1 | 17,620,378 | 2,013,265,921 | 
+| pairing | 0 | 2 | 2,556,009 | 2,013,265,921 | 
+| pairing | 0 | 3 | 24,468,838 | 2,013,265,921 | 
+| pairing | 0 | 4 | 131,072 | 2,013,265,921 | 
+| pairing | 0 | 5 | 65,536 | 2,013,265,921 | 
+| pairing | 0 | 6 | 6,004,051 | 2,013,265,921 | 
+| pairing | 0 | 7 | 4,096 | 2,013,265,921 | 
+| pairing | 0 | 8 | 56,945,038 | 2,013,265,921 | 
+
+</details>
+
+
+<details>
+<summary>Flamegraphs</summary>
+
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/bdb840b9edb511ed3b0c5bb13e84849cf870a19c/pairing-bdb840b9edb511ed3b0c5bb13e84849cf870a19c-pairing.dsl_ir.opcode.air_name.cells_used.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/bdb840b9edb511ed3b0c5bb13e84849cf870a19c/pairing-bdb840b9edb511ed3b0c5bb13e84849cf870a19c-pairing.dsl_ir.opcode.air_name.cells_used.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/bdb840b9edb511ed3b0c5bb13e84849cf870a19c/pairing-bdb840b9edb511ed3b0c5bb13e84849cf870a19c-pairing.dsl_ir.opcode.air_name.cells_used.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/bdb840b9edb511ed3b0c5bb13e84849cf870a19c/pairing-bdb840b9edb511ed3b0c5bb13e84849cf870a19c-pairing.dsl_ir.opcode.air_name.cells_used.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/bdb840b9edb511ed3b0c5bb13e84849cf870a19c/pairing-bdb840b9edb511ed3b0c5bb13e84849cf870a19c-pairing.dsl_ir.opcode.frequency.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/bdb840b9edb511ed3b0c5bb13e84849cf870a19c/pairing-bdb840b9edb511ed3b0c5bb13e84849cf870a19c-pairing.dsl_ir.opcode.frequency.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/bdb840b9edb511ed3b0c5bb13e84849cf870a19c/pairing-bdb840b9edb511ed3b0c5bb13e84849cf870a19c-pairing.dsl_ir.opcode.frequency.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/bdb840b9edb511ed3b0c5bb13e84849cf870a19c/pairing-bdb840b9edb511ed3b0c5bb13e84849cf870a19c-pairing.dsl_ir.opcode.frequency.svg)
+
+</details>
+
+Commit: https://github.com/openvm-org/openvm/commit/bdb840b9edb511ed3b0c5bb13e84849cf870a19c
+
+Max Segment Length: 1048476
+
+Instance Type: 64cpu-linux-arm64
+
+Memory Allocator: jemalloc
+
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/14366459339)
