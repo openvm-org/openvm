@@ -29,6 +29,7 @@ pub mod inner {
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
+    use tracing::debug;
 
     use super::*;
     use crate::{hints::Hintable, stark::VerifierProgram, types::new_from_inner_multi_vk};

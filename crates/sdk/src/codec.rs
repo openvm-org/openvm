@@ -243,7 +243,10 @@ impl Encode for InnerQueryProof {
         }
         self.commit_phase_openings.len().encode(writer)?;
         for step in &self.commit_phase_openings {
-            step.sibling_value.encode(writer)?;
+            step.opened_rows.len().encode(writer)?;
+            for row in &step.opened_rows {
+                encode_slice(row, writer)?;
+            }
             encode_slice(&step.opening_proof, writer)?;
         }
         Ok(())
@@ -498,12 +501,14 @@ impl Decode for InnerFriProof {
         let commit_phase_commits = decode_commitments(reader)?;
         let query_proofs = decode_vec(reader)?;
         let final_poly = decode_vec(reader)?;
+        let log_max_height = usize::decode(reader)?;
         let pow_witness = F::decode(reader)?;
 
         Ok(InnerFriProof {
             commit_phase_commits,
             query_proofs,
             final_poly,
+            log_max_height,
             pow_witness,
         })
     }
@@ -533,11 +538,16 @@ impl Decode for InnerQueryProof {
         let mut commit_phase_openings = Vec::with_capacity(commit_phase_openings_count);
 
         for _ in 0..commit_phase_openings_count {
-            let sibling_value = Challenge::decode(reader)?;
+            let opened_rows_len = usize::decode(reader)?;
+            let mut opened_rows = Vec::with_capacity(opened_rows_len);
+            for _ in 0..opened_rows_len {
+                opened_rows.push(decode_vec(reader)?);
+            }
+
             let opening_proof = decode_vec(reader)?;
 
             commit_phase_openings.push(CommitPhaseProofStep {
-                sibling_value,
+                opened_rows,
                 opening_proof,
             });
         }

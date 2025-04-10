@@ -38,10 +38,10 @@ impl Hintable<C> for InnerCommitPhaseStep {
     type HintVariable = FriCommitPhaseProofStepVariable<C>;
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
-        let sibling_value = builder.hint_ext();
+        let opened_rows = Vec::<Vec<InnerChallenge>>::read(builder);
         let opening_proof = read_hint_slice(builder);
         Self::HintVariable {
-            sibling_value,
+            opened_rows,
             opening_proof,
         }
     }
@@ -49,7 +49,7 @@ impl Hintable<C> for InnerCommitPhaseStep {
     fn write(&self) -> Vec<Vec<<C as Config>::F>> {
         let mut stream = Vec::new();
 
-        stream.extend(Hintable::<C>::write(&self.sibling_value));
+        stream.extend(Hintable::<C>::write(&self.opened_rows));
         stream.extend(write_opening_proof(&self.opening_proof));
 
         stream
@@ -91,11 +91,13 @@ impl Hintable<C> for InnerFriProof {
         let commit_phase_commits = Vec::<InnerDigest>::read(builder);
         let query_proofs = Vec::<InnerQueryProof>::read(builder);
         let final_poly = builder.hint_exts();
+        let log_max_height = Usize::from(builder.hint_var());
         let pow_witness = builder.hint_felt();
         Self::HintVariable {
             commit_phase_commits,
             query_proofs,
             final_poly,
+            log_max_height,
             pow_witness,
         }
     }
@@ -112,6 +114,7 @@ impl Hintable<C> for InnerFriProof {
         ));
         stream.extend(Vec::<InnerQueryProof>::write(&self.query_proofs));
         stream.extend(self.final_poly.write());
+        stream.extend(Hintable::<C>::write(&self.log_max_height));
         stream.push(vec![self.pow_witness]);
 
         stream
