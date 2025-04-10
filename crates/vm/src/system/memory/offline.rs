@@ -1,4 +1,4 @@
-use std::{array, cmp::max};
+use std::{array, cmp::max, collections::BTreeMap};
 
 use openvm_circuit_primitives::{
     assert_less_than::AssertLtSubAir, var_range::SharedVariableRangeCheckerChip,
@@ -150,6 +150,10 @@ pub struct OfflineMemory<F> {
     range_checker: SharedVariableRangeCheckerChip,
 
     log: Vec<Option<MemoryRecord<F>>>,
+
+    // Added: counters for memory accesses by size
+    read_counters: BTreeMap<usize, usize>,
+    write_counters: BTreeMap<usize, usize>,
 }
 
 impl<F: PrimeField32> OfflineMemory<F> {
@@ -173,6 +177,8 @@ impl<F: PrimeField32> OfflineMemory<F> {
             memory_bus,
             range_checker,
             log: vec![],
+            read_counters: BTreeMap::new(),
+            write_counters: BTreeMap::new(),
         }
     }
 
@@ -223,6 +229,9 @@ impl<F: PrimeField32> OfflineMemory<F> {
         assert!(len.is_power_of_two());
         assert_ne!(address_space, 0);
 
+        // Update write counter for this size
+        *self.write_counters.entry(len).or_insert(0) += 1;
+
         let prev_timestamp = self.access_updating_timestamp(address_space, pointer, len, records);
 
         debug_assert!(prev_timestamp < self.timestamp);
@@ -252,6 +261,10 @@ impl<F: PrimeField32> OfflineMemory<F> {
         adapter_records: &mut AccessAdapterInventory<F>,
     ) {
         assert!(len.is_power_of_two());
+
+        // Update read counter for this size
+        *self.read_counters.entry(len).or_insert(0) += 1;
+
         if address_space == 0 {
             let pointer = F::from_canonical_u32(pointer);
             self.log.push(Some(MemoryRecord {
@@ -292,6 +305,45 @@ impl<F: PrimeField32> OfflineMemory<F> {
         &mut self,
         adapter_records: &mut AccessAdapterInventory<F>,
     ) -> TimestampedEquipartition<F, N> {
+        // Print access statistics
+        println!("==========================================================");
+        println!("Memory access statistics:");
+        println!("==========================================================");
+        println!("Read operations by size:");
+        for (size, count) in self.read_counters.iter() {
+            println!("  Size {}: {} operations", size, count);
+        }
+        println!("----------------------------------------------------------");
+        println!("Write operations by size:");
+        for (size, count) in self.write_counters.iter() {
+            println!("  Size {}: {} operations", size, count);
+        }
+        println!("----------------------------------------------------------");
+
+        // Calculate memory rows based on the formula
+        let m_32 =
+            self.read_counters.get(&32).unwrap_or(&0) + self.write_counters.get(&32).unwrap_or(&0);
+        let m_16 =
+            self.read_counters.get(&16).unwrap_or(&0) + self.write_counters.get(&16).unwrap_or(&0);
+        let m_8 =
+            self.read_counters.get(&8).unwrap_or(&0) + self.write_counters.get(&8).unwrap_or(&0);
+
+        let h_32 = 2 * m_32;
+        let h_16 = 2 * m_16;
+        let h_8 = 2 * m_8;
+        let h_4 = 16 * m_32 + 8 * m_16 + 4 * m_8;
+
+        println!("Memory rows by size (H_n = rows needed):");
+        println!("  H_32 = {} rows (2·M_32)", h_32);
+        println!("  H_16 = {} rows (2·M_16)", h_16);
+        println!("  H_8  = {} rows (2·M_8)", h_8);
+        println!("  H_4  = {} rows (16·M_32 + 8·M_16 + 4·M_8)", h_4);
+        println!("==========================================================");
+
+        // Reset counters
+        self.read_counters.clear();
+        self.write_counters.clear();
+
         // First make sure the partition we maintain in self.block_data is an equipartition.
         // Grab all aligned pointers that need to be re-accessed.
         let to_access: FxHashSet<_> = self
