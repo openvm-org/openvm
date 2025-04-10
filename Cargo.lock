@@ -4597,7 +4597,7 @@ dependencies = [
  "p3-keccak",
  "p3-koala-bear",
  "p3-merkle-tree",
- "p3-poseidon 0.1.0 (git+https://github.com/Plonky3/Plonky3.git?rev=64639b0)",
+ "p3-poseidon 0.1.0 (git+https://github.com/Plonky3/Plonky3.git?rev=b1609ee)",
  "p3-poseidon2",
  "p3-symmetric",
  "rand",
@@ -4858,7 +4858,7 @@ dependencies = [
 [[package]]
 name = "p3-koala-bear"
 version = "0.1.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=64639b0#64639b07c93d3bf683b1c44ae1ac2e8db3b2ee58"
+source = "git+https://github.com/Plonky3/Plonky3.git?rev=b1609ee#b1609ee235f30d47c805e293ea63a7b48e4d0e6e"
 dependencies = [
  "p3-field",
  "p3-mds",
@@ -4952,7 +4952,7 @@ dependencies = [
 [[package]]
 name = "p3-poseidon"
 version = "0.1.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=64639b0#64639b07c93d3bf683b1c44ae1ac2e8db3b2ee58"
+source = "git+https://github.com/Plonky3/Plonky3.git?rev=b1609ee#b1609ee235f30d47c805e293ea63a7b48e4d0e6e"
 dependencies = [
  "p3-field",
  "p3-mds",
@@ -4974,7 +4974,7 @@ dependencies = [
 [[package]]
 name = "p3-poseidon2-air"
 version = "0.1.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=64639b0#64639b07c93d3bf683b1c44ae1ac2e8db3b2ee58"
+source = "git+https://github.com/Plonky3/Plonky3.git?rev=b1609ee#b1609ee235f30d47c805e293ea63a7b48e4d0e6e"
 dependencies = [
  "p3-air",
  "p3-field",
