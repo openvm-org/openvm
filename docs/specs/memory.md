@@ -97,7 +97,7 @@ The _split_ and _merge_ operations for a subsegment of length `N` are handled by
 - Of course, merging two halves creates a subsegment with the timestamp being the maximal of two timestamps for the halves.
 - Splitting, however, just makes all child timestamps equal to the former timestamp of the segment being split.
 - All these timestamp conditions are checked in the `AccessAdapterAir`.
-- When merging two segments `[l, r)` and `[m, r)`, the `AccessAdapterAir` sends to **memory bus** the information about `[l, r)` and receives the information about `[l, m)` and about `[m, r)`, all with multiplicity 1. Splitting does the same, but with multiplicity -1 (or, in other words, receives about `[l, r)` and sends about `[l, m)` and `[m, r)`).
+- When merging two segments `[l, m)` and `[m, r)`, the `AccessAdapterAir` sends to **memory bus** the information about `[l, r)` and receives the information about `[l, m)` and about `[m, r)`, all with multiplicity 1. Splitting does the same, but with multiplicity -1 (or, in other words, receives about `[l, r)` and sends about `[l, m)` and `[m, r)`).
 - The information about `[l, r)` sent to the bus is, in this order:
   - address space,
   - `l`,
