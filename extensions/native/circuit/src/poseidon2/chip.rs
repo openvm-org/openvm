@@ -221,7 +221,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
             let (write_data_1, _) = memory.write::<F, CHUNK>(
                 data_address_space,
                 output_pointer,
-                std::array::from_fn(|i| output[i]),
+                &std::array::from_fn(|i| output[i]),
             );
             let write_data_2 = if instruction.opcode == PERM_POS2.global_opcode() {
                 Some(
@@ -229,7 +229,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                         .write::<F, CHUNK>(
                             data_address_space,
                             output_pointer + F::from_canonical_usize(CHUNK),
-                            std::array::from_fn(|i| output[CHUNK + i]),
+                            &std::array::from_fn(|i| output[CHUNK + i]),
                         )
                         .0,
                 )

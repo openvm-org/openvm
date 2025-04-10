@@ -197,7 +197,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let e = instruction.e;
         let writes = [memory
-            .write(e, read_record.rd_val, tmp_convert_to_u8s(output.writes[0]))
+            .write(e, read_record.rd_val, &tmp_convert_to_u8s(output.writes[0]))
             .0];
 
         let timestamp_delta = memory.timestamp() - from_state.timestamp;

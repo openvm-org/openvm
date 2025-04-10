@@ -183,7 +183,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for AluNativeAdapterChip<F> {
         let writes = vec![memory.write(
             F::from_canonical_u32(AS::Native as u32),
             a,
-            output.writes[0],
+            &output.writes[0],
         )];
 
         Ok((

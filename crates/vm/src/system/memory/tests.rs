@@ -298,7 +298,7 @@ fn make_random_accesses<F: PrimeField32>(
                 0 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 1));
                     let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                    let (record_id, _) = memory_controller.write(address_space, pointer, [data]);
+                    let (record_id, _) = memory_controller.write(address_space, pointer, &[data]);
                     record_id
                 }
                 1 => {
@@ -315,7 +315,7 @@ fn make_random_accesses<F: PrimeField32>(
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 4));
                     let data = array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..1 << 30)));
                     let (record_id, _) =
-                        memory_controller.write::<F, 4>(address_space, pointer, data);
+                        memory_controller.write::<F, 4>(address_space, pointer, &data);
                     record_id
                 }
                 4 => {

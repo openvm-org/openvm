@@ -193,7 +193,7 @@ impl<F: PrimeField32, const N: usize> VmAdapterChip<F> for NativeVectorizedAdapt
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let (a_val, _) = memory.write(d, a, output.writes[0]);
+        let (a_val, _) = memory.write(d, a, &output.writes[0]);
 
         Ok((
             ExecutionState {

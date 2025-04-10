@@ -476,11 +476,11 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                     memory.write(
                         e,
                         F::from_canonical_u32(ptr & 0xfffffffc),
-                        tmp_convert_to_u8s(output.writes[0]),
+                        &tmp_convert_to_u8s(output.writes[0]),
                     )
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                    memory.write(d, a, tmp_convert_to_u8s(output.writes[0]))
+                    memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]))
                 }
             };
             record_id

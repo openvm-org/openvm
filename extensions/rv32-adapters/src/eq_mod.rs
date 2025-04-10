@@ -369,7 +369,7 @@ impl<
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let (rd_id, _) = memory.write(d, a, tmp_convert_to_u8s(output.writes[0]));
+        let (rd_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
 
         debug_assert!(
             memory.timestamp() - from_state.timestamp

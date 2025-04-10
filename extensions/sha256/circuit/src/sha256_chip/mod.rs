@@ -167,7 +167,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
 
         let mut digest = [0u8; SHA256_WRITE_SIZE];
         digest.copy_from_slice(hasher.finalize().as_ref());
-        let (digest_write, _) = memory.write(e, F::from_canonical_u32(dst), digest);
+        let (digest_write, _) = memory.write(e, F::from_canonical_u32(dst), &digest);
 
         self.records.push(Sha256Record {
             from_state: from_state.map(F::from_canonical_u32),

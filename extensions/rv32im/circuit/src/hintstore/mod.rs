@@ -376,7 +376,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
             let (write, _) = memory.write(
                 e,
                 F::from_canonical_u32(mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index)),
-                tmp_convert_to_u8s(data),
+                &tmp_convert_to_u8s(data),
             );
             record.hints.push((data, write));
         }

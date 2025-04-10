@@ -664,7 +664,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             );
         }
 
-        let (result_write, _) = memory.write(addr_space, result_ptr, result);
+        let (result_write, _) = memory.write(addr_space, result_ptr, &result);
 
         let record = FriReducedOpeningRecord {
             pc: F::from_canonical_u32(from_state.pc),

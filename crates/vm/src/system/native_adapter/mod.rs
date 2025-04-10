@@ -253,7 +253,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         let Instruction { a, d, .. } = *instruction;
         let mut writes = Vec::with_capacity(W);
         if W >= 1 {
-            let (record_id, _) = memory.write(d, a, output.writes[0]);
+            let (record_id, _) = memory.write(d, a, &output.writes[0]);
             writes.push((record_id, output.writes[0]));
         }
 

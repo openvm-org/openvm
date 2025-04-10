@@ -270,7 +270,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let (rd_id, _) = memory.write(d, a, tmp_convert_to_u8s(output.writes[0]));
+        let (rd_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
 
         Ok((
             ExecutionState {
@@ -331,7 +331,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
         let rd_id = if instruction.f != F::ZERO {
-            let (rd_id, _) = memory.write(d, a, tmp_convert_to_u8s(output.writes[0]));
+            let (rd_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
             Some(rd_id)
         } else {
             memory.increment_timestamp();

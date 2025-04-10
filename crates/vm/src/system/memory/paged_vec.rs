@@ -123,13 +123,13 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
     /// # Panics
     /// If `from..from + size_of<BLOCK>()` is out of bounds.
     #[inline(always)]
-    pub fn set<BLOCK: Copy>(&mut self, from: usize, values: BLOCK) -> BLOCK {
+    pub fn set<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK {
         // Create an uninitialized array for old values.
         let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
         self.set_range_generic(
             from,
             size_of::<BLOCK>(),
-            &values as *const _ as *const u8,
+            values as *const _ as *const u8,
             result.as_mut_ptr() as *mut u8,
         );
         // SAFETY:
@@ -275,7 +275,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
         );
         self.paged_vecs
             .get_unchecked_mut((addr_space - self.as_offset) as usize)
-            .set((ptr as usize) * size_of::<T>(), data)
+            .set((ptr as usize) * size_of::<T>(), &data)
     }
     pub fn is_empty(&self) -> bool {
         self.paged_vecs.iter().all(|page| page.is_empty())
@@ -293,7 +293,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     ) -> Self {
         let mut vec = Self::new(as_offset, as_cnt, mem_size);
         for ((addr_space, index), data_byte) in sparse_map.into_iter() {
-            vec.paged_vecs[(addr_space - as_offset) as usize].set(index as usize, data_byte);
+            vec.paged_vecs[(addr_space - as_offset) as usize].set(index as usize, &data_byte);
         }
         vec
     }
@@ -319,7 +319,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     pub unsafe fn set_range<T: Copy, const N: usize>(
         &mut self,
         (addr_space, ptr): Address,
-        values: [T; N],
+        values: &[T; N],
     ) -> [T; N] {
         debug_assert_eq!(
             size_of::<T>(),
@@ -340,7 +340,7 @@ mod tests {
     fn test_basic_get_set() {
         let mut v = PagedVec::<16>::new(3);
         assert_eq!(v.get::<u32>(0), 0u32);
-        v.set(0, 42u32);
+        v.set(0, &42u32);
         assert_eq!(v.get::<u32>(0), 42u32);
     }
 

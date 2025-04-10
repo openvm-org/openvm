@@ -222,7 +222,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
             a, d, f: enabled, ..
         } = *instruction;
         let rd_id = if enabled != F::ZERO {
-            let (record_id, _) = memory.write(d, a, tmp_convert_to_u8s(output.writes[0]));
+            let (record_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
             Some(record_id)
         } else {
             memory.increment_timestamp();

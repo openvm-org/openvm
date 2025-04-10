@@ -68,11 +68,13 @@ impl Memory {
     /// The type `T` must be stack-allocated `repr(C)`, and it must be the exact type used to represent a single
     /// memory cell in address space `address_space`. For standard usage, `T` is either `u8` or `F` where `F` is
     /// the base field of the ZK backend.
+    // @dev: `values` is passed by reference since the data is copied into memory. Even though the compiler probably optimizes it,
+    // we use reference to avoid any unnecessary copy of `values` onto the stack in the function call.
     pub unsafe fn write<T: Copy, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
-        values: [T; BLOCK_SIZE],
+        values: &[T; BLOCK_SIZE],
     ) -> (RecordId, [T; BLOCK_SIZE]) {
         debug_assert!(BLOCK_SIZE.is_power_of_two());
 
@@ -144,12 +146,12 @@ mod tests {
         let address_space = 1;
 
         unsafe {
-            memory.write(address_space, 0, [1u8, 2, 3, 4]);
+            memory.write(address_space, 0, &[1u8, 2, 3, 4]);
 
             let (_, data) = memory.read::<u8, 2>(address_space, 0);
             assert_eq!(data, [1u8, 2]);
 
-            memory.write(address_space, 2, [100u8]);
+            memory.write(address_space, 2, &[100u8]);
 
             let (_, data) = memory.read::<u8, 4>(address_space, 0);
             assert_eq!(data, [1u8, 2, 100, 4]);

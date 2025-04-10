@@ -291,7 +291,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         let (write_id, _) = memory.write::<F, NUM_CELLS>(
             read_record.write_as,
             read_record.write_ptr,
-            output.writes,
+            &output.writes,
         );
         Ok((
             ExecutionState {

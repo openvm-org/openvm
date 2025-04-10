@@ -420,7 +420,7 @@ impl<F: PrimeField32> MemoryController<F> {
     ///
     /// Returns the `RecordId` and previous data.
     pub fn write_cell<T: Copy>(&mut self, address_space: F, pointer: F, data: T) -> (RecordId, T) {
-        let (record_id, [data]) = self.write(address_space, pointer, [data]);
+        let (record_id, [data]) = self.write(address_space, pointer, &[data]);
         (record_id, data)
     }
 
@@ -428,7 +428,7 @@ impl<F: PrimeField32> MemoryController<F> {
         &mut self,
         address_space: F,
         pointer: F,
-        data: [T; N],
+        data: &[T; N],
     ) -> (RecordId, [T; N]) {
         debug_assert_ne!(address_space, F::ZERO);
         let address_space_u32 = address_space.as_canonical_u32();
@@ -864,7 +864,7 @@ mod tests {
 
             if rng.gen_bool(0.5) {
                 let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                memory_controller.write(address_space, pointer, [data]);
+                memory_controller.write(address_space, pointer, &[data]);
             } else {
                 memory_controller.read::<F, 1>(address_space, pointer);
             }

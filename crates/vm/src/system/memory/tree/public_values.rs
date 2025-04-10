@@ -224,7 +224,7 @@ mod tests {
             1 << memory_dimensions.address_height,
         );
         unsafe {
-            memory.set_range::<F, 1>((pv_as, 15), [F::ONE]);
+            memory.set_range::<F, 1>((pv_as, 15), &[F::ONE]);
         }
         let mut expected_pvs = F::zero_vec(num_public_values);
         expected_pvs[15] = F::ONE;

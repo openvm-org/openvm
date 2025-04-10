@@ -217,7 +217,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let (rd_id, _) = memory.write(d, a, tmp_convert_to_u8s(output.writes[0]));
+        let (rd_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
 
         let timestamp_delta = memory.timestamp() - from_state.timestamp;
         debug_assert!(

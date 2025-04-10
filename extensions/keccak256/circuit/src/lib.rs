@@ -228,7 +228,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
                 .write::<u8, KECCAK_WORD_SIZE>(
                     e,
                     F::from_canonical_usize(dst + i * KECCAK_WORD_SIZE),
-                    from_fn(|j| output[i * KECCAK_WORD_SIZE + j]),
+                    &from_fn(|j| output[i * KECCAK_WORD_SIZE + j]),
                 )
                 .0
         });

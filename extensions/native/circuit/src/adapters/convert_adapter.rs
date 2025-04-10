@@ -187,7 +187,7 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let (write_id, _) = memory.write::<F, WRITE_SIZE>(d, a, output.writes[0]);
+        let (write_id, _) = memory.write::<F, WRITE_SIZE>(d, a, &output.writes[0]);
 
         Ok((
             ExecutionState {

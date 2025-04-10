@@ -463,7 +463,7 @@ impl<
             let (record_id, _) = memory.write(
                 e,
                 read_record.rd_val + F::from_canonical_u32((i * WRITE_SIZE) as u32),
-                tmp_convert_to_u8s(write),
+                &tmp_convert_to_u8s(write),
             );
             i += 1;
             record_id
