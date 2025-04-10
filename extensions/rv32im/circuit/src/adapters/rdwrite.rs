@@ -29,7 +29,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::RV32_REGISTER_NUM_LIMBS;
+use super::{tmp_convert_to_u8s, RV32_REGISTER_NUM_LIMBS};
 
 /// This adapter doesn't read anything, and writes to \[a:4\]_d, where d == 1
 #[derive(Debug)]
@@ -270,7 +270,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let (rd_id, _) = memory.write(d, a, output.writes[0]);
+        let (rd_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
 
         Ok((
             ExecutionState {
@@ -331,7 +331,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
         let rd_id = if instruction.f != F::ZERO {
-            let (rd_id, _) = memory.write(d, a, output.writes[0]);
+            let (rd_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
             Some(rd_id)
         } else {
             memory.increment_timestamp();

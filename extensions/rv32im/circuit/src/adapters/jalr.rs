@@ -29,7 +29,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::RV32_REGISTER_NUM_LIMBS;
+use super::{tmp_convert_to_u8s, RV32_REGISTER_NUM_LIMBS};
 
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
 #[derive(Debug)]
@@ -202,9 +202,12 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         let Instruction { b, d, .. } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
+        let rs1 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, b);
 
-        Ok(([rs1.1], Rv32JalrReadRecord { rs1: rs1.0 }))
+        Ok((
+            [rs1.1.map(F::from_canonical_u8)],
+            Rv32JalrReadRecord { rs1: rs1.0 },
+        ))
     }
 
     fn postprocess(
@@ -219,7 +222,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
             a, d, f: enabled, ..
         } = *instruction;
         let rd_id = if enabled != F::ZERO {
-            let (record_id, _) = memory.write(d, a, output.writes[0]);
+            let (record_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
             Some(record_id)
         } else {
             memory.increment_timestamp();

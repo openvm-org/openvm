@@ -7,7 +7,7 @@ use std::{
 
 use openvm_stark_backend::{
     interaction::{PermutationCheckBus, PermutationInteractionType},
-    p3_field::FieldAlgebra,
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     Chip, ChipUsageGetter,
@@ -39,9 +39,9 @@ const COMPRESSION_BUS: PermutationCheckBus = PermutationCheckBus::new(POSEIDON2_
 
 fn test<const CHUNK: usize>(
     memory_dimensions: MemoryDimensions,
-    initial_memory: &MemoryImage<BabyBear>,
+    initial_memory: &MemoryImage,
     touched_labels: BTreeSet<(u32, u32)>,
-    final_memory: &MemoryImage<BabyBear>,
+    final_memory: &MemoryImage,
 ) {
     let MemoryDimensions {
         as_height,
@@ -51,30 +51,31 @@ fn test<const CHUNK: usize>(
     let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
 
     // checking validity of test data
-    for ((address_space, pointer), value) in final_memory.items() {
+    for ((address_space, pointer), value) in final_memory.items::<BabyBear>() {
         let label = pointer / CHUNK as u32;
         assert!(address_space - as_offset < (1 << as_height));
         assert!(pointer < ((CHUNK << address_height).div_ceil(PAGE_SIZE) * PAGE_SIZE) as u32);
-        if initial_memory.get(&(address_space, pointer)) != Some(&value) {
+        if unsafe { initial_memory.get::<BabyBear>((address_space, pointer)) } != value {
             assert!(touched_labels.contains(&(address_space, label)));
         }
     }
-    for key in initial_memory.items().map(|(key, _)| key) {
-        assert!(final_memory.get(&key).is_some());
-    }
-    for &(address_space, label) in touched_labels.iter() {
-        let mut contains_some_key = false;
-        for i in 0..CHUNK {
-            if final_memory
-                .get(&(address_space, label * CHUNK as u32 + i as u32))
-                .is_some()
-            {
-                contains_some_key = true;
-                break;
-            }
-        }
-        assert!(contains_some_key);
-    }
+    // for key in initial_memory.items().map(|(key, _)| key) {
+    //     assert!(unsafe { final_memory.get(key).is_some() });
+    // }
+    // for &(address_space, label) in touched_labels.iter() {
+    //     let mut contains_some_key = false;
+    //     for i in 0..CHUNK {
+    //         if unsafe {
+    //             final_memory
+    //                 .get((address_space, label * CHUNK as u32 + i as u32))
+    //                 .is_some()
+    //         } {
+    //             contains_some_key = true;
+    //             break;
+    //         }
+    //     }
+    //     assert!(contains_some_key);
+    // }
 
     let mut hash_test_chip = HashTestChip::new();
 
@@ -126,12 +127,11 @@ fn test<const CHUNK: usize>(
     };
 
     for (address_space, address_label) in touched_labels {
-        let initial_values = array::from_fn(|i| {
-            initial_memory
-                .get(&(address_space, address_label * CHUNK as u32 + i as u32))
-                .copied()
-                .unwrap_or_default()
-        });
+        let initial_values = unsafe {
+            array::from_fn(|i| {
+                initial_memory.get((address_space, address_label * CHUNK as u32 + i as u32))
+            })
+        };
         let as_label = address_space - as_offset;
         interaction(
             PermutationInteractionType::Send,
@@ -180,8 +180,8 @@ fn test<const CHUNK: usize>(
     .expect("Verification failed");
 }
 
-fn memory_to_partition<F: Default + Copy, const N: usize>(
-    memory: &MemoryImage<F>,
+fn memory_to_partition<F: PrimeField32, const N: usize>(
+    memory: &MemoryImage,
 ) -> Equipartition<F, N> {
     let mut memory_partition = Equipartition::new();
     for ((address_space, pointer), value) in memory.items() {
@@ -203,8 +203,12 @@ fn random_test<const CHUNK: usize>(
     let mut rng = create_seeded_rng();
     let mut next_u32 = || rng.next_u64() as u32;
 
-    let mut initial_memory = AddressMap::new(1, 2, CHUNK << height);
-    let mut final_memory = AddressMap::new(1, 2, CHUNK << height);
+    let as_cnt = 2;
+    let mut initial_memory = AddressMap::new(1, as_cnt, CHUNK << height);
+    let mut final_memory = AddressMap::new(1, as_cnt, CHUNK << height);
+    // TEMP[jpw]: override so address space uses field element
+    initial_memory.cell_size = vec![4; as_cnt];
+    final_memory.cell_size = vec![4; as_cnt];
     let mut seen = HashSet::new();
     let mut touched_labels = BTreeSet::new();
 
@@ -221,15 +225,19 @@ fn random_test<const CHUNK: usize>(
             if is_initial && num_initial_addresses != 0 {
                 num_initial_addresses -= 1;
                 let value = BabyBear::from_canonical_u32(next_u32() % max_value);
-                initial_memory.insert(&(address_space, pointer), value);
-                final_memory.insert(&(address_space, pointer), value);
+                unsafe {
+                    initial_memory.insert((address_space, pointer), value);
+                    final_memory.insert((address_space, pointer), value);
+                }
             }
             if is_touched && num_touched_addresses != 0 {
                 num_touched_addresses -= 1;
                 touched_labels.insert((address_space, label));
                 if value_changes || !is_initial {
                     let value = BabyBear::from_canonical_u32(next_u32() % max_value);
-                    final_memory.insert(&(address_space, pointer), value);
+                    unsafe {
+                        final_memory.insert((address_space, pointer), value);
+                    }
                 }
             }
         }

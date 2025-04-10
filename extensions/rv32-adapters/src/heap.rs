@@ -23,7 +23,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
 };
-use openvm_rv32im_circuit::adapters::read_rv32_register;
+use openvm_rv32im_circuit::adapters::{read_rv32_register, tmp_convert_to_u8s};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -173,9 +173,9 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
 
         let read_records = rs_vals.map(|address| {
             debug_assert!(address as usize + READ_SIZE - 1 < (1 << self.air.address_bits));
-            [memory.read::<READ_SIZE>(e, F::from_canonical_u32(address))]
+            [memory.read::<u8, READ_SIZE>(e, F::from_canonical_u32(address))]
         });
-        let read_data = read_records.map(|r| r[0].1);
+        let read_data = read_records.map(|r| r[0].1.map(F::from_canonical_u8));
 
         let record = Rv32VecHeapReadRecord {
             rs: rs_records,
@@ -196,7 +196,9 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let e = instruction.e;
-        let writes = [memory.write(e, read_record.rd_val, output.writes[0]).0];
+        let writes = [memory
+            .write(e, read_record.rd_val, &tmp_convert_to_u8s(output.writes[0]))
+            .0];
 
         let timestamp_delta = memory.timestamp() - from_state.timestamp;
         debug_assert!(

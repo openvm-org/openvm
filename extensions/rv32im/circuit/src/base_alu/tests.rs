@@ -340,7 +340,7 @@ struct Rv32BaseAluAdapterTestChip<F: Field>(Rv32BaseAluAdapterChip<F>);
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterTestChip<F> {
     type ReadRecord = Rv32BaseAluReadRecord<F>;
-    type WriteRecord = Rv32BaseAluWriteRecord<F>;
+    type WriteRecord = Rv32BaseAluWriteRecord;
     type Air = Rv32BaseAluAdapterAir;
     type Interface = BasicAdapterInterface<
         F,
@@ -361,7 +361,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterTestChip<F> {
     )> {
         let Instruction { b, c, d, e, .. } = *instruction;
 
-        let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
+        let rs1 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, b);
         let (rs2, rs2_data, rs2_imm) = if e.is_zero() {
             let c_u32 = c.as_canonical_u32();
             memory.increment_timestamp();
@@ -379,12 +379,16 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterTestChip<F> {
                 c,
             )
         } else {
-            let rs2_read = memory.read::<RV32_REGISTER_NUM_LIMBS>(e, c);
-            (Some(rs2_read.0), rs2_read.1, F::ZERO)
+            let rs2_read = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(e, c);
+            (
+                Some(rs2_read.0),
+                rs2_read.1.map(F::from_canonical_u8),
+                F::ZERO,
+            )
         };
 
         Ok((
-            [rs1.1, rs2_data],
+            [rs1.1.map(F::from_canonical_u8), rs2_data],
             Self::ReadRecord {
                 rs1: rs1.0,
                 rs2,

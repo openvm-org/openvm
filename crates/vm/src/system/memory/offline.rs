@@ -28,7 +28,7 @@ struct BlockData {
 
 struct BlockMap {
     /// Block ids. 0 is a special value standing for the default block.
-    id: AddressMap<usize, PAGE_SIZE>,
+    id: AddressMap<PAGE_SIZE>,
     /// The place where non-default blocks are stored.
     storage: Vec<BlockData>,
     initial_block_size: usize,
@@ -53,23 +53,22 @@ impl BlockMap {
         }
     }
 
-    pub fn get_without_adding(&self, address: &(u32, u32)) -> BlockData {
-        let idx = self.id.get(address).unwrap_or(&0);
-        if idx == &0 {
+    pub fn get_without_adding(&self, address: (u32, u32)) -> BlockData {
+        let idx = unsafe { self.id.get::<usize>(address) };
+        if idx == 0 {
             Self::initial_block_data(address.1, self.initial_block_size)
         } else {
             self.storage[idx - 1].clone()
         }
     }
 
-    pub fn get(&mut self, address: &(u32, u32)) -> &BlockData {
-        let (address_space, pointer) = *address;
-        let idx = self.id.get(&(address_space, pointer)).unwrap_or(&0);
-        if idx == &0 {
+    pub fn get(&mut self, (address_space, pointer): (u32, u32)) -> &BlockData {
+        let idx = unsafe { self.id.get::<usize>((address_space, pointer)) };
+        if idx == 0 {
             // `initial_block_size` is a power of two, as asserted in `from_mem_config`.
             let pointer = pointer & !(self.initial_block_size as u32 - 1);
             self.set_range(
-                &(address_space, pointer),
+                (address_space, pointer),
                 self.initial_block_size,
                 Self::initial_block_data(pointer, self.initial_block_size),
             );
@@ -79,13 +78,12 @@ impl BlockMap {
         }
     }
 
-    pub fn get_mut(&mut self, address: &(u32, u32)) -> &mut BlockData {
-        let (address_space, pointer) = *address;
-        let idx = self.id.get(&(address_space, pointer)).unwrap_or(&0);
-        if idx == &0 {
+    pub fn get_mut(&mut self, (address_space, pointer): (u32, u32)) -> &mut BlockData {
+        let idx = unsafe { self.id.get::<usize>((address_space, pointer)) };
+        if idx == 0 {
             let pointer = pointer - pointer % self.initial_block_size as u32;
             self.set_range(
-                &(address_space, pointer),
+                (address_space, pointer),
                 self.initial_block_size,
                 Self::initial_block_data(pointer, self.initial_block_size),
             );
@@ -95,18 +93,31 @@ impl BlockMap {
         }
     }
 
-    pub fn set_range(&mut self, address: &(u32, u32), len: usize, block: BlockData) {
-        let (address_space, pointer) = address;
+    pub fn set_range(
+        &mut self,
+        (address_space, pointer): (u32, u32),
+        len: usize,
+        block: BlockData,
+    ) {
         self.storage.push(block);
         for i in 0..len {
-            self.id
-                .insert(&(*address_space, pointer + i as u32), self.storage.len());
+            unsafe {
+                self.id
+                    .insert((address_space, pointer + i as u32), self.storage.len());
+            }
         }
     }
 
     pub fn items(&self) -> impl Iterator<Item = ((u32, u32), &BlockData)> + '_ {
         self.id
-            .items()
+            .paged_vecs
+            .iter()
+            .enumerate()
+            .flat_map(move |(as_idx, paged_vec)| {
+                paged_vec.iter::<usize>().map(move |(ptr_idx, x)| {
+                    ((as_idx as u32 + self.id.as_offset, ptr_idx as u32), x)
+                })
+            })
             .filter(|(_, idx)| *idx > 0)
             .map(|(address, idx)| (address, &self.storage[idx - 1]))
     }
@@ -141,7 +152,7 @@ impl<T: Copy> MemoryRecord<T> {
 
 pub struct OfflineMemory<F> {
     block_data: BlockMap,
-    data: Vec<PagedVec<F, PAGE_SIZE>>,
+    data: Vec<PagedVec<PAGE_SIZE>>,
     as_offset: u32,
     timestamp: u32,
     timestamp_max_bits: usize,
@@ -157,7 +168,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
     ///
     /// Panics if the initial block size is not a power of two.
     pub fn new(
-        initial_memory: MemoryImage<F>,
+        initial_memory: MemoryImage,
         initial_block_size: usize,
         memory_bus: MemoryBus,
         range_checker: SharedVariableRangeCheckerChip,
@@ -176,7 +187,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         }
     }
 
-    pub fn set_initial_memory(&mut self, initial_memory: MemoryImage<F>, config: MemoryConfig) {
+    pub fn set_initial_memory(&mut self, initial_memory: MemoryImage, config: MemoryConfig) {
         assert_eq!(self.timestamp, INITIAL_TIMESTAMP + 1);
         assert_eq!(initial_memory.as_offset, config.as_offset);
         self.as_offset = config.as_offset;
@@ -227,20 +238,21 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
         debug_assert!(prev_timestamp < self.timestamp);
 
-        let pointer = pointer as usize;
-        let prev_data = self.data[(address_space - self.as_offset) as usize]
-            .set_range(pointer..pointer + len, &values);
+        todo!();
+        // let pointer = pointer as usize;
+        // let prev_data = self.data[(address_space - self.as_offset) as usize]
+        //     .set_range(pointer..pointer + len, &values);
 
-        let record = MemoryRecord {
-            address_space: F::from_canonical_u32(address_space),
-            pointer: F::from_canonical_usize(pointer),
-            timestamp: self.timestamp,
-            prev_timestamp,
-            data: values,
-            prev_data: Some(prev_data),
-        };
-        self.log.push(Some(record));
-        self.timestamp += 1;
+        // let record = MemoryRecord {
+        //     address_space: F::from_canonical_u32(address_space),
+        //     pointer: F::from_canonical_usize(pointer),
+        //     timestamp: self.timestamp,
+        //     prev_timestamp,
+        //     data: values,
+        //     prev_data: Some(prev_data),
+        // };
+        // self.log.push(Some(record));
+        // self.timestamp += 1;
     }
 
     /// Reads an array of values from the memory at the specified address space and start index.
@@ -301,7 +313,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
             .collect();
 
         for &(address_space, pointer) in to_access.iter() {
-            let block = self.block_data.get(&(address_space, pointer));
+            let block = self.block_data.get((address_space, pointer));
             if block.pointer != pointer || block.size != N {
                 self.access(address_space, pointer, N, adapter_records);
             }
@@ -309,7 +321,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
         let mut equipartition = TimestampedEquipartition::<F, N>::new();
         for (address_space, pointer) in to_access {
-            let block = self.block_data.get(&(address_space, pointer));
+            let block = self.block_data.get((address_space, pointer));
 
             debug_assert_eq!(block.pointer % N as u32, 0);
             debug_assert_eq!(block.size, N);
@@ -348,50 +360,51 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
         let mut cur_ptr = original_block.pointer;
         let mut cur_size = original_block.size;
-        while cur_size > 0 {
-            // Split.
-            records.add_record(AccessAdapterRecord {
-                timestamp,
-                address_space: F::from_canonical_u32(address_space),
-                start_index: F::from_canonical_u32(cur_ptr),
-                data: data[(cur_ptr - original_block.pointer) as usize
-                    ..(cur_ptr - original_block.pointer) as usize + cur_size]
-                    .to_vec(),
-                kind: AccessAdapterRecordKind::Split,
-            });
+        todo!()
+        // while cur_size > 0 {
+        //     // Split.
+        //     records.add_record(AccessAdapterRecord {
+        //         timestamp,
+        //         address_space: F::from_canonical_u32(address_space),
+        //         start_index: F::from_canonical_u32(cur_ptr),
+        //         data: data[(cur_ptr - original_block.pointer) as usize
+        //             ..(cur_ptr - original_block.pointer) as usize + cur_size]
+        //             .to_vec(),
+        //         kind: AccessAdapterRecordKind::Split,
+        //     });
 
-            let half_size = cur_size / 2;
-            let half_size_u32 = half_size as u32;
-            let mid_ptr = cur_ptr + half_size_u32;
+        //     let half_size = cur_size / 2;
+        //     let half_size_u32 = half_size as u32;
+        //     let mid_ptr = cur_ptr + half_size_u32;
 
-            if query <= mid_ptr {
-                // The right is finalized; add it to the partition.
-                let block = BlockData {
-                    pointer: mid_ptr,
-                    size: half_size,
-                    timestamp,
-                };
-                self.block_data
-                    .set_range(&(address_space, mid_ptr), half_size, block);
-            }
-            if query >= cur_ptr + half_size_u32 {
-                // The left is finalized; add it to the partition.
-                let block = BlockData {
-                    pointer: cur_ptr,
-                    size: half_size,
-                    timestamp,
-                };
-                self.block_data
-                    .set_range(&(address_space, cur_ptr), half_size, block);
-            }
-            if mid_ptr <= query {
-                cur_ptr = mid_ptr;
-            }
-            if cur_ptr == query {
-                break;
-            }
-            cur_size = half_size;
-        }
+        //     if query <= mid_ptr {
+        //         // The right is finalized; add it to the partition.
+        //         let block = BlockData {
+        //             pointer: mid_ptr,
+        //             size: half_size,
+        //             timestamp,
+        //         };
+        //         self.block_data
+        //             .set_range(&(address_space, mid_ptr), half_size, block);
+        //     }
+        //     if query >= cur_ptr + half_size_u32 {
+        //         // The left is finalized; add it to the partition.
+        //         let block = BlockData {
+        //             pointer: cur_ptr,
+        //             size: half_size,
+        //             timestamp,
+        //         };
+        //         self.block_data
+        //             .set_range(&(address_space, cur_ptr), half_size, block);
+        //     }
+        //     if mid_ptr <= query {
+        //         cur_ptr = mid_ptr;
+        //     }
+        //     if cur_ptr == query {
+        //         break;
+        //     }
+        //     cur_size = half_size;
+        // }
     }
 
     fn access_updating_timestamp(
@@ -407,7 +420,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
         let mut i = 0;
         while i < size as u32 {
-            let block = self.block_data.get_mut(&(address_space, pointer + i));
+            let block = self.block_data.get_mut((address_space, pointer + i));
             debug_assert!(i == 0 || prev_timestamp == Some(block.timestamp));
             prev_timestamp = Some(block.timestamp);
             block.timestamp = self.timestamp;
@@ -456,19 +469,19 @@ impl<F: PrimeField32> OfflineMemory<F> {
         pointer: u32,
         records: &mut AccessAdapterInventory<F>,
     ) {
-        let left_block = self.block_data.get(&(address_space, pointer));
+        let left_block = self.block_data.get((address_space, pointer));
 
         let left_timestamp = left_block.timestamp;
         let size = left_block.size;
 
         let right_timestamp = self
             .block_data
-            .get(&(address_space, pointer + size as u32))
+            .get((address_space, pointer + size as u32))
             .timestamp;
 
         let timestamp = max(left_timestamp, right_timestamp);
         self.block_data.set_range(
-            &(address_space, pointer),
+            (address_space, pointer),
             2 * size,
             BlockData {
                 pointer,
@@ -489,24 +502,19 @@ impl<F: PrimeField32> OfflineMemory<F> {
     }
 
     fn block_containing(&mut self, address_space: u32, pointer: u32) -> BlockData {
-        self.block_data
-            .get_without_adding(&(address_space, pointer))
+        self.block_data.get_without_adding((address_space, pointer))
     }
 
     pub fn get(&self, address_space: u32, pointer: u32) -> F {
-        self.data[(address_space - self.as_offset) as usize]
-            .get(pointer as usize)
-            .cloned()
-            .unwrap_or_default()
+        self.data[(address_space - self.as_offset) as usize].get(pointer as usize)
     }
 
     fn range_array<const N: usize>(&self, address_space: u32, pointer: u32) -> [F; N] {
         array::from_fn(|i| self.get(address_space, pointer + i as u32))
     }
 
-    fn range_vec(&self, address_space: u32, pointer: u32, len: usize) -> Vec<F> {
-        let pointer = pointer as usize;
-        self.data[(address_space - self.as_offset) as usize].range_vec(pointer..pointer + len)
+    fn range_vec(&self, _address_space: u32, _pointer: u32, _len: usize) -> Vec<F> {
+        unimplemented!("to remove")
     }
 
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
@@ -563,7 +571,7 @@ mod tests {
     }
 
     fn setup_test(
-        initial_memory: MemoryImage<BabyBear>,
+        initial_memory: MemoryImage,
         initial_block_size: usize,
     ) -> (OfflineMemory<BabyBear>, AccessAdapterInventory<BabyBear>) {
         let memory_bus = MemoryBus::new(0);
@@ -1002,8 +1010,10 @@ mod tests {
         // Initialize initial memory with blocks at indices 0 and 2
         let mut initial_memory = MemoryImage::default();
         for i in 0..8 {
-            initial_memory.insert(&(1, i), F::from_canonical_u32(i + 1));
-            initial_memory.insert(&(1, 16 + i), F::from_canonical_u32(i + 1));
+            unsafe {
+                initial_memory.insert((1, i), F::from_canonical_u32(i + 1));
+                initial_memory.insert((1, 16 + i), F::from_canonical_u32(i + 1));
+            }
         }
 
         let (mut memory, mut adapter_records) = setup_test(initial_memory, 8);

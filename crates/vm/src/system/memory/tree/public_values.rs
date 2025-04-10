@@ -51,7 +51,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
         memory_dimensions: MemoryDimensions,
         num_public_values: usize,
         hasher: &(impl Hasher<CHUNK, F> + Sync),
-        final_memory: &MemoryImage<F>,
+        final_memory: &MemoryImage,
     ) -> Self {
         let proof = compute_merkle_proof_to_user_public_values_root(
             memory_dimensions,
@@ -121,7 +121,7 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
     memory_dimensions: MemoryDimensions,
     num_public_values: usize,
     hasher: &(impl Hasher<CHUNK, F> + Sync),
-    final_memory: &MemoryImage<F>,
+    final_memory: &MemoryImage,
 ) -> Vec<[F; CHUNK]> {
     assert_eq!(
         num_public_values % CHUNK,
@@ -169,7 +169,7 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
 pub fn extract_public_values<F: PrimeField32>(
     memory_dimensions: &MemoryDimensions,
     num_public_values: usize,
-    final_memory: &MemoryImage<F>,
+    final_memory: &MemoryImage,
 ) -> Vec<F> {
     // All (addr, value) pairs in the public value address space.
     let f_as_start = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
@@ -218,12 +218,14 @@ mod tests {
         let memory_dimensions = vm_config.memory_config.memory_dimensions();
         let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
         let num_public_values = 16;
-        let memory = AddressMap::from_iter(
+        let mut memory = AddressMap::new(
             memory_dimensions.as_offset,
             1 << memory_dimensions.as_height,
             1 << memory_dimensions.address_height,
-            [((pv_as, 15), F::ONE)],
         );
+        unsafe {
+            memory.set_range::<F, 1>((pv_as, 15), &[F::ONE]);
+        }
         let mut expected_pvs = F::zero_vec(num_public_values);
         expected_pvs[15] = F::ONE;
 

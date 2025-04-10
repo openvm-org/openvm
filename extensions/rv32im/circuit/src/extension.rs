@@ -568,12 +568,8 @@ mod phantom {
             let rd = unsafe_read_rv32_register(memory, a);
             let rs1 = unsafe_read_rv32_register(memory, b);
             let bytes = (0..rs1)
-                .map(|i| -> eyre::Result<u8> {
-                    let val = memory.unsafe_read_cell(F::TWO, F::from_canonical_u32(rd + i));
-                    let byte: u8 = val.as_canonical_u32().try_into()?;
-                    Ok(byte)
-                })
-                .collect::<eyre::Result<Vec<u8>>>()?;
+                .map(|i| memory.unsafe_read_cell::<u8>(F::TWO, F::from_canonical_u32(rd + i)))
+                .collect::<Vec<u8>>();
             let peeked_str = String::from_utf8(bytes)?;
             print!("{peeked_str}");
             Ok(())

@@ -145,7 +145,7 @@ where
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
     /// Memory image after segment was executed. Not used in trace generation.
-    pub final_memory: Option<MemoryImage<F>>,
+    pub final_memory: Option<MemoryImage>,
 
     pub since_last_segment_check: usize,
     pub trace_height_constraints: Vec<LinearConstraint>,
@@ -168,7 +168,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         config: &VC,
         program: Program<F>,
         init_streams: Streams<F>,
-        initial_memory: Option<MemoryImage<F>>,
+        initial_memory: Option<MemoryImage>,
         trace_height_constraints: Vec<LinearConstraint>,
         #[allow(unused_variables)] fn_bounds: FnBounds,
     ) -> Self {

@@ -35,6 +35,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use super::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use crate::adapters::tmp_convert_to_u8s;
 
 /// Reads instructions of the form OP a, b, c, d, e where \[a:4\]_d = \[b:4\]_d op \[c:4\]_e.
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
@@ -80,11 +81,10 @@ pub struct Rv32BaseAluReadRecord<F: Field> {
 
 #[repr(C)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct Rv32BaseAluWriteRecord<F: Field> {
+pub struct Rv32BaseAluWriteRecord {
     pub from_state: ExecutionState<u32>,
     /// Write to destination register
-    pub rd: (RecordId, [F; 4]),
+    pub rd: RecordId,
 }
 
 #[repr(C)]
@@ -215,7 +215,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
     type ReadRecord = Rv32BaseAluReadRecord<F>;
-    type WriteRecord = Rv32BaseAluWriteRecord<F>;
+    type WriteRecord = Rv32BaseAluWriteRecord;
     type Air = Rv32BaseAluAdapterAir;
     type Interface = BasicAdapterInterface<
         F,
@@ -241,7 +241,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
             e.as_canonical_u32() == RV32_IMM_AS || e.as_canonical_u32() == RV32_REGISTER_AS
         );
 
-        let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
+        let rs1 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, b);
         let (rs2, rs2_data, rs2_imm) = if e.is_zero() {
             let c_u32 = c.as_canonical_u32();
             debug_assert_eq!(c_u32 >> 24, 0);
@@ -253,17 +253,19 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
                     (c_u32 >> 8) as u8,
                     (c_u32 >> 16) as u8,
                     (c_u32 >> 16) as u8,
-                ]
-                .map(F::from_canonical_u8),
+                ],
                 c,
             )
         } else {
-            let rs2_read = memory.read::<RV32_REGISTER_NUM_LIMBS>(e, c);
+            let rs2_read = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(e, c);
             (Some(rs2_read.0), rs2_read.1, F::ZERO)
         };
 
         Ok((
-            [rs1.1, rs2_data],
+            [
+                rs1.1.map(F::from_canonical_u8),
+                rs2_data.map(F::from_canonical_u8),
+            ],
             Self::ReadRecord {
                 rs1: rs1.0,
                 rs2,
@@ -281,7 +283,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = instruction;
-        let rd = memory.write(*d, *a, output.writes[0]);
+        let (rd, _) = memory.write(*d, *a, &tmp_convert_to_u8s(output.writes[0]));
 
         let timestamp_delta = memory.timestamp() - from_state.timestamp;
         debug_assert!(
@@ -309,7 +311,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         let row_slice: &mut Rv32BaseAluAdapterCols<_> = row_slice.borrow_mut();
         let aux_cols_factory = memory.aux_cols_factory();
 
-        let rd = memory.record_by_id(write_record.rd.0);
+        let rd = memory.record_by_id(write_record.rd);
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.rd_ptr = rd.pointer;
 
