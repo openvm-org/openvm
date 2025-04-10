@@ -381,4 +381,9 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     "quotient_poly_compute_time_ms",
     "quotient_poly_commit_time_ms",
     "pcs_opening_time_ms",
+    "sumcheck_prove_batch_ms",
+    "gkr_prove_batch_ms",
+    "gkr_gen_layers_ms",
+    "gkr_generate_aux",
+    "gkr_build_instances_ms",
 ];
