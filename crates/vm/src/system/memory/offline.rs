@@ -113,8 +113,8 @@ impl BlockMap {
             .paged_vecs
             .iter()
             .enumerate()
-            .flat_map(move |(as_idx, page)| {
-                page.iter::<usize>().map(move |(ptr_idx, x)| {
+            .flat_map(move |(as_idx, paged_vec)| {
+                paged_vec.iter::<usize>().map(move |(ptr_idx, x)| {
                     ((as_idx as u32 + self.id.as_offset, ptr_idx as u32), x)
                 })
             })
