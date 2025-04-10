@@ -142,7 +142,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
 
     pub fn tree_from_memory(
         memory_dimensions: MemoryDimensions,
-        memory: &MemoryImage<F>,
+        memory: &MemoryImage,
         hasher: &(impl Hasher<CHUNK, F> + Sync),
     ) -> MemoryNode<CHUNK, F> {
         // Construct a Vec that includes the address space in the label calculation,

@@ -13,7 +13,7 @@ pub enum MemoryInterface<F> {
     Persistent {
         boundary_chip: PersistentBoundaryChip<F, CHUNK>,
         merkle_chip: MemoryMerkleChip<CHUNK, F>,
-        initial_memory: MemoryImage<F>,
+        initial_memory: MemoryImage,
     },
 }
 

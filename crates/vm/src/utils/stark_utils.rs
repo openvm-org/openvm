@@ -16,9 +16,12 @@ use openvm_stark_sdk::{
     utils::ProofInputForTest,
 };
 
-use crate::arch::{
-    vm::{VirtualMachine, VmExecutor},
-    Streams, VmConfig, VmMemoryState,
+use crate::{
+    arch::{
+        vm::{VirtualMachine, VmExecutor},
+        Streams, VmConfig,
+    },
+    system::memory::MemoryImage,
 };
 
 pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
@@ -36,7 +39,7 @@ pub fn air_test_with_min_segments<VC>(
     exe: impl Into<VmExe<BabyBear>>,
     input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
-) -> Option<VmMemoryState<BabyBear>>
+) -> Option<MemoryImage>
 where
     VC: VmConfig<BabyBear>,
     VC::Executor: Chip<BabyBearPoseidon2Config>,
@@ -53,7 +56,7 @@ pub fn air_test_impl<VC>(
     input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
     debug: bool,
-) -> Option<VmMemoryState<BabyBear>>
+) -> Option<MemoryImage>
 where
     VC: VmConfig<BabyBear>,
     VC::Executor: Chip<BabyBearPoseidon2Config>,

@@ -47,7 +47,6 @@ pub enum GenerationError {
 }
 
 /// VM memory state for continuations.
-pub type VmMemoryState<F> = MemoryImage<F>;
 
 #[derive(Clone, Default, Debug)]
 pub struct Streams<F> {
@@ -95,11 +94,11 @@ pub enum ExitCode {
 pub struct VmExecutorResult<SC: StarkGenericConfig> {
     pub per_segment: Vec<ProofInput<SC>>,
     /// When VM is running on persistent mode, public values are stored in a special memory space.
-    pub final_memory: Option<VmMemoryState<Val<SC>>>,
+    pub final_memory: Option<MemoryImage>,
 }
 
 pub struct VmExecutorNextSegmentState<F: PrimeField32> {
-    pub memory: MemoryImage<F>,
+    pub memory: MemoryImage,
     pub input: Streams<F>,
     pub pc: u32,
     #[cfg(feature = "bench-metrics")]
@@ -107,7 +106,7 @@ pub struct VmExecutorNextSegmentState<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> VmExecutorNextSegmentState<F> {
-    pub fn new(memory: MemoryImage<F>, input: impl Into<Streams<F>>, pc: u32) -> Self {
+    pub fn new(memory: MemoryImage, input: impl Into<Streams<F>>, pc: u32) -> Self {
         Self {
             memory,
             input: input.into(),
@@ -170,12 +169,13 @@ where
         let mem_config = self.config.system().memory_config;
         let exe = exe.into();
         let mut segment_results = vec![];
-        let memory = AddressMap::from_iter(
+        let memory = AddressMap::from_sparse(
             mem_config.as_offset,
             1 << mem_config.as_height,
             1 << mem_config.pointer_max_bits,
             exe.init_memory.clone(),
         );
+
         let pc = exe.pc_start;
         let mut state = VmExecutorNextSegmentState::new(memory, input, pc);
         let mut segment_idx = 0;
@@ -271,7 +271,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
+    ) -> Result<Option<MemoryImage>, ExecutionError> {
         let mut last = None;
         self.execute_and_then(
             exe,
@@ -580,7 +580,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
+    ) -> Result<Option<MemoryImage>, ExecutionError> {
         self.executor.execute(exe, input)
     }
 

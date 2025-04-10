@@ -206,8 +206,10 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                         memory.read_cell(register_address_space, input_register_2);
                     (Some(read_input_pointer_2), input_pointer_2)
                 };
-            let (read_data_1, data_1) = memory.read::<CHUNK>(data_address_space, input_pointer_1);
-            let (read_data_2, data_2) = memory.read::<CHUNK>(data_address_space, input_pointer_2);
+            let (read_data_1, data_1) =
+                memory.read::<F, CHUNK>(data_address_space, input_pointer_1);
+            let (read_data_2, data_2) =
+                memory.read::<F, CHUNK>(data_address_space, input_pointer_2);
             let p2_input = std::array::from_fn(|i| {
                 if i < CHUNK {
                     data_1[i]
@@ -216,18 +218,18 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 }
             });
             let output = self.subchip.permute(p2_input);
-            let (write_data_1, _) = memory.write::<CHUNK>(
+            let (write_data_1, _) = memory.write::<F, CHUNK>(
                 data_address_space,
                 output_pointer,
-                std::array::from_fn(|i| output[i]),
+                &std::array::from_fn(|i| output[i]),
             );
             let write_data_2 = if instruction.opcode == PERM_POS2.global_opcode() {
                 Some(
                     memory
-                        .write::<CHUNK>(
+                        .write::<F, CHUNK>(
                             data_address_space,
                             output_pointer + F::from_canonical_usize(CHUNK),
-                            std::array::from_fn(|i| output[CHUNK + i]),
+                            &std::array::from_fn(|i| output[CHUNK + i]),
                         )
                         .0,
                 )
@@ -277,7 +279,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 opened_element_size += F::ONE;
             }
 
-            let proof_id = memory.unsafe_read_cell(address_space, proof_id_ptr);
+            let proof_id = memory.unsafe_read_cell::<F>(address_space, proof_id_ptr);
             let (dim_base_pointer_read, dim_base_pointer) =
                 memory.read_cell(address_space, dim_register);
             let (opened_base_pointer_read, opened_base_pointer) =
@@ -288,12 +290,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 memory.read_cell(address_space, index_register);
             let (commit_pointer_read, commit_pointer) =
                 memory.read_cell(address_space, commit_register);
-            let (commit_read, commit) = memory.read(address_space, commit_pointer);
+            let (commit_read, commit) = memory.read::<F, CHUNK>(address_space, commit_pointer);
 
             let opened_length = opened_length.as_canonical_u32() as usize;
 
             let initial_log_height = memory
-                .unsafe_read_cell(address_space, dim_base_pointer)
+                .unsafe_read_cell::<F>(address_space, dim_base_pointer)
                 .as_canonical_u32();
             let mut log_height = initial_log_height as i32;
             let mut sibling_index = 0;
@@ -312,7 +314,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 
             while log_height >= 0 {
                 let incorporate_row = if opened_index < opened_length
-                    && memory.unsafe_read_cell(
+                    && memory.unsafe_read_cell::<F>(
                         address_space,
                         dim_base_pointer + F::from_canonical_usize(opened_index),
                     ) == F::from_canonical_u32(log_height as u32)
@@ -342,7 +344,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                                 } else {
                                     opened_index += 1;
                                     if opened_index == opened_length
-                                        || memory.unsafe_read_cell(
+                                        || memory.unsafe_read_cell::<F>(
                                             address_space,
                                             dim_base_pointer
                                                 + F::from_canonical_usize(opened_index),
@@ -351,7 +353,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                                         break;
                                     }
                                 }
-                                let (result, [new_row_pointer, row_len]) = memory.read(
+                                let (result, [new_row_pointer, row_len]) = memory.read::<F, 2>(
                                     address_space,
                                     opened_base_pointer + F::from_canonical_usize(2 * opened_index),
                                 );

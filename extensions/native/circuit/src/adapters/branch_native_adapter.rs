@@ -161,7 +161,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for BranchNativeAdapterChip<F> {
     )> {
         let Instruction { a, b, d, e, .. } = *instruction;
 
-        let reads = vec![memory.read::<1>(d, a), memory.read::<1>(e, b)];
+        let reads = vec![memory.read::<F, 1>(d, a), memory.read::<F, 1>(e, b)];
         let i_reads: [_; 2] = std::array::from_fn(|i| reads[i].1);
 
         Ok((
