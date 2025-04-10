@@ -3,7 +3,6 @@ use std::{
     collections::BTreeMap,
     iter,
     marker::PhantomData,
-    mem,
     sync::{Arc, Mutex},
 };
 
@@ -381,7 +380,7 @@ impl<F: PrimeField32> MemoryController<F> {
 
     // TEMP[jpw]: Function is safe temporarily for refactoring
     /// # Safety
-    /// The type `T` must be stack-allocated `repr(C)`, and it must be the exact type used to represent a single
+    /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`, and it must be the exact type used to represent a single
     /// memory cell in address space `address_space`. For standard usage, `T` is either `u8` or `F` where `F` is
     /// the base field of the ZK backend.
     pub fn read<T: Copy, const N: usize>(
