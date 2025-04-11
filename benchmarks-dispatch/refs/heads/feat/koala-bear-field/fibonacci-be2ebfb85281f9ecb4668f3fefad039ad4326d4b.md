@@ -1,0 +1,507 @@
+| Summary | Proof Time (s) | Parallel Proof Time (s) |
+|:---|---:|---:|
+| Total | <span style='color: red'>(+9 [+132.1%])</span> 15.02 | <span style='color: red'>(+9 [+132.1%])</span> 15.02 |
+| fibonacci_program | <span style='color: red'>(+4 [+162.5%])</span> 7.06 | <span style='color: red'>(+4 [+162.5%])</span> 7.06 |
+| leaf | <span style='color: red'>(+4 [+110.4%])</span> 7.96 | <span style='color: red'>(+4 [+110.4%])</span> 7.96 |
+
+
+| fibonacci_program |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` | <span style='color: red'>(+4373 [+162.5%])</span> 7,064 | <span style='color: red'>(+4373 [+162.5%])</span> 7,064 | <span style='color: red'>(+4373 [+162.5%])</span> 7,064 | <span style='color: red'>(+4373 [+162.5%])</span> 7,064 |
+| `main_cells_used     ` |  50,589,567 |  50,589,567 |  50,589,567 |  50,589,567 |
+| `total_cycles        ` |  1,500,277 |  1,500,277 |  1,500,277 |  1,500,277 |
+| `execute_time_ms     ` | <span style='color: red'>(+4385 [+1890.1%])</span> 4,617 | <span style='color: red'>(+4385 [+1890.1%])</span> 4,617 | <span style='color: red'>(+4385 [+1890.1%])</span> 4,617 | <span style='color: red'>(+4385 [+1890.1%])</span> 4,617 |
+| `trace_gen_time_ms   ` | <span style='color: green'>(-36 [-6.4%])</span> 523 | <span style='color: green'>(-36 [-6.4%])</span> 523 | <span style='color: green'>(-36 [-6.4%])</span> 523 | <span style='color: green'>(-36 [-6.4%])</span> 523 |
+| `stark_prove_excluding_trace_time_ms` | <span style='color: red'>(+24 [+1.3%])</span> 1,924 | <span style='color: red'>(+24 [+1.3%])</span> 1,924 | <span style='color: red'>(+24 [+1.3%])</span> 1,924 | <span style='color: red'>(+24 [+1.3%])</span> 1,924 |
+| `main_trace_commit_time_ms` |  330 |  330 |  330 |  330 |
+| `generate_perm_trace_time_ms` | <span style='color: red'>(+5 [+4.4%])</span> 118 | <span style='color: red'>(+5 [+4.4%])</span> 118 | <span style='color: red'>(+5 [+4.4%])</span> 118 | <span style='color: red'>(+5 [+4.4%])</span> 118 |
+| `perm_trace_commit_time_ms` | <span style='color: green'>(-4 [-0.8%])</span> 474 | <span style='color: green'>(-4 [-0.8%])</span> 474 | <span style='color: green'>(-4 [-0.8%])</span> 474 | <span style='color: green'>(-4 [-0.8%])</span> 474 |
+| `quotient_poly_compute_time_ms` | <span style='color: red'>(+3 [+1.2%])</span> 255 | <span style='color: red'>(+3 [+1.2%])</span> 255 | <span style='color: red'>(+3 [+1.2%])</span> 255 | <span style='color: red'>(+3 [+1.2%])</span> 255 |
+| `quotient_poly_commit_time_ms` |  222 |  222 |  222 |  222 |
+| `pcs_opening_time_ms ` | <span style='color: red'>(+19 [+3.8%])</span> 520 | <span style='color: red'>(+19 [+3.8%])</span> 520 | <span style='color: red'>(+19 [+3.8%])</span> 520 | <span style='color: red'>(+19 [+3.8%])</span> 520 |
+
+| leaf |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` | <span style='color: red'>(+4175 [+110.4%])</span> 7,956 | <span style='color: red'>(+4175 [+110.4%])</span> 7,956 | <span style='color: red'>(+4175 [+110.4%])</span> 7,956 | <span style='color: red'>(+4175 [+110.4%])</span> 7,956 |
+| `main_cells_used     ` | <span style='color: red'>(+304128 [+0.4%])</span> 70,587,440 | <span style='color: red'>(+304128 [+0.4%])</span> 70,587,440 | <span style='color: red'>(+304128 [+0.4%])</span> 70,587,440 | <span style='color: red'>(+304128 [+0.4%])</span> 70,587,440 |
+| `total_cycles        ` | <span style='color: red'>(+50656 [+4.0%])</span> 1,313,929 | <span style='color: red'>(+50656 [+4.0%])</span> 1,313,929 | <span style='color: red'>(+50656 [+4.0%])</span> 1,313,929 | <span style='color: red'>(+50656 [+4.0%])</span> 1,313,929 |
+| `execute_time_ms     ` | <span style='color: red'>(+4142 [+795.0%])</span> 4,663 | <span style='color: red'>(+4142 [+795.0%])</span> 4,663 | <span style='color: red'>(+4142 [+795.0%])</span> 4,663 | <span style='color: red'>(+4142 [+795.0%])</span> 4,663 |
+| `trace_gen_time_ms   ` | <span style='color: red'>(+6 [+0.9%])</span> 665 | <span style='color: red'>(+6 [+0.9%])</span> 665 | <span style='color: red'>(+6 [+0.9%])</span> 665 | <span style='color: red'>(+6 [+0.9%])</span> 665 |
+| `stark_prove_excluding_trace_time_ms` | <span style='color: red'>(+27 [+1.0%])</span> 2,628 | <span style='color: red'>(+27 [+1.0%])</span> 2,628 | <span style='color: red'>(+27 [+1.0%])</span> 2,628 | <span style='color: red'>(+27 [+1.0%])</span> 2,628 |
+| `main_trace_commit_time_ms` | <span style='color: green'>(-4 [-0.9%])</span> 431 | <span style='color: green'>(-4 [-0.9%])</span> 431 | <span style='color: green'>(-4 [-0.9%])</span> 431 | <span style='color: green'>(-4 [-0.9%])</span> 431 |
+| `generate_perm_trace_time_ms` | <span style='color: green'>(-1 [-0.6%])</span> 164 | <span style='color: green'>(-1 [-0.6%])</span> 164 | <span style='color: green'>(-1 [-0.6%])</span> 164 | <span style='color: green'>(-1 [-0.6%])</span> 164 |
+| `perm_trace_commit_time_ms` | <span style='color: red'>(+6 [+0.8%])</span> 729 | <span style='color: red'>(+6 [+0.8%])</span> 729 | <span style='color: red'>(+6 [+0.8%])</span> 729 | <span style='color: red'>(+6 [+0.8%])</span> 729 |
+| `quotient_poly_compute_time_ms` | <span style='color: red'>(+8 [+2.1%])</span> 384 | <span style='color: red'>(+8 [+2.1%])</span> 384 | <span style='color: red'>(+8 [+2.1%])</span> 384 | <span style='color: red'>(+8 [+2.1%])</span> 384 |
+| `quotient_poly_commit_time_ms` | <span style='color: green'>(-3 [-1.0%])</span> 289 | <span style='color: green'>(-3 [-1.0%])</span> 289 | <span style='color: green'>(-3 [-1.0%])</span> 289 | <span style='color: green'>(-3 [-1.0%])</span> 289 |
+| `pcs_opening_time_ms ` | <span style='color: red'>(+22 [+3.6%])</span> 627 | <span style='color: red'>(+22 [+3.6%])</span> 627 | <span style='color: red'>(+22 [+3.6%])</span> 627 | <span style='color: red'>(+22 [+3.6%])</span> 627 |
+
+
+
+<details>
+<summary>Detailed Metrics</summary>
+
+| group | num_segments | keygen_time_ms | commit_exe_time_ms |
+| --- | --- | --- | --- |
+| fibonacci_program | 1 | 249 | 5 | 
+
+| group | air_name | quotient_deg | interactions | constraints |
+| --- | --- | --- | --- | --- |
+| fibonacci_program | AccessAdapterAir<16> | 2 | 5 | 12 | 
+| fibonacci_program | AccessAdapterAir<2> | 2 | 5 | 12 | 
+| fibonacci_program | AccessAdapterAir<32> | 2 | 5 | 12 | 
+| fibonacci_program | AccessAdapterAir<4> | 2 | 5 | 12 | 
+| fibonacci_program | AccessAdapterAir<8> | 2 | 5 | 12 | 
+| fibonacci_program | BitwiseOperationLookupAir<8> | 2 | 2 | 4 | 
+| fibonacci_program | MemoryMerkleAir<8> | 2 | 4 | 39 | 
+| fibonacci_program | PersistentBoundaryAir<8> | 2 | 3 | 7 | 
+| fibonacci_program | PhantomAir | 2 | 3 | 5 | 
+| fibonacci_program | Poseidon2PeripheryAir<BabyBearParameters>, 7, 1, 13> | 2 | 1 | 286 | 
+| fibonacci_program | ProgramAir | 1 | 1 | 4 | 
+| fibonacci_program | RangeTupleCheckerAir<2> | 1 | 1 | 4 | 
+| fibonacci_program | Rv32HintStoreAir | 2 | 18 | 28 | 
+| fibonacci_program | VariableRangeCheckerAir | 1 | 1 | 4 | 
+| fibonacci_program | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 2 | 20 | 37 | 
+| fibonacci_program | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 2 | 18 | 40 | 
+| fibonacci_program | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 2 | 24 | 91 | 
+| fibonacci_program | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 2 | 11 | 20 | 
+| fibonacci_program | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 2 | 13 | 35 | 
+| fibonacci_program | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 2 | 10 | 18 | 
+| fibonacci_program | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 2 | 16 | 20 | 
+| fibonacci_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | 2 | 18 | 33 | 
+| fibonacci_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 2 | 17 | 40 | 
+| fibonacci_program | VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | 2 | 25 | 84 | 
+| fibonacci_program | VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | 2 | 24 | 31 | 
+| fibonacci_program | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 2 | 19 | 19 | 
+| fibonacci_program | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 2 | 12 | 14 | 
+| fibonacci_program | VmConnectorAir | 2 | 5 | 11 | 
+| leaf | AccessAdapterAir<2> | 2 | 5 | 12 | 
+| leaf | AccessAdapterAir<4> | 2 | 5 | 12 | 
+| leaf | AccessAdapterAir<8> | 2 | 5 | 12 | 
+| leaf | FriReducedOpeningAir | 2 | 39 | 71 | 
+| leaf | JalRangeCheckAir | 2 | 9 | 14 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 7, 1, 13> | 2 | 136 | 572 | 
+| leaf | PhantomAir | 2 | 3 | 5 | 
+| leaf | ProgramAir | 1 | 1 | 4 | 
+| leaf | VariableRangeCheckerAir | 1 | 1 | 4 | 
+| leaf | VmAirWrapper<AluNativeAdapterAir, FieldArithmeticCoreAir> | 2 | 15 | 27 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 2 | 11 | 25 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 2 | 11 | 30 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 2 | 15 | 20 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 2 | 15 | 20 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 2 | 15 | 27 | 
+| leaf | VmConnectorAir | 2 | 5 | 11 | 
+| leaf | VolatileBoundaryAir | 2 | 7 | 19 | 
+
+| group | air_name | dsl_ir | idx | opcode | cells_used |
+| --- | --- | --- | --- | --- | --- |
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> |  | 0 | ADD | 29 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | AddEFFI | 0 | ADD | 26,912 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | AddEFI | 0 | ADD | 15,776 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | AddEI | 0 | ADD | 1,169,744 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | AddF | 0 | ADD | 560,280 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | AddFI | 0 | ADD | 432,013 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | AddV | 0 | ADD | 436,682 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | AddVI | 0 | ADD | 1,697,022 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | Alloc | 0 | ADD | 1,010,302 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | Alloc | 0 | MUL | 272,629 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | CastFV | 0 | ADD | 16,037 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | DivEIN | 0 | ADD | 5,916 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | DivF | 0 | DIV | 60,900 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | DivFIN | 0 | DIV | 3,509 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | ImmE | 0 | ADD | 95,932 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | ImmF | 0 | ADD | 555,292 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | ImmV | 0 | ADD | 885,051 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | LoadE | 0 | ADD | 626,400 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | LoadE | 0 | MUL | 626,400 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | LoadF | 0 | ADD | 243,049 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | LoadF | 0 | MUL | 13,920 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | LoadHeapPtr | 0 | ADD | 29 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | LoadV | 0 | ADD | 415,570 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | LoadV | 0 | MUL | 347,217 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | MulEF | 0 | MUL | 243,832 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | MulEFI | 0 | MUL | 10,788 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | MulEI | 0 | ADD | 138,620 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | MulF | 0 | MUL | 744,836 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | MulFI | 0 | MUL | 496,799 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | MulV | 0 | MUL | 21,228 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | MulVI | 0 | MUL | 271,266 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | NegE | 0 | MUL | 2,088 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | StoreE | 0 | ADD | 510,400 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | StoreE | 0 | MUL | 510,400 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | StoreF | 0 | ADD | 15,196 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | StoreF | 0 | MUL | 14,732 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | StoreHeapPtr | 0 | ADD | 29 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | StoreV | 0 | ADD | 63,916 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | StoreV | 0 | MUL | 29,087 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | SubEF | 0 | ADD | 1,057,746 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | SubEF | 0 | SUB | 352,582 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | SubEFI | 0 | ADD | 7,656 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | SubEI | 0 | ADD | 11,832 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | SubFI | 0 | SUB | 496,248 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | SubV | 0 | SUB | 405,420 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | SubVI | 0 | SUB | 64,322 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | SubVIN | 0 | SUB | 58,000 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | UnsafeCastVF | 0 | ADD | 14,181 | 
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | ZipFor | 0 | ADD | 3,514,017 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqE | 0 | BNE | 10,948 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqEI | 0 | BNE | 184 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqF | 0 | BNE | 406,456 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqV | 0 | BNE | 30,245 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertEqVI | 0 | BNE | 11,661 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | AssertNonZero | 0 | BEQ | 23 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEq | 0 | BNE | 232,944 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfEqI | 0 | BNE | 264,454 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNe | 0 | BEQ | 137,908 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | IfNeI | 0 | BEQ | 2,622 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | ZipFor | 0 | BNE | 1,700,137 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | Publish | 0 | PUBLISH | 972 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadF | 0 | LOADW | 1,138,242 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | LoadV | 0 | LOADW | 2,919,882 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreF | 0 | STOREW | 275,541 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreHintWord | 0 | HINT_STOREW | 902,937 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | StoreV | 0 | STOREW | 362,103 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | LoadE | 0 | LOADW | 1,351,755 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | StoreE | 0 | STOREW | 793,557 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | AddE | 0 | FE4ADD | 773,186 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivE | 0 | BBE4DIV | 537,244 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | DivEIN | 0 | BBE4DIV | 1,938 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulE | 0 | BBE4MUL | 1,387,456 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | MulEI | 0 | BBE4MUL | 45,410 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | SubE | 0 | FE4SUB | 253,498 | 
+| leaf | FriReducedOpeningAir | FriReducedOpening | 0 | FRI_REDUCED_OPENING | 7,101,000 | 
+| leaf | JalRangeCheck |  | 0 | JAL | 12 | 
+| leaf | JalRangeCheck | Alloc | 0 | RANGE_CHECK | 321,840 | 
+| leaf | JalRangeCheck | IfEqI | 0 | JAL | 49,572 | 
+| leaf | JalRangeCheck | IfNe | 0 | JAL | 36 | 
+| leaf | JalRangeCheck | ZipFor | 0 | JAL | 148,212 | 
+| leaf | PhantomAir | CT-CheckTraceHeightConstraints | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ExtractPublicValuesCommit | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-HintOpenedValues | 0 | PHANTOM | 9,600 | 
+| leaf | PhantomAir | CT-HintOpeningProof | 0 | PHANTOM | 9,612 | 
+| leaf | PhantomAir | CT-HintOpeningValues | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-InitializePcsConst | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-ReadProofsFromInput | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-VerifyProofs | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-cache-generator-powers | 0 | PHANTOM | 1,200 | 
+| leaf | PhantomAir | CT-compute-reduced-opening | 0 | PHANTOM | 9,600 | 
+| leaf | PhantomAir | CT-exp-reverse-bits-len | 0 | PHANTOM | 93,600 | 
+| leaf | PhantomAir | CT-pre-compute-rounds-context | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-single-reduced-opening-eval | 0 | PHANTOM | 145,200 | 
+| leaf | PhantomAir | CT-stage-c-build-rounds | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verifier-verify | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-d-verify-pcs | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-stage-e-verify-constraints | 0 | PHANTOM | 12 | 
+| leaf | PhantomAir | CT-verify-batch | 0 | PHANTOM | 9,600 | 
+| leaf | PhantomAir | CT-verify-batch-ext | 0 | PHANTOM | 24,000 | 
+| leaf | PhantomAir | CT-verify-query | 0 | PHANTOM | 1,200 | 
+| leaf | PhantomAir | HintBitsF | 0 | PHANTOM | 3,312 | 
+| leaf | PhantomAir | HintFelt | 0 | PHANTOM | 74,694 | 
+| leaf | PhantomAir | HintInputVec | 0 | PHANTOM | 966 | 
+| leaf | PhantomAir | HintLoad | 0 | PHANTOM | 21,600 | 
+| leaf | VerifyBatchAir | Poseidon2CompressBabyBear | 0 | COMP_POS2 | 10,746 | 
+| leaf | VerifyBatchAir | Poseidon2PermuteBabyBear | 0 | PERM_POS2 | 499,888 | 
+| leaf | VerifyBatchAir | VerifyBatchExt | 0 | VERIFY_BATCH | 9,950,000 | 
+| leaf | VerifyBatchAir | VerifyBatchFelt | 0 | VERIFY_BATCH | 14,248,400 | 
+
+| group | air_name | dsl_ir | opcode | segment | cells_used |
+| --- | --- | --- | --- | --- | --- |
+| fibonacci_program | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | ADD | 0 | 32,403,168 | 
+| fibonacci_program | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | AND | 0 | 144 | 
+| fibonacci_program | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | OR | 0 | 108 | 
+| fibonacci_program | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | SUB | 0 | 72 | 
+| fibonacci_program | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> |  | XOR | 0 | 72 | 
+| fibonacci_program | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> |  | SLTU | 0 | 11,100,111 | 
+| fibonacci_program | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BEQ | 0 | 2,600,234 | 
+| fibonacci_program | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> |  | BNE | 0 | 2,600,130 | 
+| fibonacci_program | <Rv32BranchAdapterAir,BranchLessThanCoreAir<4, 8>> |  | BGEU | 0 | 64 | 
+| fibonacci_program | <Rv32BranchAdapterAir,BranchLessThanCoreAir<4, 8>> |  | BLT | 0 | 64 | 
+| fibonacci_program | <Rv32BranchAdapterAir,BranchLessThanCoreAir<4, 8>> |  | BLTU | 0 | 128 | 
+| fibonacci_program | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | JAL | 0 | 1,800,036 | 
+| fibonacci_program | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> |  | LUI | 0 | 378 | 
+| fibonacci_program | <Rv32JalrAdapterAir,Rv32JalrCoreAir> |  | JALR | 0 | 700 | 
+| fibonacci_program | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | LOADBU | 0 | 328 | 
+| fibonacci_program | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | LOADW | 0 | 1,230 | 
+| fibonacci_program | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | STOREB | 0 | 410 | 
+| fibonacci_program | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> |  | STOREW | 0 | 1,640 | 
+| fibonacci_program | <Rv32RdWriteAdapterAir,Rv32AuipcCoreAir> |  | AUIPC | 0 | 240 | 
+| fibonacci_program | PhantomAir |  | PHANTOM | 0 | 6 | 
+| fibonacci_program | Rv32HintStoreAir |  | HINT_BUFFER | 0 | 64 | 
+| fibonacci_program | Rv32HintStoreAir |  | HINT_STOREW | 0 | 32 | 
+
+| group | air_name | idx | rows | prep_cols | perm_cols | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| leaf | AccessAdapterAir<2> | 0 | 262,144 |  | 16 | 11 | 7,077,888 | 
+| leaf | AccessAdapterAir<4> | 0 | 131,072 |  | 16 | 13 | 3,801,088 | 
+| leaf | AccessAdapterAir<8> | 0 | 4,096 |  | 16 | 17 | 135,168 | 
+| leaf | FriReducedOpeningAir | 0 | 524,288 |  | 84 | 27 | 58,195,968 | 
+| leaf | JalRangeCheckAir | 0 | 65,536 |  | 28 | 12 | 2,621,440 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 7, 1, 13> | 0 | 65,536 |  | 312 | 398 | 46,530,560 | 
+| leaf | PhantomAir | 0 | 131,072 |  | 12 | 6 | 2,359,296 | 
+| leaf | ProgramAir | 0 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| leaf | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| leaf | VmAirWrapper<AluNativeAdapterAir, FieldArithmeticCoreAir> | 0 | 1,048,576 |  | 36 | 29 | 68,157,440 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 0 | 131,072 |  | 28 | 23 | 6,684,672 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 0 | 64 |  | 28 | 27 | 3,520 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 0 | 524,288 |  | 40 | 21 | 31,981,568 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 0 | 131,072 |  | 40 | 27 | 8,781,824 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 0 | 131,072 |  | 36 | 38 | 9,699,328 | 
+| leaf | VmConnectorAir | 0 | 2 | 1 | 16 | 5 | 42 | 
+| leaf | VolatileBoundaryAir | 0 | 131,072 |  | 20 | 12 | 4,194,304 | 
+
+| group | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| fibonacci_program | AccessAdapterAir<8> | 0 | 128 |  | 16 | 17 | 4,224 | 
+| fibonacci_program | BitwiseOperationLookupAir<8> | 0 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| fibonacci_program | MemoryMerkleAir<8> | 0 | 512 |  | 16 | 32 | 24,576 | 
+| fibonacci_program | PersistentBoundaryAir<8> | 0 | 128 |  | 12 | 20 | 4,096 | 
+| fibonacci_program | PhantomAir | 0 | 1 |  | 12 | 6 | 18 | 
+| fibonacci_program | Poseidon2PeripheryAir<BabyBearParameters>, 7, 1, 13> | 0 | 256 |  | 8 | 300 | 78,848 | 
+| fibonacci_program | ProgramAir | 0 | 8,192 |  | 8 | 10 | 147,456 | 
+| fibonacci_program | RangeTupleCheckerAir<2> | 0 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| fibonacci_program | Rv32HintStoreAir | 0 | 4 |  | 44 | 32 | 304 | 
+| fibonacci_program | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| fibonacci_program | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 0 | 1,048,576 |  | 52 | 36 | 92,274,688 | 
+| fibonacci_program | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 0 | 524,288 |  | 40 | 37 | 40,370,176 | 
+| fibonacci_program | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 0 | 262,144 |  | 28 | 26 | 14,155,776 | 
+| fibonacci_program | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 0 | 8 |  | 32 | 32 | 512 | 
+| fibonacci_program | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 0 | 131,072 |  | 28 | 18 | 6,029,312 | 
+| fibonacci_program | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 0 | 32 |  | 36 | 28 | 2,048 | 
+| fibonacci_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 0 | 128 |  | 52 | 41 | 11,904 | 
+| fibonacci_program | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 0 | 16 |  | 28 | 20 | 768 | 
+| fibonacci_program | VmConnectorAir | 0 | 2 | 1 | 16 | 5 | 42 | 
+
+| group | chip_name | idx | rows_used |
+| --- | --- | --- | --- |
+| leaf | <AluNativeAdapterAir,FieldArithmeticCoreAir> | 0 | 640,409 | 
+| leaf | <BranchNativeAdapterAir,BranchEqualCoreAir<1>> | 0 | 121,634 | 
+| leaf | <NativeAdapterAir<2, 0>,PublicValuesCoreAir> | 0 | 36 | 
+| leaf | <NativeLoadStoreAdapterAir<1>,NativeLoadStoreCoreAir<1>> | 0 | 266,605 | 
+| leaf | <NativeLoadStoreAdapterAir<4>,NativeLoadStoreCoreAir<4>> | 0 | 79,456 | 
+| leaf | <NativeVectorizedAdapterAir<4>,FieldExtensionCoreAir> | 0 | 78,914 | 
+| leaf | AccessAdapter<2> | 0 | 250,410 | 
+| leaf | AccessAdapter<4> | 0 | 123,128 | 
+| leaf | AccessAdapter<8> | 0 | 2,732 | 
+| leaf | Boundary | 0 | 111,553 | 
+| leaf | FriReducedOpeningAir | 0 | 263,000 | 
+| leaf | JalRangeCheck | 0 | 43,306 | 
+| leaf | PhantomAir | 0 | 67,386 | 
+| leaf | ProgramChip | 0 | 72,919 | 
+| leaf | VariableRangeCheckerAir | 0 | 262,144 | 
+| leaf | VerifyBatchAir | 0 | 62,083 | 
+| leaf | VmConnectorAir | 0 | 2 | 
+
+| group | chip_name | segment | rows_used |
+| --- | --- | --- | --- |
+| fibonacci_program | <Rv32BaseAluAdapterAir,BaseAluCoreAir<4, 8>> | 0 | 900,099 | 
+| fibonacci_program | <Rv32BaseAluAdapterAir,LessThanCoreAir<4, 8>> | 0 | 300,003 | 
+| fibonacci_program | <Rv32BranchAdapterAir,BranchEqualCoreAir<4>> | 0 | 200,014 | 
+| fibonacci_program | <Rv32BranchAdapterAir,BranchLessThanCoreAir<4, 8>> | 0 | 8 | 
+| fibonacci_program | <Rv32CondRdWriteAdapterAir,Rv32JalLuiCoreAir> | 0 | 100,023 | 
+| fibonacci_program | <Rv32JalrAdapterAir,Rv32JalrCoreAir> | 0 | 25 | 
+| fibonacci_program | <Rv32LoadStoreAdapterAir,LoadStoreCoreAir<4>> | 0 | 88 | 
+| fibonacci_program | <Rv32RdWriteAdapterAir,Rv32AuipcCoreAir> | 0 | 13 | 
+| fibonacci_program | AccessAdapter<8> | 0 | 80 | 
+| fibonacci_program | Arc<BabyBearParameters>, 7, 1, 13> | 0 | 225 | 
+| fibonacci_program | BitwiseOperationLookupAir<8> | 0 | 65,536 | 
+| fibonacci_program | Boundary | 0 | 80 | 
+| fibonacci_program | Merkle | 0 | 304 | 
+| fibonacci_program | PhantomAir | 0 | 1 | 
+| fibonacci_program | ProgramChip | 0 | 6,942 | 
+| fibonacci_program | RangeTupleCheckerAir<2> | 0 | 524,288 | 
+| fibonacci_program | Rv32HintStoreAir | 0 | 3 | 
+| fibonacci_program | VariableRangeCheckerAir | 0 | 262,144 | 
+| fibonacci_program | VmConnectorAir | 0 | 2 | 
+
+| group | dsl_ir | idx | opcode | frequency |
+| --- | --- | --- | --- | --- |
+| leaf |  | 0 | ADD | 2 | 
+| leaf |  | 0 | JAL | 1 | 
+| leaf | AddE | 0 | FE4ADD | 20,347 | 
+| leaf | AddEFFI | 0 | ADD | 928 | 
+| leaf | AddEFI | 0 | ADD | 544 | 
+| leaf | AddEI | 0 | ADD | 40,336 | 
+| leaf | AddF | 0 | ADD | 19,320 | 
+| leaf | AddFI | 0 | ADD | 14,897 | 
+| leaf | AddV | 0 | ADD | 15,058 | 
+| leaf | AddVI | 0 | ADD | 58,518 | 
+| leaf | Alloc | 0 | ADD | 34,838 | 
+| leaf | Alloc | 0 | MUL | 9,401 | 
+| leaf | Alloc | 0 | RANGE_CHECK | 26,820 | 
+| leaf | AssertEqE | 0 | BNE | 476 | 
+| leaf | AssertEqEI | 0 | BNE | 8 | 
+| leaf | AssertEqF | 0 | BNE | 17,672 | 
+| leaf | AssertEqV | 0 | BNE | 1,315 | 
+| leaf | AssertEqVI | 0 | BNE | 507 | 
+| leaf | AssertNonZero | 0 | BEQ | 1 | 
+| leaf | CT-CheckTraceHeightConstraints | 0 | PHANTOM | 2 | 
+| leaf | CT-ExtractPublicValuesCommit | 0 | PHANTOM | 2 | 
+| leaf | CT-HintOpenedValues | 0 | PHANTOM | 1,600 | 
+| leaf | CT-HintOpeningProof | 0 | PHANTOM | 1,602 | 
+| leaf | CT-HintOpeningValues | 0 | PHANTOM | 2 | 
+| leaf | CT-InitializePcsConst | 0 | PHANTOM | 2 | 
+| leaf | CT-ReadProofsFromInput | 0 | PHANTOM | 2 | 
+| leaf | CT-VerifyProofs | 0 | PHANTOM | 2 | 
+| leaf | CT-cache-generator-powers | 0 | PHANTOM | 200 | 
+| leaf | CT-compute-reduced-opening | 0 | PHANTOM | 1,600 | 
+| leaf | CT-exp-reverse-bits-len | 0 | PHANTOM | 15,600 | 
+| leaf | CT-pre-compute-rounds-context | 0 | PHANTOM | 2 | 
+| leaf | CT-single-reduced-opening-eval | 0 | PHANTOM | 24,200 | 
+| leaf | CT-stage-c-build-rounds | 0 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verifier-verify | 0 | PHANTOM | 2 | 
+| leaf | CT-stage-d-verify-pcs | 0 | PHANTOM | 2 | 
+| leaf | CT-stage-e-verify-constraints | 0 | PHANTOM | 2 | 
+| leaf | CT-verify-batch | 0 | PHANTOM | 1,600 | 
+| leaf | CT-verify-batch-ext | 0 | PHANTOM | 4,000 | 
+| leaf | CT-verify-query | 0 | PHANTOM | 200 | 
+| leaf | CastFV | 0 | ADD | 553 | 
+| leaf | DivE | 0 | BBE4DIV | 14,138 | 
+| leaf | DivEIN | 0 | ADD | 204 | 
+| leaf | DivEIN | 0 | BBE4DIV | 51 | 
+| leaf | DivF | 0 | DIV | 2,100 | 
+| leaf | DivFIN | 0 | DIV | 121 | 
+| leaf | FriReducedOpening | 0 | FRI_REDUCED_OPENING | 12,100 | 
+| leaf | HintBitsF | 0 | PHANTOM | 552 | 
+| leaf | HintFelt | 0 | PHANTOM | 12,449 | 
+| leaf | HintInputVec | 0 | PHANTOM | 161 | 
+| leaf | HintLoad | 0 | PHANTOM | 3,600 | 
+| leaf | IfEq | 0 | BNE | 10,128 | 
+| leaf | IfEqI | 0 | BNE | 11,498 | 
+| leaf | IfEqI | 0 | JAL | 4,131 | 
+| leaf | IfNe | 0 | BEQ | 5,996 | 
+| leaf | IfNe | 0 | JAL | 3 | 
+| leaf | IfNeI | 0 | BEQ | 114 | 
+| leaf | ImmE | 0 | ADD | 3,308 | 
+| leaf | ImmF | 0 | ADD | 19,148 | 
+| leaf | ImmV | 0 | ADD | 30,519 | 
+| leaf | LoadE | 0 | ADD | 21,600 | 
+| leaf | LoadE | 0 | LOADW | 50,065 | 
+| leaf | LoadE | 0 | MUL | 21,600 | 
+| leaf | LoadF | 0 | ADD | 8,381 | 
+| leaf | LoadF | 0 | LOADW | 54,202 | 
+| leaf | LoadF | 0 | MUL | 480 | 
+| leaf | LoadHeapPtr | 0 | ADD | 1 | 
+| leaf | LoadV | 0 | ADD | 14,330 | 
+| leaf | LoadV | 0 | LOADW | 139,042 | 
+| leaf | LoadV | 0 | MUL | 11,973 | 
+| leaf | MulE | 0 | BBE4MUL | 36,512 | 
+| leaf | MulEF | 0 | MUL | 8,408 | 
+| leaf | MulEFI | 0 | MUL | 372 | 
+| leaf | MulEI | 0 | ADD | 4,780 | 
+| leaf | MulEI | 0 | BBE4MUL | 1,195 | 
+| leaf | MulF | 0 | MUL | 25,684 | 
+| leaf | MulFI | 0 | MUL | 17,131 | 
+| leaf | MulV | 0 | MUL | 732 | 
+| leaf | MulVI | 0 | MUL | 9,354 | 
+| leaf | NegE | 0 | MUL | 72 | 
+| leaf | Poseidon2CompressBabyBear | 0 | COMP_POS2 | 27 | 
+| leaf | Poseidon2PermuteBabyBear | 0 | PERM_POS2 | 1,256 | 
+| leaf | Publish | 0 | PUBLISH | 36 | 
+| leaf | StoreE | 0 | ADD | 17,600 | 
+| leaf | StoreE | 0 | MUL | 17,600 | 
+| leaf | StoreE | 0 | STOREW | 29,391 | 
+| leaf | StoreF | 0 | ADD | 524 | 
+| leaf | StoreF | 0 | MUL | 508 | 
+| leaf | StoreF | 0 | STOREW | 13,121 | 
+| leaf | StoreHeapPtr | 0 | ADD | 1 | 
+| leaf | StoreHintWord | 0 | HINT_STOREW | 42,997 | 
+| leaf | StoreV | 0 | ADD | 2,204 | 
+| leaf | StoreV | 0 | MUL | 1,003 | 
+| leaf | StoreV | 0 | STOREW | 17,243 | 
+| leaf | SubE | 0 | FE4SUB | 6,671 | 
+| leaf | SubEF | 0 | ADD | 36,474 | 
+| leaf | SubEF | 0 | SUB | 12,158 | 
+| leaf | SubEFI | 0 | ADD | 264 | 
+| leaf | SubEI | 0 | ADD | 408 | 
+| leaf | SubFI | 0 | SUB | 17,112 | 
+| leaf | SubV | 0 | SUB | 13,980 | 
+| leaf | SubVI | 0 | SUB | 2,218 | 
+| leaf | SubVIN | 0 | SUB | 2,000 | 
+| leaf | UnsafeCastVF | 0 | ADD | 489 | 
+| leaf | VerifyBatchExt | 0 | VERIFY_BATCH | 2,000 | 
+| leaf | VerifyBatchFelt | 0 | VERIFY_BATCH | 800 | 
+| leaf | ZipFor | 0 | ADD | 121,173 | 
+| leaf | ZipFor | 0 | BNE | 73,919 | 
+| leaf | ZipFor | 0 | JAL | 12,351 | 
+
+| group | dsl_ir | opcode | segment | frequency |
+| --- | --- | --- | --- | --- |
+| fibonacci_program |  | ADD | 0 | 900,088 | 
+| fibonacci_program |  | AND | 0 | 4 | 
+| fibonacci_program |  | AUIPC | 0 | 13 | 
+| fibonacci_program |  | BEQ | 0 | 100,009 | 
+| fibonacci_program |  | BGEU | 0 | 2 | 
+| fibonacci_program |  | BLT | 0 | 2 | 
+| fibonacci_program |  | BLTU | 0 | 4 | 
+| fibonacci_program |  | BNE | 0 | 100,005 | 
+| fibonacci_program |  | HINT_BUFFER | 0 | 2 | 
+| fibonacci_program |  | HINT_STOREW | 0 | 1 | 
+| fibonacci_program |  | JAL | 0 | 100,002 | 
+| fibonacci_program |  | JALR | 0 | 25 | 
+| fibonacci_program |  | LOADBU | 0 | 8 | 
+| fibonacci_program |  | LOADW | 0 | 30 | 
+| fibonacci_program |  | LUI | 0 | 21 | 
+| fibonacci_program |  | OR | 0 | 3 | 
+| fibonacci_program |  | PHANTOM | 0 | 1 | 
+| fibonacci_program |  | SLTU | 0 | 300,003 | 
+| fibonacci_program |  | STOREB | 0 | 10 | 
+| fibonacci_program |  | STOREW | 0 | 40 | 
+| fibonacci_program |  | SUB | 0 | 2 | 
+| fibonacci_program |  | XOR | 0 | 2 | 
+
+| group | idx | trace_gen_time_ms | total_proof_time_ms | total_cycles | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| leaf | 0 | 665 | 7,956 | 1,313,929 | 254,942,698 | 2,628 | 384 | 289 | 729 | 627 | 431 | 70,587,440 | 164 | 4,663 | 
+
+| group | idx | trace_height_constraint | weighted_sum | threshold |
+| --- | --- | --- | --- | --- |
+| leaf | 0 | 0 | 5,636,228 | 2,013,265,921 | 
+| leaf | 0 | 1 | 26,751,232 | 2,013,265,921 | 
+| leaf | 0 | 2 | 2,818,114 | 2,013,265,921 | 
+| leaf | 0 | 3 | 26,878,212 | 2,013,265,921 | 
+| leaf | 0 | 4 | 131,072 | 2,013,265,921 | 
+| leaf | 0 | 5 | 62,608,074 | 2,013,265,921 | 
+
+| group | segment | trace_gen_time_ms | total_proof_time_ms | total_cycles | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| fibonacci_program | 0 | 523 | 7,064 | 1,500,277 | 160,837,996 | 1,924 | 255 | 222 | 474 | 520 | 330 | 50,589,567 | 118 | 4,617 | 
+
+| group | segment | trace_height_constraint | weighted_sum | threshold |
+| --- | --- | --- | --- | --- |
+| fibonacci_program | 0 | 0 | 3,932,542 | 2,013,265,921 | 
+| fibonacci_program | 0 | 1 | 10,749,400 | 2,013,265,921 | 
+| fibonacci_program | 0 | 2 | 1,966,271 | 2,013,265,921 | 
+| fibonacci_program | 0 | 3 | 10,749,532 | 2,013,265,921 | 
+| fibonacci_program | 0 | 4 | 1,664 | 2,013,265,921 | 
+| fibonacci_program | 0 | 5 | 640 | 2,013,265,921 | 
+| fibonacci_program | 0 | 6 | 7,209,100 | 2,013,265,921 | 
+| fibonacci_program | 0 | 7 |  | 2,013,265,921 | 
+| fibonacci_program | 0 | 8 | 35,535,101 | 2,013,265,921 | 
+
+</details>
+
+
+<details>
+<summary>Flamegraphs</summary>
+
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-fibonacci_program.dsl_ir.opcode.air_name.cells_used.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-fibonacci_program.dsl_ir.opcode.air_name.cells_used.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-fibonacci_program.dsl_ir.opcode.air_name.cells_used.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-fibonacci_program.dsl_ir.opcode.air_name.cells_used.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-fibonacci_program.dsl_ir.opcode.frequency.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-fibonacci_program.dsl_ir.opcode.frequency.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-fibonacci_program.dsl_ir.opcode.frequency.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-fibonacci_program.dsl_ir.opcode.frequency.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-leaf.dsl_ir.opcode.air_name.cells_used.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-leaf.dsl_ir.opcode.air_name.cells_used.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-leaf.dsl_ir.opcode.air_name.cells_used.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-leaf.dsl_ir.opcode.air_name.cells_used.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-leaf.dsl_ir.opcode.frequency.reverse.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-leaf.dsl_ir.opcode.frequency.reverse.svg)
+[![](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-leaf.dsl_ir.opcode.frequency.svg)](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/be2ebfb85281f9ecb4668f3fefad039ad4326d4b/fibonacci-be2ebfb85281f9ecb4668f3fefad039ad4326d4b-leaf.dsl_ir.opcode.frequency.svg)
+
+</details>
+
+Commit: https://github.com/openvm-org/openvm/commit/be2ebfb85281f9ecb4668f3fefad039ad4326d4b
+
+Max Segment Length: 1048476
+
+Instance Type: 64cpu-linux-arm64
+
+Memory Allocator: jemalloc
+
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/14394391873)
