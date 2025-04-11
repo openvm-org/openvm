@@ -127,16 +127,27 @@ pub struct NativePoseidon2RecordSet<F: Field> {
     pub simple_permute_records: Vec<SimplePoseidonRecord<F>>,
 }
 
-pub struct NativePoseidon2Chip<F: Field, const SBOX_REGISTERS: usize> {
-    pub(super) air: NativePoseidon2Air<F, SBOX_REGISTERS>,
+pub struct NativePoseidon2Chip<
+    F: Field,
+    const SBOX_DEGREE: u64,
+    const SBOX_REGISTERS: usize,
+    const PARTIAL_ROUNDS: usize,
+> {
+    pub(super) air: NativePoseidon2Air<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>,
     pub record_set: NativePoseidon2RecordSet<F>,
     pub height: usize,
     pub(super) offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-    pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
+    pub(super) subchip: Poseidon2SubChip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>,
     pub(super) streams: Arc<Mutex<Streams<F>>>,
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_REGISTERS> {
+impl<
+        F: PrimeField32,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > NativePoseidon2Chip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
+{
     pub fn new(
         port: SystemPort,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
@@ -148,7 +159,9 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
             execution_bridge: ExecutionBridge::new(port.execution_bus, port.program_bus),
             memory_bridge: port.memory_bridge,
             internal_bus: verify_batch_bus,
-            subair: Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
+            subair: Arc::new(Poseidon2SubAir::new(
+                poseidon2_config.constants.clone().into(),
+            )),
             address_space: F::from_canonical_u32(AS::Native as u32),
         };
         Self {
@@ -172,8 +185,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
 pub(super) const NUM_INITIAL_READS: usize = 6;
 pub(super) const NUM_SIMPLE_ACCESSES: u32 = 7;
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
-    for NativePoseidon2Chip<F, SBOX_REGISTERS>
+impl<
+        F: PrimeField32,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > InstructionExecutor<F>
+    for NativePoseidon2Chip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
     fn execute(
         &mut self,

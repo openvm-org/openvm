@@ -8,7 +8,9 @@
 //! internal leaves of a Merkle tree but **not** as the leaf hash because `compress` does not
 //! add any padding.
 
-use openvm_poseidon2_air::Poseidon2Config;
+use openvm_poseidon2_air::{
+    Poseidon2Config, BABYBEAR_POSEIDON2_PARTIAL_ROUNDS, BABYBEAR_POSEIDON2_SBOX_DEGREE,
+};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::BusIndex,
@@ -32,9 +34,24 @@ pub const PERIPHERY_POSEIDON2_WIDTH: usize = 16;
 pub const PERIPHERY_POSEIDON2_CHUNK_SIZE: usize = 8;
 
 pub enum Poseidon2PeripheryChip<F: PrimeField32> {
-    Register0(Poseidon2PeripheryBaseChip<F, 0>),
-    Register1(Poseidon2PeripheryBaseChip<F, 1>),
+    Register0(
+        Poseidon2PeripheryBaseChip<
+            F,
+            BABYBEAR_POSEIDON2_SBOX_DEGREE,
+            0,
+            BABYBEAR_POSEIDON2_PARTIAL_ROUNDS,
+        >,
+    ),
+    Register1(
+        Poseidon2PeripheryBaseChip<
+            F,
+            BABYBEAR_POSEIDON2_SBOX_DEGREE,
+            1,
+            BABYBEAR_POSEIDON2_PARTIAL_ROUNDS,
+        >,
+    ),
 }
+
 impl<F: PrimeField32> Poseidon2PeripheryChip<F> {
     pub fn new(
         poseidon2_config: Poseidon2Config<F>,

@@ -256,8 +256,14 @@ pub trait SerialReceiver<T> {
     fn receive(&mut self, msg: T);
 }
 
-impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
-    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+impl<
+        'a,
+        F: PrimeField32,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > SerialReceiver<&'a [F]>
+    for Poseidon2PeripheryBaseChip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
     /// Receives a permutation preimage, pads with zeros to the permutation width, and records.
     /// The permutation preimage must have length at most the permutation width (panics otherwise).

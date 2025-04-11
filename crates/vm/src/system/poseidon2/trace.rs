@@ -14,8 +14,12 @@ use openvm_stark_backend::{
 
 use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
 
-impl<SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<SC>
-    for Poseidon2PeripheryBaseChip<Val<SC>, SBOX_REGISTERS>
+impl<
+        SC: StarkGenericConfig,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > Chip<SC> for Poseidon2PeripheryBaseChip<Val<SC>, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 where
     Val<SC>: PrimeField32,
 {
@@ -51,7 +55,12 @@ where
             .for_each(|((row, inner_row), mult)| {
                 // WARNING: Poseidon2SubCols must be the first field in Poseidon2PeripheryCols
                 row[..inner_width].copy_from_slice(inner_row);
-                let cols: &mut Poseidon2PeripheryCols<Val<SC>, SBOX_REGISTERS> = row.borrow_mut();
+                let cols: &mut Poseidon2PeripheryCols<
+                    Val<SC>,
+                    SBOX_DEGREE,
+                    SBOX_REGISTERS,
+                    PARTIAL_ROUNDS,
+                > = row.borrow_mut();
                 cols.mult = Val::<SC>::from_canonical_u32(mult);
             });
 
@@ -59,8 +68,13 @@ where
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> ChipUsageGetter
-    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+impl<
+        F: PrimeField32,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > ChipUsageGetter
+    for Poseidon2PeripheryBaseChip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
     fn air_name(&self) -> String {
         get_air_name(&self.air)

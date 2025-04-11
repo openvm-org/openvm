@@ -31,28 +31,34 @@ pub use permute::*;
 mod tests;
 
 pub const POSEIDON2_WIDTH: usize = 16;
-// NOTE: these constants are for BabyBear only.
-pub const BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS: usize = 4;
-pub const BABY_BEAR_POSEIDON2_FULL_ROUNDS: usize = 8;
-pub const BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS: usize = 13;
-
-// Currently we only support SBOX_DEGREE = 7
-pub const BABY_BEAR_POSEIDON2_SBOX_DEGREE: u64 = 7;
+pub const POSEIDON2_HALF_FULL_ROUNDS: usize = 4;
+pub const POSEIDON2_FULL_ROUNDS: usize = 8;
 
 /// `SBOX_REGISTERS` affects the max constraint degree of the AIR. See [p3_poseidon2_air] for more details.
 #[derive(Debug)]
-pub struct Poseidon2SubChip<F: Field, const SBOX_REGISTERS: usize> {
+pub struct Poseidon2SubChip<
+    F: Field,
+    const SBOX_DEGREE: u64,
+    const SBOX_REGISTERS: usize,
+    const PARTIAL_ROUNDS: usize,
+> {
     // This is Arc purely because Poseidon2Air cannot derive Clone
-    pub air: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
+    pub air: Arc<Poseidon2SubAir<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>>,
     pub(crate) executor: Poseidon2Executor<F>,
-    pub(crate) constants: Plonky3RoundConstants<F>,
+    pub(crate) constants: Plonky3RoundConstants<F, PARTIAL_ROUNDS>,
 }
 
-impl<F: PrimeField, const SBOX_REGISTERS: usize> Poseidon2SubChip<F, SBOX_REGISTERS> {
+impl<
+        F: PrimeField,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > Poseidon2SubChip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
+{
     pub fn new(constants: Poseidon2Constants<F>) -> Self {
         let (external_constants, internal_constants) = constants.to_external_internal_constants();
         Self {
-            air: Arc::new(Poseidon2SubAir::new(constants.into())),
+            air: Arc::new(Poseidon2SubAir::new(constants.clone().into())),
             executor: Poseidon2Executor::new(external_constants, internal_constants),
             constants: constants.into(),
         }
@@ -79,10 +85,10 @@ impl<F: PrimeField, const SBOX_REGISTERS: usize> Poseidon2SubChip<F, SBOX_REGIST
                 F,
                 BabyBearPoseidon2LinearLayers,
                 POSEIDON2_WIDTH,
-                BABY_BEAR_POSEIDON2_SBOX_DEGREE,
+                SBOX_DEGREE,
                 SBOX_REGISTERS,
-                BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
-                BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
+                POSEIDON2_HALF_FULL_ROUNDS,
+                PARTIAL_ROUNDS,
             >(inputs, &self.constants),
         }
     }
@@ -90,7 +96,9 @@ impl<F: PrimeField, const SBOX_REGISTERS: usize> Poseidon2SubChip<F, SBOX_REGIST
 
 #[derive(Clone, Debug)]
 pub enum Poseidon2Executor<F: Field> {
-    BabyBearMds(Plonky3Poseidon2Executor<F, BabyBearPoseidon2LinearLayers>),
+    BabyBearMds(
+        Plonky3Poseidon2Executor<F, BabyBearPoseidon2LinearLayers, BABYBEAR_POSEIDON2_SBOX_DEGREE>,
+    ),
 }
 
 impl<F: PrimeField> Poseidon2Executor<F> {
@@ -105,10 +113,10 @@ impl<F: PrimeField> Poseidon2Executor<F> {
     }
 }
 
-pub type Plonky3Poseidon2Executor<F, LinearLayers> = Poseidon2<
+pub type Plonky3Poseidon2Executor<F, LinearLayers, const SBOX_DEGREE: u64> = Poseidon2<
     <F as Field>::Packing,
     Poseidon2ExternalLayer<F, LinearLayers, POSEIDON2_WIDTH>,
     Poseidon2InternalLayer<F, LinearLayers>,
     POSEIDON2_WIDTH,
-    BABY_BEAR_POSEIDON2_SBOX_DEGREE,
+    SBOX_DEGREE,
 >;

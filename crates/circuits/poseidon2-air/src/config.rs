@@ -1,40 +1,36 @@
-use openvm_stark_backend::p3_field::{Field, PrimeField32};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::p3_field::Field;
 use p3_poseidon2::ExternalLayerConstants;
 use p3_poseidon2_air::RoundConstants;
 
-use super::{
-    BABYBEAR_BEGIN_EXT_CONSTS, BABYBEAR_END_EXT_CONSTS, BABYBEAR_PARTIAL_CONSTS,
-    BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS, POSEIDON2_WIDTH,
-};
+use super::{POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_WIDTH};
 
 // Currently only contains round constants, but this struct may contain other configuration parameters in the future.
-#[derive(Clone, Copy, Debug)]
-pub struct Poseidon2Config<F> {
+#[derive(Clone, Debug)]
+pub struct Poseidon2Config<F: Field> {
     pub constants: Poseidon2Constants<F>,
 }
 
-impl<F: PrimeField32> Default for Poseidon2Config<F> {
-    fn default() -> Self {
-        Self {
-            constants: default_baby_bear_rc(),
-        }
+impl<F: Field> Poseidon2Config<F> {
+    pub fn new(constants: Poseidon2Constants<F>) -> Self {
+        Self { constants }
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct Poseidon2Constants<F> {
-    pub beginning_full_round_constants:
-        [[F; POSEIDON2_WIDTH]; BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS],
-    pub partial_round_constants: [F; BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS],
-    pub ending_full_round_constants: [[F; POSEIDON2_WIDTH]; BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS],
+#[derive(Clone, Debug)]
+pub struct Poseidon2Constants<F: Field> {
+    pub beginning_full_round_constants: [[F; POSEIDON2_WIDTH]; POSEIDON2_HALF_FULL_ROUNDS],
+    pub partial_round_constants: Vec<F>,
+    pub ending_full_round_constants: [[F; POSEIDON2_WIDTH]; POSEIDON2_HALF_FULL_ROUNDS],
 }
 
-impl<F: Field> From<Poseidon2Constants<F>> for Plonky3RoundConstants<F> {
+impl<F: Field, const PARTIAL_ROUNDS: usize> From<Poseidon2Constants<F>>
+    for Plonky3RoundConstants<F, PARTIAL_ROUNDS>
+{
     fn from(constants: Poseidon2Constants<F>) -> Self {
+        let partial_round_constants = constants.partial_round_constants.try_into().unwrap();
         Plonky3RoundConstants::new(
             constants.beginning_full_round_constants,
-            constants.partial_round_constants,
+            partial_round_constants,
             constants.ending_full_round_constants,
         )
     }
@@ -49,25 +45,10 @@ impl<F: Field> Poseidon2Constants<F> {
                 self.beginning_full_round_constants.to_vec(),
                 self.ending_full_round_constants.to_vec(),
             ),
-            self.partial_round_constants.to_vec(),
+            self.partial_round_constants.clone(),
         )
     }
 }
 
-// Round constants for only BabyBear, but we convert to `F` due to some annoyances with generics.
-// This should only be used concretely when `F = BabyBear`.
-fn default_baby_bear_rc<F: Field>() -> Poseidon2Constants<F> {
-    let convert_field = |f: BabyBear| F::from_canonical_u32(f.as_canonical_u32());
-    Poseidon2Constants {
-        beginning_full_round_constants: BABYBEAR_BEGIN_EXT_CONSTS.map(|x| x.map(convert_field)),
-        partial_round_constants: BABYBEAR_PARTIAL_CONSTS.map(convert_field),
-        ending_full_round_constants: BABYBEAR_END_EXT_CONSTS.map(|x| x.map(convert_field)),
-    }
-}
-
-pub type Plonky3RoundConstants<F> = RoundConstants<
-    F,
-    POSEIDON2_WIDTH,
-    BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
-    BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
->;
+pub type Plonky3RoundConstants<F, const PARTIAL_ROUNDS: usize> =
+    RoundConstants<F, POSEIDON2_WIDTH, POSEIDON2_HALF_FULL_ROUNDS, PARTIAL_ROUNDS>;

@@ -12,7 +12,7 @@ use openvm_native_compiler::{
     conversion::AS, FieldArithmeticOpcode, Poseidon2Opcode, Poseidon2Opcode::*,
     VerifyBatchOpcode::VERIFY_BATCH,
 };
-use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
+use openvm_poseidon2_air::{default_baby_bear_rc, Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32, PrimeField64},
@@ -138,7 +138,9 @@ fn random_instance(
     }
 }
 
+const SBOX_DEGREE: u64 = 7;
 const SBOX_REGISTERS: usize = 1;
+const PARTIAL_ROUNDS: usize = 13;
 
 struct Case {
     row_lengths: Vec<Vec<usize>>,
@@ -155,10 +157,10 @@ fn test<const N: usize>(cases: [Case; N]) {
 
     let mut tester = VmChipTestBuilder::default();
     let streams = Arc::new(Mutex::new(Streams::default()));
-    let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
+    let mut chip = NativePoseidon2Chip::<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>::new(
         tester.system_port(),
         tester.offline_memory_mutex_arc(),
-        Poseidon2Config::default(),
+        Poseidon2Config::new(default_baby_bear_rc()),
         VERIFY_BATCH_BUS,
         streams.clone(),
     );
@@ -263,7 +265,9 @@ fn test<const N: usize>(cases: [Case; N]) {
     let row_index = 0;
     trace.row_mut(row_index);
 
-    let p2_chip = Poseidon2SubChip::<F, SBOX_REGISTERS>::new(Poseidon2Config::default().constants);
+    let p2_chip = Poseidon2SubChip::<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>::new(
+        default_baby_bear_rc(),
+    );
     let inner_trace = p2_chip.generate_trace(vec![[F::ZERO; 2 * CHUNK]]);
     let inner_width = p2_chip.air.width();
 
@@ -385,10 +389,10 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
 
     let mut tester = VmChipTestBuilder::default();
     let streams = Arc::new(Mutex::new(Streams::default()));
-    let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
+    let mut chip = NativePoseidon2Chip::<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>::new(
         tester.system_port(),
         tester.offline_memory_mutex_arc(),
-        Poseidon2Config::default(),
+        Poseidon2Config::new(default_baby_bear_rc()),
         VERIFY_BATCH_BUS,
         streams.clone(),
     );

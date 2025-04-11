@@ -16,13 +16,24 @@ use super::{
 use crate::arch::hasher::{Hasher, HasherChip};
 
 #[derive(Debug)]
-pub struct Poseidon2PeripheryBaseChip<F: PrimeField32, const SBOX_REGISTERS: usize> {
-    pub air: Arc<Poseidon2PeripheryAir<F, SBOX_REGISTERS>>,
-    pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
+pub struct Poseidon2PeripheryBaseChip<
+    F: PrimeField32,
+    const SBOX_DEGREE: u64,
+    const SBOX_REGISTERS: usize,
+    const PARTIAL_ROUNDS: usize,
+> {
+    pub air: Arc<Poseidon2PeripheryAir<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>>,
+    pub subchip: Poseidon2SubChip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>,
     pub records: FxHashMap<[F; PERIPHERY_POSEIDON2_WIDTH], AtomicU32>,
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS> {
+impl<
+        F: PrimeField32,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > Poseidon2PeripheryBaseChip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
+{
     pub fn new(poseidon2_config: Poseidon2Config<F>, bus_idx: BusIndex) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         Self {
@@ -36,8 +47,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F,
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F>
-    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+impl<
+        F: PrimeField32,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F>
+    for Poseidon2PeripheryBaseChip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
     fn compress(
         &self,
@@ -53,8 +69,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Hasher<PERIPHERY_POSEIDON2_CH
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F>
-    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+impl<
+        F: PrimeField32,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F>
+    for Poseidon2PeripheryBaseChip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
     /// Key method for Hasher trait.
     ///

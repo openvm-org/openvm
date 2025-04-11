@@ -10,7 +10,7 @@ use openvm_native_compiler::{
     Poseidon2Opcode::{COMP_POS2, PERM_POS2},
     VerifyBatchOpcode::VERIFY_BATCH,
 };
-use openvm_poseidon2_air::{Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS};
+use openvm_poseidon2_air::{Poseidon2SubAir, POSEIDON2_HALF_FULL_ROUNDS};
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -32,39 +32,65 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct NativePoseidon2Air<F: Field, const SBOX_REGISTERS: usize> {
+pub struct NativePoseidon2Air<
+    F: Field,
+    const SBOX_DEGREE: u64,
+    const SBOX_REGISTERS: usize,
+    const PARTIAL_ROUNDS: usize,
+> {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub internal_bus: VerifyBatchBus,
-    pub(crate) subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
+    pub(crate) subair: Arc<Poseidon2SubAir<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>>,
     pub(crate) address_space: F,
 }
 
-impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for NativePoseidon2Air<F, SBOX_REGISTERS> {
+impl<
+        F: Field,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > BaseAir<F> for NativePoseidon2Air<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
+{
     fn width(&self) -> usize {
-        NativePoseidon2Cols::<F, SBOX_REGISTERS>::width()
+        NativePoseidon2Cols::<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>::width()
     }
 }
 
-impl<F: Field, const SBOX_REGISTERS: usize> BaseAirWithPublicValues<F>
-    for NativePoseidon2Air<F, SBOX_REGISTERS>
+impl<
+        F: Field,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > BaseAirWithPublicValues<F>
+    for NativePoseidon2Air<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
 }
 
-impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
-    for NativePoseidon2Air<F, SBOX_REGISTERS>
+impl<
+        F: Field,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > PartitionedBaseAir<F> for NativePoseidon2Air<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
 }
 
-impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
-    for NativePoseidon2Air<AB::F, SBOX_REGISTERS>
+impl<
+        AB: InteractionBuilder,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > Air<AB> for NativePoseidon2Air<AB::F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local: &NativePoseidon2Cols<AB::Var, SBOX_REGISTERS> = (*local).borrow();
+        let local: &NativePoseidon2Cols<AB::Var, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS> =
+            (*local).borrow();
         let next = main.row_slice(1);
-        let next: &NativePoseidon2Cols<AB::Var, SBOX_REGISTERS> = (*next).borrow();
+        let next: &NativePoseidon2Cols<AB::Var, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS> =
+            (*next).borrow();
 
         let &NativePoseidon2Cols {
             inner: _,
@@ -87,10 +113,10 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         let left_input = from_fn::<_, CHUNK, _>(|i| local.inner.inputs[i]);
         let right_input = from_fn::<_, CHUNK, _>(|i| local.inner.inputs[i + CHUNK]);
         let left_output = from_fn::<_, CHUNK, _>(|i| {
-            local.inner.ending_full_rounds[BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS - 1].post[i]
+            local.inner.ending_full_rounds[POSEIDON2_HALF_FULL_ROUNDS - 1].post[i]
         });
         let right_output = from_fn::<_, CHUNK, _>(|i| {
-            local.inner.ending_full_rounds[BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS - 1].post[i + CHUNK]
+            local.inner.ending_full_rounds[POSEIDON2_HALF_FULL_ROUNDS - 1].post[i + CHUNK]
         });
         let next_left_input = from_fn::<_, CHUNK, _>(|i| next.inner.inputs[i]);
         let next_right_input = from_fn::<_, CHUNK, _>(|i| next.inner.inputs[i + CHUNK]);
@@ -117,11 +143,11 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         builder.assert_eq(end.clone() * next.incorporate_row, next.start_top_level);
 
         // poseidon2 constraints are always checked
-        let mut sub_builder =
-            SubAirBuilder::<AB, Poseidon2SubAir<AB::F, SBOX_REGISTERS>, AB::F>::new(
-                builder,
-                0..self.subair.width(),
-            );
+        let mut sub_builder = SubAirBuilder::<
+            AB,
+            Poseidon2SubAir<AB::F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>,
+            AB::F,
+        >::new(builder, 0..self.subair.width());
         self.subair.eval(&mut sub_builder);
 
         //// inside row constraints

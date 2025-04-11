@@ -28,8 +28,13 @@ use crate::{
         CHUNK,
     },
 };
-impl<F: Field, const SBOX_REGISTERS: usize> ChipUsageGetter
-    for NativePoseidon2Chip<F, SBOX_REGISTERS>
+
+impl<
+        F: Field,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > ChipUsageGetter for NativePoseidon2Chip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
     fn air_name(&self) -> String {
         "VerifyBatchAir".to_string()
@@ -40,11 +45,17 @@ impl<F: Field, const SBOX_REGISTERS: usize> ChipUsageGetter
     }
 
     fn trace_width(&self) -> usize {
-        NativePoseidon2Cols::<F, SBOX_REGISTERS>::width()
+        NativePoseidon2Cols::<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>::width()
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_REGISTERS> {
+impl<
+        F: PrimeField32,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > NativePoseidon2Chip<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
+{
     fn generate_subair_cols(&self, input: [F; 2 * CHUNK], cols: &mut [F]) {
         let inner_trace = self.subchip.generate_trace(vec![input]);
         let inner_width = self.air.subair.width();
@@ -71,7 +82,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         let read_sibling_is_on_right = memory.record_by_id(read_sibling_is_on_right);
 
         self.generate_subair_cols(p2_input, slice);
-        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = slice.borrow_mut();
+        let cols: &mut NativePoseidon2Cols<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS> =
+            slice.borrow_mut();
         cols.incorporate_row = F::ZERO;
         cols.incorporate_sibling = F::ONE;
         cols.inside_row = F::ZERO;
@@ -123,7 +135,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
             ..
         } = record;
         let instruction = &record.instruction;
-        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = slice.borrow_mut();
+        let cols: &mut NativePoseidon2Cols<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS> =
+            slice.borrow_mut();
         cols.end_top_level = F::ONE;
 
         let specific: &mut TopLevelSpecificCols<F> =
@@ -184,7 +197,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         let final_height_read = memory.record_by_id(final_height_read);
 
         self.generate_subair_cols(p2_input, slice);
-        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = slice.borrow_mut();
+        let cols: &mut NativePoseidon2Cols<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS> =
+            slice.borrow_mut();
         cols.incorporate_row = F::ONE;
         cols.incorporate_sibling = F::ZERO;
         cols.inside_row = F::ZERO;
@@ -238,7 +252,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         let InsideRowRecord { cells, p2_input } = record;
 
         self.generate_subair_cols(*p2_input, slice);
-        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = slice.borrow_mut();
+        let cols: &mut NativePoseidon2Cols<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS> =
+            slice.borrow_mut();
         cols.incorporate_row = F::ZERO;
         cols.incorporate_sibling = F::ZERO;
         cols.inside_row = F::ONE;
@@ -298,7 +313,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         slice: &mut [F],
         memory: &OfflineMemory<F>,
     ) -> usize {
-        let width = NativePoseidon2Cols::<F, SBOX_REGISTERS>::width();
+        let width = NativePoseidon2Cols::<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>::width();
         let mut used_cells = 0;
 
         let mut opened_index = 0;
@@ -394,7 +409,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
         let write_data_1 = memory.record_by_id(write_data_1);
 
         self.generate_subair_cols(p2_input, slice);
-        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = slice.borrow_mut();
+        let cols: &mut NativePoseidon2Cols<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS> =
+            slice.borrow_mut();
         cols.incorporate_row = F::ZERO;
         cols.incorporate_sibling = F::ZERO;
         cols.inside_row = F::ZERO;
@@ -471,8 +487,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
     }
 }
 
-impl<SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<SC>
-    for NativePoseidon2Chip<Val<SC>, SBOX_REGISTERS>
+impl<
+        SC: StarkGenericConfig,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > Chip<SC> for NativePoseidon2Chip<Val<SC>, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 where
     Val<SC>: PrimeField32,
 {

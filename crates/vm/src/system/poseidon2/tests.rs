@@ -1,4 +1,4 @@
-use openvm_poseidon2_air::Poseidon2Config;
+use openvm_poseidon2_air::{default_baby_bear_rc, Poseidon2Config};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{
     dummy_airs::interaction::dummy_interaction_air::{DummyInteractionChip, DummyInteractionData},
@@ -33,7 +33,7 @@ fn poseidon2_periphery_direct_test() {
     });
 
     let mut chip = Poseidon2PeripheryChip::<BabyBear>::new(
-        Poseidon2Config::default(),
+        Poseidon2Config::new(default_baby_bear_rc()),
         POSEIDON2_DIRECT_BUS,
         3,
     );
@@ -87,7 +87,7 @@ fn poseidon2_periphery_duplicate_hashes_test() {
     let counts: [u32; NUM_OPS] = std::array::from_fn(|_| rng.next_u32() % 20);
 
     let mut chip = Poseidon2PeripheryChip::<BabyBear>::new(
-        Poseidon2Config::default(),
+        Poseidon2Config::new(default_baby_bear_rc()),
         POSEIDON2_DIRECT_BUS,
         3,
     );

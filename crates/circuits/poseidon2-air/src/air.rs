@@ -5,43 +5,76 @@ use openvm_stark_backend::{
 };
 use p3_poseidon2_air::{Poseidon2Air, Poseidon2Cols};
 
-use super::{
-    BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
-    BABY_BEAR_POSEIDON2_SBOX_DEGREE, POSEIDON2_WIDTH,
-};
+use super::{POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_WIDTH};
 use crate::{BabyBearPoseidon2LinearLayers, Plonky3RoundConstants};
 
-pub type Poseidon2SubCols<F, const SBOX_REGISTERS: usize> = Poseidon2Cols<
+pub type Poseidon2SubCols<
+    F,
+    const SBOX_DEGREE: u64,
+    const SBOX_REGISTERS: usize,
+    const PARTIAL_ROUNDS: usize,
+> = Poseidon2Cols<
     F,
     POSEIDON2_WIDTH,
-    BABY_BEAR_POSEIDON2_SBOX_DEGREE,
+    SBOX_DEGREE,
     SBOX_REGISTERS,
-    BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
-    BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
+    POSEIDON2_HALF_FULL_ROUNDS,
+    PARTIAL_ROUNDS,
 >;
 
-pub type Plonky3Poseidon2Air<F, LinearLayers, const SBOX_REGISTERS: usize> = Poseidon2Air<
+pub type Plonky3Poseidon2Air<
+    F,
+    LinearLayers,
+    const SBOX_DEGREE: u64,
+    const SBOX_REGISTERS: usize,
+    const PARTIAL_ROUNDS: usize,
+> = Poseidon2Air<
     F,
     LinearLayers,
     POSEIDON2_WIDTH,
-    BABY_BEAR_POSEIDON2_SBOX_DEGREE,
+    SBOX_DEGREE,
     SBOX_REGISTERS,
-    BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
-    BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
+    POSEIDON2_HALF_FULL_ROUNDS,
+    PARTIAL_ROUNDS,
 >;
 
 #[derive(Debug)]
-pub enum Poseidon2SubAir<F: Field, const SBOX_REGISTERS: usize> {
-    BabyBearMds(Plonky3Poseidon2Air<F, BabyBearPoseidon2LinearLayers, SBOX_REGISTERS>),
+pub enum Poseidon2SubAir<
+    F: Field,
+    const SBOX_DEGREE: u64,
+    const SBOX_REGISTERS: usize,
+    const PARTIAL_ROUNDS: usize,
+> {
+    BabyBearMds(
+        Plonky3Poseidon2Air<
+            F,
+            BabyBearPoseidon2LinearLayers,
+            SBOX_DEGREE,
+            SBOX_REGISTERS,
+            PARTIAL_ROUNDS,
+        >,
+    ),
 }
 
-impl<F: Field, const SBOX_REGISTERS: usize> Poseidon2SubAir<F, SBOX_REGISTERS> {
-    pub fn new(constants: Plonky3RoundConstants<F>) -> Self {
+impl<
+        F: Field,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > Poseidon2SubAir<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
+{
+    pub fn new(constants: Plonky3RoundConstants<F, PARTIAL_ROUNDS>) -> Self {
         Self::BabyBearMds(Plonky3Poseidon2Air::new(constants))
     }
 }
 
-impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for Poseidon2SubAir<F, SBOX_REGISTERS> {
+impl<
+        F: Field,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > BaseAir<F> for Poseidon2SubAir<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
+{
     fn width(&self) -> usize {
         match self {
             Self::BabyBearMds(air) => air.width(),
@@ -49,17 +82,30 @@ impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for Poseidon2SubAir<F, SB
     }
 }
 
-impl<F: Field, const SBOX_REGISTERS: usize> BaseAirWithPublicValues<F>
-    for Poseidon2SubAir<F, SBOX_REGISTERS>
+impl<
+        F: Field,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > BaseAirWithPublicValues<F>
+    for Poseidon2SubAir<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
 }
-impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
-    for Poseidon2SubAir<F, SBOX_REGISTERS>
+impl<
+        F: Field,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > PartitionedBaseAir<F> for Poseidon2SubAir<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
 }
 
-impl<AB: AirBuilder, const SBOX_REGISTERS: usize> Air<AB>
-    for Poseidon2SubAir<AB::F, SBOX_REGISTERS>
+impl<
+        AB: AirBuilder,
+        const SBOX_DEGREE: u64,
+        const SBOX_REGISTERS: usize,
+        const PARTIAL_ROUNDS: usize,
+    > Air<AB> for Poseidon2SubAir<AB::F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
     fn eval(&self, builder: &mut AB) {
         match self {

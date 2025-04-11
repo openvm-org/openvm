@@ -9,7 +9,7 @@ use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_poseidon2_air::Poseidon2Config;
+use openvm_poseidon2_air::{default_baby_bear_rc, Poseidon2Config};
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, BaseAir},
@@ -259,8 +259,11 @@ fn test_memory_controller_persistent() {
         memory_bridge: memory_controller.memory_bridge(),
     };
 
-    let mut poseidon_chip =
-        Poseidon2PeripheryChip::new(Poseidon2Config::default(), POSEIDON2_DIRECT_BUS, 3);
+    let mut poseidon_chip = Poseidon2PeripheryChip::new(
+        Poseidon2Config::new(default_baby_bear_rc()),
+        POSEIDON2_DIRECT_BUS,
+        3,
+    );
 
     memory_controller.finalize(Some(&mut poseidon_chip));
 

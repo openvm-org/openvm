@@ -14,9 +14,14 @@ use crate::{poseidon2::CHUNK, utils::const_max};
 ///    produced from an `MmcsVerifyBatch` input.
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct NativePoseidon2Cols<T, const SBOX_REGISTERS: usize> {
+pub struct NativePoseidon2Cols<
+    T,
+    const SBOX_DEGREE: u64,
+    const SBOX_REGISTERS: usize,
+    const PARTIAL_ROUNDS: usize,
+> {
     /// Columns required to compute Poseidon2 permutation.
-    pub inner: Poseidon2SubCols<T, SBOX_REGISTERS>,
+    pub inner: Poseidon2SubCols<T, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>,
 
     // Mode-of-operation flags. Each flag is boolean, and at most one may be true.
     // If none are true, the row is disabled.

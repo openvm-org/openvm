@@ -19,7 +19,7 @@ use openvm_native_compiler::{
     NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom,
     NativeRangeCheckOpcode, Poseidon2Opcode, VerifyBatchOpcode, BLOCK_LOAD_STORE_SIZE,
 };
-use openvm_poseidon2_air::Poseidon2Config;
+use openvm_poseidon2_air::{default_baby_bear_rc, Poseidon2Config};
 use openvm_rv32im_circuit::{
     BranchEqualCoreChip, Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor,
     Rv32IoPeriphery, Rv32M, Rv32MExecutor, Rv32MPeriphery,
@@ -72,7 +72,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
     FriReducedOpening(FriReducedOpeningChip<F>),
-    VerifyBatch(NativePoseidon2Chip<F, 1>),
+    VerifyBatch(NativePoseidon2Chip<F, 7, 1, 13>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
@@ -190,7 +190,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         let poseidon2_chip = NativePoseidon2Chip::new(
             builder.system_port(),
             offline_memory.clone(),
-            Poseidon2Config::default(),
+            Poseidon2Config::new(default_baby_bear_rc()),
             VerifyBatchBus::new(builder.new_bus_idx()),
             builder.streams().clone(),
         );
