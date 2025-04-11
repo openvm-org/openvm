@@ -85,6 +85,7 @@ fn main() -> Result<()> {
             app_pk,
             app_committed_exe,
             full_agg_pk,
+            args.agg_tree_config,
         );
         prover.set_program_name("kitchen_sink");
         let stdin = StdIn::default();

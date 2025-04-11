@@ -9,13 +9,12 @@ use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
     commit::commit_app_exe,
     config::{
-        AggConfig, AggStarkConfig, AppConfig, Halo2Config, DEFAULT_APP_LOG_BLOWUP,
-        DEFAULT_INTERNAL_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP, DEFAULT_ROOT_LOG_BLOWUP,
+        AggConfig, AggStarkConfig, AggregationTreeConfig, AppConfig, Halo2Config,
+        DEFAULT_APP_LOG_BLOWUP, DEFAULT_INTERNAL_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP,
+        DEFAULT_ROOT_LOG_BLOWUP,
     },
     keygen::{leaf_keygen, AppProvingKey},
-    prover::{
-        vm::local::VmLocalProver, AppProver, LeafProvingController, DEFAULT_NUM_CHILDREN_LEAF,
-    },
+    prover::{vm::local::VmLocalProver, AppProver, LeafProvingController},
     Sdk, StdIn,
 };
 use openvm_stark_backend::utils::metrics_span;
@@ -65,6 +64,10 @@ pub struct BenchmarkCli {
     /// Max segment length for continuations
     #[arg(short, long, alias = "max_segment_length")]
     pub max_segment_length: Option<usize>,
+
+    /// Controls the arity (num_children) of the aggregation tree
+    #[command(flatten)]
+    pub agg_tree_config: AggregationTreeConfig,
 
     /// Whether to execute with additional profiling metric collection
     #[arg(long)]
@@ -219,7 +222,7 @@ where
         let leaf_prover =
             VmLocalProver::<SC, NativeConfig, E>::new(leaf_vm_pk, app_pk.leaf_committed_exe);
         let leaf_controller = LeafProvingController {
-            num_children: DEFAULT_NUM_CHILDREN_LEAF,
+            num_children: AggregationTreeConfig::default().num_children_leaf,
         };
         leaf_controller.generate_proof(&leaf_prover, &app_proof);
     }

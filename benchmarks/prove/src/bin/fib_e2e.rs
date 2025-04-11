@@ -63,6 +63,7 @@ async fn main() -> Result<()> {
             app_pk,
             app_committed_exe,
             full_agg_pk,
+            args.agg_tree_config,
         );
         e2e_prover.set_program_name("fib_e2e");
         let _proof = e2e_prover.generate_proof_for_evm(stdin);
