@@ -6,20 +6,22 @@ use openvm_stark_backend::{proof::Proof, Chip};
 use openvm_stark_sdk::engine::StarkFriEngine;
 
 use crate::{
+    config::AggregationTreeConfig,
     keygen::{AggStarkProvingKey, AppProvingKey},
     prover::{agg::AggStarkProver, app::AppProver},
     NonRootCommittedExe, RootSC, StdIn, F, SC,
 };
 
 pub struct StarkProver<VC, E: StarkFriEngine<SC>> {
-    app_prover: AppProver<VC, E>,
-    agg_prover: AggStarkProver<E>,
+    pub app_prover: AppProver<VC, E>,
+    pub agg_prover: AggStarkProver<E>,
 }
 impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
     pub fn new(
         app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
         agg_stark_pk: AggStarkProvingKey,
+        agg_tree_config: AggregationTreeConfig,
     ) -> Self
     where
         VC: VmConfig<F>,
@@ -36,7 +38,11 @@ impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
 
         Self {
             app_prover: AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe),
-            agg_prover: AggStarkProver::new(agg_stark_pk, app_pk.leaf_committed_exe.clone()),
+            agg_prover: AggStarkProver::new(
+                agg_stark_pk,
+                app_pk.leaf_committed_exe.clone(),
+                agg_tree_config,
+            ),
         }
     }
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {

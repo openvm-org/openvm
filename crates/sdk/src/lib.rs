@@ -10,7 +10,7 @@ use std::{
 use alloy_primitives::{Bytes, FixedBytes};
 use alloy_sol_types::{sol, SolCall, SolValue};
 use commit::commit_app_exe;
-use config::AppConfig;
+use config::{AggregationTreeConfig, AppConfig};
 use eyre::{Context, Result};
 use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
@@ -101,12 +101,14 @@ pub struct VerifiedContinuationVmPayload {
 }
 
 pub struct GenericSdk<E: StarkFriEngine<SC>> {
+    agg_tree_config: AggregationTreeConfig,
     _phantom: PhantomData<E>,
 }
 
 impl<E: StarkFriEngine<SC>> Default for GenericSdk<E> {
     fn default() -> Self {
         Self {
+            agg_tree_config: AggregationTreeConfig::default(),
             _phantom: PhantomData,
         }
     }
@@ -264,7 +266,8 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let stark_prover = StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk);
+        let stark_prover =
+            StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config);
         let proof = stark_prover.generate_root_verifier_input(inputs);
         Ok(proof)
     }
@@ -281,7 +284,8 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let e2e_prover = ContinuationProver::<VC, E>::new(reader, app_pk, app_exe, agg_pk);
+        let e2e_prover =
+            ContinuationProver::<VC, E>::new(reader, app_pk, app_exe, agg_pk, self.agg_tree_config);
         let proof = e2e_prover.generate_proof_for_evm(inputs);
         Ok(proof)
     }

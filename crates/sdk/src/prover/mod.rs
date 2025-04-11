@@ -3,7 +3,9 @@ use std::sync::Arc;
 use openvm_circuit::arch::VmConfig;
 use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::Chip};
 
-use crate::{keygen::AppProvingKey, stdin::StdIn, NonRootCommittedExe, F, SC};
+use crate::{
+    config::AggregationTreeConfig, keygen::AppProvingKey, stdin::StdIn, NonRootCommittedExe, F, SC,
+};
 
 mod agg;
 pub use agg::*;
@@ -25,8 +27,8 @@ pub use stark::*;
 use crate::{keygen::AggProvingKey, prover::halo2::Halo2Prover, types::EvmProof};
 
 pub struct ContinuationProver<VC, E: StarkFriEngine<SC>> {
-    stark_prover: StarkProver<VC, E>,
-    halo2_prover: Halo2Prover,
+    pub stark_prover: StarkProver<VC, E>,
+    pub halo2_prover: Halo2Prover,
 }
 
 impl<VC, E: StarkFriEngine<SC>> ContinuationProver<VC, E> {
@@ -35,6 +37,7 @@ impl<VC, E: StarkFriEngine<SC>> ContinuationProver<VC, E> {
         app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
         agg_pk: AggProvingKey,
+        agg_tree_config: AggregationTreeConfig,
     ) -> Self
     where
         VC: VmConfig<F>,
@@ -43,7 +46,8 @@ impl<VC, E: StarkFriEngine<SC>> ContinuationProver<VC, E> {
             agg_stark_pk,
             halo2_pk,
         } = agg_pk;
-        let stark_prover = StarkProver::new(app_pk, app_committed_exe, agg_stark_pk);
+        let stark_prover =
+            StarkProver::new(app_pk, app_committed_exe, agg_stark_pk, agg_tree_config);
         Self {
             stark_prover,
             halo2_prover: Halo2Prover::new(reader, halo2_pk),
