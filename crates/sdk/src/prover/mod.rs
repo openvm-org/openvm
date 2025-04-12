@@ -7,16 +7,16 @@ mod stark;
 pub mod vm;
 
 pub use agg::*;
-#[cfg(feature = "evm-prove")]
-pub use api::*;
 pub use app::*;
+#[cfg(feature = "evm-prove")]
+pub use evm::*;
 #[cfg(feature = "evm-prove")]
 pub use halo2::*;
 pub use root::*;
 pub use stark::*;
 
 #[cfg(feature = "evm-prove")]
-mod api {
+mod evm {
     use std::sync::Arc;
 
     use openvm_circuit::arch::VmConfig;
@@ -32,12 +32,12 @@ mod api {
         NonRootCommittedExe, F, SC,
     };
 
-    pub struct ContinuationProver<VC, E: StarkFriEngine<SC>> {
-        stark_prover: StarkProver<VC, E>,
-        halo2_prover: Halo2Prover,
+    pub struct EvmHalo2Prover<VC, E: StarkFriEngine<SC>> {
+        pub stark_prover: StarkProver<VC, E>,
+        pub halo2_prover: Halo2Prover,
     }
 
-    impl<VC, E: StarkFriEngine<SC>> ContinuationProver<VC, E> {
+    impl<VC, E: StarkFriEngine<SC>> EvmHalo2Prover<VC, E> {
         pub fn new(
             reader: &impl Halo2ParamsReader,
             app_pk: Arc<AppProvingKey<VC>>,

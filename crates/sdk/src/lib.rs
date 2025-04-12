@@ -47,7 +47,7 @@ use crate::{
     prover::{AppProver, StarkProver},
 };
 #[cfg(feature = "evm-prove")]
-use crate::{prover::ContinuationProver, types::EvmProof};
+use crate::{prover::EvmHalo2Prover, types::EvmProof};
 
 pub mod codec;
 pub mod commit;
@@ -282,7 +282,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         VC::Periphery: Chip<SC>,
     {
         let e2e_prover =
-            ContinuationProver::<VC, E>::new(reader, app_pk, app_exe, agg_pk, self.agg_tree_config);
+            EvmHalo2Prover::<VC, E>::new(reader, app_pk, app_exe, agg_pk, self.agg_tree_config);
         let proof = e2e_prover.generate_proof_for_evm(inputs);
         Ok(proof)
     }

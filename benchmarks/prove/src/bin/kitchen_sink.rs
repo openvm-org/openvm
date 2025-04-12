@@ -10,7 +10,7 @@ use openvm_ecc_circuit::{WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG};
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
 use openvm_sdk::{
-    commit::commit_app_exe, config::SdkVmConfig, prover::ContinuationProver,
+    commit::commit_app_exe, config::SdkVmConfig, prover::EvmHalo2Prover,
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
 use openvm_stark_sdk::{
@@ -80,7 +80,7 @@ fn main() -> Result<()> {
     )?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let mut prover = ContinuationProver::<_, BabyBearPoseidon2Engine>::new(
+        let mut prover = EvmHalo2Prover::<_, BabyBearPoseidon2Engine>::new(
             &halo2_params_reader,
             app_pk,
             app_committed_exe,
