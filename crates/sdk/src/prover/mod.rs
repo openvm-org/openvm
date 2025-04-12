@@ -32,13 +32,11 @@ mod api {
         NonRootCommittedExe, F, SC,
     };
 
-    #[cfg(feature = "evm-prove")]
     pub struct ContinuationProver<VC, E: StarkFriEngine<SC>> {
         stark_prover: StarkProver<VC, E>,
         halo2_prover: Halo2Prover,
     }
 
-    #[cfg(feature = "evm-prove")]
     impl<VC, E: StarkFriEngine<SC>> ContinuationProver<VC, E> {
         pub fn new(
             reader: &impl Halo2ParamsReader,
