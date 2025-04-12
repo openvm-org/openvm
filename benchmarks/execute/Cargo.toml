@@ -30,9 +30,8 @@ tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
-default = ["mimalloc"]
+default = ["jemalloc"]
 profiling = ["openvm-sdk/profiling"]
-aggregation = []
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
