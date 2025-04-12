@@ -57,7 +57,7 @@ hex.workspace = true
 forge-fmt = { workspace = true, optional = true }
 
 [features]
-default = ["parallel", "jemalloc", "evm-verify"]
+default = ["parallel", "jemalloc", "evm-verify", "bench-metrics"]
 evm-prove = ["openvm-native-recursion/evm-prove"]
 evm-verify = [
     "evm-prove",

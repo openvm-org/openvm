@@ -13,8 +13,6 @@ use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
 #[cfg(feature = "pipeline")]
 use openvm_stark_backend::{config::Val, prover::types::ProofInput};
-#[cfg(feature = "pipeline")]
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
 use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proof};
 use tracing::info_span;
 
@@ -116,10 +114,14 @@ impl<E: StarkFriEngine<SC> + Send + 'static> AggStarkProver<E> {
         let mut proofs = leaf_proofs;
         let mut wrapper_layers = 0;
 
-        #[cfg(not(feature = "pipeline"))]
         loop {
             #[cfg(feature = "bench-metrics")]
             let wall_timer = std::time::Instant::now();
+            let proof_span = info_span!(
+                "agg_layer",
+                group = format!("internal.{internal_node_height}")
+            )
+            .entered();
 
             if proofs.len() == 1 {
                 let actual_air_heights =
@@ -148,18 +150,15 @@ impl<E: StarkFriEngine<SC> + Send + 'static> AggStarkProver<E> {
                 &proofs,
                 self.num_children_internal,
             );
-            proofs = info_span!(
-                "agg_layer",
-                group = format!("internal.{internal_node_height}")
-            )
-            .in_scope(|| {
-                #[cfg(feature = "bench-metrics")]
-                {
-                    metrics::counter!("fri.log_blowup")
-                        .absolute(self.internal_prover.fri_params().log_blowup as u64);
-                    metrics::counter!("num_children").absolute(self.num_children_internal as u64);
-                }
-                let proofs = internal_inputs
+            #[cfg(feature = "bench-metrics")]
+            {
+                metrics::counter!("fri.log_blowup")
+                    .absolute(self.internal_prover.fri_params().log_blowup as u64);
+                metrics::counter!("num_children").absolute(self.num_children_internal as u64);
+            }
+            #[cfg(not(feature = "pipeline"))]
+            {
+                proofs = internal_inputs
                     .into_iter()
                     .map(|input| {
                         internal_node_idx += 1;
@@ -168,65 +167,15 @@ impl<E: StarkFriEngine<SC> + Send + 'static> AggStarkProver<E> {
                         })
                     })
                     .collect();
-
-                #[cfg(feature = "bench-metrics")]
-                metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
-
-                proofs
-            });
-            internal_node_height += 1;
-        }
-
-        #[cfg(feature = "pipeline")]
-        loop {
-            tracing::info!(
-                "AggStarkProver::generate_internal_proof_impl() pipeline feature enabled"
-            );
-            let wall_timer = std::time::Instant::now();
-            if proofs.len() == 1 {
-                let actual_air_heights =
-                    self.root_prover
-                        .execute_for_air_heights(RootVmVerifierInput {
-                            proofs: vec![proofs[0].clone()],
-                            public_values: public_values.to_vec(),
-                        });
-                // Root verifier can handle the internal proof. We can stop here.
-                if heights_le(
-                    &actual_air_heights,
-                    &self.root_prover.root_verifier_pk.air_heights,
-                ) {
-                    break;
-                }
-                if wrapper_layers >= self.max_internal_wrapper_layers {
-                    panic!("The heights of the root verifier still exceed the required heights after {} wrapper layers", self.max_internal_wrapper_layers);
-                }
-                wrapper_layers += 1;
             }
-
-            let internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
-                self.internal_prover
-                    .committed_exe
-                    .get_program_commit()
-                    .into(),
-                &proofs,
-                self.num_children_internal,
-            );
-            let internal_inputs_num = internal_inputs.len();
-
-            proofs = info_span!(
-                "agg_layer",
-                group = format!("internal.{internal_node_height}")
-            )
-            .in_scope(|| {
-                #[cfg(feature = "bench-metrics")]
-                {
-                    metrics::counter!("fri.log_blowup")
-                        .absolute(self.internal_prover.fri_params().log_blowup as u64);
-                    metrics::counter!("num_children").absolute(self.num_children_internal as u64);
-                }
-
+            #[cfg(feature = "pipeline")]
+            {
+                tracing::info!(
+                    "AggStarkProver::generate_internal_proof_impl() pipeline feature enabled"
+                );
+                let internal_inputs_num = internal_inputs.len();
                 // Use parallel processing with expanded SingleSegmentVmProver::prove
-                let proofs = std::thread::scope(|s| {
+                proofs = std::thread::scope(|s| {
                     // Create channels
                     let (input_tx, input_rx) =
                         mpsc::sync_channel::<(usize, Streams<Val<SC>>, tracing::Span)>(1);
@@ -263,7 +212,7 @@ impl<E: StarkFriEngine<SC> + Send + 'static> AggStarkProver<E> {
 
                     // ===== Proof Generation Thread =====
                     let prove_handle = s.spawn(move || {
-                        let prove_engine = BabyBearPoseidon2Engine::new(fri_params);
+                        let prove_engine = E::new(fri_params);
                         let vm = VirtualMachine::new(prove_engine, vm_config.clone());
 
                         for (idx, proof_input, parent_span) in proof_input_rx.iter() {
@@ -329,16 +278,11 @@ impl<E: StarkFriEngine<SC> + Send + 'static> AggStarkProver<E> {
 
                     collector_handle.join().expect("Collector thread panicked")
                 });
+            }
+            proof_span.exit();
+            #[cfg(feature = "bench-metrics")]
+            metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
 
-                tracing::info!(
-                    "agg_layer wall time, group = internal.{internal_node_height}: {:.3}s",
-                    wall_timer.elapsed().as_secs_f64()
-                );
-                #[cfg(feature = "bench-metrics")]
-                metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
-
-                proofs
-            });
             internal_node_height += 1;
         }
 
@@ -429,7 +373,7 @@ impl LeafProvingController {
                 });
 
                 let prove_handle = s.spawn(move || {
-                    let prove_engine = BabyBearPoseidon2Engine::new(fri_params);
+                    let prove_engine = E::new(fri_params);
                     let vm = VirtualMachine::new(prove_engine, vm_config.clone());
 
                     for (proof_input, parent_span) in proof_input_rx.iter() {
