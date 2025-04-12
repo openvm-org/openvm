@@ -58,13 +58,13 @@ tempfile.workspace = true
 hex.workspace = true
 
 [features]
-default = ["parallel"]
+default = ["parallel", "bench-metrics"]
 bench-metrics = [
     "openvm-circuit/bench-metrics",
     "openvm-native-recursion/bench-metrics",
     "openvm-native-compiler/bench-metrics",
 ]
+pipeline = [] # pipelines execution,tracegen,stark-proving
 profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
 parallel = ["openvm-circuit/parallel"]
-pipeline = [] # pipelines execution,tracegen,stark-proving
 test-utils = ["openvm-circuit/test-utils"]
