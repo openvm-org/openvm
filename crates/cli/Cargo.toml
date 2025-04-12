@@ -48,6 +48,7 @@ profiling = ["openvm-sdk/profiling"]
 # performance features:
 # (rayon is always imported because of halo2, so "parallel" feature is redundant)
 parallel = ["openvm-sdk/parallel"]
+pipeline = ["openvm-sdk/pipeline"]
 mimalloc = ["openvm-sdk/mimalloc"]
 jemalloc = ["openvm-sdk/jemalloc"]
 jemalloc-prof = ["openvm-sdk/jemalloc-prof"]

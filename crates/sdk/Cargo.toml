@@ -76,7 +76,7 @@ test-utils = ["openvm-circuit/test-utils"]
 # performance features:
 # (rayon is always imported because of halo2, so "parallel" feature is redundant)
 parallel = ["openvm-circuit/parallel"]
-pipeline = []
+pipeline = [] # pipelines execution,tracegen,stark-proving
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
