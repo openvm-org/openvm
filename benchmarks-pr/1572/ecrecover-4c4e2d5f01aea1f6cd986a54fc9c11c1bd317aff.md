@@ -1,0 +1,196 @@
+| Summary | Proof Time (s) | Parallel Proof Time (s) |
+|:---|---:|---:|
+| Total | <span style='color: green'>(-0 [-0.6%])</span> 14.13 | <span style='color: green'>(-0 [-0.6%])</span> 14.13 |
+| ecrecover_program | <span style='color: green'>(-0 [-1.0%])</span> 1.43 | <span style='color: green'>(-0 [-1.0%])</span> 1.43 |
+| leaf | <span style='color: green'>(-0 [-0.5%])</span> 12.70 | <span style='color: green'>(-0 [-0.5%])</span> 12.70 |
+
+
+| ecrecover_program |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` | <span style='color: green'>(-15 [-1.0%])</span> 1,430 | <span style='color: green'>(-15 [-1.0%])</span> 1,430 | <span style='color: green'>(-15 [-1.0%])</span> 1,430 | <span style='color: green'>(-15 [-1.0%])</span> 1,430 |
+| `main_cells_used     ` |  14,470,186 |  14,470,186 |  14,470,186 |  14,470,186 |
+| `total_cycles        ` |  289,447 |  289,447 |  289,447 |  289,447 |
+| `execute_time_ms     ` | <span style='color: red'>(+1 [+0.7%])</span> 146 | <span style='color: red'>(+1 [+0.7%])</span> 146 | <span style='color: red'>(+1 [+0.7%])</span> 146 | <span style='color: red'>(+1 [+0.7%])</span> 146 |
+| `trace_gen_time_ms   ` | <span style='color: red'>(+1 [+0.6%])</span> 182 | <span style='color: red'>(+1 [+0.6%])</span> 182 | <span style='color: red'>(+1 [+0.6%])</span> 182 | <span style='color: red'>(+1 [+0.6%])</span> 182 |
+| `stark_prove_excluding_trace_time_ms` | <span style='color: green'>(-17 [-1.5%])</span> 1,102 | <span style='color: green'>(-17 [-1.5%])</span> 1,102 | <span style='color: green'>(-17 [-1.5%])</span> 1,102 | <span style='color: green'>(-17 [-1.5%])</span> 1,102 |
+| `main_trace_commit_time_ms` | <span style='color: red'>(+3 [+1.8%])</span> 172 | <span style='color: red'>(+3 [+1.8%])</span> 172 | <span style='color: red'>(+3 [+1.8%])</span> 172 | <span style='color: red'>(+3 [+1.8%])</span> 172 |
+| `generate_perm_trace_time_ms` | <span style='color: green'>(-4 [-10.5%])</span> 34 | <span style='color: green'>(-4 [-10.5%])</span> 34 | <span style='color: green'>(-4 [-10.5%])</span> 34 | <span style='color: green'>(-4 [-10.5%])</span> 34 |
+| `perm_trace_commit_time_ms` | <span style='color: green'>(-1 [-0.5%])</span> 190 | <span style='color: green'>(-1 [-0.5%])</span> 190 | <span style='color: green'>(-1 [-0.5%])</span> 190 | <span style='color: green'>(-1 [-0.5%])</span> 190 |
+| `quotient_poly_compute_time_ms` | <span style='color: green'>(-1 [-0.8%])</span> 125 | <span style='color: green'>(-1 [-0.8%])</span> 125 | <span style='color: green'>(-1 [-0.8%])</span> 125 | <span style='color: green'>(-1 [-0.8%])</span> 125 |
+| `quotient_poly_commit_time_ms` | <span style='color: green'>(-16 [-9.4%])</span> 154 | <span style='color: green'>(-16 [-9.4%])</span> 154 | <span style='color: green'>(-16 [-9.4%])</span> 154 | <span style='color: green'>(-16 [-9.4%])</span> 154 |
+| `pcs_opening_time_ms ` | <span style='color: red'>(+2 [+0.5%])</span> 410 | <span style='color: red'>(+2 [+0.5%])</span> 410 | <span style='color: red'>(+2 [+0.5%])</span> 410 | <span style='color: red'>(+2 [+0.5%])</span> 410 |
+
+| leaf |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` | <span style='color: green'>(-66 [-0.5%])</span> 12,701 | <span style='color: green'>(-66 [-0.5%])</span> 12,701 | <span style='color: green'>(-66 [-0.5%])</span> 12,701 | <span style='color: green'>(-66 [-0.5%])</span> 12,701 |
+| `main_cells_used     ` |  244,252,294 |  244,252,294 |  244,252,294 |  244,252,294 |
+| `total_cycles        ` |  2,988,524 |  2,988,524 |  2,988,524 |  2,988,524 |
+| `execute_time_ms     ` | <span style='color: green'>(-12 [-1.1%])</span> 1,106 | <span style='color: green'>(-12 [-1.1%])</span> 1,106 | <span style='color: green'>(-12 [-1.1%])</span> 1,106 | <span style='color: green'>(-12 [-1.1%])</span> 1,106 |
+| `trace_gen_time_ms   ` | <span style='color: green'>(-79 [-3.3%])</span> 2,316 | <span style='color: green'>(-79 [-3.3%])</span> 2,316 | <span style='color: green'>(-79 [-3.3%])</span> 2,316 | <span style='color: green'>(-79 [-3.3%])</span> 2,316 |
+| `stark_prove_excluding_trace_time_ms` | <span style='color: red'>(+25 [+0.3%])</span> 9,279 | <span style='color: red'>(+25 [+0.3%])</span> 9,279 | <span style='color: red'>(+25 [+0.3%])</span> 9,279 | <span style='color: red'>(+25 [+0.3%])</span> 9,279 |
+| `main_trace_commit_time_ms` | <span style='color: red'>(+2 [+0.1%])</span> 1,584 | <span style='color: red'>(+2 [+0.1%])</span> 1,584 | <span style='color: red'>(+2 [+0.1%])</span> 1,584 | <span style='color: red'>(+2 [+0.1%])</span> 1,584 |
+| `generate_perm_trace_time_ms` | <span style='color: red'>(+8 [+1.1%])</span> 753 | <span style='color: red'>(+8 [+1.1%])</span> 753 | <span style='color: red'>(+8 [+1.1%])</span> 753 | <span style='color: red'>(+8 [+1.1%])</span> 753 |
+| `perm_trace_commit_time_ms` | <span style='color: red'>(+14 [+0.5%])</span> 2,969 | <span style='color: red'>(+14 [+0.5%])</span> 2,969 | <span style='color: red'>(+14 [+0.5%])</span> 2,969 | <span style='color: red'>(+14 [+0.5%])</span> 2,969 |
+| `quotient_poly_compute_time_ms` | <span style='color: green'>(-4 [-0.3%])</span> 1,344 | <span style='color: green'>(-4 [-0.3%])</span> 1,344 | <span style='color: green'>(-4 [-0.3%])</span> 1,344 | <span style='color: green'>(-4 [-0.3%])</span> 1,344 |
+| `quotient_poly_commit_time_ms` | <span style='color: green'>(-1 [-0.1%])</span> 828 | <span style='color: green'>(-1 [-0.1%])</span> 828 | <span style='color: green'>(-1 [-0.1%])</span> 828 | <span style='color: green'>(-1 [-0.1%])</span> 828 |
+| `pcs_opening_time_ms ` | <span style='color: red'>(+9 [+0.5%])</span> 1,797 | <span style='color: red'>(+9 [+0.5%])</span> 1,797 | <span style='color: red'>(+9 [+0.5%])</span> 1,797 | <span style='color: red'>(+9 [+0.5%])</span> 1,797 |
+
+
+
+<details>
+<summary>Detailed Metrics</summary>
+
+| group | num_segments | keygen_time_ms | commit_exe_time_ms |
+| --- | --- | --- | --- |
+| ecrecover_program | 1 | 920 | 7 | 
+
+| group | air_name | quotient_deg | interactions | constraints |
+| --- | --- | --- | --- | --- |
+| ecrecover_program | AccessAdapterAir<16> | 2 | 5 | 12 | 
+| ecrecover_program | AccessAdapterAir<2> | 2 | 5 | 12 | 
+| ecrecover_program | AccessAdapterAir<32> | 2 | 5 | 12 | 
+| ecrecover_program | AccessAdapterAir<4> | 2 | 5 | 12 | 
+| ecrecover_program | AccessAdapterAir<8> | 2 | 5 | 12 | 
+| ecrecover_program | BitwiseOperationLookupAir<8> | 2 | 2 | 4 | 
+| ecrecover_program | KeccakVmAir | 2 | 321 | 4,513 | 
+| ecrecover_program | MemoryMerkleAir<8> | 2 | 4 | 39 | 
+| ecrecover_program | PersistentBoundaryAir<8> | 2 | 3 | 7 | 
+| ecrecover_program | PhantomAir | 2 | 3 | 5 | 
+| ecrecover_program | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 2 | 1 | 286 | 
+| ecrecover_program | ProgramAir | 1 | 1 | 4 | 
+| ecrecover_program | RangeTupleCheckerAir<2> | 1 | 1 | 4 | 
+| ecrecover_program | Rv32HintStoreAir | 2 | 18 | 28 | 
+| ecrecover_program | VariableRangeCheckerAir | 1 | 1 | 4 | 
+| ecrecover_program | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 2 | 20 | 37 | 
+| ecrecover_program | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 2 | 18 | 40 | 
+| ecrecover_program | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 2 | 24 | 91 | 
+| ecrecover_program | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 2 | 11 | 20 | 
+| ecrecover_program | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 2 | 13 | 35 | 
+| ecrecover_program | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 2 | 10 | 18 | 
+| ecrecover_program | VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8> | 2 | 25 | 225 | 
+| ecrecover_program | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 2 | 16 | 20 | 
+| ecrecover_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | 2 | 18 | 33 | 
+| ecrecover_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 2 | 17 | 40 | 
+| ecrecover_program | VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | 2 | 25 | 84 | 
+| ecrecover_program | VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | 2 | 24 | 31 | 
+| ecrecover_program | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 2 | 19 | 19 | 
+| ecrecover_program | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 2 | 12 | 14 | 
+| ecrecover_program | VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir> | 2 | 415 | 480 | 
+| ecrecover_program | VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, FieldExpressionCoreAir> | 2 | 158 | 190 | 
+| ecrecover_program | VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir> | 2 | 428 | 457 | 
+| ecrecover_program | VmConnectorAir | 2 | 5 | 11 | 
+| leaf | AccessAdapterAir<2> | 2 | 5 | 12 | 
+| leaf | AccessAdapterAir<4> | 2 | 5 | 12 | 
+| leaf | AccessAdapterAir<8> | 2 | 5 | 12 | 
+| leaf | FriReducedOpeningAir | 2 | 39 | 71 | 
+| leaf | JalRangeCheckAir | 2 | 9 | 14 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 1> | 2 | 136 | 572 | 
+| leaf | PhantomAir | 2 | 3 | 5 | 
+| leaf | ProgramAir | 1 | 1 | 4 | 
+| leaf | VariableRangeCheckerAir | 1 | 1 | 4 | 
+| leaf | VmAirWrapper<AluNativeAdapterAir, FieldArithmeticCoreAir> | 2 | 15 | 27 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 2 | 11 | 25 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 2 | 11 | 30 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 2 | 15 | 20 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 2 | 15 | 20 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 2 | 15 | 27 | 
+| leaf | VmConnectorAir | 2 | 5 | 11 | 
+| leaf | VolatileBoundaryAir | 2 | 7 | 19 | 
+
+| group | air_name | idx | rows | prep_cols | perm_cols | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| leaf | AccessAdapterAir<2> | 0 | 1,048,576 |  | 16 | 11 | 28,311,552 | 
+| leaf | AccessAdapterAir<4> | 0 | 524,288 |  | 16 | 13 | 15,204,352 | 
+| leaf | AccessAdapterAir<8> | 0 | 32,768 |  | 16 | 17 | 1,081,344 | 
+| leaf | FriReducedOpeningAir | 0 | 4,194,304 |  | 84 | 27 | 465,567,744 | 
+| leaf | JalRangeCheckAir | 0 | 65,536 |  | 28 | 12 | 2,621,440 | 
+| leaf | NativePoseidon2Air<BabyBearParameters>, 1> | 0 | 262,144 |  | 312 | 398 | 186,122,240 | 
+| leaf | PhantomAir | 0 | 32,768 |  | 12 | 6 | 589,824 | 
+| leaf | ProgramAir | 0 | 524,288 |  | 8 | 10 | 9,437,184 | 
+| leaf | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| leaf | VmAirWrapper<AluNativeAdapterAir, FieldArithmeticCoreAir> | 0 | 2,097,152 |  | 36 | 29 | 136,314,880 | 
+| leaf | VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1> | 0 | 524,288 |  | 28 | 23 | 26,738,688 | 
+| leaf | VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir> | 0 | 64 |  | 28 | 27 | 3,520 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1> | 0 | 1,048,576 |  | 40 | 21 | 63,963,136 | 
+| leaf | VmAirWrapper<NativeLoadStoreAdapterAir<4>, NativeLoadStoreCoreAir<4> | 0 | 262,144 |  | 40 | 27 | 17,563,648 | 
+| leaf | VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir> | 0 | 262,144 |  | 36 | 38 | 19,398,656 | 
+| leaf | VmConnectorAir | 0 | 2 | 1 | 16 | 5 | 42 | 
+| leaf | VolatileBoundaryAir | 0 | 1,048,576 |  | 20 | 12 | 33,554,432 | 
+
+| group | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| ecrecover_program | AccessAdapterAir<16> | 0 | 16,384 |  | 16 | 25 | 671,744 | 
+| ecrecover_program | AccessAdapterAir<32> | 0 | 8,192 |  | 16 | 41 | 466,944 | 
+| ecrecover_program | AccessAdapterAir<4> | 0 | 64 |  | 16 | 13 | 1,856 | 
+| ecrecover_program | AccessAdapterAir<8> | 0 | 32,768 |  | 16 | 17 | 1,081,344 | 
+| ecrecover_program | BitwiseOperationLookupAir<8> | 0 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| ecrecover_program | KeccakVmAir | 0 | 128 |  | 1,056 | 3,163 | 540,032 | 
+| ecrecover_program | MemoryMerkleAir<8> | 0 | 4,096 |  | 16 | 32 | 196,608 | 
+| ecrecover_program | PersistentBoundaryAir<8> | 0 | 4,096 |  | 12 | 20 | 131,072 | 
+| ecrecover_program | PhantomAir | 0 | 16 |  | 12 | 6 | 288 | 
+| ecrecover_program | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 0 | 4,096 |  | 8 | 300 | 1,261,568 | 
+| ecrecover_program | ProgramAir | 0 | 16,384 |  | 8 | 10 | 294,912 | 
+| ecrecover_program | RangeTupleCheckerAir<2> | 0 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| ecrecover_program | Rv32HintStoreAir | 0 | 256 |  | 44 | 32 | 19,456 | 
+| ecrecover_program | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| ecrecover_program | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 0 | 131,072 |  | 52 | 36 | 11,534,336 | 
+| ecrecover_program | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 0 | 4,096 |  | 40 | 37 | 315,392 | 
+| ecrecover_program | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 0 | 16,384 |  | 52 | 53 | 1,720,320 | 
+| ecrecover_program | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 0 | 16,384 |  | 28 | 26 | 884,736 | 
+| ecrecover_program | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 0 | 32,768 |  | 32 | 32 | 2,097,152 | 
+| ecrecover_program | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 0 | 8,192 |  | 28 | 18 | 376,832 | 
+| ecrecover_program | VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8> | 0 | 4,096 |  | 56 | 166 | 909,312 | 
+| ecrecover_program | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 0 | 8,192 |  | 36 | 28 | 524,288 | 
+| ecrecover_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | 0 | 4,096 |  | 52 | 36 | 360,448 | 
+| ecrecover_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 0 | 131,072 |  | 52 | 41 | 12,189,696 | 
+| ecrecover_program | VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | 0 | 8 |  | 72 | 39 | 888 | 
+| ecrecover_program | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 0 | 4,096 |  | 52 | 31 | 339,968 | 
+| ecrecover_program | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 0 | 4,096 |  | 28 | 20 | 196,608 | 
+| ecrecover_program | VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir> | 0 | 2,048 |  | 836 | 547 | 2,832,384 | 
+| ecrecover_program | VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, FieldExpressionCoreAir> | 0 | 32 |  | 320 | 263 | 18,656 | 
+| ecrecover_program | VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir> | 0 | 1,024 |  | 860 | 625 | 1,520,640 | 
+| ecrecover_program | VmConnectorAir | 0 | 2 | 1 | 16 | 5 | 42 | 
+
+| group | idx | trace_gen_time_ms | total_proof_time_ms | total_cycles | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| leaf | 0 | 2,316 | 12,701 | 2,988,524 | 1,008,831,978 | 9,279 | 1,344 | 828 | 2,969 | 1,797 | 1,584 | 244,252,294 | 753 | 1,106 | 
+
+| group | idx | trace_height_constraint | weighted_sum | threshold |
+| --- | --- | --- | --- | --- |
+| leaf | 0 | 0 | 18,022,532 | 2,013,265,921 | 
+| leaf | 0 | 1 | 123,437,312 | 2,013,265,921 | 
+| leaf | 0 | 2 | 9,011,266 | 2,013,265,921 | 
+| leaf | 0 | 3 | 125,108,484 | 2,013,265,921 | 
+| leaf | 0 | 4 | 524,288 | 2,013,265,921 | 
+| leaf | 0 | 5 | 276,890,314 | 2,013,265,921 | 
+
+| group | segment | trace_gen_time_ms | total_proof_time_ms | total_cycles | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ecrecover_program | 0 | 182 | 1,430 | 289,447 | 48,240,297 | 1,102 | 125 | 154 | 190 | 410 | 172 | 14,470,186 | 34 | 146 | 
+
+| group | segment | trace_height_constraint | weighted_sum | threshold |
+| --- | --- | --- | --- | --- |
+| ecrecover_program | 0 | 0 | 736,214 | 2,013,265,921 | 
+| ecrecover_program | 0 | 1 | 2,273,180 | 2,013,265,921 | 
+| ecrecover_program | 0 | 2 | 368,107 | 2,013,265,921 | 
+| ecrecover_program | 0 | 3 | 3,796,961 | 2,013,265,921 | 
+| ecrecover_program | 0 | 4 | 16,384 | 2,013,265,921 | 
+| ecrecover_program | 0 | 5 | 8,192 | 2,013,265,921 | 
+| ecrecover_program | 0 | 6 | 882,858 | 2,013,265,921 | 
+| ecrecover_program | 0 | 7 | 16,448 | 2,013,265,921 | 
+| ecrecover_program | 0 | 8 | 9,036,328 | 2,013,265,921 | 
+
+</details>
+
+
+Commit: https://github.com/openvm-org/openvm/commit/4c4e2d5f01aea1f6cd986a54fc9c11c1bd317aff
+
+Max Segment Length: 1048476
+
+Instance Type: 64cpu-linux-arm64
+
+Memory Allocator: jemalloc
+
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/14414890695)
