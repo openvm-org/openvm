@@ -41,3 +41,4 @@ bitcode.workspace = true
 [features]
 default = []
 bench-metrics = ["openvm-sdk/bench-metrics"]
+pipeline = ["openvm-sdk/pipeline"]

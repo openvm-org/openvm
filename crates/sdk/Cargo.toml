@@ -66,5 +66,5 @@ bench-metrics = [
 ]
 profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
 parallel = ["openvm-circuit/parallel"]
-pipeline = []
+pipeline = [] # pipelines execution,tracegen,stark-proving
 test-utils = ["openvm-circuit/test-utils"]
