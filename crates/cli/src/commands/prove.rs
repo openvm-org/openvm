@@ -5,7 +5,7 @@ use eyre::Result;
 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
     commit::AppExecutionCommit,
-    config::SdkVmConfig,
+    config::{AggregationTreeConfig, SdkVmConfig},
     fs::{
         read_agg_pk_from_file, read_app_pk_from_file, read_exe_from_file, write_app_proof_to_file,
         write_evm_proof_to_file,
@@ -56,12 +56,15 @@ enum ProveSubCommand {
 
         #[arg(long, action, help = "Path to output proof", default_value = DEFAULT_EVM_PROOF_PATH)]
         output: PathBuf,
+
+        #[command(flatten)]
+        agg_tree_config: AggregationTreeConfig,
     },
 }
 
 impl ProveCmd {
     pub fn run(&self) -> Result<()> {
-        let sdk = Sdk::new();
+        let mut sdk = Sdk::new();
         match &self.command {
             ProveSubCommand::App {
                 app_pk,
@@ -79,7 +82,9 @@ impl ProveCmd {
                 exe,
                 input,
                 output,
+                agg_tree_config,
             } => {
+                sdk.set_agg_tree_config(*agg_tree_config);
                 let params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
                 let (app_pk, committed_exe, input) =
                     Self::prepare_execution(&sdk, app_pk, exe, input)?;

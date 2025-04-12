@@ -1,3 +1,4 @@
+use clap::Args;
 use openvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use openvm_continuations::verifier::{
     common::types::VmVerifierPvs, internal::types::InternalVmVerifierPvs,
@@ -14,6 +15,11 @@ pub const DEFAULT_APP_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_LEAF_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
 pub const DEFAULT_ROOT_LOG_BLOWUP: usize = 3;
+
+// Aggregation Tree Defaults
+const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
+const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 4;
+const DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS: usize = 4;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppConfig<VC> {
@@ -57,6 +63,23 @@ pub struct Halo2Config {
     pub wrapper_k: Option<usize>,
     /// Sets the profiling mode of halo2 VM
     pub profiling: bool,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Args)]
+pub struct AggregationTreeConfig {
+    /// Each leaf verifier circuit will aggregate this many App VM proofs.
+    #[arg(long, default_value_t = DEFAULT_NUM_CHILDREN_LEAF)]
+    pub num_children_leaf: usize,
+    /// Each internal verifier circuit will aggregate this many proofs,
+    /// where each proof may be of either leaf or internal verifier (self) circuit.
+    #[arg(long, default_value_t = DEFAULT_NUM_CHILDREN_INTERNAL)]
+    pub num_children_internal: usize,
+    /// Safety threshold: how many times to do 1-to-1 aggregation of the "last" internal
+    /// verifier proof before it is small enough for the root verifier circuit.
+    /// Note: almost always no wrapping is needed.
+    #[arg(long, default_value_t = DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS)]
+    pub max_internal_wrapper_layers: usize,
+    // root currently always has 1 child for now
 }
 
 impl<VC> AppConfig<VC> {
@@ -185,5 +208,15 @@ impl AggStarkConfig {
         );
         config.system.profiling = self.profiling;
         config
+    }
+}
+
+impl Default for AggregationTreeConfig {
+    fn default() -> Self {
+        Self {
+            num_children_leaf: DEFAULT_NUM_CHILDREN_LEAF,
+            num_children_internal: DEFAULT_NUM_CHILDREN_INTERNAL,
+            max_internal_wrapper_layers: DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS,
+        }
     }
 }

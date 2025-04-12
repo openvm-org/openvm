@@ -19,6 +19,7 @@ use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proo
 use tracing::info_span;
 
 use crate::{
+    config::AggregationTreeConfig,
     keygen::AggStarkProvingKey,
     prover::{
         vm::{local::VmLocalProver, SingleSegmentVmProver},
@@ -26,10 +27,6 @@ use crate::{
     },
     NonRootCommittedExe, RootSC, F, SC,
 };
-
-pub const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
-const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 2;
-const DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS: usize = 4;
 
 pub struct AggStarkProver<E: StarkFriEngine<SC>> {
     leaf_prover: VmLocalProver<SC, NativeConfig, E>,
@@ -51,11 +48,12 @@ impl<E: StarkFriEngine<SC> + Send + 'static> AggStarkProver<E> {
     pub fn new(
         agg_stark_pk: AggStarkProvingKey,
         leaf_committed_exe: Arc<NonRootCommittedExe>,
+        tree_config: AggregationTreeConfig,
     ) -> Self {
         let leaf_prover =
             VmLocalProver::<SC, NativeConfig, E>::new(agg_stark_pk.leaf_vm_pk, leaf_committed_exe);
         let leaf_controller = LeafProvingController {
-            num_children: DEFAULT_NUM_CHILDREN_LEAF,
+            num_children: tree_config.num_children_leaf,
         };
         let internal_prover = VmLocalProver::<SC, NativeConfig, E>::new(
             agg_stark_pk.internal_vm_pk,
@@ -67,8 +65,8 @@ impl<E: StarkFriEngine<SC> + Send + 'static> AggStarkProver<E> {
             leaf_controller,
             internal_prover,
             root_prover,
-            num_children_internal: DEFAULT_NUM_CHILDREN_INTERNAL,
-            max_internal_wrapper_layers: DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS,
+            num_children_internal: tree_config.num_children_internal,
+            max_internal_wrapper_layers: tree_config.max_internal_wrapper_layers,
         }
     }
 
