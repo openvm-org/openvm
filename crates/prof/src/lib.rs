@@ -51,7 +51,10 @@ impl MetricDb {
 
         for (label, metrics) in self.flat_dict.iter() {
             let is_top_level_group = label.0.len() == top_level_group_label_len
-                && label.0.iter().any(|(k, _v)| k == "group");
+                && label
+                    .0
+                    .iter()
+                    .any(|(k, v)| k == "group" && !v.contains("keygen"));
             if is_top_level_group && !metrics.iter().any(|m| m.name == PROOF_TIME_LABEL) {
                 panic!("Top level group: {:?}, must have PROOF_TIME_LABEL", label);
             }
@@ -62,6 +65,7 @@ impl MetricDb {
             // by measuring thread time instead of actual wall time, So we delete the legacy code:
             //     let total_time = execute_time + trace_gen_time + prove_excl_trace_time;
             //     metrics.push(Metric::new(PROOF_TIME_LABEL.to_string(), total_time));
+            // We filter out agg_keygen since `total_proof_time_ms` is not a relevant metric
         }
     }
 
