@@ -18,7 +18,7 @@ pub const DEFAULT_ROOT_LOG_BLOWUP: usize = 3;
 
 // Aggregation Tree Defaults
 const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
-const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 4;
+const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 3;
 const DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS: usize = 4;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
