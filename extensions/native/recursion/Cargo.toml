@@ -18,10 +18,7 @@ p3-dft = { workspace = true }
 p3-fri = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-merkle-tree = { workspace = true }
-snark-verifier-sdk = { workspace = true, features = [
-    "loader_evm",
-    "revm",
-], optional = true }
+snark-verifier-sdk = { workspace = true, optional = true }
 itertools.workspace = true
 rand.workspace = true
 serde.workspace = true
@@ -39,20 +36,25 @@ tempfile = "3.14.0"
 bitcode = { workspace = true }
 
 [features]
-default = ["parallel", "mimalloc"]
-parallel = ["openvm-stark-backend/parallel"]
+default = ["parallel", "jemalloc"]
 static-verifier = [
     "openvm-native-compiler/halo2-compiler",
-    "dep:snark-verifier-sdk",
+    "snark-verifier-sdk",
     "dep:once_cell",
     "dep:serde_with",
 ]
+evm-prove = ["static-verifier", "snark-verifier-sdk/loader_evm"]
+evm-verify = [
+    "evm-prove",
+    "snark-verifier-sdk/revm",
+] # evm-verify needs REVM to simulate EVM contract verification
 test-utils = ["openvm-circuit/test-utils"]
 bench-metrics = [
     "dep:metrics",
     "openvm-circuit/bench-metrics",
     "openvm-native-compiler/bench-metrics",
 ]
+parallel = ["openvm-stark-backend/parallel"]
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 nightly-features = ["openvm-circuit/nightly-features"]

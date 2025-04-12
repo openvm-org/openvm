@@ -52,6 +52,7 @@ pub enum EvmProofConversionError {
 }
 
 impl EvmProof {
+    #[cfg(feature = "evm-prove")]
     /// Return bytes calldata to be passed to the verifier contract.
     pub fn verifier_calldata(&self) -> Vec<u8> {
         let evm_proof: RawEvmProof = self.clone().try_into().unwrap();

@@ -17,7 +17,6 @@ use openvm_stark_backend::p3_field::extension::BinomialExtensionField;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use snark_verifier_sdk::{
-    evm::encode_calldata,
     halo2::{gen_dummy_snark_from_vk, gen_snark_shplonk},
     snark_verifier::halo2_base::{
         gates::{
@@ -74,8 +73,9 @@ pub struct Halo2ProvingMetadata {
 
 impl RawEvmProof {
     /// Return bytes calldata to be passed to the verifier contract.
+    #[cfg(feature = "evm-prove")]
     pub fn verifier_calldata(&self) -> Vec<u8> {
-        encode_calldata(&[self.instances.clone()], &self.proof)
+        snark_verifier_sdk::evm::encode_calldata(&[self.instances.clone()], &self.proof)
     }
 }
 

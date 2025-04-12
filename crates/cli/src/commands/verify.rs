@@ -3,17 +3,11 @@ use std::path::PathBuf;
 use clap::Parser;
 use eyre::Result;
 use openvm_sdk::{
-    fs::{
-        read_app_proof_from_file, read_app_vk_from_file, read_evm_halo2_verifier_from_folder,
-        read_evm_proof_from_file,
-    },
+    fs::{read_app_proof_from_file, read_app_vk_from_file},
     Sdk,
 };
 
-use crate::default::{
-    DEFAULT_APP_PROOF_PATH, DEFAULT_APP_VK_PATH, DEFAULT_EVM_HALO2_VERIFIER_PATH,
-    DEFAULT_EVM_PROOF_PATH,
-};
+use crate::default::*;
 
 #[derive(Parser)]
 #[command(name = "verify", about = "Verify a proof")]
@@ -31,6 +25,7 @@ enum VerifySubCommand {
         #[arg(long, action, help = "Path to app proof", default_value = DEFAULT_APP_PROOF_PATH)]
         proof: PathBuf,
     },
+    #[cfg(feature = "evm-verify")]
     Evm {
         #[arg(long, action, help = "Path to EVM proof", default_value = DEFAULT_EVM_PROOF_PATH)]
         proof: PathBuf,
@@ -46,7 +41,12 @@ impl VerifyCmd {
                 let app_proof = read_app_proof_from_file(proof)?;
                 sdk.verify_app_proof(&app_vk, &app_proof)?;
             }
+            #[cfg(feature = "evm-verify")]
             VerifySubCommand::Evm { proof } => {
+                use openvm_sdk::fs::{
+                    read_evm_halo2_verifier_from_folder, read_evm_proof_from_file,
+                };
+
                 let evm_verifier = read_evm_halo2_verifier_from_folder(DEFAULT_EVM_HALO2_VERIFIER_PATH).map_err(|e| {
                     eyre::eyre!("Failed to read EVM verifier: {}\nPlease run 'cargo openvm evm-proving-setup' first", e)
                 })?;

@@ -36,7 +36,7 @@ openvm-circuit = { workspace = true, features = ["test-utils"] }
 hex.workspace = true
 
 [features]
-default = ["parallel", "mimalloc"]
+default = ["parallel", "jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
 # performance features:

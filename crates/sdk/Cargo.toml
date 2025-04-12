@@ -8,7 +8,6 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-
 p3-fri = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
@@ -35,8 +34,8 @@ openvm-circuit = { workspace = true }
 openvm-continuations = { workspace = true }
 openvm = { workspace = true }
 
-alloy-primitives = { workspace = true }
-alloy-sol-types = { workspace = true, features = ["json"] }
+alloy-primitives = { workspace = true, optional = true }
+alloy-sol-types = { workspace = true, optional = true, features = ["json"] }
 bitcode = { workspace = true }
 bon = { workspace = true }
 derivative = { workspace = true }
@@ -58,12 +57,26 @@ tempfile.workspace = true
 hex.workspace = true
 
 [features]
-default = ["parallel"]
+default = ["parallel", "jemalloc", "evm-verify"]
+evm-prove = ["openvm-native-recursion/evm-prove"]
+evm-verify = [
+    "evm-prove",
+    "openvm-native-recursion/evm-verify",
+    "dep:alloy-primitives",
+    "dep:alloy-sol-types",
+]
 bench-metrics = [
     "openvm-circuit/bench-metrics",
     "openvm-native-recursion/bench-metrics",
     "openvm-native-compiler/bench-metrics",
 ]
+# for guest profiling:
 profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
-parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
+# performance features:
+# (rayon is always imported because of halo2, so "parallel" feature is redundant)
+parallel = ["openvm-circuit/parallel"]
+mimalloc = ["openvm-circuit/mimalloc"]
+jemalloc = ["openvm-circuit/jemalloc"]
+jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
+nightly-features = ["openvm-circuit/nightly-features"]

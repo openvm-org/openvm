@@ -1,7 +1,4 @@
-use cargo_openvm::{
-    commands::{BuildCmd, EvmProvingSetupCmd, KeygenCmd, ProveCmd, RunCmd, VerifyCmd},
-    OPENVM_VERSION_MESSAGE,
-};
+use cargo_openvm::{commands::*, OPENVM_VERSION_MESSAGE};
 use clap::{Parser, Subcommand};
 use eyre::Result;
 use openvm_stark_sdk::config::setup_tracing_with_log_level;
@@ -27,6 +24,7 @@ pub enum VmCliCommands {
     Keygen(KeygenCmd),
     Prove(ProveCmd),
     Run(RunCmd),
+    #[cfg(feature = "evm-verify")]
     Setup(EvmProvingSetupCmd),
     Verify(VerifyCmd),
 }
@@ -41,6 +39,7 @@ async fn main() -> Result<()> {
         VmCliCommands::Run(cmd) => cmd.run(),
         VmCliCommands::Keygen(cmd) => cmd.run(),
         VmCliCommands::Prove(cmd) => cmd.run(),
+        #[cfg(feature = "evm-verify")]
         VmCliCommands::Setup(cmd) => cmd.run().await,
         VmCliCommands::Verify(cmd) => cmd.run(),
     }

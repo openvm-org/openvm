@@ -2,29 +2,25 @@ use itertools::Itertools;
 use openvm_stark_backend::p3_util::log2_ceil_usize;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+#[cfg(feature = "evm-prove")]
+use snark_verifier_sdk::snark_verifier::{
+    halo2_base::halo2_proofs::{halo2curves::bn256::G1Affine, plonk::VerifyingKey},
+    loader::evm::compile_solidity,
+};
 use snark_verifier_sdk::{
-    evm::{evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_sol_code},
     halo2::aggregation::{AggregationCircuit, AggregationConfigParams, VerifierUniversality},
-    snark_verifier::{
-        halo2_base::{
-            gates::circuit::{
-                CircuitBuilderStage,
-                CircuitBuilderStage::{Keygen, Prover},
-            },
-            halo2_proofs::{
-                halo2curves::bn256::G1Affine,
-                plonk::{keygen_pk2, VerifyingKey},
-                poly::commitment::Params,
-            },
-        },
-        loader::evm::compile_solidity,
+    snark_verifier::halo2_base::{
+        gates::circuit::CircuitBuilderStage,
+        halo2_proofs::{plonk::keygen_pk2, poly::commitment::Params},
     },
     CircuitExt, Snark, SHPLONK,
 };
 
+#[cfg(feature = "evm-prove")]
+use crate::halo2::RawEvmProof;
 use crate::halo2::{
     utils::{Halo2ParamsReader, KZG_PARAMS_FOR_SVK},
-    Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, RawEvmProof,
+    Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning,
 };
 
 /// `FallbackEvmVerifier` is for the raw verifier contract outputted by
@@ -63,7 +59,8 @@ impl Halo2WrapperProvingKey {
         let k = params.k();
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
-        let mut circuit = generate_wrapper_circuit_object(Keygen, k as usize, dummy_snark);
+        let mut circuit =
+            generate_wrapper_circuit_object(CircuitBuilderStage::Keygen, k as usize, dummy_snark);
         circuit.calculate_params(Some(MIN_ROWS));
         let config_params = circuit.builder.config_params.clone();
         tracing::info!(
@@ -87,17 +84,19 @@ impl Halo2WrapperProvingKey {
             },
         }
     }
+    #[cfg(feature = "evm-verify")]
     /// A helper function for testing to verify the proof of this circuit with evm verifier.
     pub fn evm_verify(
         evm_verifier: &FallbackEvmVerifier,
         evm_proof: &RawEvmProof,
     ) -> Result<u64, String> {
-        evm_verify(
+        snark_verifier_sdk::evm::evm_verify(
             evm_verifier.artifact.bytecode.clone(),
             vec![evm_proof.instances.clone()],
             evm_proof.proof.clone(),
         )
     }
+    #[cfg(feature = "evm-prove")]
     /// Return deployment code for EVM verifier which can verify the snark of this circuit.
     pub fn generate_fallback_evm_verifier(&self, params: &Halo2Params) -> FallbackEvmVerifier {
         assert_eq!(
@@ -111,6 +110,7 @@ impl Halo2WrapperProvingKey {
             self.pinning.metadata.num_pvs.clone(),
         )
     }
+    #[cfg(feature = "evm-prove")]
     pub fn prove_for_evm(&self, params: &Halo2Params, snark_to_verify: Snark) -> RawEvmProof {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
@@ -118,7 +118,12 @@ impl Halo2WrapperProvingKey {
         let prover_circuit = self.generate_circuit_object_for_proving(k, snark_to_verify);
         let mut pvs = prover_circuit.instances();
         assert_eq!(pvs.len(), 1);
-        let proof = gen_evm_proof_shplonk(params, &self.pinning.pk, prover_circuit, pvs.clone());
+        let proof = snark_verifier_sdk::evm::gen_evm_proof_shplonk(
+            params,
+            &self.pinning.pk,
+            prover_circuit,
+            pvs.clone(),
+        );
         #[cfg(feature = "bench-metrics")]
         metrics::gauge!("total_proof_time_ms").set(start.elapsed().as_millis() as f64);
 
@@ -127,6 +132,8 @@ impl Halo2WrapperProvingKey {
             proof,
         }
     }
+
+    #[cfg(feature = "evm-prove")]
     fn generate_circuit_object_for_proving(
         &self,
         k: usize,
@@ -141,7 +148,7 @@ impl Halo2WrapperProvingKey {
             self.pinning.metadata.num_pvs[0],
             snark_to_verify.instances[0].len() + 12,
         );
-        generate_wrapper_circuit_object(Prover, k, snark_to_verify)
+        generate_wrapper_circuit_object(CircuitBuilderStage::Prover, k, snark_to_verify)
             .use_params(
                 self.pinning
                     .metadata
@@ -157,7 +164,11 @@ impl Halo2WrapperProvingKey {
         let mut k = 20;
         let mut first_run = true;
         loop {
-            let mut circuit = generate_wrapper_circuit_object(Keygen, k, dummy_snark.clone());
+            let mut circuit = generate_wrapper_circuit_object(
+                CircuitBuilderStage::Keygen,
+                k,
+                dummy_snark.clone(),
+            );
             circuit.calculate_params(Some(MIN_ROWS));
             assert_eq!(
                 circuit.builder.config_params.num_advice_per_phase.len(),
@@ -210,13 +221,17 @@ fn emit_wrapper_circuit_metrics(agg_circuit: &AggregationCircuit) {
     metrics::gauge!("halo2_total_cells").set(total_cell as f64);
 }
 
+#[cfg(feature = "evm-prove")]
 fn gen_evm_verifier(
     params: &Halo2Params,
     vk: &VerifyingKey<G1Affine>,
     num_instance: Vec<usize>,
 ) -> FallbackEvmVerifier {
-    let sol_code =
-        gen_evm_verifier_sol_code::<AggregationCircuit, SHPLONK>(params, vk, num_instance);
+    let sol_code = snark_verifier_sdk::evm::gen_evm_verifier_sol_code::<AggregationCircuit, SHPLONK>(
+        params,
+        vk,
+        num_instance,
+    );
     let byte_code = compile_solidity(&sol_code);
     FallbackEvmVerifier {
         sol_code,

@@ -1,18 +1,10 @@
-use std::{
-    env,
-    fs::{create_dir_all, read, write},
-    marker::PhantomData,
-    path::Path,
-    process::Command,
-    sync::Arc,
-};
+use std::{fs::read, marker::PhantomData, path::Path, sync::Arc};
 
+#[cfg(feature = "evm-verify")]
 use alloy_primitives::{Bytes, FixedBytes};
+#[cfg(feature = "evm-verify")]
 use alloy_sol_types::{sol, SolCall, SolValue};
-use commit::commit_app_exe;
-use config::{AggregationTreeConfig, AppConfig};
-use eyre::{Context, Result};
-use keygen::{AppProvingKey, AppVerifyingKey};
+use eyre::Result;
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
@@ -32,7 +24,7 @@ pub use openvm_continuations::{
     static_verifier::{DefaultStaticVerifierPvHandler, StaticVerifierPvHandler},
     RootSC, C, F, SC,
 };
-use openvm_native_recursion::halo2::{utils::Halo2ParamsReader, wrapper::EvmVerifierByteCode};
+use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
 use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -45,22 +37,17 @@ use openvm_transpiler::{
     transpiler::{Transpiler, TranspilerError},
     FromElf,
 };
-use snark_verifier_sdk::{
-    evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit,
-    snark_verifier::halo2_base::halo2_proofs::poly::commitment::Params, SHPLONK,
-};
-use tempfile::tempdir;
+#[cfg(feature = "evm-verify")]
+use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
 
 use crate::{
-    config::AggConfig,
-    fs::{
-        EVM_HALO2_VERIFIER_BASE_NAME, EVM_HALO2_VERIFIER_INTERFACE_NAME,
-        EVM_HALO2_VERIFIER_PARENT_NAME,
-    },
-    keygen::{AggProvingKey, AggStarkProvingKey},
-    prover::{AppProver, ContinuationProver, StarkProver},
-    types::{EvmHalo2Verifier, EvmProof, NUM_BN254_ACCUMULATORS},
+    commit::commit_app_exe,
+    config::{AggConfig, AggregationTreeConfig, AppConfig},
+    keygen::{AggProvingKey, AggStarkProvingKey, AppProvingKey, AppVerifyingKey},
+    prover::{AppProver, StarkProver},
 };
+#[cfg(feature = "evm-prove")]
+use crate::{prover::ContinuationProver, types::EvmProof};
 
 pub mod codec;
 pub mod commit;
@@ -81,6 +68,7 @@ pub const EVM_HALO2_VERIFIER_INTERFACE: &str =
 pub const EVM_HALO2_VERIFIER_TEMPLATE: &str =
     include_str!("../contracts/template/OpenVmHalo2Verifier.sol");
 
+#[cfg(feature = "evm-verify")]
 sol! {
     IOpenVmHalo2Verifier,
     concat!(env!("CARGO_MANIFEST_DIR"), "/contracts/abi/IOpenVmHalo2Verifier.json"),
@@ -280,6 +268,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(proof)
     }
 
+    #[cfg(feature = "evm-prove")]
     pub fn generate_evm_proof<VC: VmConfig<F>>(
         &self,
         reader: &impl Halo2ParamsReader,
@@ -298,11 +287,29 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(proof)
     }
 
+    #[cfg(feature = "evm-verify")]
     pub fn generate_halo2_verifier_solidity(
         &self,
         reader: &impl Halo2ParamsReader,
         agg_pk: &AggProvingKey,
-    ) -> Result<EvmHalo2Verifier> {
+    ) -> Result<types::EvmHalo2Verifier> {
+        use std::{
+            fs::{create_dir_all, write},
+            process::Command,
+        };
+
+        use eyre::Context;
+        use openvm_native_recursion::halo2::wrapper::EvmVerifierByteCode;
+        use snark_verifier::halo2_base::halo2_proofs::poly::commitment::Params;
+        use snark_verifier_sdk::SHPLONK;
+        use tempfile::tempdir;
+        use types::EvmHalo2Verifier;
+
+        use crate::fs::{
+            EVM_HALO2_VERIFIER_BASE_NAME, EVM_HALO2_VERIFIER_INTERFACE_NAME,
+            EVM_HALO2_VERIFIER_PARENT_NAME,
+        };
+
         let params = reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
         let pinning = &agg_pk.halo2_pk.wrapper.pinning;
 
@@ -399,12 +406,15 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(evm_verifier)
     }
 
+    #[cfg(feature = "evm-verify")]
     /// Uses the `verify(..)` interface of the `OpenVmHalo2Verifier` contract.
     pub fn verify_evm_halo2_proof(
         &self,
-        openvm_verifier: &EvmHalo2Verifier,
+        openvm_verifier: &types::EvmHalo2Verifier,
         evm_proof: &EvmProof,
     ) -> Result<u64> {
+        use crate::types::NUM_BN254_ACCUMULATORS;
+
         let EvmProof {
             accumulators,
             proof,
@@ -473,6 +483,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
 ///
 /// Once we find "OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier," we can skip
 /// to the appropriate offset to get the compiled bytecode.
+#[cfg(feature = "evm-verify")]
 fn extract_binary(output: &[u8], contract_name: &str) -> Vec<u8> {
     let split = split_by_ascii_whitespace(output);
     let contract_name_bytes = contract_name.as_bytes();
@@ -486,6 +497,7 @@ fn extract_binary(output: &[u8], contract_name: &str) -> Vec<u8> {
     panic!("Contract '{}' not found", contract_name);
 }
 
+#[cfg(feature = "evm-verify")]
 fn split_by_ascii_whitespace(bytes: &[u8]) -> Vec<&[u8]> {
     let mut split = Vec::new();
     let mut start = None;

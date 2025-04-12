@@ -10,7 +10,7 @@ license.workspace = true
 [dependencies]
 openvm-benchmarks-utils.workspace = true
 openvm-circuit.workspace = true
-openvm-sdk.workspace = true
+openvm-sdk = { workspace = true, features = ["evm-verify"] }
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
 openvm-transpiler.workspace = true
@@ -43,11 +43,10 @@ tracing.workspace = true
 [dev-dependencies]
 
 [features]
-default = ["parallel", "mimalloc", "bench-metrics"]
+default = ["parallel", "jemalloc", "bench-metrics"]
 bench-metrics = ["openvm-native-recursion/bench-metrics"]
 profiling = ["openvm-sdk/profiling"]
 aggregation = []
-static-verifier = ["openvm-native-recursion/static-verifier"]
 parallel = ["openvm-native-recursion/parallel"]
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]

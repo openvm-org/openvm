@@ -293,6 +293,7 @@ fn test_public_values_and_leaf_verification() {
     }
 }
 
+#[cfg(feature = "evm-verify")]
 #[test]
 fn test_static_verifier_custom_pv_handler() {
     // Define custom public values handler and implement StaticVerifierPvHandler trait on it
@@ -394,6 +395,7 @@ fn test_static_verifier_custom_pv_handler() {
     Halo2WrapperProvingKey::evm_verify(&evm_verifier, &evm_proof).unwrap();
 }
 
+#[cfg(feature = "evm-verify")]
 #[test]
 fn test_e2e_proof_generation_and_verification_with_pvs() {
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
