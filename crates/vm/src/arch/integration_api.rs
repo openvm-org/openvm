@@ -21,7 +21,7 @@ use openvm_stark_backend::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{ExecutionState, InstructionExecutor, Result};
+use super::{ExecutionState, InstructionExecutor, Result, VmState};
 use crate::system::memory::{MemoryController, OfflineMemory};
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -37,6 +37,7 @@ pub trait VmAdapterInterface<T> {
     type ProcessedInstruction;
 }
 
+// TODO: delete
 /// The adapter owns all memory accesses and timestamp changes.
 /// The adapter AIR should also own `ExecutionBridge` and `MemoryBridge`.
 pub trait VmAdapterChip<F> {
@@ -111,6 +112,7 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
 }
 
+// TODO: delete
 /// Trait to be implemented on primitive chip to integrate with the machine.
 pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
     /// Minimum data that must be recorded to be able to generate trace for one row of
@@ -183,6 +185,7 @@ where
     }
 }
 
+// TODO: delete
 pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
     pub to_pc: Option<u32>,
@@ -205,6 +208,20 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     pub reads: I::Reads,
     pub writes: I::Writes,
     pub instruction: I::ProcessedInstruction,
+}
+
+/// Interface for trace generation when the state transition step of a single instruction
+/// uses only one trace row. The trace row is provided as a mutable buffer during both
+/// instruction execution and trace generation.
+/// It is expected that no additional memory allocation is necessary and the trace buffer
+/// is sufficient, with possible overwriting.
+pub trait SingleTraceStep<F> {
+    fn execute(
+        &mut self,
+        state: &mut VmState<OfflineMemory<F>, ()>,
+        instruction: &Instruction<F>,
+        row_slice: &mut [F],
+    ) -> Result<()>;
 }
 
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {
