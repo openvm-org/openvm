@@ -68,6 +68,15 @@ pub enum ExecutionError {
     FailedWithExitCode(u32),
 }
 
+/// Global VM state accessible during instruction execution.
+/// The state is generic in guest memory `MEM` and additional host state `CTX`.
+/// The host state is execution context specific.
+pub struct VmState<MEM, CTX> {
+    pub pc: u32,
+    pub memory: MEM,
+    pub ctx: CTX,
+}
+
 pub trait InstructionExecutor<F> {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
