@@ -5,6 +5,7 @@ use openvm_instructions::exe::SparseMemoryImage;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
+use super::online::GuestMemory;
 use crate::arch::MemoryConfig;
 
 /// (address_space, pointer)
@@ -72,6 +73,7 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
                 ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, len);
                 ptr::copy_nonoverlapping(new, page.as_mut_ptr().add(offset), len);
             } else {
+                assert_eq!(start_page + 1, end_page);
                 let offset = start % PAGE_SIZE;
                 let first_part = PAGE_SIZE - offset;
                 {
@@ -120,11 +122,41 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
         unsafe { result.assume_init() }
     }
 
+    /// # Panics
+    /// If `start..start + size_of<BLOCK>()` is out of bounds.
+    #[inline(always)]
+    pub fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK) {
+        let len = size_of::<BLOCK>();
+        let start_page = start / PAGE_SIZE;
+        let end_page = (start + len - 1) / PAGE_SIZE;
+        let src = values as *const _ as *const u8;
+        unsafe {
+            if start_page == end_page {
+                let offset = start % PAGE_SIZE;
+                let page = self.pages[start_page].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
+                ptr::copy_nonoverlapping(src, page.as_mut_ptr().add(offset), len);
+            } else {
+                assert_eq!(start_page + 1, end_page);
+                let offset = start % PAGE_SIZE;
+                let first_part = PAGE_SIZE - offset;
+                {
+                    let page = self.pages[start_page].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
+                    ptr::copy_nonoverlapping(src, page.as_mut_ptr().add(offset), first_part);
+                }
+                let second_part = len - first_part;
+                {
+                    let page = self.pages[end_page].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
+                    ptr::copy_nonoverlapping(src.add(first_part), page.as_mut_ptr(), second_part);
+                }
+            }
+        }
+    }
+
     /// memcpy of new `values` into pages, memcpy of old existing values into new returned value.
     /// # Panics
     /// If `from..from + size_of<BLOCK>()` is out of bounds.
     #[inline(always)]
-    pub fn set<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK {
+    pub fn replace<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK {
         // Create an uninitialized array for old values.
         let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
         self.set_range_generic(
@@ -278,7 +310,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
         );
         self.paged_vecs
             .get_unchecked_mut((addr_space - self.as_offset) as usize)
-            .set((ptr as usize) * size_of::<T>(), &data)
+            .replace((ptr as usize) * size_of::<T>(), &data)
     }
     pub fn is_empty(&self) -> bool {
         self.paged_vecs.iter().all(|page| page.is_empty())
@@ -302,11 +334,12 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     }
 }
 
-impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
-    /// # Safety
-    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
-    /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub unsafe fn get_range<T: Copy, const N: usize>(&self, (addr_space, ptr): Address) -> [T; N] {
+impl<const PAGE_SIZE: usize> GuestMemory for AddressMap<PAGE_SIZE> {
+    unsafe fn read<T: Copy, const BLOCK_SIZE: usize>(
+        &mut self,
+        addr_space: u32,
+        ptr: u32,
+    ) -> [T; BLOCK_SIZE] {
         debug_assert_eq!(
             size_of::<T>(),
             self.cell_size[(addr_space - self.as_offset) as usize]
@@ -316,14 +349,12 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
             .get((ptr as usize) * size_of::<T>())
     }
 
-    /// # Safety
-    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
-    /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub unsafe fn set_range<T: Copy, const N: usize>(
+    unsafe fn write<T: Copy, const BLOCK_SIZE: usize>(
         &mut self,
-        (addr_space, ptr): Address,
-        values: &[T; N],
-    ) -> [T; N] {
+        addr_space: u32,
+        ptr: u32,
+        values: &[T; BLOCK_SIZE],
+    ) {
         debug_assert_eq!(
             size_of::<T>(),
             self.cell_size[(addr_space - self.as_offset) as usize],
@@ -331,7 +362,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
         );
         self.paged_vecs
             .get_unchecked_mut((addr_space - self.as_offset) as usize)
-            .set((ptr as usize) * size_of::<T>(), values)
+            .set((ptr as usize) * size_of::<T>(), values);
     }
 }
 

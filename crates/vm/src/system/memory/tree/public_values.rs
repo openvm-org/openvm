@@ -206,7 +206,7 @@ mod tests {
     use super::{UserPublicValuesProof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET};
     use crate::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, SystemConfig},
-        system::memory::{paged_vec::AddressMap, tree::MemoryNode, CHUNK},
+        system::memory::{online::GuestMemory, paged_vec::AddressMap, tree::MemoryNode, CHUNK},
     };
 
     type F = BabyBear;
@@ -224,7 +224,7 @@ mod tests {
             1 << memory_dimensions.address_height,
         );
         unsafe {
-            memory.set_range::<F, 1>((pv_as, 15), &[F::ONE]);
+            memory.write::<F, 1>(pv_as, 15, &[F::ONE]);
         }
         let mut expected_pvs = F::zero_vec(num_public_values);
         expected_pvs[15] = F::ONE;

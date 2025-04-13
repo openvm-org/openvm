@@ -8,6 +8,50 @@ use crate::{
     system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId},
 };
 
+/// API for guest memory conforming to OpenVM ISA
+pub trait GuestMemory {
+    /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
+    ///
+    /// # Safety
+    /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`,
+    /// and it must be the exact type used to represent a single memory cell in
+    /// address space `address_space`. For standard usage,
+    /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
+    unsafe fn read<T: Copy, const BLOCK_SIZE: usize>(
+        &mut self, // &mut potentially for logs?
+        address_space: u32,
+        pointer: u32,
+    ) -> [T; BLOCK_SIZE];
+
+    /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
+    ///
+    /// # Safety
+    /// See [`GuestMemory::read`].
+    unsafe fn write<T: Copy, const BLOCK_SIZE: usize>(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        values: &[T; BLOCK_SIZE],
+    );
+
+    /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns
+    /// the previous values.
+    ///
+    /// # Safety
+    /// See [`GuestMemory::read`].
+    #[inline(always)]
+    unsafe fn replace<T: Copy, const BLOCK_SIZE: usize>(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        values: &[T; BLOCK_SIZE],
+    ) -> [T; BLOCK_SIZE] {
+        let prev = self.read(address_space, pointer);
+        self.write(address_space, pointer, values);
+        prev
+    }
+}
+
 // TO BE DELETED
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MemoryLogEntry<T> {
@@ -80,7 +124,7 @@ impl Memory {
     ) -> (RecordId, [T; BLOCK_SIZE]) {
         debug_assert!(BLOCK_SIZE.is_power_of_two());
 
-        let prev_data = self.data.set_range((address_space, pointer), values);
+        let prev_data = self.data.replace(address_space, pointer, values);
 
         // self.log.push(MemoryLogEntry::Write {
         //     address_space,
@@ -113,7 +157,7 @@ impl Memory {
         //     len: N,
         // });
 
-        let values = self.data.get_range((address_space, pointer));
+        let values = self.data.read(address_space, pointer);
         self.timestamp += 1;
         (self.last_record_id(), values)
     }
