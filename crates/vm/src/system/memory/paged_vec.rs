@@ -102,7 +102,7 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
     }
 
     pub fn memory_size(&self) -> usize {
-        self.pages.len() * PAGE_SIZE
+        self.pages.len().checked_mul(PAGE_SIZE).unwrap()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -248,8 +248,14 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
         // TMP: hardcoding for now
         let mut cell_size = vec![1, 1];
         cell_size.resize(as_cnt, 4);
+        let paged_vecs = cell_size
+            .iter()
+            .map(|&cell_size| {
+                PagedVec::new(mem_size.checked_mul(cell_size).unwrap().div_ceil(PAGE_SIZE))
+            })
+            .collect();
         Self {
-            paged_vecs: vec![PagedVec::new(mem_size.div_ceil(PAGE_SIZE)); as_cnt],
+            paged_vecs,
             cell_size,
             as_offset,
         }

@@ -2,7 +2,10 @@ use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 
-use super::paged_vec::{AddressMap, PAGE_SIZE};
+use super::{
+    paged_vec::{AddressMap, PAGE_SIZE},
+    PagedVec,
+};
 use crate::{
     arch::MemoryConfig,
     system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId},
@@ -18,7 +21,7 @@ pub trait GuestMemory {
     /// address space `address_space`. For standard usage,
     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
     unsafe fn read<T: Copy, const BLOCK_SIZE: usize>(
-        &mut self, // &mut potentially for logs?
+        &mut self,
         address_space: u32,
         pointer: u32,
     ) -> [T; BLOCK_SIZE];
@@ -68,41 +71,81 @@ pub enum MemoryLogEntry<T> {
     IncrementTimestampBy(u32),
 }
 
-/// A simple data structure to read to/write from memory.
-/// Internally storage is in raw bytes (untyped) to align with host memory.
-///
-/// Stores a log of memory accesses to reconstruct aspects of memory state for trace generation.
-pub struct Memory {
-    // TODO: the memory struct should contain an array of the byte size of the type per address
-    // space, passed in from MemoryConfig
-    pub(super) data: AddressMap<PAGE_SIZE>,
-    // TODO: delete
-    pub(super) log: Vec<MemoryLogEntry<u8>>,
+// perf[jpw]: since we restrict `timestamp < 2^29`, we could pack `timestamp, log2(block_size)`
+// into a single u32 to save half the memory, since `block_size` is a power of 2 and its log2
+// is less than 2^3.
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct AccessMetadata {
     timestamp: u32,
+    block_size: u32,
 }
 
-impl Memory {
+/// Online memory that stores additional information for trace generation purposes.
+/// In particular, keeps track of timestamp.
+pub struct TracingMemory {
+    pub timestamp: u32,
+    // TODO: the memory struct should contain an array of the byte size of the type per address
+    // space, passed in from MemoryConfig
+    /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
+    pub(super) data: AddressMap<PAGE_SIZE>,
+    /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
+    /// u32))` for the timestamp and block size of the latest access.
+    pub(super) meta: Vec<PagedVec<PAGE_SIZE>>,
+    /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
+    /// all memory accesses in `addr_space` must be aligned to this block size.
+    pub(super) min_block_size: Vec<u32>,
+    // TODO: access adapter
+}
+
+impl TracingMemory {
     pub fn new(mem_config: &MemoryConfig) -> Self {
+        assert_eq!(mem_config.as_offset, 1);
+        let mem_size = 1usize << mem_config.pointer_max_bits;
+        let num_addr_sp = 1 + (1 << mem_config.as_height);
+        let meta = vec![
+            PagedVec::new(
+                mem_size
+                    .checked_mul(size_of::<AccessMetadata>())
+                    .unwrap()
+                    .div_ceil(PAGE_SIZE)
+            );
+            num_addr_sp
+        ];
+        let mut min_block_size = vec![1; meta.len()];
+        // TMP: hardcoding for now
+        min_block_size[1] = 4;
+        min_block_size[2] = 4;
         Self {
             data: AddressMap::from_mem_config(mem_config),
+            meta,
+            min_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
-            log: Vec::with_capacity(mem_config.access_capacity),
         }
     }
 
     /// Instantiates a new `Memory` data structure from an image.
     pub fn from_image(image: MemoryImage, access_capacity: usize) -> Self {
+        let mut meta = vec![PagedVec::new(0); image.as_offset as usize];
+        for (paged_vec, cell_size) in image.paged_vecs.iter().zip(&image.cell_size) {
+            let num_cells = paged_vec.memory_size() / cell_size;
+            meta.push(PagedVec::new(
+                num_cells
+                    .checked_mul(size_of::<AccessMetadata>())
+                    .unwrap()
+                    .div_ceil(PAGE_SIZE),
+            ));
+        }
+        let mut min_block_size = vec![1; meta.len()];
+        // TMP: hardcoding for now
+        min_block_size[1] = 4;
+        min_block_size[2] = 4;
         Self {
             data: image,
+            meta,
+            min_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
-            log: Vec::with_capacity(access_capacity),
         }
-    }
-
-    fn last_record_id(&self) -> RecordId {
-        // TEMP[jpw]
-        RecordId(0)
-        // RecordId(self.log.len() - 1)
     }
 
     /// Writes an array of values to the memory at the specified address space and start index.
@@ -136,35 +179,57 @@ impl Memory {
         (self.last_record_id(), prev_data)
     }
 
-    /// Reads an array of values from the memory at the specified address space and start index.
+    /// Atomic read operation which increments the timestamp by 1.
+    /// Returns `(t_prev, [pointer:BLOCK_SIZE]_{address_space})` where `t_prev` is the
+    /// timestamp of the last memory access.
+    ///
+    /// The previous memory access is treated as atomic even if previous accesses were for
+    /// a smaller block size. This is made possible by internal memory access adapters
+    /// that split/merge memory blocks. More specifically, the last memory access corresponding
+    /// to `t_prev` may refer to an atomic access inserted by the memory access adapters.
+    ///
+    /// # Assumptions
+    /// The `BLOCK_SIZE` is a multiple of `ALIGN`, which must equal the minimum block size
+    /// of `address_space`.
     ///
     /// # Safety
-    /// The type `T` must be stack-allocated `repr(C)`, and it must be the exact type used to
-    /// represent a single memory cell in address space `address_space`. For standard usage, `T`
-    /// is either `u8` or `F` where `F` is the base field of the ZK backend.
+    /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`,
+    /// and it must be the exact type used to represent a single memory cell in
+    /// address space `address_space`. For standard usage,
+    /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
+    ///
+    /// In addition:
+    /// - `address_space` must be valid.
     #[inline(always)]
-    pub unsafe fn read<T: Copy, const BLOCK_SIZE: usize>(
+    pub unsafe fn read<T: Copy, const BLOCK_SIZE: usize, const ALIGN: u32>(
         &mut self,
         address_space: u32,
         pointer: u32,
-    ) -> (RecordId, [T; BLOCK_SIZE]) {
+    ) -> (u32, [T; BLOCK_SIZE]) {
         assert!(BLOCK_SIZE.is_power_of_two());
         debug_assert_ne!(address_space, 0);
-
-        // self.log.push(MemoryLogEntry::Read {
-        //     address_space,
-        //     pointer,
-        //     len: N,
-        // });
-
+        debug_assert_eq!(ALIGN, self.min_block_size[address_space as usize]);
         let values = self.data.read(address_space, pointer);
         self.timestamp += 1;
-        (self.last_record_id(), values)
+        // Handle timestamp and block size:
+        assert_eq!(
+            pointer % ALIGN,
+            0,
+            "pointer={pointer} not aligned to {ALIGN}"
+        );
+        let access_ptr = pointer / ALIGN;
+        // TODO: address space should be checked elsewhere
+        let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
+        let AccessMetadata {
+            timestamp,
+            block_size,
+        } = meta.get((access_ptr as usize) * size_of::<AccessMetadata>());
+
+        (todo!("t_prev"), values)
     }
 
     pub fn increment_timestamp_by(&mut self, amount: u32) {
         self.timestamp += amount;
-        self.log.push(MemoryLogEntry::IncrementTimestampBy(amount))
     }
 
     pub fn timestamp(&self) -> u32 {
@@ -183,12 +248,12 @@ impl Memory {
 
 #[cfg(test)]
 mod tests {
-    use super::Memory;
+    use super::TracingMemory;
     use crate::arch::MemoryConfig;
 
     #[test]
     fn test_write_read() {
-        let mut memory = Memory::new(&MemoryConfig::default());
+        let mut memory = TracingMemory::new(&MemoryConfig::default());
         let address_space = 1;
 
         unsafe {

@@ -42,7 +42,7 @@ use crate::{
             MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
             MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols, AUX_LEN,
         },
-        online::{Memory, MemoryLogEntry},
+        online::{MemoryLogEntry, TracingMemory},
         persistent::PersistentBoundaryChip,
         tree::MemoryNode,
     },
@@ -97,7 +97,7 @@ pub struct MemoryController<F> {
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
     // addr_space -> Memory data structure
-    memory: Memory,
+    memory: TracingMemory,
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub access_adapters: AccessAdapterInventory<F>,
@@ -242,7 +242,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: Memory::new(&mem_config),
+            memory: TracingMemory::new(&mem_config),
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
                 initial_memory,
                 1,
@@ -293,7 +293,8 @@ impl<F: PrimeField32> MemoryController<F> {
             memory_bus,
             mem_config,
             interface_chip,
-            memory: Memory::new(&mem_config), // it is expected that the memory will be set later
+            memory: TracingMemory::new(&mem_config), /* it is expected that the memory will be
+                                                      * set later */
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
                 AddressMap::from_mem_config(&mem_config),
                 CHUNK,
@@ -350,7 +351,7 @@ impl<F: PrimeField32> MemoryController<F> {
         let mut offline_memory = self.offline_memory.lock().unwrap();
         offline_memory.set_initial_memory(memory.clone(), self.mem_config);
 
-        self.memory = Memory::from_image(memory.clone(), self.mem_config.access_capacity);
+        self.memory = TracingMemory::from_image(memory.clone(), self.mem_config.access_capacity);
 
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
