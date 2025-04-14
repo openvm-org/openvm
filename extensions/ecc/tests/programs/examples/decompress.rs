@@ -7,10 +7,12 @@ extern crate alloc;
 use hex_literal::hex;
 use openvm::io::read_vec;
 use openvm_ecc_guest::{
-    algebra::{Field, IntMod},
+    algebra::{DivUnsafe, Field, IntMod},
+    ed25519::{Ed25519Coord, Ed25519Point},
+    edwards::TwistedEdwardsPoint,
     k256::{Secp256k1Coord, Secp256k1Point},
-    weierstrass::{FromCompressed, WeierstrassPoint},
-    Group,
+    weierstrass::WeierstrassPoint,
+    FromCompressed, Group,
 };
 
 openvm::entry!(main);
@@ -29,6 +31,7 @@ openvm_algebra_moduli_macros::moduli_init! {
     "1000000007",
     "0xffffffffffffffffffffffffffffffff000000000000000000000001",
     "0xffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3d",
+    "57896044618658097711785492504343953926634992332820282019728792003956564819949",
 }
 
 const CURVE_B_5MOD8: Fp5mod8 = Fp5mod8::from_const_u8(3);
@@ -88,19 +91,26 @@ openvm_ecc_sw_macros::sw_init! {
     CurvePoint1mod4,
 }
 
+openvm_ecc_te_macros::te_init! {
+    Ed25519Point,
+}
+
 // test decompression under an honest host
 pub fn main() {
     setup_0();
     setup_2();
     setup_4();
-    setup_all_curves();
+    setup_all_sw_curves();
+    setup_all_te_curves();
 
     let bytes = read_vec();
+
+    // secp256k1
     let x = Secp256k1Coord::from_le_bytes(&bytes[..32]);
     let y = Secp256k1Coord::from_le_bytes(&bytes[32..64]);
     let rec_id = y.as_le_bytes()[0] & 1;
 
-    test_possible_decompression::<Secp256k1Point>(&x, &y, rec_id);
+    test_possible_sw_decompression::<Secp256k1Point>(&x, &y, rec_id);
     // x = 5 is not on the x-coordinate of any point on the Secp256k1 curve
     test_impossible_decompression_secp256k1(&Secp256k1Coord::from_u8(5), rec_id);
 
@@ -108,7 +118,7 @@ pub fn main() {
     let y = Fp5mod8::from_le_bytes(&bytes[96..128]);
     let rec_id = y.as_le_bytes()[0] & 1;
 
-    test_possible_decompression::<CurvePoint5mod8>(&x, &y, rec_id);
+    test_possible_sw_decompression::<CurvePoint5mod8>(&x, &y, rec_id);
     // x = 3 is not on the x-coordinate of any point on the CurvePoint5mod8 curve
     test_impossible_decompression_curvepoint5mod8(&Fp5mod8::from_u8(3), rec_id);
 
@@ -116,12 +126,20 @@ pub fn main() {
     let y = Fp1mod4::from_le_bytes(&bytes[160..192]);
     let rec_id = y.as_le_bytes()[0] & 1;
 
-    test_possible_decompression::<CurvePoint1mod4>(&x, &y, rec_id);
+    test_possible_sw_decompression::<CurvePoint1mod4>(&x, &y, rec_id);
     // x = 1 is not on the x-coordinate of any point on the CurvePoint1mod4 curve
     test_impossible_decompression_curvepoint1mod4(&Fp1mod4::from_u8(1), rec_id);
+
+    // ed25519
+    let x = Ed25519Coord::from_le_bytes(&bytes[192..224]);
+    let y = Ed25519Coord::from_le_bytes(&bytes[224..256]);
+    let rec_id = x.as_le_bytes()[0] & 1;
+    test_possible_te_decompression::<Ed25519Point>(&x, &y, rec_id);
+    // y = 2 is not on the y-coordinate of any point on the Ed25519 curve
+    test_impossible_decompression_ed25519(&Ed25519Coord::from_u8(2), rec_id);
 }
 
-fn test_possible_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinate>>(
+fn test_possible_sw_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinate>>(
     x: &P::Coordinate,
     y: &P::Coordinate,
     rec_id: u8,
@@ -138,23 +156,25 @@ fn test_possible_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinat
     assert_eq!(p.y(), y);
 }
 
-// The test_impossible_decompression_* functions cannot be combined into a single function with a const generic parameter
-// since the get_non_qr() function is not part of the WeierstrassPoint trait.
-
-fn test_impossible_decompression_curvepoint5mod8(x: &Fp5mod8, rec_id: u8) {
-    let hint = CurvePoint5mod8::hint_decompress(x, &rec_id).expect("hint should be well-formed");
+fn test_possible_te_decompression<P: TwistedEdwardsPoint + FromCompressed<P::Coordinate>>(
+    x: &P::Coordinate,
+    y: &P::Coordinate,
+    rec_id: u8,
+) {
+    let hint = P::hint_decompress(y, &rec_id).expect("hint should be well-formed");
     if hint.possible {
-        panic!("decompression should be impossible");
+        assert_eq!(x, &hint.sqrt);
     } else {
-        let rhs = x * x * x
-            + x * &<CurvePoint5mod8 as WeierstrassPoint>::CURVE_A
-            + &<CurvePoint5mod8 as WeierstrassPoint>::CURVE_B;
-        assert_eq!(&hint.sqrt * &hint.sqrt, rhs * CurvePoint5mod8::get_non_qr());
+        panic!("decompression should be possible");
     }
 
-    let p = CurvePoint5mod8::decompress(x.clone(), &rec_id);
-    assert!(p.is_none());
+    let p = P::decompress(y.clone(), &rec_id).unwrap();
+    assert_eq!(p.x(), x);
+    assert_eq!(p.y(), y);
 }
+
+// The test_impossible_decompression_* functions cannot be combined into a single function with a const generic parameter
+// since the get_non_qr() function is not part of the WeierstrassPoint trait.
 
 fn test_impossible_decompression_secp256k1(x: &Secp256k1Coord, rec_id: u8) {
     let hint = Secp256k1Point::hint_decompress(x, &rec_id).expect("hint should be well-formed");
@@ -171,6 +191,21 @@ fn test_impossible_decompression_secp256k1(x: &Secp256k1Coord, rec_id: u8) {
     assert!(p.is_none());
 }
 
+fn test_impossible_decompression_curvepoint5mod8(x: &Fp5mod8, rec_id: u8) {
+    let hint = CurvePoint5mod8::hint_decompress(x, &rec_id).expect("hint should be well-formed");
+    if hint.possible {
+        panic!("decompression should be impossible");
+    } else {
+        let rhs = x * x * x
+            + x * &<CurvePoint5mod8 as WeierstrassPoint>::CURVE_A
+            + &<CurvePoint5mod8 as WeierstrassPoint>::CURVE_B;
+        assert_eq!(&hint.sqrt * &hint.sqrt, rhs * CurvePoint5mod8::get_non_qr());
+    }
+
+    let p = CurvePoint5mod8::decompress(x.clone(), &rec_id);
+    assert!(p.is_none());
+}
+
 fn test_impossible_decompression_curvepoint1mod4(x: &Fp1mod4, rec_id: u8) {
     let hint = CurvePoint1mod4::hint_decompress(x, &rec_id).expect("hint should be well-formed");
     if hint.possible {
@@ -183,5 +218,21 @@ fn test_impossible_decompression_curvepoint1mod4(x: &Fp1mod4, rec_id: u8) {
     }
 
     let p = CurvePoint1mod4::decompress(x.clone(), &rec_id);
+    assert!(p.is_none());
+}
+
+fn test_impossible_decompression_ed25519(y: &Ed25519Coord, rec_id: u8) {
+    let hint = Ed25519Point::hint_decompress(y, &rec_id).expect("hint should be well-formed");
+    if hint.possible {
+        panic!("decompression should be impossible");
+    } else {
+        let num = y * y - &<Ed25519Coord as IntMod>::ONE;
+        let den = &<Ed25519Point as TwistedEdwardsPoint>::CURVE_D * y * y
+            - &<Ed25519Point as TwistedEdwardsPoint>::CURVE_A;
+        let rhs = num.div_unsafe(den);
+        assert_eq!(&hint.sqrt * &hint.sqrt, rhs * Ed25519Point::get_non_qr());
+    }
+
+    let p = Ed25519Point::decompress(y.clone(), &rec_id);
     assert!(p.is_none());
 }

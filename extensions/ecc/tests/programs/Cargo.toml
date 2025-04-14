@@ -11,6 +11,7 @@ openvm-custom-insn = { path = "../../../../crates/toolchain/custom_insn", defaul
 
 openvm-ecc-guest = { path = "../../guest", default-features = false }
 openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros", default-features = false }
+openvm-ecc-te-macros = { path = "../../../../extensions/ecc/te-macros", default-features = false }
 openvm-algebra-guest = { path = "../../../algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { path = "../../../algebra/moduli-macros", default-features = false }
 openvm-keccak256-guest = { path = "../../../keccak256/guest", default-features = false }
@@ -26,6 +27,7 @@ k256 = { version = "0.13.3", default-features = false, features = [
     "ecdsa-core",
     "ecdsa",
 ], optional = true }
+num-bigint = "0.4.6"
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = "0.4.6"
@@ -35,6 +37,7 @@ default = []
 std = ["serde/std", "openvm/std"]
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
 p256 = ["openvm-ecc-guest/p256"]
+ed25519 = ["openvm-ecc-guest/ed25519"]
 
 # Features to enable specific tests within decompress_invalid_hint.rs
 # Note that these tests are expected to not terminate
@@ -64,7 +67,7 @@ required-features = ["k256", "p256"]
 
 [[example]]
 name = "decompress"
-required-features = ["k256"]
+required-features = ["k256", "ed25519"]
 
 [[example]]
 name = "decompress_invalid_hint"
@@ -73,6 +76,10 @@ required-features = ["k256"]
 [[example]]
 name = "ecdsa"
 required-features = ["k256"]
+
+[[example]]
+name = "edwards_ec"
+required-features = ["ed25519"]
 
 [[example]]
 name = "invalid_setup"

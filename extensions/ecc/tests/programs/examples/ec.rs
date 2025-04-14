@@ -2,8 +2,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use hex_literal::hex;
-use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
+    algebra::IntMod,
     k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
     msm,
     weierstrass::WeierstrassPoint,
@@ -23,7 +23,7 @@ openvm::entry!(main);
 
 pub fn main() {
     setup_all_moduli();
-    setup_all_curves();
+    setup_all_sw_curves();
 
     // Sample points got from https://asecuritysite.com/ecc/ecc_points2 and
     // https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#add
