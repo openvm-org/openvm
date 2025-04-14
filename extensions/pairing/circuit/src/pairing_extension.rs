@@ -113,7 +113,7 @@ pub(crate) mod phantom {
         bn254::BN254_NUM_LIMBS,
         pairing::{FinalExp, MultiMillerLoop},
     };
-    use openvm_rv32im_circuit::adapters::{compose, unsafe_read_rv32_register};
+    use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
 
     use super::PairingCurve;
@@ -143,21 +143,21 @@ pub(crate) mod phantom {
         rs2: u32,
         c_upper: u16,
     ) -> eyre::Result<()> {
-        let p_ptr = compose(memory.unsafe_read(
+        let p_ptr = u32::from_le_bytes(memory.unsafe_read::<u8, 4>(
             F::from_canonical_u32(RV32_MEMORY_AS),
             F::from_canonical_u32(rs1),
         ));
         // len in bytes
-        let p_len = compose(memory.unsafe_read(
+        let p_len = u32::from_le_bytes(memory.unsafe_read::<u8, 4>(
             F::from_canonical_u32(RV32_MEMORY_AS),
             F::from_canonical_u32(rs1 + RV32_REGISTER_NUM_LIMBS as u32),
         ));
-        let q_ptr = compose(memory.unsafe_read(
+        let q_ptr = u32::from_le_bytes(memory.unsafe_read::<u8, 4>(
             F::from_canonical_u32(RV32_MEMORY_AS),
             F::from_canonical_u32(rs2),
         ));
         // len in bytes
-        let q_len = compose(memory.unsafe_read(
+        let q_len = u32::from_le_bytes(memory.unsafe_read::<u8, 4>(
             F::from_canonical_u32(RV32_MEMORY_AS),
             F::from_canonical_u32(rs2 + RV32_REGISTER_NUM_LIMBS as u32),
         ));
@@ -263,13 +263,10 @@ pub(crate) mod phantom {
     {
         let mut repr = [0u8; N];
         for (i, byte) in repr.iter_mut().enumerate() {
-            *byte = memory
-                .unsafe_read_cell(
-                    F::from_canonical_u32(RV32_MEMORY_AS),
-                    F::from_canonical_u32(ptr + i as u32),
-                )
-                .as_canonical_u32()
-                .try_into()?;
+            *byte = memory.unsafe_read_cell::<u8>(
+                F::from_canonical_u32(RV32_MEMORY_AS),
+                F::from_canonical_u32(ptr + i as u32),
+            );
         }
         Fp::from_repr(repr.into())
             .into_option()

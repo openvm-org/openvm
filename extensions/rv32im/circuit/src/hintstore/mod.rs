@@ -42,7 +42,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{compose, decompose};
+use crate::adapters::{decompose, tmp_convert_to_u8s};
 
 #[cfg(test)]
 mod tests;
@@ -337,19 +337,20 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
         let local_opcode =
             Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        let (mem_ptr_read, mem_ptr_limbs) = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, mem_ptr_ptr);
+        let (mem_ptr_read, mem_ptr_limbs) =
+            memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, mem_ptr_ptr);
         let (num_words, num_words_read) = if local_opcode == HINT_STOREW {
             memory.increment_timestamp();
             (1, None)
         } else {
             let (num_words_read, num_words_limbs) =
-                memory.read::<RV32_REGISTER_NUM_LIMBS>(d, num_words_ptr);
-            (compose(num_words_limbs), Some(num_words_read))
+                memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, num_words_ptr);
+            (u32::from_le_bytes(num_words_limbs), Some(num_words_read))
         };
         debug_assert_ne!(num_words, 0);
         debug_assert!(num_words <= (1 << self.air.pointer_max_bits));
 
-        let mem_ptr = compose(mem_ptr_limbs);
+        let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
 
         debug_assert!(mem_ptr <= (1 << self.air.pointer_max_bits));
 
@@ -379,7 +380,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
             let (write, _) = memory.write(
                 e,
                 F::from_canonical_u32(mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index)),
-                data,
+                &tmp_convert_to_u8s(data),
             );
             record.hints.push((data, write));
         }

@@ -29,7 +29,8 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{
-    abstract_compose, read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    abstract_compose, read_rv32_register, tmp_convert_to_u8s, RV32_CELL_BITS,
+    RV32_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -405,10 +406,13 @@ impl<
                 address as usize + READ_SIZE * BLOCKS_PER_READ - 1 < (1 << self.air.address_bits)
             );
             from_fn(|i| {
-                memory.read::<READ_SIZE>(e, F::from_canonical_u32(address + (i * READ_SIZE) as u32))
+                memory.read::<u8, READ_SIZE>(
+                    e,
+                    F::from_canonical_u32(address + (i * READ_SIZE) as u32),
+                )
             })
         });
-        let read_data = read_records.map(|r| r.map(|x| x.1));
+        let read_data = read_records.map(|r| r.map(|x| x.1.map(F::from_canonical_u8)));
         assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.air.address_bits));
 
         let record = Rv32VecHeapReadRecord {
@@ -435,7 +439,7 @@ impl<
             let (record_id, _) = memory.write(
                 e,
                 read_record.rd_val + F::from_canonical_u32((i * WRITE_SIZE) as u32),
-                write,
+                &tmp_convert_to_u8s(write),
             );
             i += 1;
             record_id

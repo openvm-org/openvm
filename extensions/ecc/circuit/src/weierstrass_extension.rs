@@ -285,19 +285,19 @@ pub(crate) mod phantom {
             };
             let mut x_limbs: Vec<u8> = Vec::with_capacity(num_limbs);
             for i in 0..num_limbs {
-                let limb = memory.unsafe_read_cell(
+                let limb = memory.unsafe_read_cell::<u8>(
                     F::from_canonical_u32(RV32_MEMORY_AS),
                     F::from_canonical_u32(rs1 + i as u32),
                 );
-                x_limbs.push(limb.as_canonical_u32() as u8);
+                x_limbs.push(limb);
             }
             let x = BigUint::from_bytes_le(&x_limbs);
             let rs2 = unsafe_read_rv32_register(memory, b);
-            let rec_id = memory.unsafe_read_cell(
+            let rec_id = memory.unsafe_read_cell::<u8>(
                 F::from_canonical_u32(RV32_MEMORY_AS),
                 F::from_canonical_u32(rs2),
             );
-            let hint = self.decompress_point(x, rec_id.as_canonical_u32() & 1 == 1, c_idx);
+            let hint = self.decompress_point(x, rec_id & 1 == 1, c_idx);
             let hint_bytes = once(F::from_bool(hint.possible))
                 .chain(repeat(F::ZERO))
                 .take(4)

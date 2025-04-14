@@ -55,16 +55,16 @@ pub fn read_rv32_register<F: PrimeField32>(
     pointer: F,
 ) -> (RecordId, u32) {
     debug_assert_eq!(address_space, F::ONE);
-    let record = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
-    let val = compose(record.1);
+    let record = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
+    let val = u32::from_le_bytes(record.1);
     (record.0, val)
 }
 
 /// Peeks at the value of a register without updating the memory state or incrementing the
 /// timestamp.
 pub fn unsafe_read_rv32_register<F: PrimeField32>(memory: &MemoryController<F>, pointer: F) -> u32 {
-    let data = memory.unsafe_read::<RV32_REGISTER_NUM_LIMBS>(F::ONE, pointer);
-    compose(data)
+    let data = memory.unsafe_read::<u8, RV32_REGISTER_NUM_LIMBS>(F::ONE, pointer);
+    u32::from_le_bytes(data)
 }
 
 pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(
@@ -75,4 +75,9 @@ pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(
         .fold(T::ZERO, |acc, (i, limb)| {
             acc + limb * T::from_canonical_u32(1 << (i * RV32_CELL_BITS))
         })
+}
+
+// TEMP[jpw]
+pub fn tmp_convert_to_u8s<F: PrimeField32, const N: usize>(data: [F; N]) -> [u8; N] {
+    data.map(|x| x.as_canonical_u32() as u8)
 }

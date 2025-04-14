@@ -788,7 +788,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         self.base.program_chip.set_program(program);
     }
 
-    pub(crate) fn set_initial_memory(&mut self, memory: MemoryImage<F>) {
+    pub(crate) fn set_initial_memory(&mut self, memory: MemoryImage) {
         self.base.memory_controller.set_initial_memory(memory);
     }
 

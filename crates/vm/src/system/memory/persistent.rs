@@ -200,7 +200,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
     pub fn finalize<H>(
         &mut self,
-        initial_memory: &MemoryImage<F>,
+        initial_memory: &MemoryImage,
         final_memory: &TimestampedEquipartition<F, CHUNK>,
         hasher: &mut H,
     ) where
@@ -212,10 +212,8 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                     .par_iter()
                     .map(|&(address_space, label)| {
                         let pointer = label * CHUNK as u32;
-                        let init_values = array::from_fn(|i| {
-                            *initial_memory
-                                .get(&(address_space, pointer + i as u32))
-                                .unwrap_or(&F::ZERO)
+                        let init_values = array::from_fn(|i| unsafe {
+                            initial_memory.get((address_space, pointer + i as u32))
                         });
                         let initial_hash = hasher.hash(&init_values);
                         let timestamped_values = final_memory.get(&(address_space, label)).unwrap();

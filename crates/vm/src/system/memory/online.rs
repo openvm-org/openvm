@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 
-use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use super::paged_vec::{AddressMap, PAGE_SIZE};
@@ -9,6 +8,7 @@ use crate::{
     system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId},
 };
 
+// TO BE DELETED
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MemoryLogEntry<T> {
     Read {
@@ -25,16 +25,19 @@ pub enum MemoryLogEntry<T> {
 }
 
 /// A simple data structure to read to/write from memory.
+/// Internally storage is in raw bytes (untyped) to align with host memory.
 ///
 /// Stores a log of memory accesses to reconstruct aspects of memory state for trace generation.
-#[derive(Debug)]
-pub struct Memory<F> {
-    pub(super) data: AddressMap<F, PAGE_SIZE>,
-    pub(super) log: Vec<MemoryLogEntry<F>>,
+pub struct Memory {
+    // TODO: the memory struct should contain an array of the byte size of the type per address
+    // space, passed in from MemoryConfig
+    pub(super) data: AddressMap<PAGE_SIZE>,
+    // TODO: delete
+    pub(super) log: Vec<MemoryLogEntry<u8>>,
     timestamp: u32,
 }
 
-impl<F: PrimeField32> Memory<F> {
+impl Memory {
     pub fn new(mem_config: &MemoryConfig) -> Self {
         Self {
             data: AddressMap::from_mem_config(mem_config),
@@ -44,7 +47,7 @@ impl<F: PrimeField32> Memory<F> {
     }
 
     /// Instantiates a new `Memory` data structure from an image.
-    pub fn from_image(image: MemoryImage<F>, access_capacity: usize) -> Self {
+    pub fn from_image(image: MemoryImage, access_capacity: usize) -> Self {
         Self {
             data: image,
             timestamp: INITIAL_TIMESTAMP + 1,
@@ -53,48 +56,64 @@ impl<F: PrimeField32> Memory<F> {
     }
 
     fn last_record_id(&self) -> RecordId {
-        RecordId(self.log.len() - 1)
+        // TEMP[jpw]
+        RecordId(0)
+        // RecordId(self.log.len() - 1)
     }
 
     /// Writes an array of values to the memory at the specified address space and start index.
     ///
     /// Returns the `RecordId` for the memory record and the previous data.
-    pub fn write<const N: usize>(
+    ///
+    /// # Safety
+    /// The type `T` must be stack-allocated `repr(C)`, and it must be the exact type used to
+    /// represent a single memory cell in address space `address_space`. For standard usage, `T`
+    /// is either `u8` or `F` where `F` is the base field of the ZK backend.
+    // @dev: `values` is passed by reference since the data is copied into memory. Even though the
+    // compiler probably optimizes it, we use reference to avoid any unnecessary copy of
+    // `values` onto the stack in the function call.
+    pub unsafe fn write<T: Copy, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
-        values: [F; N],
-    ) -> (RecordId, [F; N]) {
-        assert!(N.is_power_of_two());
+        values: &[T; BLOCK_SIZE],
+    ) -> (RecordId, [T; BLOCK_SIZE]) {
+        debug_assert!(BLOCK_SIZE.is_power_of_two());
 
-        let prev_data = self.data.set_range(&(address_space, pointer), &values);
+        let prev_data = self.data.set_range((address_space, pointer), values);
 
-        self.log.push(MemoryLogEntry::Write {
-            address_space,
-            pointer,
-            data: values.to_vec(),
-        });
+        // self.log.push(MemoryLogEntry::Write {
+        //     address_space,
+        //     pointer,
+        //     data: values.to_vec(),
+        // });
         self.timestamp += 1;
 
         (self.last_record_id(), prev_data)
     }
 
     /// Reads an array of values from the memory at the specified address space and start index.
-    pub fn read<const N: usize>(&mut self, address_space: u32, pointer: u32) -> (RecordId, [F; N]) {
-        assert!(N.is_power_of_two());
+    ///
+    /// # Safety
+    /// The type `T` must be stack-allocated `repr(C)`, and it must be the exact type used to
+    /// represent a single memory cell in address space `address_space`. For standard usage, `T`
+    /// is either `u8` or `F` where `F` is the base field of the ZK backend.
+    #[inline(always)]
+    pub unsafe fn read<T: Copy, const BLOCK_SIZE: usize>(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+    ) -> (RecordId, [T; BLOCK_SIZE]) {
+        assert!(BLOCK_SIZE.is_power_of_two());
+        debug_assert_ne!(address_space, 0);
 
-        self.log.push(MemoryLogEntry::Read {
-            address_space,
-            pointer,
-            len: N,
-        });
+        // self.log.push(MemoryLogEntry::Read {
+        //     address_space,
+        //     pointer,
+        //     len: N,
+        // });
 
-        let values = if address_space == 0 {
-            assert_eq!(N, 1, "cannot batch read from address space 0");
-            [F::from_canonical_u32(pointer); N]
-        } else {
-            self.range_array::<N>(address_space, pointer)
-        };
+        let values = self.data.get_range((address_space, pointer));
         self.timestamp += 1;
         (self.last_record_id(), values)
     }
@@ -108,44 +127,36 @@ impl<F: PrimeField32> Memory<F> {
         self.timestamp
     }
 
+    /// # Safety
+    /// The type `T` must be stack-allocated `repr(C)`, and it must be the exact type used to
+    /// represent a single memory cell in address space `address_space`. For standard usage, `T`
+    /// is either `u8` or `F` where `F` is the base field of the ZK backend.
     #[inline(always)]
-    pub fn get(&self, address_space: u32, pointer: u32) -> F {
-        *self.data.get(&(address_space, pointer)).unwrap_or(&F::ZERO)
-    }
-
-    #[inline(always)]
-    fn range_array<const N: usize>(&self, address_space: u32, pointer: u32) -> [F; N] {
-        self.data.get_range(&(address_space, pointer))
+    pub unsafe fn get<T: Copy>(&self, address_space: u32, pointer: u32) -> T {
+        self.data.get((address_space, pointer))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
-
     use super::Memory;
     use crate::arch::MemoryConfig;
-
-    macro_rules! bba {
-        [$($x:expr),*] => {
-            [$(BabyBear::from_canonical_u32($x)),*]
-        }
-    }
 
     #[test]
     fn test_write_read() {
         let mut memory = Memory::new(&MemoryConfig::default());
         let address_space = 1;
 
-        memory.write(address_space, 0, bba![1, 2, 3, 4]);
+        unsafe {
+            memory.write(address_space, 0, &[1u8, 2, 3, 4]);
 
-        let (_, data) = memory.read::<2>(address_space, 0);
-        assert_eq!(data, bba![1, 2]);
+            let (_, data) = memory.read::<u8, 2>(address_space, 0);
+            assert_eq!(data, [1u8, 2]);
 
-        memory.write(address_space, 2, bba![100]);
+            memory.write(address_space, 2, &[100u8]);
 
-        let (_, data) = memory.read::<4>(address_space, 0);
-        assert_eq!(data, bba![1, 2, 100, 4]);
+            let (_, data) = memory.read::<u8, 4>(address_space, 0);
+            assert_eq!(data, [1u8, 2, 100, 4]);
+        }
     }
 }

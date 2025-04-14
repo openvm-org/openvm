@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     iter::zip,
+    mem::transmute,
     sync::Arc,
 };
 
@@ -316,9 +317,8 @@ fn test_vm_initial_memory() {
         Instruction::<BabyBear>::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ]);
 
-    let init_memory: BTreeMap<_, _> = [((4, 7), BabyBear::from_canonical_u32(101))]
-        .into_iter()
-        .collect();
+    let raw = unsafe { transmute::<BabyBear, [u8; 4]>(BabyBear::from_canonical_u32(101)) };
+    let init_memory = BTreeMap::from_iter((0..4).map(|i| ((4u32, 7u32 * 4 + i), raw[i as usize])));
 
     let config = test_native_continuations_config();
     let exe = VmExe {
@@ -763,7 +763,7 @@ fn test_hint_load_2() {
         segment
             .chip_complex
             .memory_controller()
-            .unsafe_read_cell(F::from_canonical_usize(4), F::from_canonical_usize(32)),
+            .unsafe_read_cell::<F>(F::from_canonical_usize(4), F::from_canonical_usize(32)),
         F::ZERO
     );
     let streams = segment.chip_complex.take_streams();

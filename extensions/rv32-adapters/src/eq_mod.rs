@@ -29,7 +29,7 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{
-    read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    read_rv32_register, tmp_convert_to_u8s, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -339,15 +339,17 @@ impl<
         let read_records = rs_vals.map(|address| {
             debug_assert!(address < (1 << self.air.address_bits));
             from_fn(|i| {
-                memory
-                    .read::<BLOCK_SIZE>(e, F::from_canonical_u32(address + (i * BLOCK_SIZE) as u32))
+                memory.read::<u8, BLOCK_SIZE>(
+                    e,
+                    F::from_canonical_u32(address + (i * BLOCK_SIZE) as u32),
+                )
             })
         });
 
         let read_data = read_records.map(|r| {
             let read = r.map(|x| x.1);
             let mut read_it = read.iter().flatten();
-            from_fn(|_| *(read_it.next().unwrap()))
+            from_fn(|_| *(read_it.next().unwrap())).map(F::from_canonical_u8)
         });
         let record = Rv32IsEqualModReadRecord {
             rs: rs_records,
@@ -366,7 +368,7 @@ impl<
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let (rd_id, _) = memory.write(d, a, output.writes[0]);
+        let (rd_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
 
         debug_assert!(
             memory.timestamp() - from_state.timestamp

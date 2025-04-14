@@ -244,14 +244,14 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
 
         let heap_records = rs_vals.map(|address| {
             assert!(address as usize + READ_SIZE - 1 < (1 << self.air.address_bits));
-            memory.read::<READ_SIZE>(e, F::from_canonical_u32(address))
+            memory.read::<u8, READ_SIZE>(e, F::from_canonical_u32(address))
         });
 
         let record = Rv32HeapBranchReadRecord {
             rs_reads: rs_records,
             heap_reads: heap_records.map(|r| r.0),
         };
-        Ok((heap_records.map(|r| r.1), record))
+        Ok((heap_records.map(|r| r.1.map(F::from_canonical_u8)), record))
     }
 
     fn postprocess(

@@ -3,7 +3,6 @@ use std::{
     collections::BTreeMap,
     iter,
     marker::PhantomData,
-    mem,
     sync::{Arc, Mutex},
 };
 
@@ -62,7 +61,7 @@ pub const BOUNDARY_AIR_OFFSET: usize = 0;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordId(pub usize);
 
-pub type MemoryImage<F> = AddressMap<F, PAGE_SIZE>;
+pub type MemoryImage = AddressMap<PAGE_SIZE>;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -98,7 +97,7 @@ pub struct MemoryController<F> {
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
     // addr_space -> Memory data structure
-    memory: Memory<F>,
+    memory: Memory,
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub access_adapters: AccessAdapterInventory<F>,
@@ -314,7 +313,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    pub fn memory_image(&self) -> &MemoryImage<F> {
+    pub fn memory_image(&self) -> &MemoryImage {
         &self.memory.data
     }
 
@@ -344,7 +343,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    pub fn set_initial_memory(&mut self, memory: MemoryImage<F>) {
+    pub fn set_initial_memory(&mut self, memory: MemoryImage) {
         if self.timestamp() > INITIAL_TIMESTAMP + 1 {
             panic!("Cannot set initial memory after first timestamp");
         }
@@ -379,7 +378,16 @@ impl<F: PrimeField32> MemoryController<F> {
         (record_id, data)
     }
 
-    pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> (RecordId, [F; N]) {
+    // TEMP[jpw]: Function is safe temporarily for refactoring
+    /// # Safety
+    /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`, and it must be the
+    /// exact type used to represent a single memory cell in address space `address_space`. For
+    /// standard usage, `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
+    pub fn read<T: Copy, const N: usize>(
+        &mut self,
+        address_space: F,
+        pointer: F,
+    ) -> (RecordId, [T; N]) {
         let address_space_u32 = address_space.as_canonical_u32();
         let ptr_u32 = pointer.as_canonical_u32();
         assert!(
@@ -387,7 +395,7 @@ impl<F: PrimeField32> MemoryController<F> {
             "memory out of bounds: {ptr_u32:?}",
         );
 
-        let (record_id, values) = self.memory.read::<N>(address_space_u32, ptr_u32);
+        let (record_id, values) = unsafe { self.memory.read::<T, N>(address_space_u32, ptr_u32) };
 
         (record_id, values)
     }
@@ -395,34 +403,34 @@ impl<F: PrimeField32> MemoryController<F> {
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
-    pub fn unsafe_read_cell(&self, addr_space: F, ptr: F) -> F {
-        self.unsafe_read::<1>(addr_space, ptr)[0]
+    pub fn unsafe_read_cell<T: Copy>(&self, addr_space: F, ptr: F) -> T {
+        self.unsafe_read::<T, 1>(addr_space, ptr)[0]
     }
 
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
-    pub fn unsafe_read<const N: usize>(&self, addr_space: F, ptr: F) -> [F; N] {
+    pub fn unsafe_read<T: Copy, const N: usize>(&self, addr_space: F, ptr: F) -> [T; N] {
         let addr_space = addr_space.as_canonical_u32();
         let ptr = ptr.as_canonical_u32();
-        array::from_fn(|i| self.memory.get(addr_space, ptr + i as u32))
+        unsafe { array::from_fn(|i| self.memory.get::<T>(addr_space, ptr + i as u32)) }
     }
 
     /// Writes `data` to the given cell.
     ///
     /// Returns the `RecordId` and previous data.
-    pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> (RecordId, F) {
-        let (record_id, [data]) = self.write(address_space, pointer, [data]);
+    pub fn write_cell<T: Copy>(&mut self, address_space: F, pointer: F, data: T) -> (RecordId, T) {
+        let (record_id, [data]) = self.write(address_space, pointer, &[data]);
         (record_id, data)
     }
 
-    pub fn write<const N: usize>(
+    pub fn write<T: Copy, const N: usize>(
         &mut self,
         address_space: F,
         pointer: F,
-        data: [F; N],
-    ) -> (RecordId, [F; N]) {
-        assert_ne!(address_space, F::ZERO);
+        data: &[T; N],
+    ) -> (RecordId, [T; N]) {
+        debug_assert_ne!(address_space, F::ZERO);
         let address_space_u32 = address_space.as_canonical_u32();
         let ptr_u32 = pointer.as_canonical_u32();
         assert!(
@@ -430,7 +438,7 @@ impl<F: PrimeField32> MemoryController<F> {
             "memory out of bounds: {ptr_u32:?}",
         );
 
-        self.memory.write(address_space_u32, ptr_u32, data)
+        unsafe { self.memory.write::<T, N>(address_space_u32, ptr_u32, data) }
     }
 
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
@@ -455,26 +463,27 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     fn replay_access_log(&mut self) {
-        let log = mem::take(&mut self.memory.log);
-        if log.is_empty() {
-            // Online memory logs may be empty, but offline memory may be replayed from external
-            // sources. In these cases, we skip the calls to replay access logs because
-            // `set_log_capacity` would panic.
-            tracing::debug!("skipping replay_access_log");
-            return;
-        }
+        unimplemented!();
+        // let log = mem::take(&mut self.memory.log);
+        // if log.is_empty() {
+        //     // Online memory logs may be empty, but offline memory may be replayed from external
+        // sources.     // In these cases, we skip the calls to replay access logs because
+        // `set_log_capacity` would     // panic.
+        //     tracing::debug!("skipping replay_access_log");
+        //     return;
+        // }
 
-        let mut offline_memory = self.offline_memory.lock().unwrap();
-        offline_memory.set_log_capacity(log.len());
+        // let mut offline_memory = self.offline_memory.lock().unwrap();
+        // offline_memory.set_log_capacity(log.len());
 
-        for entry in log {
-            Self::replay_access(
-                entry,
-                &mut offline_memory,
-                &mut self.interface_chip,
-                &mut self.access_adapters,
-            );
-        }
+        // for entry in log {
+        //     Self::replay_access(
+        //         entry,
+        //         &mut offline_memory,
+        //         &mut self.interface_chip,
+        //         &mut self.access_adapters,
+        //     );
+        // }
     }
 
     /// Low-level API to replay a single memory access log entry and populate the [OfflineMemory],
@@ -704,13 +713,13 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
         self.offline_memory.clone()
     }
-    pub fn get_memory_logs(&self) -> &Vec<MemoryLogEntry<F>> {
+    pub fn get_memory_logs(&self) -> &Vec<MemoryLogEntry<u8>> {
         &self.memory.log
     }
-    pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {
+    pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<u8>>) {
         self.memory.log = logs;
     }
-    pub fn take_memory_logs(&mut self) -> Vec<MemoryLogEntry<F>> {
+    pub fn take_memory_logs(&mut self) -> Vec<MemoryLogEntry<u8>> {
         std::mem::take(&mut self.memory.log)
     }
 }
@@ -857,9 +866,9 @@ mod tests {
 
             if rng.gen_bool(0.5) {
                 let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                memory_controller.write(address_space, pointer, [data]);
+                memory_controller.write(address_space, pointer, &[data]);
             } else {
-                memory_controller.read::<1>(address_space, pointer);
+                memory_controller.read::<F, 1>(address_space, pointer);
             }
         }
         assert!(memory_controller

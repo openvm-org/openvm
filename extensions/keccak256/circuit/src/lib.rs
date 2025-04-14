@@ -178,14 +178,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             let mut bytes = [0u8; KECCAK_RATE_BYTES];
             for i in (0..KECCAK_RATE_BYTES).step_by(KECCAK_WORD_SIZE) {
                 if i < remaining_len {
-                    let read =
-                        memory.read::<RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_usize(src + i));
+                    let read = memory
+                        .read::<u8, RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_usize(src + i));
 
-                    let chunk = read.1.map(|x| {
-                        x.as_canonical_u32()
-                            .try_into()
-                            .expect("Memory cell not a byte")
-                    });
+                    let chunk = read.1;
                     let copy_len = min(KECCAK_WORD_SIZE, remaining_len - i);
                     if copy_len != KECCAK_WORD_SIZE {
                         partial_read_idx = Some(reads.len());
@@ -230,10 +226,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         let digest_writes: [_; KECCAK_DIGEST_WRITES] = from_fn(|i| {
             timestamp_delta += 1;
             memory
-                .write::<KECCAK_WORD_SIZE>(
+                .write::<u8, KECCAK_WORD_SIZE>(
                     e,
                     F::from_canonical_usize(dst + i * KECCAK_WORD_SIZE),
-                    from_fn(|j| F::from_canonical_u8(output[i * KECCAK_WORD_SIZE + j])),
+                    &from_fn(|j| output[i * KECCAK_WORD_SIZE + j]),
                 )
                 .0
         });

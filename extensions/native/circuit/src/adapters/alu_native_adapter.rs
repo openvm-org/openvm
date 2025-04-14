@@ -160,7 +160,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for AluNativeAdapterChip<F> {
     )> {
         let Instruction { b, c, e, f, .. } = *instruction;
 
-        let reads = vec![memory.read::<1>(e, b), memory.read::<1>(f, c)];
+        let reads = vec![memory.read::<F, 1>(e, b), memory.read::<F, 1>(f, c)];
         let i_reads: [_; 2] = std::array::from_fn(|i| reads[i].1);
 
         Ok((
@@ -183,7 +183,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for AluNativeAdapterChip<F> {
         let writes = vec![memory.write(
             F::from_canonical_u32(AS::Native as u32),
             a,
-            output.writes[0],
+            &output.writes[0],
         )];
 
         Ok((
