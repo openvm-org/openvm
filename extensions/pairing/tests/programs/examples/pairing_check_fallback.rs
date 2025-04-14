@@ -76,10 +76,10 @@ mod bn254 {
             // f * c^x * c^-q * s = 1,
             //   where fc = f * c'^x (embedded Miller loop with c conjugate inverse),
             //   and the curve seed x = -0xd201000000010000
-            //   the miller loop computation includes a conjugation at the end because the value of the
-            //   seed is negative, so we need to conjugate the miller loop input c as c'. We then substitute
-            //   y = -x to get c^-y and finally compute c'^-y as input to the miller loop:
-            // f * c'^-y * c^-q * s = 1
+            //   the miller loop computation includes a conjugation at the end because the value of
+            // the   seed is negative, so we need to conjugate the miller loop input c
+            // as c'. We then substitute   y = -x to get c^-y and finally compute c'^-y
+            // as input to the miller loop: f * c'^-y * c^-q * s = 1
             let c_q = FieldExtension::frobenius_map(&c, 1);
             let c_conj = c.conjugate();
             if c_conj == Fp12::ZERO {
@@ -191,10 +191,10 @@ mod bls12_381 {
             // f * c^x * c^-q * s = 1,
             //   where fc = f * c'^x (embedded Miller loop with c conjugate inverse),
             //   and the curve seed x = -0xd201000000010000
-            //   the miller loop computation includes a conjugation at the end because the value of the
-            //   seed is negative, so we need to conjugate the miller loop input c as c'. We then substitute
-            //   y = -x to get c^-y and finally compute c'^-y as input to the miller loop:
-            // f * c'^-y * c^-q * s = 1
+            //   the miller loop computation includes a conjugation at the end because the value of
+            // the   seed is negative, so we need to conjugate the miller loop input c
+            // as c'. We then substitute   y = -x to get c^-y and finally compute c'^-y
+            // as input to the miller loop: f * c'^-y * c^-q * s = 1
             let c_q = FieldExtension::frobenius_map(&c, 1);
             let c_conj = c.conjugate();
             if c_conj == Fp12::ZERO {
