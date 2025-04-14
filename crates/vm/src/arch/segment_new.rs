@@ -118,7 +118,10 @@ where
     // );
 
     /// Get an executor for the given instruction
-    fn get_executor(&self, opcode: VmOpcode) -> Option<&mut dyn InsExecutor<Mem, Ctx, F>>;
+    fn get_instruction_executor(
+        &self,
+        opcode: VmOpcode,
+    ) -> Option<&mut dyn InsExecutor<Mem, Ctx, F>>;
 
     /// Execute a single instruction
     fn execute_instruction(
@@ -128,7 +131,7 @@ where
     ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, .. } = instruction;
 
-        if let Some(executor) = self.get_executor(opcode) {
+        if let Some(executor) = self.get_instruction_executor(opcode) {
             executor.execute(vm_state, instruction)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
