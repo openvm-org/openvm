@@ -178,6 +178,12 @@ where
         );
         let pc = exe.pc_start;
         let mut state = VmExecutorNextSegmentState::new(memory, input, pc);
+
+        #[cfg(feature = "bench-metrics")]
+        {
+            state.metrics.fn_bounds = exe.fn_bounds.clone();
+        }
+
         let mut segment_idx = 0;
 
         loop {
