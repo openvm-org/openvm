@@ -62,7 +62,7 @@ where
 }
 
 impl VmMetrics {
-    fn update_trace_cells(
+    pub fn update_trace_cells(
         &mut self,
         air_names: &[String],
         now_trace_cells: Vec<usize>,
