@@ -1,8 +1,6 @@
 use std::{collections::HashMap, fs::File, path::Path};
 
-use aggregate::{
-    EXECUTE_TIME_LABEL, PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
-};
+use aggregate::PROOF_TIME_LABEL;
 use eyre::Result;
 
 use crate::types::{Labels, Metric, MetricDb, MetricsFile};
@@ -33,25 +31,39 @@ impl MetricDb {
             db.add_to_flat_dict(labels, entry.metric, entry.value);
         }
 
-        db.apply_aggregations();
+        db.check_proof_time_label();
         db.separate_by_label_types();
 
         Ok(db)
     }
 
-    // Currently hardcoding aggregations
-    pub fn apply_aggregations(&mut self) {
-        for metrics in self.flat_dict.values_mut() {
-            let get = |key: &str| metrics.iter().find(|m| m.name == key).map(|m| m.value);
-            let execute_time = get(EXECUTE_TIME_LABEL);
-            let trace_gen_time = get(TRACE_GEN_TIME_LABEL);
-            let prove_excl_trace_time = get(PROVE_EXCL_TRACE_TIME_LABEL);
-            if let (Some(execute_time), Some(trace_gen_time), Some(prove_excl_trace_time)) =
-                (execute_time, trace_gen_time, prove_excl_trace_time)
-            {
-                let total_time = execute_time + trace_gen_time + prove_excl_trace_time;
-                metrics.push(Metric::new(PROOF_TIME_LABEL.to_string(), total_time));
+    pub fn check_proof_time_label(&mut self) {
+        let shortest_group_entry = self
+            .flat_dict
+            .iter()
+            .filter(|(label, _)| label.0.iter().any(|(k, _v)| k == "group"))
+            .min_by_key(|(label, _)| label.0.len());
+        let top_level_group_label_len = shortest_group_entry
+            .map(|(label, _)| label.0.len())
+            .expect("'group' label not found");
+
+        for (label, metrics) in self.flat_dict.iter() {
+            let is_top_level_group = label.0.len() == top_level_group_label_len
+                && label
+                    .0
+                    .iter()
+                    .any(|(k, v)| k == "group" && !v.contains("keygen"));
+            if is_top_level_group && !metrics.iter().any(|m| m.name == PROOF_TIME_LABEL) {
+                panic!("Top level group: {:?}, must have PROOF_TIME_LABEL", label);
             }
+            // Currently `total_proof_time_ms` is wall time that collected in top level group:
+            //     {app proof, agg_layer.leaf, agg_layer.internal.0, ..., agg_layer.root}
+            //     and {halo2_outer, halo2_wrapper, agg_keygen}
+            // Accumulating total_proof_time_ms using other metrics affects accuracy
+            // by measuring thread time instead of actual wall time, So we delete the legacy code:
+            //     let total_time = execute_time + trace_gen_time + prove_excl_trace_time;
+            //     metrics.push(Metric::new(PROOF_TIME_LABEL.to_string(), total_time));
+            // We filter out agg_keygen since `total_proof_time_ms` is not a relevant metric
         }
     }
 

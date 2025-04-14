@@ -1,12 +1,18 @@
+#[cfg(feature = "pipeline")]
+use std::sync::mpsc;
 use std::sync::Arc;
 
 use openvm_circuit::arch::ContinuationVmProof;
+#[cfg(feature = "pipeline")]
+use openvm_circuit::arch::{SingleSegmentVmExecutor, Streams, VirtualMachine};
 use openvm_continuations::verifier::{
     internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
     root::types::RootVmVerifierInput,
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
+#[cfg(feature = "pipeline")]
+use openvm_stark_backend::{config::Val, prover::types::ProofInput};
 use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proof};
 use tracing::info_span;
 
@@ -36,7 +42,7 @@ pub struct LeafProvingController {
     pub num_children: usize,
 }
 
-impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
+impl<E: StarkFriEngine<SC> + Send + 'static> AggStarkProver<E> {
     pub fn new(
         agg_stark_pk: AggStarkProvingKey,
         leaf_committed_exe: Arc<NonRootCommittedExe>,
@@ -107,7 +113,16 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
         let mut internal_node_height = 0;
         let mut proofs = leaf_proofs;
         let mut wrapper_layers = 0;
+
         loop {
+            #[cfg(feature = "bench-metrics")]
+            let wall_timer = std::time::Instant::now();
+            let proof_span = info_span!(
+                "agg_layer",
+                group = format!("internal.{internal_node_height}")
+            )
+            .entered();
+
             if proofs.len() == 1 {
                 let actual_air_heights =
                     self.root_prover
@@ -135,18 +150,15 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
                 &proofs,
                 self.num_children_internal,
             );
-            proofs = info_span!(
-                "agg_layer",
-                group = format!("internal.{internal_node_height}")
-            )
-            .in_scope(|| {
-                #[cfg(feature = "bench-metrics")]
-                {
-                    metrics::counter!("fri.log_blowup")
-                        .absolute(self.internal_prover.fri_params().log_blowup as u64);
-                    metrics::counter!("num_children").absolute(self.num_children_internal as u64);
-                }
-                internal_inputs
+            #[cfg(feature = "bench-metrics")]
+            {
+                metrics::counter!("fri.log_blowup")
+                    .absolute(self.internal_prover.fri_params().log_blowup as u64);
+                metrics::counter!("num_children").absolute(self.num_children_internal as u64);
+            }
+            #[cfg(not(feature = "pipeline"))]
+            {
+                proofs = internal_inputs
                     .into_iter()
                     .map(|input| {
                         internal_node_idx += 1;
@@ -154,20 +166,145 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
                             SingleSegmentVmProver::prove(&self.internal_prover, input.write())
                         })
                     })
-                    .collect()
-            });
+                    .collect();
+            }
+            #[cfg(feature = "pipeline")]
+            {
+                tracing::info!(
+                    "AggStarkProver::generate_internal_proof_impl() pipeline feature enabled"
+                );
+                let internal_inputs_num = internal_inputs.len();
+                // Use parallel processing with expanded SingleSegmentVmProver::prove
+                proofs = std::thread::scope(|s| {
+                    // Create channels
+                    let (input_tx, input_rx) =
+                        mpsc::sync_channel::<(usize, Streams<Val<SC>>, tracing::Span)>(1);
+                    let (proof_input_tx, proof_input_rx) =
+                        mpsc::sync_channel::<(usize, ProofInput<SC>, tracing::Span)>(1);
+                    let (proof_tx, proof_rx) = mpsc::sync_channel::<(usize, Proof<SC>)>(1);
+
+                    // Clone required data
+                    let committed_exe = self.internal_prover.committed_exe.clone();
+                    let vm_config = self.internal_prover.pk.vm_config.clone();
+                    let vm_pk = self.internal_prover.pk.clone();
+                    let fri_params = self.internal_prover.pk.fri_params;
+
+                    // ===== Trace Generation Thread =====
+                    let executor = SingleSegmentVmExecutor::new(vm_config.clone());
+                    let trace_handle = s.spawn(move || {
+                        for (idx, input, parent_span) in input_rx.iter() {
+                            let span = parent_span.in_scope(|| info_span!("trace_gen", idx = idx));
+                            let _guard = span.enter();
+
+                            // Execute and generate trace data
+                            let proof_input = executor
+                                .execute_and_generate(committed_exe.clone(), input)
+                                .unwrap();
+
+                            // Send result to proof thread
+                            proof_input_tx
+                                .send((idx, proof_input, parent_span.clone()))
+                                .expect("Failed to send proof input");
+                        }
+
+                        drop(proof_input_tx);
+                    });
+
+                    // ===== Proof Generation Thread =====
+                    let prove_handle = s.spawn(move || {
+                        let prove_engine = E::new(fri_params);
+                        let vm = VirtualMachine::new(prove_engine, vm_config.clone());
+
+                        for (idx, proof_input, parent_span) in proof_input_rx.iter() {
+                            let span =
+                                parent_span.in_scope(|| info_span!("prove_segment", idx = idx));
+                            let _guard = span.enter();
+
+                            // Generate proof
+                            let proof = vm.prove_single(&vm_pk.vm_pk, proof_input);
+
+                            // Send proof
+                            proof_tx.send((idx, proof)).expect("Failed to send proof");
+                        }
+
+                        drop(proof_tx);
+                    });
+
+                    // ===== Collector Thread =====
+                    let collector_handle = s.spawn(move || {
+                        let mut proofs = Vec::with_capacity(internal_inputs_num);
+                        let mut pending_proofs = std::collections::BTreeMap::new();
+                        let mut next_idx = 0;
+
+                        for (idx, proof) in proof_rx.iter() {
+                            pending_proofs.insert(idx, proof);
+
+                            // Collect proofs in order
+                            while let Some(proof) = pending_proofs.remove(&next_idx) {
+                                proofs.push(proof);
+                                next_idx += 1;
+                            }
+                        }
+
+                        // Ensure all proofs have been collected in order
+                        let expected = internal_inputs_num;
+                        let actual = proofs.len();
+                        assert_eq!(
+                            actual, expected,
+                            "Expected {} proofs, but got {}",
+                            expected, actual
+                        );
+
+                        proofs
+                    });
+
+                    // ===== Main Thread - Send Inputs =====
+                    for (idx, input) in internal_inputs.into_iter().enumerate() {
+                        internal_node_idx += 1;
+                        let span = info_span!("single_internal_agg", idx = internal_node_idx);
+                        let _guard = span.enter();
+
+                        // Send input
+                        input_tx
+                            .send((idx, input.write().into(), span.clone()))
+                            .expect("Failed to send internal node input");
+                    }
+
+                    drop(input_tx);
+
+                    // Wait for all threads to complete
+                    trace_handle.join().expect("Trace thread panicked");
+                    prove_handle.join().expect("Prove thread panicked");
+
+                    collector_handle.join().expect("Collector thread panicked")
+                });
+            }
+            proof_span.exit();
+            #[cfg(feature = "bench-metrics")]
+            metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
+
             internal_node_height += 1;
         }
+
         proofs.pop().unwrap()
     }
 
     fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<RootSC> {
-        info_span!("agg_layer", group = "root", idx = 0).in_scope(|| {
+        info_span!("agg_layer", group = "root").in_scope(|| {
+            let wall_timer = std::time::Instant::now();
             let input = root_input.write();
             #[cfg(feature = "bench-metrics")]
             metrics::counter!("fri.log_blowup")
                 .absolute(self.root_prover.fri_params().log_blowup as u64);
-            SingleSegmentVmProver::prove(&self.root_prover, input)
+            let proof = SingleSegmentVmProver::prove(&self.root_prover, input);
+            tracing::info!(
+                "agg_layer wall time, group = root: {:.3}s",
+                wall_timer.elapsed().as_secs_f64()
+            );
+            #[cfg(feature = "bench-metrics")]
+            metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
+
+            proof
         })
     }
 }
@@ -178,12 +315,13 @@ impl LeafProvingController {
         self
     }
 
-    pub fn generate_proof<E: StarkFriEngine<SC>>(
+    pub fn generate_proof<E: StarkFriEngine<SC> + Send + 'static>(
         &self,
         prover: &VmLocalProver<SC, NativeConfig, E>,
         app_proofs: &ContinuationVmProof<SC>,
     ) -> Vec<Proof<SC>> {
         info_span!("agg_layer", group = "leaf").in_scope(|| {
+            let wall_timer = std::time::Instant::now();
             #[cfg(feature = "bench-metrics")]
             {
                 metrics::counter!("fri.log_blowup").absolute(prover.fri_params().log_blowup as u64);
@@ -192,14 +330,97 @@ impl LeafProvingController {
             let leaf_inputs =
                 LeafVmVerifierInput::chunk_continuation_vm_proof(app_proofs, self.num_children);
             tracing::info!("num_leaf_proofs={}", leaf_inputs.len());
-            leaf_inputs
+
+            #[cfg(not(feature = "pipeline"))]
+            let proofs = leaf_inputs
                 .into_iter()
                 .enumerate()
                 .map(|(leaf_node_idx, input)| {
                     info_span!("single_leaf_agg", idx = leaf_node_idx)
                         .in_scope(|| SingleSegmentVmProver::prove(prover, input.write_to_stream()))
                 })
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+
+            #[cfg(feature = "pipeline")]
+            let proofs = std::thread::scope(|s| {
+                tracing::info!("LeafProvingController::generate_proof() pipeline feature enabled");
+                let (input_tx, input_rx) =
+                    mpsc::sync_channel::<(Streams<Val<SC>>, tracing::Span)>(1);
+                let (proof_input_tx, proof_input_rx) =
+                    mpsc::sync_channel::<(ProofInput<SC>, tracing::Span)>(1);
+                let (proof_tx, proof_rx) = mpsc::sync_channel::<Proof<SC>>(1);
+
+                let committed_exe = prover.committed_exe.clone();
+                let vm_config = prover.pk.vm_config.clone();
+                let vm_pk = prover.pk.clone();
+                let fri_params = prover.pk.fri_params;
+
+                let executor = SingleSegmentVmExecutor::new(vm_config.clone());
+                let trace_handle = s.spawn(move || {
+                    for (input, parent_span) in input_rx.iter() {
+                        let span = parent_span.in_scope(|| info_span!("trace_gen"));
+                        let _guard = span.enter();
+
+                        let proof_input = executor
+                            .execute_and_generate(committed_exe.clone(), input)
+                            .unwrap();
+
+                        proof_input_tx
+                            .send((proof_input, parent_span.clone()))
+                            .expect("Failed to send proof input");
+                    }
+                    drop(proof_input_tx);
+                });
+
+                let prove_handle = s.spawn(move || {
+                    let prove_engine = E::new(fri_params);
+                    let vm = VirtualMachine::new(prove_engine, vm_config.clone());
+
+                    for (proof_input, parent_span) in proof_input_rx.iter() {
+                        let span = parent_span.in_scope(|| info_span!("prove_segment"));
+                        let _guard = span.enter();
+
+                        let proof = vm.prove_single(&vm_pk.vm_pk, proof_input);
+
+                        proof_tx.send(proof).expect("Failed to send proof");
+                    }
+                    drop(proof_tx);
+                });
+
+                let collector_handle = s.spawn(move || {
+                    let mut proofs = Vec::new();
+                    for proof in proof_rx.iter() {
+                        proofs.push(proof); // Collect proofs in order
+                    }
+
+                    proofs
+                });
+
+                for (leaf_node_idx, input) in leaf_inputs.into_iter().enumerate() {
+                    let span = info_span!("single_leaf_agg", idx = leaf_node_idx);
+                    let _guard = span.enter();
+
+                    input_tx
+                        .send((input.write_to_stream().into(), span.clone()))
+                        .expect("Failed to send leaf input");
+                }
+
+                drop(input_tx);
+
+                trace_handle.join().expect("Trace thread panicked");
+                prove_handle.join().expect("Prove thread panicked");
+
+                collector_handle.join().expect("Collector thread panicked")
+            });
+
+            tracing::info!(
+                "agg_layer wall time, group = leaf: {:.3}s",
+                wall_timer.elapsed().as_secs_f64()
+            );
+            #[cfg(feature = "bench-metrics")]
+            metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
+
+            proofs
         })
     }
 }
