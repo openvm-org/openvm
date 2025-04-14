@@ -359,10 +359,6 @@ where
         })
     }
 
-    pub fn current_trace_cells(&self) -> Vec<usize> {
-        self.chip_complex.current_trace_cells()
-    }
-
     #[cfg(feature = "bench-metrics")]
     #[allow(unused_variables)]
     pub fn update_instruction_metrics(
@@ -378,7 +374,7 @@ where
             let opcode_name = executor.get_opcode_name(opcode.as_usize());
             self.metrics.update_trace_cells(
                 &self.air_names,
-                self.current_trace_cells(),
+                self.chip_complex.current_trace_cells(),
                 opcode_name,
                 dsl_instr,
             );
