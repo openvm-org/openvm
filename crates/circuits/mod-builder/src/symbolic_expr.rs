@@ -222,7 +222,8 @@ impl SymbolicExpr {
             SymbolicExpr::IntAdd(lhs, s) => {
                 let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(proper_max);
                 let scalar = BigUint::from_usize(s.unsigned_abs()).unwrap();
-                // Optimization opportunity: since `s` is a constant, we can likely do better than this bound.
+                // Optimization opportunity: since `s` is a constant, we can likely do better than
+                // this bound.
                 (lhs_max_pos + &scalar, lhs_max_neg + &scalar)
             }
             SymbolicExpr::IntMul(lhs, s) => {
@@ -243,8 +244,8 @@ impl SymbolicExpr {
     }
 
     /// Returns the maximum possible size, in bits, of each limb in `self.expr`.
-    /// This is already tracked in `FieldVariable`. However when auto saving in `FieldVariable::div`,
-    /// we need to know it from the `SymbolicExpr` only.
+    /// This is already tracked in `FieldVariable`. However when auto saving in
+    /// `FieldVariable::div`, we need to know it from the `SymbolicExpr` only.
     /// self should be a constraint expr.
     pub fn constraint_limb_max_abs(&self, limb_bits: usize, num_limbs: usize) -> usize {
         let canonical_limb_max_abs = (1 << limb_bits) - 1;

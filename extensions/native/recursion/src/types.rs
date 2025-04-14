@@ -22,8 +22,9 @@ pub struct StarkVerificationAdvice<C: Config> {
     pub preprocessed_data: Option<VerifierSinglePreprocessedDataInProgram<C>>,
     /// Trace sub-matrix widths
     pub width: TraceWidth,
-    /// The factor to multiply the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.
-    /// This is equivalently the number of chunks the quotient polynomial is split into.
+    /// The factor to multiply the trace degree by to get the degree of the quotient polynomial.
+    /// Determined from the max constraint degree of the AIR constraints. This is equivalently
+    /// the number of chunks the quotient polynomial is split into.
     pub quotient_degree: usize,
     /// Number of public values for this STARK only
     pub num_public_values: usize,

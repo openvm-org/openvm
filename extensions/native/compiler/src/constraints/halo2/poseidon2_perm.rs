@@ -114,7 +114,8 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
         // Matrix is circ(2, 1, 1)
         let sum = gate.sum(ctx, self.s.iter().copied());
         for (i, x) in self.s.iter_mut().enumerate() {
-            // This is the same as `*x = gate.add(ctx, *x, sum)` but we save a cell by reusing `sum`:
+            // This is the same as `*x = gate.add(ctx, *x, sum)` but we save a cell by reusing
+            // `sum`:
             if i % 2 == 0 {
                 ctx.assign_region(
                     [
@@ -160,7 +161,8 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
         assert_eq!(T, 3);
         let sum = gate.sum(ctx, self.s.iter().copied());
         for i in 0..T {
-            // This is the same as `self.s[i] = gate.mul_add(ctx, self.s[i], Constant(mat_internal_diag_m_1[i]), sum)` but we save a cell by reusing `sum`.
+            // This is the same as `self.s[i] = gate.mul_add(ctx, self.s[i],
+            // Constant(mat_internal_diag_m_1[i]), sum)` but we save a cell by reusing `sum`.
             if i % 2 == 0 {
                 ctx.assign_region(
                     [

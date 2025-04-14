@@ -49,8 +49,8 @@ pub trait VmAdapterChip<F> {
 
     type Interface: VmAdapterInterface<F>;
 
-    /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
-    /// This is called at the start of instruction execution.
+    /// Given instruction, perform memory reads and return only the read data that the integrator
+    /// needs to use. This is called at the start of instruction execution.
     ///
     /// The implementer may choose to store data in the `Self::ReadRecord` struct, for example in
     /// an [Option], which will later be sent to the `postprocess` method.
@@ -64,8 +64,9 @@ pub trait VmAdapterChip<F> {
         Self::ReadRecord,
     )>;
 
-    /// Given instruction and the data to write, perform memory writes and return the `(record, next_timestamp)`
-    /// of the full adapter record for this instruction. This is guaranteed to be called after `preprocess`.
+    /// Given instruction and the data to write, perform memory writes and return the `(record,
+    /// next_timestamp)` of the full adapter record for this instruction. This is guaranteed to
+    /// be called after `preprocess`.
     fn postprocess(
         &mut self,
         memory: &mut MemoryController<F>,
@@ -94,9 +95,11 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
     type Interface: VmAdapterInterface<AB::Expr>;
 
     /// [Air](openvm_stark_backend::p3_air::Air) constraints owned by the adapter.
-    /// The `interface` is given as abstract expressions so it can be directly used in other AIR constraints.
+    /// The `interface` is given as abstract expressions so it can be directly used in other AIR
+    /// constraints.
     ///
-    /// Adapters should document the max constraint degree as a function of the constraint degrees of `reads, writes, instruction`.
+    /// Adapters should document the max constraint degree as a function of the constraint degrees
+    /// of `reads, writes, instruction`.
     fn eval(
         &self,
         builder: &mut AB,
@@ -110,9 +113,11 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
 
 /// Trait to be implemented on primitive chip to integrate with the machine.
 pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
-    /// Minimum data that must be recorded to be able to generate trace for one row of `PrimitiveAir`.
+    /// Minimum data that must be recorded to be able to generate trace for one row of
+    /// `PrimitiveAir`.
     type Record: Send + Serialize + DeserializeOwned;
-    /// The primitive AIR with main constraints that do not depend on memory and other architecture-specifics.
+    /// The primitive AIR with main constraints that do not depend on memory and other
+    /// architecture-specifics.
     type Air: BaseAirWithPublicValues<F> + Clone;
 
     #[allow(clippy::type_complexity)]
@@ -138,9 +143,10 @@ pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
 
     fn air(&self) -> &Self::Air;
 
-    /// Finalize the trace, especially the padded rows if the all-zero rows don't satisfy the constraints.
-    /// This is done **after** records are consumed and the trace matrix is generated.
-    /// Most implementations should just leave the default implementation if padding with rows of all 0s satisfies the constraints.
+    /// Finalize the trace, especially the padded rows if the all-zero rows don't satisfy the
+    /// constraints. This is done **after** records are consumed and the trace matrix is
+    /// generated. Most implementations should just leave the default implementation if padding
+    /// with rows of all 0s satisfies the constraints.
     fn finalize(&self, _trace: &mut RowMajorMatrix<F>, _num_records: usize) {
         // do nothing by default
     }
@@ -394,7 +400,6 @@ where
 /// The most common adapter interface.
 /// Performs `NUM_READS` batch reads of size `READ_SIZE` and
 /// `NUM_WRITES` batch writes of size `WRITE_SIZE`.
-///
 pub struct BasicAdapterInterface<
     T,
     PI,
@@ -484,7 +489,8 @@ impl<
     type ProcessedInstruction = MinimalInstruction<T>;
 }
 
-/// Similar to `BasicAdapterInterface`, but it flattens the reads and writes into a single flat array for each
+/// Similar to `BasicAdapterInterface`, but it flattens the reads and writes into a single flat
+/// array for each
 pub struct FlatInterface<T, PI, const READ_CELLS: usize, const WRITE_CELLS: usize>(
     PhantomData<T>,
     PhantomData<PI>,
@@ -498,8 +504,8 @@ impl<T, PI, const READ_CELLS: usize, const WRITE_CELLS: usize> VmAdapterInterfac
     type ProcessedInstruction = PI;
 }
 
-/// An interface that is fully determined during runtime. This should **only** be used as a last resort when static
-/// compile-time guarantees cannot be made.
+/// An interface that is fully determined during runtime. This should **only** be used as a last
+/// resort when static compile-time guarantees cannot be made.
 #[derive(Serialize, Deserialize)]
 pub struct DynAdapterInterface<T>(PhantomData<T>);
 

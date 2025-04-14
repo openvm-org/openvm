@@ -35,7 +35,8 @@ fn main() -> Result<()> {
     );
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        // run_test tries to setup tracing, but it will be ignored since run_with_metric_collection already sets it.
+        // run_test tries to setup tracing, but it will be ignored since run_with_metric_collection
+        // already sets it.
         let (fib_air, fib_input) = collect_airs_and_inputs!(fib_chip);
         let vdata = engine.run_test(fib_air, fib_input).unwrap();
         // Unlike other apps, this "app" does not have continuations enabled.

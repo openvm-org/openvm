@@ -23,15 +23,16 @@ pub const MAX_TWO_ADICITY: usize = 27;
 
 /// Notes:
 /// 1. FieldMerkleTreeMMCS sorts traces by height in descending order when committing data.
-/// 2. **Required** that `C::F` has two-adicity <= [MAX_TWO_ADICITY]. In particular this implies that all LDE matrices have
-///    `log2(lde_height) <= MAX_TWO_ADICITY`.
+/// 2. **Required** that `C::F` has two-adicity <= [MAX_TWO_ADICITY]. In particular this implies
+///    that all LDE matrices have `log2(lde_height) <= MAX_TWO_ADICITY`.
 /// 3. **Required** that the maximum trace height is `2^log_max_height - 1`.
 ///
 /// Reference:
 /// <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/merkle_tree.rs#L53>
 /// So traces are sorted in `opening_proof`.
 ///
-/// 2. FieldMerkleTreeMMCS::poseidon2 keeps the raw values in the original order. So traces are not sorted in `opened_values`.
+/// 2. FieldMerkleTreeMMCS::poseidon2 keeps the raw values in the original order. So traces are not
+///    sorted in `opened_values`.
 ///
 /// Reference:
 /// <https://github.com/Plonky3/Plonky3/blob/27b3127dab047e07145c38143379edec2960b3e1/merkle-tree/src/mmcs.rs#L87>
@@ -149,7 +150,8 @@ pub fn verify_two_adic_pcs<C: Config>(
     };
     builder.cycle_tracker_end("pre-compute-rounds-context");
 
-    // Accumulators of the reduced opening sums, reset per query. The array `ro` is indexed by log_height.
+    // Accumulators of the reduced opening sums, reset per query. The array `ro` is indexed by
+    // log_height.
     let ro: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
     let alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
 
@@ -158,21 +160,23 @@ pub fn verify_two_adic_pcs<C: Config>(
         let index_bits = challenger.sample_bits(builder, log_max_lde_height);
 
         // We reset the reduced opening accumulators at the start of each query.
-        // We describe what `ro[log_height]` computes per query in pseduo-code, where `log_height` is log2 of the size of the LDE domain:
-        // ro[log_height] = 0
+        // We describe what `ro[log_height]` computes per query in pseduo-code, where `log_height`
+        // is log2 of the size of the LDE domain: ro[log_height] = 0
         // alpha_pow[log_height] = 1
         // for round in rounds:
-        //   for mat in round.mats where (mat.domain.log_n + log_blowup == log_height): // preserving order of round.mats
-        //      // g is generator of F
+        //   for mat in round.mats where (mat.domain.log_n + log_blowup == log_height): //
+        // preserving order of round.mats      // g is generator of F
         //      // w_{log_height} is generator of subgroup of F of order 2^log_height
-        //      x = g * w_{log_height}^{reverse_bits(index >> (log_max_height - log_height), log_height)}
-        //      // reverse_bits(x, bits) takes an unsigned integer x with `bits` bits and returns the unsigned integer with the bits of x reversed.
-        //      // x is a rotated evaluation point in a coset of the LDE domain.
-        //      ps_at_x = [claimed evaluation of p at x for each polynomial p corresponding to column of mat]
+        //      x = g * w_{log_height}^{reverse_bits(index >> (log_max_height - log_height),
+        // log_height)}      // reverse_bits(x, bits) takes an unsigned integer x with
+        // `bits` bits and returns the unsigned integer with the bits of x reversed.      //
+        // x is a rotated evaluation point in a coset of the LDE domain.      ps_at_x =
+        // [claimed evaluation of p at x for each polynomial p corresponding to column of mat]
         //      // ps_at_x is array of Felt
         //      for (z, ps_at_z) in zip(mat.points, mat.values):
-        //        // z is an out of domain point in Ext. There may be multiple per round to account for rotations in AIR constraints.
-        //        // ps_at_z is array of Ext for [claimed evaluation of p at z for each polyomial p corresponding to column of mat]
+        //        // z is an out of domain point in Ext. There may be multiple per round to account
+        // for rotations in AIR constraints.        // ps_at_z is array of Ext for [claimed
+        // evaluation of p at z for each polyomial p corresponding to column of mat]
         //        for (p_at_x, p_at_z) in zip(ps_at_x, ps_at_z):
         //          ro[log_height] += alpha_pow[log_height] * (p_at_x - p_at_z) / (x - z)
         //          alpha_pow[log_height] *= alpha
@@ -204,11 +208,13 @@ pub fn verify_two_adic_pcs<C: Config>(
 
             // b = index_bits
             // w = generator of order 2^log_max_height
-            // we first compute `w ** (b[0] * 2^(log_max_height - 1) + ... + b[log_max_height - 1])` using a square-and-multiply algorithm.
+            // we first compute `w ** (b[0] * 2^(log_max_height - 1) + ... + b[log_max_height - 1])`
+            // using a square-and-multiply algorithm.
             let res = builder.exp_bits_big_endian(w, &index_bits_truncated);
 
             // we now compute:
-            // tag_exp[log_max_height - i] = g * w ** (b[log_max_height - i] * 2^(log_max_height - 1) + ... + b[log_max_height - 1] * 2^(log_max_height - i))
+            // tag_exp[log_max_height - i] = g * w ** (b[log_max_height - i] * 2^(log_max_height -
+            // 1) + ... + b[log_max_height - 1] * 2^(log_max_height - i))
             // using a square-and-divide algorithm.
             // g * res is tag_exp[0]
             // `tag_exp` is used below as a rotated evaluation point in a coset of the LDE domain.
@@ -306,7 +312,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                             builder.assign(&cur_ro, cur_ro + (mat_ro * cur_alpha_pow / (z - x)));
                             builder.assign(&cur_alpha_pow, cur_alpha_pow * mat_alpha_pow);
                         }
-                        // The buffer `mat_opening` has now been written to, so we set `is_init` to 1.
+                        // The buffer `mat_opening` has now been written to, so we set `is_init` to
+                        // 1.
                         builder.assign(&is_init, C::N::ONE);
                         builder.cycle_tracker_end("single-reduced-opening-eval");
                     });
@@ -537,8 +544,9 @@ fn compute_rounds_context<C: Config>(
         iter_zip!(builder, round.mats, ov_ptrs, mat_alpha_pows).for_each(|ptr_vec, builder| {
             let mat = builder.iter_ptr_get(&round.mats, ptr_vec[0]);
             let local = builder.get(&mat.values, 0);
-            // We allocate the underlying buffer for the current `ov_ptr` here. On allocation, it is uninit, and
-            // will be written to on the first call of `fri_single_reduced_opening_eval` for this `ov_ptr`.
+            // We allocate the underlying buffer for the current `ov_ptr` here. On allocation, it is
+            // uninit, and will be written to on the first call of
+            // `fri_single_reduced_opening_eval` for this `ov_ptr`.
             let buf = builder.array(local.len());
             let width = buf.len();
             builder.iter_ptr_set(&ov_ptrs, ptr_vec[1], buf);

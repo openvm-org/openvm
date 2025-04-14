@@ -76,9 +76,9 @@ impl<F: Default + Clone> InternalVmVerifierPvs<Felt<F>> {
 pub struct InternalVmVerifierExtraPvs<T> {
     /// The commitment of the leaf verifier program.
     pub leaf_verifier_commit: [T; DIGEST_SIZE],
-    /// For recursion verification, a program need its own commitment, but its own commitment cannot
-    /// be hardcoded inside the program itself. So the commitment has to be read from external and
-    /// be committed.
+    /// For recursion verification, a program need its own commitment, but its own commitment
+    /// cannot be hardcoded inside the program itself. So the commitment has to be read from
+    /// external and be committed.
     pub internal_program_commit: [T; DIGEST_SIZE],
 }
 

@@ -111,10 +111,10 @@ where
             builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
             builder.when(marker[i]).assert_eq(cols.diff_val, diff);
         }
-        // - If x != y, then prefix_sum = 1 so marker[i] must be 1 iff i is the first index where diff != 0.
-        //   Constrains that diff == diff_val where diff_val is non-zero.
-        // - If x == y, then prefix_sum = 0 and cmp_result = 0.
-        //   Here, prefix_sum cannot be 1 because all diff are zero, making diff == diff_val fails.
+        // - If x != y, then prefix_sum = 1 so marker[i] must be 1 iff i is the first index where
+        //   diff != 0. Constrains that diff == diff_val where diff_val is non-zero.
+        // - If x == y, then prefix_sum = 0 and cmp_result = 0. Here, prefix_sum cannot be 1 because
+        //   all diff are zero, making diff == diff_val fails.
 
         builder.assert_bool(prefix_sum.clone());
         builder

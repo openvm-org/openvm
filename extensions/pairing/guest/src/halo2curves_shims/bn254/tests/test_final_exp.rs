@@ -54,10 +54,10 @@ fn assert_final_exp_one<const N: usize>(a: &[i32; N], b: &[i32; N]) {
     Bn254::assert_final_exp_is_one(&f, &P_ecpoints, &Q_ecpoints);
 }
 
-/// Generates test points for N number of points for an elliptic curve pairing, where the inputs `a` and `b` are
-/// scalars of generators in G1 and G2, respectively. Importantly, for every even index, the generator P point is
-/// negated (reflected an the x-axis). Outputs the vectors of P and Q points as well as the corresponding P and Q
-/// EcPoint structs.
+/// Generates test points for N number of points for an elliptic curve pairing, where the inputs `a`
+/// and `b` are scalars of generators in G1 and G2, respectively. Importantly, for every even index,
+/// the generator P point is negated (reflected an the x-axis). Outputs the vectors of P and Q
+/// points as well as the corresponding P and Q EcPoint structs.
 #[allow(non_snake_case)]
 #[allow(clippy::type_complexity)]
 pub fn generate_test_points_generator_scalar<const N: usize>(

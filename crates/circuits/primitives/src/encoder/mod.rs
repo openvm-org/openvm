@@ -20,7 +20,8 @@ pub struct Encoder {
     /// The number of flags, excluding the invalid/dummy flag.
     flag_cnt: usize,
     /// Maximal degree of the flag expressions.
-    /// The maximal degree of the equalities in the AIR, however, **is one higher:** that is, `max_flag_degree + 1`.
+    /// The maximal degree of the equalities in the AIR, however, **is one higher:** that is,
+    /// `max_flag_degree + 1`.
     max_flag_degree: u32,
     /// All possible points in the k-dimensional space that can be used to encode flags
     pts: Vec<Vec<u32>>,
@@ -34,7 +35,8 @@ impl Encoder {
     /// The zero point is reserved for the dummy row.
     /// `max_degree` is the upper bound for the flag expressions, but the `eval` function
     /// of the encoder itself will use some constraints of degree `max_degree + 1`.
-    /// `reserve_invalid` indicates if the encoder should reserve the (0, ..., 0) point as an invalid/dummy flag.
+    /// `reserve_invalid` indicates if the encoder should reserve the (0, ..., 0) point as an
+    /// invalid/dummy flag.
     pub fn new(cnt: usize, max_degree: u32, reserve_invalid: bool) -> Self {
         // Calculate binomial coefficient (d+k choose k) to determine how many points we can encode
         let binomial = |x: u32| {
@@ -109,7 +111,8 @@ impl Encoder {
         expr * denom.inverse()
     }
 
-    /// Get the polynomial expression that equals 1 when the variables encode the flag at index flag_idx
+    /// Get the polynomial expression that equals 1 when the variables encode the flag at index
+    /// flag_idx
     pub fn get_flag_expr<AB: InteractionBuilder>(
         &self,
         flag_idx: usize,
@@ -125,7 +128,8 @@ impl Encoder {
         self.pts[flag_idx + self.reserve_invalid as usize].clone()
     }
 
-    /// Returns an expression that is 1 if the variables encode a valid flag and 0 if they encode the invalid point
+    /// Returns an expression that is 1 if the variables encode a valid flag and 0 if they encode
+    /// the invalid point
     pub fn is_valid<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> AB::Expr {
         AB::Expr::ONE - self.expression_for_point::<AB>(&self.pts[0], vars)
     }

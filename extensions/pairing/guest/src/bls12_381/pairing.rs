@@ -74,8 +74,8 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
 
     /// Multiplies a line in 02345-form with a Fp12 element to get an Fp12 element
     fn mul_by_023(f: &Fp12, l: &EvaluatedLine<Fp2>) -> Fp12 {
-        // this is only used if the number of lines is odd, which doesn't happen for our applications
-        // right now, so we can use this suboptimal implementation
+        // this is only used if the number of lines is odd, which doesn't happen for our
+        // applications right now, so we can use this suboptimal implementation
         Fp12::from_evaluated_line_m_type(l.clone()) * f
     }
 
@@ -110,9 +110,9 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
         let s4 = &self_coeffs[3];
         let s5 = &self_coeffs[5];
 
-        // NOTE[yj]: Hand-calculated multiplication for Fp12 * 02345 ∈ Fp2; this is likely not the most efficient implementation
-        // c00 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4)
-        // c01 = cs0co1 + cs1co0 + xi(cs2co2 + cs4co5 + cs5co4)
+        // NOTE[yj]: Hand-calculated multiplication for Fp12 * 02345 ∈ Fp2; this is likely not the
+        // most efficient implementation c00 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 +
+        // cs4co4) c01 = cs0co1 + cs1co0 + xi(cs2co2 + cs4co5 + cs5co4)
         // c02 = cs0co2 + cs1co1 + cs2co0 + cs3co4 + xi(cs5co5)
         // c10 = cs3co0 + xi(cs1co5 + cs2co4 + cs4co2 + cs5co1)
         // c11 = cs0co4 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
@@ -154,7 +154,8 @@ impl MultiMillerLoop for Bls12_381 {
         f
     }
 
-    /// The expected output of this function when running the Miller loop with embedded exponent is c^3 * l_{3Q}
+    /// The expected output of this function when running the Miller loop with embedded exponent is
+    /// c^3 * l_{3Q}
     fn pre_loop(
         Q_acc: Vec<AffinePoint<Self::Fp2>>,
         Q: &[AffinePoint<Self::Fp2>],
@@ -162,8 +163,9 @@ impl MultiMillerLoop for Bls12_381 {
         xy_fracs: &[(Self::Fp, Self::Fp)],
     ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>) {
         let mut f = if let Some(mut c) = c {
-            // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
-            // will multiply by c again due to the last two values of the pseudo-binary encoding (BLS12_381_PSEUDO_BINARY_ENCODING) being 1.
+            // for the miller loop with embedded exponent, f will be set to c at the beginning of
+            // the function, and we will multiply by c again due to the last two values
+            // of the pseudo-binary encoding (BLS12_381_PSEUDO_BINARY_ENCODING) being 1.
             // Therefore, the final value of f at the end of this block is c^3.
             let mut c3 = c.clone();
             c.square_assign();
@@ -176,8 +178,9 @@ impl MultiMillerLoop for Bls12_381 {
         let mut Q_acc = Q_acc;
 
         // Special case the first iteration of the Miller loop with pseudo_binary_encoding = 1:
-        // this means that the first step is a double and add, but we need to separate the two steps since the optimized
-        // `miller_double_and_add_step` will fail because Q_acc is equal to Q_signed on the first iteration
+        // this means that the first step is a double and add, but we need to separate the two steps
+        // since the optimized `miller_double_and_add_step` will fail because Q_acc is equal
+        // to Q_signed on the first iteration
         let (Q_out_double, lines_2S) = Q_acc
             .into_iter()
             .map(|Q| Self::miller_double_step(&Q))
@@ -210,7 +213,8 @@ impl MultiMillerLoop for Bls12_381 {
         (f, Q_acc)
     }
 
-    /// After running the main body of the Miller loop, we conjugate f due to the curve seed x being negative.
+    /// After running the main body of the Miller loop, we conjugate f due to the curve seed x being
+    /// negative.
     fn post_loop(
         f: &Self::Fp12,
         Q_acc: Vec<AffinePoint<Self::Fp2>>,
@@ -272,7 +276,8 @@ impl PairingCheck for Bls12_381 {
         #[cfg(target_os = "zkvm")]
         {
             let hint = MaybeUninit::<(Fp12, Fp12)>::uninit();
-            // We do not rely on the slice P's memory layout since rust does not guarantee it across compiler versions.
+            // We do not rely on the slice P's memory layout since rust does not guarantee it across
+            // compiler versions.
             let p_fat_ptr = (P.as_ptr() as u32, P.len() as u32);
             let q_fat_ptr = (Q.as_ptr() as u32, Q.len() as u32);
             unsafe {
@@ -304,8 +309,8 @@ impl PairingCheck for Bls12_381 {
 
 #[allow(non_snake_case)]
 impl Bls12_381 {
-    // The paper only describes the implementation for Bn254, so we use the gnark implementation for Bls12_381.
-    // Adapted from the gnark implementation:
+    // The paper only describes the implementation for Bn254, so we use the gnark implementation for
+    // Bls12_381. Adapted from the gnark implementation:
     // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bls12381/e12_pairing.go#L394C1-L395C1
     fn try_honest_pairing_check(
         P: &[AffinePoint<<Self as PairingCheck>::Fp>],
@@ -315,13 +320,14 @@ impl Bls12_381 {
 
         // The gnark implementation checks that f * s = c^{q - x} where x is the curve seed.
         // We check an equivalent condition: f * c^x * s = c^q.
-        // This is because we can compute f * c^x by embedding the c^x computation in the miller loop.
+        // This is because we can compute f * c^x by embedding the c^x computation in the miller
+        // loop.
 
         // We compute c^q before c is consumed by conjugate() below
         let c_q = FieldExtension::frobenius_map(&c, 1);
 
-        // Since the Bls12_381 curve has a negative seed, the miller loop for Bls12_381 is computed as
-        // f_{Miller,x,Q}(P) = conjugate( f_{Miller,-x,Q}(P) * c^{-x} ).
+        // Since the Bls12_381 curve has a negative seed, the miller loop for Bls12_381 is computed
+        // as f_{Miller,x,Q}(P) = conjugate( f_{Miller,-x,Q}(P) * c^{-x} ).
         // We will pass in the conjugate inverse of c into the miller loop so that we compute
         // fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} )  (where c' is the conjugate inverse of c)
         //    = f_{Miller,x,Q}(P) * c^x

@@ -40,13 +40,12 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
-/// * The data is read from the heap (address space 2), and the pointers
-///   are read from registers (address space 1).
-/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size
-///   `READ_SIZE` from the heap, starting from the addresses in `rs[0]`
-///   (and `rs[1]` if `R = 2`).
-/// * Writes take the form of `BLOCKS_PER_WRITE` consecutive writes of
-///   size `WRITE_SIZE` to the heap, starting from the address in `rd`.
+/// * The data is read from the heap (address space 2), and the pointers are read from registers
+///   (address space 1).
+/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `READ_SIZE` from the heap,
+///   starting from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
+/// * Writes take the form of `BLOCKS_PER_WRITE` consecutive writes of size `WRITE_SIZE` to the
+///   heap, starting from the address in `rd`.
 #[derive(Clone)]
 pub struct Rv32VecHeapAdapterChip<
     F: Field,
@@ -247,9 +246,11 @@ impl<
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // We constrain the highest limbs of heap pointers to be less than 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))).
-        // This ensures that no overflow occurs when computing memory pointers. Since the number of cells accessed with each address
-        // will be small enough, and combined with the memory argument, it ensures that all the cells accessed in the memory are less than 2^addr_bits.
+        // We constrain the highest limbs of heap pointers to be less than 2^(addr_bits -
+        // (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))). This ensures that no overflow
+        // occurs when computing memory pointers. Since the number of cells accessed with each
+        // address will be small enough, and combined with the memory argument, it ensures
+        // that all the cells accessed in the memory are less than 2^addr_bits.
         let need_range_check: Vec<AB::Var> = cols
             .rs_val
             .iter()
@@ -257,7 +258,8 @@ impl<
             .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1])
             .collect();
 
-        // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain the correct amount of bits
+        // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain
+        // the correct amount of bits
         let limb_shift = AB::F::from_canonical_usize(
             1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
         );

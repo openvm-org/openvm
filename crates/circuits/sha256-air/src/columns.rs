@@ -12,8 +12,9 @@ use super::{
 /// - First 16 rows use Sha256RoundCols
 /// - Final row uses Sha256DigestCols
 ///
-/// Note that for soundness, we require that there is always a padding row after the last digest row in the trace.
-/// Right now, this is true because the unpadded height is a multiple of 17, and thus not a power of 2.
+/// Note that for soundness, we require that there is always a padding row after the last digest row
+/// in the trace. Right now, this is true because the unpadded height is a multiple of 17, and thus
+/// not a power of 2.
 ///
 /// Sha256RoundCols and Sha256DigestCols share the same first 3 fields:
 /// - flags
@@ -22,7 +23,8 @@ use super::{
 ///
 /// This design allows for:
 /// 1. Common constraints to work on either struct type by accessing these shared fields
-/// 2. Specific constraints to use the appropriate struct, with flags helping to do conditional constraints
+/// 2. Specific constraints to use the appropriate struct, with flags helping to do conditional
+///    constraints
 ///
 /// Note that the `Sha256WorkVarsCols` field it is used for different purposes in the two structs.
 #[repr(C)]
@@ -60,8 +62,9 @@ pub struct Sha256MessageScheduleCols<T> {
     /// The message schedule words as 32-bit integers
     /// The first 16 words will be the message data
     pub w: [[T; SHA256_WORD_BITS]; SHA256_ROUNDS_PER_ROW],
-    /// Will be message schedule carries for rows 4..16 and a buffer for rows 0..4 to be used freely by wrapper chips
-    /// Note: carries are 2 bit numbers represented using 2 cells as individual bits
+    /// Will be message schedule carries for rows 4..16 and a buffer for rows 0..4 to be used
+    /// freely by wrapper chips Note: carries are 2 bit numbers represented using 2 cells as
+    /// individual bits
     pub carry_or_buffer: [[T; SHA256_WORD_U8S]; SHA256_ROUNDS_PER_ROW],
 }
 
@@ -87,7 +90,8 @@ pub struct Sha256MessageHelperCols<T> {
     pub w_3: [[T; SHA256_WORD_U16S]; SHA256_ROUNDS_PER_ROW - 1],
     /// Here intermediate(i) =  w_i + sig_0(w_{i+1})
     /// Intermed_t represents the intermediate t rounds ago
-    /// This is needed to constrain the message schedule, since we can only constrain on two rows at a time
+    /// This is needed to constrain the message schedule, since we can only constrain on two rows
+    /// at a time
     pub intermed_4: [[T; SHA256_WORD_U16S]; SHA256_ROUNDS_PER_ROW],
     pub intermed_8: [[T; SHA256_WORD_U16S]; SHA256_ROUNDS_PER_ROW],
     pub intermed_12: [[T; SHA256_WORD_U16S]; SHA256_ROUNDS_PER_ROW],
@@ -117,14 +121,16 @@ pub struct Sha256FlagsCols<T> {
 }
 
 impl<O, T: Copy + core::ops::Add<Output = O>> Sha256FlagsCols<T> {
-    // This refers to the padding rows that are added to the air to make the trace length a power of 2.
-    // Not to be confused with the padding added to messages as part of the SHA hash function.
+    // This refers to the padding rows that are added to the air to make the trace length a power of
+    // 2. Not to be confused with the padding added to messages as part of the SHA hash
+    // function.
     pub fn is_not_padding_row(&self) -> O {
         self.is_round_row + self.is_digest_row
     }
 
-    // This refers to the padding rows that are added to the air to make the trace length a power of 2.
-    // Not to be confused with the padding added to messages as part of the SHA hash function.
+    // This refers to the padding rows that are added to the air to make the trace length a power of
+    // 2. Not to be confused with the padding added to messages as part of the SHA hash
+    // function.
     pub fn is_padding_row(&self) -> O
     where
         O: FieldAlgebra,

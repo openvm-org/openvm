@@ -89,7 +89,8 @@ impl FieldVariable {
 
     fn save_if_overflow(
         a: &mut FieldVariable, // will save this variable if overflow
-        expr: SymbolicExpr, // the "compute" expression of the result variable. Note that we need to check if constraint overflows
+        expr: SymbolicExpr,    /* the "compute" expression of the result variable. Note that we
+                                * need to check if constraint overflows */
         limb_max_abs: usize, // The max abs of limbs of compute expression.
     ) {
         if let SymbolicExpr::Var(_) = a.expr {
@@ -115,7 +116,8 @@ impl FieldVariable {
 
     // TODO[Lun-Kai]: rethink about how should auto-save work.
     // This implementation requires self and other to be mutable, and might actually mutate them.
-    // This might surprise the caller or introduce hard bug if the caller clone the FieldVariable and then call this.
+    // This might surprise the caller or introduce hard bug if the caller clone the FieldVariable
+    // and then call this.
     pub fn add(&mut self, other: &mut FieldVariable) -> FieldVariable {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
         let limb_max_fn = |a: &FieldVariable, b: &FieldVariable| a.limb_max_abs + b.limb_max_abs;

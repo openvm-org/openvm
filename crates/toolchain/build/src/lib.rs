@@ -103,7 +103,8 @@ pub fn current_package() -> Package {
     get_package(env::var("CARGO_MANIFEST_DIR").unwrap())
 }
 
-/// Reads the value of the environment variable `OPENVM_SKIP_BUILD` and returns true if it is set to 1.
+/// Reads the value of the environment variable `OPENVM_SKIP_BUILD` and returns true if it is set to
+/// 1.
 pub fn is_skip_build() -> bool {
     !get_env_var(SKIP_BUILD_ENV).is_empty()
 }
@@ -269,8 +270,8 @@ pub fn build_guest_package(
         return Err(None);
     }
 
-    // Check if the required toolchain and rust-src component are installed, and if not, install them.
-    // This requires that `rustup` is installed.
+    // Check if the required toolchain and rust-src component are installed, and if not, install
+    // them. This requires that `rustup` is installed.
     if let Err(code) = ensure_toolchain_installed(RUSTUP_TOOLCHAIN_NAME, &["rust-src"]) {
         eprintln!("rustup toolchain commands failed. Please ensure rustup is installed (https://www.rust-lang.org/tools/install)");
         return Err(Some(code));

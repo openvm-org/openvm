@@ -14,8 +14,8 @@ pub struct IsEqArrayIo<T, const NUM: usize> {
     pub y: [T; NUM],
     /// The boolean output, constrained to equal (x == y) when `condition != 0`.
     pub out: T,
-    /// Constraints only hold when `condition != 0`. When `condition == 0`, setting all trace values
-    /// to zero still passes the constraints.
+    /// Constraints only hold when `condition != 0`. When `condition == 0`, setting all trace
+    /// values to zero still passes the constraints.
     pub condition: T,
 }
 
@@ -51,7 +51,8 @@ impl<AB: AirBuilder, const NUM: usize> SubAir<AB> for IsEqArraySubAir<NUM> {
         let mut sum = io.out.clone();
         // If x == y: then sum == 1 implies out = 1.
         // If x != y: then out * (x[i] - y[i]) == 0 implies out = 0.
-        //            to get the sum == 1 to be satisfied, we set diff_inv_marker[i] = (x[i] - y[i])^{-1} at the first index i such that x[i] != y[i].
+        //            to get the sum == 1 to be satisfied, we set diff_inv_marker[i] = (x[i] -
+        // y[i])^{-1} at the first index i such that x[i] != y[i].
         for (x_i, y_i, inv_marker_i) in izip!(io.x, io.y, diff_inv_marker) {
             sum += (x_i.clone() - y_i.clone()) * inv_marker_i;
             builder.assert_zero(io.out.clone() * (x_i - y_i));

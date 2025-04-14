@@ -227,8 +227,8 @@ impl PairingIntrinsics for Bn254 {
     const XI: Fp2 = Fp2::new(Fp::from_const_u8(9), Fp::from_const_u8(1));
     const FP2_TWO: Fp2 = Fp2::new(Fp::from_const_u8(2), Fp::from_const_u8(0));
     const FP2_THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::from_const_u8(0));
-    // Multiplication constants for the Frobenius map for coefficients in Fp2 c1..=c5 for powers 0..12
-    // FROBENIUS_COEFFS\[i\]\[j\] = \xi^{(j + 1) * (p^i - 1)/6} when p = 1 (mod 6)
+    // Multiplication constants for the Frobenius map for coefficients in Fp2 c1..=c5 for powers
+    // 0..12 FROBENIUS_COEFFS\[i\]\[j\] = \xi^{(j + 1) * (p^i - 1)/6} when p = 1 (mod 6)
     // These are validated against `halo2curves::bn256::FROBENIUS_COEFF_FQ12_C1` in tests.rs
     // (Note that bn256 here is another name for bn254)
     const FROBENIUS_COEFFS: [[Self::Fp2; 5]; 12] = [

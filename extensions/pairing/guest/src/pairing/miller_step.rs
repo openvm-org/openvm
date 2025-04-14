@@ -47,8 +47,9 @@ where
     /// Assumptions:
     ///     - s is not point at infinity.
     ///     - a in the curve equation is 0.
-    /// The case y = 0 does not happen as long as the curve satisfies that 0 = X^3 + b has no solutions in Fp2.
-    /// The curve G1Affine and twist G2Affine are both chosen for bn254, bls12_381 so that this never happens.
+    /// The case y = 0 does not happen as long as the curve satisfies that 0 = X^3 + b has no
+    /// solutions in Fp2. The curve G1Affine and twist G2Affine are both chosen for bn254,
+    /// bls12_381 so that this never happens.
     fn miller_double_step(
         s: &AffinePoint<Self::Fp2>,
     ) -> (AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp2>) {
@@ -102,8 +103,8 @@ where
     }
 
     /// Miller double and add step (2S + Q implemented as S + Q + S for efficiency).
-    /// Returns 2S+Q, a line in Fp12 passing through S and Q, and a line in Fp12 passing through S+Q and S
-    /// Assumption: Q != +- S && (S+Q) != +-S, so that there is no division by zero.
+    /// Returns 2S+Q, a line in Fp12 passing through S and Q, and a line in Fp12 passing through S+Q
+    /// and S Assumption: Q != +- S && (S+Q) != +-S, so that there is no division by zero.
     /// The way this is used in miller loop, this is always satisfied.
     fn miller_double_and_add_step(
         s: &AffinePoint<Self::Fp2>,

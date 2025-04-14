@@ -519,8 +519,9 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
 ///
 /// complex_init!(Complex2 { mod_idx = 1 }, Complex1 { mod_idx = 0 });
 /// ```
-/// In particular, the order of complex types in the macro doesn't have to match the order of moduli in `moduli_init!`,
-/// but they should be accompanied by the `mod_idx` corresponding to the order in the `moduli_init!` macro (not `moduli_declare!`).
+/// In particular, the order of complex types in the macro doesn't have to match the order of moduli
+/// in `moduli_init!`, but they should be accompanied by the `mod_idx` corresponding to the order in
+/// the `moduli_init!` macro (not `moduli_declare!`).
 #[proc_macro]
 pub fn complex_init(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);

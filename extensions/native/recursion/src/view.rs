@@ -87,7 +87,8 @@ pub fn get_advice_per_air<C: Config>(
         } else {
             OptionalVar {
                 is_some: Usize::from(1),
-                // Because `C::F::ORDER_U32` is prime and `max_coefficient > 1`, `floor(C::F::ORDER_U32 / max_coefficient) * max_coefficient < C::F::ORDER_U32`,
+                // Because `C::F::ORDER_U32` is prime and `max_coefficient > 1`,
+                // `floor(C::F::ORDER_U32 / max_coefficient) * max_coefficient < C::F::ORDER_U32`,
                 // `height * max_coefficient` cannot overflow `C::F`.
                 value: builder.constant(C::N::from_canonical_u32(
                     C::F::ORDER_U32 / max_coefficient + 1,

@@ -47,7 +47,8 @@ use crate::adapters::RV32_CELL_BITS;
 ///                           2 byte aligned lh, lhu, sh instructions and
 ///                           1 byte aligned lb, lbu, sb instructions
 /// This adapter always batch reads/writes 4 bytes,
-/// thus it needs to shift left the memory pointer by some amount in case of not 4 byte aligned intermediate pointers
+/// thus it needs to shift left the memory pointer by some amount in case of not 4 byte aligned
+/// intermediate pointers
 pub struct LoadStoreInstruction<T> {
     /// is_valid is constrained to be bool
     pub is_valid: T,
@@ -56,8 +57,8 @@ pub struct LoadStoreInstruction<T> {
     /// is_load is constrained to be bool, and can only be 1 if is_valid is 1
     pub is_load: T,
 
-    /// Keeping two separate shift amounts is needed for getting the read_ptr/write_ptr with degree 2
-    /// load_shift_amount will be the shift amount if load and 0 if store
+    /// Keeping two separate shift amounts is needed for getting the read_ptr/write_ptr with degree
+    /// 2 load_shift_amount will be the shift amount if load and 0 if store
     pub load_shift_amount: T,
     /// store_shift_amount will be 0 if load and the shift amount if store
     pub store_shift_amount: T,
@@ -70,8 +71,9 @@ pub struct LoadStoreInstruction<T> {
 /// This method ensures that there are no modifications to the global interfaces.
 ///
 /// Here 2 reads represent read_data and prev_data,
-/// The second element of the tuple in Reads is the shift amount needed to be passed to the core chip
-/// Getting the intermediate pointer is completely internal to the adapter and shouldn't be a part of the AdapterInterface
+/// The second element of the tuple in Reads is the shift amount needed to be passed to the core
+/// chip Getting the intermediate pointer is completely internal to the adapter and shouldn't be a
+/// part of the AdapterInterface
 pub struct Rv32LoadStoreAdapterRuntimeInterface<T>(PhantomData<T>);
 impl<T> VmAdapterInterface<T> for Rv32LoadStoreAdapterRuntimeInterface<T> {
     type Reads = ([[T; RV32_REGISTER_NUM_LIMBS]; 2], T);
@@ -126,7 +128,8 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
 #[serde(bound = "F: Field")]
 pub struct Rv32LoadStoreReadRecord<F: Field> {
     pub rs1_record: RecordId,
-    /// This will be a read from a register in case of Stores and a read from RISC-V memory in case of Loads.
+    /// This will be a read from a register in case of Stores and a read from RISC-V memory in case
+    /// of Loads.
     pub read: RecordId,
     pub rs1_ptr: F,
     pub imm: F,
@@ -140,8 +143,9 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct Rv32LoadStoreWriteRecord<F: Field> {
-    /// This will be a write to a register in case of Load and a write to RISC-V memory in case of Stores.
-    /// For better struct packing, `RecordId(usize::MAX)` is used to indicate that there is no write.
+    /// This will be a write to a register in case of Load and a write to RISC-V memory in case of
+    /// Stores. For better struct packing, `RecordId(usize::MAX)` is used to indicate that
+    /// there is no write.
     pub write_id: RecordId,
     pub from_state: ExecutionState<u32>,
     pub rd_rs2_ptr: F,
@@ -218,7 +222,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         builder.assert_bool(write_count);
         builder.when(write_count).assert_one(is_valid.clone());
 
-        // Constrain that if `is_valid == 1` and `write_count == 0`, then `is_load == 1` and `rd_rs2_ptr == x0`
+        // Constrain that if `is_valid == 1` and `write_count == 0`, then `is_load == 1` and
+        // `rd_rs2_ptr == x0`
         builder
             .when(is_valid.clone() - write_count)
             .assert_one(is_load.clone());
@@ -293,9 +298,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         );
 
         // read_ptr is mem_ptr for loads and rd_rs2_ptr for stores
-        // Note: shift_amount is expected to have degree 2, thus we can't put it in the select clause
-        //       since the resulting read_ptr/write_ptr's degree will be 3 which is too high.
-        //       Instead, the solution without using additional columns is to get two different shift amounts from core chip
+        // Note: shift_amount is expected to have degree 2, thus we can't put it in the select
+        // clause       since the resulting read_ptr/write_ptr's degree will be 3 which is
+        // too high.       Instead, the solution without using additional columns is to get
+        // two different shift amounts from core chip
         let read_ptr = select::<AB::Expr>(is_load.clone(), mem_ptr.clone(), local_cols.rd_rs2_ptr)
             - load_shift_amount;
 

@@ -17,7 +17,8 @@ pub const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
 pub struct Program<F> {
     /// A map from program counter to instruction.
     /// Sometimes the instructions are enumerated as 0, 4, 8, etc.
-    /// Maybe at some point we will replace this with a struct that would have a `Vec` under the hood and divide the incoming `pc` by whatever given.
+    /// Maybe at some point we will replace this with a struct that would have a `Vec` under the
+    /// hood and divide the incoming `pc` by whatever given.
     pub instructions_and_debug_infos: Vec<Option<(Instruction<F>, Option<DebugInfo>)>>,
     pub step: u32,
     pub pc_base: u32,
@@ -71,8 +72,8 @@ impl<F: Field> Program<F> {
         }
     }
 
-    /// We assume that pc_start = pc_base = 0 everywhere except the RISC-V programs, until we need otherwise
-    /// We use [DEFAULT_PC_STEP] for consistency with RISC-V
+    /// We assume that pc_start = pc_base = 0 everywhere except the RISC-V programs, until we need
+    /// otherwise We use [DEFAULT_PC_STEP] for consistency with RISC-V
     pub fn from_instructions_and_debug_infos(
         instructions: &[Instruction<F>],
         debug_infos: &[Option<DebugInfo>],

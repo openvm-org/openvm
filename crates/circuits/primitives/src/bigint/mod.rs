@@ -36,7 +36,8 @@ impl<T> OverflowInt<T> {
         }
     }
 
-    // Limbs can be negative. So the max_overflow_bits and limb_max_abs are different from the range check result.
+    // Limbs can be negative. So the max_overflow_bits and limb_max_abs are different from the range
+    // check result.
     pub fn from_canonical_signed_limbs(x: Vec<T>, limb_bits: usize) -> OverflowInt<T> {
         OverflowInt {
             limbs: x,

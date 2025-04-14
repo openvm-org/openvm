@@ -39,7 +39,8 @@ pub fn from_r_type<F: PrimeField32>(
     )
 }
 
-/// Create a new [`Instruction`] from an I-type instruction. Should only be used for ALU instructions because `imm` is transpiled in a special way.
+/// Create a new [`Instruction`] from an I-type instruction. Should only be used for ALU
+/// instructions because `imm` is transpiled in a special way.
 pub fn from_i_type<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruction<F> {
     if dec_insn.rd == 0 {
         return nop();
@@ -147,7 +148,8 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
     )
 }
 
-/// Create a new [`Instruction`] that exits with code 2. This is equivalent to program panic but with a special exit code for debugging.
+/// Create a new [`Instruction`] that exits with code 2. This is equivalent to program panic but
+/// with a special exit code for debugging.
 pub fn unimp<F: PrimeField32>() -> Instruction<F> {
     Instruction {
         opcode: SystemOpcode::TERMINATE.global_opcode(),

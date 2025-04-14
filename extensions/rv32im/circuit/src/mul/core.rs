@@ -70,7 +70,8 @@ where
         let c = &cols.c;
 
         // Define carry[i] = (sum_{k=0}^{i} b[k] * c[i - k] + carry[i - 1] - a[i]) / 2^LIMB_BITS.
-        // If 0 <= a[i], carry[i] < 2^LIMB_BITS, it can be proven that a[i] = sum_{k=0}^{i} (b[k] * c[i - k]) % 2^LIMB_BITS as necessary.
+        // If 0 <= a[i], carry[i] < 2^LIMB_BITS, it can be proven that a[i] = sum_{k=0}^{i} (b[k] *
+        // c[i - k]) % 2^LIMB_BITS as necessary.
         let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let carry_divide = AB::F::from_canonical_u32(1 << LIMB_BITS).inverse();
 

@@ -42,11 +42,11 @@ impl<F: PrimeField32> Transpiler<F> {
     }
 
     /// Iterates over a sequence of 32-bit RISC-V instructions `instructions_u32`. The iterator
-    /// applies every processor in the [`Transpiler`] to determine if one of them knows how to transpile
-    /// the current instruction (and possibly a contiguous section of following instructions).
-    /// If so, it advances the iterator by the amount specified by the processor.
-    /// The transpiler will panic if two different processors claim to know how to transpile the same instruction
-    /// to avoid ambiguity.
+    /// applies every processor in the [`Transpiler`] to determine if one of them knows how to
+    /// transpile the current instruction (and possibly a contiguous section of following
+    /// instructions). If so, it advances the iterator by the amount specified by the processor.
+    /// The transpiler will panic if two different processors claim to know how to transpile the
+    /// same instruction to avoid ambiguity.
     pub fn transpile(
         &self,
         instructions_u32: &[u32],

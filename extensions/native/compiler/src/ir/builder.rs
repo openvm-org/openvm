@@ -645,7 +645,8 @@ impl<C: Config> Builder<C> {
         self.assign(&nb_public_values, nb_public_values + C::N::ONE);
     }
 
-    /// Commits a Var as public value. This value will be constrained when verified. This method should only be used in static mode.
+    /// Commits a Var as public value. This value will be constrained when verified. This method
+    /// should only be used in static mode.
     pub fn static_commit_public_value(&mut self, index: usize, val: Var<C::N>) {
         assert!(
             self.flags.static_only,

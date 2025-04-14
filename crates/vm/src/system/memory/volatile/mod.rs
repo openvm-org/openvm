@@ -139,7 +139,8 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
                 .eval(builder, local.is_valid);
         }
         let range_max_bits = self.range_bus().range_max_bits;
-        // Compose addr_space_limbs and pointer_limbs into addr_space, pointer for both local and next
+        // Compose addr_space_limbs and pointer_limbs into addr_space, pointer for both local and
+        // next
         let [addr_space, next_addr_space] = [&local.addr_space_limbs, &next.addr_space_limbs]
             .map(|limbs| compose::<AB::Expr>(limbs, range_max_bits));
         let [pointer, next_pointer] = [&local.pointer_limbs, &next.pointer_limbs]
@@ -153,7 +154,8 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
             out: AB::Expr::ONE,
             count: next.is_valid.into(),
         };
-        // N.B.: this will do range checks (but not other constraints) on the last row if the first row has is_valid = 1 due to wraparound
+        // N.B.: this will do range checks (but not other constraints) on the last row if the first
+        // row has is_valid = 1 due to wraparound
         self.addr_lt_air
             .eval(builder, (lt_io, (&local.addr_lt_aux).into()));
 
@@ -214,8 +216,8 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
     pub fn set_overridden_height(&mut self, overridden_height: usize) {
         self.overridden_height = Some(overridden_height);
     }
-    /// Volatile memory requires the starting and final memory to be in equipartition with block size `1`.
-    /// When block size is `1`, then the `label` is the same as the address pointer.
+    /// Volatile memory requires the starting and final memory to be in equipartition with block
+    /// size `1`. When block size is `1`, then the `label` is the same as the address pointer.
     pub fn finalize(&mut self, final_memory: TimestampedEquipartition<F, 1>) {
         self.final_memory = Some(final_memory);
     }
@@ -230,8 +232,9 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        // Volatile memory requires the starting and final memory to be in equipartition with block size `1`.
-        // When block size is `1`, then the `label` is the same as the address pointer.
+        // Volatile memory requires the starting and final memory to be in equipartition with block
+        // size `1`. When block size is `1`, then the `label` is the same as the address
+        // pointer.
         let width = self.trace_width();
         let air = Arc::new(self.air);
         let final_memory = self

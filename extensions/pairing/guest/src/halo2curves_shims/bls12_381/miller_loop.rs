@@ -148,7 +148,8 @@ impl MultiMillerLoop for Bls12_381 {
         f
     }
 
-    /// The expected output of this function when running the Miller loop with embedded exponent is c^3 * l_{3Q}
+    /// The expected output of this function when running the Miller loop with embedded exponent is
+    /// c^3 * l_{3Q}
     fn pre_loop(
         Q_acc: Vec<AffinePoint<Fq2>>,
         Q: &[AffinePoint<Fq2>],
@@ -156,9 +157,10 @@ impl MultiMillerLoop for Bls12_381 {
         xy_fracs: &[(Fq, Fq)],
     ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
         let mut f = if let Some(mut c) = c {
-            // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
-            // will multiply by c again due to the last two values of the pseudo-binary encoding (BN12_381_PBE) being 1.
-            // Therefore, the final value of f at the end of this block is c^3.
+            // for the miller loop with embedded exponent, f will be set to c at the beginning of
+            // the function, and we will multiply by c again due to the last two values
+            // of the pseudo-binary encoding (BN12_381_PBE) being 1. Therefore, the
+            // final value of f at the end of this block is c^3.
             let mut c3 = c;
             c.square_assign();
             c3 *= &c;
@@ -170,8 +172,9 @@ impl MultiMillerLoop for Bls12_381 {
         let mut Q_acc = Q_acc;
 
         // Special case the first iteration of the Miller loop with pseudo_binary_encoding = 1:
-        // this means that the first step is a double and add, but we need to separate the two steps since the optimized
-        // `miller_double_and_add_step` will fail because Q_acc is equal to Q_signed on the first iteration
+        // this means that the first step is a double and add, but we need to separate the two steps
+        // since the optimized `miller_double_and_add_step` will fail because Q_acc is equal
+        // to Q_signed on the first iteration
         let (Q_out_double, lines_2S) = Q_acc
             .into_iter()
             .map(|Q| Self::miller_double_step(&Q))
@@ -204,7 +207,8 @@ impl MultiMillerLoop for Bls12_381 {
         (f, Q_acc)
     }
 
-    /// After running the main body of the Miller loop, we conjugate f due to the curve seed x being negative.
+    /// After running the main body of the Miller loop, we conjugate f due to the curve seed x being
+    /// negative.
     fn post_loop(
         f: &Fq12,
         Q_acc: Vec<AffinePoint<Fq2>>,
@@ -214,10 +218,11 @@ impl MultiMillerLoop for Bls12_381 {
     ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
         // Conjugate for negative component of the seed
         // Explanation:
-        // The general Miller loop formula implies that f_{-x} = 1/f_x. To avoid an inversion, we use the fact that
-        // for the final exponentiation, we only need the Miller loop result up to multiplication by some proper subfield
-        // of Fp12. Using the fact that Fp12 is a quadratic extension of Fp6, we have that f_x * conjugate(f_x) * 1/f_x lies in Fp6.
-        // Therefore we conjugate f_x instead of taking the inverse.
+        // The general Miller loop formula implies that f_{-x} = 1/f_x. To avoid an inversion, we
+        // use the fact that for the final exponentiation, we only need the Miller loop
+        // result up to multiplication by some proper subfield of Fp12. Using the fact that
+        // Fp12 is a quadratic extension of Fp6, we have that f_x * conjugate(f_x) * 1/f_x lies in
+        // Fp6. Therefore we conjugate f_x instead of taking the inverse.
         let f = f.conjugate();
         (f, Q_acc)
     }

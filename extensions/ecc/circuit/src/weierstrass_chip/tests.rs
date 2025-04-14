@@ -192,7 +192,8 @@ fn test_double() {
     let a_limbs = [BabyBear::ZERO; NUM_LIMBS];
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
-        vec![prime_limbs, a_limbs], // inputs[0] = prime, inputs[1] = a coeff of weierstrass equation
+        vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
+                                     * equation */
         vec![],
         chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );
@@ -280,7 +281,8 @@ fn test_p256_double() {
         biguint_to_limbs::<NUM_LIMBS>(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
-        vec![prime_limbs, a_limbs], // inputs[0] = prime, inputs[1] = a coeff of weierstrass equation
+        vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
+                                     * equation */
         vec![],
         chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );

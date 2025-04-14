@@ -107,7 +107,8 @@ where
         );
 
         let intermed_val = rd[0] + intermed_val * AB::Expr::from_canonical_u32(1 << RV32_CELL_BITS);
-        // Constrain that from_pc + DEFAULT_PC_STEP is the correct composition of intermed_val in case of JAL
+        // Constrain that from_pc + DEFAULT_PC_STEP is the correct composition of intermed_val in
+        // case of JAL
         builder.when(is_jal).assert_eq(
             intermed_val,
             from_pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP),

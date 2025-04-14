@@ -1,4 +1,5 @@
-//! We need to export a custom getrandom implementation just to get crates that import getrandom to compile.
+//! We need to export a custom getrandom implementation just to get crates that import getrandom to
+//! compile.
 use getrandom::{register_custom_getrandom, Error};
 
 /// This is a getrandom handler for the zkvm. It's intended to hook into a

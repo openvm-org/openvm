@@ -50,8 +50,8 @@ fn test_decode_elf() -> Result<()> {
 }
 
 // To create ELF directly from .S file, `brew install riscv-gnu-toolchain` and run
-// `riscv64-unknown-elf-gcc -march=rv32im -mabi=ilp32 -nostartfiles -e _start -Ttext 0 fib.S -o rv32im-fib-from-as`
-// riscv64-unknown-elf-gcc supports rv32im if you set -march target
+// `riscv64-unknown-elf-gcc -march=rv32im -mabi=ilp32 -nostartfiles -e _start -Ttext 0 fib.S -o
+// rv32im-fib-from-as` riscv64-unknown-elf-gcc supports rv32im if you set -march target
 #[test_case("tests/data/rv32im-fib-from-as")]
 #[test_case("tests/data/rv32im-intrin-from-as")]
 fn test_generate_program(elf_path: &str) -> Result<()> {

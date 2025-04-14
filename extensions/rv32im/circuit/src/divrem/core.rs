@@ -120,7 +120,8 @@ where
         let q = &cols.q;
         let r = &cols.r;
 
-        // Constrain that b = (c * q + r) % 2^{NUM_LIMBS * LIMB_BITS} and range checkeach element in q.
+        // Constrain that b = (c * q + r) % 2^{NUM_LIMBS * LIMB_BITS} and range checkeach element in
+        // q.
         let b_ext = cols.b_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
         let c_ext = cols.c_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
         let carry_divide = AB::F::from_canonical_u32(1 << LIMB_BITS).inverse();
@@ -302,10 +303,10 @@ where
             builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
             builder.when(marker[i]).assert_eq(cols.lt_diff, diff);
         }
-        // - If r_prime != c, then prefix_sum = 1 so marker[i] must be 1 iff i is the first index where diff != 0.
-        //   Constrains that diff == lt_diff where lt_diff is non-zero.
-        // - If r_prime == c, then prefix_sum = 0.
-        //   Here, prefix_sum cannot be 1 because all diff are zero, making diff == lt_diff fails.
+        // - If r_prime != c, then prefix_sum = 1 so marker[i] must be 1 iff i is the first index
+        //   where diff != 0. Constrains that diff == lt_diff where lt_diff is non-zero.
+        // - If r_prime == c, then prefix_sum = 0. Here, prefix_sum cannot be 1 because all diff are
+        //   zero, making diff == lt_diff fails.
 
         builder.when(is_valid.clone()).assert_one(prefix_sum);
         // Range check to ensure lt_diff is non-zero.

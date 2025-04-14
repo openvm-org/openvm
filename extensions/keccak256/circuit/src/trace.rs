@@ -205,7 +205,8 @@ where
                 first_row.sponge.is_new_start = Val::<SC>::from_bool(block.is_new_start);
                 first_row.sponge.state_hi = diff.pre_hi.map(Val::<SC>::from_canonical_u8);
                 first_row.instruction.is_enabled_first_round = first_row.instruction.is_enabled;
-                // Make memory access aux columns. Any aux column not explicitly defined defaults to all 0s
+                // Make memory access aux columns. Any aux column not explicitly defined defaults to
+                // all 0s
                 if let Some(register_reads) = diff.register_reads {
                     let need_range_check = [
                         &register_reads[0], // dst

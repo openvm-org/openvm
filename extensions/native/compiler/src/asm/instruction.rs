@@ -14,7 +14,8 @@ pub enum AsmInstruction<F, EF> {
 
     /// Load extension word (dst, src, var_index, size, offset).
     ///
-    /// Load an extension from the address stored at src(fp) into dst(fp) with given index and offset.
+    /// Load an extension from the address stored at src(fp) into dst(fp) with given index and
+    /// offset.
     LoadEI(i32, i32, F, F, F),
 
     /// Store word (val, addr, var_index, size, offset)
@@ -24,7 +25,8 @@ pub enum AsmInstruction<F, EF> {
 
     /// Store extension word (val, addr, var_index, size, offset)
     ///
-    /// Store an extension from val(fp) into the address stored at addr(fp) with given index and offset.
+    /// Store an extension from val(fp) into the address stored at addr(fp) with given index and
+    /// offset.
     StoreEI(i32, i32, F, F, F),
 
     /// Set dst = imm.
@@ -147,7 +149,8 @@ pub enum AsmInstruction<F, EF> {
 
     /// HintBits(src, len).
     ///
-    /// Bit decompose the field element at pointer `src` to the first `len` little endian bits and add to hint stream.
+    /// Bit decompose the field element at pointer `src` to the first `len` little endian bits and
+    /// add to hint stream.
     HintBits(i32, u32),
 
     HintLoad(),

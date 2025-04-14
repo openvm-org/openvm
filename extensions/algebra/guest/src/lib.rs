@@ -118,7 +118,8 @@ pub trait IntMod:
 {
     /// Underlying representation of IntMod. Usually of the form `[u8; NUM_LIMBS]`.
     type Repr: AsRef<[u8]> + AsMut<[u8]>;
-    /// `SelfRef<'a>` should almost always be `&'a Self`. This is a way to include implementations of binary operations where both sides are `&'a Self`.
+    /// `SelfRef<'a>` should almost always be `&'a Self`. This is a way to include implementations
+    /// of binary operations where both sides are `&'a Self`.
     type SelfRef<'a>: Add<&'a Self, Output = Self>
         + Sub<&'a Self, Output = Self>
         + Neg<Output = Self>

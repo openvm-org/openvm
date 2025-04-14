@@ -33,7 +33,8 @@ pub fn muldiv_expr(
     // constraint is x * y = z, or z * y = x
     let lvar = FieldVariable::select(is_mul_flag, &x, &z);
     let rvar = FieldVariable::select(is_mul_flag, &z, &x);
-    // When it's SETUP op, x = p == 0, y = 0, both flags are false, and it still works: z * 0 - x = 0, whatever z is.
+    // When it's SETUP op, x = p == 0, y = 0, both flags are false, and it still works: z * 0 - x =
+    // 0, whatever z is.
     let constraint = lvar * y.clone() - rvar;
     builder.borrow_mut().set_constraint(z_idx, constraint.expr);
     let compute = SymbolicExpr::Select(

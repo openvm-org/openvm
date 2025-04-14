@@ -6,8 +6,8 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use super::{Array, Builder, Config, DslIr, Felt, MemIndex, Var};
 
 impl<C: Config> Builder<C> {
-    /// Converts a felt to bits. Will result in a failed assertion if `num` has more than `num_bits` bits.
-    /// Only works for C::F = BabyBear
+    /// Converts a felt to bits. Will result in a failed assertion if `num` has more than `num_bits`
+    /// bits. Only works for C::F = BabyBear
     pub fn num2bits_f(&mut self, num: Felt<C::F>, num_bits: u32) -> Array<C, Var<C::N>> {
         assert_eq!(TypeId::of::<C::F>(), TypeId::of::<BabyBear>());
 
@@ -46,12 +46,12 @@ impl<C: Config> Builder<C> {
         //    * 2^30 + ... + 2^x + y for y in [0, 2^(x - 1)) and 27 < x <= 30
         //    * 2^30 + ... + 2^27
         //    * y for y in [0, 2^27)
-        // To check that bits `b[0], ..., b[30]` represent `num = b[0] + ... + b[30] * 2^30` without overflow,
-        // we may check that:
-        //    * if `num_bits < 27`, then `b[30] = 0`, so overflow is impossible.
-        //      In this case, `suffix_bit_sum = 0`, so the check below passes.
-        //    * if `num_bits >= 27`, then we must check:
-        //      if `suffix_bit_sum = b[27] + ... + b[30] = 4`, then `prefix_sum = b[0] + ... + b[26] * 2^26 = 0`
+        // To check that bits `b[0], ..., b[30]` represent `num = b[0] + ... + b[30] * 2^30` without
+        // overflow, we may check that:
+        //    * if `num_bits < 27`, then `b[30] = 0`, so overflow is impossible. In this case,
+        //      `suffix_bit_sum = 0`, so the check below passes.
+        //    * if `num_bits >= 27`, then we must check: if `suffix_bit_sum = b[27] + ... + b[30] =
+        //      4`, then `prefix_sum = b[0] + ... + b[26] * 2^26 = 0`
         let suffix_bit_sum_var = self.cast_felt_to_var(suffix_bit_sum);
         self.if_eq(suffix_bit_sum_var, C::N::from_canonical_u32(4))
             .then(|builder| {

@@ -10,8 +10,8 @@ use crate::{poseidon2::CHUNK, utils::const_max};
 /// 2. **Simple Block:** A single row handling permutation/compression operations.
 /// 3. **Inside-Row Block:** A sequence of rows that compute the row-hash for all input matrix
 ///    columns corresponding to an `MmcsVerifyBatch` input of the same height.
-/// 4. **Top-Level Block:** A sequence of rows that perform Merkle tree compression on the row hashes
-///    produced from an `MmcsVerifyBatch` input.
+/// 4. **Top-Level Block:** A sequence of rows that perform Merkle tree compression on the row
+///    hashes produced from an `MmcsVerifyBatch` input.
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct NativePoseidon2Cols<T, const SBOX_REGISTERS: usize> {
@@ -47,9 +47,10 @@ pub struct NativePoseidon2Cols<T, const SBOX_REGISTERS: usize> {
     /// associated with the same instruction.
     pub opened_element_size_inv: T,
 
-    /// On an `incorporate_row` row, this is the first matrix index `i` for which `log_heights[i]` equals `log_height`.
-    /// On an `incorporate_sibling` row, this holds the initial index corresponding to the `log_height` for the next
-    /// `incorporate_row` row, or `opened_length` if none exists.
+    /// On an `incorporate_row` row, this is the first matrix index `i` for which `log_heights[i]`
+    /// equals `log_height`. On an `incorporate_sibling` row, this holds the initial index
+    /// corresponding to the `log_height` for the next `incorporate_row` row, or
+    /// `opened_length` if none exists.
     pub initial_opened_index: T,
 
     /// Pointer to the beginning of the `opened_values` array.
@@ -75,9 +76,10 @@ pub struct TopLevelSpecificCols<T> {
     /// The program counter for the VERIFY_BATCH instruction being processed.
     pub pc: T,
 
-    /// The timestamp marking the end of processing this top-level row. For an `incorporate_sibling` row,
-    /// it increases by a fixed amount. For an `incorporate_row` row, its increase depends on the row's length
-    /// and the number of matrices involved, with additional constraints imposed by the internal bus.
+    /// The timestamp marking the end of processing this top-level row. For an
+    /// `incorporate_sibling` row, it increases by a fixed amount. For an `incorporate_row`
+    /// row, its increase depends on the row's length and the number of matrices involved, with
+    /// additional constraints imposed by the internal bus.
     pub end_timestamp: T,
 
     /// Operand `a` from the instruction. Pointer to the `dimensions` array.
@@ -86,7 +88,8 @@ pub struct TopLevelSpecificCols<T> {
     pub opened_register: T,
     /// Operand `c` from the instruction. Pointer to the length of the `opened_values` array.
     pub opened_length_register: T,
-    /// Operand `d` from the instruction. Provided as a hint to the run-time and (otherwise unconstrained).
+    /// Operand `d` from the instruction. Provided as a hint to the run-time and (otherwise
+    /// unconstrained).
     pub proof_id: T,
     /// Operand `e` from the instruction. Pointer to the pointer of the `index_bits` array, which
     /// indicates the direction (left/right) of Merkle tree siblings.
@@ -94,8 +97,9 @@ pub struct TopLevelSpecificCols<T> {
     /// Operand `f` from the instruction. Pointer to the pointer of the expected Merkle root.
     pub commit_register: T,
 
-    /// For an `incorporate_row` row, the largest matrix index `i` such that `log_heights[i]` equals `log_height`.
-    /// For an `incorporate_sibling` row, this is set to `initial_opened_index - 1` for bookkeeping.
+    /// For an `incorporate_row` row, the largest matrix index `i` such that `log_heights[i]`
+    /// equals `log_height`. For an `incorporate_sibling` row, this is set to
+    /// `initial_opened_index - 1` for bookkeeping.
     pub final_opened_index: T,
 
     /// The log height of the matrices currently being incorporated. Remains fixed on
@@ -124,7 +128,8 @@ pub struct TopLevelSpecificCols<T> {
     pub commit_pointer_read: MemoryReadAuxCols<T>,
 
     /// Index into the Merkle proof for the next sibling to incorporate.
-    /// Starts at zero in a top-level block and increments by one after each `incorporate_sibling` row.
+    /// Starts at zero in a top-level block and increments by one after each `incorporate_sibling`
+    /// row.
     pub proof_index: T,
 
     /// Memory aux columns for reading either `initial_height` or `sibling_is_on_right`. On an
@@ -135,7 +140,8 @@ pub struct TopLevelSpecificCols<T> {
     pub read_final_height: MemoryReadAuxCols<T>,
 
     /// Indicator for whether the sibling being incorporated (if any) is on the right. Constrained
-    /// to equal `index_bits[proof_index]` on `incorporate_sibling` rows. Unconstrained on other rows.
+    /// to equal `index_bits[proof_index]` on `incorporate_sibling` rows. Unconstrained on other
+    /// rows.
     pub sibling_is_on_right: T,
     /// Pointer to the Merkle root.
     pub commit_pointer: T,

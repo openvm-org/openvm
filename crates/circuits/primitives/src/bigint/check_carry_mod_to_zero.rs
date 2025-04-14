@@ -18,8 +18,8 @@ pub struct CheckCarryModToZeroCols<T> {
     pub carries: Vec<T>,
 
     // We will check that expr - quotient * modulus = 0, which imples expr is 0 mod modulus.
-    // quotient can be negative, and this means there is no unique way to represent it as limbs but it's fine.
-    // Each limb will be range-checked to be in [-2^limb_bits, 2^limb_bits).
+    // quotient can be negative, and this means there is no unique way to represent it as limbs but
+    // it's fine. Each limb will be range-checked to be in [-2^limb_bits, 2^limb_bits).
     pub quotient: Vec<T>,
 }
 

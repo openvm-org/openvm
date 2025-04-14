@@ -234,7 +234,8 @@ impl ExecutionBridge {
         }
     }
 
-    /// If `to_pc` is `Some`, then `pc_inc` is ignored and the `to_state` uses `to_pc`. Otherwise `to_pc = from_pc + pc_inc`.
+    /// If `to_pc` is `Some`, then `pc_inc` is ignored and the `to_state` uses `to_pc`. Otherwise
+    /// `to_pc = from_pc + pc_inc`.
     pub fn execute_and_increment_or_set_pc<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
@@ -314,7 +315,8 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 }
 
 /// Phantom sub-instructions affect the runtime of the VM and the trace matrix values.
-/// However they all have no AIR constraints besides advancing the pc by [DEFAULT_PC_STEP](openvm_instructions::program::DEFAULT_PC_STEP).
+/// However they all have no AIR constraints besides advancing the pc by
+/// [DEFAULT_PC_STEP](openvm_instructions::program::DEFAULT_PC_STEP).
 ///
 /// They should not mutate memory, but they can mutate the input & hint streams.
 ///

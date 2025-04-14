@@ -35,8 +35,8 @@ pub struct AppExecutionCommit<T> {
 }
 
 impl AppExecutionCommit<F> {
-    /// Users should use this function to compute `AppExecutionCommit` and check it against the final
-    /// proof.
+    /// Users should use this function to compute `AppExecutionCommit` and check it against the
+    /// final proof.
     pub fn compute<VC: VmConfig<F>>(
         app_vm_config: &VC,
         app_exe: &NonRootCommittedExe,

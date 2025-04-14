@@ -18,14 +18,16 @@ pub trait Poseidon2MatrixConfig: Clone + Sync {
     fn int_diag_m1_matrix<F: FieldAlgebra>() -> [F; WIDTH];
 }
 
-/// This type needs to implement GenericPoseidon2LinearLayers generic in F so that our Poseidon2SubAir can also
-/// be generic in F, but in reality each implementation of this struct's functions should be field specific. To
-/// circumvent this, Poseidon2LinearLayers is generic in F but **currently requires** that F is BabyBear.
+/// This type needs to implement GenericPoseidon2LinearLayers generic in F so that our
+/// Poseidon2SubAir can also be generic in F, but in reality each implementation of this struct's
+/// functions should be field specific. To circumvent this, Poseidon2LinearLayers is generic in F
+/// but **currently requires** that F is BabyBear.
 #[derive(Debug, Clone)]
 pub struct BabyBearPoseidon2LinearLayers;
 
-// This is the same as the implementation for GenericPoseidon2LinearLayersMonty31<BabyBearParameters, BabyBearInternalLayerParameters> except that we drop the
-// clause that FA needs be multipliable by BabyBear.
+// This is the same as the implementation for
+// GenericPoseidon2LinearLayersMonty31<BabyBearParameters, BabyBearInternalLayerParameters> except
+// that we drop the clause that FA needs be multipliable by BabyBear.
 // TODO[jpw/stephen]: This is clearly not the best way to do this, but it would
 // require some reworking in plonky3 to get around the generics.
 impl<FA: FieldAlgebra> GenericPoseidon2LinearLayers<FA, WIDTH> for BabyBearPoseidon2LinearLayers {

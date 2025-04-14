@@ -208,7 +208,8 @@ where
     });
     // 3. Executes runtime
     // 4. Generate trace
-    // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
+    // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with
+    //    timer.
     let app_vk = app_pk.get_app_vk();
     let prover =
         AppProver::<VC, E>::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name);

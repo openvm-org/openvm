@@ -792,7 +792,8 @@ impl<F: Field, EF: ExtensionField<F>> Neg for SymbolicExt<F, EF> {
     }
 }
 
-// Implement all operations between N, F, EF, and SymbolicVar<N>, SymbolicFelt<F>, SymbolicExt<F, EF>
+// Implement all operations between N, F, EF, and SymbolicVar<N>, SymbolicFelt<F>, SymbolicExt<F,
+// EF>
 
 impl<F: Field> Add<F> for SymbolicFelt<F> {
     type Output = Self;

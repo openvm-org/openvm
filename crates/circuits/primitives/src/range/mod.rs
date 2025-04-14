@@ -1,6 +1,7 @@
 //! Range check for a fixed bit size via preprocessed trace.
 //!
-//! Caution: We almost always prefer to use the [VariableRangeCheckerChip](super::var_range::VariableRangeCheckerChip) instead of this chip.
+//! Caution: We almost always prefer to use the
+//! [VariableRangeCheckerChip](super::var_range::VariableRangeCheckerChip) instead of this chip.
 // Adapted from Valida
 
 use core::mem::size_of;

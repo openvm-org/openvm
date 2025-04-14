@@ -1,9 +1,9 @@
 /// For rust std library compatibility, we need to define the ABI specified in
 /// <https://github.com/rust-lang/rust/blob/3dc1b9f5c00ca5535505c1ec46ccd43b8d9cfa19/library/std/src/sys/pal/zkvm/abi.rs>
 /// while we are using target = "riscv32im-risc0-zkvm-elf".
-/// This will be removed once a dedicated rust toolchain is used because OpenVM does not handle system
-/// operations in the same way: there is no operating system and even the standard library should be
-/// directly handled with intrinsics.
+/// This will be removed once a dedicated rust toolchain is used because OpenVM does not handle
+/// system operations in the same way: there is no operating system and even the standard
+/// library should be directly handled with intrinsics.
 use openvm_platform::{fileno::*, memory::sys_alloc_aligned, rust_rt::terminate, WORD_SIZE};
 use openvm_rv32im_guest::{hint_buffer_u32, hint_random, raw_print_str_from_bytes};
 

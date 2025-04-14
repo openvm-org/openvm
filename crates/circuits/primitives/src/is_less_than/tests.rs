@@ -33,8 +33,8 @@ pub struct IsLessThanCols<T> {
     pub lower_decomp: Vec<T>,
 }
 
-/// Note that this air has no const generics. The parameters such as `max_bits, decomp_limbs` are all
-/// configured in the constructor at runtime.
+/// Note that this air has no const generics. The parameters such as `max_bits, decomp_limbs` are
+/// all configured in the constructor at runtime.
 #[derive(Clone, Copy)]
 pub struct IsLtTestAir(pub IsLtSubAir);
 
@@ -94,7 +94,8 @@ impl IsLessThanChip {
     }
 }
 
-// We create a custom struct of mutable references since `IsLessThanCols` cannot derive `AlignedBorrow`.
+// We create a custom struct of mutable references since `IsLessThanCols` cannot derive
+// `AlignedBorrow`.
 pub struct IsLessThanColsMut<'a, T> {
     pub x: &'a mut T,
     pub y: &'a mut T,

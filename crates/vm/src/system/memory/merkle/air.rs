@@ -75,7 +75,8 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
         // row with least height should have `height_section` = 0, `is_root` = 0
         builder.when_last_row().assert_zero(local.height_section);
         builder.when_last_row().assert_zero(local.is_root);
-        // `height_section` changes from 0 to 1 only when `parent_height` changes from `address_height` to `address_height` + 1
+        // `height_section` changes from 0 to 1 only when `parent_height` changes from
+        // `address_height` to `address_height` + 1
         builder
             .when_transition()
             .when_ne(

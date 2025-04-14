@@ -140,7 +140,8 @@ impl KeccakVmAir {
             local.instruction.dst,
             next.instruction.dst,
         );
-        // these are not used and hence not necessary, but putting for safety until performance becomes an issue:
+        // these are not used and hence not necessary, but putting for safety until performance
+        // becomes an issue:
         block_transition.assert_eq(local.instruction.dst_ptr, next.instruction.dst_ptr);
         block_transition.assert_eq(local.instruction.src_ptr, next.instruction.src_ptr);
         block_transition.assert_eq(local.instruction.len_ptr, next.instruction.len_ptr);
@@ -189,8 +190,8 @@ impl KeccakVmAir {
                 .assert_one(is_padding_byte[i]);
         }
         // is_padding_byte must stay the same on all rounds in a block
-        // we use next instead of local.step_flags.last() because the last row of the trace overall may not
-        // end on a last round
+        // we use next instead of local.step_flags.last() because the last row of the trace overall
+        // may not end on a last round
         let is_last_round = next.inner.step_flags[0];
         let is_not_last_round = not(is_last_round);
         for i in 0..KECCAK_RATE_BYTES {
@@ -360,7 +361,8 @@ impl KeccakVmAir {
                 );
         }
 
-        // We separately constrain that when(local.is_new_start), the preimage (u16s) equals the block bytes
+        // We separately constrain that when(local.is_new_start), the preimage (u16s) equals the
+        // block bytes
         let local_preimage_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
             let x = i % 5;
@@ -533,7 +535,9 @@ impl KeccakVmAir {
             // Only read block i if it is not entirely padding bytes
             // count is degree 2
             let count = is_input * not(is_padding[0]);
-            // The memory block read is partial if first byte is not padding but the last byte is padding. Since `count` is only 1 when first byte isn't padding, use check just if last byte is padding.
+            // The memory block read is partial if first byte is not padding but the last byte is
+            // padding. Since `count` is only 1 when first byte isn't padding, use check just if
+            // last byte is padding.
             let is_partial_read = *is_padding.last().unwrap();
             // word is degree 2
             let word: [_; KECCAK_WORD_SIZE] = from_fn(|i| {
@@ -541,7 +545,8 @@ impl KeccakVmAir {
                     // first byte is always ok
                     input[0].into()
                 } else {
-                    // use `partial_block` if this is a partial read, otherwise use the normal input block
+                    // use `partial_block` if this is a partial read, otherwise use the normal input
+                    // block
                     select(is_partial_read, partial_block[i - 1], input[i])
                 }
             });

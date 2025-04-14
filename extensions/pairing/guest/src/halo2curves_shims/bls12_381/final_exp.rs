@@ -8,7 +8,8 @@ use openvm_ecc_guest::{
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
 use crate::pairing::{FinalExp, MultiMillerLoop};
 
-// The paper only describes the implementation for Bn254, so we use the gnark implementation for Bls12_381.
+// The paper only describes the implementation for Bn254, so we use the gnark implementation for
+// Bls12_381.
 #[allow(non_snake_case)]
 impl FinalExp for Bls12_381 {
     type Fp = Fq;
@@ -26,10 +27,11 @@ impl FinalExp for Bls12_381 {
 
         // The gnark implementation checks that f * s = c^{q - x} where x is the curve seed.
         // We check an equivalent condition: f * c^x * c^-q * s = 1.
-        // This is because we can compute f * c^x by embedding the c^x computation in the miller loop.
+        // This is because we can compute f * c^x by embedding the c^x computation in the miller
+        // loop.
 
-        // Since the Bls12_381 curve has a negative seed, the miller loop for Bls12_381 is computed as
-        // f_{Miller,x,Q}(P) = conjugate( f_{Miller,-x,Q}(P) * c^{-x} ).
+        // Since the Bls12_381 curve has a negative seed, the miller loop for Bls12_381 is computed
+        // as f_{Miller,x,Q}(P) = conjugate( f_{Miller,-x,Q}(P) * c^{-x} ).
         // We will pass in the conjugate inverse of c into the miller loop so that we compute
         // fc = f_{Miller,x,Q}(P)
         //    = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} )  (where c' is the conjugate inverse of c)
@@ -66,7 +68,8 @@ impl FinalExp for Bls12_381 {
 
         root = f.exp_bytes(true, &exp.to_bytes_be());
         let three_be = three.to_bytes_be();
-        // NOTE[yj]: we can probably remove this first check as an optimization since we initizlize order_3rd_power to 0
+        // NOTE[yj]: we can probably remove this first check as an optimization since we initizlize
+        // order_3rd_power to 0
         if root == Fq12::ONE {
             order_3rd_power = 0;
         }

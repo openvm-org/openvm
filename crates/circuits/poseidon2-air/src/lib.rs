@@ -2,7 +2,8 @@
 //! get around some complications with field-specific generics associated with Poseidon2.
 //! Currently it is only intended for use in OpenVM with BabyBear.
 //!
-//! We do not recommend external use of this crate, and suggest using the [p3_poseidon2_air] crate directly.
+//! We do not recommend external use of this crate, and suggest using the [p3_poseidon2_air] crate
+//! directly.
 
 use std::sync::Arc;
 
@@ -39,7 +40,8 @@ pub const BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS: usize = 13;
 // Currently we only support SBOX_DEGREE = 7
 pub const BABY_BEAR_POSEIDON2_SBOX_DEGREE: u64 = 7;
 
-/// `SBOX_REGISTERS` affects the max constraint degree of the AIR. See [p3_poseidon2_air] for more details.
+/// `SBOX_REGISTERS` affects the max constraint degree of the AIR. See [p3_poseidon2_air] for more
+/// details.
 #[derive(Debug)]
 pub struct Poseidon2SubChip<F: Field, const SBOX_REGISTERS: usize> {
     // This is Arc purely because Poseidon2Air cannot derive Clone

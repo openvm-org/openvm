@@ -76,7 +76,8 @@ impl Sha256Air {
         let main = builder.main();
         let local = main.row_slice(0);
 
-        // Doesn't matter which column struct we use here as we are only interested in the common columns
+        // Doesn't matter which column struct we use here as we are only interested in the common
+        // columns
         let local_cols: &Sha256DigestCols<AB::Var> =
             local[start_col..start_col + SHA256_DIGEST_WIDTH].borrow();
         let flags = &local_cols.flags;
@@ -114,8 +115,8 @@ impl Sha256Air {
             flags.is_padding_row(),
         );
 
-        // Constrain a, e, being composed of bits: we make sure a and e are always in the same place in the trace matrix
-        // Note: this has to be true for every row, even padding rows
+        // Constrain a, e, being composed of bits: we make sure a and e are always in the same place
+        // in the trace matrix Note: this has to be true for every row, even padding rows
         for i in 0..SHA256_ROUNDS_PER_ROW {
             for j in 0..SHA256_WORD_BITS {
                 builder.assert_bool(local_cols.hash.a[i][j]);
@@ -134,7 +135,8 @@ impl Sha256Air {
         local: &Sha256RoundCols<AB::Var>,
         next: &Sha256DigestCols<AB::Var>,
     ) {
-        // Check that if this is the last row of a message or an inpadding row, the hash should be the [SHA256_H]
+        // Check that if this is the last row of a message or an inpadding row, the hash should be
+        // the [SHA256_H]
         for i in 0..SHA256_ROUNDS_PER_ROW {
             let a = next.hash.a[i].map(|x| x.into());
             let e = next.hash.e[i].map(|x| x.into());
@@ -142,7 +144,8 @@ impl Sha256Air {
                 let a_limb = compose::<AB::Expr>(&a[j * 16..(j + 1) * 16], 1);
                 let e_limb = compose::<AB::Expr>(&e[j * 16..(j + 1) * 16], 1);
 
-                // If it is a padding row or the last row of a message, the `hash` should be the [SHA256_H]
+                // If it is a padding row or the last row of a message, the `hash` should be the
+                // [SHA256_H]
                 builder
                     .when(
                         next.flags.is_padding_row()
@@ -169,7 +172,8 @@ impl Sha256Air {
             }
         }
 
-        // Check if last row of a non-last block, the `hash` should be equal to the final hash of the current block
+        // Check if last row of a non-last block, the `hash` should be equal to the final hash of
+        // the current block
         for i in 0..SHA256_ROUNDS_PER_ROW {
             let prev_a = next.hash.a[i].map(|x| x.into());
             let prev_e = next.hash.e[i].map(|x| x.into());
@@ -216,7 +220,8 @@ impl Sha256Air {
                     .when(next.flags.is_digest_row)
                     .assert_bool(carry.clone());
             }
-            // constrain the final hash limbs two at a time since we can do two checks per interaction
+            // constrain the final hash limbs two at a time since we can do two checks per
+            // interaction
             for chunk in next.final_hash[i].chunks(2) {
                 self.bitwise_lookup_bus
                     .send_range(chunk[0], chunk[1])
@@ -237,13 +242,14 @@ impl Sha256Air {
             next[start_col..start_col + SHA256_ROUND_WIDTH].borrow();
 
         let local_is_padding_row = local_cols.flags.is_padding_row();
-        // Note that there will always be a padding row in the trace since the unpadded height is a multiple of 17.
-        // So the next row is padding iff the current block is the last block in the trace.
+        // Note that there will always be a padding row in the trace since the unpadded height is a
+        // multiple of 17. So the next row is padding iff the current block is the last
+        // block in the trace.
         let next_is_padding_row = next_cols.flags.is_padding_row();
 
         // We check that the very last block has `is_last_block` set to true, which guarantees that
-        // there is at least one complete message. If other digest rows have `is_last_block` set to true,
-        // then the trace will be interpreted as containing multiple messages.
+        // there is at least one complete message. If other digest rows have `is_last_block` set to
+        // true, then the trace will be interpreted as containing multiple messages.
         builder
             .when(next_is_padding_row.clone())
             .when(local_cols.flags.is_digest_row)
@@ -361,7 +367,8 @@ impl Sha256Air {
         &self,
         builder: &mut AB,
         local: &Sha256DigestCols<AB::Var>,
-        is_last_block_of_trace: AB::Expr, // note this indicates the last block of the trace, not the last block of the message
+        is_last_block_of_trace: AB::Expr, /* note this indicates the last block of the trace,
+                                           * not the last block of the message */
     ) {
         // Constrain that next block's `prev_hash` is equal to the current block's `hash`
         let composed_hash: [[<AB as AirBuilder>::Expr; SHA256_WORD_U16S]; SHA256_HASH_WORDS] =
@@ -402,9 +409,9 @@ impl Sha256Air {
     }
 
     /// Constrain the message schedule additions for `next` row
-    /// Note: For every addition we need to constrain the following for each of [SHA256_WORD_U16S] limbs
-    /// sig_1(w_{t-2})[i] + w_{t-7}[i] + sig_0(w_{t-15})[i] + w_{t-16}[i] + carry_w[t][i-1] - carry_w[t][i] * 2^16 - w_t[i] == 0
-    /// Refer to [https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf]
+    /// Note: For every addition we need to constrain the following for each of [SHA256_WORD_U16S]
+    /// limbs sig_1(w_{t-2})[i] + w_{t-7}[i] + sig_0(w_{t-15})[i] + w_{t-16}[i] +
+    /// carry_w[t][i-1] - carry_w[t][i] * 2^16 - w_t[i] == 0 Refer to [https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf]
     fn eval_message_schedule<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
@@ -429,12 +436,14 @@ impl Sha256Air {
         }
 
         // Constrain intermed for `next` row
-        // We will only constrain intermed_12 for rows [3, 14], and let it be unconstrained for other rows
-        // Other rows should put the needed value in intermed_12 to make the below summation constraint hold
+        // We will only constrain intermed_12 for rows [3, 14], and let it be unconstrained for
+        // other rows Other rows should put the needed value in intermed_12 to make the
+        // below summation constraint hold
         let is_row_3_14 = self
             .row_idx_encoder
             .contains_flag_range::<AB>(&next.flags.row_idx, 3..=14);
-        // We will only constrain intermed_8 for rows [2, 13], and let it unconstrained for other rows
+        // We will only constrain intermed_8 for rows [2, 13], and let it unconstrained for other
+        // rows
         let is_row_2_13 = self
             .row_idx_encoder
             .contains_flag_range::<AB>(&next.flags.row_idx, 2..=13);
@@ -447,8 +456,10 @@ impl Sha256Air {
                 let w_idx_limb = compose::<AB::Expr>(&w_idx[j * 16..(j + 1) * 16], 1);
                 let sig_w_limb = compose::<AB::Expr>(&sig_w[j * 16..(j + 1) * 16], 1);
 
-                // We would like to constrain this only on rows 0..16, but we can't do a conditional check because the degree is already 3.
-                // So we must fill in `intermed_4` with dummy values on rows 0 and 16 to ensure the constraint holds on these rows.
+                // We would like to constrain this only on rows 0..16, but we can't do a conditional
+                // check because the degree is already 3. So we must fill in
+                // `intermed_4` with dummy values on rows 0 and 16 to ensure the constraint holds on
+                // these rows.
                 builder.when_transition().assert_eq(
                     next.schedule_helper.intermed_4[i][j],
                     w_idx_limb + sig_w_limb,
@@ -485,11 +496,14 @@ impl Sha256Air {
             });
 
             // Constrain `W_{idx} = sig_1(W_{idx-2}) + W_{idx-7} + sig_0(W_{idx-15}) + W_{idx-16}`
-            // We would like to constrain this only on rows 4..16, but we can't do a conditional check because the degree of sum is already 3
-            // So we must fill in `intermed_12` with dummy values on rows 0..3 and 15 and 16 to ensure the constraint holds on rows
-            // 0..4 and 16. Note that the dummy value goes in the previous row to make the current row's constraint hold.
+            // We would like to constrain this only on rows 4..16, but we can't do a conditional
+            // check because the degree of sum is already 3 So we must fill in
+            // `intermed_12` with dummy values on rows 0..3 and 15 and 16 to ensure the constraint
+            // holds on rows 0..4 and 16. Note that the dummy value goes in the previous
+            // row to make the current row's constraint hold.
             constraint_word_addition(
-                // Note: here we can't do a conditional check because the degree of sum is already 3
+                // Note: here we can't do a conditional check because the degree of sum is already
+                // 3
                 &mut builder.when_transition(),
                 &[&small_sig1_field::<AB::Expr>(&w[i + 2])],
                 &[&w_7, &intermed_16],
@@ -528,8 +542,9 @@ impl Sha256Air {
         let e = [local.work_vars.e, next.work_vars.e].concat();
         for i in 0..SHA256_ROUNDS_PER_ROW {
             for j in 0..SHA256_WORD_U16S {
-                // Although we need carry_a <= 6 and carry_e <= 5, constraining carry_a, carry_e in [0, 2^8) is enough
-                // to prevent overflow and ensure the soundness of the addition we want to check
+                // Although we need carry_a <= 6 and carry_e <= 5, constraining carry_a, carry_e in
+                // [0, 2^8) is enough to prevent overflow and ensure the soundness
+                // of the addition we want to check
                 self.bitwise_lookup_bus
                     .send_range(local.work_vars.carry_a[i][j], local.work_vars.carry_e[i][j])
                     .eval(builder, local.flags.is_round_row);
@@ -556,16 +571,19 @@ impl Sha256Air {
             });
 
             // Constrain `a = h + sig_1(e) + ch(e, f, g) + K + W + sig_0(a) + Maj(a, b, c)`
-            // We have to enforce this constraint on all rows since the degree of the constraint is already 3.
-            // So, we must fill in `carry_a` with dummy values on digest rows to ensure the constraint holds.
+            // We have to enforce this constraint on all rows since the degree of the constraint is
+            // already 3. So, we must fill in `carry_a` with dummy values on digest rows
+            // to ensure the constraint holds.
             constraint_word_addition(
                 builder,
                 &[
-                    &e[i].map(|x| x.into()),                                 // previous `h`
+                    &e[i].map(|x| x.into()),                // previous `h`
                     &big_sig1_field::<AB::Expr>(&e[i + 3]), // sig_1 of previous `e`
-                    &ch_field::<AB::Expr>(&e[i + 3], &e[i + 2], &e[i + 1]), // Ch of previous `e`, `f`, `g`
-                    &big_sig0_field::<AB::Expr>(&a[i + 3]),                 // sig_0 of previous `a`
-                    &maj_field::<AB::Expr>(&a[i + 3], &a[i + 2], &a[i + 1]), // Maj of previous a, b, c
+                    &ch_field::<AB::Expr>(&e[i + 3], &e[i + 2], &e[i + 1]), /* Ch of previous
+                                                             * `e`, `f`, `g` */
+                    &big_sig0_field::<AB::Expr>(&a[i + 3]), // sig_0 of previous `a`
+                    &maj_field::<AB::Expr>(&a[i + 3], &a[i + 2], &a[i + 1]), /* Maj of previous
+                                                             * a, b, c */
                 ],
                 &[&w_limbs, &k_limbs],      // K and W
                 &a[i + 4],                  // new `a`
@@ -573,15 +591,18 @@ impl Sha256Air {
             );
 
             // Constrain `e = d + h + sig_1(e) + ch(e, f, g) + K + W`
-            // We have to enforce this constraint on all rows since the degree of the constraint is already 3.
-            // So, we must fill in `carry_e` with dummy values on digest rows to ensure the constraint holds.
+            // We have to enforce this constraint on all rows since the degree of the constraint is
+            // already 3. So, we must fill in `carry_e` with dummy values on digest rows
+            // to ensure the constraint holds.
             constraint_word_addition(
                 builder,
                 &[
-                    &a[i].map(|x| x.into()),                                // previous `d`
-                    &e[i].map(|x| x.into()),                                // previous `h`
-                    &big_sig1_field::<AB::Expr>(&e[i + 3]),                 // sig_1 of previous `e`
-                    &ch_field::<AB::Expr>(&e[i + 3], &e[i + 2], &e[i + 1]), // Ch of previous `e`, `f`, `g`
+                    &a[i].map(|x| x.into()), // previous `d`
+                    &e[i].map(|x| x.into()), // previous `h`
+                    &big_sig1_field::<AB::Expr>(&e[i + 3]), /* sig_1 of previous
+                                              * `e` */
+                    &ch_field::<AB::Expr>(&e[i + 3], &e[i + 2], &e[i + 1]), /* Ch of previous
+                                                                             * `e`, `f`, `g` */
                 ],
                 &[&w_limbs, &k_limbs],      // K and W
                 &e[i + 4],                  // new `e`

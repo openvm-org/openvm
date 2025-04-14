@@ -114,7 +114,8 @@ where
         let marker = &cols.diff_marker;
         let mut prefix_sum = AB::Expr::ZERO;
 
-        // Check if a_msb_f and b_msb_f are signed values of a[NUM_LIMBS - 1] and b[NUM_LIMBS - 1] in prime field F.
+        // Check if a_msb_f and b_msb_f are signed values of a[NUM_LIMBS - 1] and b[NUM_LIMBS - 1]
+        // in prime field F.
         let a_diff = a[NUM_LIMBS - 1] - cols.a_msb_f;
         let b_diff = b[NUM_LIMBS - 1] - cols.b_msb_f;
         builder
@@ -133,10 +134,10 @@ where
             builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
             builder.when(marker[i]).assert_eq(cols.diff_val, diff);
         }
-        // - If x != y, then prefix_sum = 1 so marker[i] must be 1 iff i is the first index where diff != 0.
-        //   Constrains that diff == diff_val where diff_val is non-zero.
-        // - If x == y, then prefix_sum = 0 and cmp_lt = 0.
-        //   Here, prefix_sum cannot be 1 because all diff are zero, making diff == diff_val fails.
+        // - If x != y, then prefix_sum = 1 so marker[i] must be 1 iff i is the first index where
+        //   diff != 0. Constrains that diff == diff_val where diff_val is non-zero.
+        // - If x == y, then prefix_sum = 0 and cmp_lt = 0. Here, prefix_sum cannot be 1 because all
+        //   diff are zero, making diff == diff_val fails.
 
         builder.assert_bool(prefix_sum.clone());
         builder

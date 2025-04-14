@@ -83,7 +83,8 @@ pub struct AggStarkProvingKey {
 pub struct Halo2ProvingKey {
     /// Static verifier to verify a stark proof of the root verifier.
     pub verifier: Halo2VerifierProvingKey,
-    /// Wrapper circuit to verify static verifier and reduce the verification costs in the final proof.
+    /// Wrapper circuit to verify static verifier and reduce the verification costs in the final
+    /// proof.
     pub wrapper: Halo2WrapperProvingKey,
     /// Whether to collect detailed profiling metrics
     pub profiling: bool,
@@ -236,7 +237,8 @@ fn check_recursive_verifier_size<SC: StarkGenericConfig>(
     if fri_reduced_opening_trace_height > (1 << (Val::<SC>::TWO_ADICITY - next_log_blowup)) {
         tracing::warn!("recursive verifier size may be too large; FriReducedOpening height ({fri_reduced_opening_trace_height}) > {}", 1 << (Val::<SC>::TWO_ADICITY - next_log_blowup));
     }
-    // Second check: static check for log up soundness constraints using FriReducedOpening trace height as proxy
+    // Second check: static check for log up soundness constraints using FriReducedOpening trace
+    // height as proxy
     if fri_reduced_opening_trace_height as u32 >= Val::<SC>::ORDER_U32 / 200 {
         tracing::warn!(
             "recursive verifier size may violate log up soundness constraints; {} > {}",

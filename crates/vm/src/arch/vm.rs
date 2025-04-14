@@ -209,7 +209,8 @@ where
 
     /// Executes a program until a segmentation happens.
     /// Returns the last segment and the vm state for next segment.
-    /// This is so that the tracegen and proving of this segment can be immediately started (on a separate machine).
+    /// This is so that the tracegen and proving of this segment can be immediately started (on a
+    /// separate machine).
     pub fn execute_until_segment(
         &self,
         exe: impl Into<VmExe<F>>,
@@ -628,9 +629,10 @@ where
             .collect()
     }
 
-    /// Verify segment proofs, checking continuation boundary conditions between segments if VM memory is persistent
-    /// The behavior of this function differs depending on whether continuations is enabled or not.
-    /// We recommend to call the functions [`verify_segments`] or [`verify_single`] directly instead.
+    /// Verify segment proofs, checking continuation boundary conditions between segments if VM
+    /// memory is persistent The behavior of this function differs depending on whether
+    /// continuations is enabled or not. We recommend to call the functions [`verify_segments`]
+    /// or [`verify_single`] directly instead.
     pub fn verify(
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
@@ -687,9 +689,9 @@ pub struct VerifiedExecutionPayload<F> {
 /// - `vk` is a valid verifying key of a VM circuit.
 ///
 /// Returns:
-/// - The commitment to the [VmCommittedExe] extracted from `proofs`.
-///   It is the responsibility of the caller to check that the returned commitment matches
-///   the VM executable that the VM was supposed to execute.
+/// - The commitment to the [VmCommittedExe] extracted from `proofs`. It is the responsibility of
+///   the caller to check that the returned commitment matches the VM executable that the VM was
+///   supposed to execute.
 /// - The Merkle root of the final memory state.
 ///
 /// ## Note

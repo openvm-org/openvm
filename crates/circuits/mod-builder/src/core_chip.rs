@@ -35,7 +35,8 @@ pub struct FieldExpressionCoreAir {
     /// All the opcode indices (including setup) supported by this Air.
     /// The last one must be the setup opcode if it's a chip needs setup.
     pub local_opcode_idx: Vec<usize>,
-    /// Opcode flag idx (indices from builder.new_flag()) for all except setup opcode. Empty if single op chip.
+    /// Opcode flag idx (indices from builder.new_flag()) for all except setup opcode. Empty if
+    /// single op chip.
     pub opcode_flag_idx: Vec<usize>,
     // Example 1: 1-op chip EcAdd that needs setup
     //   local_opcode_idx = [0, 2], where 0 is EcAdd, 2 is setup
@@ -178,7 +179,8 @@ pub struct FieldExpressionCoreChip {
 
     pub name: String,
 
-    /// Whether to finalize the trace. True if all-zero rows don't satisfy the constraints (e.g. there is int_add)
+    /// Whether to finalize the trace. True if all-zero rows don't satisfy the constraints (e.g.
+    /// there is int_add)
     pub should_finalize: bool,
 }
 
@@ -245,8 +247,9 @@ where
         let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
         let mut flags = vec![];
 
-        // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is needed.
-        // Otherwise, there is a flag for each opcode and will be derived by is_valid - sum(flags).
+        // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is
+        // needed. Otherwise, there is a flag for each opcode and will be derived by
+        // is_valid - sum(flags).
         if self.expr().needs_setup() {
             flags = vec![false; self.air.num_flags()];
             self.air

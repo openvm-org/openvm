@@ -135,8 +135,8 @@ fn test_auto_carry_intmul() {
     let mut x3 = &mut x1 * &mut x2;
     // The int_mul below will overflow:
     // x3 should have max_overflow_bits = 8 + 8 + log2(32) = 21
-    // The carry bits = "max_overflow_bits - limb_bits + 1" will exceed 17 if it exceeds 17 + 8 - 1 = 24.
-    // So it triggers x3 to be saved first.
+    // The carry bits = "max_overflow_bits - limb_bits + 1" will exceed 17 if it exceeds 17 + 8 - 1
+    // = 24. So it triggers x3 to be saved first.
     let mut x4 = x3.int_mul(9);
     assert_eq!(x3.expr, SymbolicExpr::Var(0));
     x4.save();
@@ -229,7 +229,8 @@ fn test_auto_carry_div() {
     let x2 = ExprBuilder::new_input(builder.clone());
     // The choice of scalar (7) needs to be such that
     // 1. the denominator 7x^2 doesn't trigger autosave, >=8 doesn't work.
-    // 2. But doing a division on it triggers autosave, because of division constraint, <= 6 doesn't work.
+    // 2. But doing a division on it triggers autosave, because of division constraint, <= 6 doesn't
+    //    work.
     let mut x3 = x1.square().int_mul(7) / x2;
     x3.save();
 
@@ -387,8 +388,9 @@ fn test_symbolic_limbs_mul() {
         Box::new(SymbolicExpr::Var(0)),
         Box::new(SymbolicExpr::Var(1)),
     );
-    // x * y = pq, and x,y can be up to 2^256 - 1 so q can be up to ceil((2^256 - 1)^2 / p) which has 257 bits, which is 33 limbs
-    // x * y has 63 limbs, but p * q can have 64 limbs since q is 33 limbs
+    // x * y = pq, and x,y can be up to 2^256 - 1 so q can be up to ceil((2^256 - 1)^2 / p) which
+    // has 257 bits, which is 33 limbs x * y has 63 limbs, but p * q can have 64 limbs since q
+    // is 33 limbs
     let expected_q = 33;
     let expected_carry = 64;
     test_symbolic_limbs(expr, expected_q, expected_carry);

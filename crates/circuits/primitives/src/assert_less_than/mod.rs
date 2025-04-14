@@ -131,10 +131,11 @@ impl AssertLtSubAir {
             });
 
         // constrain that y - x - 1 is equal to the constructed lower value.
-        // this enforces that the intermediate value is in the range [0, 2^max_bits - 1], which is equivalent to x < y
+        // this enforces that the intermediate value is in the range [0, 2^max_bits - 1], which is
+        // equivalent to x < y
         builder.when(io.count).assert_eq(intermed_val, lower);
-        // the degree of this constraint is expected to be deg(count) + max(deg(intermed_val), deg(lower))
-        // since we are constraining count * intermed_val == count * lower
+        // the degree of this constraint is expected to be deg(count) + max(deg(intermed_val),
+        // deg(lower)) since we are constraining count * intermed_val == count * lower
     }
 
     #[inline(always)]
@@ -185,7 +186,8 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLtSubAir {
 
 impl<F: Field> TraceSubRowGenerator<F> for AssertLtSubAir {
     /// (range_checker, x, y)
-    // x, y are u32 because memory records are storing u32 and there would be needless conversions. It also prevents a F: PrimeField32 trait bound.
+    // x, y are u32 because memory records are storing u32 and there would be needless conversions.
+    // It also prevents a F: PrimeField32 trait bound.
     type TraceContext<'a> = (&'a VariableRangeCheckerChip, u32, u32);
     /// lower_decomp
     type ColsMut<'a> = &'a mut [F];

@@ -220,7 +220,8 @@ impl MultiMillerLoop for Bn254 {
         let q2_vec = Q
             .iter()
             .map(|Q| {
-                // There is a frobenius mapping π²(Q) that we skip here since it is equivalent to the identity mapping
+                // There is a frobenius mapping π²(Q) that we skip here since it is equivalent to
+                // the identity mapping
                 let x = Q.x * x_to_q_sq_minus_1_over_3;
                 AffinePoint { x, y: Q.y }
             })

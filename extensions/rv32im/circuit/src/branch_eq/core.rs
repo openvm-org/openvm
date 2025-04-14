@@ -88,7 +88,8 @@ where
 
         // For BEQ, inv_marker is used to check equality of a and b:
         // - If a == b, all inv_marker values must be 0 (sum = 0)
-        // - If a != b, inv_marker contains 0s for all positions except ONE position i where a[i] != b[i]
+        // - If a != b, inv_marker contains 0s for all positions except ONE position i where a[i] !=
+        //   b[i]
         // - At this position, inv_marker[i] contains the multiplicative inverse of (a[i] - b[i])
         // - This ensures inv_marker[i] * (a[i] - b[i]) = 1, making the sum = 1
         // Note: There might be multiple valid inv_marker if a != b.

@@ -66,14 +66,16 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
         // Allocate a buffer of the required length
         // We prefer that the allocator should allocate this buffer to a 4-byte boundary,
         // but we do not specify it here because `Vec<u8>` safety requires the alignment to
-        // exactly equal the alignment of `u8`, which is 1. See `Vec::from_raw_parts` for more details.
+        // exactly equal the alignment of `u8`, which is 1. See `Vec::from_raw_parts` for more
+        // details.
         //
         // Note: the bump allocator we use by default has minimum alignment of 4 bytes.
         // The heap-embedded-alloc uses linked list allocator, which has a minimum alignment of
         // `sizeof(usize) * 2 = 8` on 32-bit architectures: https://github.com/rust-osdev/linked-list-allocator/blob/b5caf3271259ddda60927752fa26527e0ccd2d56/src/hole.rs#L429
         let mut bytes = Vec::with_capacity(capacity);
         hint_buffer_u32!(bytes.as_mut_ptr(), num_words);
-        // SAFETY: We populate a `Vec<u8>` by hintstore-ing `num_words` 4 byte words. We set the length to `len` and don't care about the extra `capacity - len` bytes stored.
+        // SAFETY: We populate a `Vec<u8>` by hintstore-ing `num_words` 4 byte words. We set the
+        // length to `len` and don't care about the extra `capacity - len` bytes stored.
         unsafe {
             bytes.set_len(len);
         }

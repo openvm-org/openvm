@@ -82,7 +82,8 @@ pub trait FromCompressed<Coordinate> {
     /// Decompresses a point from its x-coordinate and a recovery identifier which indicates
     /// the parity of the y-coordinate. Given the x-coordinate, this function attempts to find the
     /// corresponding y-coordinate that satisfies the elliptic curve equation. If successful, it
-    /// returns the point as an instance of Self. If the point cannot be decompressed, it returns None.
+    /// returns the point as an instance of Self. If the point cannot be decompressed, it returns
+    /// None.
     fn decompress(x: Coordinate, rec_id: &u8) -> Option<Self>
     where
         Self: core::marker::Sized;
@@ -100,8 +101,9 @@ pub trait FromCompressed<Coordinate> {
     fn hint_decompress(x: &Coordinate, rec_id: &u8) -> Option<DecompressionHint<Coordinate>>;
 }
 
-/// A trait for elliptic curves that bridges the openvm types and external types with CurveArithmetic etc.
-/// Implement this for external curves with corresponding openvm point and scalar types.
+/// A trait for elliptic curves that bridges the openvm types and external types with
+/// CurveArithmetic etc. Implement this for external curves with corresponding openvm point and
+/// scalar types.
 pub trait IntrinsicCurve {
     type Scalar: Clone;
     type Point: Clone;
@@ -115,7 +117,8 @@ pub trait IntrinsicCurve {
 // MSM using preprocessed table (windowed method)
 // Reference: modified from https://github.com/arkworks-rs/algebra/blob/master/ec/src/scalar_mul/mod.rs
 //
-// We specialize to Weierstrass curves and further make optimizations for when the curve order is prime.
+// We specialize to Weierstrass curves and further make optimizations for when the curve order is
+// prime.
 
 /// Cached precomputations of scalar multiples of several base points.
 /// - `window_bits` is the window size used for the precomputation
@@ -232,19 +235,20 @@ where
 }
 
 /// Macro to generate a newtype wrapper for [AffinePoint](crate::AffinePoint)
-/// that implements elliptic curve operations by using the underlying field operations according to the
-/// [formulas](https://www.hyperelliptic.org/EFD/g1p/auto-shortw.html) for short Weierstrass curves.
+/// that implements elliptic curve operations by using the underlying field operations according to
+/// the [formulas](https://www.hyperelliptic.org/EFD/g1p/auto-shortw.html) for short Weierstrass curves.
 ///
 /// The following imports are required:
 /// ```rust
 /// use core::ops::AddAssign;
 ///
 /// use openvm_algebra_guest::{DivUnsafe, Field};
-/// use openvm_ecc_guest::{AffinePoint, Group, weierstrass::WeierstrassPoint};
+/// use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint, Group};
 /// ```
 #[macro_export]
 macro_rules! impl_sw_affine {
-    // Assumes `a = 0` in curve equation. `$three` should be a constant expression for `3` of type `$field`.
+    // Assumes `a = 0` in curve equation. `$three` should be a constant expression for `3` of type
+    // `$field`.
     ($struct_name:ident, $field:ty, $three:expr, $b:expr) => {
         /// A newtype wrapper for [AffinePoint] that implements elliptic curve operations
         /// by using the underlying field operations according to the [formulas](https://www.hyperelliptic.org/EFD/g1p/auto-shortw.html) for short Weierstrass curves.

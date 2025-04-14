@@ -88,8 +88,8 @@ macro_rules! entry {
         }
     };
 }
-/// This macro does nothing. You should name the function `main` so that the normal rust main function
-/// setup is used.
+/// This macro does nothing. You should name the function `main` so that the normal rust main
+/// function setup is used.
 #[cfg(any(feature = "std", not(target_os = "zkvm")))]
 #[macro_export]
 macro_rules! entry {

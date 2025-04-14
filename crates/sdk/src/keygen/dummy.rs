@@ -177,7 +177,8 @@ where
     let overridden_heights = if let Some(overridden_heights) = overridden_heights {
         overridden_heights
     } else {
-        // We first execute once to get the trace heights from dummy_exe, then pad to powers of 2 (forcing trace height 0 to 1)
+        // We first execute once to get the trace heights from dummy_exe, then pad to powers of 2
+        // (forcing trace height 0 to 1)
         let executor = VmExecutor::new(app_vm_pk.vm_config.clone());
         let mut results = executor
             .execute_segments(dummy_exe.exe.clone(), vec![])

@@ -115,8 +115,8 @@ impl Encode for Proof<SC> {
 // Helper function to encode OpeningProof
 // ```
 // pub struct OpeningProof<PcsProof, Challenge> {
-//    pub proof: PcsProof,
-//    pub values: OpenedValues<Challenge>,
+//     pub proof: PcsProof,
+//     pub values: OpenedValues<Challenge>,
 // }
 // ```
 fn encode_opening_proof<W: Write>(
@@ -226,7 +226,6 @@ impl Encode for InnerQueryProof {
     ///     pub opening_proof: Vec<[F; DIGEST_SIZE]>,
     /// }
     /// ```
-    ///
     // @dev [jpw]: We prefer to keep the implementation all in one function
     // without `impl Encode` on subtypes because it obfuscates what the overall
     // struct consists of.
@@ -278,7 +277,8 @@ fn encode_commitments<W: Write>(commitments: &[Com<SC>], writer: &mut W) -> Resu
     encode_slice(&coms, writer)
 }
 
-// Can't implement Encode on Com<SC> because Rust complains about associated trait types when you don't own the trait (in this case SC)
+// Can't implement Encode on Com<SC> because Rust complains about associated trait types when you
+// don't own the trait (in this case SC)
 impl Encode for [F; DIGEST_SIZE] {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
         for val in self {

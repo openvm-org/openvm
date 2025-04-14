@@ -158,8 +158,8 @@ impl PairingIntrinsics for Bls12_381 {
     const FP2_TWO: Fp2 = Fp2::new(Fp::from_const_u8(2), Fp::from_const_u8(0));
     const FP2_THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::from_const_u8(0));
 
-    // Multiplication constants for the Frobenius map for coefficients in Fp2 c1..=c5 for powers 0..12
-    // FROBENIUS_COEFFS\[i\]\[j\] = \xi^{(j + 1) * (p^i - 1)/6} when p = 1 (mod 6)
+    // Multiplication constants for the Frobenius map for coefficients in Fp2 c1..=c5 for powers
+    // 0..12 FROBENIUS_COEFFS\[i\]\[j\] = \xi^{(j + 1) * (p^i - 1)/6} when p = 1 (mod 6)
     // These are validated against `halo2curves::bls12_381::FROBENIUS_COEFF_FQ12_C1` in tests.rs
     const FROBENIUS_COEFFS: [[Self::Fp2; 5]; 12] = [
         [

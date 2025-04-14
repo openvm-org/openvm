@@ -339,7 +339,8 @@ where
                     zip(airs, air_proof_inputs).filter(|(_, input)| input.main_trace_height() > 0),
                 );
             }
-            self = self.load(range_checker); // this must be last because other trace generation mutates its state
+            self = self.load(range_checker); // this must be last because other trace generation
+                                             // mutates its state
         }
         self
     }

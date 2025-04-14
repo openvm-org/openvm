@@ -87,7 +87,8 @@ impl BabyBearChip {
         r
     }
 
-    /// Reduce max_bits if possible. This function doesn't guarantee that the actual value is within BabyBear.
+    /// Reduce max_bits if possible. This function doesn't guarantee that the actual value is within
+    /// BabyBear.
     pub fn reduce_max_bits(&self, ctx: &mut Context<Fr>, a: AssignedBabyBear) -> AssignedBabyBear {
         if a.max_bits > BABYBEAR_MAX_BITS {
             self.reduce(ctx, a)
@@ -242,7 +243,8 @@ impl BabyBearChip {
         c
     }
 
-    // This inner product function will be used exclusively for optimizing extension element multiplication.
+    // This inner product function will be used exclusively for optimizing extension element
+    // multiplication.
     fn special_inner_product(
         &self,
         ctx: &mut Context<Fr>,

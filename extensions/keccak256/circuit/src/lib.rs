@@ -92,7 +92,8 @@ pub struct KeccakRecord<F> {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct KeccakInputBlock {
-    /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES / KECCAK_WORD_SIZE].
+    /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES /
+    /// KECCAK_WORD_SIZE].
     pub reads: Vec<RecordId>,
     /// Index in `reads` of the memory read for < KECCAK_WORD_SIZE bytes, if any.
     pub partial_read_idx: Option<usize>,
@@ -250,8 +251,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         // Add the events to chip state for later trace generation usage
         self.records.push(record);
 
-        // NOTE: Check this is consistent with KeccakVmAir::timestamp_change (we don't use it to avoid
-        // unnecessary conversions here)
+        // NOTE: Check this is consistent with KeccakVmAir::timestamp_change (we don't use it to
+        // avoid unnecessary conversions here)
         let total_timestamp_delta =
             len + (KECCAK_REGISTER_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES) as u32;
         memory.increment_timestamp_by(total_timestamp_delta - timestamp_delta);

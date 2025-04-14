@@ -66,11 +66,11 @@ impl<AB: InteractionBuilder, const NUM: usize, const AUX_LEN: usize> Air<AB>
 }
 
 /// This chip computes whether one tuple is lexicographically less than another. Each element of the
-/// tuple has its own max number of bits, given by the limb_bits array. The chip assumes that each limb
-/// is within its given max limb_bits.
+/// tuple has its own max number of bits, given by the limb_bits array. The chip assumes that each
+/// limb is within its given max limb_bits.
 ///
-/// The IsLessThanTupleChip uses the IsLessThanChip as a subchip to check whether individual tuple elements
-/// are less than each other.
+/// The IsLessThanTupleChip uses the IsLessThanChip as a subchip to check whether individual tuple
+/// elements are less than each other.
 pub struct IsLtArrayChip<const NUM: usize, const AUX_LEN: usize> {
     pub air: IsLtArrayTestAir<NUM, AUX_LEN>,
     pub range_checker: Arc<VariableRangeCheckerChip>,

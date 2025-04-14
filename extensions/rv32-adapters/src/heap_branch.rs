@@ -41,8 +41,8 @@ use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
 /// This adapter reads from NUM_READS <= 2 pointers.
-/// * The data is read from the heap (address space 2), and the pointers
-///   are read from registers (address space 1).
+/// * The data is read from the heap (address space 2), and the pointers are read from registers
+///   (address space 1).
 /// * Reads are from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -101,16 +101,19 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // We constrain the highest limbs of heap pointers to be less than 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))).
-        // This ensures that no overflow occurs when computing memory pointers. Since the number of cells accessed with each address
-        // will be small enough, and combined with the memory argument, it ensures that all the cells accessed in the memory are less than 2^addr_bits.
+        // We constrain the highest limbs of heap pointers to be less than 2^(addr_bits -
+        // (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))). This ensures that no overflow
+        // occurs when computing memory pointers. Since the number of cells accessed with each
+        // address will be small enough, and combined with the memory argument, it ensures
+        // that all the cells accessed in the memory are less than 2^addr_bits.
         let need_range_check: Vec<AB::Var> = cols
             .rs_val
             .iter()
             .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1])
             .collect();
 
-        // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain the correct amount of bits
+        // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain
+        // the correct amount of bits
         let limb_shift = AB::F::from_canonical_usize(
             1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
         );

@@ -57,7 +57,8 @@ pub struct DslOperations<C: Config> {
 }
 
 /// Necessary metadata to prove a Halo2 circuit
-/// Attention: Deserializer of this struct is not generic. It only works for verifier/wrapper circuit.
+/// Attention: Deserializer of this struct is not generic. It only works for verifier/wrapper
+/// circuit.
 #[derive(Debug, Clone)]
 pub struct Halo2ProvingPinning {
     pub pk: ProvingKey<G1Affine>,

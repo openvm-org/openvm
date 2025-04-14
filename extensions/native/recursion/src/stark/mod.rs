@@ -48,7 +48,8 @@ pub struct VerifierProgram<C: Config> {
 }
 
 impl VerifierProgram<InnerConfig> {
-    /// Create a new instance of the program for the [`openvm_stark_sdk::config::baby_bear_poseidon2`]
+    /// Create a new instance of the program for the
+    /// [`openvm_stark_sdk::config::baby_bear_poseidon2`]
     pub fn build(
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
@@ -60,7 +61,8 @@ impl VerifierProgram<InnerConfig> {
         Self::build_with_options(constants, fri_params, options)
     }
 
-    /// Create a new instance of the program for the [`openvm_stark_sdk::config::baby_bear_poseidon2`]
+    /// Create a new instance of the program for the
+    /// [`openvm_stark_sdk::config::baby_bear_poseidon2`]
     pub fn build_with_options(
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
@@ -166,7 +168,8 @@ where
         // (T01b): `num_challenges_to_sample.len() < 2`.
 
         let num_phases = RVar::from(num_challenges_to_sample.len());
-        // Here the shape of `exposed_values_after_challenge` is not verified. But it's verified later (T01c).
+        // Here the shape of `exposed_values_after_challenge` is not verified. But it's verified
+        // later (T01c).
         assert_cumulative_sums(builder, air_proofs, &num_challenges_to_sample);
 
         let air_perm_by_height = if builder.flags.static_only {
@@ -184,8 +187,8 @@ where
                 builder.assert_less_than_slow_small_rhs(perm_i.clone(), num_airs);
                 builder.set_value(&mask, perm_i.clone(), one.clone());
             });
-            // Check that each index of mask was set, i.e., that `air_perm_by_height` is a permutation.
-            // Also check that permutation is decreasing by height.
+            // Check that each index of mask was set, i.e., that `air_perm_by_height` is a
+            // permutation. Also check that permutation is decreasing by height.
             let prev_log_height_plus_one: Usize<_> =
                 builder.eval(RVar::from(MAX_TWO_ADICITY - pcs.config.log_blowup + 1));
             iter_zip!(builder, air_perm_by_height).for_each(|ptr_vec, builder| {
@@ -207,7 +210,8 @@ where
         };
         // (T02a): `air_perm_by_height` is a valid permutation of `0..num_airs`.
         // (T02b): For all `i`, `air_proofs[i].log_degree <= MAX_TWO_ADICITY - log_blowup`.
-        // (T02c): For all `0<=i<num_air-1`, `air_proofs[air_perm_by_height[i]].log_degree >= air_proofs[air_perm_by_height[i+1]].log_degree`.
+        // (T02c): For all `0<=i<num_air-1`, `air_proofs[air_perm_by_height[i]].log_degree >=
+        // air_proofs[air_perm_by_height[i+1]].log_degree`.
         let log_max_height = {
             let index = builder.get(air_perm_by_height, RVar::zero());
             let air_proof = builder.get(air_proofs, index);
@@ -449,7 +453,8 @@ where
 
                     builder.assert_usize_eq(prep_width, prep.local.len());
                     builder.assert_usize_eq(prep_width, prep.next.len());
-                    // Assumption: each AIR with preprocessed trace has its own commitment and opening values
+                    // Assumption: each AIR with preprocessed trace has its own commitment and
+                    // opening values
                     let values = builder.array::<Array<C, _>>(2);
                     builder.set_value(&values, 0, prep.local);
                     builder.set_value(&values, 1, prep.next);

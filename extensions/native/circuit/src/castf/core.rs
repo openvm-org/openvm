@@ -34,7 +34,8 @@ pub struct CastFCoreCols<T> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct CastFCoreAir {
-    pub bus: VariableRangeCheckerBus, // to communicate with the range checker that checks that all limbs are < 2^LIMB_BITS
+    pub bus: VariableRangeCheckerBus, /* to communicate with the range checker that checks that
+                                       * all limbs are < 2^LIMB_BITS */
 }
 
 impl<F: Field> BaseAir<F> for CastFCoreAir {

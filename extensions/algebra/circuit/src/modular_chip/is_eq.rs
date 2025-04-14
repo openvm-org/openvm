@@ -47,11 +47,11 @@ pub struct ModularIsEqualCoreCols<T, const READ_LIMBS: usize> {
     // Define c_diff_idx analogously. Then let b_lt_diff = N[b_diff_idx] - b[b_diff_idx] and
     // c_lt_diff = N[c_diff_idx] - c[c_diff_idx], where both must be in [0, 2^LIMB_BITS).
     //
-    // To constrain the above, we will use lt_marker, which will indicate where b_diff_idx and c_diff_idx are.
-    // Set lt_marker[b_diff_idx] = 1, lt_marker[c_diff_idx] = c_lt_mark, and 0 everywhere
-    // else. If b_diff_idx == c_diff_idx then c_lt_mark = 1, else c_lt_mark = 2. The purpose of
-    // c_lt_mark is to handle the edge case where b_diff_idx == c_diff_idx (because we cannot set
-    // lt_marker[b_diff_idx] to 1 and 2 at the same time).
+    // To constrain the above, we will use lt_marker, which will indicate where b_diff_idx and
+    // c_diff_idx are. Set lt_marker[b_diff_idx] = 1, lt_marker[c_diff_idx] = c_lt_mark, and 0
+    // everywhere else. If b_diff_idx == c_diff_idx then c_lt_mark = 1, else c_lt_mark = 2. The
+    // purpose of c_lt_mark is to handle the edge case where b_diff_idx == c_diff_idx (because
+    // we cannot set lt_marker[b_diff_idx] to 1 and 2 at the same time).
     pub lt_marker: [T; READ_LIMBS],
     pub b_lt_diff: T,
     pub c_lt_diff: T,
@@ -204,16 +204,20 @@ where
 
             // Constrain b < N.
             // First, we constrain b[i] = N[i] for i > b_diff_idx.
-            // We do this by constraining that b[i] = N[i] when prefix_sum is not 1 or lt_marker_sum.
-            //  - If is_setup = 0, then lt_marker_sum is either 1 or 3. In this case, prefix_sum is 0, 1, 2, or 3.
-            //    It can be verified by casework that i > b_diff_idx iff prefix_sum is not 1 or lt_marker_sum.
-            //  - If is_setup = 1, then we want to constrain b[i] = N[i] for all i. In this case, lt_marker_sum is 2
-            //    and prefix_sum is 0 or 2. So we constrain b[i] = N[i] when prefix_sum is not 1, which works.
+            // We do this by constraining that b[i] = N[i] when prefix_sum is not 1 or
+            // lt_marker_sum.
+            //  - If is_setup = 0, then lt_marker_sum is either 1 or 3. In this case, prefix_sum is
+            //    0, 1, 2, or 3. It can be verified by casework that i > b_diff_idx iff prefix_sum
+            //    is not 1 or lt_marker_sum.
+            //  - If is_setup = 1, then we want to constrain b[i] = N[i] for all i. In this case,
+            //    lt_marker_sum is 2 and prefix_sum is 0 or 2. So we constrain b[i] = N[i] when
+            //    prefix_sum is not 1, which works.
             builder
                 .when_ne(prefix_sum.clone(), AB::F::ONE)
                 .when_ne(prefix_sum.clone(), lt_marker_sum.clone() - cols.is_setup)
                 .assert_eq(cols.b[i], modulus[i]);
-            // Note that lt_marker[i] is either 0, 1, or 2 and lt_marker[i] being 1 indicates b[i] < N[i] (i.e. i == b_diff_idx).
+            // Note that lt_marker[i] is either 0, 1, or 2 and lt_marker[i] being 1 indicates b[i] <
+            // N[i] (i.e. i == b_diff_idx).
             builder
                 .when_ne(cols.lt_marker[i], AB::F::ZERO)
                 .when_ne(cols.lt_marker[i], AB::F::from_canonical_u8(2))
@@ -221,14 +225,16 @@ where
 
             // Constrain c < N.
             // First, we constrain c[i] = N[i] for i > c_diff_idx.
-            // We do this by constraining that c[i] = N[i] when prefix_sum is not c_lt_mark or lt_marker_sum.
-            // It can be verified by casework that i > c_diff_idx iff prefix_sum is not c_lt_mark or lt_marker_sum.
+            // We do this by constraining that c[i] = N[i] when prefix_sum is not c_lt_mark or
+            // lt_marker_sum. It can be verified by casework that i > c_diff_idx iff
+            // prefix_sum is not c_lt_mark or lt_marker_sum.
             builder
                 .when_ne(prefix_sum.clone(), cols.c_lt_mark)
                 .when_ne(prefix_sum.clone(), lt_marker_sum.clone())
                 .assert_eq(cols.c[i], modulus[i]);
-            // Note that lt_marker[i] is either 0, 1, or 2 and lt_marker[i] being c_lt_mark indicates c[i] < N[i] (i.e. i == c_diff_idx).
-            // Since c_lt_mark is 1 or 2, we have {0, 1, 2} \ {0, 3 - c_lt_mark} = {c_lt_mark}.
+            // Note that lt_marker[i] is either 0, 1, or 2 and lt_marker[i] being c_lt_mark
+            // indicates c[i] < N[i] (i.e. i == c_diff_idx). Since c_lt_mark is 1 or 2,
+            // we have {0, 1, 2} \ {0, 3 - c_lt_mark} = {c_lt_mark}.
             builder
                 .when_ne(cols.lt_marker[i], AB::F::ZERO)
                 .when_ne(

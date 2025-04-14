@@ -67,7 +67,8 @@ impl<const N: usize, AB: InteractionBuilder> Air<AB> for AccessAdapterAir<N> {
 
         // assuming valid:
         // Split = 1 => direction = 1 => receive parent with count 1, send left/right with count 1
-        // Split = 0 => direction = -1 => receive parent with count -1, send left/right with count -1
+        // Split = 0 => direction = -1 => receive parent with count -1, send left/right with count
+        // -1
         let direction = local.is_valid * (AB::Expr::TWO * local.is_split - AB::Expr::ONE);
 
         self.memory_bus

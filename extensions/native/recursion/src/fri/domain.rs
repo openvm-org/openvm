@@ -108,8 +108,8 @@ where
                 shift: builder.eval(self.shift * domain_power),
                 g,
             };
-            // ATTENTION: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
-            // to `Usize::Var` because it calls `builder.eval`.
+            // ATTENTION: here must use `builder.set_value`. `builder.set` will convert
+            // `Usize::Const` to `Usize::Var` because it calls `builder.eval`.
             builder.set_value(&domains, i_vec[0], domain);
             builder.assign(&domain_power, domain_power * g_dom);
         });

@@ -8,7 +8,8 @@ use super::{
     BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS, POSEIDON2_WIDTH,
 };
 
-// Currently only contains round constants, but this struct may contain other configuration parameters in the future.
+// Currently only contains round constants, but this struct may contain other configuration
+// parameters in the future.
 #[derive(Clone, Copy, Debug)]
 pub struct Poseidon2Config<F> {
     pub constants: Poseidon2Constants<F>,

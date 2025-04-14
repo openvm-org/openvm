@@ -133,8 +133,8 @@ struct GeneralCols<T> {
     /// Whether the row is an instruction row.
     is_ins_row: T,
     /// For Instruction1 rows, the initial timestamp of the FRI_REDUCED_OPENING instruction.
-    /// For Workload rows, the final timestamp after processing the next elements minus `INSTRUCTION_READS`.
-    /// For Instruction2 rows, unused.
+    /// For Workload rows, the final timestamp after processing the next elements minus
+    /// `INSTRUCTION_READS`. For Instruction2 rows, unused.
     timestamp: T,
 }
 const GENERAL_WIDTH: usize = GeneralCols::<u8>::width();
@@ -159,8 +159,8 @@ struct DataCols<T> {
     /// b-values. (Note: idx increases within a workload/instruction block, while timestamp, a_ptr,
     /// and b_ptr decrease.)
     idx: T,
-    /// For both Instruction1 and Workload rows, equal to sum_{k=0}^{idx} alpha^{len-i} (b_i - a_i).
-    /// Instruction1 rows constrain this to be the result written to `mem[result_ptr]`.
+    /// For both Instruction1 and Workload rows, equal to sum_{k=0}^{idx} alpha^{len-i} (b_i -
+    /// a_i). Instruction1 rows constrain this to be the result written to `mem[result_ptr]`.
     result: [T; EXT_DEG],
     /// The alpha to use in this instruction. Fixed across workload rows; Instruction1 rows read
     /// this from `mem[alpha_ptr]`.
@@ -175,8 +175,8 @@ const_assert_eq!(DATA_WIDTH, 12);
 #[derive(Debug, AlignedBorrow)]
 struct PrefixCols<T> {
     general: GeneralCols<T>,
-    /// WorkloadCols uses this column as the value of `a` read. Instruction1Cols uses this column as
-    /// the `is_first` flag must be set to one. Shared with Instruction2Cols `is_first`.
+    /// WorkloadCols uses this column as the value of `a` read. Instruction1Cols uses this column
+    /// as the `is_first` flag must be set to one. Shared with Instruction2Cols `is_first`.
     a_or_is_first: T,
     data: DataCols<T>,
 }
@@ -285,8 +285,9 @@ impl FriReducedOpeningAir {
         // a_ptr/b_ptr/length/result
         let ptr_reads = AB::F::from_canonical_usize(INSTRUCTION_READS);
         let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
-        // write_a itself could be anything on non-workload row, but on workload row, it must be boolean.
-        // write_a on last workflow row will be constrained to equal write_a on instruction1 row, implying the latter is boolean.
+        // write_a itself could be anything on non-workload row, but on workload row, it must be
+        // boolean. write_a on last workflow row will be constrained to equal write_a on
+        // instruction1 row, implying the latter is boolean.
         builder.when(multiplicity).assert_bool(local_data.write_a);
         // read a when write_a is 0
         self.memory_bridge

@@ -29,8 +29,8 @@ pub trait PairingIntrinsics {
     const PAIRING_IDX: usize;
     /// The sextic extension `Fp12` is `Fp2[X] / (X^6 - \xi)`, where `\xi` is a non-residue.
     const XI: Self::Fp2;
-    /// Multiplication constants for the Frobenius map for coefficients in Fp2 c1..=c5 for powers 0..12
-    /// FROBENIUS_COEFFS\[i\]\[j\] = \xi^{(j + 1) * (p^i - 1)/6} when p = 1 (mod 6)
+    /// Multiplication constants for the Frobenius map for coefficients in Fp2 c1..=c5 for powers
+    /// 0..12 FROBENIUS_COEFFS\[i\]\[j\] = \xi^{(j + 1) * (p^i - 1)/6} when p = 1 (mod 6)
     const FROBENIUS_COEFFS: [[Self::Fp2; 5]; 12];
 
     const FP2_TWO: Self::Fp2;

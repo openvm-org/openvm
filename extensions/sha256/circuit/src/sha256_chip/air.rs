@@ -86,10 +86,10 @@ pub(super) enum PaddingFlags {
     FirstPadding13,
     FirstPadding14,
     FirstPadding15,
-    /// FIRST_PADDING_i_LastRow: it is the first row with padding and there are i cells of non-padding
-    ///                          AND it is the last reading row of the message
-    /// NOTE: if the Last row has padding it has to be at least 9 cells since the last 8 cells are padded with
-    /// the message length
+    /// FIRST_PADDING_i_LastRow: it is the first row with padding and there are i cells of
+    /// non-padding                          AND it is the last reading row of the message
+    /// NOTE: if the Last row has padding it has to be at least 9 cells since the last 8 cells are
+    /// padded with the message length
     FirstPadding0_LastRow,
     FirstPadding1_LastRow,
     FirstPadding2_LastRow,
@@ -140,8 +140,9 @@ impl Sha256VmAir {
     ) {
         let next_is_last_row = next.inner.flags.is_digest_row * next.inner.flags.is_last_block;
 
-        // Constrain that `padding_occured` is 1 on a suffix of rows in each message, excluding the last
-        // digest row, and 0 everywhere else. Furthermore, the suffix starts in the first 4 rows of some block.
+        // Constrain that `padding_occured` is 1 on a suffix of rows in each message, excluding the
+        // last digest row, and 0 everywhere else. Furthermore, the suffix starts in the
+        // first 4 rows of some block.
 
         builder.assert_bool(local.control.padding_occurred);
         // Last round row in the last block has padding_occurred = 1
@@ -161,8 +162,9 @@ impl Sha256VmAir {
             .when(local.control.padding_occurred - next_is_last_row.clone())
             .assert_one(next.control.padding_occurred);
 
-        // If next row is not first 4 rows of a block, then next.padding_occurred = local.padding_occurred.
-        // So padding_occurred only changes in the first 4 rows of a block.
+        // If next row is not first 4 rows of a block, then next.padding_occurred =
+        // local.padding_occurred. So padding_occurred only changes in the first 4 rows of a
+        // block.
         builder
             .when_transition()
             .when(not(next.inner.flags.is_first_4_rows) - next_is_last_row)
@@ -252,7 +254,8 @@ impl Sha256VmAir {
             is_next_entire_padding,
         );
 
-        // `pad_flags` is `FirstPadding*` if current row is padding and the previous row is not padding
+        // `pad_flags` is `FirstPadding*` if current row is padding and the previous row is not
+        // padding
         builder.when(next.inner.flags.is_first_4_rows).assert_eq(
             not(local.control.padding_occurred) * next.control.padding_occurred,
             is_next_first_padding,
@@ -396,8 +399,8 @@ impl Sha256VmAir {
                 + local.inner.message_schedule.w[3][2],
         );
 
-        // We can't support messages longer than 2^30 bytes because the length has to fit in a field element.
-        // So, constrain that the first 4 bytes of the length are 0.
+        // We can't support messages longer than 2^30 bytes because the length has to fit in a field
+        // element. So, constrain that the first 4 bytes of the length are 0.
         // Thus, the bit-length is < 2^32 so the message is < 2^29 bytes.
         for i in 8..12 {
             builder
@@ -421,7 +424,8 @@ impl Sha256VmAir {
             .when(not::<AB::Expr>(is_last_row.clone()))
             .assert_eq(next_cols.control.len, local_cols.control.len);
 
-        // Read ptr should increment by [SHA256_READ_SIZE] for the first 4 rows and stay the same otherwise
+        // Read ptr should increment by [SHA256_READ_SIZE] for the first 4 rows and stay the same
+        // otherwise
         let read_ptr_delta = local_cols.inner.flags.is_first_4_rows
             * AB::Expr::from_canonical_usize(SHA256_READ_SIZE);
         builder
@@ -527,7 +531,8 @@ impl Sha256VmAir {
         // This only works if self.ptr_max_bits >= 24 which is typically the case
         self.bitwise_lookup_bus
             .send_range(
-                // It is fine to shift like this since we already know that dst_ptr and src_ptr have [RV32_CELL_BITS] bits
+                // It is fine to shift like this since we already know that dst_ptr and src_ptr
+                // have [RV32_CELL_BITS] bits
                 local_cols.dst_ptr[RV32_REGISTER_NUM_LIMBS - 1] * shift.clone(),
                 local_cols.src_ptr[RV32_REGISTER_NUM_LIMBS - 1] * shift.clone(),
             )
@@ -548,8 +553,9 @@ impl Sha256VmAir {
         let dst_ptr_val =
             compose::<AB::Expr>(&local_cols.dst_ptr.map(|x| x.into()), RV32_CELL_BITS);
 
-        // Note: revisit in the future to do 2 block writes of 16 cells instead of 1 block write of 32 cells
-        //       This could be beneficial as the output is often an input for another hash
+        // Note: revisit in the future to do 2 block writes of 16 cells instead of 1 block write of
+        // 32 cells       This could be beneficial as the output is often an input for
+        // another hash
         self.memory_bridge
             .write(
                 MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), dst_ptr_val),

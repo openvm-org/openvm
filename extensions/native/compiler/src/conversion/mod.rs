@@ -103,7 +103,8 @@ fn i32_f<F: PrimeField32>(x: i32) -> F {
     }
 }
 
-/// Warning: for extension field branch instructions, the `pc, labels` **must** be using `DEFAULT_PC_STEP`.
+/// Warning: for extension field branch instructions, the `pc, labels` **must** be using
+/// `DEFAULT_PC_STEP`.
 fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
     debug_info: Option<DebugInfo>,

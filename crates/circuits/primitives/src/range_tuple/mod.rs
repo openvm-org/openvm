@@ -1,7 +1,8 @@
 //! Range check a tuple simultaneously.
 //! When you know you want to range check `(x, y)` to `x_bits, y_bits` respectively
-//! and `2^{x_bits + y_bits} < ~2^20`, then you can use this chip to do the range check in one interaction
-//! versus the two interactions necessary if you were to use [VariableRangeCheckerChip](super::var_range::VariableRangeCheckerChip) instead.
+//! and `2^{x_bits + y_bits} < ~2^20`, then you can use this chip to do the range check in one
+//! interaction versus the two interactions necessary if you were to use
+//! [VariableRangeCheckerChip](super::var_range::VariableRangeCheckerChip) instead.
 
 use std::{
     mem::size_of,

@@ -10,7 +10,8 @@ impl CycleTracker {
     }
 
     /// Starts a new cycle tracker span for the given name.
-    /// If a span already exists for the given name, it ends the existing span and pushes a new one to the vec.
+    /// If a span already exists for the given name, it ends the existing span and pushes a new one
+    /// to the vec.
     pub fn start(&mut self, mut name: String) {
         // hack to remove "CT-" prefix
         if name.starts_with("CT-") {

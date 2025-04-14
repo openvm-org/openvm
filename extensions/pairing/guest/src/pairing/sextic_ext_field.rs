@@ -67,8 +67,8 @@ pub(crate) fn sextic_tower_mul<F: Field>(
 where
     for<'a> &'a F: core::ops::Mul<&'a F, Output = F>,
 {
-    // The following multiplication is hand-derived with respect to the basis where degree 6 extension
-    // is composed of degree 3 extension followed by degree 2 extension.
+    // The following multiplication is hand-derived with respect to the basis where degree 6
+    // extension is composed of degree 3 extension followed by degree 2 extension.
 
     // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4 + cs5co3)
     // c1 = cs0co1 + cs1co0 + cs3co3 + xi(cs2co2 + cs4co5 + cs5co4)

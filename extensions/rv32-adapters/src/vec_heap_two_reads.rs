@@ -40,13 +40,13 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
 /// This adapter reads from 2 pointers and writes to 1 pointer.
-/// * The data is read from the heap (address space 2), and the pointers
-///   are read from registers (address space 1).
-/// * Reads take the form of `BLOCKS_PER_READX` consecutive reads of size
-///   `READ_SIZE` from the heap, starting from the addresses in `rs[X]`
+/// * The data is read from the heap (address space 2), and the pointers are read from registers
+///   (address space 1).
+/// * Reads take the form of `BLOCKS_PER_READX` consecutive reads of size `READ_SIZE` from the heap,
+///   starting from the addresses in `rs[X]`
 /// * NOTE that the two reads can read different numbers of blocks.
-/// * Writes take the form of `BLOCKS_PER_WRITE` consecutive writes of
-///   size `WRITE_SIZE` to the heap, starting from the address in `rd`.
+/// * Writes take the form of `BLOCKS_PER_WRITE` consecutive writes of size `WRITE_SIZE` to the
+///   heap, starting from the address in `rd`.
 pub struct Rv32VecHeapTwoReadsAdapterChip<
     F: Field,
     const BLOCKS_PER_READ1: usize,
@@ -279,7 +279,8 @@ impl<
         let need_range_check = [&cols.rs1_val, &cols.rs2_val, &cols.rd_val, &cols.rd_val]
             .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1]);
 
-        // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain the correct amount of bits
+        // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain
+        // the correct amount of bits
         let limb_shift = AB::F::from_canonical_usize(
             1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
         );

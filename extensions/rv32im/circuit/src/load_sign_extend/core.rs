@@ -26,9 +26,10 @@ use crate::adapters::LoadStoreInstruction;
 
 /// LoadSignExtend Core Chip handles byte/halfword into word conversions through sign extend
 /// This chip uses read_data to construct write_data
-/// prev_data columns are not used in constraints defined in the CoreAir, but are used in constraints by the Adapter
-/// shifted_read_data is the read_data shifted by (shift_amount & 2), this reduces the number of opcode flags needed
-/// using this shifted data we can generate the write_data as if the shift_amount was 0 for loadh and 0 or 1 for loadb
+/// prev_data columns are not used in constraints defined in the CoreAir, but are used in
+/// constraints by the Adapter shifted_read_data is the read_data shifted by (shift_amount & 2),
+/// this reduces the number of opcode flags needed using this shifted data we can generate the
+/// write_data as if the shift_amount was 0 for loadh and 0 or 1 for loadb
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {

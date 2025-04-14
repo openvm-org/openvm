@@ -38,7 +38,8 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
         })
         .collect::<Vec<_>>();
 
-    // Get impl generics (`<T, N: NumLimbs, const M: usize>`), type generics (`<T, N>`), where clause (`where T: Clone`)
+    // Get impl generics (`<T, N: NumLimbs, const M: usize>`), type generics (`<T, N>`), where
+    // clause (`where T: Clone`)
     let (impl_generics, type_generics, where_clause) = ast.generics.split_for_impl();
 
     let methods = quote! {
@@ -331,8 +332,8 @@ pub fn bytes_stateful_derive(input: TokenStream) -> TokenStream {
                 }
                 _ => panic!("Only unnamed fields are supported"),
             };
-            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
-            // Assume F is already generic of the field.
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate. Assume F is already generic of the field.
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
             where_clause
@@ -365,7 +366,8 @@ pub fn bytes_stateful_derive(input: TokenStream) -> TokenStream {
                     (variant_name, field)
                 })
                 .collect::<Vec<_>>();
-            // Use full path ::openvm_stark_backend... so it can be used either within or outside the vm crate.
+            // Use full path ::openvm_stark_backend... so it can be used either within or outside
+            // the vm crate.
             let (load_state_arms, store_state_arms): (Vec<_>, Vec<_>) =
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;

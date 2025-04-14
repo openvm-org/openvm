@@ -123,7 +123,8 @@ mod bn254 {
         }
     }
 
-    /// FieldExtension for Fq12 with Fq6 as base field since halo2curves does not implement `Field` for Fq6.
+    /// FieldExtension for Fq12 with Fq6 as base field since halo2curves does not implement `Field`
+    /// for Fq6.
     impl FieldExtension<Fq2> for Fq12 {
         const D: usize = 6;
         type Coeffs = [Fq2; 6];
@@ -289,9 +290,11 @@ mod bls12_381 {
         }
     }
 
-    /// Note that halo2curves does not implement `Field` for Fq6, so we need to implement the intermediate points manually.
+    /// Note that halo2curves does not implement `Field` for Fq6, so we need to implement the
+    /// intermediate points manually.
     ///
-    /// FieldExtension for Fq12 with Fq2 as base field since halo2curves does not implement `Field` for Fq6.
+    /// FieldExtension for Fq12 with Fq2 as base field since halo2curves does not implement `Field`
+    /// for Fq6.
     impl FieldExtension<Fq2> for Fq12 {
         const D: usize = 6;
         type Coeffs = [Fq2; 6];

@@ -57,8 +57,8 @@ pub fn split_32<C: Config>(builder: &mut Builder<C>, val: Var<C::N>, n: usize) -
     felts[0..n].to_vec()
 }
 
-/// Eval two expressions, return in the reversed order if cond == 1. Otherwise, return in the original order.
-/// This is a helper function for optimal performance.
+/// Eval two expressions, return in the reversed order if cond == 1. Otherwise, return in the
+/// original order. This is a helper function for optimal performance.
 pub fn cond_eval<C: Config, V: MemVariable<C, Expression: Clone> + CanSelect<C>>(
     builder: &mut Builder<C>,
     cond: Var<C::N>,

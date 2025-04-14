@@ -209,8 +209,8 @@ fn test_vm_override_executor_height() {
 
 #[test]
 fn test_vm_1_optional_air() {
-    // Aggregation VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program only
-    // uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
+    // Aggregation VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program
+    // only uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
     let config = NativeConfig::aggregation(4, 3);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
@@ -381,8 +381,8 @@ fn test_vm_1_persistent() {
             merkle_air_proof_input.raw.public_values[..8],
             // The value when you start with zeros and repeatedly hash the value with itself
             // ptr_max_bits + as_height - 2 times.
-            // The height of the tree is ptr_max_bits + as_height - log2(8). The leaf also must be hashed once
-            // with padding for security.
+            // The height of the tree is ptr_max_bits + as_height - log2(8). The leaf also must be
+            // hashed once with padding for security.
             digest
         );
     }
@@ -490,7 +490,8 @@ fn test_vm_fibonacci_old() {
 
 #[test]
 fn test_vm_fibonacci_old_cycle_tracker() {
-    // NOTE: Instructions commented until cycle tracker instructions are not counted as additional assembly Instructions
+    // NOTE: Instructions commented until cycle tracker instructions are not counted as additional
+    // assembly Instructions
     let instructions = vec![
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16)),
         Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16)),

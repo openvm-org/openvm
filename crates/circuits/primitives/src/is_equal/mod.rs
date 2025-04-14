@@ -16,8 +16,8 @@ pub struct IsEqualIo<T> {
     pub y: T,
     /// The boolean output, constrained to equal (x == y), when `condition != 0`.
     pub out: T,
-    /// Constraints only hold when `condition != 0`. When `condition == 0`, setting all trace values
-    /// to zero still passes the constraints.
+    /// Constraints only hold when `condition != 0`. When `condition == 0`, setting all trace
+    /// values to zero still passes the constraints.
     pub condition: T,
 }
 

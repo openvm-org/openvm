@@ -237,7 +237,8 @@ fn test_fp12_sub_bls12381() {
     );
 }
 
-// NOTE[yj]: This test requires RUST_MIN_STACK=8388608 to run without overflowing the stack, so it is ignored by the test runner for now
+// NOTE[yj]: This test requires RUST_MIN_STACK=8388608 to run without overflowing the stack, so it
+// is ignored by the test runner for now
 #[test]
 #[ignore]
 fn test_fp12_mul_bls12381() {

@@ -26,8 +26,8 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 }
                 _ => panic!("Only unnamed fields are supported"),
             };
-            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
-            // Assume F is already generic of the field.
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate. Assume F is already generic of the field.
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
             where_clause.predicates.push(
@@ -73,8 +73,8 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     _ => None,
                 })
                 .expect("First generic must be type for Field");
-            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
-            // Assume F is already generic of the field.
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate. Assume F is already generic of the field.
             let (execute_arms, get_opcode_name_arms): (Vec<_>, Vec<_>) =
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;

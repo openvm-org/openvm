@@ -6,7 +6,8 @@ use core::{
 
 use crate::{DivAssignUnsafe, DivUnsafe};
 
-// TODO[jpw]: the shared parts of Field and IntMod should be moved into a new `IntegralDomain` trait.
+// TODO[jpw]: the shared parts of Field and IntMod should be moved into a new `IntegralDomain`
+// trait.
 /// This is a simplified trait for field elements.
 pub trait Field:
     Sized
@@ -62,7 +63,8 @@ pub trait Field:
 pub trait FieldExtension<BaseField> {
     /// Extension field degree.
     const D: usize;
-    /// This should be [BaseField; D]. It is an associated type due to rust const generic limitations.
+    /// This should be [BaseField; D]. It is an associated type due to rust const generic
+    /// limitations.
     type Coeffs: Sized;
 
     /// Create an extension field element from its base field coefficients.
@@ -80,7 +82,8 @@ pub trait FieldExtension<BaseField> {
     /// Embed a base field element into an extension field element.
     fn embed(base_elem: BaseField) -> Self;
 
-    /// Frobenius map: take `self` to the `p^power`th power, where `p` is the prime characteristic of the field.
+    /// Frobenius map: take `self` to the `p^power`th power, where `p` is the prime characteristic
+    /// of the field.
     fn frobenius_map(&self, power: usize) -> Self;
 
     /// Multiply an extension field element by an element in the base field

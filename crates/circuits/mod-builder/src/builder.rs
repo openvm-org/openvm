@@ -78,12 +78,13 @@ pub struct ExprBuilder {
     /// flag for debug mode
     debug: bool,
 
-    /// Whether the builder has been finalized. Only after finalize, we can do generate_subrow and eval etc.
+    /// Whether the builder has been finalized. Only after finalize, we can do generate_subrow and
+    /// eval etc.
     finalized: bool,
 
     // Setup opcode is a special op that verifies the modulus is correct.
-    // There are some chips that don't need it because we hardcode the modulus. E.g. the pairing ones.
-    // For those chips need setup, setup is derived: setup = is_valid - sum(all_flags)
+    // There are some chips that don't need it because we hardcode the modulus. E.g. the pairing
+    // ones. For those chips need setup, setup is derived: setup = is_valid - sum(all_flags)
     // Therefore when the chip only supports one opcode, user won't explicitly create a flag for it
     // and we will create a default flag for it on finalizing.
     needs_setup: bool,
@@ -185,7 +186,8 @@ impl ExprBuilder {
     // so there should be same number of calls to the new_var, add_constraint and add_compute.
     pub fn new_var(&mut self) -> (usize, SymbolicExpr) {
         self.num_variables += 1;
-        // Allocate space for the new variable, to make sure they are corresponding to the same variable index.
+        // Allocate space for the new variable, to make sure they are corresponding to the same
+        // variable index.
         self.constraints.push(SymbolicExpr::Input(0));
         self.computes.push(SymbolicExpr::Input(0));
         self.q_limbs.push(0);
@@ -349,10 +351,9 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             builder.assert_bool(is_setup.clone());
             // TODO[jpw]: currently we enforce at the program code level that:
             // - a valid program must call the correct setup opcodes to be correct
-            // - it would be better if we can constraint this in the circuit,
-            //   however this has the challenge that when the same chip is used
-            //   across continuation segments,
-            //   only the first segment will have setup called
+            // - it would be better if we can constraint this in the circuit, however this has the
+            //   challenge that when the same chip is used across continuation segments, only the
+            //   first segment will have setup called
 
             let expected = iter::empty()
                 .chain({
@@ -472,7 +473,8 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             .collect::<Vec<_>>();
         let zero = OverflowInt::<isize>::from_canonical_unsigned_limbs(vec![0], limb_bits);
         let mut vars_overflow = vec![zero; self.num_variables];
-        // Note: in cases where the prime fits in less limbs than `num_limbs`, we use the smaller number of limbs.
+        // Note: in cases where the prime fits in less limbs than `num_limbs`, we use the smaller
+        // number of limbs.
         let prime_overflow = OverflowInt::<isize>::from_biguint(&self.prime, self.limb_bits, None);
 
         let constants: Vec<_> = self
@@ -493,7 +495,8 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             vars_overflow[i] =
                 OverflowInt::<isize>::from_biguint(&vars[i], self.limb_bits, Some(self.num_limbs));
         }
-        // We need to have all variables computed first because, e.g. constraints[2] might need variables[3].
+        // We need to have all variables computed first because, e.g. constraints[2] might need
+        // variables[3].
         for i in 0..self.constraints.len() {
             // expr = q * p
             let expr_bigint =

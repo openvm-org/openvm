@@ -51,9 +51,11 @@ pub enum DslIr<C: Config> {
     SubFIN(Felt<C::F>, C::F, Felt<C::F>),
     /// Subtracts two extension field elements (ext = ext - ext).
     SubE(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Ext<C::F, C::EF>),
-    /// Subtracts an extension field element and an extension field immediate (ext = ext - ext field imm).
+    /// Subtracts an extension field element and an extension field immediate (ext = ext - ext
+    /// field imm).
     SubEI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::EF),
-    /// Subtracts an extension field immediate and an extension field element (ext = ext field imm - ext).
+    /// Subtracts an extension field immediate and an extension field element (ext = ext field imm
+    /// - ext).
     SubEIN(Ext<C::F, C::EF>, C::EF, Ext<C::F, C::EF>),
     /// Subtracts an extension field element and a field immediate (ext = ext - field imm).
     SubEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
@@ -71,7 +73,8 @@ pub enum DslIr<C: Config> {
     MulFI(Felt<C::F>, Felt<C::F>, C::F),
     /// Multiplies two extension field elements (ext = ext * ext).
     MulE(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Ext<C::F, C::EF>),
-    /// Multiplies an extension field element and an extension field immediate (ext = ext * ext field imm).
+    /// Multiplies an extension field element and an extension field immediate (ext = ext * ext
+    /// field imm).
     MulEI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::EF),
     /// Multiplies an extension field element and a field immediate (ext = ext * field imm).
     MulEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
@@ -87,9 +90,11 @@ pub enum DslIr<C: Config> {
     DivFIN(Felt<C::F>, C::F, Felt<C::F>),
     /// Divides two extension field elements (ext = ext / ext).
     DivE(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Ext<C::F, C::EF>),
-    /// Divides an extension field element and an extension field immediate (ext = ext / ext field imm).
+    /// Divides an extension field element and an extension field immediate (ext = ext / ext field
+    /// imm).
     DivEI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::EF),
-    /// Divides and extension field immediate and an extension field element (ext = ext field imm / ext).
+    /// Divides and extension field immediate and an extension field element (ext = ext field imm /
+    /// ext).
     DivEIN(Ext<C::F, C::EF>, C::EF, Ext<C::F, C::EF>),
     /// Divides an extension field element and a field immediate (ext = ext / field imm).
     DivEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
@@ -122,23 +127,27 @@ pub enum DslIr<C: Config> {
         TracedVec<DslIr<C>>,
     ),
 
-    /// Executes an equal conditional branch with the parameters (lhs var, rhs var, then body, else body).
+    /// Executes an equal conditional branch with the parameters (lhs var, rhs var, then body, else
+    /// body).
     IfEq(
         Var<C::N>,
         Var<C::N>,
         TracedVec<DslIr<C>>,
         TracedVec<DslIr<C>>,
     ),
-    /// Executes a not equal conditional branch with the parameters (lhs var, rhs var, then body, else body).
+    /// Executes a not equal conditional branch with the parameters (lhs var, rhs var, then body,
+    /// else body).
     IfNe(
         Var<C::N>,
         Var<C::N>,
         TracedVec<DslIr<C>>,
         TracedVec<DslIr<C>>,
     ),
-    /// Executes an equal conditional branch with the parameters (lhs var, rhs imm, then body, else body).
+    /// Executes an equal conditional branch with the parameters (lhs var, rhs imm, then body, else
+    /// body).
     IfEqI(Var<C::N>, C::N, TracedVec<DslIr<C>>, TracedVec<DslIr<C>>),
-    /// Executes a not equal conditional branch with the parameters (lhs var, rhs imm, then body, else body).
+    /// Executes a not equal conditional branch with the parameters (lhs var, rhs imm, then body,
+    /// else body).
     IfNeI(Var<C::N>, C::N, TracedVec<DslIr<C>>, TracedVec<DslIr<C>>),
 
     // Assertions.
@@ -152,7 +161,8 @@ pub enum DslIr<C: Config> {
     AssertEqVI(Var<C::N>, C::N),
     /// Assert that a field element is equal to a field immediate (felt == field imm).
     AssertEqFI(Felt<C::F>, C::F),
-    /// Assert that an extension field element is equal to an extension field immediate (ext == ext field imm).
+    /// Assert that an extension field element is equal to an extension field immediate (ext == ext
+    /// field imm).
     AssertEqEI(Ext<C::F, C::EF>, C::EF),
 
     /// Assert that a usize is not zero (usize != 0).
@@ -179,7 +189,8 @@ pub enum DslIr<C: Config> {
     StoreHeapPtr(Ptr<C::N>),
 
     // Bits.
-    /// Decompose a field element into bits (bits = num2bits(felt)). Should only be used when target is a circuit.
+    /// Decompose a field element into bits (bits = num2bits(felt)). Should only be used when
+    /// target is a circuit.
     CircuitNum2BitsF(Felt<C::F>, Vec<Var<C::N>>),
     /// Decompose a Var into 16-bit limbs.
     CircuitVarTo64BitsF(Var<C::N>, [Felt<C::F>; 4]),
@@ -187,14 +198,15 @@ pub enum DslIr<C: Config> {
     // Hashing.
     /// Permutes an array of baby bear elements using Poseidon2 (output = p2_permute(array)).
     Poseidon2PermuteBabyBear(Array<C, Felt<C::F>>, Array<C, Felt<C::F>>),
-    /// Compresses two baby bear element arrays using Poseidon2 (output = p2_compress(array1, array2)).
+    /// Compresses two baby bear element arrays using Poseidon2 (output = p2_compress(array1,
+    /// array2)).
     Poseidon2CompressBabyBear(
         Array<C, Felt<C::F>>,
         Array<C, Felt<C::F>>,
         Array<C, Felt<C::F>>,
     ),
-    /// Permutes an array of Bn254 elements using Poseidon2 (output = p2_permute(array)). Should only
-    /// be used when target is a circuit.
+    /// Permutes an array of Bn254 elements using Poseidon2 (output = p2_permute(array)). Should
+    /// only be used when target is a circuit.
     CircuitPoseidon2Permute([Var<C::N>; 3]),
 
     // Miscellaneous instructions.
@@ -230,18 +242,19 @@ pub enum DslIr<C: Config> {
     Halt,
 
     // Public inputs for circuits.
-    /// Publish a field element as the ith public value. Should only be used when target is a circuit.
+    /// Publish a field element as the ith public value. Should only be used when target is a
+    /// circuit.
     CircuitPublish(Var<C::N>, usize),
 
     // FRI specific instructions.
     /// Select's a variable based on a condition. (select(cond, true_val, false_val) => output).
     /// Should only be used when target is a circuit.
     CircuitSelectV(Var<C::N>, Var<C::N>, Var<C::N>, Var<C::N>),
-    /// Select's a field element based on a condition. (select(cond, true_val, false_val) => output).
-    /// Should only be used when target is a circuit.
+    /// Select's a field element based on a condition. (select(cond, true_val, false_val) =>
+    /// output). Should only be used when target is a circuit.
     CircuitSelectF(Var<C::N>, Felt<C::F>, Felt<C::F>, Felt<C::F>),
-    /// Select's an extension field element based on a condition. (select(cond, true_val, false_val) => output).
-    /// Should only be used when target is a circuit.
+    /// Select's an extension field element based on a condition. (select(cond, true_val,
+    /// false_val) => output). Should only be used when target is a circuit.
     CircuitSelectE(
         Var<C::N>,
         Ext<C::F, C::EF>,
@@ -290,8 +303,9 @@ pub enum DslIr<C: Config> {
     /// Assert that v < 2^bit.
     RangeCheckV(Var<C::N>, usize),
 
-    /// Start the cycle tracker used by a block of code annotated by the string input. Calling this with the same
-    /// string will end the open cycle tracker instance and start a new one with an increasing numeric postfix.
+    /// Start the cycle tracker used by a block of code annotated by the string input. Calling this
+    /// with the same string will end the open cycle tracker instance and start a new one with
+    /// an increasing numeric postfix.
     CycleTrackerStart(String),
     /// End the cycle tracker used by a block of code annotated by the string input.
     CycleTrackerEnd(String),

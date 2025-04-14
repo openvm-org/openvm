@@ -105,8 +105,9 @@ where
         let carry_divide = AB::F::from_canonical_usize(1 << RV32_CELL_BITS).inverse();
 
         // Don't need to constrain the least significant limb of the addition
-        // since we already know that rd_data[0] = pc_limbs[0] and the least significant limb of imm is 0
-        // Note: imm_limbs doesn't include the least significant limb so imm_limbs[i - 1] means the i-th limb of imm
+        // since we already know that rd_data[0] = pc_limbs[0] and the least significant limb of imm
+        // is 0 Note: imm_limbs doesn't include the least significant limb so imm_limbs[i -
+        // 1] means the i-th limb of imm
         for i in 1..RV32_REGISTER_NUM_LIMBS {
             carry[i] = AB::Expr::from(carry_divide)
                 * (pc_limbs[i].clone() + imm_limbs[i - 1] - rd_data[i] + carry[i - 1].clone());
@@ -120,10 +121,11 @@ where
                 .eval(builder, is_valid);
         }
 
-        // The immediate and PC limbs need range checking to ensure they're within [0, 2^RV32_CELL_BITS)
-        // Since we range check two items at a time, doing this way helps efficiently divide the limbs into groups of 2
-        // Note: range checking the limbs of immediate and PC separately would result in additional range checks
-        //       since they both have odd number of limbs that need to be range checked
+        // The immediate and PC limbs need range checking to ensure they're within [0,
+        // 2^RV32_CELL_BITS) Since we range check two items at a time, doing this way helps
+        // efficiently divide the limbs into groups of 2 Note: range checking the limbs of
+        // immediate and PC separately would result in additional range checks       since
+        // they both have odd number of limbs that need to be range checked
         let mut need_range_check: Vec<AB::Expr> = Vec::new();
         for limb in imm_limbs {
             need_range_check.push(limb.into());
@@ -132,7 +134,8 @@ where
         // pc_limbs[0] is already range checked through rd_data[0]
         for (i, limb) in pc_limbs.iter().skip(1).enumerate() {
             if i == pc_limbs.len() - 1 {
-                // Range check the most significant limb of pc to be in [0, 2^{PC_BITS-(RV32_REGISTER_NUM_LIMBS-1)*RV32_CELL_BITS})
+                // Range check the most significant limb of pc to be in [0,
+                // 2^{PC_BITS-(RV32_REGISTER_NUM_LIMBS-1)*RV32_CELL_BITS})
                 need_range_check.push(
                     (*limb).clone()
                         * AB::Expr::from_canonical_usize(

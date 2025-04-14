@@ -272,7 +272,8 @@ pub enum Rv32HintStoreOpcode {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
 #[repr(u16)]
 pub enum Rv32Phantom {
-    /// Prepare the next input vector for hinting, but prepend it with a 4-byte decomposition of its length instead of one field element.
+    /// Prepare the next input vector for hinting, but prepend it with a 4-byte decomposition of
+    /// its length instead of one field element.
     HintInput = 0x20,
     /// Peek string from memory and print it to stdout.
     PrintStr,

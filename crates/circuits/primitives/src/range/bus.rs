@@ -20,7 +20,8 @@ impl RangeCheckBus {
 
     /// Range check that `x` is in the range `[0, 2^max_bits)`.
     ///
-    /// This can be used when `2^max_bits < self.range_max` **if `2 * self.range_max` is less than the field modulus**.
+    /// This can be used when `2^max_bits < self.range_max` **if `2 * self.range_max` is less than
+    /// the field modulus**.
     pub fn range_check<T: FieldAlgebra>(
         &self,
         x: impl Into<T>,
@@ -97,10 +98,13 @@ impl<T: FieldAlgebra> BitsCheckBusInteraction<T> {
     {
         let count = count.into();
         if self.shift > 0 {
-            // if 2^max_bits < range_max, then we also range check that `x + (range_max - 2^max_bits) < range_max`
+            // if 2^max_bits < range_max, then we also range check that `x + (range_max -
+            // 2^max_bits) < range_max`
             // - this will hold if `x < 2^max_bits` (necessary)
-            // - if `x < range_max` then we know the integer value `x.as_canonical_u32() + (range_max - 2^max_bits) < 2*range_max`.
-            //   **Assuming that `2*range_max < F::MODULUS`, then additionally knowing `x + (range_max - 2^max_bits) < range_max` implies `x < 2^max_bits`.
+            // - if `x < range_max` then we know the integer value `x.as_canonical_u32() +
+            //   (range_max - 2^max_bits) < 2*range_max`. **Assuming that `2*range_max <
+            //   F::MODULUS`, then additionally knowing `x + (range_max - 2^max_bits) < range_max`
+            //   implies `x < 2^max_bits`.
             self.bus.lookup_key(
                 builder,
                 [self.x.clone() + AB::Expr::from_canonical_u32(self.shift)],

@@ -49,7 +49,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
                 if dec_insn.funct3 as u8 == CSRRW_FUNCT3 {
                     // CSRRW
                     if dec_insn.rs1 == 0 && dec_insn.rd == 0 {
-                        // This resets the CSR counter to zero. Since we don't have any CSR registers, this is a nop.
+                        // This resets the CSR counter to zero. Since we don't have any CSR
+                        // registers, this is a nop.
                         return Some(TranspilerOutput::one_to_one(nop()));
                     }
                 }

@@ -39,7 +39,10 @@ pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {
 
 #[derive(Debug, Serialize, Deserialize, Clone, new, Copy)]
 pub struct MemoryConfig {
-    /// The maximum height of the address space. This means the trie has `as_height` layers for searching the address space. The allowed address spaces are those in the range `[as_offset, as_offset + 2^as_height)` where `as_offset` is currently fixed to `1` to not allow address space `0` in memory.
+    /// The maximum height of the address space. This means the trie has `as_height` layers for
+    /// searching the address space. The allowed address spaces are those in the range `[as_offset,
+    /// as_offset + 2^as_height)` where `as_offset` is currently fixed to `1` to not allow address
+    /// space `0` in memory.
     pub as_height: usize,
     /// The offset of the address space. Should be fixed to equal `1`.
     pub as_offset: u32,
@@ -78,9 +81,9 @@ pub struct SystemConfig {
     /// In single segment mode, `num_public_values` is the number of public values of
     /// `PublicValuesChip`. In this case, verifier can read public values directly.
     /// In continuation mode, public values are stored in a special address space.
-    /// `num_public_values` indicates the number of allowed addresses in that address space. The verifier
-    /// cannot read public values directly, but they can decommit the public values from the memory
-    /// merkle root.
+    /// `num_public_values` indicates the number of allowed addresses in that address space. The
+    /// verifier cannot read public values directly, but they can decommit the public values
+    /// from the memory merkle root.
     pub num_public_values: usize,
     /// Whether to collect detailed profiling metrics.
     /// **Warning**: this slows down the runtime.

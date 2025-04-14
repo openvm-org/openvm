@@ -132,7 +132,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
             assert!(len < (1 << self.air.ptr_max_bits));
         }
 
-        // need to pad with one 1 bit, 64 bits for the message length and then pad until the length is divisible by [SHA256_BLOCK_BITS]
+        // need to pad with one 1 bit, 64 bits for the message length and then pad until the length
+        // is divisible by [SHA256_BLOCK_BITS]
         let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
 
         // we will read [num_blocks] * [SHA256_BLOCK_CELLS] cells but only [len] cells will be used

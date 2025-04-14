@@ -29,8 +29,8 @@ pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
 
-/// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented as a field element)
-/// back into its value as u32.
+/// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented
+/// as a field element) back into its value as u32.
 pub fn compose<F: PrimeField32>(ptr_data: [F; RV32_REGISTER_NUM_LIMBS]) -> u32 {
     let mut val = 0;
     for (i, limb) in ptr_data.map(|x| x.as_canonical_u32()).iter().enumerate() {
@@ -60,7 +60,8 @@ pub fn read_rv32_register<F: PrimeField32>(
     (record.0, val)
 }
 
-/// Peeks at the value of a register without updating the memory state or incrementing the timestamp.
+/// Peeks at the value of a register without updating the memory state or incrementing the
+/// timestamp.
 pub fn unsafe_read_rv32_register<F: PrimeField32>(memory: &MemoryController<F>, pointer: F) -> u32 {
     let data = memory.unsafe_read::<RV32_REGISTER_NUM_LIMBS>(F::ONE, pointer);
     compose(data)

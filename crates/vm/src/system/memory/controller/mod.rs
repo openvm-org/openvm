@@ -457,9 +457,9 @@ impl<F: PrimeField32> MemoryController<F> {
     fn replay_access_log(&mut self) {
         let log = mem::take(&mut self.memory.log);
         if log.is_empty() {
-            // Online memory logs may be empty, but offline memory may be replayed from external sources.
-            // In these cases, we skip the calls to replay access logs because `set_log_capacity` would
-            // panic.
+            // Online memory logs may be empty, but offline memory may be replayed from external
+            // sources. In these cases, we skip the calls to replay access logs because
+            // `set_log_capacity` would panic.
             tracing::debug!("skipping replay_access_log");
             return;
         }
@@ -477,7 +477,8 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    /// Low-level API to replay a single memory access log entry and populate the [OfflineMemory], [MemoryInterface], and `AccessAdapterInventory`.
+    /// Low-level API to replay a single memory access log entry and populate the [OfflineMemory],
+    /// [MemoryInterface], and `AccessAdapterInventory`.
     pub fn replay_access(
         entry: MemoryLogEntry<F>,
         offline_memory: &mut OfflineMemory<F>,
@@ -720,7 +721,8 @@ pub struct MemoryAuxColsFactory<T> {
     pub(crate) _marker: PhantomData<T>,
 }
 
-// NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in parallelized trace generation.
+// NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in
+// parallelized trace generation.
 impl<F: PrimeField32> MemoryAuxColsFactory<F> {
     pub fn generate_read_aux(&self, read: &MemoryRecord<F>, buffer: &mut MemoryReadAuxCols<F>) {
         assert!(

@@ -36,7 +36,8 @@ use crate::{
 mod tests;
 
 /// PhantomAir still needs columns for each nonzero operand in a phantom instruction.
-/// We currently allow `a,b,c` where the lower 16 bits of `c` are used as the [PhantomInstruction] discriminant.
+/// We currently allow `a,b,c` where the lower 16 bits of `c` are used as the [PhantomInstruction]
+/// discriminant.
 const NUM_PHANTOM_OPERANDS: usize = 3;
 
 #[derive(Clone, Debug)]

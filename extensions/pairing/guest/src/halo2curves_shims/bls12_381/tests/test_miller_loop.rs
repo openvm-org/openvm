@@ -81,7 +81,8 @@ fn test_f_mul() {
 
     Q_acc = Q_acc_init;
 
-    // Now Q_acc is in a state where we can do a left vs right side test of double-and-add vs double then add:
+    // Now Q_acc is in a state where we can do a left vs right side test of double-and-add vs double
+    // then add:
 
     // Left side test: Double and add
     let (Q_acc_daa, l_S_plus_Q, l_S_plus_Q_plus_S) =

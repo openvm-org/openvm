@@ -17,14 +17,14 @@ use crate::system::memory::{
     MemoryAddress,
 };
 
-/// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will be decomposed into)
-/// for the `AssertLtSubAir` in the `MemoryOfflineChecker`.
+/// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will
+/// be decomposed into) for the `AssertLtSubAir` in the `MemoryOfflineChecker`.
 /// Warning: This requires that (clk_max_bits + decomp - 1) / decomp = AUX_LEN
 ///         in MemoryOfflineChecker (or whenever AssertLtSubAir is used)
 pub(crate) const AUX_LEN: usize = 2;
 
-/// The [MemoryBridge] is used within AIR evaluation functions to constrain logical memory operations (read/write).
-/// It adds all necessary constraints and interactions.
+/// The [MemoryBridge] is used within AIR evaluation functions to constrain logical memory
+/// operations (read/write). It adds all necessary constraints and interactions.
 #[derive(Clone, Copy, Debug)]
 pub struct MemoryBridge {
     offline_checker: MemoryOfflineChecker,
@@ -212,8 +212,8 @@ impl<F: FieldAlgebra, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'_, F, V
     }
 }
 
-/// Constraints and interactions for a logical memory write of `(address, data)` at time `timestamp`.
-/// This reads `(address, data_prev, timestamp_prev)` from the memory bus and writes
+/// Constraints and interactions for a logical memory write of `(address, data)` at time
+/// `timestamp`. This reads `(address, data_prev, timestamp_prev)` from the memory bus and writes
 /// `(address, data, timestamp)` to the memory bus.
 /// Includes constraints for `timestamp_prev < timestamp`.
 ///

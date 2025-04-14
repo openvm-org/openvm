@@ -70,7 +70,8 @@ where
             let step = builder.get(&proof.commit_phase_openings, i);
             let beta = builder.get(betas, i);
 
-            // reduced_openings.len() == MAX_TWO_ADICITY >= log_max_lde_height >= log_folded_height_plus_one
+            // reduced_openings.len() == MAX_TWO_ADICITY >= log_max_lde_height >=
+            // log_folded_height_plus_one
             let reduced_opening = builder.get(reduced_openings, log_folded_height_plus_one);
             builder.assign(&folded_eval, folded_eval + reduced_opening);
 
@@ -285,7 +286,8 @@ where
     let nested_opened_values_buffer = if builder.flags.static_only {
         builder.array(REDUCER_BUFFER_SIZE)
     } else {
-        // This points to the same memory. Only the length of this object will change when truncating.
+        // This points to the same memory. Only the length of this object will change when
+        // truncating.
         let ret = builder.uninit();
         builder.assign(&ret, nested_opened_values_buffer.clone());
         ret

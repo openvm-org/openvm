@@ -17,8 +17,8 @@ use super::columns::Poseidon2PeripheryCols;
 
 /// Poseidon2 Air, VM version.
 ///
-/// Carries the subair for subtrace generation. Sticking to the conventions, this struct carries no state.
-/// `direct` determines whether direct interactions are enabled. By default they are on.
+/// Carries the subair for subtrace generation. Sticking to the conventions, this struct carries no
+/// state. `direct` determines whether direct interactions are enabled. By default they are on.
 #[derive(Clone, new, Debug)]
 pub struct Poseidon2PeripheryAir<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,

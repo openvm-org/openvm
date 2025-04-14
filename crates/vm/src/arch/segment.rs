@@ -262,7 +262,8 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                     break;
                 }
 
-                // Some phantom instruction handling is more convenient to do here than in PhantomChip.
+                // Some phantom instruction handling is more convenient to do here than in
+                // PhantomChip.
                 if opcode == SystemOpcode::PHANTOM.global_opcode() {
                     // Note: the discriminant is the lower 16 bits of the c operand.
                     let discriminant = c.as_canonical_u32() as u16;
@@ -357,7 +358,8 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         })
     }
 
-    /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.
+    /// Returns bool of whether to switch to next segment or not. This is called every clock cycle
+    /// inside of Core trace generation.
     fn should_segment(&mut self) -> bool {
         if !self.system_config().continuation_enabled {
             return false;

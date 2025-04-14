@@ -266,7 +266,8 @@ impl<E, P> VmInventory<E, P> {
         }
     }
 
-    /// Append `other` to current inventory. This means `self` comes earlier in the dependency chain.
+    /// Append `other` to current inventory. This means `self` comes earlier in the dependency
+    /// chain.
     pub fn append(&mut self, mut other: VmInventory<E, P>) -> Result<(), VmInventoryError> {
         let num_executors = self.executors.len();
         let num_periphery = self.periphery.len();
@@ -651,7 +652,8 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     {
         let mut builder =
             VmInventoryBuilder::new(&self.config, &self.base, &self.streams, self.bus_idx_mgr);
-        // Add range checker for convenience, the other system base chips aren't included - they can be accessed directly from builder
+        // Add range checker for convenience, the other system base chips aren't included - they can
+        // be accessed directly from builder
         builder.add_chip(&self.base.range_checker_chip);
         for chip in self.inventory.executors() {
             builder.add_chip(chip);
@@ -790,7 +792,8 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         self.base.memory_controller.set_initial_memory(memory);
     }
 
-    /// Warning: this sets the stream in all chips which have a shared mutable reference to the streams.
+    /// Warning: this sets the stream in all chips which have a shared mutable reference to the
+    /// streams.
     pub(crate) fn set_streams(&mut self, streams: Streams<F>) {
         *self.streams.lock().unwrap() = streams;
     }
@@ -870,7 +873,8 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     /// useful for regular users.
     ///
     /// **Warning**: the order of `get_trace_heights` is deterministic, but it is not the same as
-    /// the order of `air_names`. In other words, the order here does not match the order of AIR IDs.
+    /// the order of `air_names`. In other words, the order here does not match the order of AIR
+    /// IDs.
     pub fn get_internal_trace_heights(&self) -> VmComplexTraceHeights
     where
         E: ChipUsageGetter,
@@ -885,8 +889,9 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     /// Return dummy trace heights of (SystemBase, Inventory). Usually this is for aggregation to
     /// generate a dummy proof and not useful for regular users.
     ///
-    /// **Warning**: the order of `get_dummy_trace_heights` is deterministic, but it is not the same as
-    /// the order of `air_names`. In other words, the order here does not match the order of AIR IDs.
+    /// **Warning**: the order of `get_dummy_trace_heights` is deterministic, but it is not the same
+    /// as the order of `air_names`. In other words, the order here does not match the order of
+    /// AIR IDs.
     pub fn get_dummy_internal_trace_heights(&self) -> VmComplexTraceHeights
     where
         E: ChipUsageGetter,
@@ -944,8 +949,9 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     /// Return trace cells of all chips in order.
-    /// This returns 0 cells for chips with preprocessed trace because the number of trace cells is constant in those cases.
-    /// This function is used to sample periodically and provided to the segmentation strategy to decide whether to segment during execution.
+    /// This returns 0 cells for chips with preprocessed trace because the number of trace cells is
+    /// constant in those cases. This function is used to sample periodically and provided to
+    /// the segmentation strategy to decide whether to segment during execution.
     pub(crate) fn current_trace_cells(&self) -> Vec<usize>
     where
         E: ChipUsageGetter,
@@ -1062,9 +1068,10 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         debug_assert_eq!(builder.curr_air_id, CONNECTOR_AIR_ID);
         builder.add_air_proof_input(connector_chip.generate_air_proof_input());
 
-        // Go through all chips in inventory in reverse order they were added (to resolve dependencies)
-        // Important Note: for air_id ordering reasons, we want to generate_air_proof_input for
-        // public values and memory chips **last** but include them into the `builder` **first**.
+        // Go through all chips in inventory in reverse order they were added (to resolve
+        // dependencies) Important Note: for air_id ordering reasons, we want to
+        // generate_air_proof_input for public values and memory chips **last** but include
+        // them into the `builder` **first**.
         let mut public_values_input = None;
         let mut insertion_order = self.inventory.insertion_order;
         insertion_order.reverse();
@@ -1147,7 +1154,8 @@ impl<SC: StarkGenericConfig> VmProofInputBuilder<SC> {
         }
     }
     /// Adds air proof input if one of the main trace matrices is non-empty.
-    /// Always increments the internal `curr_air_id` regardless of whether a new air proof input was added or not.
+    /// Always increments the internal `curr_air_id` regardless of whether a new air proof input was
+    /// added or not.
     fn add_air_proof_input(&mut self, air_proof_input: AirProofInput<SC>) {
         let h = if !air_proof_input.raw.cached_mains.is_empty() {
             air_proof_input.raw.cached_mains[0].height()

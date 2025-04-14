@@ -28,7 +28,8 @@ struct FinalState<const CHUNK: usize, F> {
 }
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
-    /// `compression_bus` is the bus for direct (no-memory involved) interactions to call the cryptographic compression function.
+    /// `compression_bus` is the bus for direct (no-memory involved) interactions to call the
+    /// cryptographic compression function.
     pub fn new(
         memory_dimensions: MemoryDimensions,
         merkle_bus: PermutationCheckBus,

@@ -13,8 +13,8 @@ pub struct IsZeroIo<T> {
     pub x: T,
     /// The boolean output, constrained to equal (x == 0) when `condition != 0`..
     pub out: T,
-    /// Constraints only hold when `condition != 0`. When `condition == 0`, setting all trace values
-    /// to zero still passes the constraints.
+    /// Constraints only hold when `condition != 0`. When `condition == 0`, setting all trace
+    /// values to zero still passes the constraints.
     pub condition: T,
 }
 

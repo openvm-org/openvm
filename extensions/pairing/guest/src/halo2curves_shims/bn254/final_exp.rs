@@ -25,7 +25,8 @@ impl FinalExp for Bn254 {
         // By the theorem, it suffices to provide c and u such that f * u == c^λ.
         // Since λ = 6x + 2 + q^3 - q^2 + q, we will check the equivalent condition:
         // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
-        // This is because we can compute f * c^-{6x+2} by embedding the c^-{6x+2} computation in the miller loop.
+        // This is because we can compute f * c^-{6x+2} by embedding the c^-{6x+2} computation in
+        // the miller loop.
 
         // c_mul = c^-{q^3 - q^2 + q}
         let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);

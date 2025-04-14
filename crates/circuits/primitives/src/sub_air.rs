@@ -15,8 +15,8 @@ use openvm_stark_backend::p3_air::AirBuilder;
 /// the `SubAir` from the `Io` part. These `AuxCols` are typically just slices of `AB::Var`.
 ///
 /// This trait only owns the constraints, but it is expected that the [TraceSubRowGenerator] trait
-/// or some analogous functionality is also implemented so that the trace generation of the `AuxCols`
-/// of each row can be done purely in terms of the `Io` part.
+/// or some analogous functionality is also implemented so that the trace generation of the
+/// `AuxCols` of each row can be done purely in terms of the `Io` part.
 pub trait SubAir<AB: AirBuilder> {
     /// Type to define the context, typically in terms of `AB::Expr` that are needed
     /// to define the SubAir's constraints.
@@ -38,12 +38,14 @@ pub trait SubAir<AB: AirBuilder> {
 // [jpw] This could be part of SubAir, but I want to keep SubAir to be constraints only
 pub trait TraceSubRowGenerator<F> {
     /// The minimal amount of information needed to generate the sub-row of the trace matrix.
-    /// This type has a lifetime so other context, such as references to other chips, can be provided.
+    /// This type has a lifetime so other context, such as references to other chips, can be
+    /// provided.
     type TraceContext<'a>
     where
         Self: 'a;
-    /// The type for the columns to mutate. Often this can be `&'a mut Cols<F>` if `Cols` is on the stack.
-    /// For structs that use the heap, this should be a struct that contains mutable slices.
+    /// The type for the columns to mutate. Often this can be `&'a mut Cols<F>` if `Cols` is on the
+    /// stack. For structs that use the heap, this should be a struct that contains mutable
+    /// slices.
     type ColsMut<'a>
     where
         Self: 'a;

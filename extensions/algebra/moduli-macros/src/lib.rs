@@ -12,15 +12,16 @@ use syn::{
 
 static MOD_IDX: AtomicUsize = AtomicUsize::new(0);
 
-/// This macro generates the code to setup the modulus for a given prime. Also it places the moduli into a special static variable to be later extracted from the ELF and used by the VM.
-/// Usage:
+/// This macro generates the code to setup the modulus for a given prime. Also it places the moduli
+/// into a special static variable to be later extracted from the ELF and used by the VM. Usage:
 /// ```
 /// moduli_declare! {
 ///     Bls12381 { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
 ///     Bn254 { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
 /// }
 /// ```
-/// This creates two structs, `Bls12381` and `Bn254`, each representing the modular arithmetic class (implementing `Add`, `Sub` and so on).
+/// This creates two structs, `Bls12381` and `Bn254`, each representing the modular arithmetic class
+/// (implementing `Add`, `Sub` and so on).
 #[proc_macro]
 pub fn moduli_declare(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
@@ -783,7 +784,8 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
         let serialized_modulus =
             core::iter::once(1) // 1 for "modulus"
-                .chain(core::iter::once(mod_idx as u8)) // mod_idx is u8 for now (can make it u32), because we don't know the order of variables in the elf
+                .chain(core::iter::once(mod_idx as u8)) // mod_idx is u8 for now (can make it u32), because we don't know the order of
+                // variables in the elf
                 .chain((modulus_bytes.len() as u32).to_le_bytes().iter().copied())
                 .chain(modulus_bytes.iter().copied())
                 .collect::<Vec<_>>();

@@ -462,7 +462,8 @@ where
                 F::from_canonical_u32(self.chip.air.modulus_limbs[READ_LIMBS - 1])
                     - record.b[READ_LIMBS - 1];
         } else if record.b[0] == F::from_canonical_u32(2) {
-            // test the constraint that b[i] = N[i] for all i when prefix_sum is not 1 or lt_marker_sum - is_setup
+            // test the constraint that b[i] = N[i] for all i when prefix_sum is not 1 or
+            // lt_marker_sum - is_setup
             row_slice.c_lt_mark = F::from_canonical_u8(2);
             row_slice.lt_marker = [F::ZERO; READ_LIMBS];
             row_slice.lt_marker[READ_LIMBS - 1] = F::from_canonical_u8(2);
@@ -499,7 +500,8 @@ fn test_is_equal_setup_bad<
 >(
     opcode_offset: usize,
     modulus: BigUint,
-    b_val: u32, // used to select which bug to test. currently only 1, 2, and 3 are supported (because there are three bugs to test)
+    b_val: u32, /* used to select which bug to test. currently only 1, 2, and 3 are supported
+                 * (because there are three bugs to test) */
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus);

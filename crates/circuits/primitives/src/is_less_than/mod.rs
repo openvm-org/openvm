@@ -75,8 +75,8 @@ pub struct IsLtSubAir {
     pub bus: VariableRangeCheckerBus,
     /// The maximum number of bits for the numbers to compare
     /// Soundness requirement: max_bits <= 29
-    ///     max_bits > 29 doesn't work: the approach is to decompose and range check `y - x - 1 + 2^max_bits` is non-negative.
-    ///     This requires 2^{max_bits+1} < |F|.
+    ///     max_bits > 29 doesn't work: the approach is to decompose and range check `y - x - 1 +
+    /// 2^max_bits` is non-negative.     This requires 2^{max_bits+1} < |F|.
     ///     When F::bits() = 31, this implies max_bits <= 29.
     pub max_bits: usize,
     /// `decomp_limbs = max_bits.div_ceil(bus.range_max_bits)`.
@@ -135,7 +135,8 @@ impl IsLtSubAir {
         let out = out.into();
         // constrain that the lower + out * 2^max_bits is the correct intermediate sum
         let check_val = lower + out.clone() * AB::Expr::from_canonical_usize(1 << self.max_bits);
-        // the degree of this constraint is expected to be deg(count) + max(deg(intermed_val), deg(lower))
+        // the degree of this constraint is expected to be deg(count) + max(deg(intermed_val),
+        // deg(lower))
         builder.when(condition).assert_eq(intermed_val, check_val);
         builder.assert_bool(out);
     }

@@ -11,7 +11,8 @@ pub mod exe;
 pub mod instruction;
 mod phantom;
 pub mod program;
-/// Module with traits and constants for RISC-V instruction definitions for custom OpenVM instructions.
+/// Module with traits and constants for RISC-V instruction definitions for custom OpenVM
+/// instructions.
 pub mod riscv;
 pub mod utils;
 

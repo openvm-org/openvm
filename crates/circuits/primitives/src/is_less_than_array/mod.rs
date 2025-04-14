@@ -21,8 +21,8 @@ pub mod tests;
 pub struct IsLtArrayIo<T, const NUM: usize> {
     pub x: [T; NUM],
     pub y: [T; NUM],
-    /// The boolean output, constrained to equal (x < y) when `condition != 0`. The less than comparison
-    /// is done lexicographically.
+    /// The boolean output, constrained to equal (x < y) when `condition != 0`. The less than
+    /// comparison is done lexicographically.
     pub out: T,
     /// Constraints only hold when `count != 0`. When `count == 0`, setting all trace values
     /// to zero still passes the constraints.
@@ -34,7 +34,8 @@ pub struct IsLtArrayIo<T, const NUM: usize> {
 #[derive(AlignedBorrow, Clone, Copy, Debug)]
 pub struct IsLtArrayAuxCols<T, const NUM: usize, const AUX_LEN: usize> {
     // `diff_marker` is filled with 0 except at the lowest index i such that
-    // `x[i] != y[i]`. If such an `i` exists then it is constrained that `diff_inv = inv(y[i] - x[i])`.
+    // `x[i] != y[i]`. If such an `i` exists then it is constrained that `diff_inv = inv(y[i] -
+    // x[i])`.
     pub diff_marker: [T; NUM],
     pub diff_inv: T,
     pub lt_aux: LessThanAuxCols<T, AUX_LEN>,
@@ -135,11 +136,12 @@ impl<const NUM: usize> IsLtArraySubAir<NUM> {
         }
         builder.assert_bool(prefix_sum.clone());
         // When condition != 0,
-        // - If `x != y`, then `prefix_sum = 1` so marker[i] must be nonzero iff
-        //   i is the first index where `x[i] != y[i]`. Constrains that
-        //   `diff_inv * (y[i] - x[i]) = 1` (`diff_val` is non-zero).
+        // - If `x != y`, then `prefix_sum = 1` so marker[i] must be nonzero iff i is the first
+        //   index where `x[i] != y[i]`. Constrains that `diff_inv * (y[i] - x[i]) = 1` (`diff_val`
+        //   is non-zero).
         // - If `x == y`, then `prefix_sum = 0` and `out == 0` (below)
-        //     - `prefix_sum` cannot be 1 because all diff are zero and it would be impossible to find an inverse.
+        //     - `prefix_sum` cannot be 1 because all diff are zero and it would be impossible to
+        //       find an inverse.
 
         builder
             .when(io.count.clone())

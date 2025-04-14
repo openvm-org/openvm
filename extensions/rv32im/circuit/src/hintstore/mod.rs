@@ -204,9 +204,9 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             .eval(builder, is_start.clone());
 
         // Preventing mem_ptr and rem_words overflow
-        // Constraining mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1] < 2^(pointer_max_bits - (RV32_REGISTER_NUM_LIMBS - 1)*RV32_CELL_BITS)
-        // which implies mem_ptr <= 2^pointer_max_bits
-        // Similarly for rem_words <= 2^pointer_max_bits
+        // Constraining mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1] < 2^(pointer_max_bits -
+        // (RV32_REGISTER_NUM_LIMBS - 1)*RV32_CELL_BITS) which implies mem_ptr <=
+        // 2^pointer_max_bits Similarly for rem_words <= 2^pointer_max_bits
         self.bitwise_operation_lookup_bus
             .send_range(
                 local_cols.mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1]
@@ -230,25 +230,29 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
         // buffer transition
         // `is_end` implies that the next row belongs to a new instruction,
         // which could be one of empty, hint_single, or hint_buffer
-        // Constrains that when the current row is not empty and `is_end == 1`, then `rem_words` is 1
+        // Constrains that when the current row is not empty and `is_end == 1`, then `rem_words` is
+        // 1
         builder
             .when(is_valid)
             .when(is_end.clone())
             .assert_one(rem_words.clone());
 
         let mut when_buffer_transition = builder.when(not::<AB::Expr>(is_end.clone()));
-        // Notes on `rem_words`: we constrain that `rem_words` doesn't overflow when we first read it and
-        // that on each row it decreases by one (below). We also constrain that when the current instruction ends then `rem_words` is 1.
-        // However, we don't constrain that when `rem_words` is 1 then we have to end the current instruction.
-        // The only way to exploit this if we to do some multiple of `p` number of additional illegal `buffer` rows where `p` is the modulus of `F`.
-        // However, when doing `p` additional `buffer` rows we will always increment `mem_ptr` to an illegal memory address at some point,
-        // which prevents this exploit.
+        // Notes on `rem_words`: we constrain that `rem_words` doesn't overflow when we first read
+        // it and that on each row it decreases by one (below). We also constrain that when
+        // the current instruction ends then `rem_words` is 1. However, we don't constrain
+        // that when `rem_words` is 1 then we have to end the current instruction.
+        // The only way to exploit this if we to do some multiple of `p` number of additional
+        // illegal `buffer` rows where `p` is the modulus of `F`. However, when doing `p`
+        // additional `buffer` rows we will always increment `mem_ptr` to an illegal memory address
+        // at some point, which prevents this exploit.
         when_buffer_transition.assert_one(rem_words.clone() - next_rem_words.clone());
-        // Note: we only care about the `next_mem_ptr = compose(next_mem_ptr_limb)` and not the individual limbs:
-        // the limbs do not need to be in the range, they can be anything to make `next_mem_ptr` correct --
-        // this is just a way to not have to have another column for `mem_ptr`.
-        // The constraint we care about is `next.mem_ptr == local.mem_ptr + 4`.
-        // Finally, since we increment by `4` each time, any out of bounds memory access will be rejected by the memory bus before we overflow the field.
+        // Note: we only care about the `next_mem_ptr = compose(next_mem_ptr_limb)` and not the
+        // individual limbs: the limbs do not need to be in the range, they can be anything
+        // to make `next_mem_ptr` correct -- this is just a way to not have to have another
+        // column for `mem_ptr`. The constraint we care about is `next.mem_ptr ==
+        // local.mem_ptr + 4`. Finally, since we increment by `4` each time, any out of
+        // bounds memory access will be rejected by the memory bus before we overflow the field.
         when_buffer_transition.assert_eq(
             next_mem_ptr.clone() - mem_ptr.clone(),
             AB::F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS),

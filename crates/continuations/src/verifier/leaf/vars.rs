@@ -19,8 +19,8 @@ use crate::{
 #[derive(DslVariable, Clone)]
 pub struct UserPublicValuesRootProofVariable<const CHUNK: usize, C: Config> {
     /// Sibling hashes for proving the merkle root of public values. For a specific VM, the path
-    /// is constant. So we don't need the boolean which indicates if a node is a left child or right
-    /// child.
+    /// is constant. So we don't need the boolean which indicates if a node is a left child or
+    /// right child.
     pub sibling_hashes: Array<C, [Felt<C::F>; CHUNK]>,
     pub public_values_commit: [Felt<C::F>; CHUNK],
 }

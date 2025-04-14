@@ -14,8 +14,8 @@ use super::{Evaluatable, EvaluatedLine, MillerStep, UnevaluatedLine};
 pub trait MultiMillerLoop: MillerStep
 where
     <Self as MillerStep>::Fp2: Field + FieldExtension<Self::Fp>,
-    // these trait bounds are needed for `multi_miller_loop_embedded_exp`. It would be better to move into
-    // a macro so the trait stays clean
+    // these trait bounds are needed for `multi_miller_loop_embedded_exp`. It would be better to
+    // move into a macro so the trait stays clean
     UnevaluatedLine<Self::Fp2>: Evaluatable<Self::Fp, Self::Fp2>,
     for<'a> &'a Self::Fp: DivUnsafe<&'a Self::Fp, Output = Self::Fp>,
     for<'a> &'a Self::Fp2: Neg<Output = Self::Fp2>,
@@ -56,8 +56,8 @@ where
         Self::multi_miller_loop_embedded_exp(P, Q, None)
     }
 
-    /// Runs the multi-Miller loop with an embedded exponent, removing the need to calculate the residue witness
-    /// in the final exponentiation step
+    /// Runs the multi-Miller loop with an embedded exponent, removing the need to calculate the
+    /// residue witness in the final exponentiation step
     ///
     /// `c` is assumed nonzero.
     fn multi_miller_loop_embedded_exp(

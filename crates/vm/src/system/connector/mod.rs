@@ -161,10 +161,12 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
             (AB::Expr::ONE - prep_local[0]) * end.is_terminate,
         );
 
-        // The following constraints hold on every row, so we rename `begin` to `local` to avoid confusion.
+        // The following constraints hold on every row, so we rename `begin` to `local` to avoid
+        // confusion.
         let local = begin;
-        // We decompose and range check `local.timestamp` as `timestamp_low_limb, timestamp_high_limb` where
-        // `timestamp = timestamp_low_limb + timestamp_high_limb * 2^range_max_bits`.
+        // We decompose and range check `local.timestamp` as `timestamp_low_limb,
+        // timestamp_high_limb` where `timestamp = timestamp_low_limb + timestamp_high_limb
+        // * 2^range_max_bits`.
         let (low_bits, high_bits) = self.timestamp_limb_bits();
         let high_limb = (local.timestamp - local.timestamp_low_limb)
             * AB::F::ONE.div_2exp_u64(self.range_bus.range_max_bits as u64);

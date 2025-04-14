@@ -32,8 +32,8 @@ assert_impl_all!(LeafVmVerifierInput<BabyBearPoseidon2Config>: Serialize, Deseri
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserPublicValuesRootProof<F> {
     /// Sibling hashes for proving the merkle root of public values. For a specific VM, the path
-    /// is constant. So we don't need the boolean which indicates if a node is a left child or right
-    /// child.
+    /// is constant. So we don't need the boolean which indicates if a node is a left child or
+    /// right child.
     pub sibling_hashes: Vec<[F; DIGEST_SIZE]>,
     pub public_values_commit: [F; DIGEST_SIZE],
 }

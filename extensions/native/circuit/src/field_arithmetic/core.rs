@@ -71,7 +71,8 @@ where
         // - Exactly one flag in `flags` is true.
         // - The inner product of the `flags` and `opcodes` equals `io.opcode`.
         // - The inner product of the `flags` and `results` equals `io.z`.
-        // - If `is_div` is true, then `aux.divisor_inv` correctly represents the multiplicative inverse of `io.y`.
+        // - If `is_div` is true, then `aux.divisor_inv` correctly represents the multiplicative
+        //   inverse of `io.y`.
 
         let mut is_valid = AB::Expr::ZERO;
         let mut expected_opcode = AB::Expr::ZERO;

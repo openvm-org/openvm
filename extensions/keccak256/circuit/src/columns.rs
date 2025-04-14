@@ -52,8 +52,8 @@ pub struct KeccakInstructionCols<T> {
     /// dst <- \[dst_ptr:4\]_1
     pub dst: [T; RV32_REGISTER_NUM_LIMBS],
     /// src <- \[src_ptr:4\]_1
-    /// We store src_limbs\[i\] = \[src_ptr + i + 1\]_1 and src = u32(\[src_ptr:4\]_1) from which \[src_ptr\]_1
-    /// can be recovered by linear combination.
+    /// We store src_limbs\[i\] = \[src_ptr + i + 1\]_1 and src = u32(\[src_ptr:4\]_1) from which
+    /// \[src_ptr\]_1 can be recovered by linear combination.
     /// We do this because `src` needs to be incremented between keccak-f permutations.
     pub src_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
     pub src: T,
@@ -97,8 +97,8 @@ pub struct KeccakMemoryCols<T> {
     pub register_aux: [MemoryReadAuxCols<T>; KECCAK_REGISTER_READS],
     pub absorb_reads: [MemoryReadAuxCols<T>; KECCAK_ABSORB_READS],
     pub digest_writes: [MemoryWriteAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
-    /// The input bytes are batch read in blocks of private constant KECCAK_WORD_SIZE bytes. However
-    /// if the input length is not a multiple of KECCAK_WORD_SIZE, we read into
+    /// The input bytes are batch read in blocks of private constant KECCAK_WORD_SIZE bytes.
+    /// However if the input length is not a multiple of KECCAK_WORD_SIZE, we read into
     /// `partial_block` more bytes than we need. On the other hand `block_bytes` expects
     /// only the partial block of bytes and then the correctly padded bytes.
     /// We will select between `partial_block` and `block_bytes` for what to read from memory.
