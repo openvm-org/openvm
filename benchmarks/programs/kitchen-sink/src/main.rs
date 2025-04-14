@@ -3,7 +3,7 @@ use std::{hint::black_box, mem::transmute};
 use openvm_algebra_guest::IntMod;
 use openvm_bigint_guest::I256;
 use openvm_keccak256_guest::keccak256;
-use openvm_sha256_guest::sha256;
+use openvm_sha2_guest::sha256;
 #[allow(unused_imports)]
 use {
     openvm_ecc_guest::{

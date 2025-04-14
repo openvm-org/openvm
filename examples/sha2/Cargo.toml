@@ -1,0 +1,19 @@
+[package]
+name = "sha2-example"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+members = []
+
+[dependencies]
+# TODO: update rev after PR is merged
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
+    "std",
+], rev = "5180cea6342f43ac6523e0057e73e0dc9ecece3a"}
+# TODO: update rev after PR is merged
+openvm-sha2-guest = { git = "https://github.com/openvm-org/openvm.git", rev = "5180cea6342f43ac6523e0057e73e0dc9ecece3a" }
+hex = { version = "0.4.3" }
+
+[features]
+default = []
