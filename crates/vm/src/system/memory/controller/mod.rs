@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{
+    online::GuestMemory,
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
 };
@@ -374,72 +375,13 @@ impl<F: PrimeField32> MemoryController<F> {
         )
     }
 
-    pub fn read_cell(&mut self, address_space: F, pointer: F) -> (RecordId, F) {
-        let (record_id, [data]) = self.read(address_space, pointer);
-        (record_id, data)
-    }
-
-    // TEMP[jpw]: Function is safe temporarily for refactoring
-    /// # Safety
-    /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`, and it must be the
-    /// exact type used to represent a single memory cell in address space `address_space`. For
-    /// standard usage, `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
-    pub fn read<T: Copy, const N: usize>(
-        &mut self,
-        address_space: F,
-        pointer: F,
-    ) -> (RecordId, [T; N]) {
-        let address_space_u32 = address_space.as_canonical_u32();
-        let ptr_u32 = pointer.as_canonical_u32();
-        assert!(
-            address_space == F::ZERO || ptr_u32 < (1 << self.mem_config.pointer_max_bits),
-            "memory out of bounds: {ptr_u32:?}",
-        );
-
-        let (record_id, values) = unsafe { self.memory.read::<T, N>(address_space_u32, ptr_u32) };
-
-        (record_id, values)
-    }
-
-    /// Reads a word directly from memory without updating internal state.
-    ///
-    /// Any value returned is unconstrained.
-    pub fn unsafe_read_cell<T: Copy>(&self, addr_space: F, ptr: F) -> T {
-        self.unsafe_read::<T, 1>(addr_space, ptr)[0]
-    }
-
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
     pub fn unsafe_read<T: Copy, const N: usize>(&self, addr_space: F, ptr: F) -> [T; N] {
         let addr_space = addr_space.as_canonical_u32();
         let ptr = ptr.as_canonical_u32();
-        unsafe { array::from_fn(|i| self.memory.get::<T>(addr_space, ptr + i as u32)) }
-    }
-
-    /// Writes `data` to the given cell.
-    ///
-    /// Returns the `RecordId` and previous data.
-    pub fn write_cell<T: Copy>(&mut self, address_space: F, pointer: F, data: T) -> (RecordId, T) {
-        let (record_id, [data]) = self.write(address_space, pointer, &[data]);
-        (record_id, data)
-    }
-
-    pub fn write<T: Copy, const N: usize>(
-        &mut self,
-        address_space: F,
-        pointer: F,
-        data: &[T; N],
-    ) -> (RecordId, [T; N]) {
-        debug_assert_ne!(address_space, F::ZERO);
-        let address_space_u32 = address_space.as_canonical_u32();
-        let ptr_u32 = pointer.as_canonical_u32();
-        assert!(
-            ptr_u32 < (1 << self.mem_config.pointer_max_bits),
-            "memory out of bounds: {ptr_u32:?}",
-        );
-
-        unsafe { self.memory.write::<T, N>(address_space_u32, ptr_u32, data) }
+        unsafe { self.memory.data().read::<T, N>(addr_space, ptr) }
     }
 
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
@@ -703,25 +645,6 @@ impl<F: PrimeField32> MemoryController<F> {
         }
         ret.extend(self.access_adapters.get_cells());
         ret
-    }
-
-    /// Returns a reference to the offline memory.
-    ///
-    /// Until `finalize` is called, the `OfflineMemory` does not contain useful state, and should
-    /// therefore not be used by any chip during execution. However, to obtain a reference to the
-    /// offline memory that will be useful in trace generation, a chip can call `offline_memory()`
-    /// and store the returned reference for later use.
-    pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.offline_memory.clone()
-    }
-    pub fn get_memory_logs(&self) -> &Vec<MemoryLogEntry<u8>> {
-        &self.memory.log
-    }
-    pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<u8>>) {
-        self.memory.log = logs;
-    }
-    pub fn take_memory_logs(&mut self) -> Vec<MemoryLogEntry<u8>> {
-        std::mem::take(&mut self.memory.log)
     }
 }
 

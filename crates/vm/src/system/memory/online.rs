@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use getset::Getters;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -21,7 +22,7 @@ pub trait GuestMemory {
     /// address space `address_space`. For standard usage,
     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
     unsafe fn read<T: Copy, const BLOCK_SIZE: usize>(
-        &mut self,
+        &self,
         address_space: u32,
         pointer: u32,
     ) -> [T; BLOCK_SIZE];
@@ -75,7 +76,7 @@ pub enum MemoryLogEntry<T> {
 // into a single u32 to save half the memory, since `block_size` is a power of 2 and its log2
 // is less than 2^3.
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, derive_new::new)]
 struct AccessMetadata {
     timestamp: u32,
     block_size: u32,
@@ -83,11 +84,12 @@ struct AccessMetadata {
 
 /// Online memory that stores additional information for trace generation purposes.
 /// In particular, keeps track of timestamp.
+#[derive(Getters)]
 pub struct TracingMemory {
     pub timestamp: u32,
-    // TODO: the memory struct should contain an array of the byte size of the type per address
-    // space, passed in from MemoryConfig
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
+    // TODO: make generic in GuestMemory
+    #[getset(get = "pub")]
     pub(super) data: AddressMap<PAGE_SIZE>,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
     /// u32))` for the timestamp and block size of the latest access.
@@ -148,35 +150,17 @@ impl TracingMemory {
         }
     }
 
-    /// Writes an array of values to the memory at the specified address space and start index.
-    ///
-    /// Returns the `RecordId` for the memory record and the previous data.
-    ///
-    /// # Safety
-    /// The type `T` must be stack-allocated `repr(C)`, and it must be the exact type used to
-    /// represent a single memory cell in address space `address_space`. For standard usage, `T`
-    /// is either `u8` or `F` where `F` is the base field of the ZK backend.
-    // @dev: `values` is passed by reference since the data is copied into memory. Even though the
-    // compiler probably optimizes it, we use reference to avoid any unnecessary copy of
-    // `values` onto the stack in the function call.
-    pub unsafe fn write<T: Copy, const BLOCK_SIZE: usize>(
-        &mut self,
-        address_space: u32,
-        pointer: u32,
-        values: &[T; BLOCK_SIZE],
-    ) -> (RecordId, [T; BLOCK_SIZE]) {
-        debug_assert!(BLOCK_SIZE.is_power_of_two());
-
-        let prev_data = self.data.replace(address_space, pointer, values);
-
-        // self.log.push(MemoryLogEntry::Write {
-        //     address_space,
-        //     pointer,
-        //     data: values.to_vec(),
-        // });
-        self.timestamp += 1;
-
-        (self.last_record_id(), prev_data)
+    #[inline(always)]
+    fn assert_alignment(&self, block_size: usize, align: usize, addr_space: u32, ptr: u32) {
+        debug_assert!(block_size.is_power_of_two());
+        debug_assert_eq!(block_size % align, 0);
+        debug_assert_ne!(addr_space, 0);
+        debug_assert_eq!(align as u32, self.min_block_size[addr_space as usize]);
+        assert_eq!(
+            ptr % (align as u32),
+            0,
+            "pointer={ptr} not aligned to {align}"
+        );
     }
 
     /// Atomic read operation which increments the timestamp by 1.
@@ -201,31 +185,85 @@ impl TracingMemory {
     /// In addition:
     /// - `address_space` must be valid.
     #[inline(always)]
-    pub unsafe fn read<T: Copy, const BLOCK_SIZE: usize, const ALIGN: u32>(
+    pub unsafe fn read<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
     ) -> (u32, [T; BLOCK_SIZE]) {
-        assert!(BLOCK_SIZE.is_power_of_two());
-        debug_assert_ne!(address_space, 0);
-        debug_assert_eq!(ALIGN, self.min_block_size[address_space as usize]);
+        self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let values = self.data.read(address_space, pointer);
+        let t_curr = self.timestamp;
         self.timestamp += 1;
         // Handle timestamp and block size:
-        assert_eq!(
-            pointer % ALIGN,
-            0,
-            "pointer={pointer} not aligned to {ALIGN}"
-        );
-        let access_ptr = pointer / ALIGN;
+        let access_idx = (pointer as usize / ALIGN) * size_of::<AccessMetadata>();
         // TODO: address space should be checked elsewhere
         let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
+        // The new
         let AccessMetadata {
-            timestamp,
-            block_size,
-        } = meta.get((access_ptr as usize) * size_of::<AccessMetadata>());
+            timestamp: t_prev,
+            mut block_size,
+        } = meta.replace(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
+        // TODO: do we need to handle uninitialized memory?
+        if block_size == 0 {
+            block_size = BLOCK_SIZE as u32;
+        }
+        if (block_size as usize) != BLOCK_SIZE {
+            todo!("split and merge stuff")
+        };
 
-        (todo!("t_prev"), values)
+        (t_prev, values)
+    }
+
+    /// Atomic write operation that writes `values` into `[pointer:BLOCK_SIZE]_{address_space}` and
+    /// then increments the timestamp by 1. Returns `(t_prev, values_prev)` which equal the
+    /// timestamp and value `[pointer:BLOCK_SIZE]_{address_space}` of the last memory access.
+    ///
+    /// The previous memory access is treated as atomic even if previous accesses were for
+    /// a smaller block size. This is made possible by internal memory access adapters
+    /// that split/merge memory blocks. More specifically, the last memory access corresponding
+    /// to `t_prev` may refer to an atomic access inserted by the memory access adapters.
+    ///
+    /// # Assumptions
+    /// The `BLOCK_SIZE` is a multiple of `ALIGN`, which must equal the minimum block size
+    /// of `address_space`.
+    ///
+    /// # Safety
+    /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`,
+    /// and it must be the exact type used to represent a single memory cell in
+    /// address space `address_space`. For standard usage,
+    /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
+    ///
+    /// In addition:
+    /// - `address_space` must be valid.
+    #[inline(always)]
+    pub unsafe fn write<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        values: &[T; BLOCK_SIZE],
+    ) -> (u32, [T; BLOCK_SIZE]) {
+        self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
+        let values_prev = self.data.replace(address_space, pointer, values);
+        let t_curr = self.timestamp;
+        self.timestamp += 1;
+        // Handle timestamp and block size:
+        let access_idx = (pointer as usize / ALIGN) * size_of::<AccessMetadata>();
+        // TODO: address space should be checked elsewhere
+        let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
+        // The new
+        let AccessMetadata {
+            timestamp: t_prev,
+            mut block_size,
+        } = meta.replace(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
+        // TODO: mark as touched
+        if block_size == 0 {
+            block_size = BLOCK_SIZE as u32;
+        }
+        if (block_size as usize) != BLOCK_SIZE {
+            todo!("split and merge stuff")
+        };
+
+        (t_prev, values_prev)
     }
 
     pub fn increment_timestamp_by(&mut self, amount: u32) {
@@ -234,15 +272,6 @@ impl TracingMemory {
 
     pub fn timestamp(&self) -> u32 {
         self.timestamp
-    }
-
-    /// # Safety
-    /// The type `T` must be stack-allocated `repr(C)`, and it must be the exact type used to
-    /// represent a single memory cell in address space `address_space`. For standard usage, `T`
-    /// is either `u8` or `F` where `F` is the base field of the ZK backend.
-    #[inline(always)]
-    pub unsafe fn get<T: Copy>(&self, address_space: u32, pointer: u32) -> T {
-        self.data.get((address_space, pointer))
     }
 }
 

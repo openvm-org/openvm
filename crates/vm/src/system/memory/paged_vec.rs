@@ -29,6 +29,7 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
     // Copies a range of length `len` starting at index `start`
     // into the memory pointed to by `dst`. If the relevant page is not
     // initialized, fills that portion with `0u8`.
+    #[inline]
     fn read_range_generic(&self, start: usize, len: usize, dst: *mut u8) {
         let start_page = start / PAGE_SIZE;
         let end_page = (start + len - 1) / PAGE_SIZE;
@@ -63,6 +64,7 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
     // It copies the current values into the memory pointed to by `dst`
     // and then writes the new values into the underlying pages,
     // allocating pages (with defaults) if necessary.
+    #[inline]
     fn set_range_generic(&mut self, start: usize, len: usize, new: *const u8, dst: *mut u8) {
         let start_page = start / PAGE_SIZE;
         let end_page = (start + len - 1) / PAGE_SIZE;
@@ -124,6 +126,9 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
 
     /// # Panics
     /// If `start..start + size_of<BLOCK>()` is out of bounds.
+    // @dev: `values` is passed by reference since the data is copied into memory. Even though the
+    // compiler probably optimizes it, we use reference to avoid any unnecessary copy of `values`
+    // onto the stack in the function call.
     #[inline(always)]
     pub fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK) {
         let len = size_of::<BLOCK>();
@@ -342,7 +347,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
 
 impl<const PAGE_SIZE: usize> GuestMemory for AddressMap<PAGE_SIZE> {
     unsafe fn read<T: Copy, const BLOCK_SIZE: usize>(
-        &mut self,
+        &self,
         addr_space: u32,
         ptr: u32,
     ) -> [T; BLOCK_SIZE] {
