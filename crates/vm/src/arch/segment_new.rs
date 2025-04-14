@@ -53,42 +53,44 @@ where
 }
 
 /// Trait for instruction execution
-pub trait InsExecutor<Mem, Ctx> {
+// TODO: Change to PInstruction only
+pub trait InsExecutor<Mem, Ctx, F>
+where
+    Mem: GuestMemory,
+{
     fn execute(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
-        instruction: &PInstruction,
+        instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>
     where
-        Mem: GuestMemory;
+        F: PrimeField32;
 }
 
 /// Trait for execution control, determining segmentation and stopping conditions
-pub trait ExecutionControl<Mem, Ctx>
+pub trait ExecutionControl<Mem, Ctx, F>
 where
     Mem: GuestMemory,
+    F: PrimeField32,
 {
     /// Determines if execution should stop
     fn should_stop(state: &VmExecutionState<Mem, Ctx>) -> bool;
     // /// Counter for segment checking
     // since_last_segment_check: usize,
-
     // // Avoid checking segment too often.
     // if self.since_last_segment_check < SEGMENT_CHECK_INTERVAL {
     //     self.since_last_segment_check += 1;
     //     return false;
     // }
-
     // // Reset counter after checking
     // self.since_last_segment_check = 0;
     // let cell_counts = self.chip_complex.current_trace_cells();
 
     /// Called before segment execution begins
-    fn on_segment_start<F, E, P>(
+    fn on_segment_start<E, P>(
         chip_complex: &mut VmChipComplex<F, E, P>,
         vm_state: &VmExecutionState<Mem, Ctx>,
-    ) where
-        F: PrimeField32;
+    );
     // self.chip_complex
     //     .connector_chip_mut()
     //     .begin(ExecutionState::new(
@@ -97,18 +99,16 @@ where
     //     ));
 
     /// Called after segment execution completes
-    fn on_segment_end<F, E, P>(
+    fn on_segment_end<E, P>(
         chip_complex: &mut VmChipComplex<F, E, P>,
         vm_state: &VmExecutionState<Mem, Ctx>,
         final_memory: &mut Option<MemoryImage>,
-    ) where
-        F: PrimeField32;
+    );
     // // End the current segment with connector chip
     // self.chip_complex.connector_chip_mut().end(
     //     ExecutionState::new(self.vm_state.pc, self.vm_state.timestamp),
     //     None,
     // );
-
     // self.final_memory = Some(
     //     self.chip_complex
     //         .base
@@ -116,6 +116,29 @@ where
     //         .memory_image()
     //         .clone(),
     // );
+
+    /// Get an executor for the given instruction
+    fn get_executor(&self, opcode: VmOpcode) -> Option<&mut dyn InsExecutor<Mem, Ctx, F>>;
+
+    /// Execute a single instruction
+    fn execute_instruction(
+        &self,
+        vm_state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError> {
+        let &Instruction { opcode, .. } = instruction;
+
+        if let Some(executor) = self.get_executor(opcode) {
+            executor.execute(vm_state, instruction)?;
+        } else {
+            return Err(ExecutionError::DisabledOperation {
+                pc: vm_state.pc,
+                opcode,
+            });
+        };
+
+        Ok(())
+    }
 }
 
 pub struct VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
@@ -123,7 +146,7 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
     Mem: GuestMemory,
-    Ctrl: ExecutionControl<Mem, Ctx>,
+    Ctrl: ExecutionControl<Mem, Ctx, F>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
     pub vm_state: VmExecutionState<Mem, Ctx>,
@@ -146,7 +169,7 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
     Mem: GuestMemory,
-    Ctrl: ExecutionControl<Mem, Ctx>,
+    Ctrl: ExecutionControl<Mem, Ctx, F>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
@@ -207,7 +230,7 @@ where
         Ctrl::on_segment_start(&mut self.chip_complex, &self.vm_state);
 
         while !self.vm_state.terminated && !self.should_stop() {
-            // Execute single instruction
+            // Fetch, decode and execute single instruction
             self.execute_instruction(&mut prev_backtrace)?;
         }
 
@@ -222,6 +245,7 @@ where
     }
 
     /// Executes a single instruction and updates VM state
+    // TODO: clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
         prev_backtrace: &mut Option<Backtrace>,
@@ -287,24 +311,9 @@ where
         // TODO: move to vm state?
         *prev_backtrace = trace.cloned();
 
-        // Get executor for this opcode
-        let executor = match self.chip_complex.inventory.get_mut_executor(&opcode) {
-            Some(executor) => executor,
-            None => return Err(ExecutionError::DisabledOperation { pc, opcode }),
-        };
-
-        // Execute the instruction
-        let next_state = executor.execute(
-            &mut self.chip_complex.base.memory_controller,
-            instruction,
-            ExecutionState::new(pc, timestamp),
-        )?;
-
-        // TODO: is this needed? debug_assert?
-        assert!(next_state.timestamp > timestamp);
-
-        self.vm_state.pc = next_state.pc;
-        self.vm_state.timestamp = next_state.timestamp;
+        // Execute the instruction using the control implementation
+        self.control
+            .execute_instruction(&mut self.vm_state, instruction)?;
 
         // Update metrics if enabled
         #[cfg(feature = "bench-metrics")]
