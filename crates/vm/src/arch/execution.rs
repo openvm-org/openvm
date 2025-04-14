@@ -71,10 +71,10 @@ pub enum ExecutionError {
 /// Global VM state accessible during instruction execution.
 /// The state is generic in guest memory `MEM` and additional host state `CTX`.
 /// The host state is execution context specific.
-pub struct VmState<MEM, CTX> {
-    pub pc: u32,
-    pub memory: MEM,
-    pub ctx: CTX,
+pub struct VmStateMut<'a, MEM, CTX> {
+    pub pc: &'a mut u32,
+    pub memory: &'a mut MEM,
+    pub ctx: &'a mut CTX,
 }
 
 // TODO: old

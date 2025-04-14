@@ -520,7 +520,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
         let range_bus = self.range_checker.bus();
         MemoryAuxColsFactory {
-            range_checker: self.range_checker.clone(),
+            range_checker: self.range_checker.as_ref(),
             timestamp_lt_air: AssertLtSubAir::new(range_bus, self.timestamp_max_bits),
             _marker: Default::default(),
         }

@@ -11,7 +11,9 @@ use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_zero::IsZeroSubAir,
     utils::next_power_of_two_or_zero,
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
+    },
     TraceSubRowGenerator,
 };
 use openvm_stark_backend::{
@@ -100,7 +102,7 @@ pub struct MemoryController<F> {
     // addr_space -> Memory data structure
     memory: TracingMemory,
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
-    offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+    pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub access_adapters: AccessAdapterInventory<F>,
     // Filled during finalization.
     final_state: Option<FinalState<F>>,
@@ -387,7 +389,7 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
         let range_bus = self.range_checker.bus();
         MemoryAuxColsFactory {
-            range_checker: self.range_checker.clone(),
+            range_checker: self.range_checker.as_ref(),
             timestamp_lt_air: AssertLtSubAir::new(range_bus, self.mem_config.clk_max_bits),
             _marker: Default::default(),
         }
@@ -648,15 +650,17 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 }
 
-pub struct MemoryAuxColsFactory<T> {
-    pub(crate) range_checker: SharedVariableRangeCheckerChip,
+/// A helper for generating trace values in auxiliary memory columns related to the offline memory
+/// argument.
+pub struct MemoryAuxColsFactory<'a, T> {
+    pub(crate) range_checker: &'a VariableRangeCheckerChip,
     pub(crate) timestamp_lt_air: AssertLtSubAir,
     pub(crate) _marker: PhantomData<T>,
 }
 
 // NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in
 // parallelized trace generation.
-impl<F: PrimeField32> MemoryAuxColsFactory<F> {
+impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
     pub fn generate_read_aux(&self, read: &MemoryRecord<F>, buffer: &mut MemoryReadAuxCols<F>) {
         assert!(
             !read.address_space.is_zero(),
@@ -665,6 +669,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         self.generate_base_aux(read, &mut buffer.base);
     }
 
+    // TODO: revisit deleting this
     pub fn generate_read_or_immediate_aux(
         &self,
         read: &MemoryRecord<F>,
@@ -677,6 +682,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         self.generate_base_aux(read, &mut buffer.base);
     }
 
+    // TODO: revisit deleting this
     pub fn generate_write_aux<const N: usize>(
         &self,
         write: &MemoryRecord<F>,
@@ -688,6 +694,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         self.generate_base_aux(write, &mut buffer.base);
     }
 
+    // TODO: revisit deleting this
     pub fn generate_base_aux(&self, record: &MemoryRecord<F>, buffer: &mut MemoryBaseAuxCols<F>) {
         buffer.prev_timestamp = F::from_canonical_u32(record.prev_timestamp);
         self.generate_timestamp_lt(
@@ -695,6 +702,12 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
             record.timestamp,
             &mut buffer.timestamp_lt_aux,
         );
+    }
+
+    /// Fill the trace assuming `prev_timestamp` is already provided in `buffer`.
+    pub fn fill_from_prev(&self, timestamp: u32, buffer: &mut MemoryBaseAuxCols<F>) {
+        let prev_timestamp = buffer.prev_timestamp.as_canonical_u32();
+        self.generate_timestamp_lt(prev_timestamp, timestamp, &mut buffer.timestamp_lt_aux);
     }
 
     fn generate_timestamp_lt(
@@ -705,11 +718,12 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
     ) {
         debug_assert!(prev_timestamp < timestamp);
         self.timestamp_lt_air.generate_subrow(
-            (self.range_checker.as_ref(), prev_timestamp, timestamp),
+            (self.range_checker, prev_timestamp, timestamp),
             &mut buffer.lower_decomp,
         );
     }
 
+    // TODO: revisit deleting this
     /// In general, prefer `generate_read_aux` which writes in-place rather than this function.
     pub fn make_read_aux_cols(&self, read: &MemoryRecord<F>) -> MemoryReadAuxCols<F> {
         assert!(
@@ -722,6 +736,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         )
     }
 
+    // TODO: revisit deleting this
     /// In general, prefer `generate_write_aux` which writes in-place rather than this function.
     pub fn make_write_aux_cols<const N: usize>(
         &self,
@@ -742,10 +757,8 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
     ) -> LessThanAuxCols<F, AUX_LEN> {
         debug_assert!(prev_timestamp < timestamp);
         let mut decomp = [F::ZERO; AUX_LEN];
-        self.timestamp_lt_air.generate_subrow(
-            (self.range_checker.as_ref(), prev_timestamp, timestamp),
-            &mut decomp,
-        );
+        self.timestamp_lt_air
+            .generate_subrow((self.range_checker, prev_timestamp, timestamp), &mut decomp);
         LessThanAuxCols::new(decomp)
     }
 }

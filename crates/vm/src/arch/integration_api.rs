@@ -1,6 +1,6 @@
 use std::{
     array::from_fn,
-    borrow::{Borrow, BorrowMut},
+    borrow::Borrow,
     marker::PhantomData,
     sync::{Arc, Mutex},
 };
@@ -21,8 +21,10 @@ use openvm_stark_backend::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{ExecutionState, InstructionExecutor, Result, VmState};
-use crate::system::memory::{online::TracingMemory, MemoryController, OfflineMemory};
+use super::{ExecutionState, InstructionExecutor, Result, VmStateMut};
+use crate::system::memory::{
+    online::TracingMemory, MemoryAuxColsFactory, MemoryController, OfflineMemory,
+};
 
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
@@ -218,10 +220,18 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 pub trait SingleTraceStep<F, CTX> {
     fn execute(
         &mut self,
-        state: &mut VmState<TracingMemory, CTX>,
+        state: VmStateMut<TracingMemory, CTX>,
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()>;
+
+    /// Populates `row_slice`. This function will always be called after
+    /// [`SingleTraceStep::execute`], so the `row_slice` should already contain context necessary to
+    /// fill in the rest of the row. This function will be called for each row in the trace which is
+    /// being used, and all other rows in the trace will be filled with zeroes.
+    ///
+    /// The provided `row_slice` will have length equal to the width of the AIR.
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]);
 }
 
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {

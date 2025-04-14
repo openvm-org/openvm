@@ -204,10 +204,6 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.controller.borrow().mem_config.pointer_max_bits
     }
 
-    pub fn offline_memory_mutex_arc(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory_controller().borrow().offline_memory().clone()
-    }
-
     pub fn get_default_register(&mut self, increment: usize) -> usize {
         self.default_register += increment;
         self.default_register - increment

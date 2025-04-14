@@ -40,9 +40,7 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
             prev_data,
         }
     }
-}
 
-impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
     pub fn from_base(base: MemoryBaseAuxCols<T>, prev_data: [T; N]) -> Self {
         Self { base, prev_data }
     }
@@ -53,6 +51,12 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
 
     pub fn prev_data(&self) -> &[T; N] {
         &self.prev_data
+    }
+
+    /// Sets the previous timestamp and data **without** updating the less than auxiliary columns.
+    pub fn set_prev(&mut self, timestamp: T, data: [T; N]) {
+        self.base.prev_timestamp = timestamp;
+        self.prev_data = data;
     }
 }
 
