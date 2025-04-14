@@ -138,8 +138,9 @@ fn test_possible_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinat
     assert_eq!(p.y(), y);
 }
 
-// The test_impossible_decompression_* functions cannot be combined into a single function with a const generic parameter
-// since the get_non_qr() function is not part of the WeierstrassPoint trait.
+// The test_impossible_decompression_* functions cannot be combined into a single function with a
+// const generic parameter since the get_non_qr() function is not part of the WeierstrassPoint
+// trait.
 
 fn test_impossible_decompression_curvepoint5mod8(x: &Fp5mod8, rec_id: u8) {
     let hint = CurvePoint5mod8::hint_decompress(x, &rec_id).expect("hint should be well-formed");
