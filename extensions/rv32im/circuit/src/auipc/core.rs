@@ -3,15 +3,23 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, SingleTraceStep,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmState,
+    },
+    system::memory::online::TracingMemory,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, PC_BITS},
+    riscv::RV32_REGISTER_AS,
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -21,7 +29,9 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use crate::adapters::{
+    tracing_write_reg, Rv32RdWriteAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
 
 const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 
@@ -206,6 +216,30 @@ impl Rv32AuipcCoreChip {
     }
 }
 
+impl<F: PrimeField32, CTX> SingleTraceStep for Rv32AuipcCoreChip {
+    fn execute(
+        &mut self,
+        state: &mut VmState<TracingMemory, CTX>,
+        instruction: &Instruction<F>,
+        row_slice: &mut [F],
+    ) -> Result<()> {
+        let adapter_width = Rv32RdWriteAdapterCols::<F>::width();
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(adapter_width) };
+        let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let core_row: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
+
+        let imm = instruction.c.as_canonical_u32();
+        let rd_data = run_auipc(Rv32AuipcOpcode::AUIPC, state.pc, imm);
+
+        debug_assert_eq!(instruction.d.as_canonical_u32(), RV32_REGISTER_AS);
+        let rd_ptr = instruction.a.as_canonical_u32();
+        let (t_prev, data_prev) = tracing_write_reg(&mut state.memory, rd_ptr, &rd_data);
+
+        state.pc += DEFAULT_PC_STEP;
+        Ok(())
+    }
+}
+
 impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32AuipcCoreChip
 where
     I::Writes: From<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
@@ -227,35 +261,9 @@ where
         );
         let imm = instruction.c.as_canonical_u32();
         let rd_data = run_auipc(local_opcode, from_pc, imm);
-        let rd_data_field = rd_data.map(F::from_canonical_u32);
 
-        let output = AdapterRuntimeContext::without_pc([rd_data_field]);
-
-        let imm_limbs = array::from_fn(|i| (imm >> (i * RV32_CELL_BITS)) & RV32_LIMB_MAX);
         let pc_limbs: [u32; RV32_REGISTER_NUM_LIMBS] =
             array::from_fn(|i| (from_pc >> (i * RV32_CELL_BITS)) & RV32_LIMB_MAX);
-
-        for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
-            self.bitwise_lookup_chip
-                .request_range(rd_data[i * 2], rd_data[i * 2 + 1]);
-        }
-
-        let mut need_range_check: Vec<u32> = Vec::new();
-        for limb in imm_limbs {
-            need_range_check.push(limb);
-        }
-
-        for (i, limb) in pc_limbs.iter().skip(1).enumerate() {
-            if i == pc_limbs.len() - 1 {
-                need_range_check.push((*limb) << (pc_limbs.len() * RV32_CELL_BITS - PC_BITS));
-            } else {
-                need_range_check.push(*limb);
-            }
-        }
-
-        for pair in need_range_check.chunks(2) {
-            self.bitwise_lookup_chip.request_range(pair[0], pair[1]);
-        }
 
         Ok((
             output,
@@ -280,6 +288,26 @@ where
         core_cols.pc_limbs = record.pc_limbs;
         core_cols.rd_data = record.rd_data;
         core_cols.is_valid = F::ONE;
+        // for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
+        //     self.bitwise_lookup_chip
+        //         .request_range(rd_data[i * 2], rd_data[i * 2 + 1]);
+        // }
+        // let mut need_range_check: Vec<u32> = Vec::new();
+        // for limb in imm_limbs {
+        //     need_range_check.push(limb);
+        // }
+
+        // for (i, limb) in pc_limbs.iter().skip(1).enumerate() {
+        //     if i == pc_limbs.len() - 1 {
+        //         need_range_check.push((*limb) << (pc_limbs.len() * RV32_CELL_BITS - PC_BITS));
+        //     } else {
+        //         need_range_check.push(*limb);
+        //     }
+        // }
+
+        // for pair in need_range_check.chunks(2) {
+        //     self.bitwise_lookup_chip.request_range(pair[0], pair[1]);
+        // }
     }
 
     fn air(&self) -> &Self::Air {
@@ -292,7 +320,7 @@ pub(super) fn run_auipc(
     _opcode: Rv32AuipcOpcode,
     pc: u32,
     imm: u32,
-) -> [u32; RV32_REGISTER_NUM_LIMBS] {
+) -> [u8; RV32_REGISTER_NUM_LIMBS] {
     let rd = pc.wrapping_add(imm << RV32_CELL_BITS);
-    array::from_fn(|i| (rd >> (RV32_CELL_BITS * i)) & RV32_LIMB_MAX)
+    rd.to_le_bytes()
 }

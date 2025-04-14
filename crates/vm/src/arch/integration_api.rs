@@ -1,6 +1,6 @@
 use std::{
     array::from_fn,
-    borrow::Borrow,
+    borrow::{Borrow, BorrowMut},
     marker::PhantomData,
     sync::{Arc, Mutex},
 };
@@ -22,7 +22,7 @@ use openvm_stark_backend::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{ExecutionState, InstructionExecutor, Result, VmState};
-use crate::system::memory::{MemoryController, OfflineMemory};
+use crate::system::memory::{online::TracingMemory, MemoryController, OfflineMemory};
 
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
@@ -215,10 +215,10 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 /// instruction execution and trace generation.
 /// It is expected that no additional memory allocation is necessary and the trace buffer
 /// is sufficient, with possible overwriting.
-pub trait SingleTraceStep<F> {
+pub trait SingleTraceStep<F, CTX> {
     fn execute(
         &mut self,
-        state: &mut VmState<OfflineMemory<F>, ()>,
+        state: &mut VmState<TracingMemory, CTX>,
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()>;
