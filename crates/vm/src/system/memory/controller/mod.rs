@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{
+    merkle::tree::MerkleTree,
     online::GuestMemory,
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
@@ -274,6 +275,7 @@ impl<F: PrimeField32> MemoryController<F> {
         range_checker: SharedVariableRangeCheckerChip,
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
+        merkle_tree: MerkleTree<F, CHUNK>,
     ) -> Self {
         assert_eq!(mem_config.as_offset, 1);
         let memory_dims = MemoryDimensions {
@@ -291,6 +293,7 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus, compression_bus),
             initial_memory: AddressMap::from_mem_config(&mem_config),
+            merkle_tree,
         };
         Self {
             memory_bus,
@@ -554,6 +557,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 merkle_chip,
                 boundary_chip,
                 initial_memory,
+                merkle_tree,
             } => {
                 let hasher = hasher.unwrap();
                 let final_partition = offline_memory.finalize::<CHUNK>(&mut self.access_adapters);
@@ -568,7 +572,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     initial_memory,
                     hasher,
                 );
-                merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
+                merkle_chip.finalize(&final_memory_values, merkle_tree, hasher);
                 self.final_state = Some(FinalState::Persistent(PersistentFinalState {
                     final_memory: final_memory_values.clone(),
                 }));
