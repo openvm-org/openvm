@@ -327,7 +327,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
 
         let wrapper_pvs = agg_pk.halo2_pk.wrapper.pinning.metadata.num_pvs.clone();
         let pvs_length = match wrapper_pvs.first() {
-            // We subtract 14 to exclude the KZG accumulators and the app exe
+            // We subtract 14 to exclude the KZG accumulator and the app exe
             // and vm commits.
             Some(v) => v
                 .checked_sub(14)

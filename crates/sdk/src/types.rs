@@ -8,8 +8,8 @@ use thiserror::Error;
 
 /// Number of bytes in a Bn254Fr.
 const BN254_BYTES: usize = 32;
-/// Number of Bn254Fr in `accumulators` field.
-pub const NUM_BN254_ACCUMULATORS: usize = 12;
+/// Number of Bn254Fr in `accumulator` field.
+pub const NUM_BN254_ACCUMULATOR: usize = 12;
 /// Number of Bn254Fr in `proof` field for a circuit with only 1 advice column.
 const NUM_BN254_PROOF: usize = 43;
 
@@ -25,8 +25,8 @@ pub struct EvmHalo2Verifier {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProofData {
     #[serde_as(as = "serde_with::hex::Hex")]
-    /// KZG accumulators.
-    pub accumulators: Vec<u8>,
+    /// KZG accumulator.
+    pub accumulator: Vec<u8>,
     #[serde_as(as = "serde_with::hex::Hex")]
     /// Bn254Fr proof in little-endian bytes. The circuit only has 1 advice column, so the proof is
     /// of length `NUM_BN254_PROOF * BN254_BYTES`.
@@ -37,15 +37,15 @@ pub struct ProofData {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EvmProof {
     #[serde_as(as = "serde_with::hex::Hex")]
-    /// 1 Bn254Fr public value for app exe commit in little-endian bytes.
+    /// 1 Bn254Fr public value for app exe commit in big-endian bytes.
     pub app_exe_commit: [u8; BN254_BYTES],
     #[serde_as(as = "serde_with::hex::Hex")]
-    /// 1 Bn254Fr public value for app vm commit in little-endian bytes.
+    /// 1 Bn254Fr public value for app vm commit in big-endian bytes.
     pub app_vm_commit: [u8; BN254_BYTES],
     #[serde_as(as = "serde_with::hex::Hex")]
     /// User public values packed into bytes.
     pub user_public_values: Vec<u8>,
-    /// The concatenation of `accumulators` and `proof`.
+    /// The concatenation of `accumulator` and `proof`.
     pub proof_data: ProofData,
 }
 
@@ -57,8 +57,8 @@ pub enum EvmProofConversionError {
     InvalidLengthInstances,
     #[error("Invalid length of user public values")]
     InvalidUserPublicValuesLength,
-    #[error("Invalid length of accumulators")]
-    InvalidLengthAccumulators,
+    #[error("Invalid length of accumulator")]
+    InvalidLengthAccumulator,
 }
 
 impl EvmProof {
@@ -77,11 +77,11 @@ impl EvmProof {
         } = self;
 
         let ProofData {
-            accumulators,
+            accumulator,
             proof,
         } = proof_data;
 
-        let mut proof_data = accumulators;
+        let mut proof_data = accumulator;
         proof_data.extend(proof);
 
         IOpenVmHalo2Verifier::verifyCall {
@@ -105,27 +105,27 @@ impl TryFrom<RawEvmProof> for EvmProof {
 
     fn try_from(evm_proof: RawEvmProof) -> Result<Self, Self::Error> {
         let RawEvmProof { instances, proof } = evm_proof;
-        if NUM_BN254_ACCUMULATORS + 2 >= instances.len() {
+        if NUM_BN254_ACCUMULATOR + 2 >= instances.len() {
             return Err(EvmProofConversionError::InvalidLengthInstances);
         }
         if proof.len() != NUM_BN254_PROOF * BN254_BYTES {
             return Err(EvmProofConversionError::InvalidLengthProof);
         }
-        let accumulators = instances[0..NUM_BN254_ACCUMULATORS]
+        let accumulator = instances[0..NUM_BN254_ACCUMULATOR]
             .iter()
             .flat_map(|f| f.to_bytes())
             .collect::<Vec<_>>();
-        let mut app_exe_commit = instances[NUM_BN254_ACCUMULATORS].to_bytes();
-        let mut app_vm_commit = instances[NUM_BN254_ACCUMULATORS + 1].to_bytes();
+        let mut app_exe_commit = instances[NUM_BN254_ACCUMULATOR].to_bytes();
+        let mut app_vm_commit = instances[NUM_BN254_ACCUMULATOR + 1].to_bytes();
         app_exe_commit.reverse();
         app_vm_commit.reverse();
 
-        let mut evm_accumulators: Vec<u8> = Vec::with_capacity(accumulators.len());
-        accumulators
+        let mut evm_accumulator: Vec<u8> = Vec::with_capacity(accumulator.len());
+        accumulator
             .chunks(32)
-            .for_each(|chunk| evm_accumulators.extend(chunk.iter().rev().cloned()));
+            .for_each(|chunk| evm_accumulator.extend(chunk.iter().rev().cloned()));
 
-        let user_public_values = instances[NUM_BN254_ACCUMULATORS + 2..].iter().fold(
+        let user_public_values = instances[NUM_BN254_ACCUMULATOR + 2..].iter().fold(
             Vec::<u8>::new(),
             |mut acc: Vec<u8>, chunk| {
                 // We only care about the first byte, everything else should be 0-bytes
@@ -139,7 +139,7 @@ impl TryFrom<RawEvmProof> for EvmProof {
             app_vm_commit,
             user_public_values,
             proof_data: ProofData {
-                accumulators: evm_accumulators,
+                accumulator: evm_accumulator,
                 proof,
             },
         })
@@ -160,7 +160,7 @@ impl TryFrom<EvmProof> for RawEvmProof {
         app_vm_commit.reverse();
 
         let ProofData {
-            accumulators,
+            accumulator,
             proof,
         } = proof_data;
 
@@ -168,14 +168,14 @@ impl TryFrom<EvmProof> for RawEvmProof {
             return Err(EvmProofConversionError::InvalidLengthProof);
         }
         let instances = {
-            if accumulators.len() != NUM_BN254_ACCUMULATORS * BN254_BYTES {
-                return Err(EvmProofConversionError::InvalidLengthAccumulators);
+            if accumulator.len() != NUM_BN254_ACCUMULATOR * BN254_BYTES {
+                return Err(EvmProofConversionError::InvalidLengthAccumulator);
             }
 
-            let mut reversed_accumulators: Vec<u8> = Vec::with_capacity(accumulators.len());
-            accumulators
+            let mut reversed_accumulator: Vec<u8> = Vec::with_capacity(accumulator.len());
+            accumulator
                 .chunks(32)
-                .for_each(|chunk| reversed_accumulators.extend(chunk.iter().rev().cloned()));
+                .for_each(|chunk| reversed_accumulator.extend(chunk.iter().rev().cloned()));
 
             if user_public_values.is_empty() {
                 return Err(EvmProofConversionError::InvalidUserPublicValuesLength);
@@ -187,7 +187,7 @@ impl TryFrom<EvmProof> for RawEvmProof {
                 .collect::<Vec<_>>();
 
             let mut ret = Vec::new();
-            for chunk in &reversed_accumulators
+            for chunk in &reversed_accumulator
                 .iter()
                 .chain(&app_exe_commit)
                 .chain(&app_vm_commit)

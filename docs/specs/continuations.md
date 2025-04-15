@@ -30,7 +30,7 @@ wrapper is determined by the following parameters:
 - The Aggregation VM chip constraints (but **not** the App VM chips)
 
 Public values:
-- `accumulators`: `12 * 32` bytes representing the KZG accumulator of the SNARK proof.
+- `accumulator`: `12 * 32` bytes representing the KZG accumulator of the SNARK proof.
 - `exe_commit`: one `Bn254Fr` element (as `32` bytes) for the commitment of the app executable.
 - `leaf_commit`: one `Bn254Fr` element (as `32` bytes) for the commitment of the executable verifying app VM proofs.
 - `user_public_values`: sequence of `num_public_values` user-defined public values, each as a `Bn254Fr` element (`32` bytes). The number of user public values is a VM configuration parameter.

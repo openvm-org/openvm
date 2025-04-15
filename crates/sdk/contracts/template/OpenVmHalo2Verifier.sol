@@ -35,7 +35,7 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
     /// use with the `snark-verifier` verification.
     ///
     /// @dev The verifier expected proof format is:
-    /// proof[..12 * 32]: KZG accumulators
+    /// proof[..12 * 32]: KZG accumulator
     /// proof[12 * 32..13 * 32]: app exe commit
     /// proof[13 * 32..14 * 32]: app vm commit
     /// proof[14 * 32..(14 + PUBLIC_VALUES_LENGTH) * 32]: publicValues[0..PUBLIC_VALUES_LENGTH]
@@ -44,7 +44,7 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
     /// @param publicValues The PVs revealed by the OpenVM guest program.
     /// @param proofData All components of the proof except the public values and
     /// app exe and vm commits. The expected format is:
-    /// `abi.encodePacked(kzgAccumulators, proofSuffix)`
+    /// `abi.encodePacked(kzgAccumulator, proofSuffix)`
     /// @param appExeCommit The commitment to the OpenVM application executable whose execution
     /// is being verified.
     /// @param appVmCommit The commitment to the VM configuration.
@@ -95,7 +95,7 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
 
         // The expected proof format using hex offsets:
         //
-        // proof[..0x180]: KZG accumulators
+        // proof[..0x180]: KZG accumulator
         // proof[0x180..0x1a0]: app exe commit
         // proof[0x1a0..0x1c0]: app vm commit
         // proof[0x1c0..(0x1c0 + PUBLIC_VALUES_LENGTH * 32)]: publicValues[0..PUBLIC_VALUES_LENGTH]
@@ -107,7 +107,7 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
             // Allocate the memory as a safety measure.
             mstore(0x40, add(proofPtr, fullProofLength))
 
-            // Copy the KZG accumulators (length 0x180) into the beginning of
+            // Copy the KZG accumulator (length 0x180) into the beginning of
             // the memory buffer
             calldatacopy(proofPtr, proofData.offset, 0x180)
 
@@ -119,7 +119,7 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
             // end of the memory buffer, leaving PUBLIC_VALUES_LENGTH words in
             // between for the publicValuesPayload.
             //
-            // Begin copying from the end of the KZG accumulators in the
+            // Begin copying from the end of the KZG accumulator in the
             // calldata buffer (0x180)
             let proofSuffixOffset := add(0x1c0, shl(5, PUBLIC_VALUES_LENGTH))
             calldatacopy(add(proofPtr, proofSuffixOffset), add(proofData.offset, 0x180), 0x560)

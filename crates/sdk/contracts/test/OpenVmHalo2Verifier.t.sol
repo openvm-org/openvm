@@ -52,9 +52,9 @@ contract TemplateTest is Test {
 
         uint256 proofSuffixOffset = 0x1c0 + (32 * publicValuesLength);
 
-        bytes memory kzgAccumulators = proof[0:0x180];
+        bytes memory kzgAccumulator = proof[0:0x180];
         bytes memory proofSuffix = proof[proofSuffixOffset:];
-        bytes memory _proofData = abi.encodePacked(kzgAccumulators, proofSuffix);
+        bytes memory _proofData = abi.encodePacked(kzgAccumulator, proofSuffix);
 
         require(keccak256(_proofData) == keccak256(proofDataExpected), "Partial proof mismatch");
 

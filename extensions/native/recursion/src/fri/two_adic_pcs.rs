@@ -150,7 +150,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     };
     builder.cycle_tracker_end("pre-compute-rounds-context");
 
-    // Accumulators of the reduced opening sums, reset per query. The array `ro` is indexed by
+    // Accumulator of the reduced opening sums, reset per query. The array `ro` is indexed by
     // log_height.
     let ro: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
     let alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(MAX_TWO_ADICITY + 1);
@@ -159,7 +159,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         let query_proof = builder.iter_ptr_get(&proof.query_proofs, ptr_vec[0]);
         let index_bits = challenger.sample_bits(builder, log_max_lde_height);
 
-        // We reset the reduced opening accumulators at the start of each query.
+        // We reset the reduced opening accumulator at the start of each query.
         // We describe what `ro[log_height]` computes per query in pseduo-code, where `log_height`
         // is log2 of the size of the LDE domain: ro[log_height] = 0
         // alpha_pow[log_height] = 1

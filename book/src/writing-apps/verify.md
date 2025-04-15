@@ -107,7 +107,7 @@ The EVM proof is written to `evm.proof` as a JSON of the following format:
   "app_vm_commit": "0x..",
   "user_public_values": "0x..",
   "proof_data": {
-    "accumulators": "0x..",
+    "accumulator": "0x..",
     "proof": "0x.."
   },
 }
@@ -118,11 +118,11 @@ where each field is a hex string. We explain what each field represents:
 - `app_exe_commit`: `32` bytes for the commitment of the app executable.
 - `app_vm_commit`: `32` bytes for the commitment of the app VM configuration.
 - `user_public_values`: concatenation of 32 byte chunks for user public values. The number of user public values is a configuration parameter.
-- `accumulators`: `12 * 32` bytes representing the KZG accumulator of the proof, where the proof is from a SNARK using the KZG commitment scheme.
+- `accumulator`: `12 * 32` bytes representing the KZG accumulator of the proof, where the proof is from a SNARK using the KZG commitment scheme.
 - `proof`: The rest of the proof required by the SNARK as a hex string of `43 * 32` bytes.
 
 ### EVM Proof: Calldata Format
 
 The `cargo openvm verify evm` command reads the EVM proof from JSON file and then simulates the call to the verifier contract using [Revm](https://github.com/bluealloy/revm/tree/main). This function should only be used for testing and development purposes but not for production.
 
-To verify the EVM proof in an EVM execution environment, the entries of the JSON can be passed as function arguments for the `verify` function, where the `proofData` argument is constructed by `proofData = abi.encodePacked(accumulators, proof)`.
+To verify the EVM proof in an EVM execution environment, the entries of the JSON can be passed as function arguments for the `verify` function, where the `proofData` argument is constructed by `proofData = abi.encodePacked(accumulator, proof)`.
