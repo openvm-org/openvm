@@ -9,9 +9,6 @@ mod extensions;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
 /// Runtime execution and segmentation
-// pub mod segment;
-/// Runtime execution and segmentation
-/// TODO: Temporary for E1 and E2 execution
 pub mod segment;
 /// Strategy for determining when to segment VM execution
 pub mod segmentation_strategy;

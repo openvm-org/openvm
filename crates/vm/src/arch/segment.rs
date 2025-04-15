@@ -176,7 +176,7 @@ where
     }
 
     /// Executes a single instruction and updates VM state
-    // TODO: clean this up, separate to smaller functions
+    // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
         vm_state: &mut VmExecutionState<Mem, Ctx>,
@@ -240,7 +240,7 @@ where
             }
         }
 
-        // TODO: move to vm state?
+        // TODO(ayush): move to vm state?
         *prev_backtrace = trace.cloned();
 
         // Execute the instruction using the control implementation
@@ -277,7 +277,7 @@ where
             .set_override_inventory_trace_heights(overridden_heights.inventory);
     }
 
-    // TODO: not sure what to do of these
+    // TODO(ayush): not sure what to do of these
     /// Generate ProofInput to prove the segment. Should be called after ::execute
     pub fn generate_proof_input<SC: StarkGenericConfig>(
         #[allow(unused_mut)] mut self,
@@ -323,82 +323,3 @@ where
         }
     }
 }
-
-// TODO: Only use AddressMap/PagedVec
-//       Add metric counter for gas metering, figure out what else to add
-//       Proper benchmarking, profiling - close feedback loop
-//
-// /// Prepared instruction type for efficient execution
-// pub type PInstruction = Instruction<u32>;
-
-// // TODO: move to instruction.rs
-// /// Trait for instruction execution
-// pub trait InsExecutor<Mem, Ctx, F>
-// where
-//     Mem: GuestMemory,
-// {
-//     fn execute(
-//         &mut self,
-//         state: &mut VmExecutionState<Mem, Ctx>,
-//         // TODO: Change to PInstruction
-//         instruction: &Instruction<F>,
-//     ) -> Result<(), ExecutionError>
-//     where
-//         F: PrimeField32;
-// }
-//
-// /// Trait for context with timestamp tracking
-// pub trait Temporal {
-//     fn timestamp(&self) -> u32;
-//     fn timestamp_mut(&mut self) -> &mut u32;
-// }
-
-// /// Metered instruction executor wrapper for gas metering
-// pub struct Metered<E>
-// where
-//     E: InsExecutor<Mem, Ctx>,
-//     Mem: GuestMemory,
-//     Ctx: Temporal,
-// {
-//     inner: E,
-//     trace_height: usize,
-//     weight: u32,
-// }
-
-// impl<E, Mem, Ctx> InsExecutor<Mem, Ctx> for Metered<E>
-// where
-//     E: InsExecutor<Mem, Ctx>,
-//     Mem: GuestMemory,
-//     Ctx: Temporal,
-// {
-//     fn execute(
-//         &mut self,
-//         state: &mut VmExecutionState<Mem, Ctx>,
-//         instruction: &PInstruction,
-//     ) -> Result<(), ExecutionError> {
-//         // Execute the inner implementation
-//         let result = self.inner.execute(state, instruction);
-
-//         // Add gas costs based on weight and trace height
-//         // This could be more complex based on your gas model
-//         *state.ctx.timestamp_mut() += self.weight;
-
-//         result
-//     }
-// }
-
-// /// Trait for recording instruction execution into trace buffers
-// pub trait RecordingExecutor<Mem, Ctx>: InsExecutor<Mem, Ctx>
-// where
-//     Mem: GuestMemory,
-//     Ctx: Temporal,
-// {
-//     /// Calculate buffer size needed for recording based on instruction count
-//     fn buffer_size(&self, ins_counter: usize) -> usize;
-
-//     /// Set the buffer for recording execution trace
-//     fn set_buffer(&mut self, buffer: &mut [u8]);
-
-//     /// Get the current position in the buffer
-//     fn buffer_position(&self) -> usize;
-// }

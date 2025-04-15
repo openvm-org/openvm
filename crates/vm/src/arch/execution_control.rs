@@ -45,7 +45,7 @@ where
     );
 
     /// Execute a single instruction
-    // TODO: change instruction to Instruction<u32> / PInstruction
+    // TODO(ayush): change instruction to Instruction<u32> / PInstruction
     fn execute_instruction(
         &mut self,
         vm_state: &mut VmExecutionState<Self::Mem, Self::Ctx>,
