@@ -76,10 +76,7 @@ impl EvmProof {
             proof_data,
         } = self;
 
-        let ProofData {
-            accumulator,
-            proof,
-        } = proof_data;
+        let ProofData { accumulator, proof } = proof_data;
 
         let mut proof_data = accumulator;
         proof_data.extend(proof);
@@ -159,10 +156,7 @@ impl TryFrom<EvmProof> for RawEvmProof {
         app_exe_commit.reverse();
         app_vm_commit.reverse();
 
-        let ProofData {
-            accumulator,
-            proof,
-        } = proof_data;
+        let ProofData { accumulator, proof } = proof_data;
 
         if proof.len() != NUM_BN254_PROOF * BN254_BYTES {
             return Err(EvmProofConversionError::InvalidLengthProof);
