@@ -1,7 +1,7 @@
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{segment_new::VmExecutionState, ExecutionError, TracegenCtx, VmChipComplex, VmConfig};
+use super::{segment::VmExecutionState, ExecutionError, TracegenCtx, VmChipComplex, VmConfig};
 use crate::{
     arch::{ExecutionState, InstructionExecutor},
     system::memory::{online::GuestMemory, AddressMap, MemoryImage, PAGE_SIZE},

@@ -12,7 +12,7 @@ mod integration_api;
 // pub mod segment;
 /// Runtime execution and segmentation
 /// TODO: Temporary for E1 and E2 execution
-pub mod segment_new;
+pub mod segment;
 /// Strategy for determining when to segment VM execution
 pub mod segmentation_strategy;
 /// Top level [VirtualMachine] constructor and API.
@@ -29,7 +29,6 @@ pub use config::*;
 pub use execution::*;
 pub use extensions::*;
 pub use integration_api::*;
-// pub use segment::*;
-pub use segment_new::*;
+pub use segment::*;
 pub use segmentation_strategy::*;
 pub use vm::*;

@@ -26,7 +26,7 @@ use super::{
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, segment_new::TracegenVmSegmentExecutor,
+        hasher::poseidon2::vm_poseidon2_hasher, segment::TracegenVmSegmentExecutor,
         TracegenVmExecutionState,
     },
     system::{
