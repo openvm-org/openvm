@@ -12,20 +12,24 @@ use openvm_stark_backend::{
     utils::metrics_span,
     Chip,
 };
+use program::Program;
 
 use super::{
     execution_control::{ExecutionControl, TracegenExecutionControl},
-    ExecutionError, GenerationError, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
+    ExecutionError, GenerationError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
+    VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
-    system::memory::{online::GuestMemory, paged_vec::PAGE_SIZE, AddressMap, MemoryImage},
+    system::memory::{
+        online::GuestMemory, paged_vec::PAGE_SIZE, AddressMap, MemoryController, MemoryImage,
+    },
 };
 
 /// Represents the state of the VM during execution
-pub struct VmExecutionState<'a, Mem, Ctx>
+pub struct VmExecutionState<Mem, Ctx>
 where
     Mem: GuestMemory,
 {
@@ -35,17 +39,17 @@ where
     // TODO: see if it can be removed
     pub terminated: bool,
     /// Guest memory interface
-    pub memory: &'a Mem,
+    pub memory: Mem,
     /// Host-specific execution context
     pub ctx: Ctx,
 }
 
-impl<'a, Mem, Ctx> VmExecutionState<'a, Mem, Ctx>
+impl<Mem, Ctx> VmExecutionState<Mem, Ctx>
 where
     Mem: GuestMemory,
 {
     /// Creates a new VM execution state with the given parameters
-    pub fn new(pc: u32, memory: &'a Mem, ctx: Ctx) -> Self {
+    pub fn new(pc: u32, memory: Mem, ctx: Ctx) -> Self {
         Self {
             pc,
             terminated: false,
@@ -60,7 +64,7 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
     Mem: GuestMemory,
-    Ctrl: ExecutionControl<Mem = Mem, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
     /// Execution control for determining segmentation and stopping conditions
@@ -68,6 +72,8 @@ where
 
     pub trace_height_constraints: Vec<LinearConstraint>,
 
+    /// Air names for debug purposes only.
+    pub(crate) air_names: Vec<String>,
     /// Metrics collected for this execution segment alone.
     #[cfg(feature = "bench-metrics")]
     pub metrics: VmMetrics,
@@ -83,8 +89,23 @@ impl TracegenCtx {
     }
 }
 
-pub type TracegenVmExecutionState<'a> = VmExecutionState<'a, AddressMap<PAGE_SIZE>, TracegenCtx>;
-pub type TracegenVmSegmentExecutor<F: PrimeField32, VC: VmConfig<F>> =
+pub type TracegenVmExecutionState = VmExecutionState<AddressMap<PAGE_SIZE>, TracegenCtx>;
+
+impl TracegenVmExecutionState {
+    pub fn from_pc_and_memory_controller<F>(
+        pc: u32,
+        memory_controller: &MemoryController<F>,
+    ) -> Self
+    where
+        F: PrimeField32,
+    {
+        let memory = memory_controller.memory_image().clone();
+        let ctx = TracegenCtx::new(memory_controller.timestamp());
+        TracegenVmExecutionState::new(pc, memory, ctx)
+    }
+}
+
+pub type TracegenVmSegmentExecutor<F, VC> =
     VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, TracegenCtx, TracegenExecutionControl>;
 
 impl<F, VC, Mem, Ctx, Ctrl> VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
@@ -92,18 +113,36 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
     Mem: GuestMemory,
-    Ctrl: ExecutionControl<Mem = Mem, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
-        chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
-        control: Ctrl,
+        config: &VC,
+        program: Program<F>,
+        init_streams: Streams<F>,
+        initial_memory: Option<MemoryImage>,
         trace_height_constraints: Vec<LinearConstraint>,
         #[allow(unused_variables)] fn_bounds: FnBounds,
     ) -> Self {
+        let mut chip_complex = config.create_chip_complex().unwrap();
+        chip_complex.set_streams(init_streams);
+        let program = if !config.system().profiling {
+            program.strip_debug_infos()
+        } else {
+            program
+        };
+        chip_complex.set_program(program);
+
+        if let Some(initial_memory) = initial_memory {
+            chip_complex.set_initial_memory(initial_memory);
+        }
+        let air_names = chip_complex.air_names();
+        let control = Ctrl::new(&chip_complex);
+
         Self {
             chip_complex,
             control,
+            air_names,
             trace_height_constraints,
             #[cfg(feature = "bench-metrics")]
             metrics: VmMetrics {
@@ -114,14 +153,15 @@ where
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated
-    pub fn execute_from_state<'a>(
+    pub fn execute_from_state(
         &mut self,
-        vm_state: &mut VmExecutionState<'a, Mem, Ctx>,
+        vm_state: &mut VmExecutionState<Mem, Ctx>,
     ) -> Result<(), ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         // Call the pre-execution hook
-        self.control.on_segment_start(vm_state);
+        self.control
+            .on_segment_start(vm_state, &mut self.chip_complex);
 
         while !vm_state.terminated && !self.should_stop(vm_state) {
             // Fetch, decode and execute single instruction
@@ -129,16 +169,17 @@ where
         }
 
         // Call the post-execution hook
-        self.control.on_segment_end(vm_state);
+        self.control
+            .on_segment_end(vm_state, &mut self.chip_complex);
 
         Ok(())
     }
 
     /// Executes a single instruction and updates VM state
     // TODO: clean this up, separate to smaller functions
-    fn execute_instruction<'a>(
+    fn execute_instruction(
         &mut self,
-        vm_state: &mut VmExecutionState<'a, Mem, Ctx>,
+        vm_state: &mut VmExecutionState<Mem, Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<(), ExecutionError> {
         let pc = vm_state.pc;
@@ -156,7 +197,7 @@ where
             |DebugInfo {
                  dsl_instruction,
                  trace,
-             }| (Some(dsl_instruction), trace.as_ref()),
+             }| (Some(dsl_instruction.clone()), trace.as_ref()),
         );
 
         let &Instruction { opcode, c, .. } = instruction;
@@ -189,7 +230,7 @@ where
 
                 #[cfg(feature = "bench-metrics")]
                 {
-                    let dsl_str = dsl_instr.cloned().unwrap_or_else(|| "Default".to_string());
+                    let dsl_str = dsl_instr.clone().unwrap_or_else(|| "Default".to_string());
                     match phantom {
                         SysPhantom::CtStart => self.metrics.cycle_tracker.start(dsl_str),
                         SysPhantom::CtEnd => self.metrics.cycle_tracker.end(dsl_str),
@@ -203,26 +244,26 @@ where
         *prev_backtrace = trace.cloned();
 
         // Execute the instruction using the control implementation
-        self.control.execute_instruction(vm_state, instruction)?;
+        self.control
+            .execute_instruction(vm_state, &mut self.chip_complex)?;
 
         // Update metrics if enabled
         #[cfg(feature = "bench-metrics")]
         {
-            let dsl_instr_clone = dsl_instr.cloned();
-            self.update_instruction_metrics(pc, opcode, dsl_instr_clone);
+            self.update_instruction_metrics(pc, opcode, dsl_instr);
         }
 
         Ok(())
     }
 
     /// Returns bool of whether to switch to next segment or not.
-    fn should_stop<'a>(&mut self, vm_state: &VmExecutionState<'a, Mem, Ctx>) -> bool {
+    fn should_stop(&mut self, vm_state: &VmExecutionState<Mem, Ctx>) -> bool {
         if !self.system_config().continuation_enabled {
             return false;
         }
 
         // Check with the execution control policy
-        self.control.should_stop(vm_state)
+        self.control.should_stop(vm_state, &self.chip_complex)
     }
 
     pub fn system_config(&self) -> &SystemConfig {
@@ -270,9 +311,8 @@ where
         if self.system_config().profiling {
             let executor = self.chip_complex.inventory.get_executor(opcode).unwrap();
             let opcode_name = executor.get_opcode_name(opcode.as_usize());
-            let air_names = self.chip_complex.air_names();
             self.metrics.update_trace_cells(
-                &air_names,
+                &self.air_names,
                 self.chip_complex.current_trace_cells(),
                 opcode_name,
                 dsl_instr,

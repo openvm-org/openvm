@@ -2,13 +2,7 @@ use std::{collections::BTreeMap, mem};
 
 use cycle_tracker::CycleTracker;
 use metrics::counter;
-use openvm_instructions::{
-    exe::{FnBound, FnBounds},
-    VmOpcode,
-};
-use openvm_stark_backend::p3_field::PrimeField32;
-
-use crate::arch::{InstructionExecutor, VmConfig};
+use openvm_instructions::exe::{FnBound, FnBounds};
 
 pub mod cycle_tracker;
 

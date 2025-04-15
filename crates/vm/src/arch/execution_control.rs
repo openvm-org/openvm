@@ -1,7 +1,7 @@
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{segment_new::VmExecutionState, ExecutionError, TracegenCtx};
+use super::{segment_new::VmExecutionState, ExecutionError, TracegenCtx, VmChipComplex, VmConfig};
 use crate::{
     arch::{ExecutionState, InstructionExecutor},
     system::memory::{online::GuestMemory, AddressMap, MemoryImage, PAGE_SIZE},
@@ -11,27 +11,46 @@ use crate::{
 const SEGMENT_CHECK_INTERVAL: usize = 100;
 
 /// Trait for execution control, determining segmentation and stopping conditions
-pub trait ExecutionControl {
+pub trait ExecutionControl<F, VC>
+where
+    F: PrimeField32,
+    VC: VmConfig<F>,
+{
     /// Guest memory type
     type Mem: GuestMemory;
     /// Host context
     type Ctx;
 
+    fn new(chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self;
+
     /// Determines if execution should stop
-    fn should_stop(&mut self, state: &VmExecutionState<Self::Mem, Self::Ctx>) -> bool;
+    fn should_stop(
+        &mut self,
+        state: &VmExecutionState<Self::Mem, Self::Ctx>,
+        chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) -> bool;
 
     /// Called before segment execution begins
-    fn on_segment_start(&mut self, vm_state: &VmExecutionState<Self::Mem, Self::Ctx>);
+    fn on_segment_start(
+        &mut self,
+        vm_state: &VmExecutionState<Self::Mem, Self::Ctx>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+    );
 
     /// Called after segment execution completes
-    fn on_segment_end(&mut self, vm_state: &VmExecutionState<Self::Mem, Self::Ctx>);
+    fn on_segment_end(
+        &mut self,
+        vm_state: &VmExecutionState<Self::Mem, Self::Ctx>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+    );
 
     /// Execute a single instruction
     // TODO: change instruction to Instruction<u32> / PInstruction
-    fn execute_instruction<F>(
+    fn execute_instruction(
         &mut self,
         vm_state: &mut VmExecutionState<Self::Mem, Self::Ctx>,
-        instruction: &Instruction<F>,
+        // instruction: &Instruction<F>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32;
@@ -44,76 +63,94 @@ pub struct TracegenExecutionControl {
     air_names: Vec<String>,
 }
 
-impl ExecutionControl for TracegenExecutionControl {
+impl TracegenExecutionControl {
+    pub fn new(air_names: Vec<String>) -> Self {
+        Self {
+            final_memory: None,
+            since_last_segment_check: 0,
+            air_names,
+        }
+    }
+}
+
+impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
+where
+    F: PrimeField32,
+    VC: VmConfig<F>,
+{
     type Ctx = TracegenCtx;
     type Mem = AddressMap<PAGE_SIZE>;
 
-    fn should_stop(&mut self, _state: &VmExecutionState<Self::Mem, Self::Ctx>) -> bool {
+    fn new(chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self {
+        Self {
+            final_memory: None,
+            since_last_segment_check: 0,
+            air_names: chip_complex.air_names(),
+        }
+    }
+
+    fn should_stop(
+        &mut self,
+        _state: &VmExecutionState<Self::Mem, Self::Ctx>,
+        chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) -> bool {
         // Avoid checking segment too often.
         if self.since_last_segment_check != SEGMENT_CHECK_INTERVAL {
             self.since_last_segment_check += 1;
             return false;
         }
         self.since_last_segment_check = 0;
-        self.chip_complex
-            .borrow()
-            .config()
-            .segmentation_strategy
-            .should_segment(
-                &self.air_names,
-                &self
-                    .chip_complex
-                    .borrow_mut()
-                    .dynamic_trace_heights()
-                    .collect::<Vec<_>>(),
-                &self.chip_complex.borrow().current_trace_cells(),
-            )
+        chip_complex.config().segmentation_strategy.should_segment(
+            &self.air_names,
+            &chip_complex.dynamic_trace_heights().collect::<Vec<_>>(),
+            &chip_complex.current_trace_cells(),
+        )
     }
 
-    fn on_segment_start(&mut self, vm_state: &VmExecutionState<Self::Mem, Self::Ctx>) {
-        let timestamp = vm_state.ctx.timestamp;
-        self.chip_complex
-            .borrow_mut()
+    fn on_segment_start(
+        &mut self,
+        vm_state: &VmExecutionState<Self::Mem, Self::Ctx>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) {
+        let timestamp = chip_complex.memory_controller().timestamp();
+        chip_complex
             .connector_chip_mut()
             .begin(ExecutionState::new(vm_state.pc, timestamp));
     }
 
-    fn on_segment_end(&mut self, vm_state: &VmExecutionState<Self::Mem, Self::Ctx>) {
-        let timestamp = vm_state.ctx.timestamp;
+    fn on_segment_end(
+        &mut self,
+        vm_state: &VmExecutionState<Self::Mem, Self::Ctx>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) {
+        let timestamp = chip_complex.memory_controller().timestamp();
         // End the current segment with connector chip
-        self.chip_complex
-            .borrow_mut()
+        chip_complex
             .connector_chip_mut()
             .end(ExecutionState::new(vm_state.pc, timestamp), None);
-        self.final_memory = Some(
-            self.chip_complex
-                .borrow()
-                .base
-                .memory_controller
-                .memory_image()
-                .clone(),
-        );
+        self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
     }
 
     /// Execute a single instruction
-    fn execute_instruction<F>(
+    fn execute_instruction(
         &mut self,
         vm_state: &mut VmExecutionState<Self::Mem, Self::Ctx>,
-        instruction: &Instruction<F>,
+        // instruction: &Instruction<F>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
     {
-        let timestamp = vm_state.ctx.timestamp;
+        let timestamp = chip_complex.memory_controller().timestamp();
+        let (instruction, _) = chip_complex
+            .base
+            .program_chip
+            .get_instruction(vm_state.pc)?;
+
         let &Instruction { opcode, .. } = instruction;
 
-        if let Some(executor) = self
-            .chip_complex
-            .borrow_mut()
-            .inventory
-            .get_mut_executor(&opcode)
-        {
-            let memory_controller = &mut self.chip_complex.borrow_mut().base.memory_controller;
+        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
+            let memory_controller = &mut chip_complex.base.memory_controller;
             let new_state = executor.execute(
                 memory_controller,
                 instruction,

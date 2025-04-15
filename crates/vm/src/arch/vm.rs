@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
 
 use openvm_circuit::system::program::trace::compute_exe_commit;
-use openvm_instructions::{exe::VmExe, program::Program};
+use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Com, Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
@@ -19,17 +19,15 @@ use thiserror::Error;
 use tracing::info_span;
 
 use super::{
-    ExecutionError, VmChipComplex, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID,
-    MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+    ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
+    PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{
-        execution_control::{ExecutionControl, TracegenExecutionControl},
-        hasher::poseidon2::vm_poseidon2_hasher,
-        segment_new::TracegenVmSegmentExecutor,
-        TracegenCtx, TracegenVmExecutionState,
+        hasher::poseidon2::vm_poseidon2_hasher, segment_new::TracegenVmSegmentExecutor,
+        TracegenVmExecutionState,
     },
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
@@ -131,33 +129,6 @@ where
     pub next_state: Option<VmExecutorNextSegmentState<F>>,
 }
 
-/// Initialize chip complex with program, streams, and memory
-fn initialize_chip_complex<F, VC>(
-    config: &VC,
-    program: Program<F>,
-    init_streams: Streams<F>,
-    initial_memory: Option<MemoryImage>,
-) -> VmChipComplex<F, VC::Executor, VC::Periphery>
-where
-    F: PrimeField32,
-    VC: VmConfig<F>,
-{
-    let mut chip_complex = config.create_chip_complex().unwrap();
-    chip_complex.set_streams(init_streams);
-    let program = if !config.system().profiling {
-        program.strip_debug_infos()
-    } else {
-        program
-    };
-    chip_complex.set_program(program);
-
-    if let Some(initial_memory) = initial_memory {
-        chip_complex.set_initial_memory(initial_memory);
-    }
-
-    chip_complex
-}
-
 impl<F, VC> VmExecutor<F, VC>
 where
     F: PrimeField32,
@@ -253,17 +224,12 @@ where
         from_state: VmExecutorNextSegmentState<F>,
     ) -> Result<VmExecutorOneSegmentResult<F, VC>, ExecutionError> {
         let exe = exe.into();
-        let chip_complex = initialize_chip_complex(
+
+        let mut segment = TracegenVmSegmentExecutor::new(
             &self.config,
             exe.program.clone(),
             from_state.input,
             Some(from_state.memory),
-        );
-        // let control = TracegenExecutionControl::new(chip_complex);
-
-        let mut segment = TracegenVmSegmentExecutor::new(
-            chip_complex,
-            control,
             self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
         );
@@ -274,11 +240,9 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        let timestamp = chip_complex.memory_controller().timestamp();
-        let mut vm_state = TracegenVmExecutionState::new(
+        let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
             from_state.pc,
-            &from_state.memory,
-            TracegenCtx::new(timestamp),
+            segment.chip_complex.memory_controller(),
         );
         metrics_span("execute_time_ms", || {
             segment.execute_from_state(&mut vm_state)
@@ -511,24 +475,20 @@ where
         exe: VmExe<F>,
         input: impl Into<Streams<F>>,
     ) -> Result<TracegenVmSegmentExecutor<F, VC>, ExecutionError> {
-        let pc_start = exe.pc_start;
-        let mut chip_complex =
-            initialize_chip_complex(&self.config, exe.program.clone(), input.into(), None);
-        let control = TracegenExecutionControl::new(&mut chip_complex);
         let mut segment = TracegenVmSegmentExecutor::new(
-            chip_complex,
-            control,
+            &self.config,
+            exe.program.clone(),
+            input.into(),
+            None,
             self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
         );
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        let timestamp = chip_complex.memory_controller().timestamp();
-        let mut vm_state = TracegenVmExecutionState::new(
+        let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
             exe.pc_start,
-            &from_state.memory,
-            TracegenCtx::new(timestamp),
+            segment.chip_complex.memory_controller(),
         );
         metrics_span("execute_time_ms", || {
             segment.execute_from_state(&mut vm_state)
