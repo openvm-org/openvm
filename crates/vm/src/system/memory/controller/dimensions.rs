@@ -20,6 +20,7 @@ impl MemoryDimensions {
     pub fn overall_height(&self) -> usize {
         self.as_height + self.address_height
     }
+
     /// Convert an address label (address space, block id) to its index in the memory merkle tree.
     ///
     /// Assumes that `label = (addr_space, block_id)` satisfies `block_id < 2^address_height`.

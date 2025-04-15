@@ -17,7 +17,6 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
-use rustc_hash::FxHashSet;
 
 use super::merkle::SerialReceiver;
 use crate::{
@@ -129,7 +128,7 @@ pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
 
 #[derive(Debug)]
 enum TouchedLabels<F, const CHUNK: usize> {
-    Running(FxHashSet<(u32, u32)>),
+    Running(Vec<u64>),
     Final(Vec<FinalTouchedLabel<F, CHUNK>>),
 }
 
@@ -146,23 +145,74 @@ struct FinalTouchedLabel<F, const CHUNK: usize> {
 
 impl<F: PrimeField32, const CHUNK: usize> Default for TouchedLabels<F, CHUNK> {
     fn default() -> Self {
-        Self::Running(FxHashSet::default())
+        Self::Running(Vec::new())
     }
 }
 
 impl<F: PrimeField32, const CHUNK: usize> TouchedLabels<F, CHUNK> {
-    fn touch(&mut self, address_space: u32, label: u32) {
+    fn encode_label<const CLOSE: bool>(label: u64) -> u64 {
+        (label << 1) | (CLOSE as u64)
+    }
+
+    fn open_label(label: u64) -> u64 {
+        Self::encode_label::<false>(label)
+    }
+
+    fn close_label(label: u64) -> u64 {
+        Self::encode_label::<true>(label)
+    }
+
+    fn touch_range(&mut self, md: &MemoryDimensions, address_space: u32, pointer: u32, len: u32) {
         match self {
             TouchedLabels::Running(touched_labels) => {
-                touched_labels.insert((address_space, label));
+                let start_label = pointer / CHUNK as u32;
+                let end_label = (pointer + len - 1) / CHUNK as u32;
+                touched_labels.push(Self::open_label(
+                    md.label_to_index((address_space, start_label)),
+                ));
+                touched_labels.push(Self::close_label(
+                    md.label_to_index((address_space, end_label)) + 1,
+                ));
             }
             _ => panic!("Cannot touch after finalization"),
         }
     }
+
     fn len(&self) -> usize {
         match self {
-            TouchedLabels::Running(touched_labels) => touched_labels.len(),
+            TouchedLabels::Running(_) => {
+                panic!("The number of touched labels is not known before finalization")
+            }
             TouchedLabels::Final(touched_labels) => touched_labels.len(),
+        }
+    }
+
+    pub fn collect_final_labels(&self) -> Vec<u64> {
+        match self {
+            TouchedLabels::Running(touched_labels) => {
+                let mut labels = touched_labels.clone();
+                labels.sort_unstable();
+                let mut bal = 0;
+                let mut res = Vec::new();
+                let mut last = 0;
+                for label in labels {
+                    if bal > 0 {
+                        res.extend(last..(label >> 1));
+                    }
+                    if label & 1 == 0 {
+                        bal += 1;
+                    } else {
+                        bal -= 1;
+                        debug_assert!(bal >= 0);
+                    }
+                    last = label >> 1;
+                }
+                debug_assert_eq!(bal, 0);
+                res
+            }
+            TouchedLabels::Final(_) => {
+                panic!("We should not collect final labels after finalization")
+            }
         }
     }
 }
@@ -191,11 +241,8 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     }
 
     pub fn touch_range(&mut self, address_space: u32, pointer: u32, len: u32) {
-        let start_label = pointer / CHUNK as u32;
-        let end_label = (pointer + len - 1) / CHUNK as u32;
-        for label in start_label..=end_label {
-            self.touched_labels.touch(address_space, label);
-        }
+        self.touched_labels
+            .touch_range(&self.air.memory_dims, address_space, pointer, len);
     }
 
     pub fn finalize<H>(
@@ -206,37 +253,36 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     ) where
         H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        match &mut self.touched_labels {
-            TouchedLabels::Running(touched_labels) => {
-                let final_touched_labels: Vec<_> = touched_labels
-                    .par_iter()
-                    .map(|&(address_space, label)| {
-                        let pointer = label * CHUNK as u32;
-                        let init_values = array::from_fn(|i| unsafe {
-                            initial_memory.get((address_space, pointer + i as u32))
-                        });
-                        let initial_hash = hasher.hash(&init_values);
-                        let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
-                        let final_hash = hasher.hash(&timestamped_values.values);
-                        FinalTouchedLabel {
-                            address_space,
-                            label,
-                            init_values,
-                            final_values: timestamped_values.values,
-                            init_hash: initial_hash,
-                            final_hash,
-                            final_timestamp: timestamped_values.timestamp,
-                        }
-                    })
-                    .collect();
-                for l in &final_touched_labels {
-                    hasher.receive(&l.init_values);
-                    hasher.receive(&l.final_values);
+        let final_touched_labels: Vec<_> = self
+            .touched_labels
+            .collect_final_labels()
+            .par_iter()
+            .map(|label| {
+                let address_space = (label >> self.air.memory_dims.address_height) as u32;
+                let label = (label & ((1 << self.air.memory_dims.address_height) - 1)) as u32;
+                let pointer = label * CHUNK as u32;
+                let init_values = array::from_fn(|i| unsafe {
+                    initial_memory.get((address_space, pointer + i as u32))
+                });
+                let initial_hash = hasher.hash(&init_values);
+                let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
+                let final_hash = hasher.hash(&timestamped_values.values);
+                FinalTouchedLabel {
+                    address_space,
+                    label,
+                    init_values,
+                    final_values: timestamped_values.values,
+                    init_hash: initial_hash,
+                    final_hash,
+                    final_timestamp: timestamped_values.timestamp,
                 }
-                self.touched_labels = TouchedLabels::Final(final_touched_labels);
-            }
-            _ => panic!("Cannot finalize after finalization"),
+            })
+            .collect();
+        for l in &final_touched_labels {
+            hasher.receive(&l.init_values);
+            hasher.receive(&l.final_values);
         }
+        self.touched_labels = TouchedLabels::Final(final_touched_labels);
     }
 }
 
