@@ -851,6 +851,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .chain([self.range_checker_chip().air_name()])
             .collect()
     }
+
     /// Return trace heights of all chips in order corresponding to `air_names`.
     pub(crate) fn current_trace_heights(&self) -> Vec<usize>
     where

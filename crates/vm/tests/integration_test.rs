@@ -8,9 +8,9 @@ use std::{
 use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        ChipId, ExecutionSegment, MemoryConfig, SingleSegmentVmExecutor, SystemConfig,
-        SystemTraceHeights, VirtualMachine, VmComplexTraceHeights, VmConfig,
-        VmInventoryTraceHeights,
+        ChipId, MemoryConfig, SingleSegmentVmExecutor, SystemConfig, SystemTraceHeights,
+        TracegenVmExecutionState, TracegenVmSegmentExecutor, VirtualMachine, VmComplexTraceHeights,
+        VmConfig, VmInventoryTraceHeights,
     },
     system::{
         memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
@@ -713,7 +713,7 @@ fn test_hint_load_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    let mut segment = ExecutionSegment::new(
+    let mut segment = TracegenVmSegmentExecutor::new(
         &test_native_config(),
         program,
         vec![vec![F::ONE, F::TWO]].into(),
@@ -721,7 +721,11 @@ fn test_hint_load_1() {
         vec![],
         Default::default(),
     );
-    segment.execute_from_pc(0).unwrap();
+    let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
+        0,
+        segment.chip_complex.memory_controller(),
+    );
+    segment.execute_from_state(&mut vm_state).unwrap();
     let streams = segment.chip_complex.take_streams();
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ZERO]));
@@ -750,7 +754,7 @@ fn test_hint_load_2() {
 
     let program = Program::from_instructions(&instructions);
 
-    let mut segment = ExecutionSegment::new(
+    let mut segment = TracegenVmSegmentExecutor::new(
         &test_native_config(),
         program,
         vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]].into(),
@@ -758,7 +762,11 @@ fn test_hint_load_2() {
         vec![],
         Default::default(),
     );
-    segment.execute_from_pc(0).unwrap();
+    let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
+        0,
+        segment.chip_complex.memory_controller(),
+    );
+    segment.execute_from_state(&mut vm_state).unwrap();
     assert_eq!(
         segment
             .chip_complex
