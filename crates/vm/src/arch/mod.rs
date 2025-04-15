@@ -9,7 +9,7 @@ mod extensions;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
 /// Runtime execution and segmentation
-pub mod segment;
+// pub mod segment;
 /// Runtime execution and segmentation
 /// TODO: Temporary for E1 and E2 execution
 pub mod segment_new;
@@ -29,5 +29,7 @@ pub use config::*;
 pub use execution::*;
 pub use extensions::*;
 pub use integration_api::*;
-pub use segment::*;
+// pub use segment::*;
+pub use segment_new::*;
+pub use segmentation_strategy::*;
 pub use vm::*;

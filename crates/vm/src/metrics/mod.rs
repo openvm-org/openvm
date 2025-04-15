@@ -8,7 +8,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::arch::{ExecutionSegment, InstructionExecutor, VmConfig};
+use crate::arch::{InstructionExecutor, VmConfig};
 
 pub mod cycle_tracker;
 
@@ -28,37 +28,6 @@ pub struct VmMetrics {
     #[allow(dead_code)]
     pub(crate) current_fn: FnBound,
     pub(crate) current_trace_cells: Vec<usize>,
-}
-
-impl<F, VC> ExecutionSegment<F, VC>
-where
-    F: PrimeField32,
-    VC: VmConfig<F>,
-{
-    /// Update metrics that increment per instruction
-    #[allow(unused_variables)]
-    pub fn update_instruction_metrics(
-        &mut self,
-        pc: u32,
-        opcode: VmOpcode,
-        dsl_instr: Option<String>,
-    ) {
-        self.metrics.cycle_count += 1;
-
-        if self.system_config().profiling {
-            let executor = self.chip_complex.inventory.get_executor(opcode).unwrap();
-            let opcode_name = executor.get_opcode_name(opcode.as_usize());
-            self.metrics.update_trace_cells(
-                &self.air_names,
-                self.current_trace_cells(),
-                opcode_name,
-                dsl_instr,
-            );
-
-            #[cfg(feature = "function-span")]
-            self.metrics.update_current_fn(pc);
-        }
-    }
 }
 
 impl VmMetrics {

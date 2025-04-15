@@ -2,7 +2,6 @@ use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
     instruction::{DebugInfo, Instruction},
-    program::Program,
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -15,32 +14,45 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    execution_control::ExecutionControl, ExecutionError, GenerationError, Streams, SystemConfig,
-    VmChipComplex, VmComplexTraceHeights, VmConfig,
+    execution_control::{ExecutionControl, TracegenExecutionControl},
+    ExecutionError, GenerationError, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
-    system::memory::{online::GuestMemory, MemoryImage},
+    system::memory::{online::GuestMemory, paged_vec::PAGE_SIZE, AddressMap, MemoryImage},
 };
 
 /// Represents the state of the VM during execution
-pub struct VmExecutionState<Mem, Ctx>
+pub struct VmExecutionState<'a, Mem, Ctx>
 where
     Mem: GuestMemory,
 {
-    /// Current timestamp representing clock cycles
-    pub timestamp: u32,
     /// Program counter - current instruction address
     pub pc: u32,
     /// Whether execution has terminated
     // TODO: see if it can be removed
     pub terminated: bool,
     /// Guest memory interface
-    pub memory: Mem,
+    pub memory: &'a Mem,
     /// Host-specific execution context
     pub ctx: Ctx,
+}
+
+impl<'a, Mem, Ctx> VmExecutionState<'a, Mem, Ctx>
+where
+    Mem: GuestMemory,
+{
+    /// Creates a new VM execution state with the given parameters
+    pub fn new(pc: u32, memory: &'a Mem, ctx: Ctx) -> Self {
+        Self {
+            pc,
+            terminated: false,
+            memory,
+            ctx,
+        }
+    }
 }
 
 pub struct VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
@@ -48,63 +60,50 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
     Mem: GuestMemory,
-    Ctrl: ExecutionControl<Mem, Ctx, F>,
+    Ctrl: ExecutionControl<Mem = Mem, Ctx = Ctx>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
-    pub vm_state: VmExecutionState<Mem, Ctx>,
-    /// Memory image after segment was executed. Not used in trace generation.
-    pub final_memory: Option<MemoryImage>,
     /// Execution control for determining segmentation and stopping conditions
     pub control: Ctrl,
 
     pub trace_height_constraints: Vec<LinearConstraint>,
 
-    /// Air names for debug purposes only.
-    pub(crate) air_names: Vec<String>,
     /// Metrics collected for this execution segment alone.
     #[cfg(feature = "bench-metrics")]
     pub metrics: VmMetrics,
 }
+
+pub struct TracegenCtx {
+    pub timestamp: u32,
+}
+
+impl TracegenCtx {
+    pub fn new(timestamp: u32) -> Self {
+        Self { timestamp }
+    }
+}
+
+pub type TracegenVmExecutionState<'a> = VmExecutionState<'a, AddressMap<PAGE_SIZE>, TracegenCtx>;
+pub type TracegenVmSegmentExecutor<F: PrimeField32, VC: VmConfig<F>> =
+    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, TracegenCtx, TracegenExecutionControl>;
 
 impl<F, VC, Mem, Ctx, Ctrl> VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
     Mem: GuestMemory,
-    Ctrl: ExecutionControl<Mem, Ctx, F>,
+    Ctrl: ExecutionControl<Mem = Mem, Ctx = Ctx>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        config: &VC,
-        program: Program<F>,
-        init_streams: Streams<F>,
-        initial_memory: Option<MemoryImage>,
-        vm_state: VmExecutionState<Mem, Ctx>,
+        chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
         control: Ctrl,
         trace_height_constraints: Vec<LinearConstraint>,
         #[allow(unused_variables)] fn_bounds: FnBounds,
     ) -> Self {
-        let mut chip_complex = config.create_chip_complex().unwrap();
-        chip_complex.set_streams(init_streams);
-        let program = if !config.system().profiling {
-            program.strip_debug_infos()
-        } else {
-            program
-        };
-        chip_complex.set_program(program);
-
-        if let Some(initial_memory) = initial_memory {
-            chip_complex.set_initial_memory(initial_memory);
-        }
-        let air_names = chip_complex.air_names();
-
         Self {
             chip_complex,
-            vm_state,
-            final_memory: None,
             control,
-            air_names,
             trace_height_constraints,
             #[cfg(feature = "bench-metrics")]
             metrics: VmMetrics {
@@ -115,31 +114,35 @@ where
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated
-    pub fn execute_segment(&mut self) -> Result<(), ExecutionError> {
+    pub fn execute_from_state<'a>(
+        &mut self,
+        vm_state: &mut VmExecutionState<'a, Mem, Ctx>,
+    ) -> Result<(), ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         // Call the pre-execution hook
-        self.control.on_segment_start(&self.vm_state);
+        self.control.on_segment_start(vm_state);
 
-        while !self.vm_state.terminated && !self.should_stop() {
+        while !vm_state.terminated && !self.should_stop(vm_state) {
             // Fetch, decode and execute single instruction
-            self.execute_instruction(&mut prev_backtrace)?;
+            self.execute_instruction(vm_state, &mut prev_backtrace)?;
         }
 
         // Call the post-execution hook
-        self.control.on_segment_end(&self.vm_state);
+        self.control.on_segment_end(vm_state);
 
         Ok(())
     }
 
     /// Executes a single instruction and updates VM state
     // TODO: clean this up, separate to smaller functions
-    fn execute_instruction(
+    fn execute_instruction<'a>(
         &mut self,
+        vm_state: &mut VmExecutionState<'a, Mem, Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<(), ExecutionError> {
-        let pc = self.vm_state.pc;
-        let timestamp = self.vm_state.timestamp;
+        let pc = vm_state.pc;
+        let timestamp = self.chip_complex.memory_controller().timestamp();
 
         // Process an instruction and update VM state
         let (instruction, debug_info) = self.chip_complex.base.program_chip.get_instruction(pc)?;
@@ -164,7 +167,7 @@ where
                 ExecutionState::new(pc, timestamp),
                 Some(c.as_canonical_u32()),
             );
-            self.vm_state.terminated = true;
+            vm_state.terminated = true;
             return Ok(());
         }
 
@@ -200,8 +203,7 @@ where
         *prev_backtrace = trace.cloned();
 
         // Execute the instruction using the control implementation
-        self.control
-            .execute_instruction(&mut self.vm_state, instruction)?;
+        self.control.execute_instruction(vm_state, instruction)?;
 
         // Update metrics if enabled
         #[cfg(feature = "bench-metrics")]
@@ -214,13 +216,13 @@ where
     }
 
     /// Returns bool of whether to switch to next segment or not.
-    fn should_stop(&mut self) -> bool {
+    fn should_stop<'a>(&mut self, vm_state: &VmExecutionState<'a, Mem, Ctx>) -> bool {
         if !self.system_config().continuation_enabled {
             return false;
         }
 
         // Check with the execution control policy
-        self.control.should_stop(&self.vm_state)
+        self.control.should_stop(vm_state)
     }
 
     pub fn system_config(&self) -> &SystemConfig {
@@ -268,8 +270,9 @@ where
         if self.system_config().profiling {
             let executor = self.chip_complex.inventory.get_executor(opcode).unwrap();
             let opcode_name = executor.get_opcode_name(opcode.as_usize());
+            let air_names = self.chip_complex.air_names();
             self.metrics.update_trace_cells(
-                &self.air_names,
+                &air_names,
                 self.chip_complex.current_trace_cells(),
                 opcode_name,
                 dsl_instr,

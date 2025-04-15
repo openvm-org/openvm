@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
 
 use openvm_circuit::system::program::trace::compute_exe_commit;
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::{exe::VmExe, program::Program};
 use openvm_stark_backend::{
     config::{Com, Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
@@ -19,13 +19,18 @@ use thiserror::Error;
 use tracing::info_span;
 
 use super::{
-    ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
-    PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+    ExecutionError, VmChipComplex, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID,
+    MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, segment::ExecutionSegment},
+    arch::{
+        execution_control::{ExecutionControl, TracegenExecutionControl},
+        hasher::poseidon2::vm_poseidon2_hasher,
+        segment_new::TracegenVmSegmentExecutor,
+        TracegenCtx, TracegenVmExecutionState,
+    },
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
@@ -117,9 +122,40 @@ impl<F: PrimeField32> VmExecutorNextSegmentState<F> {
     }
 }
 
-pub struct VmExecutorOneSegmentResult<F: PrimeField32, VC: VmConfig<F>> {
-    pub segment: ExecutionSegment<F, VC>,
+pub struct VmExecutorOneSegmentResult<F, VC>
+where
+    F: PrimeField32,
+    VC: VmConfig<F>,
+{
+    pub segment: TracegenVmSegmentExecutor<F, VC>,
     pub next_state: Option<VmExecutorNextSegmentState<F>>,
+}
+
+/// Initialize chip complex with program, streams, and memory
+fn initialize_chip_complex<F, VC>(
+    config: &VC,
+    program: Program<F>,
+    init_streams: Streams<F>,
+    initial_memory: Option<MemoryImage>,
+) -> VmChipComplex<F, VC::Executor, VC::Periphery>
+where
+    F: PrimeField32,
+    VC: VmConfig<F>,
+{
+    let mut chip_complex = config.create_chip_complex().unwrap();
+    chip_complex.set_streams(init_streams);
+    let program = if !config.system().profiling {
+        program.strip_debug_infos()
+    } else {
+        program
+    };
+    chip_complex.set_program(program);
+
+    if let Some(initial_memory) = initial_memory {
+        chip_complex.set_initial_memory(initial_memory);
+    }
+
+    chip_complex
 }
 
 impl<F, VC> VmExecutor<F, VC>
@@ -163,7 +199,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        mut f: impl FnMut(usize, ExecutionSegment<F, VC>) -> Result<R, E>,
+        mut f: impl FnMut(usize, TracegenVmSegmentExecutor<F, VC>) -> Result<R, E>,
         map_err: impl Fn(ExecutionError) -> E,
     ) -> Result<Vec<R>, E> {
         let mem_config = self.config.system().memory_config;
@@ -203,7 +239,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
+    ) -> Result<Vec<TracegenVmSegmentExecutor<F, VC>>, ExecutionError> {
         self.execute_and_then(exe, input, |_, seg| Ok(seg), |err| err)
     }
 
@@ -217,11 +253,17 @@ where
         from_state: VmExecutorNextSegmentState<F>,
     ) -> Result<VmExecutorOneSegmentResult<F, VC>, ExecutionError> {
         let exe = exe.into();
-        let mut segment = ExecutionSegment::new(
+        let chip_complex = initialize_chip_complex(
             &self.config,
             exe.program.clone(),
             from_state.input,
             Some(from_state.memory),
+        );
+        // let control = TracegenExecutionControl::new(chip_complex);
+
+        let mut segment = TracegenVmSegmentExecutor::new(
+            chip_complex,
+            control,
             self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
         );
@@ -232,9 +274,17 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        let state = metrics_span("execute_time_ms", || segment.execute_from_pc(from_state.pc))?;
+        let timestamp = chip_complex.memory_controller().timestamp();
+        let mut vm_state = TracegenVmExecutionState::new(
+            from_state.pc,
+            &from_state.memory,
+            TracegenCtx::new(timestamp),
+        );
+        metrics_span("execute_time_ms", || {
+            segment.execute_from_state(&mut vm_state)
+        })?;
 
-        if state.is_terminated {
+        if vm_state.terminated {
             return Ok(VmExecutorOneSegmentResult {
                 segment,
                 next_state: None,
@@ -246,12 +296,12 @@ where
             "multiple segments require to enable continuations"
         );
         assert_eq!(
-            state.pc,
+            vm_state.pc,
             segment.chip_complex.connector_chip().boundary_states[1]
                 .unwrap()
                 .pc
         );
-        let final_memory = mem::take(&mut segment.final_memory)
+        let final_memory = mem::take(&mut segment.control.final_memory)
             .expect("final memory should be set in continuations segment");
         let streams = segment.chip_complex.take_streams();
         #[cfg(feature = "bench-metrics")]
@@ -261,7 +311,7 @@ where
             next_state: Some(VmExecutorNextSegmentState {
                 memory: final_memory,
                 input: streams,
-                pc: state.pc,
+                pc: vm_state.pc,
                 #[cfg(feature = "bench-metrics")]
                 metrics,
             }),
@@ -284,7 +334,7 @@ where
             |err| err,
         )?;
         let last = last.expect("at least one segment must be executed");
-        let final_memory = last.final_memory;
+        let final_memory = last.control.final_memory;
         let end_state =
             last.chip_complex.connector_chip().boundary_states[1].expect("end state must be set");
         if end_state.is_terminate != 1 {
@@ -344,7 +394,7 @@ where
             |seg_idx, mut seg| {
                 // Note: this will only be Some on the last segment; otherwise it is
                 // already moved into next segment state
-                final_memory = mem::take(&mut seg.final_memory);
+                final_memory = mem::take(&mut seg.control.final_memory);
                 tracing::info_span!("trace_gen", segment = seg_idx)
                     .in_scope(|| seg.generate_proof_input(committed_program.clone()))
             },
@@ -460,20 +510,29 @@ where
         &self,
         exe: VmExe<F>,
         input: impl Into<Streams<F>>,
-    ) -> Result<ExecutionSegment<F, VC>, ExecutionError> {
+    ) -> Result<TracegenVmSegmentExecutor<F, VC>, ExecutionError> {
         let pc_start = exe.pc_start;
-        let mut segment = ExecutionSegment::new(
-            &self.config,
-            exe.program.clone(),
-            input.into(),
-            None,
+        let mut chip_complex =
+            initialize_chip_complex(&self.config, exe.program.clone(), input.into(), None);
+        let control = TracegenExecutionControl::new(&mut chip_complex);
+        let mut segment = TracegenVmSegmentExecutor::new(
+            chip_complex,
+            control,
             self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
         );
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        metrics_span("execute_time_ms", || segment.execute_from_pc(pc_start))?;
+        let timestamp = chip_complex.memory_controller().timestamp();
+        let mut vm_state = TracegenVmExecutionState::new(
+            exe.pc_start,
+            &from_state.memory,
+            TracegenCtx::new(timestamp),
+        );
+        metrics_span("execute_time_ms", || {
+            segment.execute_from_state(&mut vm_state)
+        })?;
         Ok(segment)
     }
 }
