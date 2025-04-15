@@ -255,7 +255,7 @@ impl BabyBearChip {
         assert!(a.len() == b.len());
         assert!(a.len() == 4);
         let mut max_bits = 0;
-        let lb = if s > 3 { s - 3 } else { 0 };
+        let lb = s.saturating_sub(3);
         let ub = 4.min(s + 1);
         let range = lb..ub;
         let other_range = (s + 1 - ub)..(s + 1 - lb);

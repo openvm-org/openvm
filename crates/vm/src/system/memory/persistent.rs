@@ -103,7 +103,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             builder,
             iter::empty()
                 .chain(local.values.map(Into::into))
-                .chain(iter::repeat(AB::Expr::ZERO).take(CHUNK))
+                .chain(iter::repeat_n(AB::Expr::ZERO, CHUNK))
                 .chain(local.hash.map(Into::into)),
             local.expand_direction * local.expand_direction,
         );

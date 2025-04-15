@@ -254,7 +254,7 @@ impl<
         let need_range_check: Vec<AB::Var> = cols
             .rs_val
             .iter()
-            .chain(std::iter::repeat(&cols.rd_val).take(2))
+            .chain(std::iter::repeat_n(&cols.rd_val, 2))
             .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1])
             .collect();
 
@@ -531,7 +531,7 @@ pub(super) fn vec_heap_generate_trace_row_impl<
     // Range checks:
     let need_range_check: Vec<u32> = rs
         .iter()
-        .chain(std::iter::repeat(&rd).take(2))
+        .chain(std::iter::repeat_n(&rd, 2))
         .map(|record| {
             record
                 .data_at(RV32_REGISTER_NUM_LIMBS - 1)
