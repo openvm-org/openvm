@@ -48,13 +48,24 @@ This command can take ~20mins on a `m6a.16xlarge` instance due to the keygen tim
 Upon a successful run, the command will write the files
 
 - `agg.pk`
-- `verifier.sol`
-- `verifier.bytecode.json`
+- `halo2/Halo2Verifier.sol`
+- `halo2/OpenVmHalo2Verifier.sol`
+- `halo2/interfaces/IOpenVmHalo2Verifier.sol`
+- `halo2/verifier.bytecode.json`
 
 to `~/.openvm/`, where `~` is the directory specified by environment variable `$HOME`. Every command that requires these files will look for them in this directory.
 
 The `agg.pk` contains all aggregation proving keys necessary for aggregating to a final EVM proof.
-The `verifier.sol` file contains a Solidity contract to verify the final EVM proof. The contract is named `Halo2Verifier` and proof verification is the fallback function of the contract.
+The `OpenVmHalo2Verifier.sol` file contains a Solidity contract to verify the final EVM proof. The contract is named `OpenVmHalo2Verifier` and it implements the `IOpenVmHalo2Verifier` interface.
+
+```solidity
+interface IOpenVmHalo2Verifier {
+    function verify(bytes calldata publicValues, bytes calldata proofData, bytes32 appExeCommit, bytes32 appVmCommit)
+        external
+        view;
+}
+```
+
 In addition, the command outputs a JSON file `verifier.bytecode.json` of the form
 
 ```json
@@ -92,30 +103,26 @@ The EVM proof is written to `evm.proof` as a JSON of the following format:
 
 ```json
 {
-  "accumulators": "0x..",
-  "exe_commit": "0x..",
-  "leaf_commit": "0x..",
+  "app_exe_commit": "0x..",
+  "app_vm_commit": "0x..",
   "user_public_values": "0x..",
-  "proof": "0x.."
+  "proof_data": {
+    "accumulators": "0x..",
+    "proof": "0x.."
+  },
 }
 ```
 
 where each field is a hex string. We explain what each field represents:
 
-- `accumulators`: `12 * 32` bytes representing the KZG accumulator of the proof, where the proof is from a SNARK using the KZG commitment scheme.
-- `exe_commit`: `32` bytes for the commitment of the app executable.
-- `leaf_commit`: `32` bytes for the commitment of the executable verifying app VM proofs.
+- `app_exe_commit`: `32` bytes for the commitment of the app executable.
+- `app_vm_commit`: `32` bytes for the commitment of the app VM proofs.
 - `user_public_values`: concatenation of 32 byte chunks for user public values. The number of user public values is a configuration parameter.
+- `accumulators`: `12 * 32` bytes representing the KZG accumulator of the proof, where the proof is from a SNARK using the KZG commitment scheme.
 - `proof`: The rest of the proof required by the SNARK as a hex string of `43 * 32` bytes.
 
 ### EVM Proof: Calldata Format
 
 The `cargo openvm verify evm` command reads the EVM proof from JSON file and then simulates the call to the verifier contract using [Revm](https://github.com/bluealloy/revm/tree/main). This function should only be used for testing and development purposes but not for production.
 
-To verify the EVM proof in an EVM execution environment, the EVM proof must be formatted into calldata bytes and sent to the fallback function of the verifier smart contract. The calldata bytes are formed by concatenating the fields of the EVM proof described above in the following order and format:
-
-1. `accumulators`: every `32` bytes are _reversed_ from little endian to big endian and concatenated.
-2. `exe_commit`: the `32` bytes are _reversed_ from little endian to big endian.
-3. `leaf_commit`: the `32` bytes are _reversed_ from little endian to big endian.
-4. `user_public_values`: every `32` bytes are _reversed_ from little endian to big endian and concatenated.
-5. `proof`: The rest of the proof is treated as raw bytes and concatenated.
+To verify the EVM proof in an EVM execution environment, the JSON format can be passed 1-to-1 into the function arguments of the `verify` function. To construct the `proofData` argument, you can simply `abi.encodePacked(accumulators, proof)`.
