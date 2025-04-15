@@ -1,6 +1,3 @@
-// TODO: Only use AddressMap/PagedVec
-//       Add metric counter for gas metering, figure out what else to add
-//       Proper benchmarking, profiling - close feedback loop
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
@@ -18,8 +15,8 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    ExecutionError, GenerationError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
-    VmConfig,
+    execution_control::ExecutionControl, ExecutionError, GenerationError, Streams, SystemConfig,
+    VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -27,12 +24,6 @@ use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
     system::memory::{online::GuestMemory, MemoryImage},
 };
-
-/// Check segment every 100 instructions.
-const SEGMENT_CHECK_INTERVAL: usize = 100;
-
-/// Prepared instruction type for efficient execution
-pub type PInstruction = Instruction<u32>;
 
 /// Represents the state of the VM during execution
 pub struct VmExecutionState<Mem, Ctx>
@@ -50,98 +41,6 @@ where
     pub memory: Mem,
     /// Host-specific execution context
     pub ctx: Ctx,
-}
-
-/// Trait for instruction execution
-// TODO: Change to PInstruction only
-pub trait InsExecutor<Mem, Ctx, F>
-where
-    Mem: GuestMemory,
-{
-    fn execute(
-        &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError>
-    where
-        F: PrimeField32;
-}
-
-/// Trait for execution control, determining segmentation and stopping conditions
-pub trait ExecutionControl<Mem, Ctx, F>
-where
-    Mem: GuestMemory,
-    F: PrimeField32,
-{
-    /// Determines if execution should stop
-    fn should_stop(state: &VmExecutionState<Mem, Ctx>) -> bool;
-    // /// Counter for segment checking
-    // since_last_segment_check: usize,
-    // // Avoid checking segment too often.
-    // if self.since_last_segment_check < SEGMENT_CHECK_INTERVAL {
-    //     self.since_last_segment_check += 1;
-    //     return false;
-    // }
-    // // Reset counter after checking
-    // self.since_last_segment_check = 0;
-    // let cell_counts = self.chip_complex.current_trace_cells();
-
-    /// Called before segment execution begins
-    fn on_segment_start<E, P>(
-        chip_complex: &mut VmChipComplex<F, E, P>,
-        vm_state: &VmExecutionState<Mem, Ctx>,
-    );
-    // self.chip_complex
-    //     .connector_chip_mut()
-    //     .begin(ExecutionState::new(
-    //         self.vm_state.pc,
-    //         self.vm_state.timestamp,
-    //     ));
-
-    /// Called after segment execution completes
-    fn on_segment_end<E, P>(
-        chip_complex: &mut VmChipComplex<F, E, P>,
-        vm_state: &VmExecutionState<Mem, Ctx>,
-        final_memory: &mut Option<MemoryImage>,
-    );
-    // // End the current segment with connector chip
-    // self.chip_complex.connector_chip_mut().end(
-    //     ExecutionState::new(self.vm_state.pc, self.vm_state.timestamp),
-    //     None,
-    // );
-    // self.final_memory = Some(
-    //     self.chip_complex
-    //         .base
-    //         .memory_controller
-    //         .memory_image()
-    //         .clone(),
-    // );
-
-    /// Get an executor for the given instruction
-    fn get_instruction_executor(
-        &self,
-        opcode: VmOpcode,
-    ) -> Option<&mut dyn InsExecutor<Mem, Ctx, F>>;
-
-    /// Execute a single instruction
-    fn execute_instruction(
-        &self,
-        vm_state: &mut VmExecutionState<Mem, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let &Instruction { opcode, .. } = instruction;
-
-        if let Some(executor) = self.get_instruction_executor(opcode) {
-            executor.execute(vm_state, instruction)?;
-        } else {
-            return Err(ExecutionError::DisabledOperation {
-                pc: vm_state.pc,
-                opcode,
-            });
-        };
-
-        Ok(())
-    }
 }
 
 pub struct VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
@@ -175,6 +74,7 @@ where
     Ctrl: ExecutionControl<Mem, Ctx, F>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: &VC,
         program: Program<F>,
@@ -214,23 +114,12 @@ where
         }
     }
 
-    pub fn system_config(&self) -> &SystemConfig {
-        self.chip_complex.config()
-    }
-
-    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
-        self.chip_complex
-            .set_override_system_trace_heights(overridden_heights.system);
-        self.chip_complex
-            .set_override_inventory_trace_heights(overridden_heights.inventory);
-    }
-
     /// Stopping is triggered by should_stop() or if VM is terminated
     pub fn execute_segment(&mut self) -> Result<(), ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         // Call the pre-execution hook
-        Ctrl::on_segment_start(&mut self.chip_complex, &self.vm_state);
+        self.control.on_segment_start(&self.vm_state);
 
         while !self.vm_state.terminated && !self.should_stop() {
             // Fetch, decode and execute single instruction
@@ -238,11 +127,7 @@ where
         }
 
         // Call the post-execution hook
-        Ctrl::on_segment_end(
-            &mut self.chip_complex,
-            &self.vm_state,
-            &mut self.final_memory,
-        );
+        self.control.on_segment_end(&self.vm_state);
 
         Ok(())
     }
@@ -335,7 +220,18 @@ where
         }
 
         // Check with the execution control policy
-        Ctrl::should_stop(&self.vm_state)
+        self.control.should_stop(&self.vm_state)
+    }
+
+    pub fn system_config(&self) -> &SystemConfig {
+        self.chip_complex.config()
+    }
+
+    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
+        self.chip_complex
+            .set_override_system_trace_heights(overridden_heights.system);
+        self.chip_complex
+            .set_override_inventory_trace_heights(overridden_heights.inventory);
     }
 
     // TODO: not sure what to do of these
@@ -385,6 +281,29 @@ where
     }
 }
 
+// TODO: Only use AddressMap/PagedVec
+//       Add metric counter for gas metering, figure out what else to add
+//       Proper benchmarking, profiling - close feedback loop
+//
+// /// Prepared instruction type for efficient execution
+// pub type PInstruction = Instruction<u32>;
+
+// // TODO: move to instruction.rs
+// /// Trait for instruction execution
+// pub trait InsExecutor<Mem, Ctx, F>
+// where
+//     Mem: GuestMemory,
+// {
+//     fn execute(
+//         &mut self,
+//         state: &mut VmExecutionState<Mem, Ctx>,
+//         // TODO: Change to PInstruction
+//         instruction: &Instruction<F>,
+//     ) -> Result<(), ExecutionError>
+//     where
+//         F: PrimeField32;
+// }
+//
 // /// Trait for context with timestamp tracking
 // pub trait Temporal {
 //     fn timestamp(&self) -> u32;
