@@ -152,6 +152,17 @@ where
         }
     }
 
+    pub fn system_config(&self) -> &SystemConfig {
+        self.chip_complex.config()
+    }
+
+    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
+        self.chip_complex
+            .set_override_system_trace_heights(overridden_heights.system);
+        self.chip_complex
+            .set_override_inventory_trace_heights(overridden_heights.inventory);
+    }
+
     /// Stopping is triggered by should_stop() or if VM is terminated
     pub fn execute_from_state(
         &mut self,
@@ -264,17 +275,6 @@ where
 
         // Check with the execution control policy
         self.control.should_stop(vm_state, &self.chip_complex)
-    }
-
-    pub fn system_config(&self) -> &SystemConfig {
-        self.chip_complex.config()
-    }
-
-    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
-        self.chip_complex
-            .set_override_system_trace_heights(overridden_heights.system);
-        self.chip_complex
-            .set_override_inventory_trace_heights(overridden_heights.inventory);
     }
 
     // TODO(ayush): not sure what to do of these
