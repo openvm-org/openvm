@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     air_builders::{debug::DebugConstraintBuilder, symbolic::SymbolicRapBuilder},
     config::{StarkGenericConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
@@ -232,6 +232,65 @@ pub trait SingleTraceStep<F, CTX> {
     ///
     /// The provided `row_slice` will have length equal to the width of the AIR.
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]);
+}
+
+pub struct NewVmChipWrapper<F, Air, C> {
+    pub air: Air,
+    pub inner: C,
+    pub trace_buffer: Vec<F>,
+    width: usize,
+    buffer_idx: usize,
+}
+
+impl<F, Air, C> NewVmChipWrapper<F, Air, C>
+where
+    F: Field,
+    Air: BaseAir<F>,
+{
+    pub fn new(air: Air, inner: C, height: usize) -> Self {
+        let width = air.width();
+        let trace_buffer = F::zero_vec(height * width);
+        Self {
+            air,
+            inner,
+            trace_buffer,
+            width,
+            buffer_idx: 0,
+        }
+    }
+}
+
+impl<F, Air, C> InstructionExecutor<F> for NewVmChipWrapper<F, Air, C>
+where
+    F: PrimeField32,
+    C: SingleTraceStep<F, ()>,
+{
+    fn execute(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        instruction: &Instruction<F>,
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        let mut pc = from_state.pc;
+        let state = VmStateMut {
+            pc: &mut pc,
+            memory: &mut memory.memory,
+            ctx: &mut (),
+        };
+        let start_idx = self.buffer_idx;
+        self.buffer_idx += self.width;
+        let row_slice = &mut self.trace_buffer[start_idx..self.buffer_idx];
+        self.inner.execute(state, instruction, row_slice)?;
+        Ok(ExecutionState {
+            pc,
+            timestamp: memory.memory.timestamp,
+        })
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        "NewWrapper".to_string()
+        // self.inner.get_opcode_name(opcode)
+    }
 }
 
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {

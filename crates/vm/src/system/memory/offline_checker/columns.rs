@@ -1,6 +1,8 @@
 //! Defines auxiliary columns for memory operations: `MemoryReadAuxCols`,
 //! `MemoryReadWithImmediateAuxCols`, and `MemoryWriteAuxCols`.
 
+use std::ops::DerefMut;
+
 use openvm_circuit_primitives::is_less_than::LessThanAuxCols;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -104,5 +106,11 @@ impl<T, const N: usize> AsRef<MemoryReadAuxCols<T>> for MemoryWriteAuxCols<T, N>
         //  - Thus, the memory layout of `MemoryWriteAuxCols<T, N>` begins with a valid
         //    `MemoryReadAuxCols<T>`.
         unsafe { &*(self as *const MemoryWriteAuxCols<T, N> as *const MemoryReadAuxCols<T>) }
+    }
+}
+
+impl<T, const N: usize> AsMut<MemoryBaseAuxCols<T>> for MemoryWriteAuxCols<T, N> {
+    fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
+        &mut self.base
     }
 }

@@ -337,14 +337,14 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
         let local_opcode =
             Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        let (mem_ptr_read, mem_ptr_limbs) =
-            memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, mem_ptr_ptr);
+        let (mem_ptr_read, mem_ptr_limbs) = todo!();
+        // memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, mem_ptr_ptr);
         let (num_words, num_words_read) = if local_opcode == HINT_STOREW {
             memory.increment_timestamp();
             (1, None)
         } else {
-            let (num_words_read, num_words_limbs) =
-                memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, num_words_ptr);
+            let (num_words_read, num_words_limbs) = todo!();
+            // memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, num_words_ptr);
             (u32::from_le_bytes(num_words_limbs), Some(num_words_read))
         };
         debug_assert_ne!(num_words, 0);
@@ -377,12 +377,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for Rv32HintStoreChip<F> {
 
             let data: [F; RV32_REGISTER_NUM_LIMBS] =
                 std::array::from_fn(|_| streams.hint_stream.pop_front().unwrap());
-            let (write, _) = memory.write(
-                e,
-                F::from_canonical_u32(mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index)),
-                &tmp_convert_to_u8s(data),
-            );
-            record.hints.push((data, write));
+            // let (write, _) = memory.write(
+            //     e,
+            //     F::from_canonical_u32(mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index)),
+            //     &tmp_convert_to_u8s(data),
+            // );
+            // record.hints.push((data, write));
         }
 
         self.height += record.hints.len();

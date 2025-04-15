@@ -130,14 +130,6 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.rng.next_u32() % (1 << (F::bits() - 2))
     }
 
-    pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        self.memory.read_cell(address_space, pointer)
-    }
-
-    pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        self.memory.write_cell(address_space, pointer, value);
-    }
-
     pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
         self.memory.read(address_space, pointer)
     }
@@ -185,7 +177,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 
     pub fn memory_bus(&self) -> MemoryBus {
-        self.memory.bus
+        self.memory.controller.borrow().memory_bus
     }
 
     pub fn memory_controller(&self) -> Rc<RefCell<MemoryController<F>>> {
@@ -198,6 +190,11 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn memory_bridge(&self) -> MemoryBridge {
         self.memory.controller.borrow().memory_bridge()
+    }
+
+    // TODO: delete
+    pub fn offline_memory_mutex_arc(&self) -> Arc<Mutex<OfflineMemory<F>>> {
+        self.memory_controller().borrow().offline_memory().clone()
     }
 
     pub fn address_bits(&self) -> usize {
@@ -324,16 +321,20 @@ where
         if let Some(memory_tester) = self.memory.take() {
             let memory_controller = memory_tester.controller.clone();
             let range_checker = memory_controller.borrow().range_checker.clone();
-            self = self.load(memory_tester); // dummy memory interactions
+            // dummy memory interactions:
+            for mem_chip in memory_tester.chip_for_block.into_values() {
+                self = self.load(mem_chip);
+            }
             {
-                let airs = memory_controller.borrow().airs();
-                let air_proof_inputs = Rc::try_unwrap(memory_controller)
-                    .unwrap_or_else(|_| panic!("Memory controller was not dropped"))
-                    .into_inner()
-                    .generate_air_proof_inputs();
-                self.air_proof_inputs.extend(
-                    zip(airs, air_proof_inputs).filter(|(_, input)| input.main_trace_height() > 0),
-                );
+                // todo: boundary and adapter stuff
+                // let airs = memory_controller.borrow().airs();
+                // let air_proof_inputs = Rc::try_unwrap(memory_controller)
+                //     .unwrap_or_else(|_| panic!("Memory controller was not dropped"))
+                //     .into_inner()
+                //     .generate_air_proof_inputs();
+                // self.air_proof_inputs.extend(
+                //     zip(airs, air_proof_inputs).filter(|(_, input)| input.main_trace_height() >
+                // 0), );
             }
             self = self.load(range_checker); // this must be last because other trace generation
                                              // mutates its state

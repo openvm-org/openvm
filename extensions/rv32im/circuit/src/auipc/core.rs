@@ -1,13 +1,13 @@
 use std::{
     array,
+    array::from_fn,
     borrow::{Borrow, BorrowMut},
-    iter::from_fn,
 };
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, SingleTraceStep,
-        VmAdapterInterface, VmCoreAir, VmCoreChip, VmState,
+        AdapterAirContext, ImmInstruction, Result, SingleTraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
@@ -218,10 +218,10 @@ impl Rv32AuipcCoreChip {
     }
 }
 
-impl<F: PrimeField32, CTX> SingleTraceStep for Rv32AuipcCoreChip {
+impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
     fn execute(
         &mut self,
-        state: &mut VmState<TracingMemory, CTX>,
+        state: VmStateMut<TracingMemory, CTX>,
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {
@@ -231,24 +231,24 @@ impl<F: PrimeField32, CTX> SingleTraceStep for Rv32AuipcCoreChip {
 
         let from_timestamp = state.memory.timestamp;
         let imm = instruction.c.as_canonical_u32();
-        let rd_data = run_auipc(Rv32AuipcOpcode::AUIPC, state.pc, imm);
+        let rd_data = run_auipc(Rv32AuipcOpcode::AUIPC, *state.pc, imm);
 
         debug_assert_eq!(instruction.d.as_canonical_u32(), RV32_REGISTER_AS);
         let rd_ptr = instruction.a.as_canonical_u32();
-        let (t_prev, data_prev) = tracing_write_reg(&mut state.memory, rd_ptr, &rd_data);
+        let (t_prev, data_prev) = tracing_write_reg(state.memory, rd_ptr, &rd_data);
         // TODO: store as u32 directly
-        adapter_row.from_state.pc = F::from_canonical_u32(state.pc);
+        adapter_row.from_state.pc = F::from_canonical_u32(*state.pc);
         adapter_row.from_state.timestamp = F::from_canonical_u32(from_timestamp);
         adapter_row.rd_ptr = instruction.a;
         adapter_row.rd_aux_cols.set_prev(
             F::from_canonical_u32(t_prev),
-            F::from_canonical_u32(data_prev),
+            data_prev.map(F::from_canonical_u8),
         );
         core_row.rd_data = rd_data.map(F::from_canonical_u8);
         // We decompose during generate trace later:
         core_row.imm_limbs[0] = instruction.c;
 
-        state.pc += DEFAULT_PC_STEP;
+        *state.pc += DEFAULT_PC_STEP;
         Ok(())
     }
 
@@ -259,7 +259,7 @@ impl<F: PrimeField32, CTX> SingleTraceStep for Rv32AuipcCoreChip {
         core_row.is_valid = F::ONE;
 
         let timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
-        mem_helper.fill_from_prev(timestamp, &mut adapter_row.rd_aux_cols);
+        mem_helper.fill_from_prev(timestamp, adapter_row.rd_aux_cols.as_mut());
 
         let from_pc = adapter_row.from_state.pc.as_canonical_u32();
         let pc_limbs = from_pc.to_le_bytes();
