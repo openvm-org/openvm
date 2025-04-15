@@ -1,10 +1,11 @@
 use std::{fs::read, marker::PhantomData, path::Path, sync::Arc};
 
 #[cfg(feature = "evm-verify")]
-use alloy_primitives::{Bytes, FixedBytes};
-#[cfg(feature = "evm-verify")]
-use alloy_sol_types::{sol, SolCall, SolValue};
+use alloy_sol_types::sol;
+use commit::commit_app_exe;
+use config::{AggregationTreeConfig, AppConfig};
 use eyre::Result;
+use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
@@ -41,9 +42,8 @@ use openvm_transpiler::{
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
 
 use crate::{
-    commit::commit_app_exe,
-    config::{AggConfig, AggregationTreeConfig, AppConfig},
-    keygen::{AggProvingKey, AggStarkProvingKey, AppProvingKey, AppVerifyingKey},
+    config::AggConfig,
+    keygen::{AggProvingKey, AggStarkProvingKey},
     prover::{AppProver, StarkProver},
 };
 #[cfg(feature = "evm-prove")]
@@ -411,55 +411,9 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
     pub fn verify_evm_halo2_proof(
         &self,
         openvm_verifier: &types::EvmHalo2Verifier,
-        evm_proof: &EvmProof,
+        evm_proof: EvmProof,
     ) -> Result<u64> {
-        use crate::types::NUM_BN254_ACCUMULATORS;
-
-        let EvmProof {
-            accumulators,
-            proof,
-            user_public_values,
-            exe_commit,
-            leaf_commit,
-        } = evm_proof;
-        let mut exe_commit = *exe_commit;
-        let mut leaf_commit = *leaf_commit;
-        exe_commit.reverse();
-        leaf_commit.reverse();
-
-        assert_eq!(accumulators.len(), NUM_BN254_ACCUMULATORS * 32);
-        let mut evm_accumulators: Vec<u8> = Vec::with_capacity(accumulators.len());
-        accumulators
-            .chunks(32)
-            .for_each(|chunk| evm_accumulators.extend(chunk.iter().rev().cloned()));
-
-        let mut proof_data = evm_accumulators;
-        proof_data.extend(proof);
-
-        assert!(
-            user_public_values.len() % 32 == 0,
-            "User public values length must be a multiple of 32"
-        );
-
-        // Take the first byte of each 32 byte chunk, and pack them together
-        // into one payload.
-        let user_public_values: Bytes =
-            user_public_values
-                .chunks(32)
-                .fold(Vec::<u8>::new().into(), |acc: Bytes, chunk| {
-                    // We only care about the first byte, everything else should be 0-bytes
-                    (acc, FixedBytes::<1>::from(*chunk.first().unwrap()))
-                        .abi_encode_packed()
-                        .into()
-                });
-
-        let calldata = IOpenVmHalo2Verifier::verifyCall {
-            publicValues: user_public_values.clone(),
-            proofData: proof_data.into(),
-            appExeCommit: exe_commit.into(),
-            appVmCommit: leaf_commit.into(),
-        }
-        .abi_encode();
+        let calldata = evm_proof.verifier_calldata();
         let deployment_code = openvm_verifier.artifact.bytecode.clone();
 
         let gas_cost = snark_verifier::loader::evm::deploy_and_call(deployment_code, calldata)

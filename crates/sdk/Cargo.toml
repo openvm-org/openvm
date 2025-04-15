@@ -34,7 +34,6 @@ openvm-circuit = { workspace = true }
 openvm-continuations = { workspace = true }
 openvm = { workspace = true }
 
-alloy-primitives = { workspace = true, optional = true }
 alloy-sol-types = { workspace = true, optional = true, features = ["json"] }
 bitcode = { workspace = true }
 bon = { workspace = true }
@@ -62,7 +61,6 @@ evm-prove = ["openvm-native-recursion/evm-prove"]
 evm-verify = [
     "evm-prove",
     "openvm-native-recursion/evm-verify",
-    "dep:alloy-primitives",
     "dep:alloy-sol-types",
 ]
 bench-metrics = [

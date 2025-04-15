@@ -108,7 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // 11. Verify the EVM proof
-    sdk.verify_evm_halo2_proof(&verifier, &proof)?;
+    sdk.verify_evm_halo2_proof(&verifier, proof)?;
     // ANCHOR_END: evm_verification
 
     Ok(())

@@ -457,7 +457,7 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
         .unwrap();
 
     verify_evm_halo2_proof_with_fallback(&evm_verifier, &evm_proof).unwrap();
-    sdk.verify_evm_halo2_proof(&evm_verifier, &evm_proof)
+    sdk.verify_evm_halo2_proof(&evm_verifier, evm_proof)
         .unwrap();
 }
 

@@ -51,7 +51,7 @@ impl VerifyCmd {
                     eyre::eyre!("Failed to read EVM verifier: {}\nPlease run 'cargo openvm evm-proving-setup' first", e)
                 })?;
                 let evm_proof = read_evm_proof_from_file(proof)?;
-                sdk.verify_evm_halo2_proof(&evm_verifier, &evm_proof)?;
+                sdk.verify_evm_halo2_proof(&evm_verifier, evm_proof)?;
             }
         }
         Ok(())

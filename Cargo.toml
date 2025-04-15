@@ -188,7 +188,6 @@ snark-verifier = { version = "0.2.0", default-features = false }
 halo2curves-axiom = "0.7.0"
 
 cargo_metadata = "0.18"
-alloy-primitives = "0.8.25"
 alloy-sol-types = "0.8.25"
 tracing = "0.1.40"
 bon = "3.2.0"
