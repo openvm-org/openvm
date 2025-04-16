@@ -137,7 +137,7 @@ impl VmMetrics {
 
         for ((dsl_ir, opcode), value) in self.counts.iter() {
             let labels = [
-                ("dsl_ir", dsl_ir.clone().unwrap_or_else(String::new)),
+                ("dsl_ir", dsl_ir.clone().unwrap_or("-".to_string())),
                 ("opcode", opcode.clone()),
             ];
             counter!("frequency", &labels).absolute(*value as u64);
@@ -145,7 +145,7 @@ impl VmMetrics {
 
         for ((dsl_ir, opcode, air_name), value) in self.trace_cells.iter() {
             let labels = [
-                ("dsl_ir", dsl_ir.clone().unwrap_or_else(String::new)),
+                ("dsl_ir", dsl_ir.clone().unwrap_or("-".to_string())),
                 ("opcode", opcode.clone()),
                 ("air_name", air_name.clone()),
             ];

@@ -56,7 +56,7 @@ mod emit {
         pub fn increment_opcode(&self, (dsl_ir, opcode): &(Option<String>, String)) {
             let labels = [
                 ("opcode", opcode.clone()),
-                ("dsl_ir", dsl_ir.clone().unwrap_or_default()),
+                ("dsl_ir", dsl_ir.clone().unwrap_or("-".to_string())),
                 ("cycle_tracker_span", self.get_full_name()),
             ];
             counter!("frequency", &labels).increment(1u64);
@@ -73,7 +73,7 @@ mod emit {
             let labels = [
                 ("air_name", air_name.clone()),
                 ("opcode", opcode.clone()),
-                ("dsl_ir", dsl_ir.clone().unwrap_or_default()),
+                ("dsl_ir", dsl_ir.clone().unwrap_or("-".to_string())),
                 ("cycle_tracker_span", self.get_full_name()),
             ];
             counter!("cells_used", &labels).increment(trace_cells_used as u64);
