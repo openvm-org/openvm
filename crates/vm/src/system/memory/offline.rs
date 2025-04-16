@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashSet;
 
-use super::{AddressMap, PagedVec, PAGE_SIZE};
+use super::{AddressMap, PagedVec, SharedMemoryHelper, PAGE_SIZE};
 use crate::{
     arch::MemoryConfig,
     system::memory::{

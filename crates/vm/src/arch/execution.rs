@@ -66,6 +66,8 @@ pub enum ExecutionError {
     DidNotTerminate,
     #[error("program exit code {0}")]
     FailedWithExitCode(u32),
+    #[error("trace buffer out of bounds: requested {requested} but capacity is {capacity}")]
+    TraceBufferOutOfBounds { requested: usize, capacity: usize },
 }
 
 /// Global VM state accessible during instruction execution.

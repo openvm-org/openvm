@@ -55,13 +55,7 @@ fn set_and_execute(
         _ => unreachable!(),
     };
     let ptr_val = rng.gen_range(
-        0..(1
-            << (tester
-                .memory_controller()
-                .borrow()
-                .mem_config()
-                .pointer_max_bits
-                - alignment)),
+        0..(1 << (tester.memory_controller().mem_config().pointer_max_bits - alignment)),
     ) << alignment;
 
     let rs1 = rs1
@@ -128,7 +122,7 @@ fn rand_load_sign_extend_test() {
     setup_tracing();
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let range_checker_chip = tester.memory_controller().range_checker.clone();
     let adapter = Rv32LoadStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -190,7 +184,7 @@ fn run_negative_loadstore_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let range_checker_chip = tester.memory_controller().range_checker.clone();
     let adapter = Rv32LoadStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
@@ -298,7 +292,7 @@ fn loadstore_negative_tests() {
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let range_checker_chip = tester.memory_controller().range_checker.clone();
     let adapter = Rv32LoadStoreAdapterChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),

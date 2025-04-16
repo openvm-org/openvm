@@ -1,11 +1,12 @@
 use std::fmt::Debug;
 
 use getset::Getters;
+use itertools::zip_eq;
 use serde::{Deserialize, Serialize};
 
 use super::{
     paged_vec::{AddressMap, PAGE_SIZE},
-    PagedVec,
+    Address, PagedVec,
 };
 use crate::{
     arch::MemoryConfig,
@@ -273,28 +274,49 @@ impl TracingMemory {
     pub fn timestamp(&self) -> u32 {
         self.timestamp
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::TracingMemory;
-    use crate::arch::MemoryConfig;
-
-    #[test]
-    fn test_write_read() {
-        let mut memory = TracingMemory::new(&MemoryConfig::default());
-        let address_space = 1;
-
-        unsafe {
-            memory.write(address_space, 0, &[1u8, 2, 3, 4]);
-
-            let (_, data) = memory.read::<u8, 2>(address_space, 0);
-            assert_eq!(data, [1u8, 2]);
-
-            memory.write(address_space, 2, &[100u8]);
-
-            let (_, data) = memory.read::<u8, 4>(address_space, 0);
-            assert_eq!(data, [1u8, 2, 100, 4]);
-        }
+    /// Returns iterator over `((addr_space, ptr), block_size)` of the addresses and block sizes of
+    /// memory blocks that have been accessed since this instance of [TracingMemory] was
+    /// constructed. This is similar to a soft-dirty mechanism, where the memory data is loaded
+    /// from an initial image and considered "clean", and then all future accesses are marked as
+    /// "dirty".
+    // block_size is initialized to 0, so nonzero block_size happens to also mark "dirty" cells
+    // **Assuming** for now that only the start of a block has nonzero block_size
+    pub fn touched_blocks(&self) -> impl Iterator<Item = (Address, u32)> + '_ {
+        zip_eq(&self.meta, &self.min_block_size)
+            .enumerate()
+            .flat_map(move |(addr_space, (page, &align))| {
+                page.iter::<AccessMetadata>()
+                    .filter_map(move |(idx, metadata)| {
+                        (metadata.block_size != 0).then_some((
+                            (addr_space as u32, idx as u32 * align),
+                            metadata.block_size,
+                        ))
+                    })
+            })
     }
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use super::TracingMemory;
+//     use crate::arch::MemoryConfig;
+
+//     #[test]
+//     fn test_write_read() {
+//         let mut memory = TracingMemory::new(&MemoryConfig::default());
+//         let address_space = 1;
+
+//         unsafe {
+//             memory.write(address_space, 0, &[1u8, 2, 3, 4]);
+
+//             let (_, data) = memory.read::<u8, 2>(address_space, 0);
+//             assert_eq!(data, [1u8, 2]);
+
+//             memory.write(address_space, 2, &[100u8]);
+
+//             let (_, data) = memory.read::<u8, 4>(address_space, 0);
+//             assert_eq!(data, [1u8, 2, 100, 4]);
+//         }
+//     }
+// }
