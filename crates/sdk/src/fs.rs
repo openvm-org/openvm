@@ -118,10 +118,12 @@ pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<
 ///
 /// ```text
 /// halo2/
-/// ├── interfaces/
-/// │   └── IOpenVmHalo2Verifier.sol
-/// ├── OpenVmHalo2Verifier.sol
-/// └── Halo2Verifier.sol
+/// └── src/
+///     └── v[OPENVM_VERSION]/
+///         ├── interfaces/
+///         │   └── IOpenVmHalo2Verifier.sol
+///         ├── OpenVmHalo2Verifier.sol
+///         └── Halo2Verifier.sol
 /// ```
 ///
 /// If the relevant directories do not exist, they will be created.
@@ -129,9 +131,12 @@ pub fn write_evm_halo2_verifier_to_folder<P: AsRef<Path>>(
     verifier: EvmHalo2Verifier,
     folder: P,
 ) -> Result<()> {
-    let folder = folder.as_ref();
+    let folder = folder
+        .as_ref()
+        .join("src")
+        .join(format!("v{}", env!("CARGO_PKG_VERSION")));
     if !folder.exists() {
-        create_dir_all(folder)?; // Make sure directories exist
+        create_dir_all(&folder)?; // Make sure directories exist
     }
 
     let halo2_verifier_code_path = folder.join(EVM_HALO2_VERIFIER_PARENT_NAME);

@@ -295,7 +295,8 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
     ) -> Result<types::EvmHalo2Verifier> {
         use std::{
             fs::{create_dir_all, write},
-            process::Command,
+            io::Write,
+            process::{Command, Stdio},
         };
 
         use eyre::Context;
@@ -304,6 +305,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             QuoteStyle, SingleLineBlockStyle,
         };
         use openvm_native_recursion::halo2::wrapper::EvmVerifierByteCode;
+        use serde_json::{json, Value};
         use snark_verifier::halo2_base::halo2_proofs::poly::commitment::Params;
         use snark_verifier_sdk::SHPLONK;
         use tempfile::tempdir;
@@ -344,10 +346,12 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             "OpenVM Halo2 verifier contract does not support more than 8192 public values"
         );
 
+        let openvm_version = env!("CARGO_PKG_VERSION");
+
         // Fill out the public values length and OpenVM version in the template
         let openvm_verifier_code = EVM_HALO2_VERIFIER_TEMPLATE
             .replace("{PUBLIC_VALUES_LENGTH}", &pvs_length.to_string())
-            .replace("{OPENVM_VERSION}", env!("CARGO_PKG_VERSION"));
+            .replace("{OPENVM_VERSION}", openvm_version);
 
         let formatter_config = FormatterConfig {
             line_length: 120,
@@ -397,38 +401,82 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         // Create temp dir
         let temp_dir = tempdir().wrap_err("Failed to create temp dir")?;
         let temp_path = temp_dir.path();
+        let root_path = Path::new("src").join(format!("v{}", openvm_version));
 
         // Make interfaces dir
-        let interfaces_path = temp_path.join("interfaces");
-        create_dir_all(&interfaces_path)?;
+        let interfaces_path = root_path.join("interfaces");
+
+        // This will also create the dir for root_path, so no need to explicitly
+        // create it
+        create_dir_all(temp_path.join(&interfaces_path))?;
+
+        let interface_file_path = interfaces_path.join(EVM_HALO2_VERIFIER_INTERFACE_NAME);
+        let parent_file_path = root_path.join(EVM_HALO2_VERIFIER_PARENT_NAME);
+        let base_file_path = root_path.join(EVM_HALO2_VERIFIER_BASE_NAME);
 
         // Write the files to the temp dir. This is only for compilation
         // purposes.
+        write(temp_path.join(&interface_file_path), &formatted_interface)?;
         write(
-            interfaces_path.join(EVM_HALO2_VERIFIER_INTERFACE_NAME),
-            &formatted_interface,
-        )?;
-        write(
-            temp_path.join(EVM_HALO2_VERIFIER_PARENT_NAME),
+            temp_path.join(&parent_file_path),
             &formatted_halo2_verifier_code,
         )?;
         write(
-            temp_path.join(EVM_HALO2_VERIFIER_BASE_NAME),
+            temp_path.join(&base_file_path),
             &formatted_openvm_verifier_code,
         )?;
 
         // Run solc from the temp dir
-        let output = Command::new("solc")
+        let solc_input = json!({
+            "language": "Solidity",
+            "sources": {
+                interface_file_path.to_str().unwrap(): {
+                    "content": formatted_interface
+                },
+                parent_file_path.to_str().unwrap(): {
+                    "content": formatted_halo2_verifier_code
+                },
+                base_file_path.to_str().unwrap(): {
+                    "content": formatted_openvm_verifier_code
+                }
+            },
+            "settings": {
+                "remappings": ["forge-std/=lib/forge-std/src/"],
+                "optimizer": {
+                    "enabled": true,
+                    "runs": 100000,
+                    "details": {
+                        "constantOptimizer": false,
+                        "yul": false
+                    }
+                },
+                "evmVersion": "paris",
+                "viaIR": false,
+                "outputSelection": {
+                    "*": {
+                        "*": ["metadata", "evm.bytecode.object"]
+                    }
+                }
+            }
+        });
+
+        let mut child = Command::new("solc")
             .current_dir(temp_path)
-            .arg(EVM_HALO2_VERIFIER_BASE_NAME)
-            .arg("--no-optimize-yul")
-            .arg("--bin")
-            .arg("--optimize")
-            .arg("--optimize-runs")
-            .arg("100000")
-            .arg("--evm-version")
-            .arg("paris")
-            .output()?;
+            .arg("--standard-json")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn solc");
+
+        child
+            .stdin
+            .as_mut()
+            .expect("Failed to open stdin")
+            .write_all(solc_input.to_string().as_bytes())
+            .expect("Failed to write to stdin");
+
+        let output = child.wait_with_output().expect("Failed to read output");
 
         if !output.status.success() {
             eyre::bail!(
@@ -438,10 +486,30 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             );
         }
 
-        let bytecode = extract_binary(
-            &output.stdout,
-            "OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier",
-        );
+        let parsed: Value = serde_json::from_slice(&output.stdout)?;
+
+        let bytecode = parsed
+            .get("contracts")
+            .expect("No 'contracts' field found")
+            .get(format!("src/v{}/OpenVmHalo2Verifier.sol", openvm_version))
+            .unwrap_or_else(|| {
+                panic!(
+                    "No 'src/v{}/OpenVmHalo2Verifier.sol' field found",
+                    openvm_version
+                )
+            })
+            .get("OpenVmHalo2Verifier")
+            .expect("No 'OpenVmHalo2Verifier' field found")
+            .get("evm")
+            .expect("No 'evm' field found")
+            .get("bytecode")
+            .expect("No 'bytecode' field found")
+            .get("object")
+            .expect("No 'object' field found")
+            .as_str()
+            .expect("No 'object' field found");
+
+        let bytecode = hex::decode(bytecode).expect("Invalid hex in Binary");
 
         let evm_verifier = EvmHalo2Verifier {
             halo2_verifier_code: formatted_halo2_verifier_code,
@@ -449,8 +517,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             openvm_verifier_interface: formatted_interface,
             artifact: EvmVerifierByteCode {
                 sol_compiler_version: "0.8.19".to_string(),
-                sol_compiler_options: "--no-optimize-yul --bin --optimize --optimize-runs 100000"
-                    .to_string(),
+                sol_compiler_options: solc_input.get("settings").unwrap().to_string(),
                 bytecode,
             },
         };
@@ -472,51 +539,4 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
 
         Ok(gas_cost)
     }
-}
-
-/// We will split the output by whitespace and look for the following
-/// sequence:
-/// [
-///     ...
-///     "=======",
-///     "OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier",
-///     "=======",
-///     "Binary:"
-///     "[compiled bytecode]"
-///     ...
-/// ]
-///
-/// Once we find "OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier," we can skip
-/// to the appropriate offset to get the compiled bytecode.
-#[cfg(feature = "evm-verify")]
-fn extract_binary(output: &[u8], contract_name: &str) -> Vec<u8> {
-    let split = split_by_ascii_whitespace(output);
-    let contract_name_bytes = contract_name.as_bytes();
-
-    for i in 0..split.len().saturating_sub(3) {
-        if split[i] == contract_name_bytes {
-            return hex::decode(split[i + 3]).expect("Invalid hex in Binary");
-        }
-    }
-
-    panic!("Contract '{}' not found", contract_name);
-}
-
-#[cfg(feature = "evm-verify")]
-fn split_by_ascii_whitespace(bytes: &[u8]) -> Vec<&[u8]> {
-    let mut split = Vec::new();
-    let mut start = None;
-    for (idx, byte) in bytes.iter().enumerate() {
-        if byte.is_ascii_whitespace() {
-            if let Some(start) = start.take() {
-                split.push(&bytes[start..idx]);
-            }
-        } else if start.is_none() {
-            start = Some(idx);
-        }
-    }
-    if let Some(last) = start {
-        split.push(&bytes[last..]);
-    }
-    split
 }
