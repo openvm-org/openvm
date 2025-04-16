@@ -48,10 +48,10 @@ This command can take ~20mins on a `m6a.16xlarge` instance due to the keygen tim
 Upon a successful run, the command will write the files
 
 - `agg.pk`
-- `halo2/Halo2Verifier.sol`
-- `halo2/OpenVmHalo2Verifier.sol`
-- `halo2/interfaces/IOpenVmHalo2Verifier.sol`
-- `halo2/verifier.bytecode.json`
+- `halo2/src/[OPENVM_VERSION]/Halo2Verifier.sol`
+- `halo2/src/[OPENVM_VERSION]/OpenVmHalo2Verifier.sol`
+- `halo2/src/[OPENVM_VERSION]/interfaces/IOpenVmHalo2Verifier.sol`
+- `halo2/src/[OPENVM_VERSION]/verifier.bytecode.json`
 
 to `~/.openvm/`, where `~` is the directory specified by environment variable `$HOME`. Every command that requires these files will look for them in this directory.
 
