@@ -17,12 +17,12 @@ pub struct MemoryTester<F> {
     /// Map from `block_size` to [MemoryDummyChip] of that block size
     pub chip_for_block: HashMap<usize, MemoryDummyChip<F>>,
     // TODO: make this just TracedMemory?
-    pub controller: Rc<RefCell<MemoryController<F>>>,
+    pub controller: MemoryController<F>,
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
-    pub fn new(controller: Rc<RefCell<MemoryController<F>>>) -> Self {
-        let bus = controller.borrow().memory_bus;
+    pub fn new(controller: MemoryController<F>) -> Self {
+        let bus = controller.memory_bus;
         let mut chip_for_block = HashMap::new();
         for log_block_size in 0..6 {
             let block_size = 1 << log_block_size;
@@ -37,7 +37,7 @@ impl<F: PrimeField32> MemoryTester<F> {
 
     // TODO: change interface by implementing GuestMemory trait after everything works
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
-        let mut controller = self.controller.borrow_mut();
+        let controller = &mut self.controller;
         let t = controller.memory.timestamp();
         // TODO: hack
         let (t_prev, data) = if addr_space <= 2 {
@@ -70,7 +70,7 @@ impl<F: PrimeField32> MemoryTester<F> {
 
     // TODO: see read
     pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
-        let mut controller = self.controller.borrow_mut();
+        let controller = &mut self.controller;
         let t = controller.memory.timestamp();
         // TODO: hack
         let (t_prev, data_prev) = if addr_space <= 2 {

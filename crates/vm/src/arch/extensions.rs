@@ -498,6 +498,10 @@ impl<F: PrimeField32> SystemBase<F> {
         self.connector_chip.air.execution_bus
     }
 
+    pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
+        self.memory_controller.offline_memory().clone()
+    }
+
     /// Return trace heights of SystemBase. Usually this is for aggregation and not useful for
     /// regular users.
     pub fn get_system_trace_heights(&self) -> SystemTraceHeights {

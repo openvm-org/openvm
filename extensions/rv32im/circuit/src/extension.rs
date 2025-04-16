@@ -329,15 +329,16 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         );
         inventory.add_executor(jalr_chip, Rv32JalrOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let auipc_chip = Rv32AuipcChip::new(
-            Rv32RdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            Rv32AuipcCoreChip::new(bitwise_lu_chip.clone()),
-            offline_memory.clone(),
-        );
-        inventory.add_executor(
-            auipc_chip,
-            Rv32AuipcOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        // TODO
+        // let auipc_chip = Rv32AuipcChip::new(
+        //     Rv32RdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
+        //     Rv32AuipcCoreChip::new(bitwise_lu_chip.clone()),
+        //     offline_memory.clone(),
+        // );
+        // inventory.add_executor(
+        //     auipc_chip,
+        //     Rv32AuipcOpcode::iter().map(|x| x.global_opcode()),
+        // )?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
         builder.add_phantom_sub_executor(

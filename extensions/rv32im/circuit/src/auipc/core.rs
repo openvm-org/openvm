@@ -35,7 +35,7 @@ use crate::adapters::{
 };
 
 const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
-const ADAPTER_WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
+pub(super) const ADAPTER_WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -48,7 +48,7 @@ pub struct Rv32AuipcCoreCols<T> {
     pub rd_data: [T; RV32_REGISTER_NUM_LIMBS],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Rv32AuipcCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }
@@ -203,6 +203,7 @@ pub struct Rv32AuipcCoreRecord<F> {
 }
 
 pub struct Rv32AuipcCoreChip {
+    // TODO[jpw]: do we still need air in here?
     pub air: Rv32AuipcCoreAir,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }

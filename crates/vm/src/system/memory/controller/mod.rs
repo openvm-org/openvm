@@ -3,6 +3,7 @@ use std::{
     collections::BTreeMap,
     iter,
     marker::PhantomData,
+    ops::Deref,
     sync::{Arc, Mutex},
 };
 
@@ -448,6 +449,15 @@ impl<F: PrimeField32> MemoryController<F> {
         // unsafe { self.memory.write::<T, N>(address_space_u32, ptr_u32, data) }
     }
 
+    pub fn helper(&self) -> SharedMemoryHelper<F> {
+        let range_bus = self.range_checker.bus();
+        SharedMemoryHelper {
+            range_checker: self.range_checker.clone(),
+            timestamp_lt_air: AssertLtSubAir::new(range_bus, self.mem_config.clk_max_bits),
+            _marker: Default::default(),
+        }
+    }
+
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
         let range_bus = self.range_checker.bus();
         MemoryAuxColsFactory {
@@ -716,6 +726,13 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 }
 
+/// Owned version of [MemoryAuxColsFactory].
+pub struct SharedMemoryHelper<T> {
+    pub(crate) range_checker: SharedVariableRangeCheckerChip,
+    pub(crate) timestamp_lt_air: AssertLtSubAir,
+    pub(crate) _marker: PhantomData<T>,
+}
+
 /// A helper for generating trace values in auxiliary memory columns related to the offline memory
 /// argument.
 pub struct MemoryAuxColsFactory<'a, T> {
@@ -782,7 +799,10 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
         timestamp: u32,
         buffer: &mut LessThanAuxCols<F, AUX_LEN>,
     ) {
-        debug_assert!(prev_timestamp < timestamp);
+        debug_assert!(
+            prev_timestamp < timestamp,
+            "prev_timestamp {prev_timestamp} >= timestamp {timestamp}"
+        );
         self.timestamp_lt_air.generate_subrow(
             (self.range_checker, prev_timestamp, timestamp),
             &mut buffer.lower_decomp,
@@ -826,6 +846,16 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
         self.timestamp_lt_air
             .generate_subrow((self.range_checker, prev_timestamp, timestamp), &mut decomp);
         LessThanAuxCols::new(decomp)
+    }
+}
+
+impl<T> SharedMemoryHelper<T> {
+    pub fn as_borrowed(&self) -> MemoryAuxColsFactory<'_, T> {
+        MemoryAuxColsFactory {
+            range_checker: self.range_checker.as_ref(),
+            timestamp_lt_air: self.timestamp_lt_air,
+            _marker: PhantomData,
+        }
     }
 }
 
