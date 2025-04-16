@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use getset::Getters;
-use itertools::zip_eq;
+use itertools::{izip, zip_eq};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -102,23 +102,26 @@ pub struct TracingMemory {
 }
 
 impl TracingMemory {
+    // TODO: per-address space memory capacity specification
     pub fn new(mem_config: &MemoryConfig) -> Self {
         assert_eq!(mem_config.as_offset, 1);
-        let mem_size = 1usize << mem_config.pointer_max_bits;
+        let num_cells = 1usize << mem_config.pointer_max_bits; // max cells per address space
         let num_addr_sp = 1 + (1 << mem_config.as_height);
-        let meta = vec![
-            PagedVec::new(
-                mem_size
-                    .checked_mul(size_of::<AccessMetadata>())
-                    .unwrap()
-                    .div_ceil(PAGE_SIZE)
-            );
-            num_addr_sp
-        ];
-        let mut min_block_size = vec![1; meta.len()];
+        let mut min_block_size = vec![1; num_addr_sp];
         // TMP: hardcoding for now
         min_block_size[1] = 4;
         min_block_size[2] = 4;
+        let meta = min_block_size
+            .iter()
+            .map(|&min_block_size| {
+                PagedVec::new(
+                    num_cells
+                        .checked_mul(size_of::<AccessMetadata>())
+                        .unwrap()
+                        .div_ceil(PAGE_SIZE * min_block_size as usize),
+                )
+            })
+            .collect();
         Self {
             data: AddressMap::from_mem_config(mem_config),
             meta,
@@ -130,19 +133,21 @@ impl TracingMemory {
     /// Instantiates a new `Memory` data structure from an image.
     pub fn from_image(image: MemoryImage, access_capacity: usize) -> Self {
         let mut meta = vec![PagedVec::new(0); image.as_offset as usize];
-        for (paged_vec, cell_size) in image.paged_vecs.iter().zip(&image.cell_size) {
-            let num_cells = paged_vec.memory_size() / cell_size;
-            meta.push(PagedVec::new(
-                num_cells
-                    .checked_mul(size_of::<AccessMetadata>())
-                    .unwrap()
-                    .div_ceil(PAGE_SIZE),
-            ));
-        }
         let mut min_block_size = vec![1; meta.len()];
         // TMP: hardcoding for now
         min_block_size[1] = 4;
         min_block_size[2] = 4;
+        for (paged_vec, cell_size, &min_block_size) in
+            izip!(&image.paged_vecs, &image.cell_size, &min_block_size)
+        {
+            let num_cells = paged_vec.bytes_capacity() / cell_size;
+            meta.push(PagedVec::new(
+                num_cells
+                    .checked_mul(size_of::<AccessMetadata>())
+                    .unwrap()
+                    .div_ceil(PAGE_SIZE * min_block_size as usize),
+            ));
+        }
         Self {
             data: image,
             meta,

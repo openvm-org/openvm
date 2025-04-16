@@ -103,7 +103,8 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
         }
     }
 
-    pub fn memory_size(&self) -> usize {
+    /// Total capacity across available pages, in bytes.
+    pub fn bytes_capacity(&self) -> usize {
         self.pages.len().checked_mul(PAGE_SIZE).unwrap()
     }
 
@@ -213,7 +214,7 @@ impl<T: Copy, const PAGE_SIZE: usize> Iterator for PagedVecIter<'_, T, PAGE_SIZE
             self.current_index_in_page = 0;
         }
         let global_index = self.current_page * PAGE_SIZE + self.current_index_in_page;
-        if global_index + size_of::<T>() > self.vec.memory_size() {
+        if global_index + size_of::<T>() > self.vec.bytes_capacity() {
             return None;
         }
 
