@@ -1,6 +1,6 @@
 # Generating Proofs
 
-Generating a proof using the CLI is simple - first generate a key, then generate your proof. Using command defaults, this looks like:
+Gddenerating a proof using the CLI is simple - first generate a key, then generate your proof. Using command defaults, this looks like:
 
 ```bash
 cargo openvm keygen
