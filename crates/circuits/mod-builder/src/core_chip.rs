@@ -1,9 +1,12 @@
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
-    Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
+        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
@@ -280,6 +283,17 @@ where
 
         let ctx = AdapterRuntimeContext::<_, DynAdapterInterface<_>>::without_pc(writes);
         Ok((ctx.into(), FieldExpressionRecord { inputs, flags }))
+    }
+
+    fn execute_instruction2<Mem, Ctx>(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        todo!("Implement execute_instruction2")
     }
 
     fn get_opcode_name(&self, _opcode: usize) -> String {

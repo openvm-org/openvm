@@ -4,9 +4,12 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
-use openvm_circuit::arch::{
-    instructions::LocalOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionError, Result,
-    Streams, VmAdapterInterface, VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        instructions::LocalOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionError,
+        Result, Streams, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::instruction::Instruction;
@@ -174,6 +177,17 @@ where
             data,
         };
         Ok((output, record))
+    }
+
+    fn execute_instruction2<Mem, Ctx>(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        todo!("Implement execute_instruction2")
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

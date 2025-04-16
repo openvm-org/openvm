@@ -3,10 +3,14 @@ use std::{array::from_fn, borrow::BorrowMut};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
-use openvm_circuit::arch::{
-    instructions::LocalOpcode,
-    testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    AdapterRuntimeContext, Result, VmAdapterInterface, VmChipWrapper, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        instructions::LocalOpcode,
+        testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        AdapterRuntimeContext, Result, VmAdapterInterface, VmChipWrapper, VmCoreChip,
+        VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
     bigint::utils::{big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime},
@@ -440,6 +444,17 @@ where
         // This will cause lt_marker to be all zeros except a 2.
         // There was a bug in this case which allowed b to be less than N.
         self.chip.execute_instruction(instruction, from_pc, reads)
+    }
+
+    fn execute_instruction2<Mem, Ctx>(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        todo!("Implement execute_instruction2")
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

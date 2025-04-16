@@ -15,9 +15,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, MinimalInstruction,
-        Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+        Result, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
-    system::public_values::columns::PublicValuesCoreColsView,
+    system::{memory::online::GuestMemory, public_values::columns::PublicValuesCoreColsView},
 };
 pub(crate) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
 pub(crate) type AdapterInterfaceReads<F> = <AdapterInterface<F> as VmAdapterInterface<F>>::Reads;
@@ -158,6 +158,17 @@ impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChi
         };
         let record = Self::Record { value, index };
         Ok((output, record))
+    }
+
+    fn execute_instruction2<Mem, Ctx>(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        todo!("Implement execute_instruction2")
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
