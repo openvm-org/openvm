@@ -15,6 +15,9 @@ pub struct MerkleTree<F, const CHUNK: usize> {
     zero_nodes: Vec<[F; CHUNK]>,
     /// Nodes in the tree that have ever been touched.
     nodes: FxHashMap<u64, [F; CHUNK]>,
+    /// Actual values for the leaves (for the boundary chip).
+    // We could create a special enum for the nodes, but I think this is cleaner.
+    leaf_values: FxHashMap<(u32, u32), [F; CHUNK]>,
 }
 
 impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
@@ -28,6 +31,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                 })
                 .collect(),
             nodes: FxHashMap::default(),
+            leaf_values: FxHashMap::default(),
         }
     }
 
@@ -36,6 +40,13 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
             .get(&index)
             .cloned()
             .unwrap_or(self.zero_nodes[self.height - index.ilog2() as usize])
+    }
+
+    pub fn get_leaf_value(&self, label: (u32, u32)) -> [F; CHUNK] {
+        self.leaf_values
+            .get(&label)
+            .cloned()
+            .unwrap_or([F::ZERO; CHUNK])
     }
 
     pub fn finalize(
@@ -48,6 +59,9 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
             .iter()
             .map(|(k, v)| ((1 << self.height) + md.label_to_index(*k), *v))
             .collect();
+        for (k, v) in touched.iter() {
+            self.leaf_values.insert(*k, *v);
+        }
         let init_root = self.get_node(1);
         let mut rows = Vec::new();
         for height in 1..=self.height {

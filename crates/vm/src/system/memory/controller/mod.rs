@@ -556,22 +556,17 @@ impl<F: PrimeField32> MemoryController<F> {
             MemoryInterface::Persistent {
                 merkle_chip,
                 boundary_chip,
-                initial_memory,
+                initial_memory: _,
                 merkle_tree,
             } => {
                 let hasher = hasher.unwrap();
                 let final_partition = offline_memory.finalize::<CHUNK>(&mut self.access_adapters);
 
-                boundary_chip.finalize(initial_memory, &final_partition, hasher);
+                boundary_chip.finalize(merkle_tree, &final_partition, hasher);
                 let final_memory_values = final_partition
                     .into_par_iter()
                     .map(|(key, value)| (key, value.values))
                     .collect();
-                let initial_node = MemoryNode::tree_from_memory(
-                    merkle_chip.air.memory_dimensions,
-                    initial_memory,
-                    hasher,
-                );
                 merkle_chip.finalize(&final_memory_values, merkle_tree, hasher);
                 self.final_state = Some(FinalState::Persistent(PersistentFinalState {
                     final_memory: final_memory_values.clone(),
