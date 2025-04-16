@@ -131,8 +131,9 @@ where
             need_range_check.push(limb.into());
         }
 
+        assert_eq!(pc_limbs.len(), RV32_REGISTER_NUM_LIMBS);
         // pc_limbs[0] is already range checked through rd_data[0]
-        for (i, limb) in pc_limbs.iter().skip(1).enumerate() {
+        for (i, limb) in pc_limbs.iter().enumerate().skip(1) {
             if i == pc_limbs.len() - 1 {
                 // Range check the most significant limb of pc to be in [0,
                 // 2^{PC_BITS-(RV32_REGISTER_NUM_LIMBS-1)*RV32_CELL_BITS})
@@ -245,7 +246,7 @@ where
             need_range_check.push(limb);
         }
 
-        for (i, limb) in pc_limbs.iter().skip(1).enumerate() {
+        for (i, limb) in pc_limbs.iter().enumerate().skip(1) {
             if i == pc_limbs.len() - 1 {
                 need_range_check.push((*limb) << (pc_limbs.len() * RV32_CELL_BITS - PC_BITS));
             } else {
