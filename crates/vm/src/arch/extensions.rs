@@ -46,7 +46,7 @@ use crate::system::{
         dimensions::MemoryDimensions,
         merkle::tree::MerkleTree,
         offline_checker::{MemoryBridge, MemoryBus},
-        MemoryController, MemoryImage, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
+        MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
     },
     native_adapter::NativeAdapterChip,
     phantom::PhantomChip,
@@ -539,11 +539,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
         let memory_bus = MemoryBus::new(bus_idx_mgr.new_bus_idx());
         let program_bus = ProgramBus::new(bus_idx_mgr.new_bus_idx());
-        let md = MemoryDimensions::new(
-            config.memory_config.as_height,
-            config.memory_config.pointer_max_bits,
-            config.memory_config.as_offset,
-        );
+        let md = MemoryDimensions::from_config(&config.memory_config);
         let range_bus =
             VariableRangeCheckerBus::new(bus_idx_mgr.new_bus_idx(), config.memory_config.decomp);
 

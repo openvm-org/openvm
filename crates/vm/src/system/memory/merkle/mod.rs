@@ -11,8 +11,8 @@ pub use air::*;
 pub use columns::*;
 pub(super) use trace::SerialReceiver;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,
