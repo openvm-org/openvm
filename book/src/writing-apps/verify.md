@@ -53,7 +53,7 @@ Upon a successful run, the command will write the files
 - `halo2/src/[OPENVM_VERSION]/interfaces/IOpenVmHalo2Verifier.sol`
 - `halo2/src/[OPENVM_VERSION]/verifier.bytecode.json`
 
-to `~/.openvm/`, where `~` is the directory specified by environment variable `$HOME`. Every command that requires these files will look for them in this directory.
+to `~/.openvm/`, where `~` is the directory specified by environment variable `$HOME` and `OPENVM_VERSION` is the version of OpenVM. Every command that requires these files will look for them in this directory.
 
 The `agg.pk` contains all aggregation proving keys necessary for aggregating to a final EVM proof.
 The `OpenVmHalo2Verifier.sol` file contains a Solidity contract to verify the final EVM proof. The contract is named `OpenVmHalo2Verifier` and it implements the `IOpenVmHalo2Verifier` interface.
