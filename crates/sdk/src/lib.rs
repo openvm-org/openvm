@@ -299,6 +299,10 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         };
 
         use eyre::Context;
+        use forge_fmt::{
+            format, parse, FormatterConfig, IntTypes, MultilineFuncHeaderStyle, NumberUnderscore,
+            QuoteStyle, SingleLineBlockStyle,
+        };
         use openvm_native_recursion::halo2::wrapper::EvmVerifierByteCode;
         use snark_verifier::halo2_base::halo2_proofs::poly::commitment::Params;
         use snark_verifier_sdk::SHPLONK;
@@ -345,6 +349,51 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             .replace("{PUBLIC_VALUES_LENGTH}", &pvs_length.to_string())
             .replace("{OPENVM_VERSION}", env!("CARGO_PKG_VERSION"));
 
+        let formatter_config = FormatterConfig {
+            line_length: 120,
+            tab_width: 4,
+            bracket_spacing: true,
+            int_types: IntTypes::Long,
+            multiline_func_header: MultilineFuncHeaderStyle::AttributesFirst,
+            quote_style: QuoteStyle::Double,
+            number_underscore: NumberUnderscore::Thousands,
+            single_line_statement_blocks: SingleLineBlockStyle::Preserve,
+            override_spacing: false,
+            wrap_comments: false,
+            ignore: vec![],
+            contract_new_lines: false,
+        };
+
+        let parsed_interface =
+            parse(EVM_HALO2_VERIFIER_INTERFACE).expect("Failed to parse interface");
+        let parsed_halo2_verifier_code =
+            parse(&halo2_verifier_code).expect("Failed to parse halo2 verifier code");
+        let parsed_openvm_verifier_code =
+            parse(&openvm_verifier_code).expect("Failed to parse openvm verifier code");
+
+        let mut formatted_interface = String::new();
+        let mut formatted_halo2_verifier_code = String::new();
+        let mut formatted_openvm_verifier_code = String::new();
+
+        format(
+            &mut formatted_interface,
+            parsed_interface,
+            formatter_config.clone(),
+        )
+        .expect("Failed to format interface");
+        format(
+            &mut formatted_halo2_verifier_code,
+            parsed_halo2_verifier_code,
+            formatter_config.clone(),
+        )
+        .expect("Failed to format halo2 verifier code");
+        format(
+            &mut formatted_openvm_verifier_code,
+            parsed_openvm_verifier_code,
+            formatter_config,
+        )
+        .expect("Failed to format openvm verifier code");
+
         // Create temp dir
         let temp_dir = tempdir().wrap_err("Failed to create temp dir")?;
         let temp_path = temp_dir.path();
@@ -357,26 +406,28 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         // purposes.
         write(
             interfaces_path.join(EVM_HALO2_VERIFIER_INTERFACE_NAME),
-            EVM_HALO2_VERIFIER_INTERFACE,
+            &formatted_interface,
         )?;
         write(
             temp_path.join(EVM_HALO2_VERIFIER_PARENT_NAME),
-            &halo2_verifier_code,
+            &formatted_halo2_verifier_code,
         )?;
         write(
             temp_path.join(EVM_HALO2_VERIFIER_BASE_NAME),
-            &openvm_verifier_code,
+            &formatted_openvm_verifier_code,
         )?;
 
         // Run solc from the temp dir
         let output = Command::new("solc")
             .current_dir(temp_path)
-            .arg("OpenVmHalo2Verifier.sol")
+            .arg(EVM_HALO2_VERIFIER_BASE_NAME)
             .arg("--no-optimize-yul")
             .arg("--bin")
             .arg("--optimize")
             .arg("--optimize-runs")
             .arg("100000")
+            .arg("--evm-version")
+            .arg("paris")
             .output()?;
 
         if !output.status.success() {
@@ -393,9 +444,9 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         );
 
         let evm_verifier = EvmHalo2Verifier {
-            halo2_verifier_code,
-            openvm_verifier_code,
-            openvm_verifier_interface: EVM_HALO2_VERIFIER_INTERFACE.to_string(),
+            halo2_verifier_code: formatted_halo2_verifier_code,
+            openvm_verifier_code: formatted_openvm_verifier_code,
+            openvm_verifier_interface: formatted_interface,
             artifact: EvmVerifierByteCode {
                 sol_compiler_version: "0.8.19".to_string(),
                 sol_compiler_options: "--no-optimize-yul --bin --optimize --optimize-runs 100000"
