@@ -26,6 +26,7 @@ jobs:
   app-level-cli:
     runs-on:
       - runs-on=${{ github.run_id }}
+      - disk=large
       - runner=32cpu-linux-arm64
       - extras=s3-cache
 
