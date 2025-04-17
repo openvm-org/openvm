@@ -15,14 +15,39 @@ mod tests {
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
-    use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
+    use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir, InitConfig};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
     type F = BabyBear;
 
+    fn modular_config_to_init_config(config: &Rv32ModularConfig) -> Option<InitConfig> {
+        Some(InitConfig {
+            modular_config: Some(config.modular.clone()),
+            fp2_config: None,
+            ecc_config: None,
+        })
+    }
+
+    fn modular_with_fp2_config_to_init_config(
+        config: &Rv32ModularWithFp2Config,
+    ) -> Option<InitConfig> {
+        Some(InitConfig {
+            modular_config: Some(config.modular.clone()),
+            fp2_config: Some(config.fp2.clone()),
+            ecc_config: None,
+        })
+    }
+
     #[test]
     fn test_moduli_setup() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "moduli_setup")?;
+        let moduli = ["4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787", "1000000000000000003", "2305843009213693951"]
+            .map(|s| BigUint::from_str(s).unwrap());
+        let config = Rv32ModularConfig::new(moduli.to_vec());
+        let elf = build_example_program_at_path(
+            get_programs_dir!(),
+            "moduli_setup",
+            modular_config_to_init_config(&config),
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -32,16 +57,18 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        let moduli = ["4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787", "1000000000000000003", "2305843009213693951"]
-            .map(|s| BigUint::from_str(s).unwrap());
-        let config = Rv32ModularConfig::new(moduli.to_vec());
         air_test(config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_modular() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "little")?;
+        let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
+        let elf = build_example_program_at_path(
+            get_programs_dir!(),
+            "little",
+            modular_config_to_init_config(&config),
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -50,14 +77,21 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
         air_test(config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_complex_two_moduli() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "complex-two-modulos")?;
+        let config = Rv32ModularWithFp2Config::new(vec![
+            BigUint::from_str("998244353").unwrap(),
+            BigUint::from_str("1000000007").unwrap(),
+        ]);
+        let elf = build_example_program_at_path(
+            get_programs_dir!(),
+            "complex-two-modulos",
+            modular_with_fp2_config_to_init_config(&config),
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -67,26 +101,12 @@ mod tests {
                 .with_extension(Fp2TranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config = Rv32ModularWithFp2Config::new(vec![
-            BigUint::from_str("998244353").unwrap(),
-            BigUint::from_str("1000000007").unwrap(),
-        ]);
         air_test(config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_complex_redundant_modulus() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "complex-redundant-modulus")?;
-        let openvm_exe = VmExe::from_elf(
-            elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
-        )?;
         let config = Rv32ModularWithFp2Config {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
@@ -100,13 +120,11 @@ mod tests {
             ]),
             fp2: Fp2Extension::new(vec![BigUint::from_str("1000000009").unwrap()]),
         };
-        air_test(config, openvm_exe);
-        Ok(())
-    }
-
-    #[test]
-    fn test_complex() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "complex-secp256k1")?;
+        let elf = build_example_program_at_path(
+            get_programs_dir!(),
+            "complex-redundant-modulus",
+            modular_with_fp2_config_to_init_config(&config),
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -116,7 +134,27 @@ mod tests {
                 .with_extension(Fp2TranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
+        air_test(config, openvm_exe);
+        Ok(())
+    }
+
+    #[test]
+    fn test_complex() -> Result<()> {
         let config = Rv32ModularWithFp2Config::new(vec![SECP256K1_CONFIG.modulus.clone()]);
+        let elf = build_example_program_at_path(
+            get_programs_dir!(),
+            "complex-secp256k1",
+            modular_with_fp2_config_to_init_config(&config),
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
         air_test(config, openvm_exe);
         Ok(())
     }
@@ -124,7 +162,22 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_invalid_setup() {
-        let elf = build_example_program_at_path(get_programs_dir!(), "invalid-setup").unwrap();
+        let config = Rv32ModularConfig::new(vec![
+            BigUint::from_str("998244353").unwrap(),
+            BigUint::from_str("1000000007").unwrap(),
+        ]);
+        let elf = build_example_program_at_path(
+            get_programs_dir!(),
+            "invalid-setup",
+            Some(InitConfig {
+                // We don't want init.rs to be generated for this test because we are testing an
+                // invalid moduli_init! call
+                modular_config: None,
+                fp2_config: None,
+                ecc_config: None,
+            }),
+        )
+        .unwrap();
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -135,10 +188,6 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )
         .unwrap();
-        let config = Rv32ModularConfig::new(vec![
-            BigUint::from_str("998244353").unwrap(),
-            BigUint::from_str("1000000007").unwrap(),
-        ]);
         air_test(config, openvm_exe);
     }
 }

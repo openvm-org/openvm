@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm_algebra_guest::IntMod;
+use openvm_algebra_guest::{init, IntMod};
 
 openvm::entry!(main);
 
@@ -11,9 +11,8 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Mod3 { modulus = "1000000009" },
     Mod4 { modulus = "987898789" },
 }
-openvm_algebra_moduli_macros::moduli_init! {
-    "998244353", "1000000007", "1000000009", "987898789"
-}
+
+init!("openvm-init-complex-redundant-modulus.rs");
 
 openvm_algebra_complex_macros::complex_declare! {
     Complex2 { mod_type = Mod3 },

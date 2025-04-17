@@ -16,7 +16,8 @@ mod tests {
 
     #[test]
     fn test_matrix_power() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "matrix-power-unsigned")?;
+        let elf =
+            build_example_program_at_path(get_programs_dir!(), "matrix-power-unsigned", None)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -32,7 +33,7 @@ mod tests {
 
     #[test]
     fn test_matrix_power_signed() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "matrix-power-signed")?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "matrix-power-signed", None)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()

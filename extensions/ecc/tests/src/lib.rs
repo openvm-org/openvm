@@ -28,7 +28,8 @@ mod tests {
 
     #[test]
     fn test_ec() -> Result<()> {
-        let elf = build_example_program_at_path_with_features(get_programs_dir!(), "ec", ["k256"])?;
+        let elf =
+            build_example_program_at_path_with_features(get_programs_dir!(), "ec", ["k256"], None)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -49,6 +50,7 @@ mod tests {
             get_programs_dir!(),
             "ec_nonzero_a",
             ["p256"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -70,6 +72,7 @@ mod tests {
             get_programs_dir!(),
             "ec_two_curves",
             ["k256", "p256"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -94,6 +97,7 @@ mod tests {
             get_programs_dir!(),
             "decompress",
             ["k256"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -155,6 +159,7 @@ mod tests {
             get_programs_dir!(),
             "decompress_invalid_hint",
             ["k256", test_type],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -247,8 +252,12 @@ mod tests {
 
     #[test]
     fn test_ecdsa() -> Result<()> {
-        let elf =
-            build_example_program_at_path_with_features(get_programs_dir!(), "ecdsa", ["k256"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "ecdsa",
+            ["k256"],
+            None,
+        )?;
         let config = SdkVmConfig::builder()
             .system(SystemConfig::default().with_continuations().into())
             .rv32i(Default::default())
@@ -282,6 +291,7 @@ mod tests {
             get_programs_dir!(),
             "invalid_setup",
             ["k256", "p256"],
+            None,
         )
         .unwrap();
         let openvm_exe = VmExe::from_elf(

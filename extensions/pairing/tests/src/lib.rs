@@ -58,6 +58,7 @@ mod bn254 {
             get_programs_dir!(),
             "fp12_mul",
             ["bn254"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -92,6 +93,7 @@ mod bn254 {
             get_programs_dir!(),
             "pairing_line",
             ["bn254"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -148,6 +150,7 @@ mod bn254 {
             get_programs_dir!(),
             "pairing_miller_step",
             ["bn254"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -195,6 +198,7 @@ mod bn254 {
             get_programs_dir!(),
             "pairing_miller_loop",
             ["bn254"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -246,6 +250,7 @@ mod bn254 {
             get_programs_dir!(),
             "pairing_check",
             ["bn254"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -301,6 +306,7 @@ mod bn254 {
             get_programs_dir!(),
             "pairing_check_fallback",
             ["bn254"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -356,6 +362,7 @@ mod bn254 {
             get_programs_dir!(),
             "bn_final_exp_hint",
             ["bn254"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -461,6 +468,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "bls_ec",
             ["bls12_381"],
+            None,
         )?;
         let curve = CurveConfig {
             modulus: BLS12_381_MODULUS.clone(),
@@ -488,6 +496,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "fp12_mul",
             ["bls12_381"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -522,6 +531,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "pairing_line",
             ["bls12_381"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -579,6 +589,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "pairing_miller_step",
             ["bls12_381"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -626,6 +637,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "pairing_miller_loop",
             ["bls12_381"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -683,6 +695,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "pairing_check",
             ["bls12_381"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -738,6 +751,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "pairing_check_fallback",
             ["bls12_381"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -792,6 +806,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "bls_final_exp_hint",
             ["bls12_381"],
+            None,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,

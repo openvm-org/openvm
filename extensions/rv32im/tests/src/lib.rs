@@ -23,7 +23,7 @@ mod tests {
 
     #[test_case("fibonacci", 1)]
     fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), example_name)?;
+        let elf = build_example_program_at_path(get_programs_dir!(), example_name, None)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -38,7 +38,7 @@ mod tests {
 
     #[test_case("collatz", 1)]
     fn test_rv32im(example_name: &str, min_segments: usize) -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), example_name)?;
+        let elf = build_example_program_at_path(get_programs_dir!(), example_name, None)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -58,6 +58,7 @@ mod tests {
             get_programs_dir!(),
             example_name,
             ["std"],
+            None,
         )?;
         let exe = VmExe::from_elf(
             elf,
@@ -73,7 +74,7 @@ mod tests {
 
     #[test]
     fn test_read_vec() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "hint")?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "hint", None)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -89,7 +90,7 @@ mod tests {
 
     #[test]
     fn test_read() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "read")?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "read", None)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -120,7 +121,7 @@ mod tests {
 
     #[test]
     fn test_reveal() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "reveal")?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "reveal", None)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -159,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_print() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "print")?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "print", None)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -174,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_heap_overflow() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "heap_overflow")?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "heap_overflow", None)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -194,8 +195,12 @@ mod tests {
 
     #[test]
     fn test_hashmap() -> Result<()> {
-        let elf =
-            build_example_program_at_path_with_features(get_programs_dir!(), "hashmap", ["std"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "hashmap",
+            ["std"],
+            None,
+        )?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -214,6 +219,7 @@ mod tests {
             get_programs_dir!(),
             "tiny-mem-test",
             ["heap-embedded-alloc"],
+            None,
         )?;
         let exe = VmExe::from_elf(
             elf,
@@ -230,7 +236,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_load_x0() {
-        let elf = build_example_program_at_path(get_programs_dir!(), "load_x0").unwrap();
+        let elf = build_example_program_at_path(get_programs_dir!(), "load_x0", None).unwrap();
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()

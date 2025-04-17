@@ -4,9 +4,12 @@ use std::{
 };
 
 use eyre::{Context, Result};
+use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use openvm_build::{
     build_guest_package, get_dir_with_profile, get_package, GuestOptions, TargetFilter,
 };
+use openvm_ecc_circuit::WeierstrassExtension;
+use openvm_sdk::init::generate_init_file;
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 use tempfile::tempdir;
 
@@ -30,33 +33,53 @@ pub fn decode_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
     Elf::decode(&data, MEM_SIZE as u32)
 }
 
-pub fn build_example_program(example_name: &str) -> Result<Elf> {
-    build_example_program_with_features::<&str>(example_name, [])
+// VM config information used for generating the init.rs file
+pub struct InitConfig {
+    pub modular_config: Option<ModularExtension>,
+    pub fp2_config: Option<Fp2Extension>,
+    pub ecc_config: Option<WeierstrassExtension>,
+}
+
+pub fn build_example_program(example_name: &str, init_config: Option<InitConfig>) -> Result<Elf> {
+    build_example_program_with_features::<&str>(example_name, [], init_config)
 }
 
 pub fn build_example_program_with_features<S: AsRef<str>>(
     example_name: &str,
     features: impl IntoIterator<Item = S>,
+    init_config: Option<InitConfig>,
 ) -> Result<Elf> {
     let manifest_dir = get_programs_dir!();
-    build_example_program_at_path_with_features(manifest_dir, example_name, features)
+    build_example_program_at_path_with_features(manifest_dir, example_name, features, init_config)
 }
 
-pub fn build_example_program_at_path(manifest_dir: PathBuf, example_name: &str) -> Result<Elf> {
-    build_example_program_at_path_with_features::<&str>(manifest_dir, example_name, [])
+pub fn build_example_program_at_path(
+    manifest_dir: PathBuf,
+    example_name: &str,
+    init_config: Option<InitConfig>,
+) -> Result<Elf> {
+    build_example_program_at_path_with_features::<&str>(manifest_dir, example_name, [], init_config)
 }
 
 pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
     manifest_dir: PathBuf,
     example_name: &str,
     features: impl IntoIterator<Item = S>,
+    init_config: Option<InitConfig>,
 ) -> Result<Elf> {
-    let pkg = get_package(manifest_dir);
+    let pkg = get_package(&manifest_dir);
     let target_dir = tempdir()?;
     // Build guest with default features
     let guest_opts = GuestOptions::default()
         .with_features(features)
         .with_target_dir(target_dir.path());
+    if let Some(init_config) = init_config {
+        generate_init_file(
+            &manifest_dir,
+            &init_config.modular_config,
+            Some(&format!("openvm-init-{}.rs", example_name)),
+        )?;
+    }
     if let Err(Some(code)) = build_guest_package(
         &pkg,
         &guest_opts,

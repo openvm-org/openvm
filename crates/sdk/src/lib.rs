@@ -5,6 +5,7 @@ use alloy_sol_types::sol;
 use commit::commit_app_exe;
 use config::{AggregationTreeConfig, AppConfig};
 use eyre::Result;
+use init::generate_init_file;
 use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
@@ -42,7 +43,7 @@ use openvm_transpiler::{
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
 
 use crate::{
-    config::AggConfig,
+    config::{AggConfig, SdkVmConfig},
     keygen::{AggProvingKey, AggStarkProvingKey},
     prover::{AppProver, StarkProver},
 };
@@ -52,6 +53,7 @@ use crate::{prover::EvmHalo2Prover, types::EvmProof};
 pub mod codec;
 pub mod commit;
 pub mod config;
+pub mod init;
 pub mod keygen;
 pub mod prover;
 
@@ -120,9 +122,12 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
     pub fn build<P: AsRef<Path>>(
         &self,
         guest_opts: GuestOptions,
+        vm_config: &SdkVmConfig,
         pkg_dir: P,
         target_filter: &Option<TargetFilter>,
+        init_file_name: Option<&str>, // If None, we use "openvm-init.rs"
     ) -> Result<Elf> {
+        generate_init_file(pkg_dir.as_ref(), &vm_config.modular, init_file_name)?;
         let pkg = get_package(pkg_dir.as_ref());
         let target_dir = match build_guest_package(&pkg, &guest_opts, None, target_filter) {
             Ok(target_dir) => target_dir,

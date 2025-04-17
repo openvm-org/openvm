@@ -12,6 +12,7 @@ use openvm_build::{
 use openvm_sdk::{
     commit::{commit_app_exe, committed_exe_as_bn254},
     fs::write_exe_to_file,
+    init::generate_init_file,
     Sdk,
 };
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
@@ -93,6 +94,9 @@ pub struct BuildArgs {
 
     #[arg(long, default_value = "release", help = "Build profile")]
     pub profile: String,
+
+    #[arg(long, default_value = "openvm-init.rs", help = "Name of the init file")]
+    pub init_file_name: String,
 }
 
 #[derive(Clone, Default, clap::Args)]
@@ -128,6 +132,13 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         .with_profile(build_args.profile.clone());
     guest_options.target_dir = build_args.target_dir.clone();
 
+    let app_config = read_config_toml_or_default(&build_args.config)?;
+    generate_init_file(
+        &build_args.manifest_dir,
+        &app_config.app_vm_config.modular,
+        Some(&build_args.init_file_name),
+    )?;
+
     let pkg = get_package(&build_args.manifest_dir);
     // We support builds of libraries with 0 or >1 executables.
     let elf_path = match build_guest_package(&pkg, &guest_options, None, &target_filter) {
@@ -146,7 +157,6 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         let elf_path = elf_path?;
         println!("[openvm] Transpiling the package...");
         let output_path = &build_args.exe_output;
-        let app_config = read_config_toml_or_default(&build_args.config)?;
         let transpiler = app_config.app_vm_config.transpiler();
 
         let data = read(elf_path.clone())?;
@@ -215,6 +225,7 @@ mod tests {
             exe_commit_output: PathBuf::from(DEFAULT_EXE_COMMIT_PATH),
             profile: "dev".to_string(),
             target_dir: Some(target_dir.to_path_buf()),
+            init_file_name: "openvm-init.rs".to_string(),
         };
         build(&build_args)?;
         assert!(

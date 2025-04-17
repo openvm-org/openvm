@@ -16,7 +16,7 @@ mod tests {
 
     #[test]
     fn test_sha256() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "sha")?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "sha", None)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
