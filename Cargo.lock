@@ -4415,21 +4415,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-keccak256-integration-tests"
-version = "1.0.1-rc.0"
-dependencies = [
- "eyre",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-keccak256-circuit",
- "openvm-keccak256-transpiler",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
-]
-
-[[package]]
 name = "openvm-keccak256-transpiler"
 version = "1.0.1-rc.0"
 dependencies = [
