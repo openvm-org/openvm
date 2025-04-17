@@ -272,6 +272,10 @@ impl TracingMemory {
         (t_prev, values_prev)
     }
 
+    pub fn increment_timestamp(&mut self) {
+        self.timestamp += 1;
+    }
+
     pub fn increment_timestamp_by(&mut self, amount: u32) {
         self.timestamp += amount;
     }

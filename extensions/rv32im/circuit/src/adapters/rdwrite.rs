@@ -31,14 +31,12 @@ use serde::{Deserialize, Serialize};
 
 use super::{tmp_convert_to_u8s, RV32_REGISTER_NUM_LIMBS};
 
-/// This adapter doesn't read anything, and writes to \[a:4\]_d, where d == 1
 #[derive(Debug)]
 pub struct Rv32RdWriteAdapterChip<F: Field> {
     pub air: Rv32RdWriteAdapterAir,
     _marker: PhantomData<F>,
 }
 
-/// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
 #[derive(Debug)]
 pub struct Rv32CondRdWriteAdapterChip<F: Field> {
     /// Do not use the inner air directly, use `air` instead.
@@ -92,16 +90,18 @@ pub struct Rv32RdWriteAdapterCols<T> {
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct Rv32CondRdWriteAdapterCols<T> {
-    inner: Rv32RdWriteAdapterCols<T>,
+    pub inner: Rv32RdWriteAdapterCols<T>,
     pub needs_write: T,
 }
 
+/// This adapter doesn't read anything, and writes to \[a:4\]_d, where d == 1
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32RdWriteAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
 }
 
+/// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32CondRdWriteAdapterAir {
     inner: Rv32RdWriteAdapterAir,

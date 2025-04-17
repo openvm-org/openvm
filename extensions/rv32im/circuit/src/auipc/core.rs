@@ -229,7 +229,7 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
         let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
         let core_row: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
 
-        let from_timestamp = state.memory.timestamp;
+        let from_timestamp = state.memory.timestamp();
         let imm = instruction.c.as_canonical_u32();
         let rd_data = run_auipc(Rv32AuipcOpcode::AUIPC, *state.pc, imm);
 
@@ -245,7 +245,7 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
             data_prev.map(F::from_canonical_u8),
         );
         core_row.rd_data = rd_data.map(F::from_canonical_u8);
-        // We decompose during generate trace later:
+        // We decompose during fill_trace_row later:
         core_row.imm_limbs[0] = instruction.c;
 
         *state.pc += DEFAULT_PC_STEP;
