@@ -1,5 +1,7 @@
 //! A transpiler from custom RISC-V ELFs to OpenVM executable binaries.
 
+use std::sync::Arc;
+
 use elf::Elf;
 use openvm_instructions::{
     exe::VmExe,
@@ -41,7 +43,7 @@ impl<F: PrimeField32> FromElf for VmExe<F> {
             program,
             pc_start: elf.pc_start,
             init_memory,
-            fn_bounds: elf.fn_bounds,
+            fn_bounds: Arc::new(elf.fn_bounds),
         })
     }
 }
