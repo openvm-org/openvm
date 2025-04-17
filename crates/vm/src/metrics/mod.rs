@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, mem};
+use std::{collections::BTreeMap, mem, sync::Arc};
 
 use cycle_tracker::CycleTracker;
 use metrics::counter;
@@ -23,7 +23,7 @@ pub struct VmMetrics {
     /// Metric collection tools. Only collected when `config.profiling` is true.
     pub cycle_tracker: CycleTracker,
     #[allow(dead_code)]
-    pub(crate) fn_bounds: FnBounds,
+    pub(crate) fn_bounds: Arc<FnBounds>,
     /// Cycle span by function if function start/end addresses are available
     #[allow(dead_code)]
     pub(crate) current_fn: FnBound,
