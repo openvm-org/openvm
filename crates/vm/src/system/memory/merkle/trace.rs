@@ -26,13 +26,14 @@ use crate::{
 };
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
-    pub fn finalize(
+    pub fn finalize<const UPDATE_LEAVES: bool>(
         &mut self,
-        final_memory: &Equipartition<F, CHUNK>,
+        final_memory: Equipartition<F, CHUNK>,
         tree: &mut MerkleTree<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) {
-        self.final_state = Some(tree.finalize(hasher, final_memory, &self.air.memory_dimensions));
+        self.final_state =
+            Some(tree.finalize::<UPDATE_LEAVES>(hasher, final_memory, &self.air.memory_dimensions));
     }
 }
 
