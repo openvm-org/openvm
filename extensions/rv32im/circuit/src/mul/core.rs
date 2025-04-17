@@ -3,13 +3,18 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+};
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -192,6 +197,49 @@ where
         };
 
         Ok((output, record))
+    }
+
+    fn execute_instruction2<Mem, Ctx>(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        let Instruction {
+            opcode, a, b, c, ..
+        } = instruction;
+
+        // Verify the opcode is MUL
+        // TODO(ayush): debug_assert
+        assert_eq!(
+            MulOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
+            MulOpcode::MUL
+        );
+
+        // Read input registers
+        let rs1_addr = b.as_canonical_u32();
+        let rs2_addr = c.as_canonical_u32();
+
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+        let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+
+        // TODO(ayush): remove this conversion
+        let rs1_bytes = rs1_bytes.map(|x| x as u32);
+        let rs2_bytes = rs2_bytes.map(|y| y as u32);
+
+        // Perform the multiplication
+        let (rd_bytes, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1_bytes, &rs2_bytes);
+        let rd_bytes = rd_bytes.map(|x| x as u8);
+
+        // Write result to destination register
+        let rd_addr = a.as_canonical_u32();
+        unsafe { state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

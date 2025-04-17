@@ -21,8 +21,8 @@ use openvm_stark_backend::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{ExecutionState, InstructionExecutor, Result};
-use crate::system::memory::{MemoryController, OfflineMemory};
+use super::{ExecutionState, InsExecutor, InstructionExecutor, Result, VmExecutionState};
+use crate::system::memory::{online::GuestMemory, MemoryController, OfflineMemory};
 
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
@@ -127,6 +127,14 @@ pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)>;
+
+    fn execute_instruction2<Mem, Ctx>(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory;
 
     fn get_opcode_name(&self, opcode: usize) -> String;
 
@@ -256,6 +264,24 @@ where
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         self.core.get_opcode_name(opcode)
+    }
+}
+
+impl<Mem, Ctx, F, A, M> InsExecutor<Mem, Ctx, F> for VmChipWrapper<F, A, M>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+    A: VmAdapterChip<F> + Send + Sync,
+    M: VmCoreChip<F, A::Interface> + Send + Sync,
+{
+    fn execute(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        self.core
+            .execute_instruction2::<Mem, Ctx>(state, instruction)?;
+        Ok(())
     }
 }
 

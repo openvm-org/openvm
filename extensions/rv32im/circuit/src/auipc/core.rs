@@ -3,15 +3,23 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, PC_BITS},
+    riscv::RV32_REGISTER_AS,
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -265,6 +273,37 @@ where
                 rd_data: rd_data.map(F::from_canonical_u32),
             },
         ))
+    }
+
+    fn execute_instruction2<Mem, Ctx>(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        let Instruction {
+            opcode, a, c: imm, ..
+        } = instruction;
+
+        let local_opcode =
+            Rv32AuipcOpcode::from_usize(opcode.local_opcode_idx(Rv32AuipcOpcode::CLASS_OFFSET));
+
+        let imm = imm.as_canonical_u32();
+
+        // TODO(ayush): should this be [u8; 4]?
+        let rd_bytes = run_auipc(local_opcode, state.pc, imm);
+        let rd_bytes = rd_bytes.map(|x| x as u8);
+
+        let rd_addr = a.as_canonical_u32();
+        unsafe {
+            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
+        }
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
