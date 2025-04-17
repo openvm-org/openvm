@@ -47,6 +47,8 @@ pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
     })
 }
 
+/// Atomic read operation which increments the timestamp by 1.
+/// Returns `(t_prev, [reg_ptr:4]_1)` where `t_prev` is the timestamp of the last memory access.
 pub fn tracing_read_reg(
     memory: &mut TracingMemory,
     reg_ptr: u32,
