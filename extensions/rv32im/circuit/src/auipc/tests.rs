@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
+use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAirWrapper};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
@@ -8,7 +8,6 @@ use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcod
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::BusIndex,
-    p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     utils::disable_debug_builder,
@@ -18,13 +17,31 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreChip, Rv32AuipcCoreCols};
-use crate::adapters::{Rv32RdWriteAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreChip, Rv32AuipcCoreCols, ADAPTER_WIDTH};
+use crate::adapters::{Rv32RdWriteAdapterAir, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
 const IMM_BITS: usize = 24;
 const BITWISE_OP_LOOKUP_BUS: BusIndex = 9;
+const MAX_INS_CAPACITY: usize = 128;
 
 type F = BabyBear;
+
+fn create_test_chip(
+    tester: &VmChipTestBuilder<F>,
+) -> (
+    Rv32AuipcChip<F>,
+    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let adapter_air = Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge());
+    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone());
+    let air = VmAirWrapper::new(adapter_air, core.air);
+    (
+        Rv32AuipcChip::<F>::new(air, core, MAX_INS_CAPACITY, tester.memory_helper()),
+        bitwise_chip,
+    )
+}
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
@@ -46,7 +63,7 @@ fn set_and_execute(
 
     let rd_data = run_auipc(opcode, initial_pc, imm as u32);
 
-    assert_eq!(rd_data.map(F::from_canonical_u32), tester.read::<4>(1, a));
+    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -59,17 +76,9 @@ fn set_and_execute(
 #[test]
 fn rand_auipc_test() {
     let mut rng = create_seeded_rng();
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32RdWriteAdapterChip::<F>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-    );
-    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone());
-    let mut chip = Rv32AuipcChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
@@ -98,18 +107,8 @@ fn run_negative_auipc_test(
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32RdWriteAdapterChip::<F>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-    );
-    let adapter_width = BaseAir::<F>::width(adapter.air());
-    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone());
-    let mut chip = Rv32AuipcChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
     set_and_execute(
         &mut tester,
@@ -129,7 +128,7 @@ fn run_negative_auipc_test(
     {
         let mut trace_row = auipc_trace.row_slice(0).to_vec();
 
-        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        let (_, core_row) = trace_row.split_at_mut(ADAPTER_WIDTH);
 
         let core_cols: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
 
@@ -254,17 +253,8 @@ fn overflow_negative_tests() {
 #[test]
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-
     let mut tester = VmChipTestBuilder::default();
-    let adapter = Rv32RdWriteAdapterChip::<F>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-    );
-    let inner = Rv32AuipcCoreChip::new(bitwise_chip);
-    let mut chip = Rv32AuipcChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
+    let (mut chip, _) = create_test_chip(&tester);
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {

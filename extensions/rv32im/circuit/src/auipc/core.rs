@@ -1,17 +1,26 @@
 use std::{
     array,
+    array::from_fn,
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, ImmInstruction, Result, SingleTraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
+    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, PC_BITS},
+    riscv::RV32_REGISTER_AS,
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -21,9 +30,11 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use crate::adapters::{
+    tracing_write_reg, Rv32RdWriteAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
 
-const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
+pub(super) const ADAPTER_WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -36,7 +47,7 @@ pub struct Rv32AuipcCoreCols<T> {
     pub rd_data: [T; RV32_REGISTER_NUM_LIMBS],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Rv32AuipcCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }
@@ -191,6 +202,7 @@ pub struct Rv32AuipcCoreRecord<F> {
 }
 
 pub struct Rv32AuipcCoreChip {
+    // TODO[jpw]: do we still need air in here?
     pub air: Rv32AuipcCoreAir,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
@@ -206,84 +218,75 @@ impl Rv32AuipcCoreChip {
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32AuipcCoreChip
-where
-    I::Writes: From<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
-{
-    type Record = Rv32AuipcCoreRecord<F>;
-    type Air = Rv32AuipcCoreAir;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
+impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
         instruction: &Instruction<F>,
-        from_pc: u32,
-        _reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode = Rv32AuipcOpcode::from_usize(
-            instruction
-                .opcode
-                .local_opcode_idx(Rv32AuipcOpcode::CLASS_OFFSET),
-        );
+        row_slice: &mut [F],
+    ) -> Result<()> {
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(ADAPTER_WIDTH) };
+        let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let core_row: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
+
+        let from_timestamp = state.memory.timestamp();
         let imm = instruction.c.as_canonical_u32();
-        let rd_data = run_auipc(local_opcode, from_pc, imm);
-        let rd_data_field = rd_data.map(F::from_canonical_u32);
+        let rd_data = run_auipc(Rv32AuipcOpcode::AUIPC, *state.pc, imm);
 
-        let output = AdapterRuntimeContext::without_pc([rd_data_field]);
+        debug_assert_eq!(instruction.d.as_canonical_u32(), RV32_REGISTER_AS);
+        let rd_ptr = instruction.a.as_canonical_u32();
+        let (t_prev, data_prev) = tracing_write_reg(state.memory, rd_ptr, &rd_data);
+        // TODO: store as u32 directly
+        adapter_row.from_state.pc = F::from_canonical_u32(*state.pc);
+        adapter_row.from_state.timestamp = F::from_canonical_u32(from_timestamp);
+        adapter_row.rd_ptr = instruction.a;
+        adapter_row.rd_aux_cols.set_prev(
+            F::from_canonical_u32(t_prev),
+            data_prev.map(F::from_canonical_u8),
+        );
+        core_row.rd_data = rd_data.map(F::from_canonical_u8);
+        // We decompose during fill_trace_row later:
+        core_row.imm_limbs[0] = instruction.c;
 
-        let imm_limbs = array::from_fn(|i| (imm >> (i * RV32_CELL_BITS)) & RV32_LIMB_MAX);
-        let pc_limbs: [u32; RV32_REGISTER_NUM_LIMBS] =
-            array::from_fn(|i| (from_pc >> (i * RV32_CELL_BITS)) & RV32_LIMB_MAX);
+        *state.pc += DEFAULT_PC_STEP;
+        Ok(())
+    }
 
-        for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
-            self.bitwise_lookup_chip
-                .request_range(rd_data[i * 2], rd_data[i * 2 + 1]);
-        }
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(ADAPTER_WIDTH) };
+        let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let core_row: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
+        core_row.is_valid = F::ONE;
 
-        let mut need_range_check: Vec<u32> = Vec::new();
-        for limb in imm_limbs {
-            need_range_check.push(limb);
-        }
+        let timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
+        mem_helper.fill_from_prev(timestamp, adapter_row.rd_aux_cols.as_mut());
 
-        for (i, limb) in pc_limbs.iter().skip(1).enumerate() {
-            if i == pc_limbs.len() - 1 {
-                need_range_check.push((*limb) << (pc_limbs.len() * RV32_CELL_BITS - PC_BITS));
-            } else {
-                need_range_check.push(*limb);
-            }
-        }
-
-        for pair in need_range_check.chunks(2) {
+        let from_pc = adapter_row.from_state.pc.as_canonical_u32();
+        let pc_limbs = from_pc.to_le_bytes();
+        let imm = core_row.imm_limbs[0].as_canonical_u32();
+        let imm_limbs = imm.to_le_bytes();
+        debug_assert_eq!(imm_limbs[3], 0);
+        core_row.imm_limbs = from_fn(|i| F::from_canonical_u8(imm_limbs[i]));
+        // only the middle 2 limbs:
+        core_row.pc_limbs = from_fn(|i| F::from_canonical_u8(pc_limbs[i + 1]));
+        // range checks:
+        let rd_data = core_row.rd_data.map(|x| x.as_canonical_u32());
+        for pair in rd_data.chunks_exact(2) {
             self.bitwise_lookup_chip.request_range(pair[0], pair[1]);
         }
-
-        Ok((
-            output,
-            Self::Record {
-                imm_limbs: imm_limbs.map(F::from_canonical_u32),
-                pc_limbs: array::from_fn(|i| F::from_canonical_u32(pc_limbs[i + 1])),
-                rd_data: rd_data.map(F::from_canonical_u32),
-            },
-        ))
+        // hardcoding for performance: first 3 limbs of imm_limbs, last 3 limbs of pc_limbs where
+        // most significant limb of pc_limbs is shifted up
+        self.bitwise_lookup_chip
+            .request_range(imm_limbs[0] as u32, imm_limbs[1] as u32);
+        self.bitwise_lookup_chip
+            .request_range(imm_limbs[2] as u32, pc_limbs[1] as u32);
+        let msl_shift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - PC_BITS;
+        self.bitwise_lookup_chip
+            .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
     }
 
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv32AuipcOpcode::from_usize(opcode - Rv32AuipcOpcode::CLASS_OFFSET)
-        )
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut Rv32AuipcCoreCols<F> = row_slice.borrow_mut();
-        core_cols.imm_limbs = record.imm_limbs;
-        core_cols.pc_limbs = record.pc_limbs;
-        core_cols.rd_data = record.rd_data;
-        core_cols.is_valid = F::ONE;
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", AUIPC)
     }
 }
 
@@ -292,7 +295,7 @@ pub(super) fn run_auipc(
     _opcode: Rv32AuipcOpcode,
     pc: u32,
     imm: u32,
-) -> [u32; RV32_REGISTER_NUM_LIMBS] {
+) -> [u8; RV32_REGISTER_NUM_LIMBS] {
     let rd = pc.wrapping_add(imm << RV32_CELL_BITS);
-    array::from_fn(|i| (rd >> (RV32_CELL_BITS * i)) & RV32_LIMB_MAX)
+    rd.to_le_bytes()
 }

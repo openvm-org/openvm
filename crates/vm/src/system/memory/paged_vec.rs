@@ -29,6 +29,7 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
     // Copies a range of length `len` starting at index `start`
     // into the memory pointed to by `dst`. If the relevant page is not
     // initialized, fills that portion with `0u8`.
+    #[inline]
     fn read_range_generic(&self, start: usize, len: usize, dst: *mut u8) {
         let start_page = start / PAGE_SIZE;
         let end_page = (start + len - 1) / PAGE_SIZE;
@@ -63,6 +64,7 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
     // It copies the current values into the memory pointed to by `dst`
     // and then writes the new values into the underlying pages,
     // allocating pages (with defaults) if necessary.
+    #[inline]
     fn set_range_generic(&mut self, start: usize, len: usize, new: *const u8, dst: *mut u8) {
         let start_page = start / PAGE_SIZE;
         let end_page = (start + len - 1) / PAGE_SIZE;
@@ -101,8 +103,9 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
         }
     }
 
-    pub fn memory_size(&self) -> usize {
-        self.pages.len() * PAGE_SIZE
+    /// Total capacity across available pages, in bytes.
+    pub fn bytes_capacity(&self) -> usize {
+        self.pages.len().checked_mul(PAGE_SIZE).unwrap()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -124,6 +127,9 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
 
     /// # Panics
     /// If `start..start + size_of<BLOCK>()` is out of bounds.
+    // @dev: `values` is passed by reference since the data is copied into memory. Even though the
+    // compiler probably optimizes it, we use reference to avoid any unnecessary copy of `values`
+    // onto the stack in the function call.
     #[inline(always)]
     pub fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK) {
         let len = size_of::<BLOCK>();
@@ -208,7 +214,7 @@ impl<T: Copy, const PAGE_SIZE: usize> Iterator for PagedVecIter<'_, T, PAGE_SIZE
             self.current_index_in_page = 0;
         }
         let global_index = self.current_page * PAGE_SIZE + self.current_index_in_page;
-        if global_index + size_of::<T>() > self.vec.memory_size() {
+        if global_index + size_of::<T>() > self.vec.bytes_capacity() {
             return None;
         }
 
@@ -248,8 +254,14 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
         // TMP: hardcoding for now
         let mut cell_size = vec![1, 1];
         cell_size.resize(as_cnt, 4);
+        let paged_vecs = cell_size
+            .iter()
+            .map(|&cell_size| {
+                PagedVec::new(mem_size.checked_mul(cell_size).unwrap().div_ceil(PAGE_SIZE))
+            })
+            .collect();
         Self {
-            paged_vecs: vec![PagedVec::new(mem_size.div_ceil(PAGE_SIZE)); as_cnt],
+            paged_vecs,
             cell_size,
             as_offset,
         }
@@ -285,6 +297,18 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
                         .collect_vec()
                 }
             })
+    }
+
+    pub fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
+        debug_assert_ne!(addr_space, 0);
+        // TODO: fix this
+        unsafe {
+            if addr_space <= 2 {
+                F::from_canonical_u8(self.get::<u8>((addr_space, ptr)))
+            } else {
+                self.get::<F>((addr_space, ptr))
+            }
+        }
     }
 
     /// # Safety
@@ -336,7 +360,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
 
 impl<const PAGE_SIZE: usize> GuestMemory for AddressMap<PAGE_SIZE> {
     unsafe fn read<T: Copy, const BLOCK_SIZE: usize>(
-        &mut self,
+        &self,
         addr_space: u32,
         ptr: u32,
     ) -> [T; BLOCK_SIZE] {

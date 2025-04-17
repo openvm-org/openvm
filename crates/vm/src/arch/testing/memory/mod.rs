@@ -1,138 +1,124 @@
-use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, rc::Rc, sync::Arc};
+use std::collections::HashMap;
 
-use air::{DummyMemoryInteractionCols, MemoryDummyAir};
+use air::{MemoryDummyAir, MemoryDummyChip};
 use openvm_circuit::system::memory::MemoryController;
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    p3_field::{FieldAlgebra, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
-    AirRef, Chip, ChipUsageGetter,
-};
-use rand::{seq::SliceRandom, Rng};
+use openvm_stark_backend::p3_field::PrimeField32;
+use rand::Rng;
 
-use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress, RecordId};
+use crate::system::memory::INITIAL_TIMESTAMP;
 
 pub mod air;
-
-const WORD_SIZE: usize = 1;
 
 /// A dummy testing chip that will add unconstrained messages into the [MemoryBus].
 /// Stores a log of raw messages to send/receive to the [MemoryBus].
 ///
 /// It will create a [air::MemoryDummyAir] to add messages to MemoryBus.
 pub struct MemoryTester<F> {
-    pub bus: MemoryBus,
-    pub controller: Rc<RefCell<MemoryController<F>>>,
-    /// Log of record ids
-    pub records: Vec<RecordId>,
+    /// Map from `block_size` to [MemoryDummyChip] of that block size
+    pub chip_for_block: HashMap<usize, MemoryDummyChip<F>>,
+    // TODO: make this just TracedMemory?
+    pub controller: MemoryController<F>,
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
-    pub fn new(controller: Rc<RefCell<MemoryController<F>>>) -> Self {
-        let bus = controller.borrow().memory_bus;
+    pub fn new(controller: MemoryController<F>) -> Self {
+        let bus = controller.memory_bus;
+        let mut chip_for_block = HashMap::new();
+        for log_block_size in 0..6 {
+            let block_size = 1 << log_block_size;
+            let chip = MemoryDummyChip::new(MemoryDummyAir::new(bus, block_size));
+            chip_for_block.insert(block_size, chip);
+        }
         Self {
-            bus,
+            chip_for_block,
             controller,
-            records: Vec::new(),
         }
     }
 
-    /// Returns the cell value at the current timestamp according to `MemoryController`.
-    pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        // core::BorrowMut confuses compiler
-        let (record_id, value) =
-            RefCell::borrow_mut(&self.controller).read_cell(addr_space, pointer);
-        self.records.push(record_id);
-        value
-    }
-
-    pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        let (record_id, _) =
-            RefCell::borrow_mut(&self.controller).write_cell(addr_space, pointer, value);
-        self.records.push(record_id);
-    }
-
-    pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
-        from_fn(|i| self.read_cell(address_space, pointer + i))
-    }
-
-    pub fn write<const N: usize>(
-        &mut self,
-        address_space: usize,
-        mut pointer: usize,
-        cells: [F; N],
-    ) {
-        for cell in cells {
-            self.write_cell(address_space, pointer, cell);
-            pointer += 1;
-        }
-    }
-}
-
-impl<SC: StarkGenericConfig> Chip<SC> for MemoryTester<Val<SC>>
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(MemoryDummyAir::<WORD_SIZE>::new(self.bus))
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let offline_memory = self.controller.borrow().offline_memory();
-        let offline_memory = offline_memory.lock().unwrap();
-
-        let height = self.records.len().next_power_of_two();
-        let width = self.trace_width();
-        let mut values = Val::<SC>::zero_vec(2 * height * width);
-        // This zip only goes through records. The padding rows between records.len()..height
-        // are filled with zeros - in particular count = 0 so nothing is added to bus.
-        for (row, id) in values.chunks_mut(2 * width).zip(self.records) {
-            let (first, second) = row.split_at_mut(width);
-            let row: &mut DummyMemoryInteractionCols<Val<SC>, WORD_SIZE> = first.borrow_mut();
-            let record = offline_memory.record_by_id(id);
-            row.address = MemoryAddress {
-                address_space: record.address_space,
-                pointer: record.pointer,
+    // TODO: change interface by implementing GuestMemory trait after everything works
+    pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
+        let controller = &mut self.controller;
+        let t = controller.memory.timestamp();
+        // TODO: hack
+        let (t_prev, data) = if addr_space <= 2 {
+            let (t_prev, data) = unsafe {
+                controller
+                    .memory
+                    .read::<u8, N, 4>(addr_space as u32, ptr as u32)
             };
-            row.data
-                .copy_from_slice(record.prev_data_slice().unwrap_or(record.data_slice()));
-            row.timestamp = Val::<SC>::from_canonical_u32(record.prev_timestamp);
-            row.count = -Val::<SC>::ONE;
+            (t_prev, data.map(F::from_canonical_u8))
+        } else {
+            unsafe {
+                controller
+                    .memory
+                    .read::<F, N, 1>(addr_space as u32, ptr as u32)
+            }
+        };
+        self.chip_for_block.get_mut(&N).unwrap().receive(
+            addr_space as u32,
+            ptr as u32,
+            &data,
+            t_prev,
+        );
+        self.chip_for_block
+            .get_mut(&N)
+            .unwrap()
+            .send(addr_space as u32, ptr as u32, &data, t);
 
-            let row: &mut DummyMemoryInteractionCols<Val<SC>, WORD_SIZE> = second.borrow_mut();
-            row.address = MemoryAddress {
-                address_space: record.address_space,
-                pointer: record.pointer,
+        data
+    }
+
+    // TODO: see read
+    pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
+        let controller = &mut self.controller;
+        let t = controller.memory.timestamp();
+        // TODO: hack
+        let (t_prev, data_prev) = if addr_space <= 2 {
+            let (t_prev, data_prev) = unsafe {
+                controller.memory.write::<u8, N, 4>(
+                    addr_space as u32,
+                    ptr as u32,
+                    &data.map(|x| x.as_canonical_u32() as u8),
+                )
             };
-            row.data.copy_from_slice(record.data_slice());
-            row.timestamp = Val::<SC>::from_canonical_u32(record.timestamp);
-            row.count = Val::<SC>::ONE;
+            (t_prev, data_prev.map(F::from_canonical_u8))
+        } else {
+            unsafe {
+                controller
+                    .memory
+                    .write::<F, N, 1>(addr_space as u32, ptr as u32, &data)
+            }
+        };
+        self.chip_for_block.get_mut(&N).unwrap().receive(
+            addr_space as u32,
+            ptr as u32,
+            &data_prev,
+            t_prev,
+        );
+        self.chip_for_block
+            .get_mut(&N)
+            .unwrap()
+            .send(addr_space as u32, ptr as u32, &data, t);
+    }
+
+    /// Fills in dummy memory chips to balance the memory bus with the initial and final boundary
+    /// messages. Taking a volatile memory approach: any touched address will be initialized with
+    /// zero.
+    pub fn finalize(&mut self) {
+        let memory = &self.controller.memory;
+        // TODO[jpw]: assuming the last block size matches initial block size, after adding
+        // adapters, fix this
+        for ((addr_space, ptr), metadata) in memory.touched_blocks() {
+            let block_size = metadata.block_size as usize;
+            let chip = self.chip_for_block.get_mut(&block_size).unwrap();
+            let mut data = F::zero_vec(block_size);
+            chip.send(addr_space, ptr, &data, INITIAL_TIMESTAMP);
+            for (i, v) in data.iter_mut().enumerate() {
+                *v = memory.data().get_f(addr_space, ptr + i as u32);
+            }
+            chip.receive(addr_space, ptr, &data, metadata.timestamp);
         }
-        AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
     }
-}
-
-impl<F: PrimeField32> ChipUsageGetter for MemoryTester<F> {
-    fn air_name(&self) -> String {
-        "MemoryDummyAir".to_string()
-    }
-    fn current_trace_height(&self) -> usize {
-        self.records.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        size_of::<DummyMemoryInteractionCols<u8, WORD_SIZE>>()
-    }
-}
-
-pub fn gen_address_space<R>(rng: &mut R) -> usize
-where
-    R: Rng + ?Sized,
-{
-    *[1, 2].choose(rng).unwrap()
 }
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize

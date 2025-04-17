@@ -12,17 +12,20 @@ use openvm_stark_backend::{
     air_builders::{debug::DebugConstraintBuilder, symbolic::SymbolicRapBuilder},
     config::{StarkGenericConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
-    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
+    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{ExecutionState, InstructionExecutor, Result};
-use crate::system::memory::{MemoryController, OfflineMemory};
+use super::{ExecutionError, ExecutionState, InstructionExecutor, Result, VmStateMut};
+use crate::system::memory::{
+    online::TracingMemory, MemoryAuxColsFactory, MemoryController, OfflineMemory,
+    SharedMemoryHelper,
+};
 
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
@@ -37,6 +40,7 @@ pub trait VmAdapterInterface<T> {
     type ProcessedInstruction;
 }
 
+// TODO: delete
 /// The adapter owns all memory accesses and timestamp changes.
 /// The adapter AIR should also own `ExecutionBridge` and `MemoryBridge`.
 pub trait VmAdapterChip<F> {
@@ -111,6 +115,7 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
 }
 
+// TODO: delete
 /// Trait to be implemented on primitive chip to integrate with the machine.
 pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
     /// Minimum data that must be recorded to be able to generate trace for one row of
@@ -183,6 +188,7 @@ where
     }
 }
 
+// TODO: delete
 pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
     pub to_pc: Option<u32>,
@@ -205,6 +211,161 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     pub reads: I::Reads,
     pub writes: I::Writes,
     pub instruction: I::ProcessedInstruction,
+}
+
+/// Interface for trace generation when the state transition step of a single instruction
+/// uses only one trace row. The trace row is provided as a mutable buffer during both
+/// instruction execution and trace generation.
+/// It is expected that no additional memory allocation is necessary and the trace buffer
+/// is sufficient, with possible overwriting.
+pub trait SingleTraceStep<F, CTX> {
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
+        instruction: &Instruction<F>,
+        row_slice: &mut [F],
+    ) -> Result<()>;
+
+    /// Populates `row_slice`. This function will always be called after
+    /// [`SingleTraceStep::execute`], so the `row_slice` should already contain context necessary to
+    /// fill in the rest of the row. This function will be called for each row in the trace which is
+    /// being used, and all other rows in the trace will be filled with zeroes.
+    ///
+    /// The provided `row_slice` will have length equal to the width of the AIR.
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]);
+
+    /// Returns a list of public values to publish.
+    fn generate_public_values(&self) -> Vec<F> {
+        vec![]
+    }
+
+    /// Displayable opcode name for logging and debugging purposes.
+    fn get_opcode_name(&self, opcode: usize) -> String;
+}
+
+pub struct NewVmChipWrapper<F, AIR, C> {
+    pub air: AIR,
+    pub inner: C,
+    pub trace_buffer: Vec<F>,
+    width: usize,
+    buffer_idx: usize,
+    mem_helper: SharedMemoryHelper<F>,
+}
+
+impl<F, AIR, C> NewVmChipWrapper<F, AIR, C>
+where
+    F: Field,
+    AIR: BaseAir<F>,
+{
+    pub fn new(air: AIR, inner: C, height: usize, mem_helper: SharedMemoryHelper<F>) -> Self {
+        assert!(height == 0 || height.is_power_of_two());
+        let width = air.width();
+        let trace_buffer = F::zero_vec(height * width);
+        Self {
+            air,
+            inner,
+            trace_buffer,
+            width,
+            buffer_idx: 0,
+            mem_helper,
+        }
+    }
+}
+
+impl<F, Air, C> InstructionExecutor<F> for NewVmChipWrapper<F, Air, C>
+where
+    F: PrimeField32,
+    C: SingleTraceStep<F, ()>, // TODO: CTX?
+{
+    fn execute(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        instruction: &Instruction<F>,
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        let mut pc = from_state.pc;
+        let state = VmStateMut {
+            pc: &mut pc,
+            memory: &mut memory.memory,
+            ctx: &mut (),
+        };
+        let start_idx = self.buffer_idx;
+        self.buffer_idx += self.width;
+        if self.buffer_idx > self.trace_buffer.len() {
+            return Err(ExecutionError::TraceBufferOutOfBounds {
+                requested: self.buffer_idx,
+                capacity: self.trace_buffer.len(),
+            });
+        }
+        // SAFETY: bound checked above
+        let row_slice = unsafe {
+            self.trace_buffer
+                .get_unchecked_mut(start_idx..self.buffer_idx)
+        };
+        self.inner.execute(state, instruction, row_slice)?;
+        Ok(ExecutionState {
+            pc,
+            timestamp: memory.memory.timestamp,
+        })
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        self.inner.get_opcode_name(opcode)
+    }
+}
+
+// Note[jpw]: the statement we want is:
+// - `Air` is an `Air<AB>` for all `AB: AirBuilder`s needed by stark-backend
+// which is equivalent to saying it implements AirRef<SC>
+// The where clauses to achieve this statement is unfortunately really verbose.
+impl<SC, AIR, C> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, C>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
+    C: SingleTraceStep<Val<SC>, ()> + Send + Sync,
+    AIR: Clone + AnyRap<SC> + 'static,
+{
+    fn air(&self) -> AirRef<SC> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(mut self) -> AirProofInput<SC> {
+        assert_eq!(self.buffer_idx % self.width, 0);
+        let rows_used = self.current_trace_height();
+        let height = next_power_of_two_or_zero(rows_used);
+        // This should be automatic since trace_buffer's height is a power of two:
+        assert!(height.checked_mul(self.width).unwrap() <= self.trace_buffer.len());
+        self.trace_buffer.truncate(height * self.width);
+        let mem_helper = self.mem_helper.as_borrowed();
+        // This zip only goes through used rows.
+        // TODO: check if zero-init assumption changes
+        // The padding(=dummy) rows between rows_used..height are ASSUMED to be filled with zeros.
+        self.trace_buffer[..rows_used * self.width]
+            .par_chunks_exact_mut(self.width)
+            .for_each(|row_slice| {
+                self.inner.fill_trace_row(&mem_helper, row_slice);
+            });
+        drop(self.mem_helper);
+        let trace = RowMajorMatrix::new(self.trace_buffer, self.width);
+        // self.inner.finalize(&mut trace, num_records);
+
+        AirProofInput::simple(trace, self.inner.generate_public_values())
+    }
+}
+
+impl<F, AIR, C> ChipUsageGetter for NewVmChipWrapper<F, AIR, C>
+where
+    C: Sync,
+{
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+    fn current_trace_height(&self) -> usize {
+        self.buffer_idx / self.width
+    }
+    fn trace_width(&self) -> usize {
+        self.width
+    }
 }
 
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {
@@ -341,6 +502,7 @@ where
     }
 }
 
+#[derive(Clone, Copy, derive_new::new)]
 pub struct VmAirWrapper<A, C> {
     pub adapter: A,
     pub core: C,

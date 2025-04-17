@@ -1,11 +1,11 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, ImmInstruction, Result, SingleTraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
+    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -25,7 +25,13 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS};
+use crate::adapters::{
+    tracing_write_reg, Rv32CondRdWriteAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    RV_J_TYPE_IMM_BITS,
+};
+
+pub(super) const ADAPTER_WIDTH: usize = size_of::<Rv32CondRdWriteAdapterCols<u8>>();
+const ADDITIONAL_BITS: u32 = 0b11000000;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -36,7 +42,7 @@ pub struct Rv32JalLuiCoreCols<T> {
     pub is_lui: T,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Rv32JalLuiCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }
@@ -166,66 +172,80 @@ impl Rv32JalLuiCoreChip {
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32JalLuiCoreChip
-where
-    I::Writes: From<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
-{
-    type Record = Rv32JalLuiCoreRecord<F>;
-    type Air = Rv32JalLuiCoreAir;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
+impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32JalLuiCoreChip {
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
         instruction: &Instruction<F>,
-        from_pc: u32,
-        _reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+        row_slice: &mut [F],
+    ) -> Result<()> {
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(ADAPTER_WIDTH) };
+        let adapter_row: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
+
         let local_opcode = Rv32JalLuiOpcode::from_usize(
             instruction
                 .opcode
                 .local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET),
         );
-        let imm = instruction.c;
-
+        let from_timestamp = state.memory.timestamp();
+        // `c` can be "negative" as a field element
+        let imm_f = instruction.c.as_canonical_u32();
         let signed_imm = match local_opcode {
             JAL => {
-                // Note: signed_imm is a signed integer and imm is a field element
-                (imm + F::from_canonical_u32(1 << (RV_J_TYPE_IMM_BITS - 1))).as_canonical_u32()
-                    as i32
-                    - (1 << (RV_J_TYPE_IMM_BITS - 1))
+                if imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)) {
+                    imm_f as i32
+                } else {
+                    let neg_imm_f = F::ORDER_U32 - imm_f;
+                    debug_assert!(neg_imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)));
+                    -(neg_imm_f as i32)
+                }
             }
-            LUI => imm.as_canonical_u32() as i32,
+            LUI => imm_f as i32,
         };
-        let (to_pc, rd_data) = run_jal_lui(local_opcode, from_pc, signed_imm);
+        let (to_pc, rd_data) = run_jal_lui(local_opcode, *state.pc, signed_imm);
 
-        for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
-            self.bitwise_lookup_chip
-                .request_range(rd_data[i * 2], rd_data[i * 2 + 1]);
+        if instruction.f != F::ZERO {
+            let rd_ptr = instruction.a.as_canonical_u32();
+            let (t_prev, data_prev) = tracing_write_reg(state.memory, rd_ptr, &rd_data);
+            adapter_row.inner.rd_ptr = instruction.a;
+            adapter_row.inner.rd_aux_cols.set_prev(
+                F::from_canonical_u32(t_prev),
+                data_prev.map(F::from_canonical_u8),
+            );
+            adapter_row.needs_write = F::ONE;
+        } else {
+            state.memory.increment_timestamp();
+        }
+        adapter_row.inner.from_state.pc = F::from_canonical_u32(*state.pc);
+        adapter_row.inner.from_state.timestamp = F::from_canonical_u32(from_timestamp);
+        core_row.rd_data = rd_data.map(F::from_canonical_u8);
+        core_row.imm = instruction.c;
+        core_row.is_jal = F::from_bool(local_opcode == JAL);
+        core_row.is_lui = F::from_bool(local_opcode == LUI);
+
+        *state.pc = to_pc;
+        Ok(())
+    }
+
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(ADAPTER_WIDTH) };
+        let adapter_row: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
+
+        if adapter_row.needs_write == F::ONE {
+            let timestamp = adapter_row.inner.from_state.timestamp.as_canonical_u32();
+            mem_helper.fill_from_prev(timestamp, adapter_row.inner.rd_aux_cols.as_mut());
         }
 
-        if local_opcode == JAL {
-            let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
-            let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1 << x));
-            self.bitwise_lookup_chip
-                .request_xor(rd_data[3], additional_bits);
+        let rd_data = core_row.rd_data.map(|x| x.as_canonical_u32());
+        for pair in rd_data.chunks_exact(2) {
+            self.bitwise_lookup_chip.request_range(pair[0], pair[1]);
         }
-
-        let rd_data = rd_data.map(F::from_canonical_u32);
-
-        let output = AdapterRuntimeContext {
-            to_pc: Some(to_pc),
-            writes: [rd_data].into(),
-        };
-
-        Ok((
-            output,
-            Rv32JalLuiCoreRecord {
-                rd_data,
-                imm,
-                is_jal: local_opcode == JAL,
-                is_lui: local_opcode == LUI,
-            },
-        ))
+        if core_row.is_jal == F::ONE {
+            self.bitwise_lookup_chip
+                .request_xor(rd_data[3], ADDITIONAL_BITS);
+        }
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -234,18 +254,6 @@ where
             Rv32JalLuiOpcode::from_usize(opcode - Rv32JalLuiOpcode::CLASS_OFFSET)
         )
     }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut Rv32JalLuiCoreCols<F> = row_slice.borrow_mut();
-        core_cols.rd_data = record.rd_data;
-        core_cols.imm = record.imm;
-        core_cols.is_jal = F::from_bool(record.is_jal);
-        core_cols.is_lui = F::from_bool(record.is_lui);
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
-    }
 }
 
 // returns (to_pc, rd_data)
@@ -253,12 +261,10 @@ pub(super) fn run_jal_lui(
     opcode: Rv32JalLuiOpcode,
     pc: u32,
     imm: i32,
-) -> (u32, [u32; RV32_REGISTER_NUM_LIMBS]) {
+) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
     match opcode {
         JAL => {
-            let rd_data = array::from_fn(|i| {
-                ((pc + DEFAULT_PC_STEP) >> (8 * i)) & ((1 << RV32_CELL_BITS) - 1)
-            });
+            let rd_data = (pc + DEFAULT_PC_STEP).to_le_bytes();
             let next_pc = pc as i32 + imm;
             assert!(next_pc >= 0);
             (next_pc as u32, rd_data)
@@ -266,9 +272,14 @@ pub(super) fn run_jal_lui(
         LUI => {
             let imm = imm as u32;
             let rd = imm << 12;
-            let rd_data =
-                array::from_fn(|i| (rd >> (RV32_CELL_BITS * i)) & ((1 << RV32_CELL_BITS) - 1));
-            (pc + DEFAULT_PC_STEP, rd_data)
+            (pc + DEFAULT_PC_STEP, rd.to_le_bytes())
         }
     }
+}
+
+#[test]
+fn test_additional_bits() {
+    let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
+    let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1u32 << x));
+    assert_eq!(additional_bits, ADDITIONAL_BITS);
 }

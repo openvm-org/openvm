@@ -1,6 +1,7 @@
 use std::ops::Mul;
 
-use openvm_circuit::system::memory::{MemoryController, RecordId};
+use openvm_circuit::system::memory::{online::TracingMemory, MemoryController, RecordId};
+use openvm_instructions::riscv::RV32_REGISTER_AS;
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 
 mod alu;
@@ -44,6 +45,36 @@ pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
     std::array::from_fn(|i| {
         F::from_canonical_u32((value >> (RV32_CELL_BITS * i)) & ((1 << RV32_CELL_BITS) - 1))
     })
+}
+
+pub fn tracing_read_reg(
+    memory: &mut TracingMemory,
+    reg_ptr: u32,
+) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
+    // SAFETY:
+    // - address space `RV32_REGISTER_AS` will always have cell type `u8` and minimum alignment of
+    //   `RV32_REGISTER_NUM_LIMBS`
+    unsafe {
+        memory
+            .read::<u8, RV32_REGISTER_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS>(RV32_REGISTER_AS, reg_ptr)
+    }
+}
+
+pub fn tracing_write_reg(
+    memory: &mut TracingMemory,
+    reg_ptr: u32,
+    reg_val: &[u8; RV32_REGISTER_NUM_LIMBS],
+) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
+    // SAFETY:
+    // - address space `RV32_REGISTER_AS` will always have cell type `u8` and minimum alignment of
+    //   `RV32_REGISTER_NUM_LIMBS`
+    unsafe {
+        memory.write::<u8, RV32_REGISTER_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS>(
+            RV32_REGISTER_AS,
+            reg_ptr,
+            reg_val,
+        )
+    }
 }
 
 /// Read register value as [RV32_REGISTER_NUM_LIMBS] limbs from memory.

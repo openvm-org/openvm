@@ -494,12 +494,12 @@ impl<F: PrimeField32> SystemBase<F> {
         self.memory_controller.memory_bridge()
     }
 
-    pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory_controller.offline_memory().clone()
-    }
-
     pub fn execution_bus(&self) -> ExecutionBus {
         self.connector_chip.air.execution_bus
+    }
+
+    pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
+        self.memory_controller.offline_memory().clone()
     }
 
     /// Return trace heights of SystemBase. Usually this is for aggregation and not useful for
@@ -557,7 +557,6 @@ impl<F: PrimeField32> SystemComplex<F> {
             )
         };
         let memory_bridge = memory_controller.memory_bridge();
-        let offline_memory = memory_controller.offline_memory();
         let program_chip = ProgramChip::new(program_bus);
         let connector_chip = VmConnectorChip::new(
             execution_bus,
@@ -576,7 +575,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                     config.num_public_values,
                     config.max_constraint_degree as u32 - 1,
                 ),
-                offline_memory,
+                memory_controller.offline_memory.clone(),
             );
             inventory
                 .add_executor(chip, [PublishOpcode::PUBLISH.global_opcode()])

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::cell::RefCell;
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -66,8 +66,20 @@ pub enum ExecutionError {
     DidNotTerminate,
     #[error("program exit code {0}")]
     FailedWithExitCode(u32),
+    #[error("trace buffer out of bounds: requested {requested} but capacity is {capacity}")]
+    TraceBufferOutOfBounds { requested: usize, capacity: usize },
 }
 
+/// Global VM state accessible during instruction execution.
+/// The state is generic in guest memory `MEM` and additional host state `CTX`.
+/// The host state is execution context specific.
+pub struct VmStateMut<'a, MEM, CTX> {
+    pub pc: &'a mut u32,
+    pub memory: &'a mut MEM,
+    pub ctx: &'a mut CTX,
+}
+
+// TODO: old
 pub trait InstructionExecutor<F> {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
@@ -84,21 +96,6 @@ pub trait InstructionExecutor<F> {
 }
 
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
-    fn execute(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        prev_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut().execute(memory, instruction, prev_state)
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        self.borrow().get_opcode_name(opcode)
-    }
-}
-
-impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,

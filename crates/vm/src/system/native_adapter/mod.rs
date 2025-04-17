@@ -27,7 +27,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use crate::system::memory::{OfflineMemory, RecordId};
+use crate::system::memory::{online::GuestMemory, OfflineMemory, RecordId};
 
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.
@@ -226,18 +226,22 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
 
         let mut reads = Vec::with_capacity(R);
         if R >= 1 {
-            reads.push(memory.read::<F, 1>(e, b));
+            reads.push(unsafe {
+                memory
+                    .memory_image()
+                    .read::<F, 1>(e.as_canonical_u32(), b.as_canonical_u32())
+            });
         }
         if R >= 2 {
-            reads.push(memory.read::<F, 1>(f, c));
+            reads.push(unsafe {
+                memory
+                    .memory_image()
+                    .read::<F, 1>(f.as_canonical_u32(), c.as_canonical_u32())
+            });
         }
-        let i_reads: [_; R] = std::array::from_fn(|i| reads[i].1);
-
         Ok((
-            i_reads,
-            Self::ReadRecord {
-                reads: reads.try_into().unwrap(),
-            },
+            reads.try_into().unwrap(),
+            Self::ReadRecord { reads: todo!() },
         ))
     }
 
@@ -253,8 +257,9 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         let Instruction { a, d, .. } = *instruction;
         let mut writes = Vec::with_capacity(W);
         if W >= 1 {
-            let (record_id, _) = memory.write(d, a, &output.writes[0]);
-            writes.push((record_id, output.writes[0]));
+            todo!();
+            // let (record_id, _) = memory.write(d, a, &output.writes[0]);
+            // writes.push((record_id, output.writes[0]));
         }
 
         Ok((

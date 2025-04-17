@@ -95,7 +95,7 @@ fn rand_jalr_test() {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let range_checker_chip = tester.memory_controller().range_checker.clone();
 
     let adapter = Rv32JalrAdapterChip::<F>::new(
         tester.execution_bus(),
@@ -150,7 +150,7 @@ fn run_negative_jalr_test(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let range_checker_chip = tester.memory_controller().range_checker.clone();
 
     let adapter = Rv32JalrAdapterChip::<F>::new(
         tester.execution_bus(),
@@ -307,7 +307,7 @@ fn execute_roundtrip_sanity_test() {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let range_checker_chip = tester.memory_controller().range_checker.clone();
 
     let adapter = Rv32JalrAdapterChip::<F>::new(
         tester.execution_bus(),

@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashSet;
 
-use super::{AddressMap, PagedVec, PAGE_SIZE};
+use super::{AddressMap, PagedVec, SharedMemoryHelper, PAGE_SIZE};
 use crate::{
     arch::MemoryConfig,
     system::memory::{
@@ -344,7 +344,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         query: u32,
         records: &mut AccessAdapterInventory<F>,
     ) {
-        let lim = (self.data[(address_space - self.as_offset) as usize].memory_size()) as u32;
+        let lim = (self.data[(address_space - self.as_offset) as usize].bytes_capacity()) as u32;
         if query == lim {
             return;
         }
@@ -520,7 +520,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
         let range_bus = self.range_checker.bus();
         MemoryAuxColsFactory {
-            range_checker: self.range_checker.clone(),
+            range_checker: self.range_checker.as_ref(),
             timestamp_lt_air: AssertLtSubAir::new(range_bus, self.timestamp_max_bits),
             _marker: Default::default(),
         }
