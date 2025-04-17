@@ -287,8 +287,8 @@ where
 
     fn execute_instruction2<Mem, Ctx>(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
-        instruction: &Instruction<F>,
+        _state: &mut VmExecutionState<Mem, Ctx>,
+        _instruction: &Instruction<F>,
     ) -> Result<()>
     where
         Mem: GuestMemory,

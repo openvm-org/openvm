@@ -343,12 +343,12 @@ where
             LUI => imm as i32,
         };
 
-        let (to_pc, rd_data) = run_jal_lui(local_opcode, state.pc, signed_imm);
-        let rd_data = rd_data.map(|x| x as u8);
+        let (to_pc, rd_bytes) = run_jal_lui(local_opcode, state.pc, signed_imm);
+        let rd_bytes = rd_bytes.map(|x| x as u8);
 
-        let rd = a.as_canonical_u32();
+        let rd_addr = a.as_canonical_u32();
         unsafe {
-            state.memory.write(RV32_REGISTER_AS, rd, &rd_data);
+            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
         }
 
         state.pc = to_pc;

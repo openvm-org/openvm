@@ -225,18 +225,18 @@ where
         let branch_eq_opcode =
             BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        let rs1 = a.as_canonical_u32();
-        let rs2 = b.as_canonical_u32();
+        let rs1_addr = a.as_canonical_u32();
+        let rs2_addr = b.as_canonical_u32();
 
-        let rs1_data: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1) };
-        let rs2_data: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2) };
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+        let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
 
         // TODO(ayush): avoid this conversion
-        let rs1_data: [u32; NUM_LIMBS] = rs1_data.map(|x| x as u32);
-        let rs2_data: [u32; NUM_LIMBS] = rs2_data.map(|y| y as u32);
+        let rs1_bytes: [u32; NUM_LIMBS] = rs1_bytes.map(|x| x as u32);
+        let rs2_bytes: [u32; NUM_LIMBS] = rs2_bytes.map(|y| y as u32);
 
         // TODO(ayush): probably don't need the other values
-        let (cmp_result, _, _) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &rs1_data, &rs2_data);
+        let (cmp_result, _, _) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &rs1_bytes, &rs2_bytes);
 
         if cmp_result {
             let imm = imm.as_canonical_u32();

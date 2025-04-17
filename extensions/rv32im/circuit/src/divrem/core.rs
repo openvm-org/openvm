@@ -531,39 +531,44 @@ where
         Mem: GuestMemory,
     {
         let Instruction {
-            a, b, c, d, opcode, ..
+            opcode, a, b, c, ..
         } = *instruction;
-
-        // Read input registers
-        let rs1_data = unsafe { state.memory.read::<F, NUM_LIMBS>(RV32_REGISTER_AS, b) };
-        let rs2_data = unsafe { state.memory.read::<F, NUM_LIMBS>(RV32_REGISTER_AS, c) };
 
         // Determine opcode and operation type
         let divrem_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+
+        // Read input registers
+        let rs1_addr = b.as_canonical_u32();
+        let rs2_addr = c.as_canonical_u32();
+
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+        let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+
+        // TODO(ayush): remove this conversion
+        let rs1_bytes = rs1_bytes.map(|x| x as u32);
+        let rs2_bytes = rs2_bytes.map(|y| y as u32);
+
         let is_div = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::DIVU;
         let is_signed = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::REM;
 
-        // Convert field elements to u32 values
-        let rs1_u32 = rs1_data.map(|x| x.as_canonical_u32());
-        let rs2_u32 = rs2_data.map(|y| y.as_canonical_u32());
-
         // Perform division/remainder computation
-        let (q, r, _, _, _, _) = run_divrem::<NUM_LIMBS, LIMB_BITS>(is_signed, &rs1_u32, &rs2_u32);
+        let (q, r, _, _, _, _) =
+            run_divrem::<NUM_LIMBS, LIMB_BITS>(is_signed, &rs1_bytes, &rs2_bytes);
 
         // Determine result based on operation type (DIV or REM)
-        let result = if is_div {
-            q.map(F::from_canonical_u32)
+        let rd_bytes = if is_div {
+            q.map(|x| x as u8)
         } else {
-            r.map(F::from_canonical_u32)
+            r.map(|x| x as u8)
         };
 
         // Write result to destination register
+        let rd_addr = a.as_canonical_u32();
         unsafe {
-            state.memory.write(RV32_REGISTER_AS, a, &result);
+            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
         }
 
-        // Increment PC
-        state.pc += DEFAULT_PC_STEP;
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }

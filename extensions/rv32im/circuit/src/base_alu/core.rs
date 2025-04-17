@@ -266,75 +266,44 @@ where
         Mem: GuestMemory,
     {
         let Instruction {
-            a,
-            b,
-            c,
-            d,
-            e,
-            opcode,
-            ..
-        } = *instruction;
+            opcode, a, b, c, e, ..
+        } = instruction;
+
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        // Read first operand from register
         let rs1_addr = b.as_canonical_u32();
-        let rs1_data = unsafe {
-            state
-                .memory
-                .read::<F, NUM_LIMBS>(RV32_REGISTER_AS, rs1_addr)
-        };
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
 
-        // Read second operand from register or use immediate
-        let rs2_data: [F; NUM_LIMBS];
-        let e_value = e.as_canonical_u32();
-
-        if e_value == RV32_IMM_AS {
+        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
             // Use immediate value
-            let imm_value = c.as_canonical_u32();
-            rs2_data = [F::from_canonical_u32(imm_value); NUM_LIMBS];
-            // In a real implementation, we would need to handle this differently
-            // since we're just setting all limbs to the same value
-        } else if e_value == RV32_REGISTER_AS {
+            let imm = c.as_canonical_u32();
+            // Convert imm from u32 to [u8; NUM_LIMBS]
+            let imm_bytes = imm.to_le_bytes();
+            // TODO(ayush): remove this
+            let mut rs2_bytes = [0u8; NUM_LIMBS];
+            rs2_bytes[..NUM_LIMBS].copy_from_slice(&imm_bytes[..NUM_LIMBS]);
+            rs2_bytes
+        } else {
             // Read from register
             let rs2_addr = c.as_canonical_u32();
-            rs2_data = unsafe {
-                state
-                    .memory
-                    .read::<F, NUM_LIMBS>(RV32_REGISTER_AS, rs2_addr)
-            };
-        } else {
-            return Err(openvm_circuit::arch::ExecutionError::InvalidAddressSpace);
-        }
+            let rs2_bytes: [u8; NUM_LIMBS] =
+                unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+            rs2_bytes
+        };
 
-        // Convert field elements to u32 for ALU operation
-        let b_values = rs1_data.map(|x| x.as_canonical_u32());
-        let c_values = rs2_data.map(|y| y.as_canonical_u32());
+        // TODO(ayush): avoid this conversion
+        let rs1_bytes: [u32; NUM_LIMBS] = rs1_bytes.map(|x| x as u32);
+        let rs2_bytes: [u32; NUM_LIMBS] = rs2_bytes.map(|y| y as u32);
 
-        // Execute ALU operation
-        let result = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &b_values, &c_values);
-
-        // Register bitwise lookup requests for verification
-        if local_opcode == BaseAluOpcode::ADD || local_opcode == BaseAluOpcode::SUB {
-            for result_val in result {
-                self.bitwise_lookup_chip.request_xor(result_val, result_val);
-            }
-        } else {
-            for (b_val, c_val) in b_values.iter().zip(c_values.iter()) {
-                self.bitwise_lookup_chip.request_xor(*b_val, *c_val);
-            }
-        }
+        // TODO(ayush): should this be [u8; 4]?
+        let rd_bytes = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1_bytes, &rs2_bytes);
+        let rd_bytes = rd_bytes.map(|x| x as u8);
 
         // Write result back to destination register
         let rd_addr = a.as_canonical_u32();
-        let result_f = result.map(F::from_canonical_u32);
-        unsafe {
-            state
-                .memory
-                .write::<F, NUM_LIMBS>(RV32_REGISTER_AS, rd_addr, &result_f)
-        };
+        unsafe { state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
 
-        // Increment PC (assuming a constant step)
-        state.pc += DEFAULT_PC_STEP;
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }
