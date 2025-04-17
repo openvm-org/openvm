@@ -63,7 +63,16 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
             self.leaf_values.insert(*k, *v);
         }
         let init_root = self.get_node(1);
-        let mut rows = Vec::new();
+        let mut rows = Vec::with_capacity(if layer.is_empty() {
+            0
+        } else {
+            layer
+                .iter()
+                .zip(layer.iter().skip(1))
+                .fold(md.overall_height(), |acc, ((lhs, _), (rhs, _))| {
+                    acc + (lhs ^ rhs).ilog2() as usize
+                })
+        });
         for height in 1..=self.height {
             let mut i = 0;
             let mut new_layer = Vec::new();
