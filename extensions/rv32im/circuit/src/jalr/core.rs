@@ -18,6 +18,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
+    riscv::RV32_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
@@ -275,7 +276,48 @@ where
     where
         Mem: GuestMemory,
     {
-        todo!("Implement execute_instruction2")
+        let Instruction {
+            opcode,
+            b,
+            a,
+            c,
+            f: enabled,
+            g,
+            ..
+        } = *instruction;
+
+        let local_opcode =
+            Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(Rv32JalrOpcode::CLASS_OFFSET));
+
+        let rs1 = b.as_canonical_u32();
+        let rs1_data: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { state.memory.read(RV32_REGISTER_AS, rs1) };
+
+        // TODO(ayush): directly read as u32 from memory
+        let rs1_data = rs1_data
+            .iter()
+            .enumerate()
+            .fold(0u32, |acc, (i, &limb)| acc | ((limb as u32) << (i * 8)));
+
+        let imm = c.as_canonical_u32();
+        let imm_sign = g.as_canonical_u32();
+        let imm_extended = imm + imm_sign * 0xffff0000;
+
+        // TODO(ayush): should this be [u8; 4]?
+        let (to_pc, rd_data) = run_jalr(local_opcode, state.pc, imm_extended, rs1_data);
+        let rd_data = rd_data.map(|x| x as u8);
+
+        // TODO(ayush): do i need this enabled check?
+        if enabled != F::ZERO {
+            let rd = a.as_canonical_u32();
+            unsafe {
+                state.memory.write(RV32_REGISTER_AS, rd, &rd_data);
+            }
+        }
+
+        state.pc = to_pc;
+
+        Ok(())
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

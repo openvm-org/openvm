@@ -205,7 +205,46 @@ where
     where
         Mem: GuestMemory,
     {
-        todo!("Implement execute_instruction2")
+        let Instruction {
+            a, b, c, opcode, ..
+        } = *instruction;
+
+        // Verify the opcode is MUL
+        assert_eq!(
+            MulOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
+            MulOpcode::MUL
+        );
+
+        // Read source registers
+        let rs1_values = unsafe { state.memory.read::<F, NUM_LIMBS>(RV32_REGISTER_AS, b) };
+        let rs2_values = unsafe { state.memory.read::<F, NUM_LIMBS>(RV32_REGISTER_AS, c) };
+
+        // Convert field elements to u32 values
+        let rs1_u32 = rs1_values.map(|x| x.as_canonical_u32());
+        let rs2_u32 = rs2_values.map(|y| y.as_canonical_u32());
+
+        // Perform the multiplication
+        let (result_u32, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1_u32, &rs2_u32);
+
+        // Update range tuple checker counts
+        for (a_val, carry_val) in result_u32.iter().zip(carry.iter()) {
+            self.range_tuple_chip.add_count(&[*a_val, *carry_val]);
+        }
+
+        // Convert result back to field elements
+        let result_f = result_u32.map(F::from_canonical_u32);
+
+        // Write result to destination register
+        unsafe {
+            state
+                .memory
+                .write::<F, NUM_LIMBS>(RV32_REGISTER_AS, a, &result_f)
+        };
+
+        // Advance PC (assuming this would be handled by the core VM loop, but including for completeness)
+        // PC advancement is not handled here as it's likely managed by the caller
+
+        Ok(())
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

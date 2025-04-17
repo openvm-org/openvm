@@ -16,7 +16,9 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+};
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -347,7 +349,46 @@ where
     where
         Mem: GuestMemory,
     {
-        todo!("Implement execute_instruction2")
+        let Instruction {
+            opcode, a, b, c, ..
+        } = *instruction;
+        let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+
+        // Read source register rs1 (b)
+        let rs1_data = unsafe {
+            state
+                .memory
+                .read::<F, NUM_LIMBS>(RV32_REGISTER_AS, b.as_canonical_u32())
+        };
+
+        // Read source register rs2 or immediate (c)
+        let rs2_data = unsafe {
+            state
+                .memory
+                .read::<F, NUM_LIMBS>(RV32_REGISTER_AS, c.as_canonical_u32())
+        };
+
+        // Convert data to u32 arrays
+        let b_u32 = rs1_data.map(|x| x.as_canonical_u32());
+        let c_u32 = rs2_data.map(|y| y.as_canonical_u32());
+
+        // Execute the shift operation
+        let (result, _, _) = run_shift::<NUM_LIMBS, LIMB_BITS>(shift_opcode, &b_u32, &c_u32);
+
+        // Convert result back to field elements
+        let result_f = result.map(F::from_canonical_u32);
+
+        // Write the result to the destination register (a)
+        unsafe {
+            state
+                .memory
+                .write(RV32_REGISTER_AS, a.as_canonical_u32(), &result_f);
+        }
+
+        // Increment program counter
+        state.pc += DEFAULT_PC_STEP;
+
+        Ok(())
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

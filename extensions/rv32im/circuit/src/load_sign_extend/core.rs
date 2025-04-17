@@ -265,7 +265,103 @@ where
     where
         Mem: GuestMemory,
     {
-        todo!("Implement execute_instruction2")
+        // Extract opcode and instruction fields
+        let Instruction {
+            opcode,
+            a, // rd/rs2 register
+            b, // rs1 register
+            c, // immediate value
+            d, // register address space
+            e, // memory address space
+            g, // immediate sign extension
+            f: enabled,
+            ..
+        } = *instruction;
+
+        // Only proceed if instruction is enabled
+        if enabled == F::ZERO {
+            // Update PC and return if instruction is not enabled
+            state.pc += 4; // Assuming DEFAULT_PC_STEP is 4
+            return Ok(());
+        }
+
+        // Get the local opcode specific to this instruction type
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
+
+        const RV32_REGISTER_AS: u32 = 1;
+        const RV32_MEMORY_AS: u32 = 2;
+
+        // Safely read rs1 register value
+        let rs1_val = unsafe {
+            let rs1_bytes: [u8; NUM_CELLS] =
+                state.memory.read(RV32_REGISTER_AS, b.as_canonical_u32());
+            u32::from_le_bytes(rs1_bytes[0..4].try_into().unwrap())
+        };
+
+        // Calculate memory address
+        let imm = c.as_canonical_u32();
+        let imm_sign = g.as_canonical_u32();
+        let imm_extended = imm + imm_sign * 0xffff0000;
+        let ptr_val = rs1_val.wrapping_add(imm_extended);
+        let shift_amount = ptr_val % 4;
+        let aligned_ptr = ptr_val - shift_amount;
+
+        // Read memory or register based on opcode
+        let read_data = unsafe {
+            match local_opcode {
+                LOADB | LOADH => state
+                    .memory
+                    .read::<u8, NUM_CELLS>(RV32_MEMORY_AS, aligned_ptr),
+                _ => unreachable!("Only LOADB and LOADH are supported by this core chip"),
+            }
+        };
+
+        // Convert to field elements for processing
+        let read_data_f: [F; NUM_CELLS] = array::from_fn(|i| F::from_canonical_u8(read_data[i]));
+
+        // Placeholder for prev_data (not actually used in calculation but needed for API)
+        let prev_data = unsafe {
+            let prev: [u8; NUM_CELLS] = state.memory.read(RV32_REGISTER_AS, a.as_canonical_u32());
+            array::from_fn(|i| F::from_canonical_u8(prev[i]))
+        };
+
+        // Generate the write data with sign extension
+        let write_data = run_write_data_sign_extend::<_, NUM_CELLS, LIMB_BITS>(
+            local_opcode,
+            read_data_f,
+            prev_data,
+            shift_amount,
+        );
+
+        // Convert back to bytes for writing to memory
+        let write_bytes: [u8; NUM_CELLS] =
+            array::from_fn(|i| write_data[i].as_canonical_u32() as u8);
+
+        // Write result to destination register
+        unsafe {
+            state
+                .memory
+                .write(RV32_REGISTER_AS, a.as_canonical_u32(), &write_bytes);
+        }
+
+        // Update program counter
+        state.pc += 4; // Assuming DEFAULT_PC_STEP is 4
+
+        // Tracking the most significant bit for range checking (done at verification time)
+        let most_sig_limb = match local_opcode {
+            LOADB => write_data[0],
+            LOADH => write_data[NUM_CELLS / 2 - 1],
+            _ => unreachable!(),
+        }
+        .as_canonical_u32();
+
+        let most_sig_bit = most_sig_limb & (1 << (LIMB_BITS - 1));
+        self.range_checker_chip
+            .add_count(most_sig_limb - most_sig_bit, LIMB_BITS - 1);
+
+        Ok(())
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

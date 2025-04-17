@@ -17,6 +17,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
+    riscv::RV32_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
@@ -329,7 +330,30 @@ where
     where
         Mem: GuestMemory,
     {
-        todo!("Implement execute_instruction2")
+        let Instruction {
+            opcode, a, c: imm, ..
+        } = instruction;
+
+        let local_opcode =
+            Rv32JalLuiOpcode::from_usize(opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET));
+
+        let imm = imm.as_canonical_u32();
+        let signed_imm = match local_opcode {
+            JAL => (imm + (1 << (RV_J_TYPE_IMM_BITS - 1))) as i32 - (1 << (RV_J_TYPE_IMM_BITS - 1)),
+            LUI => imm as i32,
+        };
+
+        let (to_pc, rd_data) = run_jal_lui(local_opcode, state.pc, signed_imm);
+        let rd_data = rd_data.map(|x| x as u8);
+
+        let rd = a.as_canonical_u32();
+        unsafe {
+            state.memory.write(RV32_REGISTER_AS, rd, &rd_data);
+        }
+
+        state.pc = to_pc;
+
+        Ok(())
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

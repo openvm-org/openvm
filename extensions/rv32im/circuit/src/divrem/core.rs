@@ -18,7 +18,9 @@ use openvm_circuit_primitives::{
     utils::{not, select},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+};
 use openvm_rv32im_transpiler::DivRemOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -528,7 +530,42 @@ where
     where
         Mem: GuestMemory,
     {
-        todo!("Implement execute_instruction2")
+        let Instruction {
+            a, b, c, d, opcode, ..
+        } = *instruction;
+
+        // Read input registers
+        let rs1_data = unsafe { state.memory.read::<F, NUM_LIMBS>(RV32_REGISTER_AS, b) };
+        let rs2_data = unsafe { state.memory.read::<F, NUM_LIMBS>(RV32_REGISTER_AS, c) };
+
+        // Determine opcode and operation type
+        let divrem_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let is_div = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::DIVU;
+        let is_signed = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::REM;
+
+        // Convert field elements to u32 values
+        let rs1_u32 = rs1_data.map(|x| x.as_canonical_u32());
+        let rs2_u32 = rs2_data.map(|y| y.as_canonical_u32());
+
+        // Perform division/remainder computation
+        let (q, r, _, _, _, _) = run_divrem::<NUM_LIMBS, LIMB_BITS>(is_signed, &rs1_u32, &rs2_u32);
+
+        // Determine result based on operation type (DIV or REM)
+        let result = if is_div {
+            q.map(F::from_canonical_u32)
+        } else {
+            r.map(F::from_canonical_u32)
+        };
+
+        // Write result to destination register
+        unsafe {
+            state.memory.write(RV32_REGISTER_AS, a, &result);
+        }
+
+        // Increment PC
+        state.pc += DEFAULT_PC_STEP;
+
+        Ok(())
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
