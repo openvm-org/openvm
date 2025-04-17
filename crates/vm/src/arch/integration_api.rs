@@ -332,7 +332,7 @@ where
         let rows_used = self.current_trace_height();
         let height = next_power_of_two_or_zero(rows_used);
         // This should be automatic since trace_buffer's height is a power of two:
-        assert!(height * self.width <= self.trace_buffer.len());
+        assert!(height.checked_mul(self.width).unwrap() <= self.trace_buffer.len());
         self.trace_buffer.truncate(height * self.width);
         let mem_helper = self.mem_helper.as_borrowed();
         // This zip only goes through used rows.
