@@ -443,9 +443,7 @@ where
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        self.core
-            .execute_instruction2::<Mem, Ctx>(state, instruction)?;
-        Ok(())
+        self.core.execute_instruction2(state, instruction)
     }
 }
 

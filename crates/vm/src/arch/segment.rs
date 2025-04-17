@@ -99,6 +99,7 @@ impl TracegenVmExecutionState {
     where
         F: PrimeField32,
     {
+        // TODO(ayush): remove this clone
         let memory = memory_controller.memory_image().clone();
         let ctx = TracegenCtx::new(memory_controller.timestamp());
         TracegenVmExecutionState::new(pc, memory, ctx)
