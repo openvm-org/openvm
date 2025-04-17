@@ -248,12 +248,12 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32JalLuiCoreChip {
         }
     }
 
-    // fn get_opcode_name(&self, opcode: usize) -> String {
-    //     format!(
-    //         "{:?}",
-    //         Rv32JalLuiOpcode::from_usize(opcode - Rv32JalLuiOpcode::CLASS_OFFSET)
-    //     )
-    // }
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv32JalLuiOpcode::from_usize(opcode - Rv32JalLuiOpcode::CLASS_OFFSET)
+        )
+    }
 }
 
 // returns (to_pc, rd_data)

@@ -238,6 +238,9 @@ pub trait SingleTraceStep<F, CTX> {
     fn generate_public_values(&self) -> Vec<F> {
         vec![]
     }
+
+    /// Displayable opcode name for logging and debugging purposes.
+    fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
 pub struct NewVmChipWrapper<F, AIR, C> {
@@ -307,8 +310,7 @@ where
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        "NewWrapper".to_string()
-        // self.inner.get_opcode_name(opcode)
+        self.inner.get_opcode_name(opcode)
     }
 }
 

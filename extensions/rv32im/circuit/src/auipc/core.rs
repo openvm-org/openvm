@@ -284,6 +284,10 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
         self.bitwise_lookup_chip
             .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
     }
+
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", AUIPC)
+    }
 }
 
 // returns rd_data
