@@ -15,7 +15,9 @@ use openvm_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+};
 use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -300,60 +302,34 @@ where
         Mem: GuestMemory,
     {
         let Instruction {
-            opcode, a, b, c, d, ..
+            opcode, a, b, c, ..
         } = instruction;
+
         let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
-        // Read the register values (rs1 and rs2)
-        let rs1_values = unsafe {
-            state
-                .memory
-                .read::<F, NUM_LIMBS>(RV32_REGISTER_AS, b.as_canonical_u32())
-        };
-        let rs2_values = unsafe {
-            state
-                .memory
-                .read::<F, NUM_LIMBS>(RV32_REGISTER_AS, c.as_canonical_u32())
-        };
+        // Read input registers
+        let rs1_addr = b.as_canonical_u32();
+        let rs2_addr = c.as_canonical_u32();
 
-        // Convert field elements to u32 for calculation
-        let b_values = rs1_values.map(|x| x.as_canonical_u32());
-        let c_values = rs2_values.map(|x| x.as_canonical_u32());
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+        let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+
+        // TODO(ayush): remove this conversion
+        let rs1_bytes = rs1_bytes.map(|x| x as u32);
+        let rs2_bytes = rs2_bytes.map(|y| y as u32);
 
         // Execute the multiplication high operation
-        let (a_values, a_mul, carry, b_ext, c_ext) =
-            run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &b_values, &c_values);
-
-        // Update range tuple counts for proving
-        for i in 0..NUM_LIMBS {
-            self.range_tuple_chip.add_count(&[a_mul[i], carry[i]]);
-            self.range_tuple_chip
-                .add_count(&[a_values[i], carry[NUM_LIMBS + i]]);
-        }
-
-        // Request bitwise operation lookup for sign checks
-        if mulh_opcode != MulHOpcode::MULHU {
-            let b_sign_mask = if b_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
-            let c_sign_mask = if c_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
-            self.bitwise_lookup_chip.request_range(
-                (b_values[NUM_LIMBS - 1] - b_sign_mask) << 1,
-                (c_values[NUM_LIMBS - 1] - c_sign_mask)
-                    << ((mulh_opcode == MulHOpcode::MULH) as u32),
-            );
-        }
-
-        // Convert result back to field elements
-        let result = a_values.map(F::from_canonical_u32);
+        let (rd_bytes, _, _, _, _) =
+            run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &rs1_bytes, &rs2_bytes);
+        let rd_bytes = rd_bytes.map(|x| x as u8);
 
         // Write the result to the destination register
+        let rd_addr = a.as_canonical_u32();
         unsafe {
-            state
-                .memory
-                .write(RV32_REGISTER_AS, a.as_canonical_u32(), &result);
+            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
         }
 
-        // Update PC
-        state.pc += DEFAULT_PC_STEP;
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }

@@ -293,12 +293,12 @@ where
         let imm = imm.as_canonical_u32();
 
         // TODO(ayush): should this be [u8; 4]?
-        let rd_data = run_auipc(local_opcode, state.pc, imm);
-        let rd_data = rd_data.map(|x| x as u8);
+        let rd_bytes = run_auipc(local_opcode, state.pc, imm);
+        let rd_bytes = rd_bytes.map(|x| x as u8);
 
-        let rd = a.as_canonical_u32();
+        let rd_addr = a.as_canonical_u32();
         unsafe {
-            state.memory.write(RV32_REGISTER_AS, rd, &rd_data);
+            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
         }
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);

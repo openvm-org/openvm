@@ -8,7 +8,12 @@ use openvm_circuit::{
     system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -314,89 +319,76 @@ where
             a,
             b,
             c,
-            d,
-            e,
             g,
             f: enabled,
             ..
-        } = *instruction;
-
-        // Return early if instruction is disabled
-        if enabled == F::ZERO {
-            return Ok(());
-        }
+        } = instruction;
 
         // Get the local opcode for this instruction
         let local_opcode =
             Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        // Read the register value (rs1)
-        let rs1_val = {
-            let rs1_bytes = unsafe { state.memory.read::<u8, NUM_CELLS>(RV32_REGISTER_AS, b) };
-            u32::from_le_bytes(rs1_bytes[0..4].try_into().unwrap())
-        };
+        let rs1_addr = b.as_canonical_u32();
+        let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+        let rs1_val = u32::from_le_bytes(rs1_bytes);
 
-        // Calculate memory address
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
+
         let ptr_val = rs1_val.wrapping_add(imm_extended);
         let shift_amount = ptr_val % 4;
-        let aligned_ptr = ptr_val - shift_amount;
+        let ptr_val = ptr_val - shift_amount; // aligned ptr
 
-        // Read data based on the opcode
-        let read_data = match local_opcode {
-            LOADW | LOADBU | LOADHU => {
+        let read_bytes: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                 // For loads, read from memory
-                unsafe {
-                    state
-                        .memory
-                        .read::<u8, NUM_CELLS>(RV32_MEMORY_AS, aligned_ptr)
-                }
+                unsafe { state.memory.read(RV32_MEMORY_AS, ptr_val) }
             }
             STOREW | STOREH | STOREB => {
                 // For stores, read the register value to be stored
-                unsafe { state.memory.read::<u8, NUM_CELLS>(RV32_REGISTER_AS, a) }
+                let rs2_addr = a.as_canonical_u32();
+                unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) }
             }
         };
 
         // For stores, we need the previous memory content to preserve unchanged bytes
-        let prev_data = match local_opcode {
+        let prev_bytes: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
             STOREW | STOREH | STOREB => {
                 // For stores, read current memory content
-                unsafe {
-                    state
-                        .memory
-                        .read::<u8, NUM_CELLS>(RV32_MEMORY_AS, aligned_ptr)
-                }
+                unsafe { state.memory.read(RV32_MEMORY_AS, ptr_val) }
             }
-            LOADW | LOADBU | LOADHU => {
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                 // For loads, read current register content
-                unsafe { state.memory.read::<u8, NUM_CELLS>(RV32_REGISTER_AS, a) }
+                let rd_addr = a.as_canonical_u32();
+                unsafe { state.memory.read(RV32_REGISTER_AS, rd_addr) }
             }
         };
 
-        // Convert data to field elements for processing
-        let read_data_f = read_data.map(F::from_canonical_u8);
-        let prev_data_f = prev_data.map(F::from_canonical_u8);
+        let read_data = read_bytes.map(F::from_canonical_u8);
+        let prev_data = prev_bytes.map(F::from_canonical_u8);
 
         // Process the data according to the load/store type and alignment
-        let write_data_f = run_write_data(local_opcode, read_data_f, prev_data_f, shift_amount);
+        let write_data = run_write_data(local_opcode, read_data, prev_data, shift_amount);
+        let write_bytes = write_data.map(|x| x.as_canonical_u32() as u8);
 
-        // Convert back to bytes for writing
-        let write_data = write_data_f.map(|x| x.as_canonical_u32() as u8);
-
-        // Write data based on the opcode
-        match local_opcode {
-            LOADW | LOADBU | LOADHU => {
-                // For loads, write to register
-                unsafe { state.memory.write(RV32_REGISTER_AS, a, &write_data) };
-            }
-            STOREW | STOREH | STOREB => {
-                // For stores, write to memory
-                unsafe { state.memory.write(RV32_MEMORY_AS, aligned_ptr, &write_data) };
+        if *enabled != F::ZERO {
+            match local_opcode {
+                STOREW | STOREH | STOREB => {
+                    // For stores, write to memory
+                    unsafe { state.memory.write(RV32_MEMORY_AS, ptr_val, &write_data) };
+                }
+                LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                    let rd_addr = a.as_canonical_u32();
+                    unsafe {
+                        state.memory.write(RV32_REGISTER_AS, rd_addr, &write_bytes);
+                    }
+                }
             }
         }
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }

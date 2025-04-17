@@ -17,7 +17,10 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::{
@@ -350,43 +353,46 @@ where
         Mem: GuestMemory,
     {
         let Instruction {
-            opcode, a, b, c, ..
-        } = *instruction;
+            opcode, a, b, c, e, ..
+        } = instruction;
+
         let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        // Read source register rs1 (b)
-        let rs1_data = unsafe {
-            state
-                .memory
-                .read::<F, NUM_LIMBS>(RV32_REGISTER_AS, b.as_canonical_u32())
+        let rs1_addr = b.as_canonical_u32();
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+
+        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
+            // Use immediate value
+            let imm = c.as_canonical_u32();
+            // Convert imm from u32 to [u8; NUM_LIMBS]
+            let imm_bytes = imm.to_le_bytes();
+            // TODO(ayush): remove this
+            let mut rs2_bytes = [0u8; NUM_LIMBS];
+            rs2_bytes[..NUM_LIMBS].copy_from_slice(&imm_bytes[..NUM_LIMBS]);
+            rs2_bytes
+        } else {
+            // Read from register
+            let rs2_addr = c.as_canonical_u32();
+            let rs2_bytes: [u8; NUM_LIMBS] =
+                unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+            rs2_bytes
         };
 
-        // Read source register rs2 or immediate (c)
-        let rs2_data = unsafe {
-            state
-                .memory
-                .read::<F, NUM_LIMBS>(RV32_REGISTER_AS, c.as_canonical_u32())
-        };
-
-        // Convert data to u32 arrays
-        let b_u32 = rs1_data.map(|x| x.as_canonical_u32());
-        let c_u32 = rs2_data.map(|y| y.as_canonical_u32());
+        // TODO(ayush): avoid this conversion
+        let rs1_bytes: [u32; NUM_LIMBS] = rs1_bytes.map(|x| x as u32);
+        let rs2_bytes: [u32; NUM_LIMBS] = rs2_bytes.map(|y| y as u32);
 
         // Execute the shift operation
-        let (result, _, _) = run_shift::<NUM_LIMBS, LIMB_BITS>(shift_opcode, &b_u32, &c_u32);
+        let (rd_bytes, _, _) =
+            run_shift::<NUM_LIMBS, LIMB_BITS>(shift_opcode, &rs1_bytes, &rs2_bytes);
+        let rd_bytes = rd_bytes.map(|x| x as u8);
 
-        // Convert result back to field elements
-        let result_f = result.map(F::from_canonical_u32);
-
-        // Write the result to the destination register (a)
+        let rd_addr = a.as_canonical_u32();
         unsafe {
-            state
-                .memory
-                .write(RV32_REGISTER_AS, a.as_canonical_u32(), &result_f);
+            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
         }
 
-        // Increment program counter
-        state.pc += DEFAULT_PC_STEP;
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }

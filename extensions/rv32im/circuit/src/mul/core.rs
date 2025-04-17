@@ -12,7 +12,9 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+};
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -206,43 +208,36 @@ where
         Mem: GuestMemory,
     {
         let Instruction {
-            a, b, c, opcode, ..
-        } = *instruction;
+            opcode, a, b, c, ..
+        } = instruction;
 
         // Verify the opcode is MUL
+        // TODO(ayush): debug_assert
         assert_eq!(
             MulOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
             MulOpcode::MUL
         );
 
-        // Read source registers
-        let rs1_values = unsafe { state.memory.read::<F, NUM_LIMBS>(RV32_REGISTER_AS, b) };
-        let rs2_values = unsafe { state.memory.read::<F, NUM_LIMBS>(RV32_REGISTER_AS, c) };
+        // Read input registers
+        let rs1_addr = b.as_canonical_u32();
+        let rs2_addr = c.as_canonical_u32();
 
-        // Convert field elements to u32 values
-        let rs1_u32 = rs1_values.map(|x| x.as_canonical_u32());
-        let rs2_u32 = rs2_values.map(|y| y.as_canonical_u32());
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+        let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+
+        // TODO(ayush): remove this conversion
+        let rs1_bytes = rs1_bytes.map(|x| x as u32);
+        let rs2_bytes = rs2_bytes.map(|y| y as u32);
 
         // Perform the multiplication
-        let (result_u32, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1_u32, &rs2_u32);
-
-        // Update range tuple checker counts
-        for (a_val, carry_val) in result_u32.iter().zip(carry.iter()) {
-            self.range_tuple_chip.add_count(&[*a_val, *carry_val]);
-        }
-
-        // Convert result back to field elements
-        let result_f = result_u32.map(F::from_canonical_u32);
+        let (rd_bytes, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1_bytes, &rs2_bytes);
+        let rd_bytes = rd_bytes.map(|x| x as u8);
 
         // Write result to destination register
-        unsafe {
-            state
-                .memory
-                .write::<F, NUM_LIMBS>(RV32_REGISTER_AS, a, &result_f)
-        };
+        let rd_addr = a.as_canonical_u32();
+        unsafe { state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
 
-        // Advance PC (assuming this would be handled by the core VM loop, but including for completeness)
-        // PC advancement is not handled here as it's likely managed by the caller
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }

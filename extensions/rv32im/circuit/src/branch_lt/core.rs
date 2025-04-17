@@ -348,19 +348,19 @@ where
 
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        let rs1 = a.as_canonical_u32();
-        let rs2 = b.as_canonical_u32();
+        let rs1_addr = a.as_canonical_u32();
+        let rs2_addr = b.as_canonical_u32();
 
         // TODO(ayush): why even have NUM_LIMBS when it is equal to RV32_REGISTER_NUM_LIMBS?
-        let rs1_data: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1) };
-        let rs2_data: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2) };
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+        let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
 
         // TODO(ayush): why is this conversion necessary?
-        let rs1_data: [u32; NUM_LIMBS] = rs1_data.map(|x| x as u32);
-        let rs2_data: [u32; NUM_LIMBS] = rs2_data.map(|y| y as u32);
+        let rs1_bytes: [u32; NUM_LIMBS] = rs1_bytes.map(|x| x as u32);
+        let rs2_bytes: [u32; NUM_LIMBS] = rs2_bytes.map(|y| y as u32);
 
         let (cmp_result, _, _, _) =
-            run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &rs1_data, &rs2_data);
+            run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &rs1_bytes, &rs2_bytes);
 
         if cmp_result {
             let imm = imm.as_canonical_u32();
