@@ -95,12 +95,14 @@ impl Elf {
             if let Some((symtab, stringtab)) = elf.symbol_table()? {
                 for symbol in symtab.iter() {
                     if symbol.st_symtype() == elf::abi::STT_FUNC {
+                        let raw_name = stringtab.get(symbol.st_name as usize).unwrap().to_string();
+                        let demangled_name = rustc_demangle::demangle(&raw_name).to_string();
                         fn_bounds.insert(
                             symbol.st_value as u32,
                             FnBound {
                                 start: symbol.st_value as u32,
                                 end: (symbol.st_value + symbol.st_size - (WORD_SIZE as u64)) as u32,
-                                name: stringtab.get(symbol.st_name as usize).unwrap().to_string(),
+                                name: demangled_name,
                             },
                         );
                     }
