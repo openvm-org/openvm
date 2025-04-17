@@ -170,7 +170,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         init_streams: Streams<F>,
         initial_memory: Option<MemoryImage<F>>,
         trace_height_constraints: Vec<LinearConstraint>,
-        #[allow(unused_variables)] fn_bounds: FnBounds,
+        #[allow(unused_variables)] fn_bounds: Arc<FnBounds>,
     ) -> Self {
         let mut chip_complex = config.create_chip_complex().unwrap();
         chip_complex.set_streams(init_streams);

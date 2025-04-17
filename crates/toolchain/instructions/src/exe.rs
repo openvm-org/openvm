@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use openvm_stark_backend::p3_field::Field;
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,7 @@ pub struct VmExe<F> {
     /// Initial memory image.
     pub init_memory: MemoryImage<F>,
     /// Starting + ending bounds for each function.
-    pub fn_bounds: FnBounds,
+    pub fn_bounds: Arc<FnBounds>,
 }
 
 impl<F> VmExe<F> {
@@ -33,7 +33,7 @@ impl<F> VmExe<F> {
             program,
             pc_start: 0,
             init_memory: BTreeMap::new(),
-            fn_bounds: Default::default(),
+            fn_bounds: Arc::new(Default::default()),
         }
     }
     pub fn with_pc_start(mut self, pc_start: u32) -> Self {
