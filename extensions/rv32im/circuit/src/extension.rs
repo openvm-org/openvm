@@ -312,15 +312,16 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             BranchLessThanOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let jal_lui_chip = Rv32JalLuiChip::new(
-            Rv32CondRdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            Rv32JalLuiCoreChip::new(bitwise_lu_chip.clone()),
-            offline_memory.clone(),
-        );
-        inventory.add_executor(
-            jal_lui_chip,
-            Rv32JalLuiOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        // TODO
+        // let jal_lui_chip = Rv32JalLuiChip::new(
+        //     Rv32CondRdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
+        //     Rv32JalLuiCoreChip::new(bitwise_lu_chip.clone()),
+        //     offline_memory.clone(),
+        // );
+        // inventory.add_executor(
+        //     jal_lui_chip,
+        //     Rv32JalLuiOpcode::iter().map(|x| x.global_opcode()),
+        // )?;
 
         let jalr_chip = Rv32JalrChip::new(
             Rv32JalrAdapterChip::new(execution_bus, program_bus, memory_bridge),

@@ -34,7 +34,6 @@ use crate::adapters::{
     tracing_write_reg, Rv32RdWriteAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 
-const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 pub(super) const ADAPTER_WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
 
 #[repr(C)]
@@ -230,7 +229,7 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
         let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
         let core_row: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
 
-        let from_timestamp = state.memory.timestamp;
+        let from_timestamp = state.memory.timestamp();
         let imm = instruction.c.as_canonical_u32();
         let rd_data = run_auipc(Rv32AuipcOpcode::AUIPC, *state.pc, imm);
 
@@ -246,7 +245,7 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
             data_prev.map(F::from_canonical_u8),
         );
         core_row.rd_data = rd_data.map(F::from_canonical_u8);
-        // We decompose during generate trace later:
+        // We decompose during fill_trace_row later:
         core_row.imm_limbs[0] = instruction.c;
 
         *state.pc += DEFAULT_PC_STEP;
@@ -284,6 +283,10 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
         let msl_shift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - PC_BITS;
         self.bitwise_lookup_chip
             .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
+    }
+
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", AUIPC)
     }
 }
 

@@ -1,9 +1,4 @@
-use std::{
-    cell::RefCell,
-    iter::zip,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
@@ -40,7 +35,6 @@ use crate::{
             offline_checker::{MemoryBridge, MemoryBus},
             MemoryController, OfflineMemory, SharedMemoryHelper,
         },
-        poseidon2::Poseidon2PeripheryChip,
         program::ProgramBus,
     },
 };
@@ -314,7 +308,9 @@ where
     }
 
     pub fn finalize(mut self) -> Self {
-        if let Some(memory_tester) = self.memory.take() {
+        if let Some(mut memory_tester) = self.memory.take() {
+            // Balance memory boundaries
+            memory_tester.finalize();
             let memory_controller = memory_tester.controller;
             let range_checker = memory_controller.range_checker.clone();
             drop(memory_controller);

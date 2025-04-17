@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip, VmAirWrapper};
+use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAirWrapper};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
@@ -8,7 +8,6 @@ use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcod
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::BusIndex,
-    p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     utils::disable_debug_builder,
@@ -19,9 +18,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreChip, Rv32AuipcCoreCols, ADAPTER_WIDTH};
-use crate::adapters::{
-    Rv32RdWriteAdapterAir, Rv32RdWriteAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-};
+use crate::adapters::{Rv32RdWriteAdapterAir, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
 const IMM_BITS: usize = 24;
 const BITWISE_OP_LOOKUP_BUS: BusIndex = 9;

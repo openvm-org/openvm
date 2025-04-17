@@ -103,7 +103,8 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
         }
     }
 
-    pub fn memory_size(&self) -> usize {
+    /// Total capacity across available pages, in bytes.
+    pub fn bytes_capacity(&self) -> usize {
         self.pages.len().checked_mul(PAGE_SIZE).unwrap()
     }
 
@@ -213,7 +214,7 @@ impl<T: Copy, const PAGE_SIZE: usize> Iterator for PagedVecIter<'_, T, PAGE_SIZE
             self.current_index_in_page = 0;
         }
         let global_index = self.current_page * PAGE_SIZE + self.current_index_in_page;
-        if global_index + size_of::<T>() > self.vec.memory_size() {
+        if global_index + size_of::<T>() > self.vec.bytes_capacity() {
             return None;
         }
 
@@ -296,6 +297,18 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
                         .collect_vec()
                 }
             })
+    }
+
+    pub fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
+        debug_assert_ne!(addr_space, 0);
+        // TODO: fix this
+        unsafe {
+            if addr_space <= 2 {
+                F::from_canonical_u8(self.get::<u8>((addr_space, ptr)))
+            } else {
+                self.get::<F>((addr_space, ptr))
+            }
+        }
     }
 
     /// # Safety
