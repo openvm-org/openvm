@@ -56,7 +56,6 @@ members = [
     "extensions/sha256/circuit",
     "extensions/sha256/transpiler",
     "extensions/sha256/guest",
-    "extensions/sha256/tests",
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
