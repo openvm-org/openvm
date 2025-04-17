@@ -15,7 +15,7 @@ use openvm_circuit_primitives::{
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -301,7 +301,46 @@ where
     where
         Mem: GuestMemory,
     {
-        todo!("Implement execute_instruction2")
+        let Instruction {
+            opcode, a, b, c, ..
+        } = instruction;
+        let less_than_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+
+        // Read register values
+        let b_val = unsafe {
+            state
+                .memory
+                .read::<F, NUM_LIMBS>(RV32_REGISTER_AS, b.as_canonical_u32())
+        };
+        let c_val = unsafe {
+            state
+                .memory
+                .read::<F, NUM_LIMBS>(RV32_REGISTER_AS, c.as_canonical_u32())
+        };
+
+        // Convert to u32 arrays for processing
+        let b_u32 = b_val.map(|x| x.as_canonical_u32());
+        let c_u32 = c_val.map(|x| x.as_canonical_u32());
+
+        // Run the comparison
+        let (cmp_result, diff_idx, _, _) =
+            run_less_than::<NUM_LIMBS, LIMB_BITS>(less_than_opcode, &b_u32, &c_u32);
+
+        // Prepare result
+        let mut result = [F::ZERO; NUM_LIMBS];
+        result[0] = F::from_bool(cmp_result);
+
+        // Write the result back to the destination register
+        unsafe {
+            state
+                .memory
+                .write(RV32_REGISTER_AS, a.as_canonical_u32(), &result);
+        }
+
+        // Update PC
+        state.pc += DEFAULT_PC_STEP;
+
+        Ok(())
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
