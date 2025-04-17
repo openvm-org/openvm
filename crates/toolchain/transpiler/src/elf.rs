@@ -121,6 +121,8 @@ impl Elf {
 
                 for symbol in symtab.iter() {
                     if symbol.st_symtype() == elf::abi::STT_FUNC {
+                        let raw_name = stringtab.get(symbol.st_name as usize).unwrap().to_string();
+                        let demangled_name = rustc_demangle::demangle(&raw_name).to_string();
                         fn_bounds.insert(
                             symbol.st_value as u32,
                             FnBound {
