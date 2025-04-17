@@ -299,6 +299,18 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
             })
     }
 
+    pub fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
+        debug_assert_ne!(addr_space, 0);
+        // TODO: fix this
+        unsafe {
+            if addr_space <= 2 {
+                F::from_canonical_u8(self.get::<u8>((addr_space, ptr)))
+            } else {
+                self.get::<F>((addr_space, ptr))
+            }
+        }
+    }
+
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds

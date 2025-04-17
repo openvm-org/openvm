@@ -34,7 +34,6 @@ use crate::adapters::{
     tracing_write_reg, Rv32RdWriteAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 
-const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 pub(super) const ADAPTER_WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
 
 #[repr(C)]

@@ -78,9 +78,9 @@ pub enum MemoryLogEntry<T> {
 // is less than 2^3.
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, derive_new::new)]
-struct AccessMetadata {
-    timestamp: u32,
-    block_size: u32,
+pub struct AccessMetadata {
+    pub timestamp: u32,
+    pub block_size: u32,
 }
 
 /// Online memory that stores additional information for trace generation purposes.
@@ -280,23 +280,21 @@ impl TracingMemory {
         self.timestamp
     }
 
-    /// Returns iterator over `((addr_space, ptr), block_size)` of the addresses and block sizes of
-    /// memory blocks that have been accessed since this instance of [TracingMemory] was
-    /// constructed. This is similar to a soft-dirty mechanism, where the memory data is loaded
-    /// from an initial image and considered "clean", and then all future accesses are marked as
-    /// "dirty".
+    /// Returns iterator over `((addr_space, ptr), (timestamp, block_size))` of the address, last
+    /// accessed timestamp, and block size of all memory blocks that have been accessed since this
+    /// instance of [TracingMemory] was constructed. This is similar to a soft-dirty mechanism,
+    /// where the memory data is loaded from an initial image and considered "clean", and then
+    /// all future accesses are marked as "dirty".
     // block_size is initialized to 0, so nonzero block_size happens to also mark "dirty" cells
     // **Assuming** for now that only the start of a block has nonzero block_size
-    pub fn touched_blocks(&self) -> impl Iterator<Item = (Address, u32)> + '_ {
+    pub fn touched_blocks(&self) -> impl Iterator<Item = (Address, AccessMetadata)> + '_ {
         zip_eq(&self.meta, &self.min_block_size)
             .enumerate()
             .flat_map(move |(addr_space, (page, &align))| {
                 page.iter::<AccessMetadata>()
                     .filter_map(move |(idx, metadata)| {
-                        (metadata.block_size != 0).then_some((
-                            (addr_space as u32, idx as u32 * align),
-                            metadata.block_size,
-                        ))
+                        (metadata.block_size != 0)
+                            .then_some(((addr_space as u32, idx as u32 * align), metadata))
                     })
             })
     }
