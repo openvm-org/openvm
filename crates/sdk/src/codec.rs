@@ -7,8 +7,10 @@ use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::{InnerBatchOpening, InnerFriProof, InnerQueryProof};
 use openvm_stark_backend::{
-    config::{Com, PcsProof},
-    interaction::{fri_log_up::FriLogUpPartialProof, RapPhaseSeqKind},
+    config::{Com, PcsProof, RapPhaseSeqPartialProof},
+    interaction::{
+        fri_log_up::FriLogUpPartialProof, gkr_log_up::GkrLogUpPartialProof, RapPhaseSeqKind,
+    },
     p3_field::{
         extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra, PrimeField32,
     },
@@ -147,6 +149,11 @@ fn encode_opened_values<W: Write>(
     for phase in &opened_values.after_challenge {
         encode_slice(phase, writer)?;
     }
+    todo!();
+    // opened_values.extra_after_challenge.len().encode(writer)?;
+    // for phase in &opened_values.extra_after_challenge {
+    //     encode_slice(phase, writer)?;
+    // }
     opened_values.quotient.len().encode(writer)?;
     for per_air in &opened_values.quotient {
         per_air.len().encode(writer)?;
@@ -257,6 +264,12 @@ impl Encode for Option<FriLogUpPartialProof<F>> {
             Some(FriLogUpPartialProof { logup_pow_witness }) => logup_pow_witness.encode(writer),
             None => writer.write_all(&u32::MAX.to_le_bytes()),
         }
+    }
+}
+
+impl Encode for Option<GkrLogUpPartialProof<BinomialExtensionField<F, 4>, F>> {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
+        todo!()
     }
 }
 
@@ -392,7 +405,7 @@ impl Decode for Proof<SC> {
         }
 
         // Decode logup witness
-        let rap_phase_seq_proof = Option::<FriLogUpPartialProof<F>>::decode(reader)?;
+        let rap_phase_seq_proof = Option::<RapPhaseSeqPartialProof<SC>>::decode(reader)?;
 
         Ok(Proof {
             commitments,
@@ -443,6 +456,13 @@ fn decode_opened_values<R: Read>(reader: &mut R) -> Result<OpenedValues<Challeng
         after_challenge.push(decode_vec(reader)?);
     }
 
+    let extra_after_challenge_count = usize::decode(reader)?;
+    let mut extra_after_challenge = Vec::with_capacity(extra_after_challenge_count);
+    for _ in 0..after_challenge_count {
+        todo!()
+        // extra_after_challenge.push(decode_vec(reader)?);
+    }
+
     let quotient_count = usize::decode(reader)?;
     let mut quotient = Vec::with_capacity(quotient_count);
     for _ in 0..quotient_count {
@@ -458,6 +478,7 @@ fn decode_opened_values<R: Read>(reader: &mut R) -> Result<OpenedValues<Challeng
         preprocessed,
         main,
         after_challenge,
+        extra_after_challenge,
         quotient,
     })
 }
@@ -563,6 +584,12 @@ impl Decode for Option<FriLogUpPartialProof<F>> {
         // Reconstruct the field element from the u32 value
         let logup_pow_witness = F::from_canonical_u32(value);
         Ok(Some(FriLogUpPartialProof { logup_pow_witness }))
+    }
+}
+
+impl Decode for Option<GkrLogUpPartialProof<BinomialExtensionField<F, 4>, F>> {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        todo!()
     }
 }
 
