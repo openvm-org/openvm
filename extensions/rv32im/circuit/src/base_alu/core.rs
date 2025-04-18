@@ -6,10 +6,13 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, MinimalInstruction, Result, SingleTraceStep, VmAdapterInterface,
-        VmCoreAir, VmStateMut,
+        AdapterAirContext, InsExecutorE1, MinimalInstruction, Result, SingleTraceStep,
+        VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -322,6 +325,55 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32BaseAluCoreChip {
         timestamp += 1;
         self.0.core_fill_trace_row(core_row);
         mem_helper.fill_from_prev(timestamp, adapter_row.writes_aux.as_mut());
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
+    for BaseAluCoreChip<NUM_LIMBS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        let Instruction {
+            opcode, a, b, c, e, ..
+        } = instruction;
+
+        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+
+        let rs1_addr = b.as_canonical_u32();
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+
+        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
+            // Use immediate value
+            let imm = c.as_canonical_u32();
+            // Convert imm from u32 to [u8; NUM_LIMBS]
+            let imm_bytes = imm.to_le_bytes();
+            // TODO(ayush): remove this
+            let mut rs2_bytes = [0u8; NUM_LIMBS];
+            rs2_bytes[..NUM_LIMBS].copy_from_slice(&imm_bytes[..NUM_LIMBS]);
+            rs2_bytes
+        } else {
+            // Read from register
+            let rs2_addr = c.as_canonical_u32();
+            let rs2_bytes: [u8; NUM_LIMBS] =
+                unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+            rs2_bytes
+        };
+
+        let rd_bytes = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1_bytes, &rs2_bytes);
+
+        // Write result back to destination register
+        let rd_addr = a.as_canonical_u32();
+        unsafe { state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }
 

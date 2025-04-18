@@ -21,10 +21,13 @@ use openvm_stark_backend::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{ExecutionError, ExecutionState, InstructionExecutor, Result, VmStateMut};
+use super::{
+    ExecutionError, ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmExecutionState,
+    VmStateMut,
+};
 use crate::system::memory::{
-    online::TracingMemory, MemoryAuxColsFactory, MemoryController, OfflineMemory,
-    SharedMemoryHelper,
+    online::{GuestMemory, TracingMemory},
+    MemoryAuxColsFactory, MemoryController, OfflineMemory, SharedMemoryHelper,
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -417,6 +420,38 @@ where
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         self.core.get_opcode_name(opcode)
+    }
+}
+
+// TODO(ayush): delete
+impl<Mem, Ctx, F, A, M> InsExecutorE1<Mem, Ctx, F> for VmChipWrapper<F, A, M>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+    A: VmAdapterChip<F> + Send + Sync,
+    M: VmCoreChip<F, A::Interface> + InsExecutorE1<Mem, Ctx, F> + Send + Sync,
+{
+    fn execute_e1(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        self.core.execute_e1(state, instruction)
+    }
+}
+
+impl<Mem, Ctx, F, A, C> InsExecutorE1<Mem, Ctx, F> for NewVmChipWrapper<F, A, C>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+    C: InsExecutorE1<Mem, Ctx, F>,
+{
+    fn execute_e1(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        self.inner.execute_e1(state, instruction)
     }
 }
 
