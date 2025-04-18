@@ -2,10 +2,13 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, ImmInstruction, Result, SingleTraceStep, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, InsExecutorE1, Result,
+        SingleTraceStep, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -14,6 +17,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
+    riscv::RV32_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
@@ -253,6 +257,124 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32JalLuiCoreChip {
             "{:?}",
             Rv32JalLuiOpcode::from_usize(opcode - Rv32JalLuiOpcode::CLASS_OFFSET)
         )
+    }
+}
+
+impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32JalLuiCoreChip
+where
+    I::Writes: From<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
+{
+    type Record = Rv32JalLuiCoreRecord<F>;
+    type Air = Rv32JalLuiCoreAir;
+
+    #[allow(clippy::type_complexity)]
+    fn execute_instruction(
+        &self,
+        instruction: &Instruction<F>,
+        from_pc: u32,
+        _reads: I::Reads,
+    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+        let local_opcode = Rv32JalLuiOpcode::from_usize(
+            instruction
+                .opcode
+                .local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET),
+        );
+        let imm = instruction.c;
+
+        let signed_imm = match local_opcode {
+            JAL => {
+                // Note: signed_imm is a signed integer and imm is a field element
+                (imm + F::from_canonical_u32(1 << (RV_J_TYPE_IMM_BITS - 1))).as_canonical_u32()
+                    as i32
+                    - (1 << (RV_J_TYPE_IMM_BITS - 1))
+            }
+            LUI => imm.as_canonical_u32() as i32,
+        };
+        let (to_pc, rd_data) = run_jal_lui(local_opcode, from_pc, signed_imm);
+
+        for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
+            self.bitwise_lookup_chip
+                .request_range(rd_data[i * 2] as u32, rd_data[i * 2 + 1] as u32);
+        }
+
+        if local_opcode == JAL {
+            let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
+            let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1 << x));
+            self.bitwise_lookup_chip
+                .request_xor(rd_data[3] as u32, additional_bits);
+        }
+
+        let rd_data = rd_data.map(F::from_canonical_u8);
+
+        let output = AdapterRuntimeContext {
+            to_pc: Some(to_pc),
+            writes: [rd_data].into(),
+        };
+
+        Ok((
+            output,
+            Rv32JalLuiCoreRecord {
+                rd_data,
+                imm,
+                is_jal: local_opcode == JAL,
+                is_lui: local_opcode == LUI,
+            },
+        ))
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv32JalLuiOpcode::from_usize(opcode - Rv32JalLuiOpcode::CLASS_OFFSET)
+        )
+    }
+
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let core_cols: &mut Rv32JalLuiCoreCols<F> = row_slice.borrow_mut();
+        core_cols.rd_data = record.rd_data;
+        core_cols.imm = record.imm;
+        core_cols.is_jal = F::from_bool(record.is_jal);
+        core_cols.is_lui = F::from_bool(record.is_lui);
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
+impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for Rv32JalLuiCoreChip
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        let Instruction {
+            opcode, a, c: imm, ..
+        } = instruction;
+
+        let local_opcode =
+            Rv32JalLuiOpcode::from_usize(opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET));
+
+        let imm = imm.as_canonical_u32();
+        let signed_imm = match local_opcode {
+            JAL => (imm + (1 << (RV_J_TYPE_IMM_BITS - 1))) as i32 - (1 << (RV_J_TYPE_IMM_BITS - 1)),
+            LUI => imm as i32,
+        };
+
+        let (to_pc, rd_bytes) = run_jal_lui(local_opcode, state.pc, signed_imm);
+
+        let rd_addr = a.as_canonical_u32();
+        unsafe {
+            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
+        }
+
+        state.pc = to_pc;
+
+        Ok(())
     }
 }
 

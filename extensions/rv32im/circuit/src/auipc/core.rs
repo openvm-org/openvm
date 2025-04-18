@@ -6,10 +6,13 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, ImmInstruction, Result, SingleTraceStep, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        AdapterAirContext, ImmInstruction, InsExecutorE1, Result, SingleTraceStep,
+        VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -287,6 +290,37 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
 
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", AUIPC)
+    }
+}
+
+impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for Rv32AuipcCoreChip
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        let Instruction {
+            opcode, a, c: imm, ..
+        } = instruction;
+
+        let local_opcode =
+            Rv32AuipcOpcode::from_usize(opcode.local_opcode_idx(Rv32AuipcOpcode::CLASS_OFFSET));
+
+        let imm = imm.as_canonical_u32();
+        let rd_bytes = run_auipc(local_opcode, state.pc, imm);
+
+        let rd_addr = a.as_canonical_u32();
+        unsafe {
+            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
+        }
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }
 

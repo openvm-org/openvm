@@ -6,13 +6,16 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
-    p3_field::FieldAlgebra,
+    p3_field::{FieldAlgebra, PrimeField32},
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::Streams;
-use crate::system::{memory::MemoryController, program::ProgramBus};
+use super::{Streams, VmExecutionState};
+use crate::system::{
+    memory::{online::GuestMemory, MemoryController},
+    program::ProgramBus,
+};
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
 
@@ -93,6 +96,19 @@ pub trait InstructionExecutor<F> {
     /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
     /// if it is a supported opcode by the present executor.
     fn get_opcode_name(&self, opcode: usize) -> String;
+}
+
+/// New trait for instruction execution
+pub trait InsExecutorE1<Mem, Ctx, F>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>;
 }
 
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
