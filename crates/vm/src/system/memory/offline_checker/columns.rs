@@ -88,6 +88,11 @@ impl<F: PrimeField32> MemoryReadAuxCols<F> {
     pub fn get_base(self) -> MemoryBaseAuxCols<F> {
         self.base
     }
+
+    /// Sets the previous timestamp **without** updating the less than auxiliary columns.
+    pub fn set_prev(&mut self, timestamp: F) {
+        self.base.prev_timestamp = timestamp;
+    }
 }
 
 #[repr(C)]
@@ -110,6 +115,12 @@ impl<T, const N: usize> AsRef<MemoryReadAuxCols<T>> for MemoryWriteAuxCols<T, N>
 }
 
 impl<T, const N: usize> AsMut<MemoryBaseAuxCols<T>> for MemoryWriteAuxCols<T, N> {
+    fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
+        &mut self.base
+    }
+}
+
+impl<T> AsMut<MemoryBaseAuxCols<T>> for MemoryReadAuxCols<T> {
     fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
         &mut self.base
     }
