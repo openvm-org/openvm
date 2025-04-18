@@ -439,7 +439,7 @@ fn run_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 }
 
 fn get_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(y: &[u32]) -> (usize, usize) {
-    // We assume `NUM_LIMBS * LIMB_BITS <= 2^LIMB_BITS` so so the shift is defined
+    // We assume `NUM_LIMBS * LIMB_BITS <= 2^LIMB_BITS` so the shift is defined
     // entirely in y[0].
     let shift = (y[0] as usize) % (NUM_LIMBS * LIMB_BITS);
     (shift / LIMB_BITS, shift % LIMB_BITS)
