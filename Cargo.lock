@@ -4696,6 +4696,7 @@ dependencies = [
  "clap",
  "eyre",
  "itertools 0.14.0",
+ "memmap2",
  "num-format",
  "serde",
  "serde_json",

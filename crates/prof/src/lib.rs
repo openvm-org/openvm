@@ -4,6 +4,7 @@ use aggregate::{
     EXECUTE_TIME_LABEL, PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
 };
 use eyre::Result;
+use memmap2::Mmap;
 
 use crate::types::{Labels, Metric, MetricDb, MetricsFile};
 
@@ -14,7 +15,8 @@ pub mod types;
 impl MetricDb {
     pub fn new(metrics_file: impl AsRef<Path>) -> Result<Self> {
         let file = File::open(metrics_file)?;
-        let metrics: MetricsFile = serde_json::from_reader(file)?;
+        let mmap = unsafe { Mmap::map(&file)? };
+        let metrics: MetricsFile = serde_json::from_slice(&mmap)?;
 
         let mut db = MetricDb::default();
 
