@@ -366,7 +366,6 @@ where
         };
 
         let (to_pc, rd_bytes) = run_jal_lui(local_opcode, state.pc, signed_imm);
-        let rd_bytes = rd_bytes.map(|x| x as u8);
 
         let rd_addr = a.as_canonical_u32();
         unsafe {

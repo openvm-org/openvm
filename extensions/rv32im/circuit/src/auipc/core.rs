@@ -37,8 +37,6 @@ use crate::adapters::{
     tracing_write_reg, Rv32RdWriteAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 
-const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
-
 pub(super) const ADAPTER_WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
 
 #[repr(C)]
@@ -313,10 +311,7 @@ where
             Rv32AuipcOpcode::from_usize(opcode.local_opcode_idx(Rv32AuipcOpcode::CLASS_OFFSET));
 
         let imm = imm.as_canonical_u32();
-
-        // TODO(ayush): should this be [u8; 4]?
         let rd_bytes = run_auipc(local_opcode, state.pc, imm);
-        let rd_bytes = rd_bytes.map(|x| x as u8);
 
         let rd_addr = a.as_canonical_u32();
         unsafe {
