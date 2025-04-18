@@ -43,6 +43,8 @@ use crate::metrics::VmMetrics;
 use crate::system::{
     connector::VmConnectorChip,
     memory::{
+        dimensions::MemoryDimensions,
+        merkle::tree::MerkleTree,
         offline_checker::{MemoryBridge, MemoryBus},
         MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
     },
@@ -537,17 +539,28 @@ impl<F: PrimeField32> SystemComplex<F> {
         let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
         let memory_bus = MemoryBus::new(bus_idx_mgr.new_bus_idx());
         let program_bus = ProgramBus::new(bus_idx_mgr.new_bus_idx());
+        let md = MemoryDimensions::from_config(&config.memory_config);
         let range_bus =
             VariableRangeCheckerBus::new(bus_idx_mgr.new_bus_idx(), config.memory_config.decomp);
 
+        let mut poseidon_chip = None;
+
         let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
         let memory_controller = if config.continuation_enabled {
+            let merkle_bus = PermutationCheckBus::new(bus_idx_mgr.new_bus_idx());
+            let compression_bus = PermutationCheckBus::new(bus_idx_mgr.new_bus_idx());
+            poseidon_chip = Some(Poseidon2PeripheryChip::new(
+                vm_poseidon2_config(),
+                compression_bus.index,
+                config.max_constraint_degree,
+            ));
             MemoryController::with_persistent_memory(
                 memory_bus,
                 config.memory_config,
                 range_checker.clone(),
-                PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
-                PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
+                merkle_bus,
+                compression_bus,
+                MerkleTree::new(md.overall_height(), poseidon_chip.as_ref().unwrap()),
             )
         } else {
             MemoryController::with_volatile_memory(
@@ -587,17 +600,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             // This is **not** an instruction executor.
             // Currently we never use poseidon2 opcodes when continuations is enabled: we will need
             // special handling when that happens
-            let direct_bus_idx = memory_controller
-                .interface_chip
-                .compression_bus()
-                .unwrap()
-                .index;
-            let chip = Poseidon2PeripheryChip::new(
-                vm_poseidon2_config(),
-                direct_bus_idx,
-                config.max_constraint_degree,
-            );
-            inventory.add_periphery_chip(chip);
+            inventory.add_periphery_chip(poseidon_chip.unwrap());
         }
         let streams = Arc::new(Mutex::new(Streams::default()));
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();

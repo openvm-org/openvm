@@ -17,6 +17,14 @@ pub struct MemoryDimensions {
 }
 
 impl MemoryDimensions {
+    pub fn from_config(config: &MemoryConfig) -> Self {
+        Self {
+            as_height: config.as_height,
+            address_height: config.pointer_max_bits - log2_strict_usize(CHUNK),
+            as_offset: config.as_offset,
+        }
+    }
+
     pub fn overall_height(&self) -> usize {
         self.as_height + self.address_height
     }

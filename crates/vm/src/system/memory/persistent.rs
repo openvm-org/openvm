@@ -1,5 +1,4 @@
 use std::{
-    array,
     borrow::{Borrow, BorrowMut},
     iter,
     sync::Arc,
@@ -19,11 +18,11 @@ use openvm_stark_backend::{
 };
 use rustc_hash::FxHashSet;
 
-use super::merkle::SerialReceiver;
+use super::merkle::{tree::MerkleTree, SerialReceiver};
 use crate::{
     arch::hasher::Hasher,
     system::memory::{
-        dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
+        dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress,
         TimestampedEquipartition, INITIAL_TIMESTAMP,
     },
 };
@@ -200,7 +199,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
     pub fn finalize<H>(
         &mut self,
-        initial_memory: &MemoryImage,
+        initial_memory: &MerkleTree<F, CHUNK>,
         final_memory: &TimestampedEquipartition<F, CHUNK>,
         hasher: &mut H,
     ) where
@@ -212,9 +211,8 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                     .par_iter()
                     .map(|&(address_space, label)| {
                         let pointer = label * CHUNK as u32;
-                        let init_values = array::from_fn(|i| unsafe {
-                            initial_memory.get((address_space, pointer + i as u32))
-                        });
+                        let init_values = initial_memory.get_leaf_value((address_space, pointer));
+                        // TODO: maybe we shouldn't recompute the hash here, maybe it's okay
                         let initial_hash = hasher.hash(&init_values);
                         let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
                         let final_hash = hasher.hash(&timestamped_values.values);

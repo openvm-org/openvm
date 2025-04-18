@@ -28,7 +28,7 @@ use rand::{
     Rng,
 };
 
-use super::MemoryController;
+use super::{dimensions::MemoryDimensions, merkle::tree::MerkleTree, MemoryController};
 use crate::{
     arch::{
         testing::{memory::gen_pointer, MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
@@ -244,12 +244,17 @@ fn test_memory_controller_persistent() {
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
 
+    let mut poseidon_chip =
+        Poseidon2PeripheryChip::new(Poseidon2Config::default(), POSEIDON2_DIRECT_BUS, 3);
+    let md = MemoryDimensions::from_config(&memory_config);
+
     let mut memory_controller = MemoryController::with_persistent_memory(
         memory_bus,
         memory_config,
         range_checker.clone(),
         merkle_bus,
         compression_bus,
+        MerkleTree::new(md.overall_height(), &poseidon_chip),
     );
 
     let mut rng = create_seeded_rng();
@@ -258,9 +263,6 @@ fn test_memory_controller_persistent() {
     let memory_requester_air = MemoryRequesterAir {
         memory_bridge: memory_controller.memory_bridge(),
     };
-
-    let mut poseidon_chip =
-        Poseidon2PeripheryChip::new(Poseidon2Config::default(), POSEIDON2_DIRECT_BUS, 3);
 
     memory_controller.finalize(Some(&mut poseidon_chip));
 

@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{
+    merkle::tree::MerkleTree,
     online::GuestMemory,
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
@@ -48,7 +49,6 @@ use crate::{
         },
         online::{MemoryLogEntry, TracingMemory},
         persistent::PersistentBoundaryChip,
-        tree::MemoryNode,
     },
 };
 
@@ -90,6 +90,26 @@ pub type TimestampedEquipartition<F, const N: usize> =
 ///
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
 pub type Equipartition<F, const N: usize> = BTreeMap<(u32, u32), [F; N]>;
+
+/// Convert a memory image to an equipartition.
+///
+/// The key is a pair `(address_space, label)`, where `label` is the index of the block in the
+/// partition. I.e., the starting address of the block is `(address_space, label * N)`.
+///
+/// If a key is not present in the map, then the block is uninitialized (and therefore zero).
+pub fn memory_to_partition<F: PrimeField32, const N: usize>(
+    memory: &MemoryImage,
+) -> Equipartition<F, N> {
+    let mut memory_partition = Equipartition::new();
+    for ((address_space, pointer), value) in memory.items() {
+        let label = (address_space, pointer / N as u32);
+        let chunk = memory_partition
+            .entry(label)
+            .or_insert_with(|| [F::default(); N]);
+        chunk[(pointer % N as u32) as usize] = value;
+    }
+    memory_partition
+}
 
 #[derive(Getters, MutGetters)]
 pub struct MemoryController<F> {
@@ -275,6 +295,7 @@ impl<F: PrimeField32> MemoryController<F> {
         range_checker: SharedVariableRangeCheckerChip,
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
+        merkle_tree: MerkleTree<F, CHUNK>,
     ) -> Self {
         assert_eq!(mem_config.as_offset, 1);
         let memory_dims = MemoryDimensions {
@@ -292,6 +313,7 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus, compression_bus),
             initial_memory: AddressMap::from_mem_config(&mem_config),
+            merkle_tree,
         };
         Self {
             memory_bus,
@@ -364,7 +386,11 @@ impl<F: PrimeField32> MemoryController<F> {
                     "Cannot set initial memory for volatile memory"
                 );
             }
-            MemoryInterface::Persistent { initial_memory, .. } => {
+            MemoryInterface::Persistent {
+                initial_memory,
+                merkle_tree,
+                ..
+            } => {
                 *initial_memory = memory;
             }
         }
@@ -564,23 +590,31 @@ impl<F: PrimeField32> MemoryController<F> {
                 merkle_chip,
                 boundary_chip,
                 initial_memory,
+                merkle_tree,
             } => {
                 let hasher = hasher.unwrap();
                 let final_partition = offline_memory.finalize::<CHUNK>(&mut self.access_adapters);
-
-                boundary_chip.finalize(initial_memory, &final_partition, hasher);
+                *merkle_tree = MerkleTree::from_memory(
+                    initial_memory,
+                    &MemoryDimensions::from_config(&self.mem_config),
+                    hasher,
+                );
+                boundary_chip.finalize(merkle_tree, &final_partition, hasher);
+                let touched_values = self
+                    .memory
+                    .touched_blocks()
+                    .flat_map(|((addr_sp, ptr), metadata)| {
+                        (0..metadata.block_size).map(move |i| (addr_sp, ptr + i))
+                    })
+                    .map(|addr| (addr, final_partition[&addr].values))
+                    .collect();
+                merkle_chip.finalize::<false>(touched_values, merkle_tree, hasher);
                 let final_memory_values = final_partition
                     .into_par_iter()
                     .map(|(key, value)| (key, value.values))
                     .collect();
-                let initial_node = MemoryNode::tree_from_memory(
-                    merkle_chip.air.memory_dimensions,
-                    initial_memory,
-                    hasher,
-                );
-                merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
                 self.final_state = Some(FinalState::Persistent(PersistentFinalState {
-                    final_memory: final_memory_values.clone(),
+                    final_memory: final_memory_values,
                 }));
             }
         };

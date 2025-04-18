@@ -1,7 +1,9 @@
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
 use crate::system::memory::{
-    merkle::MemoryMerkleChip, persistent::PersistentBoundaryChip, volatile::VolatileBoundaryChip,
+    merkle::{tree::MerkleTree, MemoryMerkleChip},
+    persistent::PersistentBoundaryChip,
+    volatile::VolatileBoundaryChip,
     MemoryImage, CHUNK,
 };
 
@@ -14,6 +16,7 @@ pub enum MemoryInterface<F> {
         boundary_chip: PersistentBoundaryChip<F, CHUNK>,
         merkle_chip: MemoryMerkleChip<CHUNK, F>,
         initial_memory: MemoryImage,
+        merkle_tree: MerkleTree<F, CHUNK>,
     },
 }
 
@@ -27,7 +30,7 @@ impl<F: PrimeField32> MemoryInterface<F> {
                 ..
             } => {
                 boundary_chip.touch_range(addr_space, pointer, len);
-                merkle_chip.touch_range(addr_space, pointer, len);
+                // merkle_chip.touch_range(addr_space, pointer, len);
             }
         }
     }
