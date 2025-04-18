@@ -594,7 +594,7 @@ impl<F: PrimeField32> MemoryController<F> {
             } => {
                 let hasher = hasher.unwrap();
                 let final_partition = offline_memory.finalize::<CHUNK>(&mut self.access_adapters);
-                *merkle_tree = MerkleTree::from_memory::<true>(
+                *merkle_tree = MerkleTree::from_memory(
                     initial_memory,
                     &MemoryDimensions::from_config(&self.mem_config),
                     hasher,

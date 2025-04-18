@@ -9,6 +9,12 @@ use crate::{
     },
 };
 
+/// A Merkle tree data structure.
+///
+/// Internally, the nodes are enumerated from 1 as in the bfs order of the full binary tree.
+/// Hence, the root has index `1` and the `i`-th leaf has index `2^height + i`.
+/// The structure also holds the actual values (not hashes) for the leaves to be used in
+/// [`PersistentBoundaryChip`].
 pub struct MerkleTree<F, const CHUNK: usize> {
     /// Height of the tree -- the root is the only node at depth 0, and the leaves are at depth
     /// `height`.
@@ -20,6 +26,20 @@ pub struct MerkleTree<F, const CHUNK: usize> {
     /// Actual values for the leaves (for the boundary chip).
     // We could create a special enum for the nodes, but I think this is cleaner.
     leaf_values: Option<Equipartition<F, CHUNK>>,
+}
+
+enum UpdateMode<'a, H: HasherChip<CHUNK, F>, F: PrimeField32, const CHUNK: usize> {
+    Immutable(&'a H),
+    Mutable(&'a mut H, &'a mut Vec<MemoryMerkleCols<F, CHUNK>>),
+}
+
+impl<H: HasherChip<CHUNK, F>, F: PrimeField32, const CHUNK: usize> UpdateMode<'_, H, F, CHUNK> {
+    fn compress(&mut self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
+        match self {
+            UpdateMode::Immutable(h) => h.compress(lhs, rhs),
+            UpdateMode::Mutable(h, _) => h.compress_and_record(lhs, rhs),
+        }
+    }
 }
 
 impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
@@ -37,13 +57,17 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         }
     }
 
-    pub fn from_memory<const FILL_LEAVES: bool>(
+    pub fn from_memory(
         image: &MemoryImage,
         md: &MemoryDimensions,
         hasher: &impl HasherChip<CHUNK, F>,
     ) -> Self {
-        let mut tree = Self::new(md.overall_height(), hasher);
-        tree.update::<FILL_LEAVES>(hasher, memory_to_partition(image), md, None);
+        let mut tree: MerkleTree<F, CHUNK> = Self::new(md.overall_height(), hasher);
+        tree.update::<true, _>(
+            memory_to_partition(image),
+            md,
+            UpdateMode::Immutable(hasher),
+        );
         tree
     }
 
@@ -54,6 +78,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         }
     }
 
+    /// Returns the hash of the node at the given index.
     fn get_node(&self, index: u64) -> [F; CHUNK] {
         self.nodes
             .get(&index)
@@ -61,6 +86,8 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
             .unwrap_or(self.zero_nodes[self.height - index.ilog2() as usize])
     }
 
+    /// Returns the actual value of the leaf at the given label, where label is `(address_space,
+    /// pointer / CHUNK)`.
     pub fn get_leaf_value(&self, label: (u32, u32)) -> [F; CHUNK] {
         self.leaf_values
             .as_ref()
@@ -78,7 +105,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
     ) -> FinalState<CHUNK, F> {
         let mut rows = Vec::new();
         let init_root = self.get_node(1);
-        self.update::<UPDATE_LEAVES>(hasher, touched, md, Some(&mut rows));
+        self.update::<UPDATE_LEAVES, _>(touched, md, UpdateMode::Mutable(hasher, &mut rows));
         FinalState {
             rows,
             init_root,
@@ -86,12 +113,11 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         }
     }
 
-    fn update<const UPDATE_LEAVES: bool>(
+    fn update<const UPDATE_LEAVES: bool, H: HasherChip<CHUNK, F>>(
         &mut self,
-        hasher: &impl HasherChip<CHUNK, F>,
         touched: Equipartition<F, CHUNK>,
         md: &MemoryDimensions,
-        mut rows: Option<&mut Vec<MemoryMerkleCols<F, CHUNK>>>,
+        mut mode: UpdateMode<'_, H, F, CHUNK>,
     ) {
         let mut layer: Vec<_> = touched
             .iter()
@@ -116,8 +142,8 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                     acc + (lhs ^ rhs).ilog2() as usize
                 })
         };
-        if let Some(v) = rows.as_deref_mut() {
-            v.reserve_exact(rows_count);
+        if let UpdateMode::Mutable(_, rows) = &mut mode {
+            rows.reserve_exact(rows_count);
         }
         for height in 1..=self.height {
             let mut i = 0;
@@ -127,8 +153,8 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                 let par_index = index >> 1;
                 i += 1;
                 // Add the initial state record
-                if let Some(v) = rows.as_deref_mut() {
-                    v.push(MemoryMerkleCols {
+                if let UpdateMode::Mutable(_, rows) = &mut mode {
+                    rows.push(MemoryMerkleCols {
                         expand_direction: F::ONE,
                         height_section: F::from_bool(height > md.address_height),
                         parent_height: F::from_canonical_usize(height),
@@ -151,9 +177,9 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                     // sibling found
                     let (_, sibling_values) = layer[i];
                     i += 1;
-                    let combined = hasher.compress(&values, &sibling_values);
-                    if let Some(v) = rows.as_deref_mut() {
-                        v.push(MemoryMerkleCols {
+                    let combined = mode.compress(&values, &sibling_values);
+                    if let UpdateMode::Mutable(_, rows) = &mut mode {
+                        rows.push(MemoryMerkleCols {
                             expand_direction: F::NEG_ONE,
                             height_section: F::from_bool(height > md.address_height),
                             parent_height: F::from_canonical_usize(height),
@@ -177,12 +203,12 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                     // no sibling found
                     let sibling_values = self.get_node(index ^ 1);
                     let is_left = index % 2 == 0;
-                    let combined = hasher.compress(
+                    let combined = mode.compress(
                         if is_left { &values } else { &sibling_values },
                         if is_left { &sibling_values } else { &values },
                     );
-                    if let Some(v) = rows.as_deref_mut() {
-                        v.push(MemoryMerkleCols {
+                    if let UpdateMode::Mutable(_, rows) = &mut mode {
+                        rows.push(MemoryMerkleCols {
                             expand_direction: F::NEG_ONE,
                             height_section: F::from_bool(height > md.address_height),
                             parent_height: F::from_canonical_usize(height),
@@ -210,8 +236,8 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
             assert_eq!(layer.len(), 1);
             self.nodes.insert(layer[0].0, layer[0].1);
         }
-        if let Some(v) = rows {
-            debug_assert_eq!(v.len(), rows_count);
+        if let UpdateMode::Mutable(_, rows) = &mode {
+            debug_assert_eq!(rows.len(), rows_count);
         }
     }
 }
