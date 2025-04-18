@@ -8,9 +8,9 @@ use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
-    segment::DefaultSegmentationStrategy, AnyEnum, InstructionExecutor, SegmentationStrategy,
-    SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex, VmInventoryError,
-    PUBLIC_VALUES_AIR_ID,
+    segmentation_strategy::{DefaultSegmentationStrategy, SegmentationStrategy},
+    AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
+    VmInventoryError, PUBLIC_VALUES_AIR_ID,
 };
 use crate::system::memory::BOUNDARY_AIR_OFFSET;
 

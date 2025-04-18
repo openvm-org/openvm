@@ -49,7 +49,6 @@ use crate::{
         },
         online::{MemoryLogEntry, TracingMemory},
         persistent::PersistentBoundaryChip,
-        tree::MemoryNode,
     },
 };
 

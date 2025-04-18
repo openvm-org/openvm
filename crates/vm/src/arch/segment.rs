@@ -1,10 +1,7 @@
-use std::sync::Arc;
-
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
     instruction::{DebugInfo, Instruction},
-    program::Program,
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -15,139 +12,64 @@ use openvm_stark_backend::{
     utils::metrics_span,
     Chip,
 };
+use program::Program;
 
 use super::{
-    ExecutionError, GenerationError, Streams, SystemBase, SystemConfig, VmChipComplex,
-    VmComplexTraceHeights, VmConfig,
+    execution_control::{ExecutionControl, TracegenExecutionControl},
+    ExecutionError, GenerationError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
+    VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
-    system::memory::MemoryImage,
+    system::memory::{
+        online::GuestMemory, paged_vec::PAGE_SIZE, AddressMap, MemoryController, MemoryImage,
+    },
 };
 
-/// Check segment every 100 instructions.
-const SEGMENT_CHECK_INTERVAL: usize = 100;
-
-const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
-// a heuristic number for the maximum number of cells per chip in a segment
-// a few reasons for this number:
-//  1. `VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>` is
-//    the chip with the most cells in a segment from the reth-benchmark.
-//  2. `VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>`:
-//    its trace width is 36 and its after challenge trace width is 80.
-const DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT: usize = DEFAULT_MAX_SEGMENT_LEN * 120;
-
-pub trait SegmentationStrategy:
-    std::fmt::Debug + Send + Sync + std::panic::UnwindSafe + std::panic::RefUnwindSafe
+/// Represents the state of the VM during execution
+pub struct VmExecutionState<Mem, Ctx>
+where
+    Mem: GuestMemory,
 {
-    /// Whether the execution should segment based on the trace heights and cells.
-    ///
-    /// Air names are provided for debugging purposes.
-    fn should_segment(
-        &self,
-        air_names: &[String],
-        trace_heights: &[usize],
-        trace_cells: &[usize],
-    ) -> bool;
-
-    /// A strategy that segments more aggressively than the current one.
-    ///
-    /// Called when `should_segment` results in a segment that is infeasible. Execution will be
-    /// re-run with the stricter segmentation strategy.
-    fn stricter_strategy(&self) -> Arc<dyn SegmentationStrategy>;
+    /// Program counter - current instruction address
+    pub pc: u32,
+    /// Whether execution has terminated
+    // TODO: see if it can be removed
+    pub terminated: bool,
+    /// Guest memory interface
+    pub memory: Mem,
+    /// Host-specific execution context
+    pub ctx: Ctx,
 }
 
-/// Default segmentation strategy: segment if any chip's height or cells exceed the limits.
-#[derive(Debug, Clone)]
-pub struct DefaultSegmentationStrategy {
-    max_segment_len: usize,
-    max_cells_per_chip_in_segment: usize,
-}
-
-impl Default for DefaultSegmentationStrategy {
-    fn default() -> Self {
+impl<Mem, Ctx> VmExecutionState<Mem, Ctx>
+where
+    Mem: GuestMemory,
+{
+    /// Creates a new VM execution state with the given parameters
+    pub fn new(pc: u32, memory: Mem, ctx: Ctx) -> Self {
         Self {
-            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
-            max_cells_per_chip_in_segment: DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT,
+            pc,
+            terminated: false,
+            memory,
+            ctx,
         }
     }
 }
 
-impl DefaultSegmentationStrategy {
-    pub fn new_with_max_segment_len(max_segment_len: usize) -> Self {
-        Self {
-            max_segment_len,
-            max_cells_per_chip_in_segment: max_segment_len * 120,
-        }
-    }
-
-    pub fn new(max_segment_len: usize, max_cells_per_chip_in_segment: usize) -> Self {
-        Self {
-            max_segment_len,
-            max_cells_per_chip_in_segment,
-        }
-    }
-
-    pub fn max_segment_len(&self) -> usize {
-        self.max_segment_len
-    }
-}
-
-const SEGMENTATION_BACKOFF_FACTOR: usize = 4;
-
-impl SegmentationStrategy for DefaultSegmentationStrategy {
-    fn should_segment(
-        &self,
-        air_names: &[String],
-        trace_heights: &[usize],
-        trace_cells: &[usize],
-    ) -> bool {
-        for (i, &height) in trace_heights.iter().enumerate() {
-            if height > self.max_segment_len {
-                tracing::info!(
-                    "Should segment because chip {} (name: {}) has height {}",
-                    i,
-                    air_names[i],
-                    height
-                );
-                return true;
-            }
-        }
-        for (i, &num_cells) in trace_cells.iter().enumerate() {
-            if num_cells > self.max_cells_per_chip_in_segment {
-                tracing::info!(
-                    "Should segment because chip {} (name: {}) has {} cells",
-                    i,
-                    air_names[i],
-                    num_cells
-                );
-                return true;
-            }
-        }
-        false
-    }
-
-    fn stricter_strategy(&self) -> Arc<dyn SegmentationStrategy> {
-        Arc::new(Self {
-            max_segment_len: self.max_segment_len / SEGMENTATION_BACKOFF_FACTOR,
-            max_cells_per_chip_in_segment: self.max_cells_per_chip_in_segment
-                / SEGMENTATION_BACKOFF_FACTOR,
-        })
-    }
-}
-
-pub struct ExecutionSegment<F, VC>
+pub struct VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
+    Mem: GuestMemory,
+    Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
-    /// Memory image after segment was executed. Not used in trace generation.
-    pub final_memory: Option<MemoryImage>,
+    /// Execution control for determining segmentation and stopping conditions
+    pub control: Ctrl,
 
-    pub since_last_segment_check: usize,
     pub trace_height_constraints: Vec<LinearConstraint>,
 
     /// Air names for debug purposes only.
@@ -157,12 +79,42 @@ where
     pub metrics: VmMetrics,
 }
 
-pub struct ExecutionSegmentState {
-    pub pc: u32,
-    pub is_terminated: bool,
+pub struct TracegenCtx {
+    pub timestamp: u32,
 }
 
-impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
+impl TracegenCtx {
+    pub fn new(timestamp: u32) -> Self {
+        Self { timestamp }
+    }
+}
+
+pub type TracegenVmExecutionState = VmExecutionState<AddressMap<PAGE_SIZE>, TracegenCtx>;
+
+impl TracegenVmExecutionState {
+    pub fn from_pc_and_memory_controller<F>(
+        pc: u32,
+        memory_controller: &MemoryController<F>,
+    ) -> Self
+    where
+        F: PrimeField32,
+    {
+        let memory = memory_controller.memory_image().clone();
+        let ctx = TracegenCtx::new(memory_controller.timestamp());
+        TracegenVmExecutionState::new(pc, memory, ctx)
+    }
+}
+
+pub type TracegenVmSegmentExecutor<F, VC> =
+    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, TracegenCtx, TracegenExecutionControl>;
+
+impl<F, VC, Mem, Ctx, Ctrl> VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
+where
+    F: PrimeField32,
+    VC: VmConfig<F>,
+    Mem: GuestMemory,
+    Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
+{
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
         config: &VC,
@@ -185,10 +137,11 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             chip_complex.set_initial_memory(initial_memory);
         }
         let air_names = chip_complex.air_names();
+        let control = Ctrl::new(&chip_complex);
 
         Self {
             chip_complex,
-            final_memory: None,
+            control,
             air_names,
             trace_height_constraints,
             #[cfg(feature = "bench-metrics")]
@@ -196,7 +149,6 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 fn_bounds,
                 ..Default::default()
             },
-            since_last_segment_check: 0,
         }
     }
 
@@ -211,133 +163,121 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             .set_override_inventory_trace_heights(overridden_heights.inventory);
     }
 
-    /// Stopping is triggered by should_segment()
-    pub fn execute_from_pc(
+    /// Stopping is triggered by should_stop() or if VM is terminated
+    pub fn execute_from_state(
         &mut self,
-        mut pc: u32,
-    ) -> Result<ExecutionSegmentState, ExecutionError> {
-        let mut timestamp = self.chip_complex.memory_controller().timestamp();
+        vm_state: &mut VmExecutionState<Mem, Ctx>,
+    ) -> Result<(), ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
-        self.chip_complex
-            .connector_chip_mut()
-            .begin(ExecutionState::new(pc, timestamp));
+        // Call the pre-execution hook
+        self.control
+            .on_segment_start(vm_state, &mut self.chip_complex);
 
-        let mut did_terminate = false;
+        while !vm_state.terminated && !self.should_stop(vm_state) {
+            // Fetch, decode and execute single instruction
+            self.execute_instruction(vm_state, &mut prev_backtrace)?;
+        }
 
-        loop {
-            #[allow(unused_variables)]
-            let (opcode, dsl_instr) = {
-                let Self {
-                    chip_complex,
-                    #[cfg(feature = "bench-metrics")]
-                    metrics,
-                    ..
-                } = self;
-                let SystemBase {
-                    program_chip,
-                    memory_controller,
-                    ..
-                } = &mut chip_complex.base;
+        // Call the post-execution hook
+        self.control
+            .on_segment_end(vm_state, &mut self.chip_complex);
 
-                let (instruction, debug_info) = program_chip.get_instruction(pc)?;
-                tracing::trace!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
+        Ok(())
+    }
 
-                #[allow(unused_variables)]
-                let (dsl_instr, trace) = debug_info.as_ref().map_or(
-                    (None, None),
-                    |DebugInfo {
-                         dsl_instruction,
-                         trace,
-                     }| (Some(dsl_instruction), trace.as_ref()),
-                );
+    /// Executes a single instruction and updates VM state
+    // TODO(ayush): clean this up, separate to smaller functions
+    fn execute_instruction(
+        &mut self,
+        vm_state: &mut VmExecutionState<Mem, Ctx>,
+        prev_backtrace: &mut Option<Backtrace>,
+    ) -> Result<(), ExecutionError> {
+        let pc = vm_state.pc;
+        let timestamp = self.chip_complex.memory_controller().timestamp();
 
-                let &Instruction { opcode, c, .. } = instruction;
-                if opcode == SystemOpcode::TERMINATE.global_opcode() {
-                    did_terminate = true;
-                    self.chip_complex.connector_chip_mut().end(
-                        ExecutionState::new(pc, timestamp),
-                        Some(c.as_canonical_u32()),
-                    );
-                    break;
+        // Process an instruction and update VM state
+        let (instruction, debug_info) = self.chip_complex.base.program_chip.get_instruction(pc)?;
+
+        tracing::trace!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
+
+        // Extract debug info components
+        #[allow(unused_variables)]
+        let (dsl_instr, trace) = debug_info.as_ref().map_or(
+            (None, None),
+            |DebugInfo {
+                 dsl_instruction,
+                 trace,
+             }| (Some(dsl_instruction.clone()), trace.as_ref()),
+        );
+
+        let &Instruction { opcode, c, .. } = instruction;
+
+        // Handle termination instruction
+        if opcode == SystemOpcode::TERMINATE.global_opcode() {
+            self.chip_complex.connector_chip_mut().end(
+                ExecutionState::new(pc, timestamp),
+                Some(c.as_canonical_u32()),
+            );
+            vm_state.terminated = true;
+            return Ok(());
+        }
+
+        // Handle phantom instructions
+        if opcode == SystemOpcode::PHANTOM.global_opcode() {
+            let discriminant = c.as_canonical_u32() as u16;
+            if let Some(phantom) = SysPhantom::from_repr(discriminant) {
+                tracing::trace!("pc: {pc:#x} | system phantom: {phantom:?}");
+
+                if phantom == SysPhantom::DebugPanic {
+                    if let Some(mut backtrace) = prev_backtrace.take() {
+                        backtrace.resolve();
+                        eprintln!("openvm program failure; backtrace:\n{:?}", backtrace);
+                    } else {
+                        eprintln!("openvm program failure; no backtrace");
+                    }
+                    return Err(ExecutionError::Fail { pc });
                 }
 
-                // Some phantom instruction handling is more convenient to do here than in
-                // PhantomChip.
-                if opcode == SystemOpcode::PHANTOM.global_opcode() {
-                    // Note: the discriminant is the lower 16 bits of the c operand.
-                    let discriminant = c.as_canonical_u32() as u16;
-                    let phantom = SysPhantom::from_repr(discriminant);
-                    tracing::trace!("pc: {pc:#x} | system phantom: {phantom:?}");
+                #[cfg(feature = "bench-metrics")]
+                {
+                    let dsl_str = dsl_instr.clone().unwrap_or_else(|| "Default".to_string());
                     match phantom {
-                        Some(SysPhantom::DebugPanic) => {
-                            if let Some(mut backtrace) = prev_backtrace {
-                                backtrace.resolve();
-                                eprintln!("openvm program failure; backtrace:\n{:?}", backtrace);
-                            } else {
-                                eprintln!("openvm program failure; no backtrace");
-                            }
-                            return Err(ExecutionError::Fail { pc });
-                        }
-                        Some(SysPhantom::CtStart) =>
-                        {
-                            #[cfg(feature = "bench-metrics")]
-                            metrics
-                                .cycle_tracker
-                                .start(dsl_instr.cloned().unwrap_or("Default".to_string()))
-                        }
-                        Some(SysPhantom::CtEnd) =>
-                        {
-                            #[cfg(feature = "bench-metrics")]
-                            metrics
-                                .cycle_tracker
-                                .end(dsl_instr.cloned().unwrap_or("Default".to_string()))
-                        }
+                        SysPhantom::CtStart => self.metrics.cycle_tracker.start(dsl_str),
+                        SysPhantom::CtEnd => self.metrics.cycle_tracker.end(dsl_str),
                         _ => {}
                     }
                 }
-                prev_backtrace = trace.cloned();
-
-                if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-                    let next_state = InstructionExecutor::execute(
-                        executor,
-                        memory_controller,
-                        instruction,
-                        ExecutionState::new(pc, timestamp),
-                    )?;
-                    assert!(next_state.timestamp > timestamp);
-                    pc = next_state.pc;
-                    timestamp = next_state.timestamp;
-                } else {
-                    return Err(ExecutionError::DisabledOperation { pc, opcode });
-                };
-                (opcode, dsl_instr.cloned())
-            };
-
-            #[cfg(feature = "bench-metrics")]
-            self.update_instruction_metrics(pc, opcode, dsl_instr);
-
-            if self.should_segment() {
-                self.chip_complex
-                    .connector_chip_mut()
-                    .end(ExecutionState::new(pc, timestamp), None);
-                break;
             }
         }
-        self.final_memory = Some(
-            self.chip_complex
-                .base
-                .memory_controller
-                .memory_image()
-                .clone(),
-        );
 
-        Ok(ExecutionSegmentState {
-            pc,
-            is_terminated: did_terminate,
-        })
+        // TODO(ayush): move to vm state?
+        *prev_backtrace = trace.cloned();
+
+        // Execute the instruction using the control implementation
+        self.control
+            .execute_instruction(vm_state, &mut self.chip_complex)?;
+
+        // Update metrics if enabled
+        #[cfg(feature = "bench-metrics")]
+        {
+            self.update_instruction_metrics(pc, opcode, dsl_instr);
+        }
+
+        Ok(())
     }
 
+    /// Returns bool of whether to switch to next segment or not.
+    fn should_stop(&mut self, vm_state: &VmExecutionState<Mem, Ctx>) -> bool {
+        if !self.system_config().continuation_enabled {
+            return false;
+        }
+
+        // Check with the execution control policy
+        self.control.should_stop(vm_state, &self.chip_complex)
+    }
+
+    // TODO(ayush): not sure what to do of these
     /// Generate ProofInput to prove the segment. Should be called after ::execute
     pub fn generate_proof_input<SC: StarkGenericConfig>(
         #[allow(unused_mut)] mut self,
@@ -358,30 +298,28 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         })
     }
 
-    /// Returns bool of whether to switch to next segment or not. This is called every clock cycle
-    /// inside of Core trace generation.
-    fn should_segment(&mut self) -> bool {
-        if !self.system_config().continuation_enabled {
-            return false;
-        }
-        // Avoid checking segment too often.
-        if self.since_last_segment_check != SEGMENT_CHECK_INTERVAL {
-            self.since_last_segment_check += 1;
-            return false;
-        }
-        self.since_last_segment_check = 0;
-        let segmentation_strategy = &self.system_config().segmentation_strategy;
-        segmentation_strategy.should_segment(
-            &self.air_names,
-            &self
-                .chip_complex
-                .dynamic_trace_heights()
-                .collect::<Vec<_>>(),
-            &self.chip_complex.current_trace_cells(),
-        )
-    }
+    #[cfg(feature = "bench-metrics")]
+    #[allow(unused_variables)]
+    pub fn update_instruction_metrics(
+        &mut self,
+        pc: u32,
+        opcode: VmOpcode,
+        dsl_instr: Option<String>,
+    ) {
+        self.metrics.cycle_count += 1;
 
-    pub fn current_trace_cells(&self) -> Vec<usize> {
-        self.chip_complex.current_trace_cells()
+        if self.system_config().profiling {
+            let executor = self.chip_complex.inventory.get_executor(opcode).unwrap();
+            let opcode_name = executor.get_opcode_name(opcode.as_usize());
+            self.metrics.update_trace_cells(
+                &self.air_names,
+                self.chip_complex.current_trace_cells(),
+                opcode_name,
+                dsl_instr,
+            );
+
+            #[cfg(feature = "function-span")]
+            self.metrics.update_current_fn(pc);
+        }
     }
 }
