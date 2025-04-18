@@ -2,7 +2,7 @@
 // and https://github.com/risc0/risc0/blob/f61379bf69b24d56e49d6af96a3b284961dcc498/risc0/binfmt/src/elf.rs#L34 under Apache License
 use std::{
     cmp::min,
-    collections::{BTreeMap, HashMap},
+    collections::{hash_map::Entry, BTreeMap, HashMap},
     fmt::Debug,
     io::Write,
 };
@@ -111,9 +111,9 @@ impl Elf {
                 let mut offsets = HashMap::new();
                 buf.push(0);
                 for (name, st_name) in fn_names {
-                    if !offsets.contains_key(&st_name) {
+                    if let Entry::Vacant(e) = offsets.entry(st_name) {
                         let offset = buf.len();
-                        offsets.insert(st_name, offset);
+                        e.insert(offset);
                         buf.extend_from_slice(name.as_bytes());
                         buf.push(0);
                     }
