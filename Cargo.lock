@@ -4696,6 +4696,7 @@ dependencies = [
  "clap",
  "eyre",
  "itertools 0.14.0",
+ "memmap2",
  "num-format",
  "serde",
  "serde_json",
@@ -5003,6 +5004,7 @@ dependencies = [
  "openvm-platform",
  "openvm-stark-backend",
  "rrs-lib",
+ "rustc-demangle",
  "thiserror 1.0.69",
 ]
 

@@ -16,3 +16,4 @@ clap = { workspace = true, features = ["derive"] }
 eyre.workspace = true
 itertools = { workspace = true, features = ["use_std"] }
 num-format = "0.4"
+memmap2 = "0.9"
