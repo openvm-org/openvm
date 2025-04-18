@@ -38,7 +38,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{compose, RV32_REGISTER_NUM_LIMBS};
+use super::{tmp_convert_to_u8s, RV32_REGISTER_NUM_LIMBS};
 use crate::adapters::RV32_CELL_BITS;
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -397,9 +397,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
-        let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
+        let rs1_record = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, b);
 
-        let rs1_val = compose(rs1_record.1);
+        let rs1_val = u32::from_le_bytes(rs1_record.1);
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
@@ -417,24 +417,27 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let ptr_val = ptr_val - shift_amount;
         let read_record = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                memory.read::<RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_u32(ptr_val))
+                memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_u32(ptr_val))
             }
-            STOREW | STOREH | STOREB => memory.read::<RV32_REGISTER_NUM_LIMBS>(d, a),
+            STOREW | STOREH | STOREB => memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, a),
         };
 
         // We need to keep values of some cells to keep them unchanged when writing to those cells
         let prev_data = match local_opcode {
             STOREW | STOREH | STOREB => array::from_fn(|i| {
-                memory.unsafe_read_cell(e, F::from_canonical_usize(ptr_val as usize + i))
+                memory.unsafe_read_cell::<u8>(e, F::from_canonical_usize(ptr_val as usize + i))
             }),
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                array::from_fn(|i| memory.unsafe_read_cell(d, a + F::from_canonical_usize(i)))
+                array::from_fn(|i| memory.unsafe_read_cell::<u8>(d, a + F::from_canonical_usize(i)))
             }
         };
 
         Ok((
             (
-                [prev_data, read_record.1],
+                [
+                    prev_data.map(F::from_canonical_u8),
+                    read_record.1.map(F::from_canonical_u8),
+                ],
                 F::from_canonical_u32(shift_amount),
             ),
             Self::ReadRecord {
@@ -476,9 +479,15 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                 STOREW | STOREH | STOREB => {
                     let ptr = read_record.mem_ptr_limbs[0]
                         + read_record.mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-                    memory.write(e, F::from_canonical_u32(ptr & 0xfffffffc), output.writes[0])
+                    memory.write(
+                        e,
+                        F::from_canonical_u32(ptr & 0xfffffffc),
+                        &tmp_convert_to_u8s(output.writes[0]),
+                    )
                 }
-                LOADW | LOADB | LOADH | LOADBU | LOADHU => memory.write(d, a, output.writes[0]),
+                LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                    memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]))
+                }
             };
             record_id
         } else {

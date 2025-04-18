@@ -29,6 +29,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
+use crate::adapters::tmp_convert_to_u8s;
 
 /// Reads instructions of the form OP a, b, c, d where \[a:4\]_d = \[b:4\]_d op \[c:4\]_d.
 /// Operand d can only be 1, and there is no immediate support.
@@ -192,11 +193,14 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
-        let rs2 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, c);
+        let rs1 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, b);
+        let rs2 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, c);
 
         Ok((
-            [rs1.1, rs2.1],
+            [
+                rs1.1.map(F::from_canonical_u8),
+                rs2.1.map(F::from_canonical_u8),
+            ],
             Self::ReadRecord {
                 rs1: rs1.0,
                 rs2: rs2.0,
@@ -213,7 +217,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let (rd_id, _) = memory.write(d, a, output.writes[0]);
+        let (rd_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
 
         let timestamp_delta = memory.timestamp() - from_state.timestamp;
         debug_assert!(

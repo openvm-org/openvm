@@ -1,9 +1,12 @@
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
-    Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, InsExecutorE1,
+        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
@@ -308,6 +311,20 @@ where
         for row in trace.rows_mut().skip(num_records) {
             row.copy_from_slice(&dummy_row);
         }
+    }
+}
+
+impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for FieldExpressionCoreChip
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        _state: &mut VmExecutionState<Mem, Ctx>,
+        _instruction: &Instruction<F>,
+    ) -> Result<()> {
+        todo!("Implement execute_e1")
     }
 }
 

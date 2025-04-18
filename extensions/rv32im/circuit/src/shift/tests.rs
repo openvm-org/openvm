@@ -57,7 +57,7 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         ),
         ShiftCoreChip::new(
             bitwise_chip.clone(),
-            tester.memory_controller().borrow().range_checker.clone(),
+            tester.memory_controller().range_checker.clone(),
             ShiftOpcode::CLASS_OFFSET,
         ),
         tester.offline_memory_mutex_arc(),
@@ -145,7 +145,7 @@ fn run_rv32_shift_negative_test(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let range_checker_chip = tester.memory_controller().range_checker.clone();
     let mut chip = Rv32ShiftTestChip::<F>::new(
         TestAdapterChip::new(
             vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat()],

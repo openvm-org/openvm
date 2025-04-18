@@ -1,9 +1,4 @@
-use std::{
-    cell::RefCell,
-    iter::zip,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
@@ -32,15 +27,14 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
-use super::{ExecutionBus, InstructionExecutor, SystemPort};
+use super::{ExecutionBridge, ExecutionBus, InstructionExecutor, SystemPort};
 use crate::{
     arch::{ExecutionState, MemoryConfig},
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryBus},
-            MemoryController, OfflineMemory,
+            MemoryController, OfflineMemory, SharedMemoryHelper,
         },
-        poseidon2::Poseidon2PeripheryChip,
         program::ProgramBus,
     },
 };
@@ -76,7 +70,7 @@ pub struct VmChipTestBuilder<F: PrimeField32> {
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn new(
-        memory_controller: Rc<RefCell<MemoryController<F>>>,
+        memory_controller: MemoryController<F>,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         rng: StdRng,
@@ -110,16 +104,12 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     ) {
         let initial_state = ExecutionState {
             pc: initial_pc,
-            timestamp: self.memory.controller.borrow().timestamp(),
+            timestamp: self.memory.controller.timestamp(),
         };
         tracing::debug!(?initial_state.timestamp);
 
         let final_state = executor
-            .execute(
-                &mut *self.memory.controller.borrow_mut(),
-                instruction,
-                initial_state,
-            )
+            .execute(&mut self.memory.controller, instruction, initial_state)
             .expect("Expected the execution not to fail");
 
         self.program.execute(instruction, &initial_state);
@@ -128,14 +118,6 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     fn next_elem_size_u32(&mut self) -> u32 {
         self.rng.next_u32() % (1 << (F::bits() - 2))
-    }
-
-    pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        self.memory.read_cell(address_space, pointer)
-    }
-
-    pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        self.memory.write_cell(address_space, pointer, value);
     }
 
     pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
@@ -176,6 +158,10 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         }
     }
 
+    pub fn execution_bridge(&self) -> ExecutionBridge {
+        ExecutionBridge::new(self.execution.bus, self.program.bus)
+    }
+
     pub fn execution_bus(&self) -> ExecutionBus {
         self.execution.bus
     }
@@ -185,27 +171,32 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 
     pub fn memory_bus(&self) -> MemoryBus {
-        self.memory.bus
+        self.memory.controller.memory_bus
     }
 
-    pub fn memory_controller(&self) -> Rc<RefCell<MemoryController<F>>> {
-        self.memory.controller.clone()
+    pub fn memory_controller(&self) -> &MemoryController<F> {
+        &self.memory.controller
     }
 
     pub fn range_checker(&self) -> SharedVariableRangeCheckerChip {
-        self.memory.controller.borrow().range_checker.clone()
+        self.memory.controller.range_checker.clone()
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {
-        self.memory.controller.borrow().memory_bridge()
+        self.memory.controller.memory_bridge()
+    }
+
+    pub fn memory_helper(&self) -> SharedMemoryHelper<F> {
+        self.memory.controller.helper()
+    }
+
+    // TODO: delete
+    pub fn offline_memory_mutex_arc(&self) -> Arc<Mutex<OfflineMemory<F>>> {
+        self.memory.controller.offline_memory().clone()
     }
 
     pub fn address_bits(&self) -> usize {
-        self.memory.controller.borrow().mem_config.pointer_max_bits
-    }
-
-    pub fn offline_memory_mutex_arc(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory_controller().borrow().offline_memory().clone()
+        self.memory.controller.mem_config.pointer_max_bits
     }
 
     pub fn get_default_register(&mut self, increment: usize) -> usize {
@@ -247,10 +238,6 @@ type TestSC = BabyBearBlake3Config;
 
 impl VmChipTestBuilder<BabyBear> {
     pub fn build(self) -> VmChipTester<TestSC> {
-        self.memory
-            .controller
-            .borrow_mut()
-            .finalize(None::<&mut Poseidon2PeripheryChip<BabyBear>>);
         let tester = VmChipTester {
             memory: Some(self.memory),
             ..Default::default()
@@ -259,10 +246,6 @@ impl VmChipTestBuilder<BabyBear> {
         tester.load(self.program)
     }
     pub fn build_babybear_poseidon2(self) -> VmChipTester<BabyBearPoseidon2Config> {
-        self.memory
-            .controller
-            .borrow_mut()
-            .finalize(None::<&mut Poseidon2PeripheryChip<BabyBear>>);
         let tester = VmChipTester {
             memory: Some(self.memory),
             ..Default::default()
@@ -285,7 +268,7 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             range_checker,
         );
         Self {
-            memory: MemoryTester::new(Rc::new(RefCell::new(memory_controller))),
+            memory: MemoryTester::new(memory_controller),
             execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
             program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
             rng: StdRng::seed_from_u64(0),
@@ -325,19 +308,26 @@ where
     }
 
     pub fn finalize(mut self) -> Self {
-        if let Some(memory_tester) = self.memory.take() {
-            let memory_controller = memory_tester.controller.clone();
-            let range_checker = memory_controller.borrow().range_checker.clone();
-            self = self.load(memory_tester); // dummy memory interactions
+        if let Some(mut memory_tester) = self.memory.take() {
+            // Balance memory boundaries
+            memory_tester.finalize();
+            let memory_controller = memory_tester.controller;
+            let range_checker = memory_controller.range_checker.clone();
+            drop(memory_controller);
+            // dummy memory interactions:
+            for mem_chip in memory_tester.chip_for_block.into_values() {
+                self = self.load(mem_chip);
+            }
             {
-                let airs = memory_controller.borrow().airs();
-                let air_proof_inputs = Rc::try_unwrap(memory_controller)
-                    .unwrap_or_else(|_| panic!("Memory controller was not dropped"))
-                    .into_inner()
-                    .generate_air_proof_inputs();
-                self.air_proof_inputs.extend(
-                    zip(airs, air_proof_inputs).filter(|(_, input)| input.main_trace_height() > 0),
-                );
+                // todo: boundary and adapter stuff
+                // let airs = memory_controller.borrow().airs();
+                // let air_proof_inputs = Rc::try_unwrap(memory_controller)
+                //     .unwrap_or_else(|_| panic!("Memory controller was not dropped"))
+                //     .into_inner()
+                //     .generate_air_proof_inputs();
+                // self.air_proof_inputs.extend(
+                //     zip(airs, air_proof_inputs).filter(|(_, input)| input.main_trace_height() >
+                // 0), );
             }
             self = self.load(range_checker); // this must be last because other trace generation
                                              // mutates its state

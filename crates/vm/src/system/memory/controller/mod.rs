@@ -3,7 +3,7 @@ use std::{
     collections::BTreeMap,
     iter,
     marker::PhantomData,
-    mem,
+    ops::Deref,
     sync::{Arc, Mutex},
 };
 
@@ -12,7 +12,9 @@ use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_zero::IsZeroSubAir,
     utils::next_power_of_two_or_zero,
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
+    },
     TraceSubRowGenerator,
 };
 use openvm_stark_backend::{
@@ -29,6 +31,7 @@ use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{
+    online::GuestMemory,
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
 };
@@ -43,7 +46,7 @@ use crate::{
             MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
             MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols, AUX_LEN,
         },
-        online::{Memory, MemoryLogEntry},
+        online::{MemoryLogEntry, TracingMemory},
         persistent::PersistentBoundaryChip,
         tree::MemoryNode,
     },
@@ -62,7 +65,7 @@ pub const BOUNDARY_AIR_OFFSET: usize = 0;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordId(pub usize);
 
-pub type MemoryImage<F> = AddressMap<F, PAGE_SIZE>;
+pub type MemoryImage = AddressMap<PAGE_SIZE>;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -98,9 +101,9 @@ pub struct MemoryController<F> {
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
     // addr_space -> Memory data structure
-    memory: Memory<F>,
+    pub(crate) memory: TracingMemory,
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
-    offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+    pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub access_adapters: AccessAdapterInventory<F>,
     // Filled during finalization.
     final_state: Option<FinalState<F>>,
@@ -243,7 +246,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: Memory::new(&mem_config),
+            memory: TracingMemory::new(&mem_config),
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
                 initial_memory,
                 1,
@@ -294,7 +297,8 @@ impl<F: PrimeField32> MemoryController<F> {
             memory_bus,
             mem_config,
             interface_chip,
-            memory: Memory::new(&mem_config), // it is expected that the memory will be set later
+            memory: TracingMemory::new(&mem_config), /* it is expected that the memory will be
+                                                      * set later */
             offline_memory: Arc::new(Mutex::new(OfflineMemory::new(
                 AddressMap::from_mem_config(&mem_config),
                 CHUNK,
@@ -314,7 +318,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    pub fn memory_image(&self) -> &MemoryImage<F> {
+    pub fn memory_image(&self) -> &MemoryImage {
         &self.memory.data
     }
 
@@ -344,14 +348,14 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    pub fn set_initial_memory(&mut self, memory: MemoryImage<F>) {
+    pub fn set_initial_memory(&mut self, memory: MemoryImage) {
         if self.timestamp() > INITIAL_TIMESTAMP + 1 {
             panic!("Cannot set initial memory after first timestamp");
         }
         let mut offline_memory = self.offline_memory.lock().unwrap();
         offline_memory.set_initial_memory(memory.clone(), self.mem_config);
 
-        self.memory = Memory::from_image(memory.clone(), self.mem_config.access_capacity);
+        self.memory = TracingMemory::from_image(memory.clone(), self.mem_config.access_capacity);
 
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
@@ -379,50 +383,61 @@ impl<F: PrimeField32> MemoryController<F> {
         (record_id, data)
     }
 
-    pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> (RecordId, [F; N]) {
+    // TEMP[jpw]: Function is safe temporarily for refactoring
+    /// # Safety
+    /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`, and it must be the
+    /// exact type used to represent a single memory cell in address space `address_space`. For
+    /// standard usage, `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
+    pub fn read<T: Copy, const N: usize>(
+        &mut self,
+        address_space: F,
+        pointer: F,
+    ) -> (RecordId, [T; N]) {
         let address_space_u32 = address_space.as_canonical_u32();
         let ptr_u32 = pointer.as_canonical_u32();
         assert!(
             address_space == F::ZERO || ptr_u32 < (1 << self.mem_config.pointer_max_bits),
             "memory out of bounds: {ptr_u32:?}",
         );
+        todo!()
+        // let (record_id, values) = unsafe { self.memory.read::<T, N>(address_space_u32, ptr_u32)
+        // };
 
-        let (record_id, values) = self.memory.read::<N>(address_space_u32, ptr_u32);
-
-        (record_id, values)
+        // (record_id, values)
     }
 
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
-    pub fn unsafe_read_cell(&self, addr_space: F, ptr: F) -> F {
-        self.unsafe_read::<1>(addr_space, ptr)[0]
+    pub fn unsafe_read_cell<T: Copy>(&self, addr_space: F, ptr: F) -> T {
+        self.unsafe_read::<T, 1>(addr_space, ptr)[0]
     }
 
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
-    pub fn unsafe_read<const N: usize>(&self, addr_space: F, ptr: F) -> [F; N] {
+    pub fn unsafe_read<T: Copy, const N: usize>(&self, addr_space: F, ptr: F) -> [T; N] {
         let addr_space = addr_space.as_canonical_u32();
         let ptr = ptr.as_canonical_u32();
-        array::from_fn(|i| self.memory.get(addr_space, ptr + i as u32))
+        todo!()
+        // unsafe { array::from_fn(|i| self.memory.get::<T>(addr_space, ptr + i as u32)) }
     }
 
     /// Writes `data` to the given cell.
     ///
     /// Returns the `RecordId` and previous data.
-    pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> (RecordId, F) {
-        let (record_id, [data]) = self.write(address_space, pointer, [data]);
+    pub fn write_cell<T: Copy>(&mut self, address_space: F, pointer: F, data: T) -> (RecordId, T) {
+        let (record_id, [data]) = self.write(address_space, pointer, &[data]);
         (record_id, data)
     }
 
-    pub fn write<const N: usize>(
+    pub fn write<T: Copy, const N: usize>(
         &mut self,
         address_space: F,
         pointer: F,
-        data: [F; N],
-    ) -> (RecordId, [F; N]) {
-        assert_ne!(address_space, F::ZERO);
+        data: &[T; N],
+    ) -> (RecordId, [T; N]) {
+        debug_assert_ne!(address_space, F::ZERO);
         let address_space_u32 = address_space.as_canonical_u32();
         let ptr_u32 = pointer.as_canonical_u32();
         assert!(
@@ -430,13 +445,23 @@ impl<F: PrimeField32> MemoryController<F> {
             "memory out of bounds: {ptr_u32:?}",
         );
 
-        self.memory.write(address_space_u32, ptr_u32, data)
+        todo!()
+        // unsafe { self.memory.write::<T, N>(address_space_u32, ptr_u32, data) }
+    }
+
+    pub fn helper(&self) -> SharedMemoryHelper<F> {
+        let range_bus = self.range_checker.bus();
+        SharedMemoryHelper {
+            range_checker: self.range_checker.clone(),
+            timestamp_lt_air: AssertLtSubAir::new(range_bus, self.mem_config.clk_max_bits),
+            _marker: Default::default(),
+        }
     }
 
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
         let range_bus = self.range_checker.bus();
         MemoryAuxColsFactory {
-            range_checker: self.range_checker.clone(),
+            range_checker: self.range_checker.as_ref(),
             timestamp_lt_air: AssertLtSubAir::new(range_bus, self.mem_config.clk_max_bits),
             _marker: Default::default(),
         }
@@ -454,27 +479,32 @@ impl<F: PrimeField32> MemoryController<F> {
         self.memory.timestamp()
     }
 
+    pub fn offline_memory(&self) -> &Arc<Mutex<OfflineMemory<F>>> {
+        &self.offline_memory
+    }
+
     fn replay_access_log(&mut self) {
-        let log = mem::take(&mut self.memory.log);
-        if log.is_empty() {
-            // Online memory logs may be empty, but offline memory may be replayed from external
-            // sources. In these cases, we skip the calls to replay access logs because
-            // `set_log_capacity` would panic.
-            tracing::debug!("skipping replay_access_log");
-            return;
-        }
+        unimplemented!();
+        // let log = mem::take(&mut self.memory.log);
+        // if log.is_empty() {
+        //     // Online memory logs may be empty, but offline memory may be replayed from external
+        // sources.     // In these cases, we skip the calls to replay access logs because
+        // `set_log_capacity` would     // panic.
+        //     tracing::debug!("skipping replay_access_log");
+        //     return;
+        // }
 
-        let mut offline_memory = self.offline_memory.lock().unwrap();
-        offline_memory.set_log_capacity(log.len());
+        // let mut offline_memory = self.offline_memory.lock().unwrap();
+        // offline_memory.set_log_capacity(log.len());
 
-        for entry in log {
-            Self::replay_access(
-                entry,
-                &mut offline_memory,
-                &mut self.interface_chip,
-                &mut self.access_adapters,
-            );
-        }
+        // for entry in log {
+        //     Self::replay_access(
+        //         entry,
+        //         &mut offline_memory,
+        //         &mut self.interface_chip,
+        //         &mut self.access_adapters,
+        //     );
+        // }
     }
 
     /// Low-level API to replay a single memory access log entry and populate the [OfflineMemory],
@@ -694,36 +724,26 @@ impl<F: PrimeField32> MemoryController<F> {
         ret.extend(self.access_adapters.get_cells());
         ret
     }
-
-    /// Returns a reference to the offline memory.
-    ///
-    /// Until `finalize` is called, the `OfflineMemory` does not contain useful state, and should
-    /// therefore not be used by any chip during execution. However, to obtain a reference to the
-    /// offline memory that will be useful in trace generation, a chip can call `offline_memory()`
-    /// and store the returned reference for later use.
-    pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.offline_memory.clone()
-    }
-    pub fn get_memory_logs(&self) -> &Vec<MemoryLogEntry<F>> {
-        &self.memory.log
-    }
-    pub fn set_memory_logs(&mut self, logs: Vec<MemoryLogEntry<F>>) {
-        self.memory.log = logs;
-    }
-    pub fn take_memory_logs(&mut self) -> Vec<MemoryLogEntry<F>> {
-        std::mem::take(&mut self.memory.log)
-    }
 }
 
-pub struct MemoryAuxColsFactory<T> {
+/// Owned version of [MemoryAuxColsFactory].
+pub struct SharedMemoryHelper<T> {
     pub(crate) range_checker: SharedVariableRangeCheckerChip,
+    pub(crate) timestamp_lt_air: AssertLtSubAir,
+    pub(crate) _marker: PhantomData<T>,
+}
+
+/// A helper for generating trace values in auxiliary memory columns related to the offline memory
+/// argument.
+pub struct MemoryAuxColsFactory<'a, T> {
+    pub(crate) range_checker: &'a VariableRangeCheckerChip,
     pub(crate) timestamp_lt_air: AssertLtSubAir,
     pub(crate) _marker: PhantomData<T>,
 }
 
 // NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in
 // parallelized trace generation.
-impl<F: PrimeField32> MemoryAuxColsFactory<F> {
+impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
     pub fn generate_read_aux(&self, read: &MemoryRecord<F>, buffer: &mut MemoryReadAuxCols<F>) {
         assert!(
             !read.address_space.is_zero(),
@@ -732,6 +752,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         self.generate_base_aux(read, &mut buffer.base);
     }
 
+    // TODO: revisit deleting this
     pub fn generate_read_or_immediate_aux(
         &self,
         read: &MemoryRecord<F>,
@@ -744,6 +765,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         self.generate_base_aux(read, &mut buffer.base);
     }
 
+    // TODO: revisit deleting this
     pub fn generate_write_aux<const N: usize>(
         &self,
         write: &MemoryRecord<F>,
@@ -755,6 +777,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         self.generate_base_aux(write, &mut buffer.base);
     }
 
+    // TODO: revisit deleting this
     pub fn generate_base_aux(&self, record: &MemoryRecord<F>, buffer: &mut MemoryBaseAuxCols<F>) {
         buffer.prev_timestamp = F::from_canonical_u32(record.prev_timestamp);
         self.generate_timestamp_lt(
@@ -764,19 +787,29 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         );
     }
 
+    /// Fill the trace assuming `prev_timestamp` is already provided in `buffer`.
+    pub fn fill_from_prev(&self, timestamp: u32, buffer: &mut MemoryBaseAuxCols<F>) {
+        let prev_timestamp = buffer.prev_timestamp.as_canonical_u32();
+        self.generate_timestamp_lt(prev_timestamp, timestamp, &mut buffer.timestamp_lt_aux);
+    }
+
     fn generate_timestamp_lt(
         &self,
         prev_timestamp: u32,
         timestamp: u32,
         buffer: &mut LessThanAuxCols<F, AUX_LEN>,
     ) {
-        debug_assert!(prev_timestamp < timestamp);
+        debug_assert!(
+            prev_timestamp < timestamp,
+            "prev_timestamp {prev_timestamp} >= timestamp {timestamp}"
+        );
         self.timestamp_lt_air.generate_subrow(
-            (self.range_checker.as_ref(), prev_timestamp, timestamp),
+            (self.range_checker, prev_timestamp, timestamp),
             &mut buffer.lower_decomp,
         );
     }
 
+    // TODO: revisit deleting this
     /// In general, prefer `generate_read_aux` which writes in-place rather than this function.
     pub fn make_read_aux_cols(&self, read: &MemoryRecord<F>) -> MemoryReadAuxCols<F> {
         assert!(
@@ -789,6 +822,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         )
     }
 
+    // TODO: revisit deleting this
     /// In general, prefer `generate_write_aux` which writes in-place rather than this function.
     pub fn make_write_aux_cols<const N: usize>(
         &self,
@@ -809,11 +843,19 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
     ) -> LessThanAuxCols<F, AUX_LEN> {
         debug_assert!(prev_timestamp < timestamp);
         let mut decomp = [F::ZERO; AUX_LEN];
-        self.timestamp_lt_air.generate_subrow(
-            (self.range_checker.as_ref(), prev_timestamp, timestamp),
-            &mut decomp,
-        );
+        self.timestamp_lt_air
+            .generate_subrow((self.range_checker, prev_timestamp, timestamp), &mut decomp);
         LessThanAuxCols::new(decomp)
+    }
+}
+
+impl<T> SharedMemoryHelper<T> {
+    pub fn as_borrowed(&self) -> MemoryAuxColsFactory<'_, T> {
+        MemoryAuxColsFactory {
+            range_checker: self.range_checker.as_ref(),
+            timestamp_lt_air: self.timestamp_lt_air,
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -857,9 +899,9 @@ mod tests {
 
             if rng.gen_bool(0.5) {
                 let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                memory_controller.write(address_space, pointer, [data]);
+                memory_controller.write(address_space, pointer, &[data]);
             } else {
-                memory_controller.read::<1>(address_space, pointer);
+                memory_controller.read::<F, 1>(address_space, pointer);
             }
         }
         assert!(memory_controller

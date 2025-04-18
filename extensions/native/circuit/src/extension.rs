@@ -306,7 +306,7 @@ pub(crate) mod phantom {
             c_upper: u16,
         ) -> eyre::Result<()> {
             let addr_space = F::from_canonical_u16(c_upper);
-            let value = memory.unsafe_read_cell(addr_space, a);
+            let value = memory.unsafe_read_cell::<F>(addr_space, a);
             println!("{}", value);
             Ok(())
         }
@@ -323,7 +323,7 @@ pub(crate) mod phantom {
             c_upper: u16,
         ) -> eyre::Result<()> {
             let addr_space = F::from_canonical_u16(c_upper);
-            let val = memory.unsafe_read_cell(addr_space, a);
+            let val = memory.unsafe_read_cell::<F>(addr_space, a);
             let mut val = val.as_canonical_u32();
 
             let len = b.as_canonical_u32();

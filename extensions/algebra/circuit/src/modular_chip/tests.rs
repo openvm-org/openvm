@@ -3,10 +3,14 @@ use std::{array::from_fn, borrow::BorrowMut};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
-use openvm_circuit::arch::{
-    instructions::LocalOpcode,
-    testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    AdapterRuntimeContext, Result, VmAdapterInterface, VmChipWrapper, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        instructions::LocalOpcode,
+        testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        AdapterRuntimeContext, InsExecutorE1, Result, VmAdapterInterface, VmChipWrapper,
+        VmCoreChip, VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
     bigint::utils::{big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime},
@@ -488,6 +492,21 @@ where
         <ModularIsEqualCoreChip<READ_LIMBS, WRITE_LIMBS, LIMB_BITS> as VmCoreChip<F, I>>::air(
             &self.chip,
         )
+    }
+}
+
+impl<Mem, Ctx, F, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
+    InsExecutorE1<Mem, Ctx, F> for BadModularIsEqualCoreChip<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        _state: &mut VmExecutionState<Mem, Ctx>,
+        _instruction: &Instruction<F>,
+    ) -> Result<()> {
+        todo!("Implement execute_e1")
     }
 }
 

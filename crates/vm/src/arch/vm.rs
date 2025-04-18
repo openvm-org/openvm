@@ -25,7 +25,10 @@ use super::{
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, segment::ExecutionSegment},
+    arch::{
+        hasher::poseidon2::vm_poseidon2_hasher, segment::TracegenVmSegmentExecutor,
+        TracegenVmExecutionState,
+    },
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
@@ -47,7 +50,6 @@ pub enum GenerationError {
 }
 
 /// VM memory state for continuations.
-pub type VmMemoryState<F> = MemoryImage<F>;
 
 #[derive(Clone, Default, Debug)]
 pub struct Streams<F> {
@@ -95,11 +97,11 @@ pub enum ExitCode {
 pub struct VmExecutorResult<SC: StarkGenericConfig> {
     pub per_segment: Vec<ProofInput<SC>>,
     /// When VM is running on persistent mode, public values are stored in a special memory space.
-    pub final_memory: Option<VmMemoryState<Val<SC>>>,
+    pub final_memory: Option<MemoryImage>,
 }
 
 pub struct VmExecutorNextSegmentState<F: PrimeField32> {
-    pub memory: MemoryImage<F>,
+    pub memory: MemoryImage,
     pub input: Streams<F>,
     pub pc: u32,
     #[cfg(feature = "bench-metrics")]
@@ -107,7 +109,7 @@ pub struct VmExecutorNextSegmentState<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> VmExecutorNextSegmentState<F> {
-    pub fn new(memory: MemoryImage<F>, input: impl Into<Streams<F>>, pc: u32) -> Self {
+    pub fn new(memory: MemoryImage, input: impl Into<Streams<F>>, pc: u32) -> Self {
         Self {
             memory,
             input: input.into(),
@@ -118,8 +120,12 @@ impl<F: PrimeField32> VmExecutorNextSegmentState<F> {
     }
 }
 
-pub struct VmExecutorOneSegmentResult<F: PrimeField32, VC: VmConfig<F>> {
-    pub segment: ExecutionSegment<F, VC>,
+pub struct VmExecutorOneSegmentResult<F, VC>
+where
+    F: PrimeField32,
+    VC: VmConfig<F>,
+{
+    pub segment: TracegenVmSegmentExecutor<F, VC>,
     pub next_state: Option<VmExecutorNextSegmentState<F>>,
 }
 
@@ -164,18 +170,19 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        mut f: impl FnMut(usize, ExecutionSegment<F, VC>) -> Result<R, E>,
+        mut f: impl FnMut(usize, TracegenVmSegmentExecutor<F, VC>) -> Result<R, E>,
         map_err: impl Fn(ExecutionError) -> E,
     ) -> Result<Vec<R>, E> {
         let mem_config = self.config.system().memory_config;
         let exe = exe.into();
         let mut segment_results = vec![];
-        let memory = AddressMap::from_iter(
+        let memory = AddressMap::from_sparse(
             mem_config.as_offset,
             1 << mem_config.as_height,
             1 << mem_config.pointer_max_bits,
             exe.init_memory.clone(),
         );
+
         let pc = exe.pc_start;
         let mut state = VmExecutorNextSegmentState::new(memory, input, pc);
 
@@ -209,7 +216,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
+    ) -> Result<Vec<TracegenVmSegmentExecutor<F, VC>>, ExecutionError> {
         self.execute_and_then(exe, input, |_, seg| Ok(seg), |err| err)
     }
 
@@ -223,7 +230,8 @@ where
         from_state: VmExecutorNextSegmentState<F>,
     ) -> Result<VmExecutorOneSegmentResult<F, VC>, ExecutionError> {
         let exe = exe.into();
-        let mut segment = ExecutionSegment::new(
+
+        let mut segment = TracegenVmSegmentExecutor::new(
             &self.config,
             exe.program.clone(),
             from_state.input,
@@ -238,9 +246,15 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        let state = metrics_span("execute_time_ms", || segment.execute_from_pc(from_state.pc))?;
+        let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
+            from_state.pc,
+            segment.chip_complex.memory_controller(),
+        );
+        metrics_span("execute_time_ms", || {
+            segment.execute_from_state(&mut vm_state)
+        })?;
 
-        if state.is_terminated {
+        if vm_state.terminated {
             return Ok(VmExecutorOneSegmentResult {
                 segment,
                 next_state: None,
@@ -252,12 +266,12 @@ where
             "multiple segments require to enable continuations"
         );
         assert_eq!(
-            state.pc,
+            vm_state.pc,
             segment.chip_complex.connector_chip().boundary_states[1]
                 .unwrap()
                 .pc
         );
-        let final_memory = mem::take(&mut segment.final_memory)
+        let final_memory = mem::take(&mut segment.control.final_memory)
             .expect("final memory should be set in continuations segment");
         let streams = segment.chip_complex.take_streams();
         #[cfg(feature = "bench-metrics")]
@@ -267,7 +281,7 @@ where
             next_state: Some(VmExecutorNextSegmentState {
                 memory: final_memory,
                 input: streams,
-                pc: state.pc,
+                pc: vm_state.pc,
                 #[cfg(feature = "bench-metrics")]
                 metrics,
             }),
@@ -278,7 +292,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
+    ) -> Result<Option<MemoryImage>, ExecutionError> {
         let mut last = None;
         self.execute_and_then(
             exe,
@@ -290,7 +304,7 @@ where
             |err| err,
         )?;
         let last = last.expect("at least one segment must be executed");
-        let final_memory = last.final_memory;
+        let final_memory = last.control.final_memory;
         let end_state =
             last.chip_complex.connector_chip().boundary_states[1].expect("end state must be set");
         if end_state.is_terminate != 1 {
@@ -350,7 +364,7 @@ where
             |seg_idx, mut seg| {
                 // Note: this will only be Some on the last segment; otherwise it is
                 // already moved into next segment state
-                final_memory = mem::take(&mut seg.final_memory);
+                final_memory = mem::take(&mut seg.control.final_memory);
                 tracing::info_span!("trace_gen", segment = seg_idx)
                     .in_scope(|| seg.generate_proof_input(committed_program.clone()))
             },
@@ -466,9 +480,8 @@ where
         &self,
         exe: VmExe<F>,
         input: impl Into<Streams<F>>,
-    ) -> Result<ExecutionSegment<F, VC>, ExecutionError> {
-        let pc_start = exe.pc_start;
-        let mut segment = ExecutionSegment::new(
+    ) -> Result<TracegenVmSegmentExecutor<F, VC>, ExecutionError> {
+        let mut segment = TracegenVmSegmentExecutor::new(
             &self.config,
             exe.program.clone(),
             input.into(),
@@ -479,7 +492,13 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        metrics_span("execute_time_ms", || segment.execute_from_pc(pc_start))?;
+        let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
+            exe.pc_start,
+            segment.chip_complex.memory_controller(),
+        );
+        metrics_span("execute_time_ms", || {
+            segment.execute_from_state(&mut vm_state)
+        })?;
         Ok(segment)
     }
 }
@@ -587,7 +606,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-    ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
+    ) -> Result<Option<MemoryImage>, ExecutionError> {
         self.executor.execute(exe, input)
     }
 

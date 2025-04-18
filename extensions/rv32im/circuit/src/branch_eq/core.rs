@@ -3,13 +3,16 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, InsExecutorE1, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::utils::not;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -229,6 +232,53 @@ where
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_LIMBS: usize> InsExecutorE1<Mem, Ctx, F>
+    for BranchEqualCoreChip<NUM_LIMBS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c: imm,
+            ..
+        } = instruction;
+
+        let branch_eq_opcode =
+            BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+
+        let rs1_addr = a.as_canonical_u32();
+        let rs2_addr = b.as_canonical_u32();
+
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+        let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+
+        // TODO(ayush): avoid this conversion
+        let rs1_bytes: [u32; NUM_LIMBS] = rs1_bytes.map(|x| x as u32);
+        let rs2_bytes: [u32; NUM_LIMBS] = rs2_bytes.map(|y| y as u32);
+
+        // TODO(ayush): probably don't need the other values
+        let (cmp_result, _, _) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &rs1_bytes, &rs2_bytes);
+
+        if cmp_result {
+            let imm = imm.as_canonical_u32();
+            state.pc = state.pc.wrapping_add(imm);
+        } else {
+            // TODO(ayush): why not DEFAULT_PC_STEP or some constant?
+            state.pc = state.pc.wrapping_add(self.air.pc_step);
+        }
+
+        Ok(())
     }
 }
 

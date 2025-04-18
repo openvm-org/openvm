@@ -3,16 +3,21 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, InsExecutorE1, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+};
 use openvm_rv32im_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -352,6 +357,52 @@ where
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
+    for BranchLessThanCoreChip<NUM_LIMBS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c: imm,
+            ..
+        } = instruction;
+
+        let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+
+        let rs1_addr = a.as_canonical_u32();
+        let rs2_addr = b.as_canonical_u32();
+
+        // TODO(ayush): why even have NUM_LIMBS when it is equal to RV32_REGISTER_NUM_LIMBS?
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+        let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+
+        // TODO(ayush): why is this conversion necessary?
+        let rs1_bytes: [u32; NUM_LIMBS] = rs1_bytes.map(|x| x as u32);
+        let rs2_bytes: [u32; NUM_LIMBS] = rs2_bytes.map(|y| y as u32);
+
+        let (cmp_result, _, _, _) =
+            run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &rs1_bytes, &rs2_bytes);
+
+        if cmp_result {
+            let imm = imm.as_canonical_u32();
+            state.pc = state.pc.wrapping_add(imm);
+        } else {
+            state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        }
+
+        Ok(())
     }
 }
 

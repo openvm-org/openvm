@@ -3,16 +3,24 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, MinimalInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -267,6 +275,61 @@ where
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
+    for BaseAluCoreChip<NUM_LIMBS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        let Instruction {
+            opcode, a, b, c, e, ..
+        } = instruction;
+
+        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+
+        let rs1_addr = b.as_canonical_u32();
+        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+
+        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
+            // Use immediate value
+            let imm = c.as_canonical_u32();
+            // Convert imm from u32 to [u8; NUM_LIMBS]
+            let imm_bytes = imm.to_le_bytes();
+            // TODO(ayush): remove this
+            let mut rs2_bytes = [0u8; NUM_LIMBS];
+            rs2_bytes[..NUM_LIMBS].copy_from_slice(&imm_bytes[..NUM_LIMBS]);
+            rs2_bytes
+        } else {
+            // Read from register
+            let rs2_addr = c.as_canonical_u32();
+            let rs2_bytes: [u8; NUM_LIMBS] =
+                unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+            rs2_bytes
+        };
+
+        // TODO(ayush): avoid this conversion
+        let rs1_bytes: [u32; NUM_LIMBS] = rs1_bytes.map(|x| x as u32);
+        let rs2_bytes: [u32; NUM_LIMBS] = rs2_bytes.map(|y| y as u32);
+
+        // TODO(ayush): should this be [u8; 4]?
+        let rd_bytes = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1_bytes, &rs2_bytes);
+        let rd_bytes = rd_bytes.map(|x| x as u8);
+
+        // Write result back to destination register
+        let rd_addr = a.as_canonical_u32();
+        unsafe { state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }
 

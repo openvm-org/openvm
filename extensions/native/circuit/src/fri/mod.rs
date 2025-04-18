@@ -621,7 +621,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         let is_init_read = memory.read_cell(addr_space, is_init_ptr);
         let is_init = is_init_read.1.as_canonical_u32();
 
-        let hint_id_f = memory.unsafe_read_cell(addr_space, hint_id_ptr);
+        let hint_id_f = memory.unsafe_read_cell::<F>(addr_space, hint_id_ptr);
         let hint_id = hint_id_f.as_canonical_u32() as usize;
 
         let alpha = alpha_read.1;
@@ -650,7 +650,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
                 memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i))
             };
             let b_read =
-                memory.read::<EXT_DEG>(addr_space, b_ptr + F::from_canonical_usize(EXT_DEG * i));
+                memory.read::<F, EXT_DEG>(addr_space, b_ptr + F::from_canonical_usize(EXT_DEG * i));
             a_rws.push(a_rw);
             b_reads.push(b_read);
         }
@@ -665,7 +665,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             );
         }
 
-        let (result_write, _) = memory.write(addr_space, result_ptr, result);
+        let (result_write, _) = memory.write(addr_space, result_ptr, &result);
 
         let record = FriReducedOpeningRecord {
             pc: F::from_canonical_u32(from_state.pc),

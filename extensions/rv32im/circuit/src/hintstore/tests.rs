@@ -40,15 +40,9 @@ fn set_and_execute(
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
 ) {
-    let mem_ptr = rng.gen_range(
-        0..(1
-            << (tester
-                .memory_controller()
-                .borrow()
-                .mem_config()
-                .pointer_max_bits
-                - 2)),
-    ) << 2;
+    let mem_ptr = rng
+        .gen_range(0..(1 << (tester.memory_controller().mem_config().pointer_max_bits - 2)))
+        << 2;
     let b = gen_pointer(rng, 4);
 
     tester.write(1, b, decompose(mem_ptr));
@@ -80,15 +74,9 @@ fn set_and_execute_buffer(
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
 ) {
-    let mem_ptr = rng.gen_range(
-        0..(1
-            << (tester
-                .memory_controller()
-                .borrow()
-                .mem_config()
-                .pointer_max_bits
-                - 2)),
-    ) << 2;
+    let mem_ptr = rng
+        .gen_range(0..(1 << (tester.memory_controller().mem_config().pointer_max_bits - 2)))
+        << 2;
     let b = gen_pointer(rng, 4);
 
     tester.write(1, b, decompose(mem_ptr));
@@ -140,7 +128,7 @@ fn rand_hintstore_test() {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let range_checker_chip = tester.memory_controller().range_checker.clone();
 
     let mut chip = Rv32HintStoreChip::<F>::new(
         tester.execution_bus(),
@@ -187,7 +175,7 @@ fn run_negative_hintstore_test(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
+    let range_checker_chip = tester.memory_controller().range_checker.clone();
 
     let mut chip = Rv32HintStoreChip::<F>::new(
         tester.execution_bus(),

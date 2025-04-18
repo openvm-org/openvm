@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::cell::RefCell;
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -6,13 +6,16 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
-    p3_field::FieldAlgebra,
+    p3_field::{FieldAlgebra, PrimeField32},
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::Streams;
-use crate::system::{memory::MemoryController, program::ProgramBus};
+use super::{Streams, VmExecutionState};
+use crate::system::{
+    memory::{online::GuestMemory, MemoryController},
+    program::ProgramBus,
+};
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
 
@@ -66,8 +69,20 @@ pub enum ExecutionError {
     DidNotTerminate,
     #[error("program exit code {0}")]
     FailedWithExitCode(u32),
+    #[error("trace buffer out of bounds: requested {requested} but capacity is {capacity}")]
+    TraceBufferOutOfBounds { requested: usize, capacity: usize },
 }
 
+/// Global VM state accessible during instruction execution.
+/// The state is generic in guest memory `MEM` and additional host state `CTX`.
+/// The host state is execution context specific.
+pub struct VmStateMut<'a, MEM, CTX> {
+    pub pc: &'a mut u32,
+    pub memory: &'a mut MEM,
+    pub ctx: &'a mut CTX,
+}
+
+// TODO: old
 pub trait InstructionExecutor<F> {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
@@ -83,22 +98,20 @@ pub trait InstructionExecutor<F> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
-impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
-    fn execute(
+/// New trait for instruction execution
+pub trait InsExecutorE1<Mem, Ctx, F>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
         &mut self,
-        memory: &mut MemoryController<F>,
+        state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-        prev_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut().execute(memory, instruction, prev_state)
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        self.borrow().get_opcode_name(opcode)
-    }
+    ) -> Result<()>;
 }
 
-impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
+impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,

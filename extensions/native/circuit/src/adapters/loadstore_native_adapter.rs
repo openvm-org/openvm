@@ -260,7 +260,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         let data_read = match local_opcode {
             HINT_STOREW => None,
-            LOADW | STOREW => Some(memory.read::<NUM_CELLS>(data_read_as, data_read_ptr)),
+            LOADW | STOREW => Some(memory.read::<F, NUM_CELLS>(data_read_as, data_read_ptr)),
         };
         let record = NativeLoadStoreReadRecord {
             pointer_read: read_cell.0,
@@ -288,8 +288,11 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         output: AdapterRuntimeContext<F, Self::Interface>,
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let (write_id, _) =
-            memory.write::<NUM_CELLS>(read_record.write_as, read_record.write_ptr, output.writes);
+        let (write_id, _) = memory.write::<F, NUM_CELLS>(
+            read_record.write_as,
+            read_record.write_ptr,
+            &output.writes,
+        );
         Ok((
             ExecutionState {
                 pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),

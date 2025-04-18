@@ -14,10 +14,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, MinimalInstruction,
-        Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, InsExecutorE1,
+        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
-    system::public_values::columns::PublicValuesCoreColsView,
+    system::{memory::online::GuestMemory, public_values::columns::PublicValuesCoreColsView},
 };
 pub(crate) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
 pub(crate) type AdapterInterfaceReads<F> = <AdapterInterface<F> as VmAdapterInterface<F>>::Reads;
@@ -189,5 +189,19 @@ impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChi
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+}
+
+impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for PublicValuesCoreChip<F>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        _state: &mut VmExecutionState<Mem, Ctx>,
+        _instruction: &Instruction<F>,
+    ) -> Result<()> {
+        todo!("Implement execute_e1")
     }
 }

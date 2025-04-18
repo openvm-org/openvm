@@ -99,7 +99,7 @@ where
                 exe.clone(),
                 input.clone(),
                 |seg_idx, mut seg| {
-                    final_memory = mem::take(&mut seg.final_memory);
+                    final_memory = mem::take(&mut seg.control.final_memory);
                     let proof_input = info_span!("trace_gen", segment = seg_idx)
                         .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())))?;
                     info_span!("prove_segment", segment = seg_idx)

@@ -1,5 +1,6 @@
 pub mod connector;
 pub mod memory;
+// Necessary for the PublicValuesChip
 pub mod native_adapter;
 /// Chip to handle phantom instructions.
 /// The Air will always constrain a NOP which advances pc by DEFAULT_PC_STEP.

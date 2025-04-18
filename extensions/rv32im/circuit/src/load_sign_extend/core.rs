@@ -3,15 +3,24 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, Result, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
     utils::select,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -275,6 +284,76 @@ where
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_CELLS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
+    for LoadSignExtendCoreChip<NUM_CELLS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            f: enabled,
+            g,
+            ..
+        } = instruction;
+
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
+
+        let rs1_addr = b.as_canonical_u32();
+        let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
+        let rs1_val = u32::from_le_bytes(rs1_bytes);
+
+        let imm = c.as_canonical_u32();
+        let imm_sign = g.as_canonical_u32();
+        let imm_extended = imm + imm_sign * 0xffff0000;
+
+        let ptr_val = rs1_val.wrapping_add(imm_extended);
+        let shift_amount = ptr_val % 4;
+        let ptr_val = ptr_val - shift_amount; // aligned ptr
+
+        let read_bytes: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
+            LOADB | LOADH => unsafe { state.memory.read(RV32_MEMORY_AS, ptr_val) },
+            _ => unreachable!("Only LOADB and LOADH are supported by LoadSignExtendCoreChip chip"),
+        };
+        // TODO(ayush): handle NUM_CELLS and RV32_REGISTER_NUM_LIMBS properly
+        let read_data: [F; NUM_CELLS] = array::from_fn(|i| F::from_canonical_u8(read_bytes[i]));
+
+        // TODO(ayush): clean this up for e1
+        let write_data = run_write_data_sign_extend::<_, NUM_CELLS, LIMB_BITS>(
+            local_opcode,
+            read_data,
+            [F::ZERO; NUM_CELLS],
+            shift_amount,
+        );
+        let write_bytes: [u8; NUM_CELLS] =
+            array::from_fn(|i| write_data[i].as_canonical_u32() as u8);
+
+        // Only proceed if instruction is enabled
+        if *enabled != F::ZERO {
+            // Write result to destination register
+            let rd_addr = a.as_canonical_u32();
+            unsafe {
+                state.memory.write(RV32_REGISTER_AS, rd_addr, &write_bytes);
+            }
+        }
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }
 
