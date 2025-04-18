@@ -6,13 +6,16 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
-    p3_field::FieldAlgebra,
+    p3_field::{Field, FieldAlgebra},
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::Streams;
-use crate::system::{memory::MemoryController, program::ProgramBus};
+use crate::system::{
+    memory::{online::TracingMemory, MemoryController},
+    program::ProgramBus,
+};
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
 
@@ -77,6 +80,14 @@ pub struct VmStateMut<'a, MEM, CTX> {
     pub pc: &'a mut u32,
     pub memory: &'a mut MEM,
     pub ctx: &'a mut CTX,
+}
+
+impl<CTX> VmStateMut<'_, TracingMemory, CTX> {
+    // TODO: store as u32 directly
+    pub fn ins_start<F: Field>(&self, from_state: &mut ExecutionState<F>) {
+        from_state.pc = F::from_canonical_u32(*self.pc);
+        from_state.timestamp = F::from_canonical_u32(self.memory.timestamp);
+    }
 }
 
 // TODO: old

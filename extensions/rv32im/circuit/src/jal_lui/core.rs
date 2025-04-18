@@ -188,7 +188,7 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32JalLuiCoreChip {
                 .opcode
                 .local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET),
         );
-        let from_timestamp = state.memory.timestamp();
+        state.ins_start(&mut adapter_row.inner.from_state);
         // `c` can be "negative" as a field element
         let imm_f = instruction.c.as_canonical_u32();
         let signed_imm = match local_opcode {
@@ -217,8 +217,6 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32JalLuiCoreChip {
         } else {
             state.memory.increment_timestamp();
         }
-        adapter_row.inner.from_state.pc = F::from_canonical_u32(*state.pc);
-        adapter_row.inner.from_state.timestamp = F::from_canonical_u32(from_timestamp);
         core_row.rd_data = rd_data.map(F::from_canonical_u8);
         core_row.imm = instruction.c;
         core_row.is_jal = F::from_bool(local_opcode == JAL);
