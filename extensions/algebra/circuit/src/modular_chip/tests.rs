@@ -7,8 +7,8 @@ use openvm_circuit::{
     arch::{
         instructions::LocalOpcode,
         testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        AdapterRuntimeContext, Result, VmAdapterInterface, VmChipWrapper, VmCoreChip,
-        VmExecutionState,
+        AdapterRuntimeContext, InsExecutorE1, Result, VmAdapterInterface, VmChipWrapper,
+        VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -446,17 +446,6 @@ where
         self.chip.execute_instruction(instruction, from_pc, reads)
     }
 
-    fn execute_instruction2<Mem, Ctx>(
-        &mut self,
-        _state: &mut VmExecutionState<Mem, Ctx>,
-        _instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
-        todo!("Implement execute_instruction2")
-    }
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         <ModularIsEqualCoreChip<READ_LIMBS, WRITE_LIMBS, LIMB_BITS> as VmCoreChip<F, I>>::get_opcode_name(&self.chip, opcode)
     }
@@ -503,6 +492,21 @@ where
         <ModularIsEqualCoreChip<READ_LIMBS, WRITE_LIMBS, LIMB_BITS> as VmCoreChip<F, I>>::air(
             &self.chip,
         )
+    }
+}
+
+impl<Mem, Ctx, F, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
+    InsExecutorE1<Mem, Ctx, F> for BadModularIsEqualCoreChip<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        _state: &mut VmExecutionState<Mem, Ctx>,
+        _instruction: &Instruction<F>,
+    ) -> Result<()> {
+        todo!("Implement execute_e1")
     }
 }
 

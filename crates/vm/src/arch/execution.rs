@@ -99,12 +99,12 @@ pub trait InstructionExecutor<F> {
 }
 
 /// New trait for instruction execution
-pub trait InsExecutor<Mem, Ctx, F>
+pub trait InsExecutorE1<Mem, Ctx, F>
 where
     Mem: GuestMemory,
     F: PrimeField32,
 {
-    fn execute(
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,

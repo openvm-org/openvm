@@ -2,8 +2,8 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, SingleTraceStep,
-        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState, VmStateMut,
+        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, InsExecutorE1, Result,
+        SingleTraceStep, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -322,14 +322,36 @@ where
         ))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv32JalLuiOpcode::from_usize(opcode - Rv32JalLuiOpcode::CLASS_OFFSET)
+        )
+    }
+
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let core_cols: &mut Rv32JalLuiCoreCols<F> = row_slice.borrow_mut();
+        core_cols.rd_data = record.rd_data;
+        core_cols.imm = record.imm;
+        core_cols.is_jal = F::from_bool(record.is_jal);
+        core_cols.is_lui = F::from_bool(record.is_lui);
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
+impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for Rv32JalLuiCoreChip
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction {
             opcode, a, c: imm, ..
         } = instruction;
@@ -354,25 +376,6 @@ where
         state.pc = to_pc;
 
         Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv32JalLuiOpcode::from_usize(opcode - Rv32JalLuiOpcode::CLASS_OFFSET)
-        )
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut Rv32JalLuiCoreCols<F> = row_slice.borrow_mut();
-        core_cols.rd_data = record.rd_data;
-        core_cols.imm = record.imm;
-        core_cols.is_jal = F::from_bool(record.is_jal);
-        core_cols.is_lui = F::from_bool(record.is_lui);
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
 

@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, MinimalInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -344,14 +344,62 @@ where
         Ok((output, record))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", ShiftOpcode::from_usize(opcode - self.air.offset))
+    }
+
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        for carry_val in record.bit_shift_carry {
+            self.range_checker_chip
+                .add_count(carry_val, record.bit_shift);
+        }
+
+        let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
+        self.range_checker_chip.add_count(
+            (((record.c[0].as_canonical_u32() as usize)
+                - record.bit_shift
+                - record.limb_shift * LIMB_BITS)
+                >> num_bits_log) as u32,
+            LIMB_BITS - num_bits_log as usize,
+        );
+
+        let row_slice: &mut ShiftCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
+        row_slice.a = record.a;
+        row_slice.b = record.b;
+        row_slice.c = record.c;
+        row_slice.bit_multiplier_left = match record.opcode {
+            ShiftOpcode::SLL => F::from_canonical_usize(1 << record.bit_shift),
+            _ => F::ZERO,
+        };
+        row_slice.bit_multiplier_right = match record.opcode {
+            ShiftOpcode::SLL => F::ZERO,
+            _ => F::from_canonical_usize(1 << record.bit_shift),
+        };
+        row_slice.b_sign = record.b_sign;
+        row_slice.bit_shift_marker = array::from_fn(|i| F::from_bool(i == record.bit_shift));
+        row_slice.limb_shift_marker = array::from_fn(|i| F::from_bool(i == record.limb_shift));
+        row_slice.bit_shift_carry = record.bit_shift_carry.map(F::from_canonical_u32);
+        row_slice.opcode_sll_flag = F::from_bool(record.opcode == ShiftOpcode::SLL);
+        row_slice.opcode_srl_flag = F::from_bool(record.opcode == ShiftOpcode::SRL);
+        row_slice.opcode_sra_flag = F::from_bool(record.opcode == ShiftOpcode::SRA);
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
+    for ShiftCoreChip<NUM_LIMBS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction {
             opcode, a, b, c, e, ..
         } = instruction;
@@ -395,50 +443,6 @@ where
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", ShiftOpcode::from_usize(opcode - self.air.offset))
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        for carry_val in record.bit_shift_carry {
-            self.range_checker_chip
-                .add_count(carry_val, record.bit_shift);
-        }
-
-        let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
-        self.range_checker_chip.add_count(
-            (((record.c[0].as_canonical_u32() as usize)
-                - record.bit_shift
-                - record.limb_shift * LIMB_BITS)
-                >> num_bits_log) as u32,
-            LIMB_BITS - num_bits_log as usize,
-        );
-
-        let row_slice: &mut ShiftCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
-        row_slice.a = record.a;
-        row_slice.b = record.b;
-        row_slice.c = record.c;
-        row_slice.bit_multiplier_left = match record.opcode {
-            ShiftOpcode::SLL => F::from_canonical_usize(1 << record.bit_shift),
-            _ => F::ZERO,
-        };
-        row_slice.bit_multiplier_right = match record.opcode {
-            ShiftOpcode::SLL => F::ZERO,
-            _ => F::from_canonical_usize(1 << record.bit_shift),
-        };
-        row_slice.b_sign = record.b_sign;
-        row_slice.bit_shift_marker = array::from_fn(|i| F::from_bool(i == record.bit_shift));
-        row_slice.limb_shift_marker = array::from_fn(|i| F::from_bool(i == record.limb_shift));
-        row_slice.bit_shift_carry = record.bit_shift_carry.map(F::from_canonical_u32);
-        row_slice.opcode_sll_flag = F::from_bool(record.opcode == ShiftOpcode::SLL);
-        row_slice.opcode_srl_flag = F::from_bool(record.opcode == ShiftOpcode::SRL);
-        row_slice.opcode_sra_flag = F::from_bool(record.opcode == ShiftOpcode::SRA);
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
 

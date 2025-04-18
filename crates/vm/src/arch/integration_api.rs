@@ -22,7 +22,7 @@ use openvm_stark_backend::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
-    ExecutionError, ExecutionState, InsExecutor, InstructionExecutor, Result, VmExecutionState,
+    ExecutionError, ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmExecutionState,
     VmStateMut,
 };
 use crate::system::memory::{
@@ -135,14 +135,6 @@ pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
         from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)>;
-
-    fn execute_instruction2<Mem, Ctx>(
-        &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory;
 
     fn get_opcode_name(&self, opcode: usize) -> String;
 
@@ -431,19 +423,35 @@ where
     }
 }
 
-impl<Mem, Ctx, F, A, M> InsExecutor<Mem, Ctx, F> for VmChipWrapper<F, A, M>
+// TODO(ayush): delete
+impl<Mem, Ctx, F, A, M> InsExecutorE1<Mem, Ctx, F> for VmChipWrapper<F, A, M>
 where
     Mem: GuestMemory,
     F: PrimeField32,
     A: VmAdapterChip<F> + Send + Sync,
-    M: VmCoreChip<F, A::Interface> + Send + Sync,
+    M: VmCoreChip<F, A::Interface> + InsExecutorE1<Mem, Ctx, F> + Send + Sync,
 {
-    fn execute(
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        self.core.execute_instruction2(state, instruction)
+        self.core.execute_e1(state, instruction)
+    }
+}
+
+impl<Mem, Ctx, F, A, C> InsExecutorE1<Mem, Ctx, F> for NewVmChipWrapper<F, A, C>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+    C: InsExecutorE1<Mem, Ctx, F>,
+{
+    fn execute_e1(
+        &mut self,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        self.inner.execute_e1(state, instruction)
     }
 }
 

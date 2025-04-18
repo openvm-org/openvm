@@ -3,7 +3,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
+        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, InsExecutorE1,
         MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
@@ -285,17 +285,6 @@ where
         Ok((ctx.into(), FieldExpressionRecord { inputs, flags }))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
-        &mut self,
-        _state: &mut VmExecutionState<Mem, Ctx>,
-        _instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
-        todo!("Implement execute_instruction2")
-    }
-
     fn get_opcode_name(&self, _opcode: usize) -> String {
         self.name.clone()
     }
@@ -322,6 +311,20 @@ where
         for row in trace.rows_mut().skip(num_records) {
             row.copy_from_slice(&dummy_row);
         }
+    }
+}
+
+impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for FieldExpressionCoreChip
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        _state: &mut VmExecutionState<Mem, Ctx>,
+        _instruction: &Instruction<F>,
+    ) -> Result<()> {
+        todo!("Implement execute_e1")
     }
 }
 

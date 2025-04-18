@@ -2,8 +2,8 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, MinimalInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -168,17 +168,6 @@ where
         Ok((output, record))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
-        &mut self,
-        _state: &mut VmExecutionState<Mem, Ctx>,
-        _instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
-        todo!("Implement execute_instruction2")
-    }
-
     fn get_opcode_name(&self, _opcode: usize) -> String {
         format!("{:?}", CastfOpcode::CASTF)
     }
@@ -200,6 +189,20 @@ where
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+}
+
+impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for CastFCoreChip
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        _state: &mut VmExecutionState<Mem, Ctx>,
+        _instruction: &Instruction<F>,
+    ) -> Result<()> {
+        todo!("Implement execute_e1")
     }
 }
 

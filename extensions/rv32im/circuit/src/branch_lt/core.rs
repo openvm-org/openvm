@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, InsExecutorE1, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -330,14 +330,47 @@ where
         Ok((output, record))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            BranchLessThanOpcode::from_usize(opcode - self.air.offset)
+        )
+    }
+
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let row_slice: &mut BranchLessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> =
+            row_slice.borrow_mut();
+        row_slice.a = record.a;
+        row_slice.b = record.b;
+        row_slice.cmp_result = record.cmp_result;
+        row_slice.cmp_lt = record.cmp_lt;
+        row_slice.imm = record.imm;
+        row_slice.a_msb_f = record.a_msb_f;
+        row_slice.b_msb_f = record.b_msb_f;
+        row_slice.diff_marker = array::from_fn(|i| F::from_bool(i == record.diff_idx));
+        row_slice.diff_val = record.diff_val;
+        row_slice.opcode_blt_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BLT);
+        row_slice.opcode_bltu_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BLTU);
+        row_slice.opcode_bge_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BGE);
+        row_slice.opcode_bgeu_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BGEU);
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
+    for BranchLessThanCoreChip<NUM_LIMBS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction {
             opcode,
             a,
@@ -370,35 +403,6 @@ where
         }
 
         Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            BranchLessThanOpcode::from_usize(opcode - self.air.offset)
-        )
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut BranchLessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> =
-            row_slice.borrow_mut();
-        row_slice.a = record.a;
-        row_slice.b = record.b;
-        row_slice.cmp_result = record.cmp_result;
-        row_slice.cmp_lt = record.cmp_lt;
-        row_slice.imm = record.imm;
-        row_slice.a_msb_f = record.a_msb_f;
-        row_slice.b_msb_f = record.b_msb_f;
-        row_slice.diff_marker = array::from_fn(|i| F::from_bool(i == record.diff_idx));
-        row_slice.diff_val = record.diff_val;
-        row_slice.opcode_blt_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BLT);
-        row_slice.opcode_bltu_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BLTU);
-        row_slice.opcode_bge_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BGE);
-        row_slice.opcode_bgeu_flag = F::from_bool(record.opcode == BranchLessThanOpcode::BGEU);
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
 

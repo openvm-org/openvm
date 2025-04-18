@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, MinimalInstruction,
-        Result, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, InsExecutorE1,
+        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::{memory::online::GuestMemory, public_values::columns::PublicValuesCoreColsView},
 };
@@ -160,17 +160,6 @@ impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChi
         Ok((output, record))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
-        &mut self,
-        _state: &mut VmExecutionState<Mem, Ctx>,
-        _instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
-        todo!("Implement execute_instruction2")
-    }
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -200,5 +189,19 @@ impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChi
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+}
+
+impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for PublicValuesCoreChip<F>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        _state: &mut VmExecutionState<Mem, Ctx>,
+        _instruction: &Instruction<F>,
+    ) -> Result<()> {
+        todo!("Implement execute_e1")
     }
 }

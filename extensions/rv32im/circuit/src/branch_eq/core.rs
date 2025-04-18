@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, InsExecutorE1, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -206,14 +206,46 @@ where
         Ok((output, record))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            BranchEqualOpcode::from_usize(opcode - self.air.offset)
+        )
+    }
+
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let row_slice: &mut BranchEqualCoreCols<_, NUM_LIMBS> = row_slice.borrow_mut();
+        row_slice.a = record.a;
+        row_slice.b = record.b;
+        row_slice.cmp_result = record.cmp_result;
+        row_slice.imm = record.imm;
+        row_slice.opcode_beq_flag = F::from_bool(record.opcode == BranchEqualOpcode::BEQ);
+        row_slice.opcode_bne_flag = F::from_bool(record.opcode == BranchEqualOpcode::BNE);
+        row_slice.diff_inv_marker = array::from_fn(|i| {
+            if i == record.diff_idx {
+                record.diff_inv_val
+            } else {
+                F::ZERO
+            }
+        });
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_LIMBS: usize> InsExecutorE1<Mem, Ctx, F>
+    for BranchEqualCoreChip<NUM_LIMBS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction {
             opcode,
             a,
@@ -247,34 +279,6 @@ where
         }
 
         Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            BranchEqualOpcode::from_usize(opcode - self.air.offset)
-        )
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut BranchEqualCoreCols<_, NUM_LIMBS> = row_slice.borrow_mut();
-        row_slice.a = record.a;
-        row_slice.b = record.b;
-        row_slice.cmp_result = record.cmp_result;
-        row_slice.imm = record.imm;
-        row_slice.opcode_beq_flag = F::from_bool(record.opcode == BranchEqualOpcode::BEQ);
-        row_slice.opcode_bne_flag = F::from_bool(record.opcode == BranchEqualOpcode::BNE);
-        row_slice.diff_inv_marker = array::from_fn(|i| {
-            if i == record.diff_idx {
-                record.diff_inv_val
-            } else {
-                F::ZERO
-            }
-        });
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
 

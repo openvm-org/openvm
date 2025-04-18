@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, MinimalInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -293,14 +293,42 @@ where
         Ok((output, record))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            MulHOpcode::from_usize(opcode - MulHOpcode::CLASS_OFFSET)
+        )
+    }
+
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let row_slice: &mut MulHCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
+        row_slice.a = record.a;
+        row_slice.b = record.b;
+        row_slice.c = record.c;
+        row_slice.a_mul = record.a_mul;
+        row_slice.b_ext = record.b_ext;
+        row_slice.c_ext = record.c_ext;
+        row_slice.opcode_mulh_flag = F::from_bool(record.opcode == MulHOpcode::MULH);
+        row_slice.opcode_mulhsu_flag = F::from_bool(record.opcode == MulHOpcode::MULHSU);
+        row_slice.opcode_mulhu_flag = F::from_bool(record.opcode == MulHOpcode::MULHU);
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
+    for MulHCoreChip<NUM_LIMBS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction {
             opcode, a, b, c, ..
         } = instruction;
@@ -332,30 +360,6 @@ where
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            MulHOpcode::from_usize(opcode - MulHOpcode::CLASS_OFFSET)
-        )
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut MulHCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
-        row_slice.a = record.a;
-        row_slice.b = record.b;
-        row_slice.c = record.c;
-        row_slice.a_mul = record.a_mul;
-        row_slice.b_ext = record.b_ext;
-        row_slice.c_ext = record.c_ext;
-        row_slice.opcode_mulh_flag = F::from_bool(record.opcode == MulHOpcode::MULH);
-        row_slice.opcode_mulhsu_flag = F::from_bool(record.opcode == MulHOpcode::MULHSU);
-        row_slice.opcode_mulhu_flag = F::from_bool(record.opcode == MulHOpcode::MULHU);
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
 

@@ -2,8 +2,8 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
-        VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, Result, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -306,14 +306,60 @@ where
         ))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv32LoadStoreOpcode::from_usize(opcode - self.air.offset)
+        )
+    }
+
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let core_cols: &mut LoadStoreCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
+        let opcode = record.opcode;
+        let flags = &mut core_cols.flags;
+        *flags = [F::ZERO; 4];
+        match (opcode, record.shift) {
+            (LOADW, 0) => flags[0] = F::TWO,
+            (LOADHU, 0) => flags[1] = F::TWO,
+            (LOADHU, 2) => flags[2] = F::TWO,
+            (LOADBU, 0) => flags[3] = F::TWO,
+
+            (LOADBU, 1) => flags[0] = F::ONE,
+            (LOADBU, 2) => flags[1] = F::ONE,
+            (LOADBU, 3) => flags[2] = F::ONE,
+            (STOREW, 0) => flags[3] = F::ONE,
+
+            (STOREH, 0) => (flags[0], flags[1]) = (F::ONE, F::ONE),
+            (STOREH, 2) => (flags[0], flags[2]) = (F::ONE, F::ONE),
+            (STOREB, 0) => (flags[0], flags[3]) = (F::ONE, F::ONE),
+            (STOREB, 1) => (flags[1], flags[2]) = (F::ONE, F::ONE),
+            (STOREB, 2) => (flags[1], flags[3]) = (F::ONE, F::ONE),
+            (STOREB, 3) => (flags[2], flags[3]) = (F::ONE, F::ONE),
+            _ => unreachable!(),
+        };
+        core_cols.prev_data = record.prev_data;
+        core_cols.read_data = record.read_data;
+        core_cols.is_valid = F::ONE;
+        core_cols.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
+        core_cols.write_data = record.write_data;
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_CELLS: usize> InsExecutorE1<Mem, Ctx, F>
+    for LoadStoreCoreChip<NUM_CELLS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction {
             opcode,
             a,
@@ -391,48 +437,6 @@ where
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv32LoadStoreOpcode::from_usize(opcode - self.air.offset)
-        )
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut LoadStoreCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
-        let opcode = record.opcode;
-        let flags = &mut core_cols.flags;
-        *flags = [F::ZERO; 4];
-        match (opcode, record.shift) {
-            (LOADW, 0) => flags[0] = F::TWO,
-            (LOADHU, 0) => flags[1] = F::TWO,
-            (LOADHU, 2) => flags[2] = F::TWO,
-            (LOADBU, 0) => flags[3] = F::TWO,
-
-            (LOADBU, 1) => flags[0] = F::ONE,
-            (LOADBU, 2) => flags[1] = F::ONE,
-            (LOADBU, 3) => flags[2] = F::ONE,
-            (STOREW, 0) => flags[3] = F::ONE,
-
-            (STOREH, 0) => (flags[0], flags[1]) = (F::ONE, F::ONE),
-            (STOREH, 2) => (flags[0], flags[2]) = (F::ONE, F::ONE),
-            (STOREB, 0) => (flags[0], flags[3]) = (F::ONE, F::ONE),
-            (STOREB, 1) => (flags[1], flags[2]) = (F::ONE, F::ONE),
-            (STOREB, 2) => (flags[1], flags[3]) = (F::ONE, F::ONE),
-            (STOREB, 3) => (flags[2], flags[3]) = (F::ONE, F::ONE),
-            _ => unreachable!(),
-        };
-        core_cols.prev_data = record.prev_data;
-        core_cols.read_data = record.read_data;
-        core_cols.is_valid = F::ONE;
-        core_cols.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
-        core_cols.write_data = record.write_data;
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
 

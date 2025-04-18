@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
-        VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, Result, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -262,14 +262,42 @@ where
         ))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv32LoadStoreOpcode::from_usize(opcode - Rv32LoadStoreOpcode::CLASS_OFFSET)
+        )
+    }
+
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let core_cols: &mut LoadSignExtendCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
+        let opcode = record.opcode;
+        let shift = record.shift_amount;
+        core_cols.opcode_loadb_flag0 = F::from_bool(opcode == LOADB && (shift & 1) == 0);
+        core_cols.opcode_loadb_flag1 = F::from_bool(opcode == LOADB && (shift & 1) == 1);
+        core_cols.opcode_loadh_flag = F::from_bool(opcode == LOADH);
+        core_cols.shift_most_sig_bit = F::from_canonical_u32((shift & 2) >> 1);
+        core_cols.data_most_sig_bit = F::from_bool(record.most_sig_bit);
+        core_cols.prev_data = record.prev_data;
+        core_cols.shifted_read_data = record.shifted_read_data;
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_CELLS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
+    for LoadSignExtendCoreChip<NUM_CELLS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction {
             opcode,
             a,
@@ -326,30 +354,6 @@ where
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv32LoadStoreOpcode::from_usize(opcode - Rv32LoadStoreOpcode::CLASS_OFFSET)
-        )
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut LoadSignExtendCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
-        let opcode = record.opcode;
-        let shift = record.shift_amount;
-        core_cols.opcode_loadb_flag0 = F::from_bool(opcode == LOADB && (shift & 1) == 0);
-        core_cols.opcode_loadb_flag1 = F::from_bool(opcode == LOADB && (shift & 1) == 1);
-        core_cols.opcode_loadh_flag = F::from_bool(opcode == LOADH);
-        core_cols.shift_most_sig_bit = F::from_canonical_u32((shift & 2) >> 1);
-        core_cols.data_most_sig_bit = F::from_bool(record.most_sig_bit);
-        core_cols.prev_data = record.prev_data;
-        core_cols.shifted_read_data = record.shifted_read_data;
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
 

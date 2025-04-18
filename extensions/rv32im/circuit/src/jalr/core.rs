@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, Result, SignedImmInstruction, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, Result, SignedImmInstruction,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -268,14 +268,42 @@ where
         ))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv32JalrOpcode::from_usize(opcode - Rv32JalrOpcode::CLASS_OFFSET)
+        )
+    }
+
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        self.range_checker_chip.add_count(record.to_pc_limbs[0], 15);
+        self.range_checker_chip.add_count(record.to_pc_limbs[1], 14);
+
+        let core_cols: &mut Rv32JalrCoreCols<F> = row_slice.borrow_mut();
+        core_cols.imm = record.imm;
+        core_cols.rd_data = record.rd_data;
+        core_cols.rs1_data = record.rs1_data;
+        core_cols.to_pc_least_sig_bit = record.to_pc_least_sig_bit;
+        core_cols.to_pc_limbs = record.to_pc_limbs.map(F::from_canonical_u32);
+        core_cols.imm_sign = record.imm_sign;
+        core_cols.is_valid = F::ONE;
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
+impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for Rv32JalrCoreChip
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction {
             opcode,
             b,
@@ -315,31 +343,6 @@ where
         state.pc = to_pc;
 
         Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv32JalrOpcode::from_usize(opcode - Rv32JalrOpcode::CLASS_OFFSET)
-        )
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        self.range_checker_chip.add_count(record.to_pc_limbs[0], 15);
-        self.range_checker_chip.add_count(record.to_pc_limbs[1], 14);
-
-        let core_cols: &mut Rv32JalrCoreCols<F> = row_slice.borrow_mut();
-        core_cols.imm = record.imm;
-        core_cols.rd_data = record.rd_data;
-        core_cols.rs1_data = record.rs1_data;
-        core_cols.to_pc_least_sig_bit = record.to_pc_least_sig_bit;
-        core_cols.to_pc_limbs = record.to_pc_limbs.map(F::from_canonical_u32);
-        core_cols.imm_sign = record.imm_sign;
-        core_cols.is_valid = F::ONE;
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
 

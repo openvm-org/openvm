@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, MinimalInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -257,14 +257,38 @@ where
         Ok((output, record))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.air.offset))
+    }
+
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let row_slice: &mut BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
+        row_slice.a = record.a;
+        row_slice.b = record.b;
+        row_slice.c = record.c;
+        row_slice.opcode_add_flag = F::from_bool(record.opcode == BaseAluOpcode::ADD);
+        row_slice.opcode_sub_flag = F::from_bool(record.opcode == BaseAluOpcode::SUB);
+        row_slice.opcode_xor_flag = F::from_bool(record.opcode == BaseAluOpcode::XOR);
+        row_slice.opcode_or_flag = F::from_bool(record.opcode == BaseAluOpcode::OR);
+        row_slice.opcode_and_flag = F::from_bool(record.opcode == BaseAluOpcode::AND);
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
+    for BaseAluCoreChip<NUM_LIMBS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction {
             opcode, a, b, c, e, ..
         } = instruction;
@@ -306,26 +330,6 @@ where
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.air.offset))
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
-        row_slice.a = record.a;
-        row_slice.b = record.b;
-        row_slice.c = record.c;
-        row_slice.opcode_add_flag = F::from_bool(record.opcode == BaseAluOpcode::ADD);
-        row_slice.opcode_sub_flag = F::from_bool(record.opcode == BaseAluOpcode::SUB);
-        row_slice.opcode_xor_flag = F::from_bool(record.opcode == BaseAluOpcode::XOR);
-        row_slice.opcode_or_flag = F::from_bool(record.opcode == BaseAluOpcode::OR);
-        row_slice.opcode_and_flag = F::from_bool(record.opcode == BaseAluOpcode::AND);
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
 

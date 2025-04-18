@@ -7,8 +7,8 @@ use num_bigint::BigUint;
 use num_integer::Integer;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, MinimalInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -522,14 +522,50 @@ where
         Ok((output, record))
     }
 
-    fn execute_instruction2<Mem, Ctx>(
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", DivRemOpcode::from_usize(opcode - self.air.offset))
+    }
+
+    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+        let row_slice: &mut DivRemCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
+        row_slice.b = record.b;
+        row_slice.c = record.c;
+        row_slice.q = record.q;
+        row_slice.r = record.r;
+        row_slice.zero_divisor = record.zero_divisor;
+        row_slice.r_zero = record.r_zero;
+        row_slice.b_sign = record.b_sign;
+        row_slice.c_sign = record.c_sign;
+        row_slice.q_sign = record.q_sign;
+        row_slice.sign_xor = record.sign_xor;
+        row_slice.c_sum_inv = record.c_sum_inv;
+        row_slice.r_sum_inv = record.r_sum_inv;
+        row_slice.r_prime = record.r_prime;
+        row_slice.r_inv = record.r_inv;
+        row_slice.lt_marker = array::from_fn(|i| F::from_bool(i == record.lt_diff_idx));
+        row_slice.lt_diff = record.lt_diff_val;
+        row_slice.opcode_div_flag = F::from_bool(record.opcode == DivRemOpcode::DIV);
+        row_slice.opcode_divu_flag = F::from_bool(record.opcode == DivRemOpcode::DIVU);
+        row_slice.opcode_rem_flag = F::from_bool(record.opcode == DivRemOpcode::REM);
+        row_slice.opcode_remu_flag = F::from_bool(record.opcode == DivRemOpcode::REMU);
+    }
+
+    fn air(&self) -> &Self::Air {
+        &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
+    for DivRemCoreChip<NUM_LIMBS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction {
             opcode, a, b, c, ..
         } = *instruction;
@@ -571,38 +607,6 @@ where
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", DivRemOpcode::from_usize(opcode - self.air.offset))
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut DivRemCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
-        row_slice.b = record.b;
-        row_slice.c = record.c;
-        row_slice.q = record.q;
-        row_slice.r = record.r;
-        row_slice.zero_divisor = record.zero_divisor;
-        row_slice.r_zero = record.r_zero;
-        row_slice.b_sign = record.b_sign;
-        row_slice.c_sign = record.c_sign;
-        row_slice.q_sign = record.q_sign;
-        row_slice.sign_xor = record.sign_xor;
-        row_slice.c_sum_inv = record.c_sum_inv;
-        row_slice.r_sum_inv = record.r_sum_inv;
-        row_slice.r_prime = record.r_prime;
-        row_slice.r_inv = record.r_inv;
-        row_slice.lt_marker = array::from_fn(|i| F::from_bool(i == record.lt_diff_idx));
-        row_slice.lt_diff = record.lt_diff_val;
-        row_slice.opcode_div_flag = F::from_bool(record.opcode == DivRemOpcode::DIV);
-        row_slice.opcode_divu_flag = F::from_bool(record.opcode == DivRemOpcode::DIVU);
-        row_slice.opcode_rem_flag = F::from_bool(record.opcode == DivRemOpcode::REM);
-        row_slice.opcode_remu_flag = F::from_bool(record.opcode == DivRemOpcode::REMU);
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
 
