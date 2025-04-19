@@ -3,11 +3,8 @@ use std::borrow::BorrowMut;
 use openvm_circuit::{
     arch::{
         testing::{TestAdapterChip, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge, ExecutionState,
-        MinimalInstruction, NewVmChipWrapper, Result, VmAdapterChip, VmAdapterInterface,
-        VmAirWrapper, VmChipWrapper,
+        NewVmChipWrapper, VmAirWrapper, VmChipWrapper,
     },
-    system::memory::{MemoryController, OfflineMemory},
     utils::generate_long_number,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -16,8 +13,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{
-    p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -49,7 +45,7 @@ fn create_test_chip(
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let core = Rv32BaseAluStep(BaseAluCoreChip::new(
+    let step = Rv32BaseAluStep::new(BaseAluCoreChip::new(
         bitwise_chip.clone(),
         BaseAluOpcode::CLASS_OFFSET,
     ));
@@ -59,9 +55,9 @@ fn create_test_chip(
             tester.memory_bridge(),
             bitwise_bus,
         ),
-        core.0.air,
+        step.core.air,
     );
-    let chip = NewVmChipWrapper::new(air, core, MAX_INS_CAPACITY, tester.memory_helper());
+    let chip = NewVmChipWrapper::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
     (chip, bitwise_chip)
 }
 //////////////////////////////////////////////////////////////////////////////////////

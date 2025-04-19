@@ -1,6 +1,6 @@
 use openvm_circuit::arch::VmChipWrapper;
 
-use super::adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use super::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
 mod core;
 pub use core::*;

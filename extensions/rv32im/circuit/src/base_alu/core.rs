@@ -2,6 +2,7 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     iter::zip,
+    marker::PhantomData,
 };
 
 use openvm_circuit::{
@@ -22,7 +23,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::BaseAluOpcode;
@@ -34,10 +35,7 @@ use openvm_stark_backend::{
 };
 use strum::IntoEnumIterator;
 
-use crate::adapters::{
-    timed_read_reg, timed_write_reg, tracing_read_reg, tracing_read_reg_or_imm, tracing_write_reg,
-    Rv32BaseAluAdapterCols,
-};
+use crate::adapters::BaseAluAdapterTraceStep;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -200,7 +198,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, 
     }
 
     #[inline]
-    pub fn core_execute<F: PrimeField32>(
+    pub fn execute<F: PrimeField32>(
         &self,
         instruction: &Instruction<F>,
         [x, y]: [[u8; NUM_LIMBS]; 2],
@@ -224,7 +222,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, 
         z
     }
 
-    pub fn core_fill_trace_row<F: PrimeField32>(&self, core_row: &mut [F]) {
+    pub fn fill_trace_row<F: PrimeField32>(&self, core_row: &mut [F]) {
         let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
         if core_row.opcode_add_flag == F::ONE || core_row.opcode_sub_flag == F::ONE {
@@ -241,46 +239,36 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, 
     }
 }
 
-pub struct Rv32BaseAluStep(pub BaseAluCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>);
+#[derive(derive_new::new)]
+pub struct BaseAluStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub core: BaseAluCoreChip<NUM_LIMBS, LIMB_BITS>,
+    phantom: PhantomData<A>,
+}
 
-impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32BaseAluStep {
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
+    for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: BaseAluAdapterTraceStep<
+        F,
+        CTX,
+        LIMB_BITS,
+        ReadData = [[u8; NUM_LIMBS]; 2],
+        WriteData = [u8; NUM_LIMBS],
+    >,
+{
     fn execute(
         &mut self,
         state: VmStateMut<TracingMemory, CTX>,
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {
-        let &Instruction { a, b, c, d, e, .. } = instruction;
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        let (adapter_row, core_row) =
-            unsafe { row_slice.split_at_mut_unchecked(Rv32BaseAluAdapterCols::<F>::width()) };
-        let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        state.ins_start(&mut adapter_row.from_state);
-
-        let rs1_idx = b.as_canonical_u32();
-        let rs1 = tracing_read_reg(
-            state.memory,
-            rs1_idx,
-            (&mut adapter_row.rs1_ptr, &mut adapter_row.reads_aux[0]),
-        );
-        let rs2 = tracing_read_reg_or_imm(
-            state.memory,
-            e.as_canonical_u32(),
-            c.as_canonical_u32(),
-            &mut adapter_row.rs2_as,
-            (&mut adapter_row.rs2, &mut adapter_row.reads_aux[1]),
-        );
-
-        let output = self.0.core_execute(instruction, [rs1, rs2], core_row);
-
-        let rd_idx = a.as_canonical_u32();
-        tracing_write_reg(
-            state.memory,
-            rd_idx,
-            &output,
-            (&mut adapter_row.rd_ptr, &mut adapter_row.writes_aux),
-        );
+        A::start(*state.pc, state.memory, adapter_row);
+        let [rs1, rs2] = A::read(state.memory, instruction, adapter_row);
+        let output = self.core.execute(instruction, [rs1, rs2], core_row);
+        A::write(state.memory, instruction, adapter_row, &output);
 
         *state.pc += DEFAULT_PC_STEP;
         Ok(())
@@ -289,30 +277,18 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32BaseAluStep {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            BaseAluOpcode::from_usize(opcode - self.0.air.offset)
+            BaseAluOpcode::from_usize(opcode - self.core.air.offset)
         )
     }
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) =
-            unsafe { row_slice.split_at_mut_unchecked(Rv32BaseAluAdapterCols::<F>::width()) };
-        let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
-
-        let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
-        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[0].as_mut());
-        timestamp += 1;
-        if !adapter_row.rs2_as.is_zero() {
-            mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[1].as_mut());
-        } else {
-            let rs2_imm = adapter_row.rs2.as_canonical_u32();
-            let mask = (1 << RV32_CELL_BITS) - 1;
-            self.0
-                .bitwise_lookup_chip
-                .request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
-        }
-        timestamp += 1;
-        self.0.core_fill_trace_row(core_row);
-        mem_helper.fill_from_prev(timestamp, adapter_row.writes_aux.as_mut());
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        A::fill_trace_row(
+            mem_helper,
+            self.core.bitwise_lookup_chip.as_ref(),
+            adapter_row,
+        );
+        self.core.fill_trace_row(core_row);
     }
 }
 
