@@ -20,11 +20,13 @@ pub use p3_symmetric::{self, Permutation};
 mod air;
 mod babybear;
 mod config;
+mod koalabear;
 mod permute;
 
 pub use air::*;
 pub use babybear::*;
 pub use config::*;
+pub use koalabear::*;
 pub use permute::*;
 
 #[cfg(test)]
@@ -67,12 +69,14 @@ impl<
     pub fn permute(&self, input_state: [F; POSEIDON2_WIDTH]) -> [F; POSEIDON2_WIDTH] {
         match &self.executor {
             Poseidon2Executor::BabyBearMds(permuter) => permuter.permute(input_state),
+            Poseidon2Executor::KoalaBearMds(permuter) => permuter.permute(input_state),
         }
     }
 
     pub fn permute_mut(&self, input_state: &mut [F; POSEIDON2_WIDTH]) {
         match &self.executor {
             Poseidon2Executor::BabyBearMds(permuter) => permuter.permute_mut(input_state),
+            Poseidon2Executor::KoalaBearMds(permuter) => permuter.permute_mut(input_state),
         };
     }
 
@@ -90,6 +94,15 @@ impl<
                 POSEIDON2_HALF_FULL_ROUNDS,
                 PARTIAL_ROUNDS,
             >(inputs, &self.constants),
+            Poseidon2SubAir::KoalaBearMds(_) => generate_trace_rows::<
+                F,
+                KoalaBearPoseidon2LinearLayers,
+                POSEIDON2_WIDTH,
+                SBOX_DEGREE,
+                SBOX_REGISTERS,
+                POSEIDON2_HALF_FULL_ROUNDS,
+                PARTIAL_ROUNDS,
+            >(inputs, &self.constants),
         }
     }
 }
@@ -99,10 +112,23 @@ pub enum Poseidon2Executor<F: Field> {
     BabyBearMds(
         Plonky3Poseidon2Executor<F, BabyBearPoseidon2LinearLayers, BABYBEAR_POSEIDON2_SBOX_DEGREE>,
     ),
+    KoalaBearMds(
+        Plonky3Poseidon2Executor<F, KoalaBearPoseidon2LinearLayers, BABYBEAR_POSEIDON2_SBOX_DEGREE>,
+    ),
 }
 
 impl<F: PrimeField> Poseidon2Executor<F> {
     pub fn new(
+        external_constants: ExternalLayerConstants<F, POSEIDON2_WIDTH>,
+        internal_constants: Vec<F>,
+    ) -> Self {
+        Self::KoalaBearMds(Plonky3Poseidon2Executor::new(
+            external_constants,
+            internal_constants,
+        ))
+    }
+
+    pub fn new_babybear(
         external_constants: ExternalLayerConstants<F, POSEIDON2_WIDTH>,
         internal_constants: Vec<F>,
     ) -> Self {

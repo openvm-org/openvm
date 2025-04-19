@@ -6,7 +6,7 @@ use openvm_stark_backend::{
 use p3_poseidon2_air::{Poseidon2Air, Poseidon2Cols};
 
 use super::{POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_WIDTH};
-use crate::{BabyBearPoseidon2LinearLayers, Plonky3RoundConstants};
+use crate::{BabyBearPoseidon2LinearLayers, KoalaBearPoseidon2LinearLayers, Plonky3RoundConstants};
 
 pub type Poseidon2SubCols<
     F,
@@ -54,6 +54,15 @@ pub enum Poseidon2SubAir<
             PARTIAL_ROUNDS,
         >,
     ),
+    KoalaBearMds(
+        Plonky3Poseidon2Air<
+            F,
+            KoalaBearPoseidon2LinearLayers,
+            SBOX_DEGREE,
+            SBOX_REGISTERS,
+            PARTIAL_ROUNDS,
+        >,
+    ),
 }
 
 impl<
@@ -64,6 +73,10 @@ impl<
     > Poseidon2SubAir<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>
 {
     pub fn new(constants: Plonky3RoundConstants<F, PARTIAL_ROUNDS>) -> Self {
+        Self::KoalaBearMds(Plonky3Poseidon2Air::new(constants))
+    }
+
+    pub fn new_babybear(constants: Plonky3RoundConstants<F, PARTIAL_ROUNDS>) -> Self {
         Self::BabyBearMds(Plonky3Poseidon2Air::new(constants))
     }
 }
@@ -78,6 +91,7 @@ impl<
     fn width(&self) -> usize {
         match self {
             Self::BabyBearMds(air) => air.width(),
+            Self::KoalaBearMds(air) => air.width(),
         }
     }
 }
@@ -110,6 +124,7 @@ impl<
     fn eval(&self, builder: &mut AB) {
         match self {
             Self::BabyBearMds(air) => air.eval(builder),
+            Self::KoalaBearMds(air) => air.eval(builder),
         }
     }
 }

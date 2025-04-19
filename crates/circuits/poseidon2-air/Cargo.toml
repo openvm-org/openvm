@@ -19,6 +19,8 @@ openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 
 rand.workspace = true
+rand_chacha.workspace = true
+once_cell.workspace = true
 lazy_static.workspace = true
 derivative.workspace = true
 

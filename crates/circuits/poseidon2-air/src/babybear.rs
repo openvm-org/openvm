@@ -12,9 +12,11 @@ use zkhash::{
 
 use super::{Poseidon2Constants, POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_WIDTH};
 
+// Because the SBOX_DEGREE for BabyBear is 7, either 0 or 1 SBOX_REGISTERS are
+// needed depending on the max constraint degree. Generally if max constraint
+// degree is less than 7 then 0 registers are needed, otherwise 1 is needed.
 pub const BABYBEAR_POSEIDON2_PARTIAL_ROUNDS: usize = 13;
 pub const BABYBEAR_POSEIDON2_SBOX_DEGREE: u64 = 7;
-// pub const BABYBEAR_POSEIDON2_SBOX_REGISTERS: usize = 1;
 
 pub(crate) fn horizen_to_p3_babybear(horizen_babybear: HorizenBabyBear) -> BabyBear {
     BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
@@ -56,16 +58,6 @@ lazy_static! {
         BABYBEAR_CONSTS.ending_full_round_constants;
 }
 
-pub(crate) fn babybear_internal_linear_layer<FA: FieldAlgebra, const WIDTH: usize>(
-    state: &mut [FA; WIDTH],
-    int_diag_m1_matrix: &[FA::F; WIDTH],
-) {
-    let sum = state.iter().cloned().sum::<FA>();
-    for (input, diag_m1) in state.iter_mut().zip(int_diag_m1_matrix) {
-        *input = sum.clone() + FA::from_f(*diag_m1) * input.clone();
-    }
-}
-
 // Default round constants for only BabyBear, but we convert to `F` due to some annoyances with
 // generics. This should only be used concretely when `F = BabyBear`.
 pub fn default_baby_bear_rc<F: Field>() -> Poseidon2Constants<F> {
@@ -86,6 +78,16 @@ pub fn default_baby_bear_rc<F: Field>() -> Poseidon2Constants<F> {
 /// circumvent this, Poseidon2LinearLayers is generic in F but **currently requires** that F is BabyBear.
 #[derive(Debug, Clone)]
 pub struct BabyBearPoseidon2LinearLayers;
+
+pub(crate) fn babybear_internal_linear_layer<FA: FieldAlgebra, const WIDTH: usize>(
+    state: &mut [FA; WIDTH],
+    int_diag_m1_matrix: &[FA::F; WIDTH],
+) {
+    let sum = state.iter().cloned().sum::<FA>();
+    for (input, diag_m1) in state.iter_mut().zip(int_diag_m1_matrix) {
+        *input = sum.clone() + FA::from_f(*diag_m1) * input.clone();
+    }
+}
 
 // This is the same as the implementation for GenericPoseidon2LinearLayersMonty31<BabyBearParameters, BabyBearInternalLayerParameters> except that we drop the
 // clause that FA needs be multipliable by BabyBear.
