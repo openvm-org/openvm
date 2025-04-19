@@ -87,6 +87,7 @@ pub struct VmStateMut<'a, MEM, CTX> {
 
 impl<CTX> VmStateMut<'_, TracingMemory, CTX> {
     // TODO: store as u32 directly
+    #[inline(always)]
     pub fn ins_start<F: Field>(&self, from_state: &mut ExecutionState<F>) {
         from_state.pc = F::from_canonical_u32(*self.pc);
         from_state.timestamp = F::from_canonical_u32(self.memory.timestamp);

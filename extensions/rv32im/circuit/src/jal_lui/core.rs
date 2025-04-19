@@ -211,11 +211,12 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32JalLuiCoreChip {
 
         if instruction.f != F::ZERO {
             let rd_ptr = instruction.a.as_canonical_u32();
-            let (t_prev, data_prev) = tracing_write_reg(state.memory, rd_ptr, &rd_data);
-            adapter_row.inner.rd_ptr = instruction.a;
-            adapter_row.inner.rd_aux_cols.set_prev(
-                F::from_canonical_u32(t_prev),
-                data_prev.map(F::from_canonical_u8),
+            let write_buf = &mut adapter_row.inner;
+            tracing_write_reg(
+                state.memory,
+                rd_ptr,
+                &rd_data,
+                (&mut write_buf.rd_ptr, &mut write_buf.rd_aux_cols),
             );
             adapter_row.needs_write = F::ONE;
         } else {

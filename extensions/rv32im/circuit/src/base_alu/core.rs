@@ -34,7 +34,10 @@ use openvm_stark_backend::{
 };
 use strum::IntoEnumIterator;
 
-use crate::adapters::{tracing_read_reg, tracing_write_reg, Rv32BaseAluAdapterCols};
+use crate::adapters::{
+    timed_read_reg, timed_write_reg, tracing_read_reg, tracing_read_reg_or_imm, tracing_write_reg,
+    Rv32BaseAluAdapterCols,
+};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -238,62 +241,47 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, 
     }
 }
 
-pub struct Rv32BaseAluCoreChip(pub BaseAluCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>);
+pub struct Rv32BaseAluStep(pub BaseAluCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>);
 
-impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32BaseAluCoreChip {
+impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32BaseAluStep {
     fn execute(
         &mut self,
         state: VmStateMut<TracingMemory, CTX>,
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {
+        let &Instruction { a, b, c, d, e, .. } = instruction;
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         let (adapter_row, core_row) =
             unsafe { row_slice.split_at_mut_unchecked(Rv32BaseAluAdapterCols::<F>::width()) };
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
 
-        let from_timestamp = state.memory.timestamp();
-        let &Instruction { a, b, c, d, e, .. } = instruction;
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert!(
-            e.as_canonical_u32() == RV32_IMM_AS || e.as_canonical_u32() == RV32_REGISTER_AS
-        );
+        state.ins_start(&mut adapter_row.from_state);
 
         let rs1_idx = b.as_canonical_u32();
-        let (rs1_t_prev, rs1) = tracing_read_reg(state.memory, rs1_idx);
-        let (rs2_t_prev, rs2) = if e.is_zero() {
-            let c_u32 = c.as_canonical_u32();
-            debug_assert_eq!(c_u32 >> 24, 0);
-            state.memory.increment_timestamp();
-            (0, c_u32.to_le_bytes())
-        } else {
-            let rs2_idx = c.as_canonical_u32();
-            tracing_read_reg(state.memory, rs2_idx)
-        };
+        let rs1 = tracing_read_reg(
+            state.memory,
+            rs1_idx,
+            (&mut adapter_row.rs1_ptr, &mut adapter_row.reads_aux[0]),
+        );
+        let rs2 = tracing_read_reg_or_imm(
+            state.memory,
+            e.as_canonical_u32(),
+            c.as_canonical_u32(),
+            &mut adapter_row.rs2_as,
+            (&mut adapter_row.rs2, &mut adapter_row.reads_aux[1]),
+        );
 
         let output = self.0.core_execute(instruction, [rs1, rs2], core_row);
+
         let rd_idx = a.as_canonical_u32();
-        let (rd_t_prev, rd_prev) = tracing_write_reg(state.memory, rd_idx, &output);
-
-        adapter_row.from_state.pc = F::from_canonical_u32(*state.pc);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(from_timestamp);
-        adapter_row.rd_ptr = a;
-        adapter_row.rs1_ptr = b;
-        adapter_row.rs2 = c;
-        adapter_row.rs2_as = e;
-        adapter_row.reads_aux[0].set_prev(F::from_canonical_u32(rs1_t_prev));
-        if !e.is_zero() {
-            adapter_row.reads_aux[1].set_prev(F::from_canonical_u32(rs2_t_prev));
-        }
-        adapter_row.writes_aux.set_prev(
-            F::from_canonical_u32(rd_t_prev),
-            rd_prev.map(F::from_canonical_u8),
+        tracing_write_reg(
+            state.memory,
+            rd_idx,
+            &output,
+            (&mut adapter_row.rd_ptr, &mut adapter_row.writes_aux),
         );
 
-        debug_assert_eq!(
-            state.memory.timestamp(),
-            from_timestamp + 3,
-            "incorrect timestamp delta"
-        );
         *state.pc += DEFAULT_PC_STEP;
         Ok(())
     }

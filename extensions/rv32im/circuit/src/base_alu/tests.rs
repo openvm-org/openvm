@@ -29,7 +29,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
-use super::{core::run_alu, BaseAluCoreChip, Rv32BaseAluChip, Rv32BaseAluCoreChip};
+use super::{core::run_alu, BaseAluCoreChip, Rv32BaseAluChip, Rv32BaseAluStep};
 use crate::{
     adapters::{
         Rv32BaseAluAdapterAir, Rv32BaseAluAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
@@ -49,7 +49,7 @@ fn create_test_chip(
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let core = Rv32BaseAluCoreChip(BaseAluCoreChip::new(
+    let core = Rv32BaseAluStep(BaseAluCoreChip::new(
         bitwise_chip.clone(),
         BaseAluOpcode::CLASS_OFFSET,
     ));

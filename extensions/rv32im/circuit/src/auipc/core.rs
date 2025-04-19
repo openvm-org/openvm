@@ -238,11 +238,11 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
 
         debug_assert_eq!(instruction.d.as_canonical_u32(), RV32_REGISTER_AS);
         let rd_ptr = instruction.a.as_canonical_u32();
-        let (t_prev, data_prev) = tracing_write_reg(state.memory, rd_ptr, &rd_data);
-        adapter_row.rd_ptr = instruction.a;
-        adapter_row.rd_aux_cols.set_prev(
-            F::from_canonical_u32(t_prev),
-            data_prev.map(F::from_canonical_u8),
+        tracing_write_reg(
+            state.memory,
+            rd_ptr,
+            &rd_data,
+            (&mut adapter_row.rd_ptr, &mut adapter_row.rd_aux_cols),
         );
         core_row.rd_data = rd_data.map(F::from_canonical_u8);
         // We decompose during fill_trace_row later:
