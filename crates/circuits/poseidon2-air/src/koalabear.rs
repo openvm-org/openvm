@@ -49,13 +49,10 @@ fn baby_bear_rc() -> Poseidon2Constants<KoalaBear> {
     let first_seven: Vec<_> = constants
         .partial_round_constants
         .iter()
-        .take(6)
+        .take(7)
         .cloned()
         .collect();
     constants.partial_round_constants.extend(first_seven);
-    constants
-        .partial_round_constants
-        .push(KoalaBear::from_canonical_u32(12));
     constants
 }
 
