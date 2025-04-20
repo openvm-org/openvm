@@ -36,13 +36,13 @@ To see how more complex inputs can be converted into a VM-readable format, see t
 
 ## Generating a Proof
 
-Given an app configuration TOML file, you first need to generate a proving and verifying key:
+To generate a proof, you first need to generate a proving and verifying key:
 
 ```bash
 cargo openvm keygen
 ```
 
-After generating the keys, you can generate a proof by running:
+If you are using custom VM extensions, this will depend on the `openvm.toml` file which encodes the VM extension configuration; see the [custom extensions](../custom-extensions/overview.md) docs for more information about `openvm.toml`. After generating the keys, you can generate a proof by running:
 
 ```bash
 cargo openvm prove app --input <path_to_input | hex_string>
