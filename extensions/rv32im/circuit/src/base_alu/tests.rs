@@ -141,6 +141,7 @@ fn rv32_alu_and_rand_test() {
 
 type Rv32BaseAluTestChip<F> =
     VmChipWrapper<F, TestAdapterChip<F>, BaseAluCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+// TODO: FIX NEGATIVE TESTS
 
 #[allow(clippy::too_many_arguments)]
 fn run_rv32_alu_negative_test(
@@ -152,6 +153,15 @@ fn run_rv32_alu_negative_test(
 ) {
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
+    // let mut chip = Rv32BaseAluTestChip::<F>::new(
+    //     TestAdapterChip::new(
+    //         vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat()],
+    //         vec![None],
+    //         ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
+    //     ),
+    //     BaseAluCoreChip::new(bitwise_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
+    //     tester.offline_memory_mutex_arc(),
+    // );
 
     tester.execute(
         &mut chip,

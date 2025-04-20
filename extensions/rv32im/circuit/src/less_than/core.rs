@@ -6,8 +6,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, InsExecutorE1, MinimalInstruction, Result, SingleTraceStep,
-        VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
+        AdapterAirContext, AdapterTraceStep, InsExecutorE1, MinimalInstruction, Result,
+        SingleTraceStep, VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -15,7 +15,9 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip,
+    },
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -35,8 +37,6 @@ use openvm_stark_backend::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_big_array::BigArray;
 use strum::IntoEnumIterator;
-
-use crate::adapters::BaseAluAdapterTraceStep;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -316,13 +316,14 @@ impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<
     for LessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: BaseAluAdapterTraceStep<
-        F,
-        CTX,
-        LIMB_BITS,
-        ReadData = [[u8; NUM_LIMBS]; 2],
-        WriteData = [u8; NUM_LIMBS],
-    >,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = [[u8; NUM_LIMBS]; 2],
+            WriteData = [u8; NUM_LIMBS],
+            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
+        >,
 {
     fn execute(
         &mut self,

@@ -7,8 +7,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, InsExecutorE1, MinimalInstruction, Result, SingleTraceStep,
-        VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
+        AdapterAirContext, AdapterTraceStep, InsExecutorE1, MinimalInstruction, Result,
+        SingleTraceStep, VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -16,7 +16,9 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip,
+    },
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -34,8 +36,6 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
-
-use crate::adapters::BaseAluAdapterTraceStep;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -208,6 +208,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, 
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let z = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &x, &y);
+        println!("{local_opcode:?} {x:?}, {y:?}: {z:?}");
 
         let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
         core_row.a = z.map(F::from_canonical_u8);
@@ -249,13 +250,14 @@ impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<
     for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: BaseAluAdapterTraceStep<
-        F,
-        CTX,
-        LIMB_BITS,
-        ReadData = [[u8; NUM_LIMBS]; 2],
-        WriteData = [u8; NUM_LIMBS],
-    >,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = [[u8; NUM_LIMBS]; 2],
+            WriteData = [u8; NUM_LIMBS],
+            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
+        >,
 {
     fn execute(
         &mut self,
@@ -363,8 +365,10 @@ fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     let mut z = [0u8; NUM_LIMBS];
     let mut carry = [0u8; NUM_LIMBS];
     for i in 0..NUM_LIMBS {
-        let overflow = x[i] as u16 + y[i] as u16 + if i > 0 { carry[i - 1] as u16 } else { 0 };
+        let mut overflow =
+            (x[i] as u16) + (y[i] as u16) + if i > 0 { carry[i - 1] as u16 } else { 0 };
         carry[i] = (overflow >> LIMB_BITS) as u8;
+        overflow &= (1u16 << LIMB_BITS) - 1;
         z[i] = overflow as u8;
     }
     z

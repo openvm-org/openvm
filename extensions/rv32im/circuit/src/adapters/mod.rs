@@ -137,7 +137,11 @@ pub fn tracing_read_reg_or_imm<F: PrimeField32>(
         *reg_ptr_or_imm_mut = F::from_canonical_u32(imm);
         debug_assert_eq!(imm >> 24, 0); // highest byte should be zero to prevent overflow
         memory.increment_timestamp();
-        imm.to_le_bytes()
+        let mut imm_le = imm.to_le_bytes();
+        // Important: we set the highest byte equal to the second highest byte, using the assumption
+        // that imm is at most 24 bits
+        imm_le[3] = imm_le[2];
+        imm_le
     } else {
         *addr_space_mut = F::ONE; // F::from_canonical_u32(RV32_REGISTER_AS)
         let reg_ptr = reg_ptr_or_imm;

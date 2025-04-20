@@ -2,8 +2,8 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, BasicAdapterInterface, ExecutionBridge, ExecutionState,
-        MinimalInstruction, VmAdapterAir, VmStateMut,
+        AdapterAirContext, AdapterTraceStep, BasicAdapterInterface, ExecutionBridge,
+        ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -158,47 +158,16 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
     }
 }
 
-// TODO[jpw]: switch read,write to store into abstract buffer, then fill_trace_row using buffer
-/// Trait for generic state access steps necessary for base ALU interface.
-/// To be used within [SingleTraceStep](openvm_circuit::arch::SingleTraceStep) implementation.
-pub trait BaseAluAdapterTraceStep<F, CTX, const LIMB_BITS: usize> {
-    /// Adapter row width
-    const WIDTH: usize;
-    type ReadData;
-    type WriteData;
-
-    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]);
-
-    fn read(
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        adapter_row: &mut [F],
-    ) -> Self::ReadData;
-
-    fn write(
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        adapter_row: &mut [F],
-        data: &Self::WriteData,
-    );
-
-    /// Post-execution filling of rest of adapter row.
-    fn fill_trace_row(
-        mem_helper: &MemoryAuxColsFactory<F>,
-        bitwise_lookup_chip: &BitwiseOperationLookupChip<LIMB_BITS>,
-        adapter_row: &mut [F],
-    );
-}
-
 #[derive(derive_new::new)]
-pub struct Rv32BaseAluAdapterStep;
+pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize>;
 
-impl<F: PrimeField32, CTX, const LIMB_BITS: usize> BaseAluAdapterTraceStep<F, CTX, LIMB_BITS>
-    for Rv32BaseAluAdapterStep
+impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
+    for Rv32BaseAluAdapterStep<LIMB_BITS>
 {
     const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
     type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]) {

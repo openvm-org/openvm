@@ -371,6 +371,47 @@ where
     }
 }
 
+// TODO[jpw]: switch read,write to store into abstract buffer, then fill_trace_row using buffer
+/// A helper trait for expressing generic state accesses within the implementation of
+/// [SingleTraceStep]. Note that this is only a helper trait when the same interface of state access
+/// is re-used or shared by multiple implementations. It is not required to implement this trait if
+/// it is easier to implement the [SingleTraceStep] trait directly without this trait.
+pub trait AdapterTraceStep<F, CTX> {
+    /// Adapter row width
+    const WIDTH: usize;
+    type ReadData;
+    type WriteData;
+    /// The minimal amount of information needed to generate the sub-row of the trace matrix.
+    /// This type has a lifetime so other context, such as references to other chips, can be
+    /// provided.
+    type TraceContext<'a>
+    where
+        Self: 'a;
+
+    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]);
+
+    fn read(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+    ) -> Self::ReadData;
+
+    fn write(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+        data: &Self::WriteData,
+    );
+
+    // Note[jpw]: should we re-use TraceSubRowGenerator trait instead?
+    /// Post-execution filling of rest of adapter row.
+    fn fill_trace_row(
+        mem_helper: &MemoryAuxColsFactory<F>,
+        ctx: Self::TraceContext<'_>,
+        adapter_row: &mut [F],
+    );
+}
+
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {
     pub adapter: A,
     pub core: C,

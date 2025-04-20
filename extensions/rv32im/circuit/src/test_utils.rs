@@ -42,5 +42,13 @@ pub fn generate_rv32_is_type_immediate(rng: &mut StdRng) -> (usize, [u8; RV32_RE
     if (imm & 0x800) != 0 {
         imm |= !0xFFF
     }
-    ((imm & 0xFFFFFF) as usize, imm.to_le_bytes())
+    (
+        (imm & 0xFFFFFF) as usize,
+        [
+            imm as u8,
+            (imm >> 8) as u8,
+            (imm >> 16) as u8,
+            (imm >> 16) as u8,
+        ],
+    )
 }
