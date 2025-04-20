@@ -18,14 +18,16 @@ use rand::distributions::Standard;
 use rand::Rng;
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 
-use crate::{Poseidon2Constants, POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_WIDTH};
+use crate::{
+    default_baby_bear_rc, Poseidon2Constants, POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_WIDTH,
+};
 
 // KoalaBear only needs SBOX_DEGREE of 3, so we can always set SBOX_REGISTERS to 0.
 pub const KOALABEAR_POSEIDON2_PARTIAL_ROUNDS: usize = 20;
 pub const KOALABEAR_POSEIDON2_SBOX_DEGREE: u64 = 3;
 pub const KOALABEAR_POSEIDON2_SBOX_REGISTERS: usize = 0;
 
-pub(crate) fn rng_round_consts() -> Poseidon2Constants<KoalaBear> {
+pub(crate) fn _rng_round_consts() -> Poseidon2Constants<KoalaBear> {
     let mut rng = ChaCha20Rng::from_seed(Default::default());
     let partial_round_constants: [KoalaBear; KOALABEAR_POSEIDON2_PARTIAL_ROUNDS] =
         core::array::from_fn(|_| rng.sample(Standard));
@@ -37,7 +39,28 @@ pub(crate) fn rng_round_consts() -> Poseidon2Constants<KoalaBear> {
     }
 }
 
-static KOALABEAR_CONSTS: Lazy<Poseidon2Constants<KoalaBear>> = Lazy::new(rng_round_consts);
+// Because trait StarkFriEngine's new function doesn't take in round constants, using
+// randomized constants is unnecessarily difficult. As this is just for testing, we'll
+// use the default round constants from BabyBear since KoalaBear > BabyBear.
+//
+// TODO[stephenh]: remove this
+fn baby_bear_rc() -> Poseidon2Constants<KoalaBear> {
+    let mut constants = default_baby_bear_rc::<KoalaBear>();
+    let first_seven: Vec<_> = constants
+        .partial_round_constants
+        .iter()
+        .take(6)
+        .cloned()
+        .collect();
+    constants.partial_round_constants.extend(first_seven);
+    constants
+        .partial_round_constants
+        .push(KoalaBear::from_canonical_u32(12));
+    constants
+}
+
+static KOALABEAR_CONSTS: Lazy<Poseidon2Constants<KoalaBear>> = Lazy::new(baby_bear_rc);
+// static KOALABEAR_CONSTS: Lazy<Poseidon2Constants<KoalaBear>> = Lazy::new(rng_round_consts);
 lazy_static! {
     pub static ref KOALABEAR_BEGIN_EXT_CONSTS: [[KoalaBear; POSEIDON2_WIDTH]; POSEIDON2_HALF_FULL_ROUNDS] =
         KOALABEAR_CONSTS.beginning_full_round_constants;
@@ -100,7 +123,7 @@ impl<FA: FieldAlgebra> GenericPoseidon2LinearLayers<FA, POSEIDON2_WIDTH>
 }
 
 pub fn koalabear_engine(fri_params: FriParameters) -> KoalaBearPoseidon2Engine {
-    let perm = perm_from_constants::<POSEIDON2_WIDTH>(
+    let perm = perm_from_constants(
         KOALABEAR_BEGIN_EXT_CONSTS.to_vec(),
         KOALABEAR_END_EXT_CONSTS.to_vec(),
         KOALABEAR_PARTIAL_CONSTS.clone(),

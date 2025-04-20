@@ -5,17 +5,21 @@ use openvm_stark_backend::{
     verifier::VerificationError,
 };
 use openvm_stark_sdk::{
-    config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
-    engine::StarkFriEngine, p3_koala_bear::KoalaBear, utils::create_seeded_rng,
+    config::{
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        koala_bear_poseidon2::KoalaBearPoseidon2Engine,
+    },
+    engine::StarkFriEngine,
+    p3_koala_bear::KoalaBear,
+    utils::create_seeded_rng,
 };
 use p3_poseidon2::ExternalLayerConstants;
 use rand::{rngs::StdRng, Rng, RngCore};
 
 use super::{Poseidon2Config, Poseidon2Constants, Poseidon2SubChip};
 use crate::{
-    default_koalabear_rc, koalabear_engine, KOALABEAR_POSEIDON2_PARTIAL_ROUNDS,
-    KOALABEAR_POSEIDON2_SBOX_DEGREE, KOALABEAR_POSEIDON2_SBOX_REGISTERS,
-    POSEIDON2_HALF_FULL_ROUNDS,
+    default_koalabear_rc, KOALABEAR_POSEIDON2_PARTIAL_ROUNDS, KOALABEAR_POSEIDON2_SBOX_DEGREE,
+    KOALABEAR_POSEIDON2_SBOX_REGISTERS, POSEIDON2_HALF_FULL_ROUNDS,
 };
 
 fn run_poseidon2_subchip_test(
@@ -42,7 +46,7 @@ fn run_poseidon2_subchip_test(
     let mut poseidon2_trace = subchip.generate_trace(states.clone());
 
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(3); // max constraint degree = 7 requires log blowup = 3
-    let engine = koalabear_engine(fri_params);
+    let engine = KoalaBearPoseidon2Engine::new(fri_params);
 
     // positive test
     engine
