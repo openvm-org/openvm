@@ -1,7 +1,8 @@
 use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
 
-use super::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use crate::adapters::{Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep};
+use super::adapters::{
+    Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
 
 mod core;
 pub use core::*;
