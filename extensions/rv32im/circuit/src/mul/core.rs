@@ -181,8 +181,8 @@ where
         );
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
-        let b = data[0].map(|x| x.as_canonical_u32() as u8);
-        let c = data[1].map(|y| y.as_canonical_u32() as u8);
+        let b = data[0].map(|x| u8::try_from(x.as_canonical_u32()).unwrap());
+        let c = data[1].map(|y| u8::try_from(y.as_canonical_u32()).unwrap());
         let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&b, &c);
 
         for (a, carry) in a.iter().zip(carry.iter()) {
