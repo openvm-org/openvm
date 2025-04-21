@@ -80,6 +80,7 @@ def create_flamegraph(fname, metrics_dict, group_by_kvs, stack_keys, metric_name
         command = ["inferno-flamegraph", "--title", f"{fname} {' '.join(suffixes)} {metric_name}", stacks_path]
         if reverse:
             command.append("--reverse")
+            command.append("--inverted")
 
         subprocess.run(command, stdout=f, check=False)
         print(f"Created flamegraph at {flamegraph_path}")
