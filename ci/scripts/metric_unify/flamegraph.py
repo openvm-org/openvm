@@ -147,11 +147,11 @@ def main():
 
     argparser = argparse.ArgumentParser()
     argparser.add_argument('metrics_json', type=str, help="Path to the metrics JSON")
-    argparser.add_argument('--metrics_syms', type=str, help="Path to the metrics symbols", default=None, required=False)
+    argparser.add_argument('--guest-symbols', type=str, help="Path to the guest symbols file", default=None, required=False)
     args = argparser.parse_args()
 
-    if args.metrics_syms:
-        with open(args.metrics_syms, 'rb') as f:
+    if args.guest_symbols:
+        with open(args.guest_symbols, 'rb') as f:
             string_table = f.read()
     else:
         string_table = None
