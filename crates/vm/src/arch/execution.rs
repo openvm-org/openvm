@@ -111,16 +111,18 @@ pub trait InstructionExecutor<F> {
 }
 
 /// New trait for instruction execution
-pub trait InsExecutorE1<Mem, Ctx, F>
+/// Should be implemented by all VM chips that execute an instruction
+pub trait InsExecutorE1<F>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
-    fn execute_e1(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>;
+    ) -> Result<()>
+    where
+        Mem: GuestMemory;
 }
 
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {

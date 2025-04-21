@@ -3,16 +3,13 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::{
-    arch::{
-        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, InsExecutorE1, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
-    },
-    system::memory::online::GuestMemory,
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::utils::not;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,

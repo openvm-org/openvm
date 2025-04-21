@@ -412,6 +412,23 @@ pub trait AdapterTraceStep<F, CTX> {
     );
 }
 
+// pub trait AdapterExecutorE1<F> {
+//     type ReadData;
+//     type WriteData;
+
+//     fn read(memory: &mut TracingMemory, instruction: &Instruction<F>) -> Self::ReadData;
+
+//     fn write(memory: &mut TracingMemory, instruction: &Instruction<F>, data: &Self::WriteData);
+// }
+
+// pub trait CoreExecutorE1<F, Mem, Ctx> {
+//     fn execute_e1(
+//         &mut self,
+//         state: VmStateMut<Mem, Ctx>,
+//         instruction: &Instruction<F>,
+//     ) -> Result<()>;
+// }
+
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {
     pub adapter: A,
     pub core: C,
@@ -464,37 +481,37 @@ where
     }
 }
 
-// TODO(ayush): delete
-impl<Mem, Ctx, F, A, M> InsExecutorE1<Mem, Ctx, F> for VmChipWrapper<F, A, M>
-where
-    Mem: GuestMemory,
-    F: PrimeField32,
-    A: VmAdapterChip<F> + Send + Sync,
-    M: VmCoreChip<F, A::Interface> + InsExecutorE1<Mem, Ctx, F> + Send + Sync,
-{
-    fn execute_e1(
-        &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()> {
-        self.core.execute_e1(state, instruction)
-    }
-}
+// // TODO(ayush): delete
+// impl<Mem, Ctx, F, A, M> InsExecutorE1<Mem, Ctx, F> for VmChipWrapper<F, A, M>
+// where
+//     Mem: GuestMemory,
+//     F: PrimeField32,
+//     A: VmAdapterChip<F> + Send + Sync,
+//     M: VmCoreChip<F, A::Interface> + InsExecutorE1<Mem, Ctx, F> + Send + Sync,
+// {
+//     fn execute_e1(
+//         &mut self,
+//         state: &mut VmExecutionState<Mem, Ctx>,
+//         instruction: &Instruction<F>,
+//     ) -> Result<()> {
+//         self.core.execute_e1(state, instruction)
+//     }
+// }
 
-impl<Mem, Ctx, F, A, S> InsExecutorE1<Mem, Ctx, F> for NewVmChipWrapper<F, A, S>
-where
-    Mem: GuestMemory,
-    F: PrimeField32,
-    S: InsExecutorE1<Mem, Ctx, F>,
-{
-    fn execute_e1(
-        &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()> {
-        self.step.execute_e1(state, instruction)
-    }
-}
+// impl<Mem, Ctx, F, A, S> InsExecutorE1<Mem, Ctx, F> for NewVmChipWrapper<F, A, S>
+// where
+//     Mem: GuestMemory,
+//     F: PrimeField32,
+//     S: InsExecutorE1<Mem, Ctx, F>,
+// {
+//     fn execute_e1(
+//         &mut self,
+//         state: &mut VmExecutionState<Mem, Ctx>,
+//         instruction: &Instruction<F>,
+//     ) -> Result<()> {
+//         self.step.execute_e1(state, instruction)
+//     }
+// }
 
 // Note[jpw]: the statement we want is:
 // - when A::Air is an AdapterAir for all AirBuilders needed by stark-backend

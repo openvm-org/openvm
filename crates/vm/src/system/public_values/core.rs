@@ -2,8 +2,7 @@ use std::sync::Mutex;
 
 use openvm_circuit_primitives::{encoder::Encoder, SubAir};
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, PublishOpcode,
-    PublishOpcode::PUBLISH,
+    instruction::Instruction, LocalOpcode, PublishOpcode, PublishOpcode::PUBLISH,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -15,10 +14,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, InsExecutorE1,
-        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, MinimalInstruction,
+        Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
-    system::{memory::online::GuestMemory, public_values::columns::PublicValuesCoreColsView},
+    system::public_values::columns::PublicValuesCoreColsView,
 };
 pub(crate) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
 pub(crate) type AdapterInterfaceReads<F> = <AdapterInterface<F> as VmAdapterInterface<F>>::Reads;
@@ -111,7 +110,7 @@ pub struct PublicValuesRecord<F> {
 pub struct PublicValuesCoreChip<F> {
     air: PublicValuesCoreAir,
     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
-    custom_pvs: Mutex<Vec<Option<F>>>,
+    pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,
 }
 
 impl<F: PrimeField32> PublicValuesCoreChip<F> {
@@ -190,45 +189,5 @@ impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChi
 
     fn air(&self) -> &Self::Air {
         &self.air
-    }
-}
-
-impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for PublicValuesCoreChip<F>
-where
-    Mem: GuestMemory,
-    F: PrimeField32,
-{
-    fn execute_e1(
-        &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()> {
-        let Instruction { b, c, e, f, .. } = instruction;
-
-        let [value]: [F; 1] = unsafe {
-            state
-                .memory
-                .read(e.as_canonical_u32(), b.as_canonical_u32())
-        };
-        let [index]: [F; 1] = unsafe {
-            state
-                .memory
-                .read(f.as_canonical_u32(), c.as_canonical_u32())
-        };
-        {
-            let idx: usize = index.as_canonical_u32() as usize;
-            let mut custom_pvs = self.custom_pvs.lock().unwrap();
-
-            if custom_pvs[idx].is_none() {
-                custom_pvs[idx] = Some(value);
-            } else {
-                panic!("Custom public value {} already set", idx);
-            }
-        }
-        // TODO(ayush): should there be a write?
-
-        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
     }
 }
