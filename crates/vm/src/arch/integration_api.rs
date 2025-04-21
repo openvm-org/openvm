@@ -374,7 +374,7 @@ where
 // TODO[jpw]: switch read,write to store into abstract buffer, then fill_trace_row using buffer
 /// A helper trait for expressing generic state accesses within the implementation of
 /// [SingleTraceStep]. Note that this is only a helper trait when the same interface of state access
-/// is re-used or shared by multiple implementations. It is not required to implement this trait if
+/// is reused or shared by multiple implementations. It is not required to implement this trait if
 /// it is easier to implement the [SingleTraceStep] trait directly without this trait.
 pub trait AdapterTraceStep<F, CTX> {
     /// Adapter row width
@@ -403,7 +403,7 @@ pub trait AdapterTraceStep<F, CTX> {
         data: &Self::WriteData,
     );
 
-    // Note[jpw]: should we re-use TraceSubRowGenerator trait instead?
+    // Note[jpw]: should we reuse TraceSubRowGenerator trait instead?
     /// Post-execution filling of rest of adapter row.
     fn fill_trace_row(
         mem_helper: &MemoryAuxColsFactory<F>,
