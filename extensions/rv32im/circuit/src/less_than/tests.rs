@@ -3,7 +3,7 @@ use std::borrow::BorrowMut;
 use openvm_circuit::{
     arch::{
         testing::{TestAdapterChip, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        ExecutionBridge, VmAdapterChip, VmChipWrapper,
+        NewVmChipWrapper, VmAirWrapper, VmChipWrapper,
     },
     utils::{generate_long_number, i32_to_f},
 };
@@ -26,15 +26,39 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
-use super::{core::run_less_than, LessThanCoreChip, Rv32LessThanChip};
+use super::{core::run_less_than, LessThanCoreChip, Rv32LessThanChip, Rv32LessThanStep};
 use crate::{
-    adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    adapters::{Rv32BaseAluAdapterAir, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     less_than::LessThanCoreCols,
     test_utils::{generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm},
 };
 
 type F = BabyBear;
+const MAX_INS_CAPACITY: usize = 128;
 
+fn create_test_chip(
+    tester: &VmChipTestBuilder<F>,
+) -> (
+    Rv32LessThanChip<F>,
+    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let step = Rv32LessThanStep::new(LessThanCoreChip::new(
+        bitwise_chip.clone(),
+        LessThanOpcode::CLASS_OFFSET,
+    ));
+    let air = VmAirWrapper::new(
+        Rv32BaseAluAdapterAir::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            bitwise_bus,
+        ),
+        step.core.air,
+    );
+    let chip = NewVmChipWrapper::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
+    (chip, bitwise_chip)
+}
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
 //
@@ -44,27 +68,17 @@ type F = BabyBear;
 
 fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = Rv32LessThanChip::<F>::new(
-        Rv32BaseAluAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-            bitwise_chip.clone(),
-        ),
-        LessThanCoreChip::new(bitwise_chip.clone(), LessThanOpcode::CLASS_OFFSET),
-        tester.offline_memory_mutex_arc(),
-    );
-
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
     for _ in 0..num_ops {
-        let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
+        let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng)
+            .map(|x| x as u8);
         let (c_imm, c) = if rng.gen_bool(0.5) {
             (
                 None,
-                generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng),
+                generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng)
+                    .map(|x| x as u8),
             )
         } else {
             let (imm, c) = generate_rv32_is_type_immediate(&mut rng);
@@ -147,33 +161,21 @@ struct LessThanPrankValues<const NUM_LIMBS: usize> {
 #[allow(clippy::too_many_arguments)]
 fn run_rv32_lt_negative_test(
     opcode: LessThanOpcode,
-    b: [u32; RV32_REGISTER_NUM_LIMBS],
-    c: [u32; RV32_REGISTER_NUM_LIMBS],
+    b: [u8; RV32_REGISTER_NUM_LIMBS],
+    c: [u8; RV32_REGISTER_NUM_LIMBS],
     cmp_result: bool,
     prank_vals: LessThanPrankValues<RV32_REGISTER_NUM_LIMBS>,
     interaction_error: bool,
 ) {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let mut chip = Rv32LessThanTestChip::<F>::new(
-        TestAdapterChip::new(
-            vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat()],
-            vec![None],
-            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
-        ),
-        LessThanCoreChip::new(bitwise_chip.clone(), LessThanOpcode::CLASS_OFFSET),
-        tester.offline_memory_mutex_arc(),
-    );
-
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
     tester.execute(
         &mut chip,
         &Instruction::from_usize(opcode.global_opcode(), [0, 0, 0, 1, 1]),
     );
 
     let trace_width = chip.trace_width();
-    let adapter_width = BaseAir::<F>::width(chip.adapter.air());
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
     let (_, _, b_sign, c_sign) =
         run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
 
@@ -431,8 +433,8 @@ fn rv32_sltu_wrong_c_msb_sign_negative_test() {
 
 #[test]
 fn run_sltu_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [145, 34, 25, 205];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [73, 35, 25, 205];
+    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [145, 34, 25, 205];
+    let y: [u8; RV32_REGISTER_NUM_LIMBS] = [73, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(LessThanOpcode::SLTU, &x, &y);
     assert!(cmp_result);
@@ -443,8 +445,8 @@ fn run_sltu_sanity_test() {
 
 #[test]
 fn run_slt_same_sign_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [145, 34, 25, 205];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [73, 35, 25, 205];
+    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [145, 34, 25, 205];
+    let y: [u8; RV32_REGISTER_NUM_LIMBS] = [73, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(LessThanOpcode::SLT, &x, &y);
     assert!(cmp_result);
@@ -455,8 +457,8 @@ fn run_slt_same_sign_sanity_test() {
 
 #[test]
 fn run_slt_diff_sign_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [45, 35, 25, 55];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [173, 34, 25, 205];
+    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [45, 35, 25, 55];
+    let y: [u8; RV32_REGISTER_NUM_LIMBS] = [173, 34, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(LessThanOpcode::SLT, &x, &y);
     assert!(!cmp_result);
@@ -467,7 +469,7 @@ fn run_slt_diff_sign_sanity_test() {
 
 #[test]
 fn run_less_than_equal_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [45, 35, 25, 55];
+    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [45, 35, 25, 55];
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(LessThanOpcode::SLT, &x, &x);
     assert!(!cmp_result);

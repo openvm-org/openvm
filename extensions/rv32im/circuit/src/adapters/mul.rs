@@ -31,8 +31,6 @@ use serde::{Deserialize, Serialize};
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::tmp_convert_to_u8s;
 
-/// Reads instructions of the form OP a, b, c, d where \[a:4\]_d = \[b:4\]_d op \[c:4\]_d.
-/// Operand d can only be 1, and there is no immediate support.
 #[derive(Debug)]
 pub struct Rv32MultAdapterChip<F: Field> {
     pub air: Rv32MultAdapterAir,
@@ -82,6 +80,8 @@ pub struct Rv32MultAdapterCols<T> {
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 }
 
+/// Reads instructions of the form OP a, b, c, d where \[a:4\]_d = \[b:4\]_d op \[c:4\]_d.
+/// Operand d can only be 1, and there is no immediate support.
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32MultAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,

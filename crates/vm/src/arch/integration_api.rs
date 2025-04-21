@@ -246,27 +246,27 @@ pub trait SingleTraceStep<F, CTX> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
-pub struct NewVmChipWrapper<F, AIR, C> {
+pub struct NewVmChipWrapper<F, AIR, STEP> {
     pub air: AIR,
-    pub inner: C,
+    pub step: STEP,
     pub trace_buffer: Vec<F>,
     width: usize,
     buffer_idx: usize,
     mem_helper: SharedMemoryHelper<F>,
 }
 
-impl<F, AIR, C> NewVmChipWrapper<F, AIR, C>
+impl<F, AIR, STEP> NewVmChipWrapper<F, AIR, STEP>
 where
     F: Field,
     AIR: BaseAir<F>,
 {
-    pub fn new(air: AIR, inner: C, height: usize, mem_helper: SharedMemoryHelper<F>) -> Self {
+    pub fn new(air: AIR, step: STEP, height: usize, mem_helper: SharedMemoryHelper<F>) -> Self {
         assert!(height == 0 || height.is_power_of_two());
         let width = air.width();
         let trace_buffer = F::zero_vec(height * width);
         Self {
             air,
-            inner,
+            step,
             trace_buffer,
             width,
             buffer_idx: 0,
@@ -275,10 +275,10 @@ where
     }
 }
 
-impl<F, Air, C> InstructionExecutor<F> for NewVmChipWrapper<F, Air, C>
+impl<F, AIR, STEP> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP>
 where
     F: PrimeField32,
-    C: SingleTraceStep<F, ()>, // TODO: CTX?
+    STEP: SingleTraceStep<F, ()>, // TODO: CTX?
 {
     fn execute(
         &mut self,
@@ -305,7 +305,7 @@ where
             self.trace_buffer
                 .get_unchecked_mut(start_idx..self.buffer_idx)
         };
-        self.inner.execute(state, instruction, row_slice)?;
+        self.step.execute(state, instruction, row_slice)?;
         Ok(ExecutionState {
             pc,
             timestamp: memory.memory.timestamp,
@@ -313,7 +313,7 @@ where
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        self.inner.get_opcode_name(opcode)
+        self.step.get_opcode_name(opcode)
     }
 }
 
@@ -321,11 +321,11 @@ where
 // - `Air` is an `Air<AB>` for all `AB: AirBuilder`s needed by stark-backend
 // which is equivalent to saying it implements AirRef<SC>
 // The where clauses to achieve this statement is unfortunately really verbose.
-impl<SC, AIR, C> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, C>
+impl<SC, AIR, STEP> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, STEP>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
-    C: SingleTraceStep<Val<SC>, ()> + Send + Sync,
+    STEP: SingleTraceStep<Val<SC>, ()> + Send + Sync,
     AIR: Clone + AnyRap<SC> + 'static,
 {
     fn air(&self) -> AirRef<SC> {
@@ -346,13 +346,13 @@ where
         self.trace_buffer[..rows_used * self.width]
             .par_chunks_exact_mut(self.width)
             .for_each(|row_slice| {
-                self.inner.fill_trace_row(&mem_helper, row_slice);
+                self.step.fill_trace_row(&mem_helper, row_slice);
             });
         drop(self.mem_helper);
         let trace = RowMajorMatrix::new(self.trace_buffer, self.width);
         // self.inner.finalize(&mut trace, num_records);
 
-        AirProofInput::simple(trace, self.inner.generate_public_values())
+        AirProofInput::simple(trace, self.step.generate_public_values())
     }
 }
 
@@ -369,6 +369,47 @@ where
     fn trace_width(&self) -> usize {
         self.width
     }
+}
+
+// TODO[jpw]: switch read,write to store into abstract buffer, then fill_trace_row using buffer
+/// A helper trait for expressing generic state accesses within the implementation of
+/// [SingleTraceStep]. Note that this is only a helper trait when the same interface of state access
+/// is reused or shared by multiple implementations. It is not required to implement this trait if
+/// it is easier to implement the [SingleTraceStep] trait directly without this trait.
+pub trait AdapterTraceStep<F, CTX> {
+    /// Adapter row width
+    const WIDTH: usize;
+    type ReadData;
+    type WriteData;
+    /// The minimal amount of information needed to generate the sub-row of the trace matrix.
+    /// This type has a lifetime so other context, such as references to other chips, can be
+    /// provided.
+    type TraceContext<'a>
+    where
+        Self: 'a;
+
+    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]);
+
+    fn read(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+    ) -> Self::ReadData;
+
+    fn write(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+        data: &Self::WriteData,
+    );
+
+    // Note[jpw]: should we reuse TraceSubRowGenerator trait instead?
+    /// Post-execution filling of rest of adapter row.
+    fn fill_trace_row(
+        mem_helper: &MemoryAuxColsFactory<F>,
+        ctx: Self::TraceContext<'_>,
+        adapter_row: &mut [F],
+    );
 }
 
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {
@@ -440,18 +481,18 @@ where
     }
 }
 
-impl<Mem, Ctx, F, A, C> InsExecutorE1<Mem, Ctx, F> for NewVmChipWrapper<F, A, C>
+impl<Mem, Ctx, F, A, S> InsExecutorE1<Mem, Ctx, F> for NewVmChipWrapper<F, A, S>
 where
     Mem: GuestMemory,
     F: PrimeField32,
-    C: InsExecutorE1<Mem, Ctx, F>,
+    S: InsExecutorE1<Mem, Ctx, F>,
 {
     fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        self.inner.execute_e1(state, instruction)
+        self.step.execute_e1(state, instruction)
     }
 }
 

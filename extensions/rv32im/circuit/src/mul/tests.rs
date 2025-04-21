@@ -62,8 +62,10 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
     );
 
     for _ in 0..num_ops {
-        let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
-        let c = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
+        let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng)
+            .map(|x| x as u8);
+        let c = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng)
+            .map(|x| x as u8);
 
         let (mut instruction, rd) = rv32_rand_write_register_or_imm(
             &mut tester,
@@ -78,7 +80,7 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
 
         let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
         assert_eq!(
-            a.map(F::from_canonical_u32),
+            a.map(F::from_canonical_u8),
             tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
         )
     }
@@ -112,9 +114,9 @@ type Rv32MultiplicationTestChip<F> = VmChipWrapper<
 
 #[allow(clippy::too_many_arguments)]
 fn run_rv32_mul_negative_test(
-    a: [u32; RV32_REGISTER_NUM_LIMBS],
-    b: [u32; RV32_REGISTER_NUM_LIMBS],
-    c: [u32; RV32_REGISTER_NUM_LIMBS],
+    a: [u8; RV32_REGISTER_NUM_LIMBS],
+    b: [u8; RV32_REGISTER_NUM_LIMBS],
+    c: [u8; RV32_REGISTER_NUM_LIMBS],
     is_valid: bool,
     interaction_error: bool,
 ) {
@@ -128,7 +130,7 @@ fn run_rv32_mul_negative_test(
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32MultiplicationTestChip::<F>::new(
         TestAdapterChip::new(
-            vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat()],
+            vec![[b.map(F::from_canonical_u8), c.map(F::from_canonical_u8)].concat()],
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
@@ -148,7 +150,7 @@ fn run_rv32_mul_negative_test(
     range_tuple_chip.clear();
     if is_valid {
         for (a, carry) in a.iter().zip(carry.iter()) {
-            range_tuple_chip.add_count(&[*a, *carry]);
+            range_tuple_chip.add_count(&[*a as u32, *carry]);
         }
     }
 
@@ -156,7 +158,7 @@ fn run_rv32_mul_negative_test(
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut MultiplicationCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.a = a.map(F::from_canonical_u32);
+        cols.a = a.map(F::from_canonical_u8);
         cols.is_valid = F::from_bool(is_valid);
         *trace = RowMajorMatrix::new(values, trace_width);
     };
@@ -204,9 +206,9 @@ fn rv32_mul_is_valid_false_negative_test() {
 
 #[test]
 fn run_mul_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [197, 85, 150, 32];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [51, 109, 78, 142];
-    let z: [u32; RV32_REGISTER_NUM_LIMBS] = [63, 247, 125, 232];
+    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [197, 85, 150, 32];
+    let y: [u8; RV32_REGISTER_NUM_LIMBS] = [51, 109, 78, 142];
+    let z: [u8; RV32_REGISTER_NUM_LIMBS] = [63, 247, 125, 232];
     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [39, 100, 126, 205];
     let (result, carry) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&x, &y);
     for i in 0..RV32_REGISTER_NUM_LIMBS {

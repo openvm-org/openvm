@@ -181,17 +181,17 @@ where
         );
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
-        let b = data[0].map(|x| x.as_canonical_u32());
-        let c = data[1].map(|y| y.as_canonical_u32());
+        let b = data[0].map(|x| u8::try_from(x.as_canonical_u32()).unwrap());
+        let c = data[1].map(|y| u8::try_from(y.as_canonical_u32()).unwrap());
         let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&b, &c);
 
         for (a, carry) in a.iter().zip(carry.iter()) {
-            self.range_tuple_chip.add_count(&[*a, *carry]);
+            self.range_tuple_chip.add_count(&[*a as u32, *carry]);
         }
 
-        let output = AdapterRuntimeContext::without_pc([a.map(F::from_canonical_u32)]);
+        let output = AdapterRuntimeContext::without_pc([a.map(F::from_canonical_u8)]);
         let record = MultiplicationCoreRecord {
-            a: a.map(F::from_canonical_u32),
+            a: a.map(F::from_canonical_u8),
             b: data[0],
             c: data[1],
         };
@@ -246,13 +246,8 @@ where
         let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
         let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
 
-        // TODO(ayush): remove this conversion
-        let rs1_bytes = rs1_bytes.map(|x| x as u32);
-        let rs2_bytes = rs2_bytes.map(|y| y as u32);
-
         // Perform the multiplication
         let (rd_bytes, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1_bytes, &rs2_bytes);
-        let rd_bytes = rd_bytes.map(|x| x as u8);
 
         // Write result to destination register
         let rd_addr = a.as_canonical_u32();
@@ -266,20 +261,22 @@ where
 
 // returns mul, carry
 pub(super) fn run_mul<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    x: &[u32; NUM_LIMBS],
-    y: &[u32; NUM_LIMBS],
-) -> ([u32; NUM_LIMBS], [u32; NUM_LIMBS]) {
-    let mut result = [0; NUM_LIMBS];
-    let mut carry = [0; NUM_LIMBS];
+    x: &[u8; NUM_LIMBS],
+    y: &[u8; NUM_LIMBS],
+) -> ([u8; NUM_LIMBS], [u32; NUM_LIMBS]) {
+    let mut result = [0u8; NUM_LIMBS];
+    let mut carry = [0u32; NUM_LIMBS];
     for i in 0..NUM_LIMBS {
+        let mut res = 0u32;
         if i > 0 {
-            result[i] = carry[i - 1];
+            res = carry[i - 1];
         }
         for j in 0..=i {
-            result[i] += x[j] * y[i - j];
+            res += (x[j] as u32) * (y[i - j] as u32);
         }
-        carry[i] = result[i] >> LIMB_BITS;
-        result[i] %= 1 << LIMB_BITS;
+        carry[i] = res >> LIMB_BITS;
+        res %= 1u32 << LIMB_BITS;
+        result[i] = res as u8;
     }
     (result, carry)
 }

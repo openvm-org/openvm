@@ -1,7 +1,11 @@
 use std::ops::Mul;
 
-use openvm_circuit::system::memory::{online::TracingMemory, MemoryController, RecordId};
-use openvm_instructions::riscv::RV32_REGISTER_AS;
+use openvm_circuit::system::memory::{
+    offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    online::TracingMemory,
+    MemoryController, RecordId,
+};
+use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 
 mod alu;
@@ -47,7 +51,10 @@ pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
     })
 }
 
-pub fn tracing_read_reg(
+/// Atomic read operation which increments the timestamp by 1.
+/// Returns `(t_prev, [reg_ptr:4]_1)` where `t_prev` is the timestamp of the last memory access.
+#[inline(always)]
+pub fn timed_read_reg(
     memory: &mut TracingMemory,
     reg_ptr: u32,
 ) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
@@ -60,7 +67,8 @@ pub fn tracing_read_reg(
     }
 }
 
-pub fn tracing_write_reg(
+#[inline(always)]
+pub fn timed_write_reg(
     memory: &mut TracingMemory,
     reg_ptr: u32,
     reg_val: &[u8; RV32_REGISTER_NUM_LIMBS],
@@ -77,6 +85,71 @@ pub fn tracing_write_reg(
     }
 }
 
+/// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.
+/// Trace generation relevant to this memory access can be done fully from the recorded buffer.
+#[inline(always)]
+pub fn tracing_read_reg<F: PrimeField32>(
+    memory: &mut TracingMemory,
+    reg_ptr: u32,
+    (reg_ptr_mut, aux_cols): (&mut F, &mut MemoryReadAuxCols<F>), /* TODO[jpw]: switch to raw u8
+                                                                   * buffer */
+) -> [u8; RV32_REGISTER_NUM_LIMBS] {
+    let (t_prev, data) = timed_read_reg(memory, reg_ptr);
+    *reg_ptr_mut = F::from_canonical_u32(reg_ptr);
+    aux_cols.set_prev(F::from_canonical_u32(t_prev));
+    data
+}
+
+/// Writes `reg_ptr, reg_val` into memory and records the memory access in mutable buffer.
+/// Trace generation relevant to this memory access can be done fully from the recorded buffer.
+#[inline(always)]
+pub fn tracing_write_reg<F: PrimeField32>(
+    memory: &mut TracingMemory,
+    reg_ptr: u32,
+    reg_val: &[u8; RV32_REGISTER_NUM_LIMBS],
+    (reg_ptr_mut, aux_cols): (&mut F, &mut MemoryWriteAuxCols<F, RV32_REGISTER_NUM_LIMBS>), /* TODO[jpw]: switch to raw u8
+                                                                                             * buffer */
+) {
+    let (t_prev, data_prev) = timed_write_reg(memory, reg_ptr, reg_val);
+    *reg_ptr_mut = F::from_canonical_u32(reg_ptr);
+    aux_cols.set_prev(
+        F::from_canonical_u32(t_prev),
+        data_prev.map(F::from_canonical_u8),
+    );
+}
+
+/// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.
+/// Trace generation relevant to this memory access can be done fully from the recorded buffer.
+///
+/// Assumes that `addr_space` is [RV32_IMM_AS] or [RV32_REGISTER_AS].
+#[inline(always)]
+pub fn tracing_read_reg_or_imm<F: PrimeField32>(
+    memory: &mut TracingMemory,
+    addr_space: u32,
+    reg_ptr_or_imm: u32,
+    addr_space_mut: &mut F,
+    (reg_ptr_or_imm_mut, aux_cols): (&mut F, &mut MemoryReadAuxCols<F>),
+) -> [u8; RV32_REGISTER_NUM_LIMBS] {
+    debug_assert!(addr_space == RV32_IMM_AS || addr_space == RV32_REGISTER_AS);
+    if addr_space == RV32_IMM_AS {
+        *addr_space_mut = F::ZERO;
+        let imm = reg_ptr_or_imm;
+        *reg_ptr_or_imm_mut = F::from_canonical_u32(imm);
+        debug_assert_eq!(imm >> 24, 0); // highest byte should be zero to prevent overflow
+        memory.increment_timestamp();
+        let mut imm_le = imm.to_le_bytes();
+        // Important: we set the highest byte equal to the second highest byte, using the assumption
+        // that imm is at most 24 bits
+        imm_le[3] = imm_le[2];
+        imm_le
+    } else {
+        *addr_space_mut = F::ONE; // F::from_canonical_u32(RV32_REGISTER_AS)
+        let reg_ptr = reg_ptr_or_imm;
+        tracing_read_reg(memory, reg_ptr, (reg_ptr_or_imm_mut, aux_cols))
+    }
+}
+
+// TODO: delete
 /// Read register value as [RV32_REGISTER_NUM_LIMBS] limbs from memory.
 /// Returns the read record and the register value as u32.
 /// Does not make any range check calls.
