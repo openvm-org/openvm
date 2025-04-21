@@ -6,12 +6,16 @@ import subprocess
 
 from utils import FLAMEGRAPHS_DIR, get_git_root
 
-def get_function_symbol(string_table, symbol_offset):
-    end = string_table.find(b'\0', symbol_offset)
-    if end == -1:
-        print(f"Invalid symbol offset: {symbol_offset}")
-        return None
-    return string_table[symbol_offset:end].decode()
+def get_function_symbol(string_table, offset_str):
+    try:
+        offset_int = int(offset_str)
+        end = string_table.find(b'\0', offset_int)
+        if end == -1:
+            print(f"Invalid symbol offset: {offset_int}")
+            return None
+        return string_table[offset_int:end].decode()
+    except ValueError:
+        return offset_str
 
 
 def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name, sum_metrics=None, string_table=None):
@@ -53,7 +57,7 @@ def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name, sum_met
                     stack_values.append(labels[key])
                 else:
                     symbol_offsets = labels[key].split(';')
-                    function_symbols = [get_function_symbol(string_table, int(offset)) for offset in symbol_offsets]
+                    function_symbols = [get_function_symbol(string_table, offset) for offset in symbol_offsets]
                     stack_values.extend(function_symbols)
             else:
                 stack_values.append(labels[key])
@@ -132,6 +136,7 @@ def create_custom_flamegraphs(metrics_file, group_by=["group"], string_table=Non
         create_flamegraphs(metrics_file, group_by, ["cell_tracker_span"], "cells_used",
                            sum_metrics=["simple_advice_cells", "fixed_cells", "lookup_advice_cells"],
                            reverse=reverse, string_table=string_table)
+
 
 def main():
     import shutil
