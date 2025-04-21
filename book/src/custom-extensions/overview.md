@@ -28,27 +28,40 @@ Our design for the configuration procedure above was inspired by the [EVMMAX pro
 To use these extensions, you must populate an `openvm.toml` in your package root directory (where the `Cargo.toml` file is located).
 We will explain in each extension how to configure the `openvm.toml` file.
 
-The template `openvm.toml` file is as follows:
+A template `openvm.toml` file using the default VM extensions shipping with OpenVM is as follows:
 
 ```toml
 [app_vm_config.rv32i]
+
 [app_vm_config.rv32m]
+range_tuple_checker_sizes = [256, 8192]
+
 [app_vm_config.io]
+
 [app_vm_config.keccak]
+
 [app_vm_config.sha256]
+
 [app_vm_config.native]
+
 [app_vm_config.bigint]
+range_tuple_checker_sizes = [256, 8192]
+
 [app_vm_config.modular]
 supported_modulus = ["<modulus_1>", "<modulus_2>", ...]
+
 [app_vm_config.fp2]
 supported_modulus = ["<modulus_1>", "<modulus_2>", ...]
+
 [app_vm_config.pairing]
 supported_curves = ["Bls12_381", "Bn254"]
+
 [[app_vm_config.ecc.supported_curves]]
 modulus = "<modulus_1>"
 scalar = "<scalar_1>"
 a = "<a_1>"
 b = "<b_1>"
+
 [[app_vm_config.ecc.supported_curves]]
 modulus = "<modulus_2>"
 scalar = "<scalar_2>"
