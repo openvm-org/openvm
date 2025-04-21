@@ -1,5 +1,3 @@
-use itertools::Itertools;
-
 #[derive(Clone, Debug, Default)]
 pub struct CycleTracker {
     /// Stack of span names, with most recent at the end
@@ -9,6 +7,10 @@ pub struct CycleTracker {
 impl CycleTracker {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn top(&self) -> Option<&String> {
+        self.stack.last()
     }
 
     /// Starts a new cycle tracker span for the given name.
@@ -40,7 +42,7 @@ impl CycleTracker {
 
     /// Get full name of span with all parent names separated by ";" in flamegraph format
     pub fn get_full_name(&self) -> String {
-        self.stack.iter().dedup().join(";")
+        self.stack.join(";")
     }
 }
 
