@@ -11,7 +11,7 @@ use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::CastfOpcode;
 use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::{
@@ -199,10 +199,36 @@ where
 {
     fn execute_e1(
         &mut self,
-        _state: &mut VmExecutionState<Mem, Ctx>,
-        _instruction: &Instruction<F>,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
     ) -> Result<()> {
-        todo!("Implement execute_e1")
+        let Instruction {
+            opcode, a, b, d, e, ..
+        } = instruction;
+
+        assert_eq!(
+            opcode.local_opcode_idx(CastfOpcode::CLASS_OFFSET),
+            CastfOpcode::CASTF as usize
+        );
+
+        // TODO(ayush): check if can be read directly as [u8; 4] or u32?
+        let [y]: [F; 1] = unsafe {
+            state
+                .memory
+                .read(e.as_canonical_u32(), b.as_canonical_u32())
+        };
+        let x = CastF::solve(y.as_canonical_u32());
+        let x = x.map(F::from_canonical_u32);
+
+        unsafe {
+            state
+                .memory
+                .write::<F, 4>(d.as_canonical_u32(), a.as_canonical_u32(), &x);
+        };
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }
 

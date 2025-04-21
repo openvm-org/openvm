@@ -13,7 +13,7 @@ use openvm_circuit::{
     system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::instruction::Instruction;
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_native_compiler::NativeLoadStoreOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -210,9 +210,75 @@ where
 {
     fn execute_e1(
         &mut self,
-        _state: &mut VmExecutionState<Mem, Ctx>,
-        _instruction: &Instruction<F>,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
     ) -> Result<()> {
-        todo!("Implement execute_e1")
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = instruction;
+
+        // Get the local opcode for this instruction
+        let local_opcode =
+            NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+
+        // Read the pointer
+        let read_as = d.as_canonical_u32();
+        let read_ptr = c.as_canonical_u32();
+        let [read_cell]: [F; 1] = unsafe { state.memory.read(read_as, read_ptr) };
+
+        // Determine read/write addresses based on opcode
+        let (data_read_as, data_write_as) = match local_opcode {
+            NativeLoadStoreOpcode::LOADW => (e.as_canonical_u32(), d.as_canonical_u32()),
+            NativeLoadStoreOpcode::STOREW | NativeLoadStoreOpcode::HINT_STOREW => {
+                (d.as_canonical_u32(), e.as_canonical_u32())
+            }
+        };
+
+        let (data_read_ptr, data_write_ptr) = match local_opcode {
+            NativeLoadStoreOpcode::LOADW => (read_cell + *b, *a),
+            NativeLoadStoreOpcode::STOREW | NativeLoadStoreOpcode::HINT_STOREW => {
+                (*a, read_cell + *b)
+            }
+        };
+
+        let data_read: [F; NUM_CELLS] = match local_opcode {
+            NativeLoadStoreOpcode::HINT_STOREW => [F::ZERO; NUM_CELLS],
+            NativeLoadStoreOpcode::LOADW | NativeLoadStoreOpcode::STOREW => {
+                let data_read: [F; NUM_CELLS] = unsafe {
+                    state
+                        .memory
+                        .read(data_read_as, data_read_ptr.as_canonical_u32())
+                };
+                data_read
+            }
+        };
+
+        let data = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
+            let mut streams = self.streams.get().unwrap().lock().unwrap();
+            if streams.hint_stream.len() < NUM_CELLS {
+                return Err(ExecutionError::HintOutOfBounds { pc: state.pc });
+            }
+            array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
+        } else {
+            data_read
+        };
+
+        unsafe {
+            state.memory.write::<F, NUM_CELLS>(
+                data_write_as,
+                data_write_ptr.as_canonical_u32(),
+                &data,
+            )
+        };
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }

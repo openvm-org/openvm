@@ -9,8 +9,11 @@ use openvm_circuit::{
     system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_native_compiler::FieldArithmeticOpcode::{self, *};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_native_compiler::{
+    conversion::AS,
+    FieldArithmeticOpcode::{self, *},
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -212,10 +215,44 @@ where
 {
     fn execute_e1(
         &mut self,
-        _state: &mut VmExecutionState<Mem, Ctx>,
-        _instruction: &Instruction<F>,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
     ) -> Result<()> {
-        todo!("Implement execute_e1")
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            e,
+            f,
+            ..
+        } = instruction;
+
+        let local_opcode = FieldArithmeticOpcode::from_usize(
+            opcode.local_opcode_idx(FieldArithmeticOpcode::CLASS_OFFSET),
+        );
+
+        let [b_val]: [F; 1] = unsafe {
+            state
+                .memory
+                .read(e.as_canonical_u32(), b.as_canonical_u32())
+        };
+        let [c_val]: [F; 1] = unsafe {
+            state
+                .memory
+                .read(f.as_canonical_u32(), c.as_canonical_u32())
+        };
+        let a_val = FieldArithmetic::run_field_arithmetic(local_opcode, b_val, c_val).unwrap();
+
+        unsafe {
+            state
+                .memory
+                .write::<F, 1>(AS::Native as u32, a.as_canonical_u32(), &[a_val])
+        }
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }
 

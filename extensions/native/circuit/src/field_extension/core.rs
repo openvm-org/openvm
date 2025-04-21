@@ -13,7 +13,7 @@ use openvm_circuit::{
     system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::FieldExtensionOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -238,10 +238,48 @@ where
 {
     fn execute_e1(
         &mut self,
-        _state: &mut VmExecutionState<Mem, Ctx>,
-        _instruction: &Instruction<F>,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
     ) -> Result<()> {
-        todo!("Implement execute_e1")
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = instruction;
+
+        let local_opcode_idx = opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET);
+
+        let y_val: [F; EXT_DEG] = unsafe {
+            state
+                .memory
+                .read(d.as_canonical_u32(), b.as_canonical_u32())
+        };
+        let z_val: [F; EXT_DEG] = unsafe {
+            state
+                .memory
+                .read(e.as_canonical_u32(), c.as_canonical_u32())
+        };
+
+        let x_val = FieldExtension::solve(
+            FieldExtensionOpcode::from_usize(local_opcode_idx),
+            y_val,
+            z_val,
+        )
+        .unwrap();
+
+        unsafe {
+            state
+                .memory
+                .write(d.as_canonical_u32(), a.as_canonical_u32(), &x_val)
+        };
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }
 
