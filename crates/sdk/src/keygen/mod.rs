@@ -4,7 +4,7 @@ use derivative::Derivative;
 use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
     arch::{VirtualMachine, VmComplexTraceHeights, VmConfig},
-    system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
+    system::{memory::merkle::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
 use openvm_continuations::{
     static_verifier::StaticVerifierPvHandler,

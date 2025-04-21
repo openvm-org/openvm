@@ -1,11 +1,13 @@
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
-use super::controller::dimensions::MemoryDimensions;
+use super::merkle::dimensions::MemoryDimensions;
 mod air;
 mod columns;
 mod trace;
 
 pub mod tree;
+
+pub mod dimensions;
 
 pub use air::*;
 pub use columns::*;

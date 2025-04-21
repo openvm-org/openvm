@@ -22,7 +22,7 @@ use super::merkle::{tree::MerkleTree, SerialReceiver};
 use crate::{
     arch::hasher::Hasher,
     system::memory::{
-        dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress,
+        merkle::dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress,
         TimestampedEquipartition, INITIAL_TIMESTAMP,
     },
 };

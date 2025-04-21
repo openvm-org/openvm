@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::{
     arch::hasher::Hasher,
     system::memory::{
-        dimensions::MemoryDimensions, paged_vec::Address, tree::MemoryNode, MemoryImage,
+        merkle::dimensions::MemoryDimensions, paged_vec::Address, tree::MemoryNode, MemoryImage,
     },
 };
 

@@ -5,7 +5,7 @@ use std::{ops::Range, sync::Arc};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
 use MemoryNode::*;
 
-use super::controller::dimensions::MemoryDimensions;
+use super::merkle::dimensions::MemoryDimensions;
 use crate::{
     arch::hasher::{Hasher, HasherChip},
     system::memory::MemoryImage,

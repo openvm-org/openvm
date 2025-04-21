@@ -1,12 +1,10 @@
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashMap;
 
-use super::{FinalState, MemoryMerkleCols};
+use super::{dimensions::MemoryDimensions, FinalState, MemoryMerkleCols};
 use crate::{
     arch::hasher::HasherChip,
-    system::memory::{
-        dimensions::MemoryDimensions, memory_to_partition, Equipartition, MemoryImage,
-    },
+    system::memory::{memory_to_partition, Equipartition, MemoryImage},
 };
 
 /// A Merkle tree data structure.

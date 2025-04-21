@@ -40,8 +40,7 @@ use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
     system::memory::{
         adapter::AccessAdapterInventory,
-        dimensions::MemoryDimensions,
-        merkle::{MemoryMerkleChip, SerialReceiver},
+        merkle::{dimensions::MemoryDimensions, MemoryMerkleChip, SerialReceiver},
         offline::{MemoryRecord, OfflineMemory, INITIAL_TIMESTAMP},
         offline_checker::{
             MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
@@ -52,7 +51,6 @@ use crate::{
     },
 };
 
-pub mod dimensions;
 pub mod interface;
 
 pub const CHUNK: usize = 8;
