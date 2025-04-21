@@ -43,8 +43,7 @@ use crate::metrics::VmMetrics;
 use crate::system::{
     connector::VmConnectorChip,
     memory::{
-        merkle::dimensions::MemoryDimensions,
-        merkle::tree::MerkleTree,
+        merkle::{dimensions::MemoryDimensions, tree::MerkleTree},
         offline_checker::{MemoryBridge, MemoryBus},
         MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
     },

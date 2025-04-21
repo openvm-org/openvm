@@ -28,7 +28,10 @@ use rand::{
     Rng,
 };
 
-use super::{merkle::dimensions::MemoryDimensions, merkle::tree::MerkleTree, MemoryController};
+use super::{
+    merkle::{dimensions::MemoryDimensions, tree::MerkleTree},
+    MemoryController,
+};
 use crate::{
     arch::{
         testing::{memory::gen_pointer, MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
