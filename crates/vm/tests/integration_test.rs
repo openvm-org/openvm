@@ -325,7 +325,7 @@ fn test_vm_initial_memory() {
         program,
         pc_start: 0,
         init_memory,
-        fn_bounds: Arc::new(Default::default()),
+        fn_bounds: Default::default(),
     };
     air_test(config, exe);
 }
