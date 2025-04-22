@@ -720,10 +720,10 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 fn reduce_le_bytes(bytes: &[u8]) -> Self {
                     let mut res = <Self as openvm_algebra_guest::IntMod>::ZERO;
                     // base should be 2 ^ #limbs which exceeds what Self can represent
-                    let mut base = Self::from_le_bytes(&[255u8; #limbs]);
+                    let mut base = <Self as openvm_algebra_guest::IntMod>::from_le_bytes(&[255u8; #limbs]);
                     base += <Self as openvm_algebra_guest::IntMod>::ONE;
                     for chunk in bytes.chunks(#limbs).rev() {
-                        res = res * &base + Self::from_le_bytes(chunk);
+                        res = res * &base + <Self as openvm_algebra_guest::IntMod>::from_le_bytes(chunk);
                     }
                     res
                 }
