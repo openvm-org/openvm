@@ -3,7 +3,8 @@ use openvm_algebra_guest::{
     MODULAR_ARITHMETIC_FUNCT3, OPCODE,
 };
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, VmOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
+    VmOpcode,
 };
 use openvm_instructions_derive::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -26,6 +27,13 @@ pub enum Rv32ModularArithmeticOpcode {
     SETUP_MULDIV,
     IS_EQ,
     SETUP_ISEQ,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
+#[repr(u16)]
+pub enum ModularPhantom {
+    HintNonQr = 0x50,
+    HintSqrt = 0x51,
 }
 
 #[derive(
@@ -73,10 +81,10 @@ impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
                 Rv32ModularArithmeticOpcode::COUNT
                     <= ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize
             );
-            let mod_idx_shift = ((dec_insn.funct7 as u8)
+            let mod_idx = ((dec_insn.funct7 as u8)
                 / ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS)
-                as usize
-                * Rv32ModularArithmeticOpcode::COUNT;
+                as usize;
+            let mod_idx_shift = mod_idx * Rv32ModularArithmeticOpcode::COUNT;
             if base_funct7 == ModArithBaseFunct7::SetupMod as u8 {
                 let local_opcode = match dec_insn.rs2 {
                     0 => Rv32ModularArithmeticOpcode::SETUP_ADDSUB,
@@ -100,6 +108,25 @@ impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
                         F::ZERO,
                     ))
                 }
+            } else if base_funct7 == ModArithBaseFunct7::HintNonQr as u8 {
+                assert_eq!(dec_insn.rd, 0);
+                assert_eq!(dec_insn.rs1, 0);
+                assert_eq!(dec_insn.rs2, 0);
+                Some(Instruction::phantom(
+                    PhantomDiscriminant(ModularPhantom::HintNonQr as u16),
+                    F::ZERO,
+                    F::ZERO,
+                    mod_idx as u16,
+                ))
+            } else if base_funct7 == ModArithBaseFunct7::HintSqrt as u8 {
+                assert_eq!(dec_insn.rd, 0);
+                assert_eq!(dec_insn.rs2, 0);
+                Some(Instruction::phantom(
+                    PhantomDiscriminant(ModularPhantom::HintSqrt as u16),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::ZERO,
+                    mod_idx as u16,
+                ))
             } else {
                 let global_opcode = match ModArithBaseFunct7::from_repr(base_funct7) {
                     Some(ModArithBaseFunct7::AddMod) => {
