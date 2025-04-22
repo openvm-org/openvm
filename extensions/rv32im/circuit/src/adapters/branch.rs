@@ -5,14 +5,14 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, BasicAdapterInterface,
-        ExecutionBridge, ExecutionBus, ExecutionState, ImmInstruction, Result, VmAdapterAir,
-        VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionBus, ExecutionState, ImmInstruction,
+        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols},
-            online::GuestMemory,
+            online::{GuestMemory, TracingMemory},
             MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
@@ -130,29 +130,87 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
 
 /// Reads instructions of the form OP a, b, c, d, e where if(\[a:4\]_d op \[b:4\]_e) pc += c.
 /// Operands d and e can only be 1.
-#[derive(Debug)]
-pub struct Rv32BranchAdapterChip<F: Field> {
-    pub air: Rv32BranchAdapterAir,
-    _marker: PhantomData<F>,
-}
+#[derive(derive_new::new)]
+pub struct Rv32BranchAdapterStep;
 
-impl<F: PrimeField32> Rv32BranchAdapterChip<F> {
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
-    ) -> Self {
-        Self {
-            air: Rv32BranchAdapterAir {
-                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-            },
-            _marker: PhantomData,
+impl<F: PrimeField32, CTX> AdapterTraceStep<F, CTX> for Rv32BranchAdapterStep {
+    const WIDTH: usize = size_of::<Rv32BranchAdapterCols<u8>>();
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>;
+
+    #[inline(always)]
+    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]) {
+        let adapter_row: &mut Rv32BranchAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_row.from_state.pc = F::from_canonical_u32(pc);
+        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    }
+
+    #[inline(always)]
+    fn read(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+    ) -> Self::ReadData {
+        let &Instruction { b, c, d, e, .. } = instruction;
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        let adapter_row: &mut Rv32BranchAdapterCols<F> = adapter_row.borrow_mut();
+        let rs1_idx = b.as_canonical_u32();
+        let rs1 = tracing_read_reg(
+            memory,
+            rs1_idx,
+            (&mut adapter_row.rs1_ptr, &mut adapter_row.reads_aux[0]),
+        );
+        let rs2 = tracing_read_reg_or_imm(
+            memory,
+            e.as_canonical_u32(),
+            c.as_canonical_u32(),
+            &mut adapter_row.rs2_as,
+            (&mut adapter_row.rs2, &mut adapter_row.reads_aux[1]),
+        );
+        [rs1, rs2]
+    }
+
+    #[inline(always)]
+    fn write(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+        data: &Self::WriteData,
+    ) {
+        let adapter_row: &mut Rv32BranchAdapterCols<F> = adapter_row.borrow_mut();
+        let rd_ptr = instruction.a.as_canonical_u32();
+        tracing_write_reg(
+            memory,
+            rd_ptr,
+            data,
+            (&mut adapter_row.rd_ptr, &mut adapter_row.writes_aux),
+        );
+    }
+
+    #[inline(always)]
+    fn fill_trace_row(
+        mem_helper: &MemoryAuxColsFactory<F>,
+        bitwise_lookup_chip: &BitwiseOperationLookupChip<LIMB_BITS>,
+        adapter_row: &mut [F],
+    ) {
+        let adapter_row: &mut Rv32BranchAdapterCols<F> = adapter_row.borrow_mut();
+        let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
+        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[0].as_mut());
+        timestamp += 1;
+        if !adapter_row.rs2_as.is_zero() {
+            mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[1].as_mut());
+        } else {
+            let rs2_imm = adapter_row.rs2.as_canonical_u32();
+            let mask = (1 << RV32_CELL_BITS) - 1;
+            bitwise_lookup_chip.request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
         }
+        timestamp += 1;
+        mem_helper.fill_from_prev(timestamp, adapter_row.writes_aux.as_mut());
     }
 }
 
-impl<Mem, F, const LIMB_BITS: usize> AdapterExecutorE1<Mem, F> for Rv32BaseAluAdapterStep<LIMB_BITS>
+impl<Mem, F> AdapterExecutorE1<Mem, F> for Rv32BranchAdapterStep
 where
     Mem: GuestMemory,
     F: PrimeField32,
@@ -162,36 +220,23 @@ where
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
-        let Instruction {
-            opcode, a, b, c, e, ..
-        } = instruction;
+        let Instruction { a, b, c, e, .. } = instruction;
 
-        let rs1_addr = b.as_canonical_u32();
-        let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(RV32_REGISTER_AS, rs1_addr) };
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_REGISTER_AS);
 
-        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
-            // Use immediate value
-            let imm = c.as_canonical_u32();
-            imm.to_le_bytes()
-        } else {
-            // Read from register
-            let rs2_addr = c.as_canonical_u32();
-            let rs2_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-                unsafe { memory.read(RV32_REGISTER_AS, rs2_addr) };
-            rs2_bytes
-        };
+        let rs1 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, a);
+        let rs2 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(e, b);
 
         [rs1_bytes, rs2_bytes]
     }
 
     fn write(memory: &mut Mem, instruction: &Instruction<F>, rd_bytes: &Self::WriteData) {
-        let Instruction {
-            opcode, a, b, c, e, ..
-        } = instruction;
-
-        let rd_addr = a.as_canonical_u32();
-        unsafe { memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
+        debug_assert!(
+            timestamp_delta == 2,
+            "timestamp delta is {}, expected 2",
+            timestamp_delta
+        );
     }
 }
 

@@ -219,7 +219,7 @@ where
     Mem: GuestMemory,
     F: PrimeField32,
 {
-    type ReadData = [[F; N]; 2];
+    type ReadData = ([F; N], [F; N]);
     type WriteData = [F; N];
 
     fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
@@ -229,7 +229,7 @@ where
         let z_val: [F; N] =
             unsafe { memory.read(e.as_cas_canonical_u32(), c.as_cas_canonical_u32()) };
 
-        [y_val, z_val]
+        (y_val, z_val)
     }
 
     fn write(memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData) {

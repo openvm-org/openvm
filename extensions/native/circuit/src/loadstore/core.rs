@@ -1,14 +1,15 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
     sync::{Arc, Mutex, OnceLock},
 };
 
 use openvm_circuit::{
     arch::{
-        instructions::LocalOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionError,
-        InsExecutorE1, Result, Streams, VmAdapterInterface, VmCoreAir, VmCoreChip,
-        VmExecutionState,
+        instructions::LocalOpcode, AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext,
+        ExecutionError, InsExecutorE1, Result, StepExecutorE1, Streams, VmAdapterInterface,
+        VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
@@ -118,68 +119,73 @@ where
 }
 
 #[derive(Debug)]
-pub struct NativeLoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
-    pub air: NativeLoadStoreCoreAir<NUM_CELLS>,
+pub struct NativeLoadStoreStep<A, F, const NUM_CELLS: usize>
+where
+    F: Field,
+{
+    offset: usize,
     pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
+    phantom: PhantomData<A>,
 }
 
-impl<F: Field, const NUM_CELLS: usize> NativeLoadStoreCoreChip<F, NUM_CELLS> {
-    pub fn new(offset: usize) -> Self {
-        Self {
-            air: NativeLoadStoreCoreAir::<NUM_CELLS> { offset },
-            streams: OnceLock::new(),
-        }
-    }
-    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        self.streams.set(streams).unwrap();
-    }
-}
-
-impl<F: Field, const NUM_CELLS: usize> Default for NativeLoadStoreCoreChip<F, NUM_CELLS> {
+impl<A, F, const NUM_CELLS: usize> Default for NativeLoadStoreStep<A, F, NUM_CELLS>
+where
+    F: Field,
+{
     fn default() -> Self {
         Self::new(NativeLoadStoreOpcode::CLASS_OFFSET)
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
-    for NativeLoadStoreCoreChip<F, NUM_CELLS>
+impl<A, F, const NUM_CELLS: usize> NativeLoadStoreStep<A, F, NUM_CELLS>
 where
-    I::Reads: Into<(F, [F; NUM_CELLS])>,
-    I::Writes: From<[F; NUM_CELLS]>,
+    F: Field,
 {
-    type Record = NativeLoadStoreCoreRecord<F, NUM_CELLS>;
-    type Air = NativeLoadStoreCoreAir<NUM_CELLS>;
-
-    fn execute_instruction(
-        &self,
-        instruction: &Instruction<F>,
-        from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction { opcode, .. } = *instruction;
-        let local_opcode =
-            NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
-        let (pointer_read, data_read) = reads.into();
-
-        let data = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
-            let mut streams = self.streams.get().unwrap().lock().unwrap();
-            if streams.hint_stream.len() < NUM_CELLS {
-                return Err(ExecutionError::HintOutOfBounds { pc: from_pc });
-            }
-            array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
-        } else {
-            data_read
-        };
-
-        let output = AdapterRuntimeContext::without_pc(data);
-        let record = NativeLoadStoreCoreRecord {
-            opcode: NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
-            pointer_read,
-            data,
-        };
-        Ok((output, record))
+    pub fn new(offset: usize) -> Self {
+        Self {
+            offset,
+            streams: OnceLock::new(),
+            phantom: PhantomData,
+        }
+    }
+    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
+        self.streams.set(streams).unwrap();
     }
 
+    #[inline]
+    pub fn execute_trace_core<F>(
+        &self,
+        instruction: &Instruction<F>,
+        [x, y]: [[u8; NUM_LIMBS]; 2],
+        core_row: &mut [F],
+    ) -> [u8; NUM_LIMBS]
+    where
+        F: PrimeField32,
+    {
+        todo!("Implement execute_trace_core")
+    }
+
+    pub fn fill_trace_row_core<F>(&self, core_row: &mut [F])
+    where
+        F: PrimeField32,
+    {
+        todo!("Implement fill_trace_row_core")
+    }
+}
+
+impl<F, CTX, A, const NUM_CELLS: usize> SingleTraceStep<F, CTX>
+    for NativeLoadStoreStep<A, F, NUM_CELLS>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = [[u8; NUM_LIMBS]; 2],
+            WriteData = [u8; NUM_LIMBS],
+            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
+        >,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -187,26 +193,32 @@ where
         )
     }
 
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let cols: &mut NativeLoadStoreCoreCols<_, NUM_CELLS> = row_slice.borrow_mut();
-        cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW);
-        cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW);
-        cols.is_hint_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::HINT_STOREW);
-
-        cols.pointer_read = record.pointer_read;
-        cols.data = record.data;
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
+        instruction: &Instruction<F>,
+        row_slice: &mut [F],
+    ) -> Result<()> {
+        todo!("Implement execute")
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        todo!("Implement fill_trace_row")
     }
 }
 
-impl<Mem, Ctx, F, const NUM_CELLS: usize> InsExecutorE1<Mem, Ctx, F>
-    for NativeLoadStoreCoreChip<F, NUM_CELLS>
+impl<Mem, Ctx, F, A, const NUM_CELLS: usize> StepExecutorE1<Mem, Ctx, F>
+    for NativeLoadStoreStep<A, F, NUM_CELLS>
 where
     Mem: GuestMemory,
     F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<
+            Mem,
+            F,
+            ReadData = (F, [F; NUM_CELLS]),
+            WriteData = [F; NUM_CELLS],
+        >,
 {
     fn execute_e1(
         &mut self,
@@ -227,37 +239,7 @@ where
         let local_opcode =
             NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        // Read the pointer
-        let read_as = d.as_canonical_u32();
-        let read_ptr = c.as_canonical_u32();
-        let [read_cell]: [F; 1] = unsafe { state.memory.read(read_as, read_ptr) };
-
-        // Determine read/write addresses based on opcode
-        let (data_read_as, data_write_as) = match local_opcode {
-            NativeLoadStoreOpcode::LOADW => (e.as_canonical_u32(), d.as_canonical_u32()),
-            NativeLoadStoreOpcode::STOREW | NativeLoadStoreOpcode::HINT_STOREW => {
-                (d.as_canonical_u32(), e.as_canonical_u32())
-            }
-        };
-
-        let (data_read_ptr, data_write_ptr) = match local_opcode {
-            NativeLoadStoreOpcode::LOADW => (read_cell + *b, *a),
-            NativeLoadStoreOpcode::STOREW | NativeLoadStoreOpcode::HINT_STOREW => {
-                (*a, read_cell + *b)
-            }
-        };
-
-        let data_read: [F; NUM_CELLS] = match local_opcode {
-            NativeLoadStoreOpcode::HINT_STOREW => [F::ZERO; NUM_CELLS],
-            NativeLoadStoreOpcode::LOADW | NativeLoadStoreOpcode::STOREW => {
-                let data_read: [F; NUM_CELLS] = unsafe {
-                    state
-                        .memory
-                        .read(data_read_as, data_read_ptr.as_canonical_u32())
-                };
-                data_read
-            }
-        };
+        let (pointer_read, data_read) = A::read(&mut state.memory, instruction);
 
         let data = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
             let mut streams = self.streams.get().unwrap().lock().unwrap();
@@ -269,16 +251,71 @@ where
             data_read
         };
 
-        unsafe {
-            state.memory.write::<F, NUM_CELLS>(
-                data_write_as,
-                data_write_ptr.as_canonical_u32(),
-                &data,
-            )
-        };
+        A::write(&mut state.memory, instruction, &data);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }
 }
+
+// impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
+//     for NativeLoadStoreCoreChip<F, NUM_CELLS>
+// where
+//     I::Reads: Into<(F, [F; NUM_CELLS])>,
+//     I::Writes: From<[F; NUM_CELLS]>,
+// {
+//     type Record = NativeLoadStoreCoreRecord<F, NUM_CELLS>;
+//     type Air = NativeLoadStoreCoreAir<NUM_CELLS>;
+
+//     fn execute_instruction(
+//         &self,
+//         instruction: &Instruction<F>,
+//         from_pc: u32,
+//         reads: I::Reads,
+//     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+//         let Instruction { opcode, .. } = *instruction;
+//         let local_opcode =
+//             NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+//         let (pointer_read, data_read) = reads.into();
+
+//         let data = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
+//             let mut streams = self.streams.get().unwrap().lock().unwrap();
+//             if streams.hint_stream.len() < NUM_CELLS {
+//                 return Err(ExecutionError::HintOutOfBounds { pc: from_pc });
+//             }
+//             array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
+//         } else {
+//             data_read
+//         };
+
+//         let output = AdapterRuntimeContext::without_pc(data);
+//         let record = NativeLoadStoreCoreRecord {
+//             opcode: NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
+//             pointer_read,
+//             data,
+//         };
+//         Ok((output, record))
+//     }
+
+//     fn get_opcode_name(&self, opcode: usize) -> String {
+//         format!(
+//             "{:?}",
+//             NativeLoadStoreOpcode::from_usize(opcode - self.air.offset)
+//         )
+//     }
+
+//     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+//         let cols: &mut NativeLoadStoreCoreCols<_, NUM_CELLS> = row_slice.borrow_mut();
+//         cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW);
+//         cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW);
+//         cols.is_hint_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::HINT_STOREW);
+
+//         cols.pointer_read = record.pointer_read;
+//         cols.data = record.data;
+//     }
+
+//     fn air(&self) -> &Self::Air {
+//         &self.air
+//     }
+// }

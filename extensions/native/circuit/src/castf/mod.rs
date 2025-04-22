@@ -1,6 +1,6 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper, VmChipWrapper};
 
-use super::adapters::convert_adapter::{ConvertAdapterAir, ConvertAdapterChip};
+use super::adapters::convert_adapter::{ConvertAdapterAir, ConvertAdapterStep};
 
 #[cfg(test)]
 mod tests;

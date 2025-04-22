@@ -195,8 +195,9 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluStep<A, NUM_LIMBS
         }
     }
 
+    // TODO(ayush): rename
     #[inline]
-    pub fn execute_core<F: PrimeField32>(
+    pub fn execute_trace_core<F: PrimeField32>(
         &self,
         instruction: &Instruction<F>,
         [x, y]: [[u8; NUM_LIMBS]; 2],
@@ -221,6 +222,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluStep<A, NUM_LIMBS
         z
     }
 
+    // TODO(ayush): rename
     pub fn fill_trace_row_core<F: PrimeField32>(&self, core_row: &mut [F]) {
         let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
@@ -261,7 +263,7 @@ where
 
         A::start(*state.pc, state.memory, adapter_row);
         let [rs1, rs2] = A::read(state.memory, instruction, adapter_row);
-        let output = self.execute_core(instruction, [rs1, rs2], core_row);
+        let output = self.execute_trace_core(instruction, [rs1, rs2], core_row);
         A::write(state.memory, instruction, adapter_row, &output);
 
         *state.pc += DEFAULT_PC_STEP;

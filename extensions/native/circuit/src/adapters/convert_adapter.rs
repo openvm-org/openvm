@@ -5,13 +5,14 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir,
-        VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionBus, ExecutionState, MinimalInstruction,
+        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+            online::GuestMemory,
             MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
