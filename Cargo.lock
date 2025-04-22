@@ -3931,6 +3931,7 @@ version = "1.0.1-rc.0"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
+ "eyre",
  "halo2curves-axiom",
  "itertools 0.14.0",
  "num-bigint 0.4.6",
@@ -3972,6 +3973,8 @@ dependencies = [
  "once_cell",
  "openvm-algebra-complex-macros",
  "openvm-algebra-moduli-macros",
+ "openvm-custom-insn",
+ "openvm-rv32im-guest",
  "serde-big-array",
  "strum_macros",
 ]
