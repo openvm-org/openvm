@@ -9,6 +9,10 @@ impl CycleTracker {
         Self::default()
     }
 
+    pub fn top(&self) -> Option<&String> {
+        self.stack.last()
+    }
+
     /// Starts a new cycle tracker span for the given name.
     /// If a span already exists for the given name, it ends the existing span and pushes a new one
     /// to the vec.

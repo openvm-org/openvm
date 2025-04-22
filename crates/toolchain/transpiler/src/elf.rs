@@ -1,6 +1,11 @@
 // Initial version taken from https://github.com/succinctlabs/sp1/blob/v2.0.0/crates/core/executor/src/disassembler/elf.rs under MIT License
 // and https://github.com/risc0/risc0/blob/f61379bf69b24d56e49d6af96a3b284961dcc498/risc0/binfmt/src/elf.rs#L34 under Apache License
 use std::{cmp::min, collections::BTreeMap, fmt::Debug};
+#[cfg(feature = "function-span")]
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    io::Write,
+};
 
 use elf::{
     abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD},
@@ -93,6 +98,27 @@ impl Elf {
         #[cfg(feature = "function-span")]
         {
             if let Some((symtab, stringtab)) = elf.symbol_table()? {
+                let mut fn_names = Vec::new();
+                for symbol in symtab.iter() {
+                    if symbol.st_symtype() == elf::abi::STT_FUNC {
+                        let raw_name = stringtab.get(symbol.st_name as usize).unwrap().to_string();
+                        let demangled_name = rustc_demangle::demangle(&raw_name).to_string();
+                        fn_names.push((demangled_name, symbol.st_name));
+                    }
+                }
+
+                let mut buf = Vec::new();
+                let mut offsets = HashMap::new();
+                buf.push(0);
+                for (name, st_name) in fn_names {
+                    if let Entry::Vacant(e) = offsets.entry(st_name) {
+                        let offset = buf.len();
+                        e.insert(offset);
+                        buf.extend_from_slice(name.as_bytes());
+                        buf.push(0);
+                    }
+                }
+
                 for symbol in symtab.iter() {
                     if symbol.st_symtype() == elf::abi::STT_FUNC {
                         fn_bounds.insert(
@@ -100,11 +126,20 @@ impl Elf {
                             FnBound {
                                 start: symbol.st_value as u32,
                                 end: (symbol.st_value + symbol.st_size - (WORD_SIZE as u64)) as u32,
-                                name: stringtab.get(symbol.st_name as usize).unwrap().to_string(),
+                                name: offsets[&symbol.st_name].to_string(),
                             },
                         );
                     }
                 }
+
+                let guest_symbols_path = std::env::var("GUEST_SYMBOLS_PATH")?;
+                let mut guest_symbols_file =
+                    std::fs::File::create(&guest_symbols_path).map_err(|e| {
+                        eyre::eyre!(
+                            "Failed to create guest symbols file at {guest_symbols_path}: {e}"
+                        )
+                    })?;
+                guest_symbols_file.write_all(buf.as_slice())?;
             } else {
                 println!("No symbol table found");
             }

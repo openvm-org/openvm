@@ -106,7 +106,10 @@ impl VmMetrics {
 
     #[cfg(feature = "function-span")]
     fn update_current_fn(&mut self, pc: u32) {
-        if !self.fn_bounds.is_empty() && (pc < self.current_fn.start || pc > self.current_fn.end) {
+        if self.fn_bounds.is_empty() {
+            return;
+        }
+        if pc < self.current_fn.start || pc > self.current_fn.end {
             self.current_fn = self
                 .fn_bounds
                 .range(..=pc)
@@ -116,10 +119,16 @@ impl VmMetrics {
             if pc == self.current_fn.start {
                 self.cycle_tracker.start(self.current_fn.name.clone());
             } else {
-                self.cycle_tracker.force_end();
+                while let Some(name) = self.cycle_tracker.top() {
+                    if name == &self.current_fn.name {
+                        break;
+                    }
+                    self.cycle_tracker.force_end();
+                }
             }
         };
     }
+
     pub fn emit(&self) {
         for (name, value) in self.chip_heights.iter() {
             let labels = [("chip_name", name.clone())];

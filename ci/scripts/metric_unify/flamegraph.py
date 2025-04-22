@@ -6,7 +6,19 @@ import subprocess
 
 from utils import FLAMEGRAPHS_DIR, get_git_root
 
-def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name, sum_metrics=None):
+def get_function_symbol(string_table, offset_str):
+    try:
+        offset_int = int(offset_str)
+        end = string_table.find(b'\0', offset_int)
+        if end == -1:
+            print(f"Invalid symbol offset: {offset_int}")
+            return None
+        return string_table[offset_int:end].decode()
+    except ValueError:
+        return offset_str
+
+
+def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name, sum_metrics=None, string_table=None):
     """
     Filters a metrics_dict obtained from json for entries that look like:
         [ { labels: [["key1", "span1;span2"], ["key2", "span3"]], "metric": metric_name, "value": 2 } ]
@@ -40,7 +52,15 @@ def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name, sum_met
             if key not in labels:
                 filter = True
                 break
-            stack_values.append(labels[key])
+            if key == 'cycle_tracker_span':
+                if labels[key] == '' or string_table is None:
+                    stack_values.append(labels[key])
+                else:
+                    symbol_offsets = labels[key].split(';')
+                    function_symbols = [get_function_symbol(string_table, offset) for offset in symbol_offsets]
+                    stack_values.extend(function_symbols)
+            else:
+                stack_values.append(labels[key])
         if filter:
             continue
 
@@ -57,8 +77,8 @@ def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name, sum_met
     return lines if non_zero else []
 
 
-def create_flamegraph(fname, metrics_dict, group_by_kvs, stack_keys, metric_name, sum_metrics=None, reverse=False):
-    lines = get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name, sum_metrics)
+def create_flamegraph(fname, metrics_dict, group_by_kvs, stack_keys, metric_name, sum_metrics=None, reverse=False, string_table=None):
+    lines = get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name, sum_metrics, string_table)
     if not lines:
         return
 
@@ -86,7 +106,7 @@ def create_flamegraph(fname, metrics_dict, group_by_kvs, stack_keys, metric_name
         print(f"Created flamegraph at {flamegraph_path}")
 
 
-def create_flamegraphs(metrics_file, group_by, stack_keys, metric_name, sum_metrics=None, reverse=False):
+def create_flamegraphs(metrics_file, group_by, stack_keys, metric_name, sum_metrics=None, reverse=False, string_table=None):
     fname_prefix = os.path.splitext(os.path.basename(metrics_file))[0]
 
     with open(metrics_file, 'r') as f:
@@ -104,18 +124,18 @@ def create_flamegraphs(metrics_file, group_by, stack_keys, metric_name, sum_metr
     for group_by_values in group_by_values_list:
         group_by_kvs = list(zip(group_by, group_by_values))
         fname = fname_prefix + '-' + '-'.join(group_by_values)
-        create_flamegraph(fname, metrics_dict, group_by_kvs, stack_keys, metric_name, sum_metrics, reverse=reverse)
+        create_flamegraph(fname, metrics_dict, group_by_kvs, stack_keys, metric_name, sum_metrics, reverse=reverse, string_table=string_table)
 
 
-def create_custom_flamegraphs(metrics_file, group_by=["group"]):
+def create_custom_flamegraphs(metrics_file, group_by=["group"], string_table=None):
     for reverse in [False, True]:
         create_flamegraphs(metrics_file, group_by, ["cycle_tracker_span", "dsl_ir", "opcode"], "frequency",
-                           reverse=reverse)
+                           reverse=reverse, string_table=string_table)
         create_flamegraphs(metrics_file, group_by, ["cycle_tracker_span", "dsl_ir", "opcode", "air_name"], "cells_used",
-                           reverse=reverse)
+                           reverse=reverse, string_table=string_table)
         create_flamegraphs(metrics_file, group_by, ["cell_tracker_span"], "cells_used",
                            sum_metrics=["simple_advice_cells", "fixed_cells", "lookup_advice_cells"],
-                           reverse=reverse)
+                           reverse=reverse, string_table=string_table)
 
 
 def main():
@@ -127,9 +147,16 @@ def main():
 
     argparser = argparse.ArgumentParser()
     argparser.add_argument('metrics_json', type=str, help="Path to the metrics JSON")
+    argparser.add_argument('--guest-symbols', type=str, help="Path to the guest symbols file", default=None, required=False)
     args = argparser.parse_args()
 
-    create_custom_flamegraphs(args.metrics_json)
+    if args.guest_symbols:
+        with open(args.guest_symbols, 'rb') as f:
+            string_table = f.read()
+    else:
+        string_table = None
+
+    create_custom_flamegraphs(args.metrics_json, string_table=string_table)
 
 
 if __name__ == '__main__':
