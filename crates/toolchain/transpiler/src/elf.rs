@@ -132,11 +132,14 @@ impl Elf {
                     }
                 }
 
-                let guest_symbols_file = std::env::var("GUEST_SYMBOLS_PATH")
-                    .map(|path| std::fs::File::create(path).unwrap());
-                if let Ok(mut guest_symbols_file) = guest_symbols_file {
-                    guest_symbols_file.write_all(buf.as_slice()).unwrap();
-                }
+                let guest_symbols_path = std::env::var("GUEST_SYMBOLS_PATH")?;
+                let mut guest_symbols_file =
+                    std::fs::File::create(&guest_symbols_path).map_err(|e| {
+                        eyre::eyre!(
+                            "Failed to create guest symbols file at {guest_symbols_path}: {e}"
+                        )
+                    })?;
+                guest_symbols_file.write_all(buf.as_slice())?;
             } else {
                 println!("No symbol table found");
             }
