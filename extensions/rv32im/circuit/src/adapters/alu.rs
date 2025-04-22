@@ -2,12 +2,12 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceStep, BasicAdapterInterface, ExecutionBridge,
-        ExecutionState, MinimalInstruction, VmAdapterAir,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        online::TracingMemory,
+        online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
@@ -17,7 +17,9 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -237,5 +239,44 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         }
         timestamp += 1;
         mem_helper.fill_from_prev(timestamp, adapter_row.writes_aux.as_mut());
+    }
+}
+
+impl<Mem, F, const LIMB_BITS: usize> AdapterExecutorE1<Mem, F> for Rv32BaseAluAdapterStep<LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    // TODO(ayush): directly use u32
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+
+    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+        let Instruction { a, b, c, e, .. } = instruction;
+
+        let rs1_addr = b.as_canonical_u32();
+        let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { memory.read(RV32_REGISTER_AS, rs1_addr) };
+
+        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
+            // Use immediate value
+            let imm = c.as_canonical_u32();
+            imm.to_le_bytes()
+        } else {
+            // Read from register
+            let rs2_addr = c.as_canonical_u32();
+            let rs2_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
+                unsafe { memory.read(RV32_REGISTER_AS, rs2_addr) };
+            rs2_bytes
+        };
+
+        [rs1_bytes, rs2_bytes]
+    }
+
+    fn write(memory: &mut Mem, instruction: &Instruction<F>, rd_bytes: &Self::WriteData) {
+        let Instruction { a, .. } = instruction;
+
+        let rd_addr = a.as_canonical_u32();
+        unsafe { memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
     }
 }

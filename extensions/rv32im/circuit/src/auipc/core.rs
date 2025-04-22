@@ -6,10 +6,13 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, ImmInstruction, Result, SingleTraceStep, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        AdapterAirContext, ImmInstruction, Result, SingleTraceStep, StepExecutorE1,
+        VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -287,7 +290,7 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
     }
 }
 
-impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for Rv32AuipcCoreChip
+impl<Mem, Ctx, F> CoreExecutorE1<Mem, Ctx, F> for Rv32AuipcCoreChip
 where
     Mem: GuestMemory,
     F: PrimeField32,

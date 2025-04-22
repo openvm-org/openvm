@@ -114,24 +114,28 @@ pub struct CastFRecord<F> {
     pub out_val: [u32; RV32_REGISTER_NUM_LIMBS],
 }
 
-pub struct CastFCoreChip {
+pub struct CastFStep<A> {
     pub air: CastFCoreAir,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
+    phantom: PhantomData<A>,
 }
 
-impl CastFCoreChip {
+impl CastFStep<A> {
     pub fn new(range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
         Self {
             air: CastFCoreAir {
                 bus: range_checker_chip.bus(),
             },
             range_checker_chip,
+            phantom: PhantomData,
         }
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for CastFCoreChip
+impl<F, I> VmCoreChip<F, I> for CastFCoreChip
 where
+    F: PrimeField32,
+    I: VmAdapterInterface<F>,
     I::Reads: Into<[[F; 1]; 1]>,
     I::Writes: From<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
 {

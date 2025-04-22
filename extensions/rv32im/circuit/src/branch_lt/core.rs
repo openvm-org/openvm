@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+    VmCoreAir, VmCoreChip, VmExecutionState,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
