@@ -6,15 +6,17 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
+        ExecutionBridge, ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
     system::{
         memory::{
             offline_checker::{
                 MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
             },
-            MemoryAddress, MemoryController, OfflineMemory, RecordId,
+            online::{GuestMemory, TracingMemory},
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -90,37 +92,6 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
     );
     type Writes = [[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1];
     type ProcessedInstruction = LoadStoreInstruction<AB::Expr>;
-}
-
-/// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
-/// In case of Loads, reads from the shifted intermediate pointer and writes to rd.
-/// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
-pub struct Rv32LoadStoreAdapterChip<F: Field> {
-    pub air: Rv32LoadStoreAdapterAir,
-    pub range_checker_chip: SharedVariableRangeCheckerChip,
-    _marker: PhantomData<F>,
-}
-
-impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
-        pointer_max_bits: usize,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-    ) -> Self {
-        assert!(range_checker_chip.range_max_bits() >= 15);
-        Self {
-            air: Rv32LoadStoreAdapterAir {
-                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-                range_bus: range_checker_chip.bus(),
-                pointer_max_bits,
-            },
-            range_checker_chip,
-            _marker: PhantomData,
-        }
-    }
 }
 
 #[repr(C)]
@@ -366,21 +337,85 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
     }
 }
 
-impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
-    type ReadRecord = Rv32LoadStoreReadRecord<F>;
-    type WriteRecord = Rv32LoadStoreWriteRecord<F>;
-    type Air = Rv32LoadStoreAdapterAir;
-    type Interface = Rv32LoadStoreAdapterRuntimeInterface<F>;
+/// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
+/// In case of Loads, reads from the shifted intermediate pointer and writes to rd.
+/// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
+pub struct Rv32LoadStoreAdapterStep {
+    pointer_max_bits: usize,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
+}
 
-    #[allow(clippy::type_complexity)]
-    fn preprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
+impl Rv32LoadStoreAdapterStep {
+    pub fn new(
+        pointer_max_bits: usize,
+        range_checker_chip: SharedVariableRangeCheckerChip,
+    ) -> Self {
+        assert!(range_checker_chip.range_max_bits() >= 15);
+        Self {
+            pointer_max_bits,
+            range_checker_chip,
+        }
+    }
+}
+
+impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32LoadStoreAdapterStep
+where
+    F: PrimeField32,
+{
+    const WIDTH: usize = size_of::<Rv32LoadStoreAdapterCols<u8>>();
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type TraceContext<'a> = ();
+
+    #[inline(always)]
+    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]) {
+        let adapter_row: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_row.from_state.pc = F::from_canonical_u32(pc);
+        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    }
+
+    #[inline(always)]
+    fn read(
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
-    ) -> Result<(
-        <Self::Interface as VmAdapterInterface<F>>::Reads,
-        Self::ReadRecord,
-    )> {
+        adapter_row: &mut [F],
+    ) -> Self::ReadData {
+        todo!("Implement read method");
+    }
+
+    #[inline(always)]
+    fn write(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+        data: &Self::WriteData,
+    ) {
+        todo!("Implement write method");
+    }
+
+    #[inline(always)]
+    fn fill_trace_row(
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace_ctx: Self::TraceContext<'_>,
+        adapter_row: &mut [F],
+    ) {
+        todo!("Implement fill_trace_row method");
+    }
+}
+
+impl<Mem, F> AdapterExecutorE1<Mem, F> for Rv32LoadStoreAdapterStep
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    // TODO(ayush): directly use u32
+    type ReadData = (
+        ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]),
+        u32,
+    );
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+
+    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction {
             opcode,
             a,
@@ -390,163 +425,283 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             e,
             g,
             ..
-        } = *instruction;
+        } = instruction;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
-        let rs1_record = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, b);
 
-        let rs1_val = u32::from_le_bytes(rs1_record.1);
+        let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+        let rs1_val = u32::from_le_bytes(rs1_bytes);
+
+        let imm = c.as_canonical_u32();
+        let imm_sign = g.as_canonical_u32();
+        let imm_extended = imm + imm_sign * 0xffff0000;
+
+        let ptr_val = rs1_val.wrapping_add(imm_extended);
+        // assert!(
+        //     ptr_val < (1 << self.pointer_max_bits),
+        //     "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
+        //     self.pointer_max_bits
+        // );
+        let shift_amount = ptr_val % 4;
+
+        let ptr_val = ptr_val - shift_amount; // aligned ptr
+
+        let read_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
+                memory.read(e.as_canonical_u32(), ptr_val)
+            },
+            STOREW | STOREH | STOREB => unsafe {
+                memory.read(d.as_canonical_u32(), a.as_canonical_u32())
+            },
+        };
+
+        // For stores, we need the previous memory content to preserve unchanged bytes
+        let prev_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
+            STOREW | STOREH | STOREB => unsafe { memory.read(e.as_canonical_u32(), ptr_val) },
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
+                memory.read(d.as_canonical_u32(), a.as_canonical_u32())
+            },
+        };
+
+        ((prev_data, read_data), shift_amount)
+    }
+
+    fn write(memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData) {
+        // TODO(ayush): remove duplication with read
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f: enabled,
+            g,
+            ..
+        } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
+
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
+
+        let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+        let rs1_val = u32::from_le_bytes(rs1_bytes);
+
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
         let shift_amount = ptr_val % 4;
-        assert!(
-            ptr_val < (1 << self.air.pointer_max_bits),
-            "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
-            self.air.pointer_max_bits
-        );
+
+        let ptr_val = ptr_val - shift_amount; // aligned ptr
 
         let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
 
-        let ptr_val = ptr_val - shift_amount;
-        let read_record = match local_opcode {
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_u32(ptr_val))
-            }
-            STOREW | STOREH | STOREB => memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, a),
-        };
-
-        // We need to keep values of some cells to keep them unchanged when writing to those cells
-        let prev_data = match local_opcode {
-            STOREW | STOREH | STOREB => array::from_fn(|i| {
-                memory.unsafe_read_cell::<u8>(e, F::from_canonical_usize(ptr_val as usize + i))
-            }),
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                array::from_fn(|i| memory.unsafe_read_cell::<u8>(d, a + F::from_canonical_usize(i)))
-            }
-        };
-
-        Ok((
-            (
-                [
-                    prev_data.map(F::from_canonical_u8),
-                    read_record.1.map(F::from_canonical_u8),
-                ],
-                F::from_canonical_u32(shift_amount),
-            ),
-            Self::ReadRecord {
-                rs1_record: rs1_record.0,
-                rs1_ptr: b,
-                read: read_record.0,
-                imm: c,
-                imm_sign: g,
-                shift_amount,
-                mem_ptr_limbs,
-                mem_as: e,
-            },
-        ))
-    }
-
-    fn postprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-        output: AdapterRuntimeContext<F, Self::Interface>,
-        read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction {
-            opcode,
-            a,
-            d,
-            e,
-            f: enabled,
-            ..
-        } = *instruction;
-
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        );
-
-        let write_id = if enabled != F::ZERO {
-            let (record_id, _) = match local_opcode {
+        if enabled != F::ZERO {
+            match local_opcode {
                 STOREW | STOREH | STOREB => {
-                    let ptr = read_record.mem_ptr_limbs[0]
-                        + read_record.mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-                    memory.write(
-                        e,
-                        F::from_canonical_u32(ptr & 0xfffffffc),
-                        &tmp_convert_to_u8s(output.writes[0]),
-                    )
+                    let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
+                    unsafe { memory.write(e.as_canonical_u32(), ptr & 0xfffffffc, &data) };
                 }
-                LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                    memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]))
-                }
-            };
-            record_id
-        } else {
-            memory.increment_timestamp();
-            // RecordId will never get to usize::MAX, so it can be used as a flag for no write
-            RecordId(usize::MAX)
-        };
-
-        Ok((
-            ExecutionState {
-                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
-                timestamp: memory.timestamp(),
-            },
-            Self::WriteRecord {
-                from_state,
-                write_id,
-                rd_rs2_ptr: a,
-            },
-        ))
-    }
-
-    fn generate_trace_row(
-        &self,
-        row_slice: &mut [F],
-        read_record: Self::ReadRecord,
-        write_record: Self::WriteRecord,
-        memory: &OfflineMemory<F>,
-    ) {
-        self.range_checker_chip.add_count(
-            (read_record.mem_ptr_limbs[0] - read_record.shift_amount) / 4,
-            RV32_CELL_BITS * 2 - 2,
-        );
-        self.range_checker_chip.add_count(
-            read_record.mem_ptr_limbs[1],
-            self.air.pointer_max_bits - RV32_CELL_BITS * 2,
-        );
-
-        let aux_cols_factory = memory.aux_cols_factory();
-        let adapter_cols: &mut Rv32LoadStoreAdapterCols<_> = row_slice.borrow_mut();
-        adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
-        let rs1 = memory.record_by_id(read_record.rs1_record);
-        adapter_cols.rs1_data.copy_from_slice(rs1.data_slice());
-        aux_cols_factory.generate_read_aux(rs1, &mut adapter_cols.rs1_aux_cols);
-        adapter_cols.rs1_ptr = read_record.rs1_ptr;
-        adapter_cols.rd_rs2_ptr = write_record.rd_rs2_ptr;
-        let read = memory.record_by_id(read_record.read);
-        aux_cols_factory.generate_read_aux(read, &mut adapter_cols.read_data_aux);
-        adapter_cols.imm = read_record.imm;
-        adapter_cols.imm_sign = read_record.imm_sign;
-        adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
-        adapter_cols.mem_as = read_record.mem_as;
-        if write_record.write_id.0 != usize::MAX {
-            let write = memory.record_by_id(write_record.write_id);
-            aux_cols_factory.generate_base_aux(write, &mut adapter_cols.write_base_aux);
-            adapter_cols.needs_write = F::ONE;
+                LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
+                    memory.write(d.as_canonical_u32(), a.as_canonical_u32(), &data);
+                },
+            }
         }
     }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
-    }
 }
+
+// impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
+//     type ReadRecord = Rv32LoadStoreReadRecord<F>;
+//     type WriteRecord = Rv32LoadStoreWriteRecord<F>;
+//     type Air = Rv32LoadStoreAdapterAir;
+//     type Interface = Rv32LoadStoreAdapterRuntimeInterface<F>;
+
+//     #[allow(clippy::type_complexity)]
+//     fn preprocess(
+//         &mut self,
+//         memory: &mut MemoryController<F>,
+//         instruction: &Instruction<F>,
+//     ) -> Result<(
+//         <Self::Interface as VmAdapterInterface<F>>::Reads,
+//         Self::ReadRecord,
+//     )> {
+//         let Instruction {
+//             opcode,
+//             a,
+//             b,
+//             c,
+//             d,
+//             e,
+//             g,
+//             ..
+//         } = *instruction;
+//         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+//         debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
+
+//         let local_opcode = Rv32LoadStoreOpcode::from_usize(
+//             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+//         );
+//         let rs1_record = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, b);
+
+//         let rs1_val = u32::from_le_bytes(rs1_record.1);
+//         let imm = c.as_canonical_u32();
+//         let imm_sign = g.as_canonical_u32();
+//         let imm_extended = imm + imm_sign * 0xffff0000;
+
+//         let ptr_val = rs1_val.wrapping_add(imm_extended);
+//         let shift_amount = ptr_val % 4;
+//         assert!(
+//             ptr_val < (1 << self.air.pointer_max_bits),
+//             "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
+//             self.air.pointer_max_bits
+//         );
+
+//         let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
+
+//         let ptr_val = ptr_val - shift_amount;
+//         let read_record = match local_opcode {
+//             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+//                 memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_u32(ptr_val))
+//             }
+//             STOREW | STOREH | STOREB => memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, a),
+//         };
+
+//         // We need to keep values of some cells to keep them unchanged when writing to those cells
+//         let prev_data = match local_opcode {
+//             STOREW | STOREH | STOREB => array::from_fn(|i| {
+//                 memory.unsafe_read_cell::<u8>(e, F::from_canonical_usize(ptr_val as usize + i))
+//             }),
+//             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+//                 array::from_fn(|i| memory.unsafe_read_cell::<u8>(d, a + F::from_canonical_usize(i)))
+//             }
+//         };
+
+//         Ok((
+//             (
+//                 [
+//                     prev_data.map(F::from_canonical_u8),
+//                     read_record.1.map(F::from_canonical_u8),
+//                 ],
+//                 F::from_canonical_u32(shift_amount),
+//             ),
+//             Self::ReadRecord {
+//                 rs1_record: rs1_record.0,
+//                 rs1_ptr: b,
+//                 read: read_record.0,
+//                 imm: c,
+//                 imm_sign: g,
+//                 shift_amount,
+//                 mem_ptr_limbs,
+//                 mem_as: e,
+//             },
+//         ))
+//     }
+
+//     fn postprocess(
+//         &mut self,
+//         memory: &mut MemoryController<F>,
+//         instruction: &Instruction<F>,
+//         from_state: ExecutionState<u32>,
+//         output: AdapterRuntimeContext<F, Self::Interface>,
+//         read_record: &Self::ReadRecord,
+//     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
+//         let Instruction {
+//             opcode,
+//             a,
+//             d,
+//             e,
+//             f: enabled,
+//             ..
+//         } = *instruction;
+
+//         let local_opcode = Rv32LoadStoreOpcode::from_usize(
+//             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+//         );
+
+//         let write_id = if enabled != F::ZERO {
+//             let (record_id, _) = match local_opcode {
+//                 STOREW | STOREH | STOREB => {
+//                     let ptr = read_record.mem_ptr_limbs[0]
+//                         + read_record.mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
+//                     memory.write(
+//                         e,
+//                         F::from_canonical_u32(ptr & 0xfffffffc),
+//                         &tmp_convert_to_u8s(output.writes[0]),
+//                     )
+//                 }
+//                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+//                     memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]))
+//                 }
+//             };
+//             record_id
+//         } else {
+//             memory.increment_timestamp();
+//             // RecordId will never get to usize::MAX, so it can be used as a flag for no write
+//             RecordId(usize::MAX)
+//         };
+
+//         Ok((
+//             ExecutionState {
+//                 pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
+//                 timestamp: memory.timestamp(),
+//             },
+//             Self::WriteRecord {
+//                 from_state,
+//                 write_id,
+//                 rd_rs2_ptr: a,
+//             },
+//         ))
+//     }
+
+//     fn generate_trace_row(
+//         &self,
+//         row_slice: &mut [F],
+//         read_record: Self::ReadRecord,
+//         write_record: Self::WriteRecord,
+//         memory: &OfflineMemory<F>,
+//     ) {
+//         self.range_checker_chip.add_count(
+//             (read_record.mem_ptr_limbs[0] - read_record.shift_amount) / 4,
+//             RV32_CELL_BITS * 2 - 2,
+//         );
+//         self.range_checker_chip.add_count(
+//             read_record.mem_ptr_limbs[1],
+//             self.air.pointer_max_bits - RV32_CELL_BITS * 2,
+//         );
+
+//         let aux_cols_factory = memory.aux_cols_factory();
+//         let adapter_cols: &mut Rv32LoadStoreAdapterCols<_> = row_slice.borrow_mut();
+//         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
+//         let rs1 = memory.record_by_id(read_record.rs1_record);
+//         adapter_cols.rs1_data.copy_from_slice(rs1.data_slice());
+//         aux_cols_factory.generate_read_aux(rs1, &mut adapter_cols.rs1_aux_cols);
+//         adapter_cols.rs1_ptr = read_record.rs1_ptr;
+//         adapter_cols.rd_rs2_ptr = write_record.rd_rs2_ptr;
+//         let read = memory.record_by_id(read_record.read);
+//         aux_cols_factory.generate_read_aux(read, &mut adapter_cols.read_data_aux);
+//         adapter_cols.imm = read_record.imm;
+//         adapter_cols.imm_sign = read_record.imm_sign;
+//         adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
+//         adapter_cols.mem_as = read_record.mem_as;
+//         if write_record.write_id.0 != usize::MAX {
+//             let write = memory.record_by_id(write_record.write_id);
+//             aux_cols_factory.generate_base_aux(write, &mut adapter_cols.write_base_aux);
+//             adapter_cols.needs_write = F::ONE;
+//         }
+//     }
+
+//     fn air(&self) -> &Self::Air {
+//         &self.air
+//     }
+// }

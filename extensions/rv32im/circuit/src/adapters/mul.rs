@@ -5,14 +5,15 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
-        VmAdapterInterface,
+        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionBus, ExecutionState, MinimalInstruction,
+        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryController, OfflineMemory, RecordId,
+            online::{GuestMemory, TracingMemory},
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -30,28 +31,6 @@ use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::tmp_convert_to_u8s;
-
-#[derive(Debug)]
-pub struct Rv32MultAdapterChip<F: Field> {
-    pub air: Rv32MultAdapterAir,
-    _marker: PhantomData<F>,
-}
-
-impl<F: PrimeField32> Rv32MultAdapterChip<F> {
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
-    ) -> Self {
-        Self {
-            air: Rv32MultAdapterAir {
-                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-            },
-            _marker: PhantomData,
-        }
-    }
-}
 
 #[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
@@ -168,95 +147,172 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
     }
 }
 
-impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
-    type ReadRecord = Rv32MultReadRecord;
-    type WriteRecord = Rv32MultWriteRecord;
-    type Air = Rv32MultAdapterAir;
-    type Interface = BasicAdapterInterface<
-        F,
-        MinimalInstruction<F>,
-        2,
-        1,
-        RV32_REGISTER_NUM_LIMBS,
-        RV32_REGISTER_NUM_LIMBS,
-    >;
+#[derive(derive_new::new)]
+pub struct Rv32MultAdapterStep;
 
-    fn preprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-    ) -> Result<(
-        <Self::Interface as VmAdapterInterface<F>>::Reads,
-        Self::ReadRecord,
-    )> {
-        let Instruction { b, c, d, .. } = *instruction;
+impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32MultAdapterStep
+where
+    F: PrimeField32,
+{
+    const WIDTH: usize = size_of::<Rv32MultAdapterCols<u8>>();
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type TraceContext<'a> = ();
 
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-
-        let rs1 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, b);
-        let rs2 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, c);
-
-        Ok((
-            [
-                rs1.1.map(F::from_canonical_u8),
-                rs2.1.map(F::from_canonical_u8),
-            ],
-            Self::ReadRecord {
-                rs1: rs1.0,
-                rs2: rs2.0,
-            },
-        ))
+    #[inline(always)]
+    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]) {
+        let adapter_row: &mut Rv32MultAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_row.from_state.pc = F::from_canonical_u32(pc);
+        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
     }
 
-    fn postprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
+    #[inline(always)]
+    fn read(
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-        output: AdapterRuntimeContext<F, Self::Interface>,
-        _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction { a, d, .. } = *instruction;
-        let (rd_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
-
-        let timestamp_delta = memory.timestamp() - from_state.timestamp;
-        debug_assert!(
-            timestamp_delta == 3,
-            "timestamp delta is {}, expected 3",
-            timestamp_delta
-        );
-
-        Ok((
-            ExecutionState {
-                pc: from_state.pc + DEFAULT_PC_STEP,
-                timestamp: memory.timestamp(),
-            },
-            Self::WriteRecord { from_state, rd_id },
-        ))
+        adapter_row: &mut [F],
+    ) -> Self::ReadData {
+        todo!("Implement read method");
     }
 
-    fn generate_trace_row(
-        &self,
-        row_slice: &mut [F],
-        read_record: Self::ReadRecord,
-        write_record: Self::WriteRecord,
-        memory: &OfflineMemory<F>,
+    #[inline(always)]
+    fn write(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+        data: &Self::WriteData,
     ) {
-        let aux_cols_factory = memory.aux_cols_factory();
-        let row_slice: &mut Rv32MultAdapterCols<_> = row_slice.borrow_mut();
-        row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        let rd = memory.record_by_id(write_record.rd_id);
-        row_slice.rd_ptr = rd.pointer;
-        let rs1 = memory.record_by_id(read_record.rs1);
-        let rs2 = memory.record_by_id(read_record.rs2);
-        row_slice.rs1_ptr = rs1.pointer;
-        row_slice.rs2_ptr = rs2.pointer;
-        aux_cols_factory.generate_read_aux(rs1, &mut row_slice.reads_aux[0]);
-        aux_cols_factory.generate_read_aux(rs2, &mut row_slice.reads_aux[1]);
-        aux_cols_factory.generate_write_aux(rd, &mut row_slice.writes_aux);
+        todo!("Implement write method");
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    #[inline(always)]
+    fn fill_trace_row(
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace_ctx: Self::TraceContext<'_>,
+        adapter_row: &mut [F],
+    ) {
+        todo!("Implement fill_trace_row method");
     }
 }
+
+impl<Mem, F> AdapterExecutorE1<Mem, F> for Rv32MultAdapterStep
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    // TODO(ayush): directly use u32
+    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+
+    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+        let Instruction { b, c, d, .. } = instruction;
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+
+        let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+        let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { memory.read(d.as_canonical_u32(), c.as_canonical_u32()) };
+
+        (rs1, rs2)
+    }
+
+    fn write(memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
+        let Instruction { a, d, .. } = *instruction;
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+
+        unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), &rd) };
+    }
+}
+
+// impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
+//     type ReadRecord = Rv32MultReadRecord;
+//     type WriteRecord = Rv32MultWriteRecord;
+//     type Air = Rv32MultAdapterAir;
+//     type Interface = BasicAdapterInterface<
+//         F,
+//         MinimalInstruction<F>,
+//         2,
+//         1,
+//         RV32_REGISTER_NUM_LIMBS,
+//         RV32_REGISTER_NUM_LIMBS,
+//     >;
+
+//     fn preprocess(
+//         &mut self,
+//         memory: &mut MemoryController<F>,
+//         instruction: &Instruction<F>,
+//     ) -> Result<(
+//         <Self::Interface as VmAdapterInterface<F>>::Reads,
+//         Self::ReadRecord,
+//     )> {
+//         let Instruction { b, c, d, .. } = *instruction;
+
+//         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+
+//         let rs1 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, b);
+//         let rs2 = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, c);
+
+//         Ok((
+//             [
+//                 rs1.1.map(F::from_canonical_u8),
+//                 rs2.1.map(F::from_canonical_u8),
+//             ],
+//             Self::ReadRecord {
+//                 rs1: rs1.0,
+//                 rs2: rs2.0,
+//             },
+//         ))
+//     }
+
+//     fn postprocess(
+//         &mut self,
+//         memory: &mut MemoryController<F>,
+//         instruction: &Instruction<F>,
+//         from_state: ExecutionState<u32>,
+//         output: AdapterRuntimeContext<F, Self::Interface>,
+//         _read_record: &Self::ReadRecord,
+//     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
+//         let Instruction { a, d, .. } = *instruction;
+//         let (rd_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
+
+//         let timestamp_delta = memory.timestamp() - from_state.timestamp;
+//         debug_assert!(
+//             timestamp_delta == 3,
+//             "timestamp delta is {}, expected 3",
+//             timestamp_delta
+//         );
+
+//         Ok((
+//             ExecutionState {
+//                 pc: from_state.pc + DEFAULT_PC_STEP,
+//                 timestamp: memory.timestamp(),
+//             },
+//             Self::WriteRecord { from_state, rd_id },
+//         ))
+//     }
+
+//     fn generate_trace_row(
+//         &self,
+//         row_slice: &mut [F],
+//         read_record: Self::ReadRecord,
+//         write_record: Self::WriteRecord,
+//         memory: &OfflineMemory<F>,
+//     ) {
+//         let aux_cols_factory = memory.aux_cols_factory();
+//         let row_slice: &mut Rv32MultAdapterCols<_> = row_slice.borrow_mut();
+//         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
+//         let rd = memory.record_by_id(write_record.rd_id);
+//         row_slice.rd_ptr = rd.pointer;
+//         let rs1 = memory.record_by_id(read_record.rs1);
+//         let rs2 = memory.record_by_id(read_record.rs2);
+//         row_slice.rs1_ptr = rs1.pointer;
+//         row_slice.rs2_ptr = rs2.pointer;
+//         aux_cols_factory.generate_read_aux(rs1, &mut row_slice.reads_aux[0]);
+//         aux_cols_factory.generate_read_aux(rs2, &mut row_slice.reads_aux[1]);
+//         aux_cols_factory.generate_write_aux(rd, &mut row_slice.writes_aux);
+//     }
+
+//     fn air(&self) -> &Self::Air {
+//         &self.air
+//     }
+// }

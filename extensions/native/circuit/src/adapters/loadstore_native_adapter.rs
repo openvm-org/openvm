@@ -5,8 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        instructions::LocalOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionBridge,
-        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        instructions::LocalOpcode, AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext,
+        ExecutionBridge, ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
     system::{
         memory::{
@@ -219,19 +220,7 @@ where
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
-        let Instruction { b, c, e, f, .. } = instruction;
-        let adapter_row: &mut NativeLoadNativeLoadStoreAdapterCols<F> = adapter_row.borrow_mut();
-
-        // TODO(ayush): create similar `tracing_read_reg_or_imm` for F
-        let read = tracing_read_reg_or_imm(
-            memory,
-            e.as_canonical_u32(),
-            b.as_canonical_u32(),
-            // TODO(ayush): why no address space pointer? Should this be hardcoded?
-            &mut adapter_row.e_as,
-            (&mut adapter_row.b_pointer, &mut adapter_row.reads_aux[0]),
-        );
-        read
+        todo!("Implement read method");
     }
 
     #[inline(always)]
@@ -241,17 +230,7 @@ where
         adapter_row: &mut [F],
         data: &Self::WriteData,
     ) {
-        let Instruction { a, d, .. } = instruction;
-        let adapter_row: &mut NativeLoadNativeLoadStoreAdapterCols<F> = adapter_row.borrow_mut();
-
-        // TODO(ayush): create similar `tracing_read_reg_or_imm` for F
-        tracing_write_reg(
-            memory,
-            d.as_canonical_u32(),
-            a.as_canonical_u32(),
-            data,
-            (&mut adapter_row.a_pointer, &mut adapter_row.write_aux[0]),
-        );
+        todo!("Implement write method");
     }
 
     #[inline(always)]
@@ -283,6 +262,7 @@ where
             e,
             ..
         } = instruction;
+        // TODO(ayush): how to handle self.offset?
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let [read_cell]: [F; 1] =
@@ -324,6 +304,7 @@ where
             e,
             ..
         } = instruction;
+        // TODO(ayush): how to handle self.offset?
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let [read_cell]: [F; 1] =

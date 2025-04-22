@@ -2,24 +2,35 @@ use std::borrow::Borrow;
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction,
-        VmAdapterAir,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryWriteAuxCols},
-        MemoryAddress,
+        online::{GuestMemory, TracingMemory},
+        MemoryAddress, MemoryAuxColsFactory, RecordId,
     },
 };
 use openvm_circuit_primitives::utils::not;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
+
+#[repr(C)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Rv32RdWriteWriteRecord {
+    pub from_state: ExecutionState<u32>,
+    pub rd_id: Option<RecordId>,
+}
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -182,3 +193,269 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32CondRdWriteAdapterAir {
         cols.inner.from_state.pc
     }
 }
+
+/// This adapter doesn't read anything, and writes to \[a:4\]_d, where d == 1
+#[derive(derive_new::new)]
+pub struct Rv32RdWriteAdapterStep;
+
+impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32RdWriteAdapterStep
+where
+    F: PrimeField32,
+{
+    const WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type TraceContext<'a> = ();
+
+    #[inline(always)]
+    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]) {
+        let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_row.from_state.pc = F::from_canonical_u32(pc);
+        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    }
+
+    #[inline(always)]
+    fn read(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+    ) -> Self::ReadData {
+        todo!("Implement read method");
+    }
+
+    #[inline(always)]
+    fn write(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+        data: &Self::WriteData,
+    ) {
+        todo!("Implement write method");
+    }
+
+    #[inline(always)]
+    fn fill_trace_row(
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace_ctx: Self::TraceContext<'_>,
+        adapter_row: &mut [F],
+    ) {
+        todo!("Implement fill_trace_row method");
+    }
+}
+
+impl<Mem, F> AdapterExecutorE1<Mem, F> for Rv32RdWriteAdapterStep
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    type ReadData = ();
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+
+    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {}
+
+    fn write(memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
+        let Instruction { a, d, .. } = instruction;
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+
+        unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), &rd) };
+    }
+}
+
+// impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
+//     type ReadRecord = ();
+//     type WriteRecord = Rv32RdWriteWriteRecord;
+//     type Air = Rv32RdWriteAdapterAir;
+//     type Interface = BasicAdapterInterface<F, ImmInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LIMBS>;
+
+//     fn preprocess(
+//         &mut self,
+//         _memory: &mut MemoryController<F>,
+//         instruction: &Instruction<F>,
+//     ) -> Result<(
+//         <Self::Interface as VmAdapterInterface<F>>::Reads,
+//         Self::ReadRecord,
+//     )> {
+//         let d = instruction.d;
+//         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+
+//         Ok(([], ()))
+//     }
+
+//     fn postprocess(
+//         &mut self,
+//         memory: &mut MemoryController<F>,
+//         instruction: &Instruction<F>,
+//         from_state: ExecutionState<u32>,
+//         output: AdapterRuntimeContext<F, Self::Interface>,
+//         _read_record: &Self::ReadRecord,
+//     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
+//         let Instruction { a, d, .. } = *instruction;
+//         let (rd_id, _) = memory.write(d, a, output.writes[0]);
+
+//         Ok((
+//             ExecutionState {
+//                 pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
+//                 timestamp: memory.timestamp(),
+//             },
+//             Self::WriteRecord {
+//                 from_state,
+//                 rd_id: Some(rd_id),
+//             },
+//         ))
+//     }
+
+//     fn generate_trace_row(
+//         &self,
+//         row_slice: &mut [F],
+//         _read_record: Self::ReadRecord,
+//         write_record: Self::WriteRecord,
+//         memory: &OfflineMemory<F>,
+//     ) {
+//         let aux_cols_factory = memory.aux_cols_factory();
+//         let adapter_cols: &mut Rv32RdWriteAdapterCols<F> = row_slice.borrow_mut();
+//         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
+//         let rd = memory.record_by_id(write_record.rd_id.unwrap());
+//         adapter_cols.rd_ptr = rd.pointer;
+//         aux_cols_factory.generate_write_aux(rd, &mut adapter_cols.rd_aux_cols);
+//     }
+
+//     fn air(&self) -> &Self::Air {
+//         &self.air
+//     }
+// }
+
+/// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
+#[derive(derive_new::new)]
+pub struct Rv32CondRdWriteAdapterStep;
+
+impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32CondRdWriteAdapterStep
+where
+    F: PrimeField32,
+{
+    const WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type TraceContext<'a> = ();
+
+    #[inline(always)]
+    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]) {
+        let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_row.from_state.pc = F::from_canonical_u32(pc);
+        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    }
+
+    #[inline(always)]
+    fn read(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+    ) -> Self::ReadData {
+        todo!("Implement read method");
+    }
+
+    #[inline(always)]
+    fn write(
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+        data: &Self::WriteData,
+    ) {
+        todo!("Implement write method");
+    }
+
+    #[inline(always)]
+    fn fill_trace_row(
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace_ctx: Self::TraceContext<'_>,
+        adapter_row: &mut [F],
+    ) {
+        todo!("Implement fill_trace_row method");
+    }
+}
+
+impl<Mem, F> AdapterExecutorE1<Mem, F> for Rv32CondRdWriteAdapterStep
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    type ReadData = ();
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+
+    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+        <Rv32RdWriteAdapterStep as AdapterExecutorE1<Mem, F>>::read(memory, instruction)
+    }
+
+    fn write(memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
+        let Instruction { f: enabled, .. } = instruction;
+
+        if enabled != F::ZERO {
+            <Rv32RdWriteAdapterStep as AdapterExecutorE1<Mem, F>>::write(memory, instruction, rd)
+        }
+    }
+}
+
+// impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
+//     type ReadRecord = ();
+//     type WriteRecord = Rv32RdWriteWriteRecord;
+//     type Air = Rv32CondRdWriteAdapterAir;
+//     type Interface = BasicAdapterInterface<F, ImmInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LIMBS>;
+
+//     fn preprocess(
+//         &mut self,
+//         memory: &mut MemoryController<F>,
+//         instruction: &Instruction<F>,
+//     ) -> Result<(
+//         <Self::Interface as VmAdapterInterface<F>>::Reads,
+//         Self::ReadRecord,
+//     )> {
+//         self.inner.preprocess(memory, instruction)
+//     }
+
+//     fn postprocess(
+//         &mut self,
+//         memory: &mut MemoryController<F>,
+//         instruction: &Instruction<F>,
+//         from_state: ExecutionState<u32>,
+//         output: AdapterRuntimeContext<F, Self::Interface>,
+//         _read_record: &Self::ReadRecord,
+//     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
+//         let Instruction { a, d, .. } = *instruction;
+//         let rd_id = if instruction.f != F::ZERO {
+//             let (rd_id, _) = memory.write(d, a, output.writes[0]);
+//             Some(rd_id)
+//         } else {
+//             memory.increment_timestamp();
+//             None
+//         };
+
+//         Ok((
+//             ExecutionState {
+//                 pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
+//                 timestamp: memory.timestamp(),
+//             },
+//             Self::WriteRecord { from_state, rd_id },
+//         ))
+//     }
+
+//     fn generate_trace_row(
+//         &self,
+//         row_slice: &mut [F],
+//         _read_record: Self::ReadRecord,
+//         write_record: Self::WriteRecord,
+//         memory: &OfflineMemory<F>,
+//     ) {
+//         let aux_cols_factory = memory.aux_cols_factory();
+//         let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = row_slice.borrow_mut();
+//         adapter_cols.inner.from_state = write_record.from_state.map(F::from_canonical_u32);
+//         if let Some(rd_id) = write_record.rd_id {
+//             let rd = memory.record_by_id(rd_id);
+//             adapter_cols.inner.rd_ptr = rd.pointer;
+//             aux_cols_factory.generate_write_aux(rd, &mut adapter_cols.inner.rd_aux_cols);
+//             adapter_cols.needs_write = F::ONE;
+//         }
+//     }
+
+//     fn air(&self) -> &Self::Air {
+//         &self.air
+//     }
+// }

@@ -290,7 +290,7 @@ where
         + for<'a> AdapterExecutorE1<
             Mem,
             F,
-            ReadData = [[u8; NUM_LIMBS]; 2],
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
             WriteData = [u8; NUM_LIMBS],
         >,
 {
@@ -305,7 +305,7 @@ where
 
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        let [rs1_bytes, rs2_bytes] = A::read(&mut state.memory, instruction);
+        let (rs1_bytes, rs2_bytes) = A::read(&mut state.memory, instruction);
 
         let rd_bytes = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1_bytes, &rs2_bytes);
 

@@ -248,35 +248,38 @@ where
     F: PrimeField32,
 {
     // TODO(ayush): directly use u32
-    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
-        let Instruction { a, b, c, e, .. } = instruction;
+        let Instruction { a, b, c, d, e, .. } = instruction;
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert!(
+            e.as_canonical_u32() == RV32_IMM_AS || e.as_canonical_u32() == RV32_REGISTER_AS
+        );
 
-        let rs1_addr = b.as_canonical_u32();
-        let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(RV32_REGISTER_AS, rs1_addr) };
+        let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
 
-        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
+        let rs2 = if e.as_canonical_u32() == RV32_IMM_AS {
             // Use immediate value
             let imm = c.as_canonical_u32();
+            debug_assert_eq!(imm >> 24, 0);
             imm.to_le_bytes()
         } else {
             // Read from register
-            let rs2_addr = c.as_canonical_u32();
-            let rs2_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-                unsafe { memory.read(RV32_REGISTER_AS, rs2_addr) };
-            rs2_bytes
+            let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
+                unsafe { memory.read(RV32_REGISTER_AS, c.as_canonical_u32()) };
+            rs2
         };
 
-        [rs1_bytes, rs2_bytes]
+        (rs1, rs2)
     }
 
-    fn write(memory: &mut Mem, instruction: &Instruction<F>, rd_bytes: &Self::WriteData) {
-        let Instruction { a, .. } = instruction;
+    fn write(memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
+        let Instruction { a, d, .. } = instruction;
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        let rd_addr = a.as_canonical_u32();
-        unsafe { memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
+        unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), &rd) };
     }
 }
