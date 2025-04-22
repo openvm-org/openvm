@@ -4,10 +4,10 @@ use itertools::Itertools;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use openvm_stark_backend::p3_field::{
-    extension::{BinomialExtensionField, BinomiallyExtendable},
-    Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, PrimeField64,
+    extension::BinomiallyExtendable, Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32,
+    PrimeField64,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{fast_ext_field::FastBinomialExtensionField, p3_baby_bear::BabyBear};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
         gates::{GateChip, GateInstructions, RangeChip, RangeInstructions},
@@ -443,7 +443,7 @@ pub struct BabyBearExt4Chip {
 
 #[derive(Copy, Clone, Debug)]
 pub struct AssignedBabyBearExt4(pub [AssignedBabyBear; 4]);
-pub type BabyBearExt4 = BinomialExtensionField<BabyBear, 4>;
+pub type BabyBearExt4 = FastBinomialExtensionField<BabyBear, 4>;
 
 impl AssignedBabyBearExt4 {
     pub fn to_extension_field(&self) -> BabyBearExt4 {

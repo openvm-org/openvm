@@ -4,7 +4,8 @@ use openvm_stark_backend::{
     p3_field::{extension::BinomialExtensionField, FieldAlgebra},
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2_root::root_perm, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
+    config::baby_bear_poseidon2_root::root_perm, fast_ext_field::FastBinomialExtensionField,
+    p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
 };
 use p3_symmetric::Hash;
 
@@ -73,11 +74,11 @@ fn test_challenger_sample_ext() {
     challenger.observe(a);
     challenger.observe(b);
     challenger.observe(c);
-    let gt1: BinomialExtensionField<BabyBear, 4> = challenger.sample_ext_element();
+    let gt1: FastBinomialExtensionField<BabyBear, 4> = challenger.sample_ext_element();
     challenger.observe(a);
     challenger.observe(b);
     challenger.observe(c);
-    let gt2: BinomialExtensionField<BabyBear, 4> = challenger.sample_ext_element();
+    let gt2: FastBinomialExtensionField<BabyBear, 4> = challenger.sample_ext_element();
 
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;

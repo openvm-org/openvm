@@ -10,12 +10,13 @@ use openvm_stark_backend::{
     config::{Com, PcsProof},
     keygen::types::TraceWidth,
     p3_commit::ExtensionMmcs,
-    p3_field::{extension::BinomialExtensionField, Field, FieldAlgebra, FieldExtensionAlgebra},
+    p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra},
     p3_util::log2_strict_usize,
     proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    fast_ext_field::FastBinomialExtensionField,
     p3_baby_bear::{BabyBear, Poseidon2BabyBear},
 };
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof};
@@ -31,7 +32,7 @@ use crate::{
 };
 
 pub type InnerVal = BabyBear;
-pub type InnerChallenge = BinomialExtensionField<InnerVal, 4>;
+pub type InnerChallenge = FastBinomialExtensionField<InnerVal, 4>;
 pub type InnerPerm = Poseidon2BabyBear<16>;
 pub type InnerHash = PaddingFreeSponge<InnerPerm, 16, 8, 8>;
 pub type InnerDigest = [InnerVal; DIGEST_SIZE];

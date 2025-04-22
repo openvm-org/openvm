@@ -1,10 +1,10 @@
 use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, Field, FieldAlgebra};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
+use openvm_stark_sdk::{fast_ext_field::FastBinomialExtensionField, p3_baby_bear::BabyBear};
 
 type F = BabyBear;
-type EF = BinomialExtensionField<BabyBear, 4>;
+type EF = FastBinomialExtensionField<BabyBear, 4>;
 
 #[test]
 fn test_hint_bits_felt() {

@@ -3,8 +3,8 @@ use openvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
 };
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_sdk::{fast_ext_field::FastBinomialExtensionField, p3_baby_bear::BabyBear};
 
 fn fibonacci(n: u32) -> u32 {
     if n == 0 {
@@ -23,7 +23,7 @@ fn fibonacci(n: u32) -> u32 {
 
 fn main() {
     type F = BabyBear;
-    type EF = BinomialExtensionField<F, 4>;
+    type EF = FastBinomialExtensionField<F, 4>;
 
     let n_val = 10;
     let mut builder = AsmBuilder::<F, EF>::default();

@@ -7,12 +7,14 @@ use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldExtensionOpcode;
 use openvm_stark_backend::{
-    p3_field::{extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra},
+    p3_field::{FieldAlgebra, FieldExtensionAlgebra},
     utils::disable_debug_builder,
     verifier::VerificationError,
     ChipUsageGetter,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{
+    fast_ext_field::FastBinomialExtensionField, p3_baby_bear::BabyBear, utils::create_seeded_rng,
+};
 use rand::Rng;
 use strum::EnumCount;
 
@@ -102,7 +104,7 @@ fn new_field_extension_air_test() {
 #[test]
 fn new_field_extension_consistency_test() {
     type F = BabyBear;
-    type EF = BinomialExtensionField<F, 4>;
+    type EF = FastBinomialExtensionField<F, 4>;
 
     let len_tests = 100;
     let mut rng = create_seeded_rng();

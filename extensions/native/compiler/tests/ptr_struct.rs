@@ -6,7 +6,7 @@ use openvm_native_compiler::{
 };
 use openvm_native_compiler_derive::DslVariable;
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{fast_ext_field::FastBinomialExtensionField, p3_baby_bear::BabyBear};
 use rand::{thread_rng, Rng};
 
 #[derive(DslVariable, Clone, Debug)]
@@ -20,7 +20,7 @@ pub struct Point<C: Config> {
 #[ignore = "test too slow"]
 fn test_compiler_array() {
     type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
+    type EF = FastBinomialExtensionField<BabyBear, 4>;
 
     let mut builder = AsmBuilder::<F, EF>::default();
 

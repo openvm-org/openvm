@@ -3,16 +3,14 @@ use openvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Ext, Felt},
 };
-use openvm_stark_backend::p3_field::{
-    extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra,
-};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use openvm_stark_sdk::{fast_ext_field::FastBinomialExtensionField, p3_baby_bear::BabyBear};
 use rand::{thread_rng, Rng};
 #[test]
 fn test_ext2felt() {
     const D: usize = 4;
     type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, D>;
+    type EF = FastBinomialExtensionField<BabyBear, D>;
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
@@ -38,7 +36,7 @@ fn test_ext2felt() {
 fn test_ext_from_base_slice() {
     const D: usize = 4;
     type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, D>;
+    type EF = FastBinomialExtensionField<BabyBear, D>;
 
     let mut builder = AsmBuilder::<F, EF>::default();
 

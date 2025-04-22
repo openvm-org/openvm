@@ -9,16 +9,15 @@ use openvm_native_recursion::hints::{InnerBatchOpening, InnerFriProof, InnerQuer
 use openvm_stark_backend::{
     config::{Com, PcsProof},
     interaction::{fri_log_up::FriLogUpPartialProof, RapPhaseSeqKind},
-    p3_field::{
-        extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra, PrimeField32,
-    },
+    p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32},
     proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
 };
+use openvm_stark_sdk::fast_ext_field::FastBinomialExtensionField;
 use p3_fri::CommitPhaseProofStep;
 
 use super::{F, SC}; // BabyBearPoseidon2Config
 
-type Challenge = BinomialExtensionField<F, 4>;
+type Challenge = FastBinomialExtensionField<F, 4>;
 
 /// Codec version should change only when proof system or proof format changes.
 /// It does correspond to the main openvm version (which may change more frequently).

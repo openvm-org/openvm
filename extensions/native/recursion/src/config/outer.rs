@@ -4,10 +4,10 @@ use openvm_stark_backend::{
     keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey},
     p3_challenger::MultiField32Challenger,
     p3_commit::ExtensionMmcs,
-    p3_field::extension::BinomialExtensionField,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
+    fast_ext_field::FastBinomialExtensionField,
     p3_baby_bear::BabyBear,
     p3_bn254_fr::{Bn254Fr, Poseidon2Bn254},
 };
@@ -35,12 +35,12 @@ pub struct OuterConfig;
 impl Config for OuterConfig {
     type N = Bn254Fr;
     type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
+    type EF = FastBinomialExtensionField<BabyBear, 4>;
 }
 
 /// A configuration for outer recursion.
 pub type OuterVal = BabyBear;
-pub type OuterChallenge = BinomialExtensionField<OuterVal, 4>;
+pub type OuterChallenge = FastBinomialExtensionField<OuterVal, 4>;
 pub type OuterPerm = Poseidon2Bn254<WIDTH>;
 pub type OuterHash =
     MultiField32PaddingFreeSponge<OuterVal, Bn254Fr, OuterPerm, WIDTH, RATE, DIGEST_WIDTH>;

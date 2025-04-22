@@ -5,13 +5,16 @@ use openvm_native_recursion::testing_utils::inner::run_recursive_test;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
-    p3_field::{extension::BinomialExtensionField, FieldAlgebra},
+    p3_field::FieldAlgebra,
 };
-use openvm_stark_sdk::{config::FriParameters, p3_baby_bear::BabyBear, utils::ProofInputForTest};
+use openvm_stark_sdk::{
+    config::FriParameters, fast_ext_field::FastBinomialExtensionField, p3_baby_bear::BabyBear,
+    utils::ProofInputForTest,
+};
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
+    type EF = FastBinomialExtensionField<BabyBear, 4>;
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
