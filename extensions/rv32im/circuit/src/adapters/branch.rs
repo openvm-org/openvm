@@ -12,6 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols},
+            online::GuestMemory,
             MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
@@ -19,7 +20,9 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -29,30 +32,6 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
-
-/// Reads instructions of the form OP a, b, c, d, e where if(\[a:4\]_d op \[b:4\]_e) pc += c.
-/// Operands d and e can only be 1.
-#[derive(Debug)]
-pub struct Rv32BranchAdapterChip<F: Field> {
-    pub air: Rv32BranchAdapterAir,
-    _marker: PhantomData<F>,
-}
-
-impl<F: PrimeField32> Rv32BranchAdapterChip<F> {
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
-    ) -> Self {
-        Self {
-            air: Rv32BranchAdapterAir {
-                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-            },
-            _marker: PhantomData,
-        }
-    }
-}
 
 #[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
@@ -149,6 +128,73 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
     }
 }
 
+/// Reads instructions of the form OP a, b, c, d, e where if(\[a:4\]_d op \[b:4\]_e) pc += c.
+/// Operands d and e can only be 1.
+#[derive(Debug)]
+pub struct Rv32BranchAdapterChip<F: Field> {
+    pub air: Rv32BranchAdapterAir,
+    _marker: PhantomData<F>,
+}
+
+impl<F: PrimeField32> Rv32BranchAdapterChip<F> {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        memory_bridge: MemoryBridge,
+    ) -> Self {
+        Self {
+            air: Rv32BranchAdapterAir {
+                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
+                memory_bridge,
+            },
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<Mem, F, const LIMB_BITS: usize> AdapterExecutorE1<Mem, F> for Rv32BaseAluAdapterStep<LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    // TODO(ayush): directly use u32
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+
+    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+        let Instruction {
+            opcode, a, b, c, e, ..
+        } = instruction;
+
+        let rs1_addr = b.as_canonical_u32();
+        let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { memory.read(RV32_REGISTER_AS, rs1_addr) };
+
+        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
+            // Use immediate value
+            let imm = c.as_canonical_u32();
+            imm.to_le_bytes()
+        } else {
+            // Read from register
+            let rs2_addr = c.as_canonical_u32();
+            let rs2_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
+                unsafe { memory.read(RV32_REGISTER_AS, rs2_addr) };
+            rs2_bytes
+        };
+
+        [rs1_bytes, rs2_bytes]
+    }
+
+    fn write(memory: &mut Mem, instruction: &Instruction<F>, rd_bytes: &Self::WriteData) {
+        let Instruction {
+            opcode, a, b, c, e, ..
+        } = instruction;
+
+        let rd_addr = a.as_canonical_u32();
+        unsafe { memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
+    }
+}
+
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
     type ReadRecord = Rv32BranchReadRecord;
     type WriteRecord = Rv32BranchWriteRecord;
@@ -227,48 +273,5 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
 
     fn air(&self) -> &Self::Air {
         &self.air
-    }
-}
-
-impl<Mem, F, const LIMB_BITS: usize> AdapterExecutorE1<Mem, F> for Rv32BaseAluAdapterStep<LIMB_BITS>
-where
-    Mem: GuestMemory,
-    F: PrimeField32,
-{
-    // TODO(ayush): directly use u32
-    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-
-    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
-        let Instruction {
-            opcode, a, b, c, e, ..
-        } = instruction;
-
-        let rs1_addr = b.as_canonical_u32();
-        let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(RV32_REGISTER_AS, rs1_addr) };
-
-        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
-            // Use immediate value
-            let imm = c.as_canonical_u32();
-            imm.to_le_bytes()
-        } else {
-            // Read from register
-            let rs2_addr = c.as_canonical_u32();
-            let rs2_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-                unsafe { memory.read(RV32_REGISTER_AS, rs2_addr) };
-            rs2_bytes
-        };
-
-        [rs1_bytes, rs2_bytes]
-    }
-
-    fn write(memory: &mut Mem, instruction: &Instruction<F>, rd_bytes: &Self::WriteData) {
-        let Instruction {
-            opcode, a, b, c, e, ..
-        } = instruction;
-
-        let rd_addr = a.as_canonical_u32();
-        unsafe { memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
     }
 }

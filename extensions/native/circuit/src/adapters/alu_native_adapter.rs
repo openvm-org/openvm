@@ -27,6 +27,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
+use super::{tracing_read_or_imm, tracing_write, tracing_write_reg};
+
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct AluNativeAdapterCols<T> {
@@ -132,7 +134,6 @@ where
     const WIDTH: usize = size_of::<AluNativeAdapterCols<u8>>();
     type ReadData = [F; 2];
     type WriteData = [F; 1];
-    // TODO(ayush): what's this
     type TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>;
 
     #[inline(always)]
@@ -150,17 +151,17 @@ where
         adapter_row: &mut [F],
     ) -> Self::ReadData {
         let Instruction { b, c, e, f, .. } = instruction;
+
         let adapter_row: &mut AluNativeAdapterCols<F> = adapter_row.borrow_mut();
 
-        // TODO(ayush): create similar `tracing_read_reg_or_imm` for F
-        let read1 = tracing_read_reg_or_imm(
+        let read1 = tracing_read_or_imm(
             memory,
             e.as_canonical_u32(),
             b.as_canonical_u32(),
             &mut adapter_row.e_as,
             (&mut adapter_row.b_pointer, &mut adapter_row.reads_aux[0]),
         );
-        let read2 = tracing_read_reg_or_imm(
+        let read2 = tracing_read_or_imm(
             memory,
             f.as_canonical_u32(),
             c.as_canonical_u32(),
@@ -178,11 +179,10 @@ where
         data: &Self::WriteData,
     ) {
         let Instruction { a, .. } = instruction;
+
         let adapter_row: &mut AluNativeAdapterCols<F> = adapter_row.borrow_mut();
-        // TODO(ayush): create similar `tracing_read_reg_or_imm` for F
-        tracing_write_reg(
+        tracing_write(
             memory,
-            AS::Native,
             a.as_canonical_u32(),
             data,
             (&mut adapter_row.a_pointer, &mut adapter_row.write_aux),

@@ -153,8 +153,7 @@ where
         let Instruction { b, c, e, f, .. } = instruction;
         let adapter_row: &mut BranchNativeAdapterCols<F> = adapter_row.borrow_mut();
 
-        // TODO(ayush): create similar `tracing_read_reg_or_imm` for F
-        let read1 = tracing_read_reg_or_imm(
+        let read1 = tracing_read_or_imm(
             memory,
             d.as_canonical_u32(),
             a.as_canonical_u32(),
@@ -164,7 +163,7 @@ where
                 &mut adapter_row.reads_aux[0].read_aux,
             ),
         );
-        let read2 = tracing_read_reg_or_imm(
+        let read2 = tracing_read_or_imm(
             memory,
             e.as_canonical_u32(),
             b.as_canonical_u32(),
