@@ -194,7 +194,6 @@ pub struct LessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     pub opcode: LessThanOpcode,
 }
 
-#[derive(derive_new::new)]
 pub struct LessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
@@ -376,15 +375,15 @@ where
             opcode, a, b, c, e, ..
         } = instruction;
 
-        let less_than_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let less_than_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let (rs1, rs2) = A::read(&mut state.memory, instruction);
 
         // Run the comparison
         let (cmp_result, _, _, _) =
             run_less_than::<NUM_LIMBS, LIMB_BITS>(less_than_opcode, &rs1, &rs2);
-        // TODO(ayush): can i write just [u8; 1]?
-        let rd = (cmp_result as u32).to_le_bytes();
+        let mut rd = [0u8; NUM_LIMBS];
+        rd[0] = cmp_result as u8;
 
         A::write(&mut state.memory, instruction, &rd);
 

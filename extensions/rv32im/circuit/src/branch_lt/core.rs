@@ -263,7 +263,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            BranchLessThanOpcode::from_usize(opcode - self.air.offset)
+            BranchLessThanOpcode::from_usize(opcode - self.offset)
         )
     }
 

@@ -493,9 +493,11 @@ where
         } = *instruction;
 
         // Determine opcode and operation type
-        let divrem_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let divrem_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let (rs1, rs2) = A::read(&mut state.memory, instruction);
+        let rs1 = rs1.map(u32::from);
+        let rs2 = rs2.map(u32::from);
 
         let is_div = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::DIVU;
         let is_signed = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::REM;

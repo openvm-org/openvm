@@ -306,7 +306,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv32LoadStoreOpcode::from_usize(opcode - self.air.offset)
+            Rv32LoadStoreOpcode::from_usize(opcode - self.offset)
         )
     }
 
@@ -353,8 +353,7 @@ where
         } = instruction;
 
         // Get the local opcode for this instruction
-        let local_opcode =
-            Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let ((prev_data, read_data), shift_amount) = A::read(&mut state.memory, instruction);
         let read_data = read_data.map(F::from_canonical_u8);

@@ -315,6 +315,8 @@ where
         let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
         let (rs1, rs2) = A::read(&mut state.memory, instruction);
+        let rs1 = rs1.map(u32::from);
+        let rs2 = rs2.map(u32::from);
 
         let (rd, _, _, _, _) = run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &rs1, &rs2);
         let rd = rd.map(|x| x as u8);

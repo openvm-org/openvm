@@ -268,6 +268,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, 
             offset,
             bitwise_lookup_chip,
             range_checker_chip,
+            phantom: PhantomData,
         }
     }
 
@@ -282,7 +283,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, 
         F: PrimeField32,
     {
         let opcode = instruction.opcode;
-        let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let (a, limb_shift, bit_shift) = run_shift::<NUM_LIMBS, LIMB_BITS>(local_opcode, &b, &c);
 
@@ -391,11 +392,7 @@ where
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        A::fill_trace_row(
-            mem_helper,
-            self.core.bitwise_lookup_chip.as_ref(),
-            adapter_row,
-        );
+        A::fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
         self.fill_trace_row_core(core_row);
     }
 }
@@ -422,7 +419,7 @@ where
             opcode, a, b, c, e, ..
         } = instruction;
 
-        let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let (rs1, rs2) = A::read(&mut state.memory, instruction);
 

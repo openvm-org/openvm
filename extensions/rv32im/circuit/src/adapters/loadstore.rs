@@ -505,9 +505,11 @@ where
 
         let ptr_val = ptr_val - shift_amount; // aligned ptr
 
-        let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
+        // TODO(ayush): check this
+        let mem_ptr_limbs: [u32; RV32_REGISTER_NUM_LIMBS] =
+            array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
 
-        if enabled != F::ZERO {
+        if *enabled != F::ZERO {
             match local_opcode {
                 STOREW | STOREH | STOREB => {
                     let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));

@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
@@ -388,7 +388,7 @@ where
     fn write(memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
         let Instruction { f: enabled, .. } = instruction;
 
-        if enabled != F::ZERO {
+        if *enabled != F::ZERO {
             <Rv32RdWriteAdapterStep as AdapterExecutorE1<Mem, F>>::write(memory, instruction, rd)
         }
     }

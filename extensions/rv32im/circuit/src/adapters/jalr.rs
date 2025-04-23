@@ -231,7 +231,7 @@ where
             a, d, f: enabled, ..
         } = instruction;
 
-        if enabled != F::ZERO {
+        if *enabled != F::ZERO {
             unsafe {
                 memory.write(d.as_canonical_u32(), a.as_canonical_u32(), data);
             }

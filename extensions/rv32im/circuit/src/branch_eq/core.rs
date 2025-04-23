@@ -200,10 +200,7 @@ where
         >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            BranchEqualOpcode::from_usize(opcode - self.air.offset)
-        )
+        format!("{:?}", BranchEqualOpcode::from_usize(opcode - self.offset))
     }
 
     fn execute(
@@ -258,7 +255,7 @@ where
             state.pc = state.pc.wrapping_add(imm);
         } else {
             // TODO(ayush): why not DEFAULT_PC_STEP or some constant?
-            state.pc = state.pc.wrapping_add(self.air.pc_step);
+            state.pc = state.pc.wrapping_add(self.pc_step);
         }
 
         Ok(())
