@@ -127,7 +127,12 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         target_filter: &Option<TargetFilter>,
         init_file_name: Option<&str>, // If None, we use "openvm-init.rs"
     ) -> Result<Elf> {
-        generate_init_file(pkg_dir.as_ref(), &vm_config.modular, init_file_name)?;
+        generate_init_file(
+            pkg_dir.as_ref(),
+            &vm_config.modular,
+            &vm_config.fp2,
+            init_file_name,
+        )?;
         let pkg = get_package(pkg_dir.as_ref());
         let target_dir = match build_guest_package(&pkg, &guest_opts, None, target_filter) {
             Ok(target_dir) => target_dir,

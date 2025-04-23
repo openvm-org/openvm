@@ -37,3 +37,5 @@ pub mod bls12_381;
 /// Types for BN254 curve with intrinsic functions.
 #[cfg(feature = "bn254")]
 pub mod bn254;
+
+pub use openvm_algebra_guest::init;

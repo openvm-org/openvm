@@ -29,19 +29,25 @@ pub struct Rv32PairingConfig {
 }
 
 impl Rv32PairingConfig {
-    pub fn new(curves: Vec<PairingCurve>) -> Self {
-        let mut primes: Vec<_> = curves
+    pub fn new(curves: Vec<PairingCurve>, complex_struct_names: Vec<String>) -> Self {
+        let modulus_primes: Vec<_> = curves
             .iter()
             .map(|c| c.curve_config().modulus.clone())
             .collect();
-        primes.extend(curves.iter().map(|c| c.curve_config().scalar.clone()));
+        let mut modulus_and_scalar_primes = modulus_primes.clone();
+        modulus_and_scalar_primes.extend(curves.iter().map(|c| c.curve_config().scalar.clone()));
         Self {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
-            modular: ModularExtension::new(primes.to_vec()),
-            fp2: Fp2Extension::new(primes.to_vec()),
+            modular: ModularExtension::new(modulus_and_scalar_primes),
+            fp2: Fp2Extension::new(
+                complex_struct_names
+                    .into_iter()
+                    .zip(modulus_primes)
+                    .collect(),
+            ),
             weierstrass: WeierstrassExtension::new(
                 curves.iter().map(|c| c.curve_config()).collect(),
             ),

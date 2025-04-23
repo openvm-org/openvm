@@ -12,15 +12,11 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Mod4 { modulus = "987898789" },
 }
 
-init!("openvm-init-complex-redundant-modulus.rs");
-
 openvm_algebra_complex_macros::complex_declare! {
     Complex2 { mod_type = Mod3 },
 }
 
-openvm_algebra_complex_macros::complex_init! {
-    Complex2 { mod_idx = 2 },
-}
+init!("openvm-init-complex-redundant-modulus.rs");
 
 pub fn main() {
     setup_all_moduli();

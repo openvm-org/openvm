@@ -23,7 +23,7 @@ mod bn254 {
     use openvm_instructions::exe::VmExe;
     use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
     use openvm_pairing_guest::{
-        bn254::BN254_MODULUS,
+        bn254::{BN254_COMPLEX_STRUCT_NAME, BN254_MODULUS},
         halo2curves_shims::bn254::Bn254,
         pairing::{EvaluatedLine, FinalExp, LineMulDType, MillerStep, MultiMillerLoop},
     };
@@ -40,13 +40,18 @@ mod bn254 {
 
     pub fn get_testing_config() -> Rv32PairingConfig {
         let primes = [BN254_MODULUS.clone()];
+        let complex_struct_names = [BN254_COMPLEX_STRUCT_NAME.to_string()];
+        let primes_with_names = complex_struct_names
+            .into_iter()
+            .zip(primes.clone())
+            .collect::<Vec<_>>();
         Rv32PairingConfig {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
-            fp2: Fp2Extension::new(primes.to_vec()),
+            fp2: Fp2Extension::new(primes_with_names),
             weierstrass: WeierstrassExtension::new(vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bn254]),
         }
@@ -433,7 +438,7 @@ mod bls12_381 {
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
     use openvm_pairing_guest::{
-        bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER},
+        bls12_381::{BLS12_381_COMPLEX_STRUCT_NAME, BLS12_381_MODULUS, BLS12_381_ORDER},
         halo2curves_shims::bls12_381::Bls12_381,
         pairing::{EvaluatedLine, FinalExp, LineMulMType, MillerStep, MultiMillerLoop},
     };
@@ -450,13 +455,18 @@ mod bls12_381 {
 
     pub fn get_testing_config() -> Rv32PairingConfig {
         let primes = [BLS12_381_MODULUS.clone()];
+        let complex_struct_names = [BLS12_381_COMPLEX_STRUCT_NAME.to_string()];
+        let primes_with_names = complex_struct_names
+            .into_iter()
+            .zip(primes.clone())
+            .collect::<Vec<_>>();
         Rv32PairingConfig {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
-            fp2: Fp2Extension::new(primes.to_vec()),
+            fp2: Fp2Extension::new(primes_with_names),
             weierstrass: WeierstrassExtension::new(vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bls12_381]),
         }

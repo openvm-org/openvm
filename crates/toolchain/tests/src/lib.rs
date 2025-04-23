@@ -77,6 +77,7 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
         generate_init_file(
             &manifest_dir,
             &init_config.modular_config,
+            &init_config.fp2_config,
             Some(&format!("openvm-init-{}.rs", example_name)),
         )?;
     }

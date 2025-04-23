@@ -50,14 +50,18 @@ pub struct Rv32ModularWithFp2Config {
 }
 
 impl Rv32ModularWithFp2Config {
-    pub fn new(moduli: Vec<BigUint>) -> Self {
+    pub fn new(moduli_with_names: Vec<(String, BigUint)>) -> Self {
+        let moduli = moduli_with_names
+            .iter()
+            .map(|(_, modulus)| modulus.clone())
+            .collect();
         Self {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
-            modular: ModularExtension::new(moduli.clone()),
-            fp2: Fp2Extension::new(moduli),
+            modular: ModularExtension::new(moduli),
+            fp2: Fp2Extension::new(moduli_with_names),
         }
     }
 }

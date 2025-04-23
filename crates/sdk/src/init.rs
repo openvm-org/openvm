@@ -1,13 +1,15 @@
 use std::{fs::File, io::Write, path::Path};
 
 use eyre::Result;
-use openvm_algebra_circuit::ModularExtension;
+use num_bigint::BigUint;
+use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 
 // Reads the vm config and generates a init.rs file that contains a call to moduli_init!,
 // complex_init!, sw_init! with the supported moduli and curves.
 pub fn generate_init_file(
     manifest_dir: &Path,
     modular_config: &Option<ModularExtension>,
+    complex_config: &Option<Fp2Extension>,
     init_file_name: Option<&str>, // if None, we use "openvm-init.rs"
 ) -> Result<()> {
     let dest_path = Path::new(manifest_dir).join(init_file_name.unwrap_or("openvm-init.rs"));
@@ -19,6 +21,7 @@ pub fn generate_init_file(
     )?;
 
     write_moduli_init(&mut f, modular_config)?;
+    write_complex_init(&mut f, modular_config, complex_config)?;
 
     Ok(())
 }
@@ -42,20 +45,41 @@ fn write_moduli_init(f: &mut File, modular_config: &Option<ModularExtension>) ->
     }
 }
 
-/*
-fn write_complex_init(f: &mut File, config: &SdkVmConfig) -> Result<()> {
-    if let Some(fp2) = &config.fp2 {
+fn write_complex_init(
+    f: &mut File,
+    modular_config: &Option<ModularExtension>,
+    config: &Option<Fp2Extension>,
+) -> Result<()> {
+    if let Some(fp2) = &config {
+        assert!(
+            modular_config.is_some(),
+            "ModularExtension is required for Fp2Extension"
+        );
+        let modular_config = modular_config.as_ref().unwrap();
+        fn get_index_of_modulus(modulus: &BigUint, modular_config: &ModularExtension) -> usize {
+            modular_config
+                .supported_modulus
+                .iter()
+                .position(|m| m == modulus)
+                .expect("Modulus used in Fp2Extension not found in ModularExtension")
+        }
         let supported_moduli = fp2
             .supported_modulus
             .iter()
-            .map(|modulus| format!("\"{}\"", modulus))
+            .map(|(name, modulus)| {
+                format!(
+                    "{} {{ mod_idx = {} }}",
+                    name,
+                    get_index_of_modulus(modulus, modular_config)
+                )
+            })
             .collect::<Vec<String>>()
             .join(", ");
 
         writeln!(
             f,
             r#"
-openvm_algebra_guest::moduli_macros::moduli_init! {{
+openvm_algebra_guest::complex_macros::complex_init! {{
 {supported_moduli}
 }}
 "#,
@@ -65,4 +89,3 @@ openvm_algebra_guest::moduli_macros::moduli_init! {{
         Ok(())
     }
 }
-*/

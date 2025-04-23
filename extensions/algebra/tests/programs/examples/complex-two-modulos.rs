@@ -10,16 +10,12 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Mod2 { modulus = "1000000007" }
 }
 
-init!("openvm-init-complex-two-modulos.rs");
-
 openvm_algebra_complex_macros::complex_declare! {
     Complex1 { mod_type = Mod1 },
     Complex2 { mod_type = Mod2 },
 }
 
-openvm_algebra_complex_macros::complex_init! {
-    Complex1 { mod_idx = 0 }, Complex2 { mod_idx = 1 },
-}
+init!("openvm-init-complex-two-modulos.rs");
 
 pub fn main() {
     setup_all_moduli();

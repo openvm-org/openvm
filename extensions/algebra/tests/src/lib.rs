@@ -84,8 +84,14 @@ mod tests {
     #[test]
     fn test_complex_two_moduli() -> Result<()> {
         let config = Rv32ModularWithFp2Config::new(vec![
-            BigUint::from_str("998244353").unwrap(),
-            BigUint::from_str("1000000007").unwrap(),
+            (
+                "Complex1".to_string(),
+                BigUint::from_str("998244353").unwrap(),
+            ),
+            (
+                "Complex2".to_string(),
+                BigUint::from_str("1000000007").unwrap(),
+            ),
         ]);
         let elf = build_example_program_at_path(
             get_programs_dir!(),
@@ -118,7 +124,10 @@ mod tests {
                 BigUint::from_str("1000000009").unwrap(),
                 BigUint::from_str("987898789").unwrap(),
             ]),
-            fp2: Fp2Extension::new(vec![BigUint::from_str("1000000009").unwrap()]),
+            fp2: Fp2Extension::new(vec![(
+                "Complex2".to_string(),
+                BigUint::from_str("1000000009").unwrap(),
+            )]),
         };
         let elf = build_example_program_at_path(
             get_programs_dir!(),
@@ -140,7 +149,10 @@ mod tests {
 
     #[test]
     fn test_complex() -> Result<()> {
-        let config = Rv32ModularWithFp2Config::new(vec![SECP256K1_CONFIG.modulus.clone()]);
+        let config = Rv32ModularWithFp2Config::new(vec![(
+            "Complex".to_string(),
+            SECP256K1_CONFIG.modulus.clone(),
+        )]);
         let elf = build_example_program_at_path(
             get_programs_dir!(),
             "complex-secp256k1",
