@@ -17,6 +17,7 @@ use crate::{
         vm::{local::VmLocalProver, SingleSegmentVmProver},
         RootVerifierLocalProver,
     },
+    types::E2eStarkProof,
     NonRootCommittedExe, RootSC, F, SC,
 };
 
@@ -83,50 +84,30 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
         self.generate_root_proof_impl(root_verifier_input)
     }
 
+    pub fn generate_leaf_proofs(&self, app_proofs: &ContinuationVmProof<SC>) -> Vec<Proof<SC>> {
+        self.leaf_controller
+            .generate_proof(&self.leaf_prover, app_proofs)
+    }
+
     pub fn generate_root_verifier_input(
         &self,
         app_proofs: ContinuationVmProof<SC>,
     ) -> RootVmVerifierInput<SC> {
-        let leaf_proofs = self
-            .leaf_controller
-            .generate_proof(&self.leaf_prover, &app_proofs);
+        let leaf_proofs = self.generate_leaf_proofs(&app_proofs);
         let public_values = app_proofs.user_public_values.public_values;
-        let internal_proof = self.generate_internal_proof_impl(leaf_proofs, &public_values);
-        RootVmVerifierInput {
-            proofs: vec![internal_proof],
-            public_values,
-        }
+        let e2e_stark_proof = self.generate_e2e_stark_proof(leaf_proofs, public_values);
+        self.wrap_e2e_stark_proof(e2e_stark_proof)
     }
 
-    fn generate_internal_proof_impl(
+    pub fn generate_e2e_stark_proof(
         &self,
         leaf_proofs: Vec<Proof<SC>>,
-        public_values: &[F],
-    ) -> Proof<SC> {
+        public_values: Vec<F>,
+    ) -> E2eStarkProof {
         let mut internal_node_idx = -1;
         let mut internal_node_height = 0;
         let mut proofs = leaf_proofs;
-        let mut wrapper_layers = 0;
-        loop {
-            if proofs.len() == 1 {
-                let actual_air_heights =
-                    self.root_prover
-                        .execute_for_air_heights(RootVmVerifierInput {
-                            proofs: vec![proofs[0].clone()],
-                            public_values: public_values.to_vec(),
-                        });
-                // Root verifier can handle the internal proof. We can stop here.
-                if heights_le(
-                    &actual_air_heights,
-                    &self.root_prover.root_verifier_pk.air_heights,
-                ) {
-                    break;
-                }
-                if wrapper_layers >= self.max_internal_wrapper_layers {
-                    panic!("The heights of the root verifier still exceed the required heights after {} wrapper layers", self.max_internal_wrapper_layers);
-                }
-                wrapper_layers += 1;
-            }
+        while proofs.len() > 1 {
             let internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
                 self.internal_prover
                     .committed_exe
@@ -158,7 +139,63 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
             });
             internal_node_height += 1;
         }
-        proofs.pop().unwrap()
+        E2eStarkProof {
+            proof: proofs.pop().unwrap(),
+            user_public_values: public_values,
+        }
+    }
+
+    /// Wrap the e2e stark proof until its heights meet the requirements of the root verifier.
+    pub fn wrap_e2e_stark_proof(&self, e2e_stark_proof: E2eStarkProof) -> RootVmVerifierInput<SC> {
+        let internal_commit = self
+            .internal_prover
+            .committed_exe
+            .get_program_commit()
+            .into();
+        let E2eStarkProof {
+            mut proof,
+            user_public_values,
+        } = e2e_stark_proof;
+        let mut wrapper_layers = 0;
+        loop {
+            let actual_air_heights =
+                self.root_prover
+                    .execute_for_air_heights(RootVmVerifierInput {
+                        proofs: vec![proof.clone()],
+                        public_values: user_public_values.clone(),
+                    });
+            // Root verifier can handle the internal proof. We can stop here.
+            if heights_le(
+                &actual_air_heights,
+                &self.root_prover.root_verifier_pk.air_heights,
+            ) {
+                break;
+            }
+            if wrapper_layers >= self.max_internal_wrapper_layers {
+                panic!("The heights of the root verifier still exceed the required heights after {} wrapper layers", self.max_internal_wrapper_layers);
+            }
+            wrapper_layers += 1;
+            let input = InternalVmVerifierInput {
+                self_program_commit: internal_commit,
+                proofs: vec![proof.clone()],
+            };
+            proof = info_span!(
+                "wrapper_layer",
+                group = format!("internal_wrapper.{wrapper_layers}")
+            )
+            .in_scope(|| {
+                #[cfg(feature = "bench-metrics")]
+                {
+                    metrics::counter!("fri.log_blowup")
+                        .absolute(self.internal_prover.fri_params().log_blowup as u64);
+                }
+                SingleSegmentVmProver::prove(&self.internal_prover, input.write())
+            });
+        }
+        RootVmVerifierInput {
+            proofs: vec![proof],
+            public_values: user_public_values,
+        }
     }
 
     fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<RootSC> {

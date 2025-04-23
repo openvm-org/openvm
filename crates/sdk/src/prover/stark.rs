@@ -9,6 +9,7 @@ use crate::{
     config::AggregationTreeConfig,
     keygen::{AggStarkProvingKey, AppProvingKey},
     prover::{agg::AggStarkProver, app::AppProver},
+    types::E2eStarkProof,
     NonRootCommittedExe, RootSC, StdIn, F, SC,
 };
 
@@ -67,5 +68,17 @@ impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
     {
         let app_proof = self.app_prover.generate_app_proof(input);
         self.agg_prover.generate_root_verifier_input(app_proof)
+    }
+
+    pub fn generate_e2e_stark_proof(&self, input: StdIn) -> E2eStarkProof
+    where
+        VC: VmConfig<F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let app_proof = self.app_prover.generate_app_proof(input);
+        let leaf_proofs = self.agg_prover.generate_leaf_proofs(&app_proof);
+        self.agg_prover
+            .generate_e2e_stark_proof(leaf_proofs, app_proof.user_public_values.public_values)
     }
 }
