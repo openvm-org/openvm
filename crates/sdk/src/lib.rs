@@ -131,6 +131,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             pkg_dir.as_ref(),
             &vm_config.modular,
             &vm_config.fp2,
+            &vm_config.ecc,
             init_file_name,
         )?;
         let pkg = get_package(pkg_dir.as_ref());

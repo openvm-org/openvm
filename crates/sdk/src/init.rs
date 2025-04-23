@@ -3,6 +3,7 @@ use std::{fs::File, io::Write, path::Path};
 use eyre::Result;
 use num_bigint::BigUint;
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
+use openvm_ecc_circuit::WeierstrassExtension;
 
 // Reads the vm config and generates a init.rs file that contains a call to moduli_init!,
 // complex_init!, sw_init! with the supported moduli and curves.
@@ -10,6 +11,7 @@ pub fn generate_init_file(
     manifest_dir: &Path,
     modular_config: &Option<ModularExtension>,
     complex_config: &Option<Fp2Extension>,
+    weierstrass_config: &Option<WeierstrassExtension>,
     init_file_name: Option<&str>, // if None, we use "openvm-init.rs"
 ) -> Result<()> {
     let dest_path = Path::new(manifest_dir).join(init_file_name.unwrap_or("openvm-init.rs"));
@@ -22,7 +24,7 @@ pub fn generate_init_file(
 
     write_moduli_init(&mut f, modular_config)?;
     write_complex_init(&mut f, modular_config, complex_config)?;
-
+    write_sw_init(&mut f, weierstrass_config)?;
     Ok(())
 }
 
@@ -78,13 +80,28 @@ fn write_complex_init(
 
         writeln!(
             f,
-            r#"
-openvm_algebra_guest::complex_macros::complex_init! {{
-{supported_moduli}
-}}
-"#,
+            r#"openvm_algebra_guest::complex_macros::complex_init! {{ {supported_moduli} }}"#,
         )
-        .map_err(|_| eyre::eyre!("Failed to write moduli_init! to init.rs"))
+        .map_err(|_| eyre::eyre!("Failed to write complex_init! to init.rs"))
+    } else {
+        Ok(())
+    }
+}
+
+fn write_sw_init(f: &mut File, config: &Option<WeierstrassExtension>) -> Result<()> {
+    if let Some(weierstrass) = &config {
+        let supported_curves = weierstrass
+            .supported_curves
+            .iter()
+            .map(|curve_config| curve_config.struct_name.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        writeln!(
+            f,
+            r#"openvm_ecc_guest::sw_macros::sw_init! {{ {supported_curves} }}"#,
+        )
+        .map_err(|_| eyre::eyre!("Failed to write sw_init! to init.rs"))
     } else {
         Ok(())
     }

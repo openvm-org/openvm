@@ -4,20 +4,14 @@
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
+    init,
     k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
     msm,
     weierstrass::WeierstrassPoint,
     Group,
 };
 
-openvm_algebra_moduli_macros::moduli_init! {
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
-}
-
-openvm_ecc_sw_macros::sw_init! {
-    Secp256k1Point,
-}
+init!("openvm-init-ec.rs");
 
 openvm::entry!(main);
 

@@ -181,13 +181,9 @@ mod tests {
         let elf = build_example_program_at_path(
             get_programs_dir!(),
             "invalid-setup",
-            Some(InitConfig {
-                // We don't want init.rs to be generated for this test because we are testing an
-                // invalid moduli_init! call
-                modular_config: None,
-                fp2_config: None,
-                ecc_config: None,
-            }),
+            // We don't want init.rs to be generated for this test because we are testing an
+            // invalid moduli_init! call
+            None,
         )
         .unwrap();
         let openvm_exe = VmExe::from_elf(

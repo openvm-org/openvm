@@ -137,6 +137,7 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         &build_args.manifest_dir,
         &app_config.app_vm_config.modular,
         &app_config.app_vm_config.fp2,
+        &app_config.app_vm_config.ecc,
         Some(&build_args.init_file_name),
     )?;
 

@@ -33,6 +33,8 @@ pub mod p256;
 #[cfg(all(test, feature = "k256", feature = "p256", not(target_os = "zkvm")))]
 mod tests;
 
+pub use openvm_algebra_guest::init;
+
 /// This is custom-1 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x2b;
 pub const SW_FUNCT3: u8 = 0b001;
