@@ -233,8 +233,9 @@ where
         mem_helper.fill_from_prev(timestamp, adapter_row.rs1_aux_cols.as_mut());
         timestamp += 1;
 
-        // TODO(ayush): don't need to fill this when enabled is zero
-        mem_helper.fill_from_prev(timestamp, adapter_row.rd_aux_cols.as_mut());
+        if adapter_row.needs_write.is_one() {
+            mem_helper.fill_from_prev(timestamp, adapter_row.rd_aux_cols.as_mut());
+        }
     }
 }
 

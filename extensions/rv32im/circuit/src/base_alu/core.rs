@@ -191,50 +191,6 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluStep<A, NUM_LIMBS
             phantom: PhantomData,
         }
     }
-
-    // TODO(ayush): rename
-    #[inline]
-    pub fn execute_trace_core<F: PrimeField32>(
-        &self,
-        instruction: &Instruction<F>,
-        [x, y]: [[u8; NUM_LIMBS]; 2],
-        core_row: &mut [F],
-    ) -> [u8; NUM_LIMBS] {
-        let opcode = instruction.opcode;
-        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let z = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &x, &y);
-        println!("{local_opcode:?} {x:?}, {y:?}: {z:?}");
-
-        let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.a = z.map(F::from_canonical_u8);
-        core_row.b = x.map(F::from_canonical_u8);
-        core_row.c = y.map(F::from_canonical_u8);
-        core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
-        core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
-        core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
-        core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
-        core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
-
-        z
-    }
-
-    // TODO(ayush): rename
-    pub fn fill_trace_row_core<F: PrimeField32>(&self, core_row: &mut [F]) {
-        let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-
-        if core_row.opcode_add_flag == F::ONE || core_row.opcode_sub_flag == F::ONE {
-            for a_val in core_row.a.map(|x| x.as_canonical_u32()) {
-                self.bitwise_lookup_chip.request_xor(a_val, a_val);
-            }
-        } else {
-            let b = core_row.b.map(|x| x.as_canonical_u32());
-            let c = core_row.c.map(|x| x.as_canonical_u32());
-            for (b_val, c_val) in zip(b, c) {
-                self.bitwise_lookup_chip.request_xor(b_val, c_val);
-            }
-        }
-    }
 }
 
 impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
@@ -260,21 +216,55 @@ where
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {
+        let Instruction { opcode, .. } = instruction;
+
+        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
-        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
-        let output = self.execute_trace_core(instruction, [rs1, rs2], core_row);
-        A::write(state.memory, instruction, adapter_row, &output);
 
-        *state.pc += DEFAULT_PC_STEP;
+        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
+
+        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
+        // TODO(ayush): remove
+        println!("{local_opcode:?} {rs1:?}, {rs2:?}: {rd:?}");
+
+        let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+        core_row.a = rs1.map(F::from_canonical_u8);
+        core_row.b = rs2.map(F::from_canonical_u8);
+        core_row.c = rd.map(F::from_canonical_u8);
+        core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
+        core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
+        core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
+        core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
+        core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
+
+        A::write(state.memory, instruction, adapter_row, &rd);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
         Ok(())
     }
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
         A::fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
-        self.fill_trace_row_core(core_row);
+
+        let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+
+        if core_row.opcode_add_flag == F::ONE || core_row.opcode_sub_flag == F::ONE {
+            for a_val in core_row.a.map(|x| x.as_canonical_u32()) {
+                self.bitwise_lookup_chip.request_xor(a_val, a_val);
+            }
+        } else {
+            let b = core_row.b.map(|x| x.as_canonical_u32());
+            let c = core_row.c.map(|x| x.as_canonical_u32());
+            for (b_val, c_val) in zip(b, c) {
+                self.bitwise_lookup_chip.request_xor(b_val, c_val);
+            }
+        }
     }
 }
 

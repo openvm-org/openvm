@@ -6,8 +6,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, ImmInstruction, Result, SingleTraceStep,
-        StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -21,7 +22,6 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    riscv::RV32_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
@@ -33,11 +33,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{
-    tracing_write_reg, Rv32RdWriteAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-};
-
-pub(super) const ADAPTER_WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
+use crate::adapters::{Rv32RdWriteAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -218,10 +214,17 @@ impl<A> Rv32AuipcStep<A> {
     }
 }
 
-// TODO: add adapter
 impl<F, CTX, A> SingleTraceStep<F, CTX> for Rv32AuipcStep<A>
 where
     F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = (),
+            WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
+            TraceContext<'a> = (),
+        >,
 {
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", AUIPC)
@@ -233,40 +236,47 @@ where
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(ADAPTER_WIDTH) };
-        let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let Instruction { opcode, c: imm, .. } = instruction;
+
+        let local_opcode =
+            Rv32AuipcOpcode::from_usize(opcode.local_opcode_idx(Rv32AuipcOpcode::CLASS_OFFSET));
+
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        A::start(*state.pc, state.memory, adapter_row);
+
+        let imm_u32 = imm.as_canonical_u32();
+        let rd = run_auipc(local_opcode, *state.pc, imm_u32);
+
         let core_row: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
+        core_row.rd_data = rd.map(F::from_canonical_u8);
 
-        state.ins_start(&mut adapter_row.from_state);
-        let imm = instruction.c.as_canonical_u32();
-        let rd_data = run_auipc(Rv32AuipcOpcode::AUIPC, *state.pc, imm);
-
-        debug_assert_eq!(instruction.d.as_canonical_u32(), RV32_REGISTER_AS);
-        let rd_ptr = instruction.a.as_canonical_u32();
-        tracing_write_reg(
-            state.memory,
-            rd_ptr,
-            &rd_data,
-            (&mut adapter_row.rd_ptr, &mut adapter_row.rd_aux_cols),
-        );
-        core_row.rd_data = rd_data.map(F::from_canonical_u8);
+        // TODO(ayush): see if there's a better way
         // We decompose during fill_trace_row later:
-        core_row.imm_limbs[0] = instruction.c;
+        core_row.imm_limbs[0] = *imm;
 
-        *state.pc += DEFAULT_PC_STEP;
+        A::write(state.memory, instruction, adapter_row, &rd);
+
+        // TODO(ayush): add increment_pc function to vmstate
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
         Ok(())
     }
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(ADAPTER_WIDTH) };
-        let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        A::fill_trace_row(mem_helper, (), adapter_row);
+
         let core_row: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
+
         core_row.is_valid = F::ONE;
 
-        let timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
-        mem_helper.fill_from_prev(timestamp, adapter_row.rd_aux_cols.as_mut());
-
+        // TODO(ayush): this is bad since we're treating adapters as generic. maybe
+        //              add a .state() function to adapters or get_from_pc like in air
+        let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
         let from_pc = adapter_row.from_state.pc.as_canonical_u32();
+
         let pc_limbs = from_pc.to_le_bytes();
         let imm = core_row.imm_limbs[0].as_canonical_u32();
         let imm_limbs = imm.to_le_bytes();
@@ -320,6 +330,7 @@ where
 }
 
 // returns rd_data
+// TODO(ayush): remove _opcode
 pub(super) fn run_auipc(
     _opcode: Rv32AuipcOpcode,
     pc: u32,

@@ -272,12 +272,10 @@ where
             unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
 
         let rs2 = if e.as_canonical_u32() == RV32_IMM_AS {
-            // Use immediate value
             let imm = c.as_canonical_u32();
             debug_assert_eq!(imm >> 24, 0);
             imm.to_le_bytes()
         } else {
-            // Read from register
             let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
                 unsafe { memory.read(e.as_canonical_u32(), c.as_canonical_u32()) };
             rs2

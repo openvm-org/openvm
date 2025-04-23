@@ -6,8 +6,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, InsExecutorE1, MinimalInstruction,
-        Result, SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
         VmStateMut,
     },
     system::memory::{
@@ -22,12 +22,7 @@ use openvm_circuit_primitives::{
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -211,39 +206,68 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanStep<A, NUM_LIMB
             phantom: PhantomData,
         }
     }
+}
 
-    #[inline]
-    fn execute_trace_core<F>(
-        &self,
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
+    for LessThanStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
+            WriteData = [u8; NUM_LIMBS],
+            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
+        >,
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", LessThanOpcode::from_usize(opcode - self.offset))
+    }
+
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
         instruction: &Instruction<F>,
-        [b, c]: [[u8; NUM_LIMBS]; 2],
-        core_row: &mut [F],
-    ) -> [u8; NUM_LIMBS]
-    where
-        F: PrimeField32,
-    {
+        row_slice: &mut [F],
+    ) -> Result<()> {
         debug_assert!(LIMB_BITS <= 8);
-        let opcode = instruction.opcode;
+
+        let Instruction { opcode, .. } = instruction;
+
         let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (cmp_result, _, _, _) = run_less_than::<NUM_LIMBS, LIMB_BITS>(local_opcode, &b, &c);
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        A::start(*state.pc, state.memory, adapter_row);
+
+        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
+
+        let (cmp_result, _, _, _) = run_less_than::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
 
         let core_row: &mut LessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.b = b.map(F::from_canonical_u8);
-        core_row.c = c.map(F::from_canonical_u8);
+        core_row.b = rs1.map(F::from_canonical_u8);
+        core_row.c = rs2.map(F::from_canonical_u8);
         core_row.opcode_slt_flag = F::from_bool(local_opcode == LessThanOpcode::SLT);
         core_row.opcode_sltu_flag = F::from_bool(local_opcode == LessThanOpcode::SLTU);
 
         let mut output = [0u8; NUM_LIMBS];
         output[0] = cmp_result as u8;
-        output
+
+        A::write(state.memory, instruction, adapter_row, &output);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 
-    pub fn fill_trace_row_core<F>(&self, core_row: &mut [F])
-    where
-        F: PrimeField32,
-    {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        A::fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
+
         let core_row: &mut LessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+
         let b = core_row.b.map(|x| x.as_canonical_u32() as u8);
         let c = core_row.c.map(|x| x.as_canonical_u32() as u8);
         // It's easier (and faster?) to re-execute
@@ -312,47 +336,6 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanStep<A, NUM_LIMB
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
-    for LessThanStep<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData = [[u8; NUM_LIMBS]; 2],
-            WriteData = [u8; NUM_LIMBS],
-            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
-        >,
-{
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", LessThanOpcode::from_usize(opcode - self.offset))
-    }
-
-    fn execute(
-        &mut self,
-        state: VmStateMut<TracingMemory, CTX>,
-        instruction: &Instruction<F>,
-        row_slice: &mut [F],
-    ) -> Result<()> {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        A::start(*state.pc, state.memory, adapter_row);
-        let [rs1, rs2] = A::read(state.memory, instruction, adapter_row);
-        let output = self.execute_trace_core(instruction, [rs1, rs2], core_row);
-        A::write(state.memory, instruction, adapter_row, &output);
-
-        *state.pc += DEFAULT_PC_STEP;
-        Ok(())
-    }
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        A::fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
-        self.fill_trace_row_core(core_row);
-    }
-}
-
 impl<Mem, Ctx, F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<Mem, Ctx, F>
     for LessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
@@ -371,9 +354,7 @@ where
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        let Instruction {
-            opcode, a, b, c, e, ..
-        } = instruction;
+        let Instruction { opcode, .. } = instruction;
 
         let less_than_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 

@@ -426,6 +426,7 @@ where
             g,
             ..
         } = instruction;
+
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
 
@@ -442,6 +443,7 @@ where
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
+        // TODO(ayush): this requires &self
         // assert!(
         //     ptr_val < (1 << self.pointer_max_bits),
         //     "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
@@ -505,7 +507,6 @@ where
 
         let ptr_val = ptr_val - shift_amount; // aligned ptr
 
-        // TODO(ayush): check this
         let mem_ptr_limbs: [u32; RV32_REGISTER_NUM_LIMBS] =
             array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
 

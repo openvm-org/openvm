@@ -6,9 +6,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
-        ImmInstruction, Result, SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir,
-        VmCoreChip, VmExecutionState, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -17,7 +17,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::utils::not;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -171,20 +171,6 @@ impl<A, const NUM_LIMBS: usize> BranchEqualStep<A, NUM_LIMBS> {
             phantom: PhantomData,
         }
     }
-
-    #[inline]
-    pub fn execute_trace_core<F: PrimeField32>(
-        &self,
-        instruction: &Instruction<F>,
-        [x, y]: [[u8; NUM_LIMBS]; 2],
-        core_row: &mut [F],
-    ) -> [u8; NUM_LIMBS] {
-        todo!("Implement the execute_trace_core method");
-    }
-
-    pub fn fill_trace_row_core<F: PrimeField32>(&self, core_row: &mut [F]) {
-        todo!("Implement the fill_trace_row_core method");
-    }
 }
 
 impl<F, CTX, A, const NUM_LIMBS: usize> SingleTraceStep<F, CTX> for BranchEqualStep<A, NUM_LIMBS>
@@ -194,8 +180,8 @@ where
         + for<'a> AdapterTraceStep<
             F,
             CTX,
-            ReadData = [[u8; NUM_LIMBS]; 2],
-            WriteData = [u8; NUM_LIMBS],
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
+            WriteData = (),
             TraceContext<'a> = (),
         >,
 {
@@ -209,11 +195,41 @@ where
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {
-        todo!("Implement the execute method");
+        let Instruction { opcode, c: imm, .. } = instruction;
+
+        let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        A::start(*state.pc, state.memory, adapter_row);
+
+        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
+
+        let (cmp_result, diff_idx, diff_inv_val) = run_eq(branch_eq_opcode, &rs1, &rs2);
+
+        let core_row: &mut BranchEqualCoreCols<_, NUM_LIMBS> = core_row.borrow_mut();
+        core_row.a = rs1.map(F::from_canonical_u8);
+        core_row.b = rs2.map(F::from_canonical_u8);
+        core_row.cmp_result = F::from_bool(cmp_result);
+        core_row.imm = *imm;
+        core_row.opcode_beq_flag = F::from_bool(branch_eq_opcode == BranchEqualOpcode::BEQ);
+        core_row.opcode_bne_flag = F::from_bool(branch_eq_opcode == BranchEqualOpcode::BNE);
+        core_row.diff_inv_marker =
+            array::from_fn(|i| if i == diff_idx { diff_inv_val } else { F::ZERO });
+
+        if cmp_result {
+            *state.pc = state.pc.wrapping_add(imm.as_canonical_u32());
+        } else {
+            *state.pc = state.pc.wrapping_add(self.pc_step);
+        }
+
+        Ok(())
     }
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        todo!("Implement the fill_trace_row method");
+        let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        A::fill_trace_row(mem_helper, (), adapter_row);
     }
 }
 
@@ -227,7 +243,7 @@ where
             Mem,
             F,
             ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
-            WriteData = [u8; NUM_LIMBS],
+            WriteData = (),
         >,
 {
     fn execute_e1(
@@ -235,13 +251,7 @@ where
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        let Instruction {
-            opcode,
-            a,
-            b,
-            c: imm,
-            ..
-        } = instruction;
+        let Instruction { opcode, c: imm, .. } = instruction;
 
         let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
@@ -251,87 +261,14 @@ where
         let (cmp_result, _, _) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &rs1, &rs2);
 
         if cmp_result {
-            let imm = imm.as_canonical_u32();
-            state.pc = state.pc.wrapping_add(imm);
+            state.pc = state.pc.wrapping_add(imm.as_canonical_u32());
         } else {
-            // TODO(ayush): why not DEFAULT_PC_STEP or some constant?
             state.pc = state.pc.wrapping_add(self.pc_step);
         }
 
         Ok(())
     }
 }
-
-// impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize> VmCoreChip<F, I>
-//     for BranchEqualCoreChip<NUM_LIMBS>
-// where
-//     I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-//     I::Writes: Default,
-// {
-//     type Record = BranchEqualCoreRecord<F, NUM_LIMBS>;
-//     type Air = BranchEqualCoreAir<NUM_LIMBS>;
-
-//     #[allow(clippy::type_complexity)]
-//     fn execute_instruction(
-//         &self,
-//         instruction: &Instruction<F>,
-//         from_pc: u32,
-//         reads: I::Reads,
-//     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-//         let Instruction { opcode, c: imm, .. } = *instruction;
-//         let branch_eq_opcode =
-//             BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
-
-//         let data: [[F; NUM_LIMBS]; 2] = reads.into();
-//         let x = data[0].map(|x| x.as_canonical_u32());
-//         let y = data[1].map(|y| y.as_canonical_u32());
-//         let (cmp_result, diff_idx, diff_inv_val) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &x, &y);
-
-//         let output = AdapterRuntimeContext {
-//             to_pc: cmp_result.then_some((F::from_canonical_u32(from_pc) + imm).as_canonical_u32()),
-//             writes: Default::default(),
-//         };
-//         let record = BranchEqualCoreRecord {
-//             opcode: branch_eq_opcode,
-//             a: data[0],
-//             b: data[1],
-//             cmp_result: F::from_bool(cmp_result),
-//             imm,
-//             diff_idx,
-//             diff_inv_val,
-//         };
-
-//         Ok((output, record))
-//     }
-
-//     fn get_opcode_name(&self, opcode: usize) -> String {
-//         format!(
-//             "{:?}",
-//             BranchEqualOpcode::from_usize(opcode - self.air.offset)
-//         )
-//     }
-
-//     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-//         let row_slice: &mut BranchEqualCoreCols<_, NUM_LIMBS> = row_slice.borrow_mut();
-//         row_slice.a = record.a;
-//         row_slice.b = record.b;
-//         row_slice.cmp_result = record.cmp_result;
-//         row_slice.imm = record.imm;
-//         row_slice.opcode_beq_flag = F::from_bool(record.opcode == BranchEqualOpcode::BEQ);
-//         row_slice.opcode_bne_flag = F::from_bool(record.opcode == BranchEqualOpcode::BNE);
-//         row_slice.diff_inv_marker = array::from_fn(|i| {
-//             if i == record.diff_idx {
-//                 record.diff_inv_val
-//             } else {
-//                 F::ZERO
-//             }
-//         });
-//     }
-
-//     fn air(&self) -> &Self::Air {
-//         &self.air
-//     }
-// }
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
 pub(super) fn run_eq<F, const NUM_LIMBS: usize>(

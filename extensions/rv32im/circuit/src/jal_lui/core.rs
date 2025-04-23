@@ -5,9 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
-        ImmInstruction, InsExecutorE1, Result, SingleTraceStep, StepExecutorE1, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -21,7 +21,6 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    riscv::RV32_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
@@ -33,12 +32,8 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{
-    tracing_write_reg, Rv32CondRdWriteAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-    RV_J_TYPE_IMM_BITS,
-};
+use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS};
 
-pub(super) const ADAPTER_WIDTH: usize = size_of::<Rv32CondRdWriteAdapterCols<u8>>();
 const ADDITIONAL_BITS: u32 = 0b11000000;
 
 #[repr(C)]
@@ -176,20 +171,6 @@ impl<A> Rv32JalLuiStep<A> {
             phantom: PhantomData,
         }
     }
-
-    #[inline]
-    pub fn execute_trace_core<F: PrimeField32>(
-        &self,
-        instruction: &Instruction<F>,
-        input: &[u8],
-        core_row: &mut [F],
-    ) -> &[u8] {
-        todo!("Implement the execute_trace_core method");
-    }
-
-    pub fn fill_trace_row_core<F: PrimeField32>(&self, core_row: &mut [F]) {
-        todo!("Implement the fill_trace_row_core method");
-    }
 }
 
 impl<F, CTX, A> SingleTraceStep<F, CTX> for Rv32JalLuiStep<A>
@@ -199,8 +180,8 @@ where
         + for<'a> AdapterTraceStep<
             F,
             CTX,
-            ReadData = [[u8; NUM_LIMBS]; 2],
-            WriteData = [u8; NUM_LIMBS],
+            ReadData = (),
+            WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
             TraceContext<'a> = (),
         >,
 {
@@ -217,18 +198,19 @@ where
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(ADAPTER_WIDTH) };
-        let adapter_row: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let Instruction { opcode, c: imm, .. } = instruction;
+
+        let local_opcode =
+            Rv32JalLuiOpcode::from_usize(opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET));
+
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        A::start(*state.pc, state.memory, adapter_row);
+
         let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
 
-        let local_opcode = Rv32JalLuiOpcode::from_usize(
-            instruction
-                .opcode
-                .local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET),
-        );
-        state.ins_start(&mut adapter_row.inner.from_state);
         // `c` can be "negative" as a field element
-        let imm_f = instruction.c.as_canonical_u32();
+        let imm_f = imm.as_canonical_u32();
         let signed_imm = match local_opcode {
             JAL => {
                 if imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)) {
@@ -243,37 +225,23 @@ where
         };
         let (to_pc, rd_data) = run_jal_lui(local_opcode, *state.pc, signed_imm);
 
-        if instruction.f != F::ZERO {
-            let rd_ptr = instruction.a.as_canonical_u32();
-            let write_buf = &mut adapter_row.inner;
-            tracing_write_reg(
-                state.memory,
-                rd_ptr,
-                &rd_data,
-                (&mut write_buf.rd_ptr, &mut write_buf.rd_aux_cols),
-            );
-            adapter_row.needs_write = F::ONE;
-        } else {
-            state.memory.increment_timestamp();
-        }
         core_row.rd_data = rd_data.map(F::from_canonical_u8);
         core_row.imm = instruction.c;
         core_row.is_jal = F::from_bool(local_opcode == JAL);
         core_row.is_lui = F::from_bool(local_opcode == LUI);
 
+        A::write(state.memory, instruction, adapter_row, &rd_data);
+
         *state.pc = to_pc;
+
         Ok(())
     }
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(ADAPTER_WIDTH) };
-        let adapter_row: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
 
-        if adapter_row.needs_write == F::ONE {
-            let timestamp = adapter_row.inner.from_state.timestamp.as_canonical_u32();
-            mem_helper.fill_from_prev(timestamp, adapter_row.inner.rd_aux_cols.as_mut());
-        }
+        A::fill_trace_row(mem_helper, (), adapter_row);
 
         let rd_data = core_row.rd_data.map(|x| x.as_canonical_u32());
         for pair in rd_data.chunks_exact(2) {
@@ -298,9 +266,7 @@ where
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        let Instruction {
-            opcode, a, c: imm, ..
-        } = instruction;
+        let Instruction { opcode, c: imm, .. } = instruction;
 
         let local_opcode =
             Rv32JalLuiOpcode::from_usize(opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET));

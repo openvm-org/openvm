@@ -206,20 +206,6 @@ impl<A, const NUM_CELLS: usize, const LIMB_BITS: usize>
             phantom: PhantomData,
         }
     }
-
-    #[inline]
-    pub fn execute_trace_core<F: PrimeField32>(
-        &self,
-        instruction: &Instruction<F>,
-        input: &[u8],
-        core_row: &mut [F],
-    ) -> &[u8] {
-        todo!("Implement the execute_trace_core method");
-    }
-
-    pub fn fill_trace_row_core<F: PrimeField32>(&self, core_row: &mut [F]) {
-        todo!("Implement the fill_trace_row_core method");
-    }
 }
 
 impl<F, CTX, A, const NUM_CELLS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
