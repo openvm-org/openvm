@@ -42,7 +42,7 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
