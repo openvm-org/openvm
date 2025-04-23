@@ -1,14 +1,19 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
 };
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
+        ImmInstruction, Result, SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir,
+        VmCoreChip, VmExecutionState, VmStateMut,
     },
-    system::memory::online::GuestMemory,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::utils::not;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -152,60 +157,48 @@ pub struct BranchEqualCoreRecord<T, const NUM_LIMBS: usize> {
 }
 
 #[derive(Debug)]
-pub struct BranchEqualCoreChip<const NUM_LIMBS: usize> {
-    pub air: BranchEqualCoreAir<NUM_LIMBS>,
+pub struct BranchEqualStep<A, const NUM_LIMBS: usize> {
+    pub offset: usize,
+    pub pc_step: u32,
+    phantom: PhantomData<A>,
 }
 
-impl<const NUM_LIMBS: usize> BranchEqualCoreChip<NUM_LIMBS> {
+impl<A, const NUM_LIMBS: usize> BranchEqualStep<A, NUM_LIMBS> {
     pub fn new(offset: usize, pc_step: u32) -> Self {
         Self {
-            air: BranchEqualCoreAir { offset, pc_step },
+            offset,
+            pc_step,
+            phantom: PhantomData,
         }
+    }
+
+    #[inline]
+    pub fn execute_trace_core<F: PrimeField32>(
+        &self,
+        instruction: &Instruction<F>,
+        [x, y]: [[u8; NUM_LIMBS]; 2],
+        core_row: &mut [F],
+    ) -> [u8; NUM_LIMBS] {
+        todo!("Implement the execute_trace_core method");
+    }
+
+    pub fn fill_trace_row_core<F: PrimeField32>(&self, core_row: &mut [F]) {
+        todo!("Implement the fill_trace_row_core method");
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize> VmCoreChip<F, I>
-    for BranchEqualCoreChip<NUM_LIMBS>
+impl<F, CTX, A, const NUM_LIMBS: usize> SingleTraceStep<F, CTX> for BranchEqualStep<A, NUM_LIMBS>
 where
-    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-    I::Writes: Default,
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = [[u8; NUM_LIMBS]; 2],
+            WriteData = [u8; NUM_LIMBS],
+            TraceContext<'a> = (),
+        >,
 {
-    type Record = BranchEqualCoreRecord<F, NUM_LIMBS>;
-    type Air = BranchEqualCoreAir<NUM_LIMBS>;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
-        instruction: &Instruction<F>,
-        from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction { opcode, c: imm, .. } = *instruction;
-        let branch_eq_opcode =
-            BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
-
-        let data: [[F; NUM_LIMBS]; 2] = reads.into();
-        let x = data[0].map(|x| x.as_canonical_u32());
-        let y = data[1].map(|y| y.as_canonical_u32());
-        let (cmp_result, diff_idx, diff_inv_val) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &x, &y);
-
-        let output = AdapterRuntimeContext {
-            to_pc: cmp_result.then_some((F::from_canonical_u32(from_pc) + imm).as_canonical_u32()),
-            writes: Default::default(),
-        };
-        let record = BranchEqualCoreRecord {
-            opcode: branch_eq_opcode,
-            a: data[0],
-            b: data[1],
-            cmp_result: F::from_bool(cmp_result),
-            imm,
-            diff_idx,
-            diff_inv_val,
-        };
-
-        Ok((output, record))
-    }
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -213,33 +206,32 @@ where
         )
     }
 
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut BranchEqualCoreCols<_, NUM_LIMBS> = row_slice.borrow_mut();
-        row_slice.a = record.a;
-        row_slice.b = record.b;
-        row_slice.cmp_result = record.cmp_result;
-        row_slice.imm = record.imm;
-        row_slice.opcode_beq_flag = F::from_bool(record.opcode == BranchEqualOpcode::BEQ);
-        row_slice.opcode_bne_flag = F::from_bool(record.opcode == BranchEqualOpcode::BNE);
-        row_slice.diff_inv_marker = array::from_fn(|i| {
-            if i == record.diff_idx {
-                record.diff_inv_val
-            } else {
-                F::ZERO
-            }
-        });
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
+        instruction: &Instruction<F>,
+        row_slice: &mut [F],
+    ) -> Result<()> {
+        todo!("Implement the execute method");
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        todo!("Implement the fill_trace_row method");
     }
 }
 
-impl<Mem, Ctx, F, const NUM_LIMBS: usize> InsExecutorE1<Mem, Ctx, F>
-    for BranchEqualCoreChip<NUM_LIMBS>
+impl<Mem, Ctx, F, A, const NUM_LIMBS: usize> StepExecutorE1<Mem, Ctx, F>
+    for BranchEqualStep<A, NUM_LIMBS>
 where
     Mem: GuestMemory,
     F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<
+            Mem,
+            F,
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
+            WriteData = [u8; NUM_LIMBS],
+        >,
 {
     fn execute_e1(
         &mut self,
@@ -254,21 +246,12 @@ where
             ..
         } = instruction;
 
-        let branch_eq_opcode =
-            BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let rs1_addr = a.as_canonical_u32();
-        let rs2_addr = b.as_canonical_u32();
-
-        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
-        let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
-
-        // TODO(ayush): avoid this conversion
-        let rs1_bytes: [u32; NUM_LIMBS] = rs1_bytes.map(|x| x as u32);
-        let rs2_bytes: [u32; NUM_LIMBS] = rs2_bytes.map(|y| y as u32);
+        let (rs1, rs2) = A::read(&mut state.memory, instruction);
 
         // TODO(ayush): probably don't need the other values
-        let (cmp_result, _, _) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &rs1_bytes, &rs2_bytes);
+        let (cmp_result, _, _) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &rs1, &rs2);
 
         if cmp_result {
             let imm = imm.as_canonical_u32();
@@ -282,18 +265,92 @@ where
     }
 }
 
+// impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize> VmCoreChip<F, I>
+//     for BranchEqualCoreChip<NUM_LIMBS>
+// where
+//     I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
+//     I::Writes: Default,
+// {
+//     type Record = BranchEqualCoreRecord<F, NUM_LIMBS>;
+//     type Air = BranchEqualCoreAir<NUM_LIMBS>;
+
+//     #[allow(clippy::type_complexity)]
+//     fn execute_instruction(
+//         &self,
+//         instruction: &Instruction<F>,
+//         from_pc: u32,
+//         reads: I::Reads,
+//     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+//         let Instruction { opcode, c: imm, .. } = *instruction;
+//         let branch_eq_opcode =
+//             BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+
+//         let data: [[F; NUM_LIMBS]; 2] = reads.into();
+//         let x = data[0].map(|x| x.as_canonical_u32());
+//         let y = data[1].map(|y| y.as_canonical_u32());
+//         let (cmp_result, diff_idx, diff_inv_val) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &x, &y);
+
+//         let output = AdapterRuntimeContext {
+//             to_pc: cmp_result.then_some((F::from_canonical_u32(from_pc) + imm).as_canonical_u32()),
+//             writes: Default::default(),
+//         };
+//         let record = BranchEqualCoreRecord {
+//             opcode: branch_eq_opcode,
+//             a: data[0],
+//             b: data[1],
+//             cmp_result: F::from_bool(cmp_result),
+//             imm,
+//             diff_idx,
+//             diff_inv_val,
+//         };
+
+//         Ok((output, record))
+//     }
+
+//     fn get_opcode_name(&self, opcode: usize) -> String {
+//         format!(
+//             "{:?}",
+//             BranchEqualOpcode::from_usize(opcode - self.air.offset)
+//         )
+//     }
+
+//     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+//         let row_slice: &mut BranchEqualCoreCols<_, NUM_LIMBS> = row_slice.borrow_mut();
+//         row_slice.a = record.a;
+//         row_slice.b = record.b;
+//         row_slice.cmp_result = record.cmp_result;
+//         row_slice.imm = record.imm;
+//         row_slice.opcode_beq_flag = F::from_bool(record.opcode == BranchEqualOpcode::BEQ);
+//         row_slice.opcode_bne_flag = F::from_bool(record.opcode == BranchEqualOpcode::BNE);
+//         row_slice.diff_inv_marker = array::from_fn(|i| {
+//             if i == record.diff_idx {
+//                 record.diff_inv_val
+//             } else {
+//                 F::ZERO
+//             }
+//         });
+//     }
+
+//     fn air(&self) -> &Self::Air {
+//         &self.air
+//     }
+// }
+
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
-pub(super) fn run_eq<F: PrimeField32, const NUM_LIMBS: usize>(
+pub(super) fn run_eq<F, const NUM_LIMBS: usize>(
     local_opcode: BranchEqualOpcode,
-    x: &[u32; NUM_LIMBS],
-    y: &[u32; NUM_LIMBS],
-) -> (bool, usize, F) {
+    x: &[u8; NUM_LIMBS],
+    y: &[u8; NUM_LIMBS],
+) -> (bool, usize, F)
+where
+    F: PrimeField32,
+{
     for i in 0..NUM_LIMBS {
         if x[i] != y[i] {
             return (
                 local_opcode == BranchEqualOpcode::BNE,
                 i,
-                (F::from_canonical_u32(x[i]) - F::from_canonical_u32(y[i])).inverse(),
+                (F::from_canonical_u8(x[i]) - F::from_canonical_u8(y[i])).inverse(),
             );
         }
     }

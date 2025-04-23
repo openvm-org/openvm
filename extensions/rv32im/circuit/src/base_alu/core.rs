@@ -175,7 +175,7 @@ where
 }
 
 pub struct BaseAluStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>,
+    pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     phantom: PhantomData<A>,
 }
@@ -186,10 +186,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluStep<A, NUM_LIMBS
         offset: usize,
     ) -> Self {
         Self {
-            air: BaseAluCoreAir {
-                bus: bitwise_lookup_chip.bus(),
-                offset,
-            },
+            offset,
             bitwise_lookup_chip,
             phantom: PhantomData,
         }
@@ -204,7 +201,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluStep<A, NUM_LIMBS
         core_row: &mut [F],
     ) -> [u8; NUM_LIMBS] {
         let opcode = instruction.opcode;
-        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let z = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &x, &y);
         println!("{local_opcode:?} {x:?}, {y:?}: {z:?}");
@@ -253,6 +250,10 @@ where
             TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
         >,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
+    }
+
     fn execute(
         &mut self,
         state: VmStateMut<TracingMemory, CTX>,
@@ -268,10 +269,6 @@ where
 
         *state.pc += DEFAULT_PC_STEP;
         Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.air.offset))
     }
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
@@ -303,13 +300,13 @@ where
             opcode, a, b, c, e, ..
         } = instruction;
 
-        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (rs1_bytes, rs2_bytes) = A::read(&mut state.memory, instruction);
+        let (rs1, rs2) = A::read(&mut state.memory, instruction);
 
-        let rd_bytes = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1_bytes, &rs2_bytes);
+        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
 
-        A::write(&mut state.memory, instruction, &rd_bytes);
+        A::write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

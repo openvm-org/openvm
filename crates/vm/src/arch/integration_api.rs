@@ -246,6 +246,7 @@ pub trait SingleTraceStep<F, CTX> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
+// TODO(ayush): rename to ChipWithExecutionContext or something
 pub struct NewVmChipWrapper<F, AIR, STEP> {
     pub air: AIR,
     pub step: STEP,

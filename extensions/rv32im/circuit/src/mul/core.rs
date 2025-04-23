@@ -1,14 +1,19 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
 };
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, MinimalInstruction, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
+        InsExecutorE1, MinimalInstruction, Result, SingleTraceStep, StepExecutorE1,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState, VmStateMut,
     },
-    system::memory::online::GuestMemory,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip};
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -114,13 +119,28 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct MultiplicationCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: MultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
+#[repr(C)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound = "T: Serialize + DeserializeOwned")]
+pub struct MultiplicationCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    #[serde(with = "BigArray")]
+    pub a: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
+    pub b: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
+    pub c: [T; NUM_LIMBS],
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationCoreChip<NUM_LIMBS, LIMB_BITS> {
+#[derive(Debug)]
+pub struct MultiplicationStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub offset: usize,
+    pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
+    phantom: PhantomData<A>,
+}
+
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
+{
     pub fn new(range_tuple_chip: SharedRangeTupleCheckerChip<2>, offset: usize) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
         // < NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1 bytes
@@ -137,91 +157,70 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationCoreChip<NUM_
         );
 
         Self {
-            air: MultiplicationCoreAir {
-                bus: *range_tuple_chip.bus(),
-                offset,
-            },
+            offset,
             range_tuple_chip,
+            phantom: PhantomData,
         }
     }
-}
 
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound = "T: Serialize + DeserializeOwned")]
-pub struct MultiplicationCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    #[serde(with = "BigArray")]
-    pub a: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub b: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub c: [T; NUM_LIMBS],
-}
-
-impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmCoreChip<F, I> for MultiplicationCoreChip<NUM_LIMBS, LIMB_BITS>
-where
-    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-    I::Writes: From<[[F; NUM_LIMBS]; 1]>,
-{
-    type Record = MultiplicationCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
-    type Air = MultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
+    #[inline]
+    pub fn execute_trace_core<F: PrimeField32>(
         &self,
         instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction { opcode, .. } = instruction;
-        assert_eq!(
-            MulOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
-            MulOpcode::MUL
-        );
-
-        let data: [[F; NUM_LIMBS]; 2] = reads.into();
-        let b = data[0].map(|x| u8::try_from(x.as_canonical_u32()).unwrap());
-        let c = data[1].map(|y| u8::try_from(y.as_canonical_u32()).unwrap());
-        let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&b, &c);
-
-        for (a, carry) in a.iter().zip(carry.iter()) {
-            self.range_tuple_chip.add_count(&[*a as u32, *carry]);
-        }
-
-        let output = AdapterRuntimeContext::without_pc([a.map(F::from_canonical_u8)]);
-        let record = MultiplicationCoreRecord {
-            a: a.map(F::from_canonical_u8),
-            b: data[0],
-            c: data[1],
-        };
-
-        Ok((output, record))
+        [x, y]: [[u8; NUM_LIMBS]; 2],
+        core_row: &mut [F],
+    ) -> [u8; NUM_LIMBS] {
+        todo!("Implement the execute_trace_core method");
     }
 
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", MulOpcode::from_usize(opcode - self.air.offset))
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut MultiplicationCoreCols<_, NUM_LIMBS, LIMB_BITS> =
-            row_slice.borrow_mut();
-        row_slice.a = record.a;
-        row_slice.b = record.b;
-        row_slice.c = record.c;
-        row_slice.is_valid = F::ONE;
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
+    pub fn fill_trace_row_core<F: PrimeField32>(&self, core_row: &mut [F]) {
+        todo!("Implement the fill_trace_row_core method");
     }
 }
 
-impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
-    for MultiplicationCoreChip<NUM_LIMBS, LIMB_BITS>
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
+    for MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = [[u8; NUM_LIMBS]; 2],
+            WriteData = [u8; NUM_LIMBS],
+            TraceContext<'a> = (),
+        >,
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", MulOpcode::from_usize(opcode - self.offset))
+    }
+
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
+        instruction: &Instruction<F>,
+        row_slice: &mut [F],
+    ) -> Result<()> {
+        todo!("Implement the execute method");
+    }
+
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        todo!("Implement the fill_trace_row method");
+    }
+}
+
+impl<Mem, Ctx, F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<Mem, Ctx, F>
+    for MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
 where
     Mem: GuestMemory,
     F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<
+            Mem,
+            F,
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
+            WriteData = [u8; NUM_LIMBS],
+        >,
 {
     fn execute_e1(
         &mut self,
@@ -235,29 +234,80 @@ where
         // Verify the opcode is MUL
         // TODO(ayush): debug_assert
         assert_eq!(
-            MulOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
+            MulOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
             MulOpcode::MUL
         );
 
-        // Read input registers
-        let rs1_addr = b.as_canonical_u32();
-        let rs2_addr = c.as_canonical_u32();
+        let (rs1, rs2) = A::read(&mut state.memory, instruction);
 
-        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
-        let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+        let (rd, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
 
-        // Perform the multiplication
-        let (rd_bytes, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1_bytes, &rs2_bytes);
-
-        // Write result to destination register
-        let rd_addr = a.as_canonical_u32();
-        unsafe { state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
+        A::write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }
 }
+
+// impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+//     VmCoreChip<F, I> for MultiplicationCoreChip<NUM_LIMBS, LIMB_BITS>
+// where
+//     I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
+//     I::Writes: From<[[F; NUM_LIMBS]; 1]>,
+// {
+//     type Record = MultiplicationCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
+//     type Air = MultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>;
+
+//     #[allow(clippy::type_complexity)]
+//     fn execute_instruction(
+//         &self,
+//         instruction: &Instruction<F>,
+//         _from_pc: u32,
+//         reads: I::Reads,
+//     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+//         let Instruction { opcode, .. } = instruction;
+//         assert_eq!(
+//             MulOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
+//             MulOpcode::MUL
+//         );
+
+//         let data: [[F; NUM_LIMBS]; 2] = reads.into();
+//         let b = data[0].map(|x| u8::try_from(x.as_canonical_u32()).unwrap());
+//         let c = data[1].map(|y| u8::try_from(y.as_canonical_u32()).unwrap());
+//         let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&b, &c);
+
+//         for (a, carry) in a.iter().zip(carry.iter()) {
+//             self.range_tuple_chip.add_count(&[*a as u32, *carry]);
+//         }
+
+//         let output = AdapterRuntimeContext::without_pc([a.map(F::from_canonical_u8)]);
+//         let record = MultiplicationCoreRecord {
+//             a: a.map(F::from_canonical_u8),
+//             b: data[0],
+//             c: data[1],
+//         };
+
+//         Ok((output, record))
+//     }
+
+//     fn get_opcode_name(&self, opcode: usize) -> String {
+//         format!("{:?}", MulOpcode::from_usize(opcode - self.air.offset))
+//     }
+
+//     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+//         let row_slice: &mut MultiplicationCoreCols<_, NUM_LIMBS, LIMB_BITS> =
+//             row_slice.borrow_mut();
+//         row_slice.a = record.a;
+//         row_slice.b = record.b;
+//         row_slice.c = record.c;
+//         row_slice.is_valid = F::ONE;
+//     }
+
+//     fn air(&self) -> &Self::Air {
+//         &self.air
+//     }
+// }
 
 // returns mul, carry
 pub(super) fn run_mul<const NUM_LIMBS: usize, const LIMB_BITS: usize>(

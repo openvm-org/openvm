@@ -6,8 +6,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceStep, InsExecutorE1, MinimalInstruction, Result,
-        SingleTraceStep, VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, InsExecutorE1, MinimalInstruction,
+        Result, SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -193,35 +194,38 @@ pub struct LessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     pub opcode: LessThanOpcode,
 }
 
-pub struct LessThanCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: LessThanCoreAir<NUM_LIMBS, LIMB_BITS>,
+#[derive(derive_new::new)]
+pub struct LessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    phantom: PhantomData<A>,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanCoreChip<NUM_LIMBS, LIMB_BITS> {
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanStep<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
     ) -> Self {
         Self {
-            air: LessThanCoreAir {
-                bus: bitwise_lookup_chip.bus(),
-                offset,
-            },
+            offset,
             bitwise_lookup_chip,
+            phantom: PhantomData,
         }
     }
 
     #[inline]
-    fn execute<F: PrimeField32>(
+    fn execute_trace_core<F>(
         &self,
         instruction: &Instruction<F>,
         [b, c]: [[u8; NUM_LIMBS]; 2],
         core_row: &mut [F],
-    ) -> [u8; NUM_LIMBS] {
+    ) -> [u8; NUM_LIMBS]
+    where
+        F: PrimeField32,
+    {
         debug_assert!(LIMB_BITS <= 8);
         let opcode = instruction.opcode;
-        let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let (cmp_result, _, _, _) = run_less_than::<NUM_LIMBS, LIMB_BITS>(local_opcode, &b, &c);
 
@@ -236,7 +240,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanCoreChip<NUM_LIMBS,
         output
     }
 
-    pub fn fill_trace_row<F: PrimeField32>(&self, core_row: &mut [F]) {
+    pub fn fill_trace_row_core<F>(&self, core_row: &mut [F])
+    where
+        F: PrimeField32,
+    {
         let core_row: &mut LessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
         let b = core_row.b.map(|x| x.as_canonical_u32() as u8);
         let c = core_row.c.map(|x| x.as_canonical_u32() as u8);
@@ -306,12 +313,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanCoreChip<NUM_LIMBS,
     }
 }
 
-#[derive(derive_new::new)]
-pub struct LessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub core: LessThanCoreChip<NUM_LIMBS, LIMB_BITS>,
-    phantom: PhantomData<A>,
-}
-
 impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
     for LessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
@@ -325,6 +326,10 @@ where
             TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
         >,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", LessThanOpcode::from_usize(opcode - self.offset))
+    }
+
     fn execute(
         &mut self,
         state: VmStateMut<TracingMemory, CTX>,
@@ -335,36 +340,32 @@ where
 
         A::start(*state.pc, state.memory, adapter_row);
         let [rs1, rs2] = A::read(state.memory, instruction, adapter_row);
-        let output = self.core.execute(instruction, [rs1, rs2], core_row);
+        let output = self.execute_trace_core(instruction, [rs1, rs2], core_row);
         A::write(state.memory, instruction, adapter_row, &output);
 
         *state.pc += DEFAULT_PC_STEP;
         Ok(())
     }
 
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            LessThanOpcode::from_usize(opcode - self.core.air.offset)
-        )
-    }
-
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        A::fill_trace_row(
-            mem_helper,
-            self.core.bitwise_lookup_chip.as_ref(),
-            adapter_row,
-        );
-        self.core.fill_trace_row(core_row);
+        A::fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
+        self.fill_trace_row_core(core_row);
     }
 }
 
-impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
-    for LessThanCoreChip<NUM_LIMBS, LIMB_BITS>
+impl<Mem, Ctx, F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<Mem, Ctx, F>
+    for LessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
     Mem: GuestMemory,
     F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<
+            Mem,
+            F,
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
+            WriteData = [u8; NUM_LIMBS],
+        >,
 {
     fn execute_e1(
         &mut self,
@@ -377,37 +378,15 @@ where
 
         let less_than_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
-        let rs1_addr = b.as_canonical_u32();
-        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
-
-        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
-            // Use immediate value
-            let imm = c.as_canonical_u32();
-            // Convert imm from u32 to [u8; NUM_LIMBS]
-            let imm_bytes = imm.to_le_bytes();
-            // TODO(ayush): remove this
-            let mut rs2_bytes = [0u8; NUM_LIMBS];
-            rs2_bytes[..NUM_LIMBS].copy_from_slice(&imm_bytes[..NUM_LIMBS]);
-            rs2_bytes
-        } else {
-            // Read from register
-            let rs2_addr = c.as_canonical_u32();
-            let rs2_bytes: [u8; NUM_LIMBS] =
-                unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
-            rs2_bytes
-        };
+        let (rs1, rs2) = A::read(&mut state.memory, instruction);
 
         // Run the comparison
         let (cmp_result, _, _, _) =
-            run_less_than::<NUM_LIMBS, LIMB_BITS>(less_than_opcode, &rs1_bytes, &rs2_bytes);
+            run_less_than::<NUM_LIMBS, LIMB_BITS>(less_than_opcode, &rs1, &rs2);
         // TODO(ayush): can i write just [u8; 1]?
-        let rd_bytes = (cmp_result as u32).to_le_bytes();
+        let rd = (cmp_result as u32).to_le_bytes();
 
-        // Write the result back to the destination register
-        let rd_addr = a.as_canonical_u32();
-        unsafe {
-            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
-        }
+        A::write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

@@ -1,13 +1,13 @@
 use std::{
-    array,
-    array::from_fn,
+    array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
 };
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, ImmInstruction, Result, SingleTraceStep, StepExecutorE1,
-        VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, ImmInstruction, Result, SingleTraceStep,
+        StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -204,24 +204,29 @@ pub struct Rv32AuipcCoreRecord<F> {
     pub rd_data: [F; RV32_REGISTER_NUM_LIMBS],
 }
 
-pub struct Rv32AuipcCoreChip {
-    // TODO[jpw]: do we still need air in here?
-    pub air: Rv32AuipcCoreAir,
+pub struct Rv32AuipcStep<A> {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    phantom: PhantomData<A>,
 }
 
-impl Rv32AuipcCoreChip {
+impl<A> Rv32AuipcStep<A> {
     pub fn new(bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>) -> Self {
         Self {
-            air: Rv32AuipcCoreAir {
-                bus: bitwise_lookup_chip.bus(),
-            },
             bitwise_lookup_chip,
+            phantom: PhantomData,
         }
     }
 }
 
-impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
+// TODO: add adapter
+impl<F, CTX, A> SingleTraceStep<F, CTX> for Rv32AuipcStep<A>
+where
+    F: PrimeField32,
+{
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", AUIPC)
+    }
+
     fn execute(
         &mut self,
         state: VmStateMut<TracingMemory, CTX>,
@@ -284,36 +289,29 @@ impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
         self.bitwise_lookup_chip
             .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
     }
-
-    fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", AUIPC)
-    }
 }
 
-impl<Mem, Ctx, F> CoreExecutorE1<Mem, Ctx, F> for Rv32AuipcCoreChip
+impl<Mem, Ctx, F, A> StepExecutorE1<Mem, Ctx, F> for Rv32AuipcStep<A>
 where
     Mem: GuestMemory,
     F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<Mem, F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
     fn execute_e1(
         &mut self,
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        let Instruction {
-            opcode, a, c: imm, ..
-        } = instruction;
+        let Instruction { opcode, c: imm, .. } = instruction;
 
         let local_opcode =
             Rv32AuipcOpcode::from_usize(opcode.local_opcode_idx(Rv32AuipcOpcode::CLASS_OFFSET));
 
         let imm = imm.as_canonical_u32();
-        let rd_bytes = run_auipc(local_opcode, state.pc, imm);
+        let rd = run_auipc(local_opcode, state.pc, imm);
 
-        let rd_addr = a.as_canonical_u32();
-        unsafe {
-            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
-        }
+        A::write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

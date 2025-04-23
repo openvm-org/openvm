@@ -184,7 +184,7 @@ where
     F: PrimeField32,
 {
     // TODO(ayush): directly use u32
-    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {

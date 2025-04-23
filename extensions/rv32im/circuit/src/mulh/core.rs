@@ -1,14 +1,19 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
 };
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, MinimalInstruction, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
+        InsExecutorE1, MinimalInstruction, Result, SingleTraceStep, StepExecutorE1,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState, VmStateMut,
     },
-    system::memory::online::GuestMemory,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -188,13 +193,29 @@ where
     }
 }
 
-pub struct MulHCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: MulHCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-    pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
+#[repr(C)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MulHCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub opcode: MulHOpcode,
+    #[serde(with = "BigArray")]
+    pub a: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
+    pub b: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
+    pub c: [T; NUM_LIMBS],
+    #[serde(with = "BigArray")]
+    pub a_mul: [T; NUM_LIMBS],
+    pub b_ext: T,
+    pub c_ext: T,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCoreChip<NUM_LIMBS, LIMB_BITS> {
+pub struct MulHStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
+    phantom: PhantomData<A>,
+}
+
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHStep<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         range_tuple_chip: SharedRangeTupleCheckerChip<2>,
@@ -214,85 +235,40 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHCoreChip<NUM_LIMBS, LIM
         );
 
         Self {
-            air: MulHCoreAir {
-                bitwise_lookup_bus: bitwise_lookup_chip.bus(),
-                range_tuple_bus: *range_tuple_chip.bus(),
-            },
             bitwise_lookup_chip,
             range_tuple_chip,
+            phantom: PhantomData,
         }
     }
-}
 
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MulHCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub opcode: MulHOpcode,
-    #[serde(with = "BigArray")]
-    pub a: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub b: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub c: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub a_mul: [T; NUM_LIMBS],
-    pub b_ext: T,
-    pub c_ext: T,
-}
-
-impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmCoreChip<F, I> for MulHCoreChip<NUM_LIMBS, LIMB_BITS>
-where
-    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-    I::Writes: From<[[F; NUM_LIMBS]; 1]>,
-{
-    type Record = MulHCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
-    type Air = MulHCoreAir<NUM_LIMBS, LIMB_BITS>;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
+    #[inline]
+    pub fn execute_trace_core<F: PrimeField32>(
         &self,
         instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction { opcode, .. } = instruction;
-        let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
-
-        let data: [[F; NUM_LIMBS]; 2] = reads.into();
-        let b = data[0].map(|x| x.as_canonical_u32());
-        let c = data[1].map(|y| y.as_canonical_u32());
-        let (a, a_mul, carry, b_ext, c_ext) = run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &b, &c);
-
-        for i in 0..NUM_LIMBS {
-            self.range_tuple_chip.add_count(&[a_mul[i], carry[i]]);
-            self.range_tuple_chip
-                .add_count(&[a[i], carry[NUM_LIMBS + i]]);
-        }
-
-        if mulh_opcode != MulHOpcode::MULHU {
-            let b_sign_mask = if b_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
-            let c_sign_mask = if c_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
-            self.bitwise_lookup_chip.request_range(
-                (b[NUM_LIMBS - 1] - b_sign_mask) << 1,
-                (c[NUM_LIMBS - 1] - c_sign_mask) << ((mulh_opcode == MulHOpcode::MULH) as u32),
-            );
-        }
-
-        let output = AdapterRuntimeContext::without_pc([a.map(F::from_canonical_u32)]);
-        let record = MulHCoreRecord {
-            opcode: mulh_opcode,
-            a: a.map(F::from_canonical_u32),
-            b: data[0],
-            c: data[1],
-            a_mul: a_mul.map(F::from_canonical_u32),
-            b_ext: F::from_canonical_u32(b_ext),
-            c_ext: F::from_canonical_u32(c_ext),
-        };
-
-        Ok((output, record))
+        [x, y]: [[u8; NUM_LIMBS]; 2],
+        core_row: &mut [F],
+    ) -> [u8; NUM_LIMBS] {
+        todo!("Implement the execute_trace_core method");
     }
 
+    pub fn fill_trace_row_core<F: PrimeField32>(&self, core_row: &mut [F]) {
+        todo!("Implement the fill_trace_row_core method");
+    }
+}
+
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
+    for MulHStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = [[u8; NUM_LIMBS]; 2],
+            WriteData = [u8; NUM_LIMBS],
+            TraceContext<'a> = (),
+        >,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -300,29 +276,32 @@ where
         )
     }
 
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut MulHCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
-        row_slice.a = record.a;
-        row_slice.b = record.b;
-        row_slice.c = record.c;
-        row_slice.a_mul = record.a_mul;
-        row_slice.b_ext = record.b_ext;
-        row_slice.c_ext = record.c_ext;
-        row_slice.opcode_mulh_flag = F::from_bool(record.opcode == MulHOpcode::MULH);
-        row_slice.opcode_mulhsu_flag = F::from_bool(record.opcode == MulHOpcode::MULHSU);
-        row_slice.opcode_mulhu_flag = F::from_bool(record.opcode == MulHOpcode::MULHU);
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
+        instruction: &Instruction<F>,
+        row_slice: &mut [F],
+    ) -> Result<()> {
+        todo!("Implement the execute method");
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        todo!("Implement the fill_trace_row method");
     }
 }
 
-impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
-    for MulHCoreChip<NUM_LIMBS, LIMB_BITS>
+impl<Mem, Ctx, F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<Mem, Ctx, F>
+    for MulHStep<A, NUM_LIMBS, LIMB_BITS>
 where
     Mem: GuestMemory,
     F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<
+            Mem,
+            F,
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
+            WriteData = [u8; NUM_LIMBS],
+        >,
 {
     fn execute_e1(
         &mut self,
@@ -335,33 +314,96 @@ where
 
         let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
-        // Read input registers
-        let rs1_addr = b.as_canonical_u32();
-        let rs2_addr = c.as_canonical_u32();
+        let (rs1, rs2) = A::read(&mut state.memory, instruction);
 
-        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
-        let rs2_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
+        let (rd, _, _, _, _) = run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &rs1, &rs2);
+        let rd = rd.map(|x| x as u8);
 
-        // TODO(ayush): remove this conversion
-        let rs1_bytes = rs1_bytes.map(|x| x as u32);
-        let rs2_bytes = rs2_bytes.map(|y| y as u32);
-
-        // Execute the multiplication high operation
-        let (rd_bytes, _, _, _, _) =
-            run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &rs1_bytes, &rs2_bytes);
-        let rd_bytes = rd_bytes.map(|x| x as u8);
-
-        // Write the result to the destination register
-        let rd_addr = a.as_canonical_u32();
-        unsafe {
-            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
-        }
+        A::write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }
 }
+
+// impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+//     VmCoreChip<F, I> for MulHCoreChip<NUM_LIMBS, LIMB_BITS>
+// where
+//     I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
+//     I::Writes: From<[[F; NUM_LIMBS]; 1]>,
+// {
+//     type Record = MulHCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
+//     type Air = MulHCoreAir<NUM_LIMBS, LIMB_BITS>;
+
+//     #[allow(clippy::type_complexity)]
+//     fn execute_instruction(
+//         &self,
+//         instruction: &Instruction<F>,
+//         _from_pc: u32,
+//         reads: I::Reads,
+//     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+//         let Instruction { opcode, .. } = instruction;
+//         let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
+
+//         let data: [[F; NUM_LIMBS]; 2] = reads.into();
+//         let b = data[0].map(|x| x.as_canonical_u32());
+//         let c = data[1].map(|y| y.as_canonical_u32());
+//         let (a, a_mul, carry, b_ext, c_ext) = run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &b, &c);
+
+//         for i in 0..NUM_LIMBS {
+//             self.range_tuple_chip.add_count(&[a_mul[i], carry[i]]);
+//             self.range_tuple_chip
+//                 .add_count(&[a[i], carry[NUM_LIMBS + i]]);
+//         }
+
+//         if mulh_opcode != MulHOpcode::MULHU {
+//             let b_sign_mask = if b_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
+//             let c_sign_mask = if c_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
+//             self.bitwise_lookup_chip.request_range(
+//                 (b[NUM_LIMBS - 1] - b_sign_mask) << 1,
+//                 (c[NUM_LIMBS - 1] - c_sign_mask) << ((mulh_opcode == MulHOpcode::MULH) as u32),
+//             );
+//         }
+
+//         let output = AdapterRuntimeContext::without_pc([a.map(F::from_canonical_u32)]);
+//         let record = MulHCoreRecord {
+//             opcode: mulh_opcode,
+//             a: a.map(F::from_canonical_u32),
+//             b: data[0],
+//             c: data[1],
+//             a_mul: a_mul.map(F::from_canonical_u32),
+//             b_ext: F::from_canonical_u32(b_ext),
+//             c_ext: F::from_canonical_u32(c_ext),
+//         };
+
+//         Ok((output, record))
+//     }
+
+//     fn get_opcode_name(&self, opcode: usize) -> String {
+//         format!(
+//             "{:?}",
+//             MulHOpcode::from_usize(opcode - MulHOpcode::CLASS_OFFSET)
+//         )
+//     }
+
+//     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+//         let row_slice: &mut MulHCoreCols<_, NUM_LIMBS, LIMB_BITS> = row_slice.borrow_mut();
+//         row_slice.a = record.a;
+//         row_slice.b = record.b;
+//         row_slice.c = record.c;
+//         row_slice.a_mul = record.a_mul;
+//         row_slice.b_ext = record.b_ext;
+//         row_slice.c_ext = record.c_ext;
+//         row_slice.opcode_mulh_flag = F::from_bool(record.opcode == MulHOpcode::MULH);
+//         row_slice.opcode_mulhsu_flag = F::from_bool(record.opcode == MulHOpcode::MULHSU);
+//         row_slice.opcode_mulhu_flag = F::from_bool(record.opcode == MulHOpcode::MULHU);
+//     }
+
+//     fn air(&self) -> &Self::Air {
+//         &self.air
+//     }
+// }
 
 // returns mulh[[s]u], mul, carry, x_ext, y_ext
 pub(super) fn run_mulh<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
