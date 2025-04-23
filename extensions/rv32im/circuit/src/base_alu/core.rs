@@ -245,7 +245,7 @@ where
         + for<'a> AdapterTraceStep<
             F,
             CTX,
-            ReadData = [[u8; NUM_LIMBS]; 2],
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
             WriteData = [u8; NUM_LIMBS],
             TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
         >,
@@ -263,7 +263,7 @@ where
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
-        let [rs1, rs2] = A::read(state.memory, instruction, adapter_row);
+        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
         let output = self.execute_trace_core(instruction, [rs1, rs2], core_row);
         A::write(state.memory, instruction, adapter_row, &output);
 
@@ -296,16 +296,12 @@ where
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        let Instruction {
-            opcode, a, b, c, e, ..
-        } = instruction;
+        let Instruction { opcode, .. } = instruction;
 
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let (rs1, rs2) = A::read(&mut state.memory, instruction);
-
         let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
-
         A::write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
