@@ -12,7 +12,7 @@ use openvm_build::{
 use openvm_sdk::{
     commit::{commit_app_exe, committed_exe_as_bn254},
     fs::write_exe_to_file,
-    init::generate_init_file,
+    init::{generate_init_file, OPENVM_INIT_DEFAULT_FILE_NAME},
     Sdk,
 };
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
@@ -95,7 +95,7 @@ pub struct BuildArgs {
     #[arg(long, default_value = "release", help = "Build profile")]
     pub profile: String,
 
-    #[arg(long, default_value = "openvm-init.rs", help = "Name of the init file")]
+    #[arg(long, default_value = OPENVM_INIT_DEFAULT_FILE_NAME, help = "Name of the init file")]
     pub init_file_name: String,
 }
 
@@ -227,7 +227,7 @@ mod tests {
             exe_commit_output: PathBuf::from(DEFAULT_EXE_COMMIT_PATH),
             profile: "dev".to_string(),
             target_dir: Some(target_dir.to_path_buf()),
-            init_file_name: "openvm-init.rs".to_string(),
+            init_file_name: OPENVM_INIT_DEFAULT_FILE_NAME.to_string(),
         };
         build(&build_args)?;
         assert!(

@@ -5,6 +5,8 @@ use num_bigint::BigUint;
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use openvm_ecc_circuit::WeierstrassExtension;
 
+pub const OPENVM_INIT_DEFAULT_FILE_NAME: &str = "openvm_init.rs";
+
 // Reads the vm config and generates a init.rs file that contains a call to moduli_init!,
 // complex_init!, sw_init! with the supported moduli and curves.
 pub fn generate_init_file(
@@ -14,7 +16,8 @@ pub fn generate_init_file(
     weierstrass_config: &Option<WeierstrassExtension>,
     init_file_name: Option<&str>, // if None, we use "openvm-init.rs"
 ) -> Result<()> {
-    let dest_path = Path::new(manifest_dir).join(init_file_name.unwrap_or("openvm-init.rs"));
+    let dest_path =
+        Path::new(manifest_dir).join(init_file_name.unwrap_or(OPENVM_INIT_DEFAULT_FILE_NAME));
     let mut f = File::create(&dest_path)?;
 
     writeln!(
