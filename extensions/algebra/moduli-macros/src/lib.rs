@@ -874,8 +874,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             extern "C" fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
                 {
-                    openvm::io::println("setup function called");
-
                     let mut ptr = 0;
                     assert_eq!(super::#serialized_name[ptr], 1);
                     ptr += 1;

@@ -59,12 +59,15 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(complex_mul_extern_func);
         create_extern_func!(complex_div_extern_func);
 
+        let setup_function = syn::Ident::new(&format!("setup_{}", struct_name), span.into());
+
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
                 fn #complex_add_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #complex_sub_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #complex_mul_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #complex_div_extern_func(rd: usize, rs1: usize, rs2: usize);
+                fn #setup_function();
             }
 
 
@@ -110,6 +113,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #complex_add_extern_func(
                                 self as *mut Self as usize,
@@ -130,6 +134,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #complex_sub_extern_func(
                                 self as *mut Self as usize,
@@ -154,6 +159,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #complex_mul_extern_func(
                                 self as *mut Self as usize,
@@ -179,6 +185,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #complex_div_extern_func(
                                 self as *mut Self as usize,
@@ -199,6 +206,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         let mut uninit: core::mem::MaybeUninit<Self> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #complex_add_extern_func(
@@ -222,6 +230,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         let mut uninit: core::mem::MaybeUninit<Self> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #complex_sub_extern_func(
@@ -249,6 +258,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #complex_mul_extern_func(
                                 dst_ptr as usize,
@@ -270,6 +280,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         let mut uninit: core::mem::MaybeUninit<Self> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #complex_div_extern_func(
@@ -280,6 +291,15 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                         }
                         unsafe { uninit.assume_init() }
                     }
+                }
+
+                // Helper function to call the setup instruction on first use
+                fn assert_is_setup() {
+                    static is_setup: ::openvm_algebra_guest::once_cell::race::OnceBool = ::openvm_algebra_guest::once_cell::race::OnceBool::new();
+                    is_setup.get_or_init(|| {
+                        unsafe { #setup_function(); }
+                        true
+                    });
                 }
             }
 
@@ -528,7 +548,6 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
 
     let mut externs = Vec::new();
     let mut setups = Vec::new();
-    let mut setup_all_complex_extensions = Vec::new();
 
     let span = proc_macro::Span::call_site();
 
@@ -587,22 +606,20 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
             });
         }
 
-        let setup_function =
-            syn::Ident::new(&format!("setup_complex_{}", complex_idx), span.into());
+        let setup_function = syn::Ident::new(&format!("setup_{}", struct_name), span.into());
 
-        setup_all_complex_extensions.push(quote::quote_spanned! { span.into() =>
-            #setup_function();
-        });
         setups.push(quote::quote_spanned! { span.into() =>
             #[allow(non_snake_case)]
-            pub fn #setup_function() {
+            #[no_mangle]
+            extern "C" fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
                 {
-                    let two_modulus_bytes = &openvm_intrinsics_meta_do_not_type_this_by_yourself::two_modular_limbs_list[openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]..openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1]];
+                    use super::openvm_intrinsics_meta_do_not_type_this_by_yourself::{two_modular_limbs_list, limb_list_borders};
+                    let two_modulus_bytes = &two_modular_limbs_list[limb_list_borders[#mod_idx]..limb_list_borders[#mod_idx + 1]];
 
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
-                    let mut uninit: core::mem::MaybeUninit<[u8; openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1] - openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]]> = core::mem::MaybeUninit::uninit();
+                    let mut uninit: core::mem::MaybeUninit<[u8; limb_list_borders[#mod_idx + 1] - limb_list_borders[#mod_idx]]> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(
                         opcode = ::openvm_algebra_guest::OPCODE,
                         funct3 = ::openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
@@ -632,10 +649,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_complex {
             #(#externs)*
-        }
-        #(#setups)*
-        pub fn setup_all_complex_extensions() {
-            #(#setup_all_complex_extensions)*
+            #(#setups)*
         }
     })
 }
