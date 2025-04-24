@@ -107,6 +107,11 @@ where
                     final_memory = mem::take(&mut seg.final_memory);
                     let proof_input = info_span!("trace_gen", segment = seg_idx)
                         .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())))?;
+                    let mem = sys_info::mem_info().unwrap();
+                    println!(
+                        "seg_idx={seg_idx},after tracegen,mem_total={},mem_free={},mem_avail={}",
+                        mem.total, mem.free, mem.avail
+                    );
                     let proof = info_span!("prove_segment", segment = seg_idx)
                         .in_scope(|| Ok(vm.engine.prove(&self.pk.vm_pk, proof_input)));
                     let mem = sys_info::mem_info().unwrap();
