@@ -48,13 +48,11 @@ add_metadata() {
         echo "<details>" >> $result_path
         echo "<summary>Flamegraphs</summary>" >> $result_path
         echo "" >> $result_path
-        repo_root=$(git rev-parse --show-toplevel)
-        for file in $repo_root/.bench_metrics/flamegraphs/*.svg; do
-        filename=$(basename "$file")
-            flamegraph_url=https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${CURRENT_SHA}/${filename}
+        flamegraph_files=$(s5cmd ls ${S3_FLAMEGRAPHS_PATH}/${CURRENT_SHA}/*.svg | awk '{print $4}' | xargs -n1 basename)
+        for file in $flamegraph_files; do
+            flamegraph_url=https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${CURRENT_SHA}/${file}
             echo "[![]($flamegraph_url)]($flamegraph_url)" >> $result_path
         done
-        rm -f ${repo_root}/.bench_metrics/flamegraphs/*.svg
         echo "" >> $result_path
         echo "</details>" >> $result_path
         echo "" >> $result_path
