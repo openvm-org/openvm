@@ -25,8 +25,8 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 
 use super::core::run_mul;
 use crate::{
-    adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    mul::{MultiplicationCoreChip, MultiplicationCoreCols, Rv32MultiplicationChip},
+    adapters::{Rv32MultAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    mul::{MultiplicationCoreCols, MultiplicationStep, Rv32MultiplicationChip},
     test_utils::rv32_rand_write_register_or_imm,
 };
 
@@ -52,12 +52,12 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32MultiplicationChip::<F>::new(
-        Rv32MultAdapterChip::new(
+        Rv32MultAdapterStep::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        MultiplicationCoreChip::new(range_tuple_checker.clone(), MulOpcode::CLASS_OFFSET),
+        MultiplicationStep::new(range_tuple_checker.clone(), MulOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -109,7 +109,7 @@ fn rv32_mul_rand_test() {
 type Rv32MultiplicationTestChip<F> = VmChipWrapper<
     F,
     TestAdapterChip<F>,
-    MultiplicationCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+    MultiplicationStep<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 
 #[allow(clippy::too_many_arguments)]
@@ -134,7 +134,7 @@ fn run_rv32_mul_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        MultiplicationCoreChip::new(range_tuple_chip.clone(), MulOpcode::CLASS_OFFSET),
+        MultiplicationStep::new(range_tuple_chip.clone(), MulOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 

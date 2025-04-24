@@ -28,8 +28,7 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    tracing_read_reg, tracing_read_reg_or_imm, tracing_write_reg, RV32_CELL_BITS,
-    RV32_REGISTER_NUM_LIMBS,
+    tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -188,20 +187,36 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         let &Instruction { b, c, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert!(
+            e.as_canonical_u32() == RV32_REGISTER_AS || e.as_canonical_u32() == RV32_IMM_AS
+        );
 
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
-        let rs1 = tracing_read_reg(
+
+        adapter_row.rs1_ptr = b;
+        let rs1 = tracing_read(
             memory,
+            d.as_canonical_u32(),
             b.as_canonical_u32(),
-            (&mut adapter_row.rs1_ptr, &mut adapter_row.reads_aux[0]),
+            &mut adapter_row.reads_aux[0],
         );
-        let rs2 = tracing_read_reg_or_imm(
-            memory,
-            e.as_canonical_u32(),
-            c.as_canonical_u32(),
-            &mut adapter_row.rs2_as,
-            (&mut adapter_row.rs2, &mut adapter_row.reads_aux[1]),
-        );
+
+        let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
+            adapter_row.rs2_as == e;
+            adapter_row.rs2 = c;
+
+            tracing_read(
+                memory,
+                e.as_canonical_u32(),
+                c.as_canonical_u32(),
+                &mut adapter_row.reads_aux[1],
+            )
+        } else {
+            adapter_row.rs2_as == e;
+
+            tracing_read_imm(memory, c.as_canonical_u32(), &mut adapter_row.rs2)
+        };
+
         (rs1, rs2)
     }
 
@@ -213,17 +228,19 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         adapter_row: &mut [F],
         data: &Self::WriteData,
     ) {
-        let Instruction { a, d, .. } = instruction;
+        let &Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
 
-        tracing_write_reg(
+        adapter_row.rd_ptr = a;
+        tracing_write(
             memory,
+            d.as_canonical_u32(),
             a.as_canonical_u32(),
             data,
-            (&mut adapter_row.rd_ptr, &mut adapter_row.writes_aux),
+            &mut adapter_row.writes_aux,
         );
     }
 

@@ -26,7 +26,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
-use super::{core::run_shift, Rv32ShiftChip, Rv32ShiftStep, ShiftCoreChip, ShiftCoreCols};
+use super::{core::run_shift, Rv32ShiftChip, Rv32ShiftStep, ShiftCoreCols, ShiftStep};
 use crate::{
     adapters::{Rv32BaseAluAdapterAir, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     test_utils::{generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm},
@@ -43,7 +43,7 @@ fn create_test_chip(
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let step = Rv32ShiftStep::new(ShiftCoreChip::new(
+    let step = Rv32ShiftStep::new(ShiftStep::new(
         bitwise_chip.clone(),
         tester.range_checker(),
         ShiftOpcode::CLASS_OFFSET,
@@ -132,7 +132,7 @@ fn rv32_shift_sra_rand_test() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32ShiftTestChip<F> =
-    VmChipWrapper<F, TestAdapterChip<F>, ShiftCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+    VmChipWrapper<F, TestAdapterChip<F>, ShiftStep<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct ShiftPrankValues<const NUM_LIMBS: usize, const LIMB_BITS: usize> {

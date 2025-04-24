@@ -21,6 +21,12 @@ pub struct MemoryBaseAuxCols<T> {
     pub(in crate::system::memory) timestamp_lt_aux: LessThanAuxCols<T, AUX_LEN>,
 }
 
+impl<F: PrimeField32> MemoryBaseAuxCols<F> {
+    pub fn set_prev(&mut self, prev_timestamp: F) {
+        self.prev_timestamp = prev_timestamp;
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryWriteAuxCols<T, const N: usize> {

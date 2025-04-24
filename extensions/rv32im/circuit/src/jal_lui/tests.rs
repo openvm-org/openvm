@@ -19,7 +19,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreChip, ADAPTER_WIDTH};
+use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiStep, ADAPTER_WIDTH};
 use crate::{
     adapters::{
         Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterCols, Rv32RdWriteAdapterAir,
@@ -46,7 +46,7 @@ fn create_test_chip(
         tester.memory_bridge(),
         tester.execution_bridge(),
     ));
-    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone());
+    let core = Rv32JalLuiStep::new(bitwise_chip.clone());
     let air = VmAirWrapper::new(adapter_air, core.air);
     (
         Rv32JalLuiChip::<F>::new(air, core, MAX_INS_CAPACITY, tester.memory_helper()),

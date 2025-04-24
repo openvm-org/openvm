@@ -23,7 +23,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::tracing_write_reg;
+use crate::adapters::tracing_write;
 
 use super::RV32_REGISTER_NUM_LIMBS;
 
@@ -205,6 +205,7 @@ where
     F: PrimeField32,
 {
     const WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
+
     type ReadData = ();
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
     type TraceContext<'a> = ();
@@ -233,17 +234,19 @@ where
         adapter_row: &mut [F],
         data: &Self::WriteData,
     ) {
-        let Instruction { a, d, .. } = instruction;
+        let &Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
 
-        tracing_write_reg(
+        adapter_row.rd_ptr = a;
+        tracing_write(
             memory,
+            d.as_canonical_u32(),
             a.as_canonical_u32(),
             data,
-            (&mut adapter_row.rd_ptr, &mut adapter_row.rd_aux_cols),
+            &mut adapter_row.rd_aux_cols,
         );
     }
 

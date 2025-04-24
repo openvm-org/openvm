@@ -32,9 +32,9 @@ use rand::{rngs::StdRng, Rng};
 
 use super::core::run_divrem;
 use crate::{
-    adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    adapters::{Rv32MultAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     divrem::{
-        run_mul_carries, run_sltu_diff_idx, DivRemCoreChip, DivRemCoreCols, DivRemCoreSpecialCase,
+        run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase, DivRemStep,
         Rv32DivRemChip,
     },
 };
@@ -105,12 +105,12 @@ fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32DivRemChip::<F>::new(
-        Rv32MultAdapterChip::new(
+        Rv32MultAdapterStep::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        DivRemCoreChip::new(
+        DivRemStep::new(
             bitwise_chip.clone(),
             range_tuple_checker.clone(),
             DivRemOpcode::CLASS_OFFSET,
@@ -217,7 +217,7 @@ fn rv32_remu_rand_test() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32DivRemTestChip<F> =
-    VmChipWrapper<F, TestAdapterChip<F>, DivRemCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+    VmChipWrapper<F, TestAdapterChip<F>, DivRemStep<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
 
 #[derive(Default, Clone, Copy)]
 struct DivRemPrankValues<const NUM_LIMBS: usize> {
@@ -254,7 +254,7 @@ fn run_rv32_divrem_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        DivRemCoreChip::new(
+        DivRemStep::new(
             bitwise_chip.clone(),
             range_tuple_chip.clone(),
             DivRemOpcode::CLASS_OFFSET,

@@ -22,7 +22,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::tracing_read_reg;
+use crate::adapters::tracing_read;
 
 use super::RV32_REGISTER_NUM_LIMBS;
 
@@ -156,15 +156,19 @@ where
 
         let adapter_row: &mut Rv32BranchAdapterCols<F> = adapter_row.borrow_mut();
 
-        let rs1 = tracing_read_reg(
+        adapter_row.rs1_ptr = a;
+        let rs1 = tracing_read(
             memory,
+            d.as_canonical_u32(),
             a.as_canonical_u32(),
-            (&mut adapter_row.rs1_ptr, &mut adapter_row.reads_aux[0]),
+            &mut adapter_row.reads_aux[0],
         );
-        let rs2 = tracing_read_reg(
+        adapter_row.rs2_ptr = b;
+        let rs2 = tracing_read(
             memory,
+            e.as_canonical_u32(),
             b.as_canonical_u32(),
-            (&mut adapter_row.rs2_ptr, &mut adapter_row.reads_aux[1]),
+            &mut adapter_row.reads_aux[1],
         );
 
         (rs1, rs2)

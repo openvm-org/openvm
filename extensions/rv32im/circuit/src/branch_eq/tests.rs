@@ -22,10 +22,10 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
-    core::{run_eq, BranchEqualCoreChip},
+    core::{run_eq, BranchEqualStep},
     BranchEqualCoreCols, Rv32BranchEqualChip,
 };
-use crate::adapters::{Rv32BranchAdapterChip, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS};
+use crate::adapters::{Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS};
 
 type F = BabyBear;
 
@@ -78,12 +78,12 @@ fn run_rv32_branch_eq_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32BranchEqualChip::<F>::new(
-        Rv32BranchAdapterChip::new(
+        Rv32BranchAdapterStep::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        BranchEqualCoreChip::new(BranchEqualOpcode::CLASS_OFFSET, 4),
+        BranchEqualStep::new(BranchEqualOpcode::CLASS_OFFSET, 4),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -121,7 +121,7 @@ fn rv32_bne_rand_test() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32BranchEqualTestChip<F> =
-    VmChipWrapper<F, TestAdapterChip<F>, BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS>>;
+    VmChipWrapper<F, TestAdapterChip<F>, BranchEqualStep<RV32_REGISTER_NUM_LIMBS>>;
 
 #[allow(clippy::too_many_arguments)]
 fn run_rv32_beq_negative_test(
@@ -139,7 +139,7 @@ fn run_rv32_beq_negative_test(
             vec![if cmp_result { Some(imm) } else { None }],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        BranchEqualCoreChip::new(BranchEqualOpcode::CLASS_OFFSET, 4),
+        BranchEqualStep::new(BranchEqualOpcode::CLASS_OFFSET, 4),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -260,8 +260,7 @@ fn rv32_bne_invalid_inv_marker_negative_test() {
 
 #[test]
 fn execute_pc_increment_sanity_test() {
-    let core =
-        BranchEqualCoreChip::<RV32_REGISTER_NUM_LIMBS>::new(BranchEqualOpcode::CLASS_OFFSET, 4);
+    let core = BranchEqualStep::<RV32_REGISTER_NUM_LIMBS>::new(BranchEqualOpcode::CLASS_OFFSET, 4);
 
     let mut instruction = Instruction::<F> {
         opcode: BranchEqualOpcode::BEQ.global_opcode(),
@@ -271,7 +270,7 @@ fn execute_pc_increment_sanity_test() {
     let x: [F; RV32_REGISTER_NUM_LIMBS] = [19, 4, 1790, 60].map(F::from_canonical_u32);
     let y: [F; RV32_REGISTER_NUM_LIMBS] = [19, 32, 1804, 60].map(F::from_canonical_u32);
 
-    let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
+    let result = <BranchEqualStep<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
         F,
         BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, y]);
@@ -279,7 +278,7 @@ fn execute_pc_increment_sanity_test() {
     assert!(output.to_pc.is_none());
 
     instruction.opcode = BranchEqualOpcode::BNE.global_opcode();
-    let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
+    let result = <BranchEqualStep<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
         F,
         BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, y]);

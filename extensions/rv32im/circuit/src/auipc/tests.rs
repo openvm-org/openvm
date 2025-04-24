@@ -17,7 +17,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreChip, Rv32AuipcCoreCols, ADAPTER_WIDTH};
+use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreCols, Rv32AuipcStep};
 use crate::adapters::{Rv32RdWriteAdapterAir, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
 const IMM_BITS: usize = 24;
@@ -35,7 +35,7 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let adapter_air = Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge());
-    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone());
+    let core = Rv32AuipcStep::new(bitwise_chip.clone());
     let air = VmAirWrapper::new(adapter_air, core.air);
     (
         Rv32AuipcChip::<F>::new(air, core, MAX_INS_CAPACITY, tester.memory_helper()),

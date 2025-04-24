@@ -32,8 +32,8 @@ use rand::rngs::StdRng;
 
 use super::core::run_mulh;
 use crate::{
-    adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    mulh::{MulHCoreChip, MulHCoreCols, Rv32MulHChip},
+    adapters::{Rv32MultAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    mulh::{MulHCoreCols, MulHStep, Rv32MulHChip},
 };
 
 type F = BabyBear;
@@ -89,12 +89,12 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32MulHChip::<F>::new(
-        Rv32MultAdapterChip::new(
+        Rv32MultAdapterStep::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_checker.clone()),
+        MulHStep::new(bitwise_chip.clone(), range_tuple_checker.clone()),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -137,7 +137,7 @@ fn rv32_mulhu_rand_test() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32MulHTestChip<F> =
-    VmChipWrapper<F, TestAdapterChip<F>, MulHCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+    VmChipWrapper<F, TestAdapterChip<F>, MulHStep<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
 
 #[allow(clippy::too_many_arguments)]
 fn run_rv32_mulh_negative_test(
@@ -167,7 +167,7 @@ fn run_rv32_mulh_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_chip.clone()),
+        MulHStep::new(bitwise_chip.clone(), range_tuple_chip.clone()),
         tester.offline_memory_mutex_arc(),
     );
 

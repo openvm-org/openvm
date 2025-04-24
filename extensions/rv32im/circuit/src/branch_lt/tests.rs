@@ -28,12 +28,12 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
-    core::{run_cmp, BranchLessThanCoreChip},
+    core::{run_cmp, BranchLessThanStep},
     Rv32BranchLessThanChip,
 };
 use crate::{
     adapters::{
-        Rv32BranchAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
+        Rv32BranchAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_lt::BranchLessThanCoreCols,
 };
@@ -92,12 +92,12 @@ fn run_rv32_branch_lt_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32BranchLessThanChip::<F>::new(
-        Rv32BranchAdapterChip::new(
+        Rv32BranchAdapterStep::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
         ),
-        BranchLessThanCoreChip::new(bitwise_chip.clone(), BranchLessThanOpcode::CLASS_OFFSET),
+        BranchLessThanStep::new(bitwise_chip.clone(), BranchLessThanOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -167,7 +167,7 @@ fn rv32_bgeu_rand_test() {
 type Rv32BranchLessThanTestChip<F> = VmChipWrapper<
     F,
     TestAdapterChip<F>,
-    BranchLessThanCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+    BranchLessThanStep<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -198,7 +198,7 @@ fn run_rv32_blt_negative_test(
             vec![if cmp_result { Some(imm) } else { None }],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        BranchLessThanCoreChip::new(bitwise_chip.clone(), BranchLessThanOpcode::CLASS_OFFSET),
+        BranchLessThanStep::new(bitwise_chip.clone(), BranchLessThanOpcode::CLASS_OFFSET),
         tester.offline_memory_mutex_arc(),
     );
 
@@ -490,7 +490,7 @@ fn rv32_blt_unsigned_wrong_b_msb_sign_negative_test() {
 fn execute_pc_increment_sanity_test() {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let core = BranchLessThanCoreChip::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(
+    let core = BranchLessThanStep::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(
         bitwise_chip,
         BranchLessThanOpcode::CLASS_OFFSET,
     );
@@ -502,7 +502,7 @@ fn execute_pc_increment_sanity_test() {
     };
     let x: [F; RV32_REGISTER_NUM_LIMBS] = [145, 34, 25, 205].map(F::from_canonical_u32);
 
-    let result = <BranchLessThanCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> as VmCoreChip<
+    let result = <BranchLessThanStep<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> as VmCoreChip<
         F,
         BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, x]);
@@ -510,7 +510,7 @@ fn execute_pc_increment_sanity_test() {
     assert!(output.to_pc.is_none());
 
     instruction.opcode = BranchLessThanOpcode::BGE.global_opcode();
-    let result = <BranchLessThanCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> as VmCoreChip<
+    let result = <BranchLessThanStep<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> as VmCoreChip<
         F,
         BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, x]);

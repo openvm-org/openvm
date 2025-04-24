@@ -25,7 +25,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
-use super::{core::run_alu, BaseAluCoreChip, Rv32BaseAluChip, Rv32BaseAluStep};
+use super::{core::run_alu, BaseAluStep, Rv32BaseAluChip, Rv32BaseAluStep};
 use crate::{
     adapters::{
         Rv32BaseAluAdapterAir, Rv32BaseAluAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
@@ -45,7 +45,7 @@ fn create_test_chip(
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let step = Rv32BaseAluStep::new(BaseAluCoreChip::new(
+    let step = Rv32BaseAluStep::new(BaseAluStep::new(
         bitwise_chip.clone(),
         BaseAluOpcode::CLASS_OFFSET,
     ));
@@ -140,7 +140,7 @@ fn rv32_alu_and_rand_test() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32BaseAluTestChip<F> =
-    VmChipWrapper<F, TestAdapterChip<F>, BaseAluCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+    VmChipWrapper<F, TestAdapterChip<F>, BaseAluStep<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
 // TODO: FIX NEGATIVE TESTS
 
 #[allow(clippy::too_many_arguments)]
@@ -159,7 +159,7 @@ fn run_rv32_alu_negative_test(
     //         vec![None],
     //         ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
     //     ),
-    //     BaseAluCoreChip::new(bitwise_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
+    //     BaseAluStep::new(bitwise_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
     //     tester.offline_memory_mutex_arc(),
     // );
 
@@ -450,7 +450,7 @@ fn run_and_sanity_test() {
 //             tester.memory_bridge(),
 //             bitwise_chip.clone(),
 //         )),
-//         BaseAluCoreChip::new(bitwise_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
+//         BaseAluStep::new(bitwise_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
 //         tester.offline_memory_mutex_arc(),
 //     );
 
@@ -490,7 +490,7 @@ fn run_and_sanity_test() {
 //             tester.memory_bridge(),
 //             bitwise_chip.clone(),
 //         ),
-//         BaseAluCoreChip::new(bitwise_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
+//         BaseAluStep::new(bitwise_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
 //         tester.offline_memory_mutex_arc(),
 //     );
 

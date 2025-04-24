@@ -23,7 +23,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{tracing_read_reg, tracing_write_reg};
+use crate::adapters::{tracing_read, tracing_write};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 
@@ -186,10 +186,12 @@ where
 
         let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
 
-        let rs1 = tracing_read_reg(
+        adapter_row.rs1_ptr = b;
+        let rs1 = tracing_read(
             memory,
+            d.as_canonical_u32(),
             b.as_canonical_u32(),
-            (&mut adapter_row.rs1_ptr, &mut adapter_row.rs1_aux_cols),
+            &mut adapter_row.rs1_aux_cols,
         );
 
         rs1
@@ -203,21 +205,24 @@ where
         adapter_row: &mut [F],
         data: &Self::WriteData,
     ) {
-        let Instruction {
+        let &Instruction {
             a, d, f: enabled, ..
         } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        if *enabled != F::ZERO {
+        if enabled != F::ZERO {
             let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
 
             adapter_row.needs_write = F::ONE;
-            tracing_write_reg(
+
+            adapter_row.rd_ptr = a;
+            tracing_write(
                 memory,
+                d.as_canonical_u32(),
                 a.as_canonical_u32(),
                 data,
-                (&mut adapter_row.rd_ptr, &mut adapter_row.rd_aux_cols),
+                &mut adapter_row.rd_aux_cols,
             );
         }
     }

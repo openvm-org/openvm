@@ -35,7 +35,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
-use crate::adapters::{tracing_read_reg, tracing_write_reg, RV32_CELL_BITS};
+use crate::adapters::{tracing_read, tracing_write_with_base_aux, RV32_CELL_BITS};
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
 /// of the instruction type, specifically whether it is a load or store
@@ -379,7 +379,7 @@ where
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
-        let Instruction {
+        let &Instruction {
             opcode,
             a,
             b,
@@ -399,10 +399,12 @@ where
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        let rs1 = tracing_read_reg(
+        adapter_row.rs1_ptr = b;
+        let rs1 = tracing_read(
             memory,
+            d.as_canonical_u32(),
             b.as_canonical_u32(),
-            (&mut adapter_row.rs1_ptr, &mut adapter_row.rs1_aux_cols),
+            &mut adapter_row.rs1_aux_cols,
         );
 
         let rs1_val = u32::from_le_bytes(rs1);
@@ -422,61 +424,39 @@ where
 
         let ptr_val = ptr_val - shift_amount;
         let read_data = match local_opcode {
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                // TODO(ayush): this should be tracing_read_mem. what should be rs1_ptr here?
-                // memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_u32(ptr_val))
-                tracing_read_reg(
-                    memory,
-                    ptr_val,
-                    (&mut adapter_row.rs1_ptr, &mut adapter_row.read_data_aux),
-                )
-            }
-            STOREW | STOREH | STOREB => {
-                // TODO(ayush): what should be rs1_ptr here?
-                // memory.read(d.as_canonical_u32(), a.as_canonical_u32())
-                tracing_read_reg(
-                    memory,
-                    a.as_canonical_u32(),
-                    (&mut adapter_row.rs1_ptr, &mut adapter_row.read_data_aux),
-                )
-            }
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => tracing_read(
+                memory,
+                e.as_canonical_u32(),
+                ptr_val,
+                &mut adapter_row.read_data_aux,
+            ),
+            STOREW | STOREH | STOREB => tracing_read(
+                memory,
+                d.as_canonical_u32(),
+                a.as_canonical_u32(),
+                &mut adapter_row.read_data_aux,
+            ),
         };
 
         // We need to keep values of some cells to keep them unchanged when writing to those cells
         let prev_data = match local_opcode {
-            STOREW | STOREH | STOREB => {
-                // TODO(ayush): this probably doesn't need to be traced
-                //              i.e. read without changing memory state
-                // array::from_fn(|i| {
-                //     memory.unsafe_read_cell::<u8>(e, F::from_canonical_usize(ptr_val as usize + i))
-                // })
-                // memory.read(e.as_canonical_u32(), ptr_val) ;
-                tracing_read_reg(
-                    memory,
-                    ptr_val,
-                    (&mut adapter_row.rs1_ptr, &mut adapter_row.read_data_aux),
-                )
-            }
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                // TODO(ayush): this probably doesn't need to be traced
-                //              i.e. read without changing memory state
-                // array::from_fn(|i| memory.unsafe_read_cell::<u8>(d, a + F::from_canonical_usize(i)))
-                // memory.read(d.as_canonical_u32(), a.as_canonical_u32())
-                tracing_read_reg(
-                    memory,
-                    a.as_canonical_u32(),
-                    (&mut adapter_row.rs1_ptr, &mut adapter_row.read_data_aux),
-                )
-            }
+            STOREW | STOREH | STOREB => unsafe {
+                memory.data().read(e.as_canonical_u32(), ptr_val)
+            },
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
+                memory
+                    .data()
+                    .read(d.as_canonical_u32(), a.as_canonical_u32())
+            },
         };
 
         adapter_row
             .rs1_data
             .copy_from_slice(&rs1.map(F::from_canonical_u8));
-        adapter_row.imm = *c;
-        adapter_row.imm_sign = *g;
+        adapter_row.imm = c;
+        adapter_row.imm_sign = g;
         adapter_row.mem_ptr_limbs = mem_ptr_limbs.map(F::from_canonical_u32);
-        adapter_row.mem_as = *e;
+        adapter_row.mem_as = e;
 
         ((prev_data, read_data), shift_amount)
     }
@@ -489,10 +469,9 @@ where
         adapter_row: &mut [F],
         data: &Self::WriteData,
     ) {
-        let Instruction {
+        let &Instruction {
             opcode,
             a,
-            b,
             c,
             d,
             e,
@@ -518,7 +497,6 @@ where
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
-        let shift_amount = ptr_val % 4;
         assert!(
             ptr_val < (1 << self.pointer_max_bits),
             "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
@@ -528,41 +506,33 @@ where
         let mem_ptr_limbs: [u32; RV32_REGISTER_NUM_LIMBS] =
             array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
 
-        if *enabled != F::ZERO {
+        if enabled != F::ZERO {
             adapter_row.needs_write = F::ONE;
 
             match local_opcode {
                 STOREW | STOREH | STOREB => {
                     let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-                    // TODO(ayush): write_aux is not complete. previous data is in the core columns
-                    //              how to access that? guess it should be done in core?
-                    //              also, this is writing to memory not registers
-                    // memory.write(
-                    //     e,
-                    //     F::from_canonical_u32(ptr & 0xfffffffc),
-                    //     &tmp_convert_to_u8s(output.writes[0]),
-                    // )
-                    tracing_write_reg(
+                    adapter_row.rd_rs2_ptr = F::from_canonical_u32(ptr & 0xfffffffc);
+                    tracing_write_with_base_aux(
                         memory,
-                        a.as_canonical_u32(),
+                        e.as_canonical_u32(),
+                        ptr & 0xfffffffc,
                         data,
-                        (&mut adapter_row.rd_rs2_ptr, &mut adapter_row.write_base_aux),
+                        &mut adapter_row.write_base_aux,
                     );
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                    // TODO(ayush): write_aux is not complete. previous data is in the core columns
-                    //              how to access that? guess it should be done in core?
-                    // memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]))
-                    tracing_write_reg(
+                    adapter_row.rd_rs2_ptr = a;
+                    tracing_write_with_base_aux(
                         memory,
+                        d.as_canonical_u32(),
                         a.as_canonical_u32(),
                         data,
-                        (&mut adapter_row.rd_rs2_ptr, &mut adapter_row.write_base_aux),
+                        &mut adapter_row.write_base_aux,
                     );
                 }
             };
         } else {
-            // TODO(ayush): should this be here? why is it needed?
             memory.increment_timestamp();
         };
     }
@@ -571,7 +541,7 @@ where
     fn fill_trace_row(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
-        trace_ctx: Self::TraceContext<'_>,
+        _trace_ctx: Self::TraceContext<'_>,
         adapter_row: &mut [F],
     ) {
         let adapter_row: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
@@ -585,6 +555,7 @@ where
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
         let shift_amount = ptr_val % 4;
+
         self.range_checker_chip.add_count(
             (adapter_row.mem_ptr_limbs[0].as_canonical_u32() - shift_amount) / 4,
             RV32_CELL_BITS * 2 - 2,
@@ -593,6 +564,18 @@ where
             adapter_row.mem_ptr_limbs[1].as_canonical_u32(),
             self.pointer_max_bits - RV32_CELL_BITS * 2,
         );
+
+        let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
+
+        mem_helper.fill_from_prev(timestamp, adapter_row.rs1_aux_cols.as_mut());
+        timestamp += 1;
+
+        mem_helper.fill_from_prev(timestamp, adapter_row.read_data_aux.as_mut());
+        timestamp += 1;
+
+        if adapter_row.needs_write.is_one() {
+            mem_helper.fill_from_prev(timestamp, &mut adapter_row.write_base_aux);
+        }
     }
 }
 

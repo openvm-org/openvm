@@ -22,9 +22,9 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, seq::SliceRandom, Rng};
 
-use super::{run_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
+use super::{run_write_data, LoadStoreStep, Rv32LoadStoreChip};
 use crate::{
-    adapters::{compose, Rv32LoadStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    adapters::{compose, Rv32LoadStoreAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     loadstore::LoadStoreCoreCols,
 };
 
@@ -143,7 +143,7 @@ fn rand_loadstore_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().range_checker.clone();
-    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
+    let adapter = Rv32LoadStoreAdapterStep::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
@@ -151,7 +151,7 @@ fn rand_loadstore_test() {
         range_checker_chip.clone(),
     );
 
-    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
+    let core = LoadStoreStep::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
@@ -248,7 +248,7 @@ fn run_negative_loadstore_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().range_checker.clone();
-    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
+    let adapter = Rv32LoadStoreAdapterStep::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
@@ -256,7 +256,7 @@ fn run_negative_loadstore_test(
         range_checker_chip.clone(),
     );
 
-    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
+    let core = LoadStoreStep::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
     let adapter_width = BaseAir::<F>::width(adapter.air());
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
@@ -431,14 +431,14 @@ fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().range_checker.clone();
-    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
+    let adapter = Rv32LoadStoreAdapterStep::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
         tester.address_bits(),
         range_checker_chip.clone(),
     );
-    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
+    let core = LoadStoreStep::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
     let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;

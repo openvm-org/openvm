@@ -21,8 +21,8 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use crate::{
-    adapters::{compose, Rv32JalrAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    jalr::{run_jalr, Rv32JalrChip, Rv32JalrCoreChip, Rv32JalrCoreCols},
+    adapters::{compose, Rv32JalrAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    jalr::{run_jalr, Rv32JalrChip, Rv32JalrCoreCols, Rv32JalrStep},
 };
 
 const IMM_BITS: usize = 16;
@@ -97,12 +97,12 @@ fn rand_jalr_test() {
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().range_checker.clone();
 
-    let adapter = Rv32JalrAdapterChip::<F>::new(
+    let adapter = Rv32JalrAdapterStep::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let inner = Rv32JalrCoreChip::new(bitwise_chip.clone(), range_checker_chip.clone());
+    let inner = Rv32JalrStep::new(bitwise_chip.clone(), range_checker_chip.clone());
     let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 100;
@@ -152,13 +152,13 @@ fn run_negative_jalr_test(
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().range_checker.clone();
 
-    let adapter = Rv32JalrAdapterChip::<F>::new(
+    let adapter = Rv32JalrAdapterStep::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
     );
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let inner = Rv32JalrCoreChip::new(bitwise_chip.clone(), range_checker_chip.clone());
+    let inner = Rv32JalrStep::new(bitwise_chip.clone(), range_checker_chip.clone());
     let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
 
     set_and_execute(
@@ -309,12 +309,12 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().range_checker.clone();
 
-    let adapter = Rv32JalrAdapterChip::<F>::new(
+    let adapter = Rv32JalrAdapterStep::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
     );
-    let inner = Rv32JalrCoreChip::new(bitwise_chip, range_checker_chip);
+    let inner = Rv32JalrStep::new(bitwise_chip, range_checker_chip);
     let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.offline_memory_mutex_arc());
 
     let num_tests: usize = 10;

@@ -22,8 +22,8 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{tracing_write_reg, RV32_REGISTER_NUM_LIMBS};
-use crate::adapters::tracing_read_reg;
+use super::{tracing_write, RV32_REGISTER_NUM_LIMBS};
+use crate::adapters::tracing_read;
 
 #[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
@@ -172,15 +172,19 @@ where
 
         let adapter_row: &mut Rv32MultAdapterCols<F> = adapter_row.borrow_mut();
 
-        let rs1 = tracing_read_reg(
+        adapter_row.rs1_ptr = b;
+        let rs1 = tracing_read(
             memory,
+            d.as_canonical_u32(),
             b.as_canonical_u32(),
-            (&mut adapter_row.rs1_ptr, &mut adapter_row.reads_aux[0]),
+            &mut adapter_row.reads_aux[0],
         );
-        let rs2 = tracing_read_reg(
+        adapter_row.rs2_ptr = c;
+        let rs2 = tracing_read(
             memory,
+            d.as_canonical_u32(),
             c.as_canonical_u32(),
-            (&mut adapter_row.rs2_ptr, &mut adapter_row.reads_aux[1]),
+            &mut adapter_row.reads_aux[1],
         );
 
         (rs1, rs2)
@@ -194,18 +198,20 @@ where
         adapter_row: &mut [F],
         data: &Self::WriteData,
     ) {
-        let Instruction { a, d, .. } = instruction;
+        let &Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         let adapter_row: &mut Rv32MultAdapterCols<F> = adapter_row.borrow_mut();
 
-        tracing_write_reg(
+        adapter_row.rd_ptr = a;
+        tracing_write(
             memory,
+            d.as_canonical_u32(),
             a.as_canonical_u32(),
             data,
-            (&mut adapter_row.rd_ptr, &mut adapter_row.writes_aux),
-        );
+            &mut adapter_row.writes_aux,
+        )
     }
 
     #[inline(always)]

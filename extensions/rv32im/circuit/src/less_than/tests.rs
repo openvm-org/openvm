@@ -26,7 +26,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
-use super::{core::run_less_than, LessThanCoreChip, Rv32LessThanChip, Rv32LessThanStep};
+use super::{core::run_less_than, LessThanStep, Rv32LessThanChip, Rv32LessThanStep};
 use crate::{
     adapters::{Rv32BaseAluAdapterAir, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     less_than::LessThanCoreCols,
@@ -44,7 +44,7 @@ fn create_test_chip(
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let step = Rv32LessThanStep::new(LessThanCoreChip::new(
+    let step = Rv32LessThanStep::new(LessThanStep::new(
         bitwise_chip.clone(),
         LessThanOpcode::CLASS_OFFSET,
     ));
@@ -148,7 +148,7 @@ fn rv32_sltu_rand_test() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32LessThanTestChip<F> =
-    VmChipWrapper<F, TestAdapterChip<F>, LessThanCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+    VmChipWrapper<F, TestAdapterChip<F>, LessThanStep<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct LessThanPrankValues<const NUM_LIMBS: usize> {
