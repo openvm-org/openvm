@@ -18,12 +18,6 @@ add_metadata_and_flamegraphs() {
       }')
     echo "inputs: $inputs"
 
-    if [[ "$FLAMEGRAPHS" == 'true' ]]; then
-      repo_root=$(git rev-parse --show-toplevel)
-      python3 ${repo_root}/ci/scripts/metric_unify/flamegraph.py $metric_path
-      s5cmd cp "${repo_root}/.bench_metrics/flamegraphs/*.svg" "${S3_FLAMEGRAPHS_PATH}/${CURRENT_SHA}/"
-    fi
-
     if [ ! -z "$inputs" ]; then
       max_segment_length=$(echo "$inputs" | jq -r '.max_segment_length')
       instance_type=$(echo "$inputs" | jq -r '.instance_type')
@@ -57,7 +51,7 @@ add_metadata() {
         repo_root=$(git rev-parse --show-toplevel)
         for file in $repo_root/.bench_metrics/flamegraphs/*.svg; do
         filename=$(basename "$file")
-            flamegraph_url=https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${CURRENT_SHA}/${filename}
+            flamegraph_url=${S3_FLAMEGRAPHS_PATH}/${CURRENT_SHA}/${filename}
             echo "[![]($flamegraph_url)]($flamegraph_url)" >> $result_path
         done
         rm -f ${repo_root}/.bench_metrics/flamegraphs/*.svg

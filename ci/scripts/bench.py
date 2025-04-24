@@ -50,6 +50,8 @@ def run_cargo_command(
     # Prepare the environment variables
     env = os.environ.copy()  # Copy current environment variables
     env["OUTPUT_PATH"] = output_path
+    if "profiling" in feature_flags:
+        env["GUEST_SYMBOLS_PATH"] = os.path.splitext(output_path)[0] + ".syms"
     env["RUSTFLAGS"] = "-Ctarget-cpu=native"
 
     # Run the subprocess with the updated environment
