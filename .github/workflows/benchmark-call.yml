@@ -242,7 +242,7 @@ jobs:
               echo "Generating flamegraphs with guest symbols"
               python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH --guest-symbols $GUEST_SYMBOLS_PATH
             else
-              echo "Generating flamegraphs without guest symbols"
+              echo "No guest symbols found, generating flamegraphs without symbols"
               python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
             fi
             s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.S3_FLAMEGRAPHS_PATH }}/${current_sha}/"

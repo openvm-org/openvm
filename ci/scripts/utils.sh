@@ -51,7 +51,7 @@ add_metadata() {
         repo_root=$(git rev-parse --show-toplevel)
         for file in $repo_root/.bench_metrics/flamegraphs/*.svg; do
         filename=$(basename "$file")
-            flamegraph_url=${S3_FLAMEGRAPHS_PATH}/${CURRENT_SHA}/${filename}
+            flamegraph_url=https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${CURRENT_SHA}/${filename}
             echo "[![]($flamegraph_url)]($flamegraph_url)" >> $result_path
         done
         rm -f ${repo_root}/.bench_metrics/flamegraphs/*.svg
