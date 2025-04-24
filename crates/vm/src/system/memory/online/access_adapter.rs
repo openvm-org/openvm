@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    io::Cursor,
+};
 
 use openvm_circuit_primitives::{
     is_less_than::{IsLessThanIo, IsLtSubAir},
@@ -154,6 +157,62 @@ impl GenericAccessAdapterChip {
             _ => panic!("Only supports N in (8, 16, 32)"),
         }
     }
+
+    /// Dispatches the execute_split call to the appropriate concrete chip.
+    /// Assumes the concrete chip has a method `execute_split(address_space: u32, pointer: u32)`.
+    fn execute_split<F: PrimeField32>(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[u8],
+        timestamp: u32,
+        row_slice: &mut [F],
+    ) {
+        match self {
+            GenericAccessAdapterChip::N8(chip) => {
+                chip.execute_split(address, values, timestamp, row_slice)
+            }
+            GenericAccessAdapterChip::N16(chip) => {
+                chip.execute_split(address, values, timestamp, row_slice)
+            }
+            GenericAccessAdapterChip::N32(chip) => {
+                chip.execute_split(address, values, timestamp, row_slice)
+            }
+        }
+    }
+
+    /// Dispatches the execute_merge call to the appropriate concrete chip.
+    /// Assumes the concrete chip has a method `execute_merge(address_space: u32, pointer: u32)`.
+    fn execute_merge<F: PrimeField32>(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[u8],
+        block_timestamps: &[u32],
+        timestamp: u32,
+        row_slice: &mut [F],
+    ) {
+        match self {
+            GenericAccessAdapterChip::N8(chip) => {
+                chip.execute_merge(address, values, block_timestamps, timestamp, row_slice)
+            }
+            GenericAccessAdapterChip::N16(chip) => {
+                chip.execute_merge(address, values, block_timestamps, timestamp, row_slice)
+            }
+            GenericAccessAdapterChip::N32(chip) => {
+                chip.execute_merge(address, values, block_timestamps, timestamp, row_slice)
+            }
+        }
+    }
+
+    /// Dispatches the fill_trace_row call to the appropriate concrete chip.
+    /// Assumes the concrete chip has a method `fill_trace_row<F>(row: &mut TraceRow<F>, address_space: u32, pointer: u32)`.
+    /// Also assumes `TraceRow<F>` is the correct type as used by the caller (`AccessAdapterInventory`).
+    fn fill_trace_row<F: PrimeField32>(&mut self, row_slice: &mut [F]) {
+        match self {
+            GenericAccessAdapterChip::N8(chip) => chip.fill_trace_row::<F>(row_slice),
+            GenericAccessAdapterChip::N16(chip) => chip.fill_trace_row::<F>(row_slice),
+            GenericAccessAdapterChip::N32(chip) => chip.fill_trace_row::<F>(row_slice),
+        }
+    }
 }
 
 pub struct AccessAdapterChip<const LEN: usize, const NUM_BLOCKS: usize> {
@@ -254,6 +313,20 @@ pub struct AccessAdapterInventory {
     air_names: Vec<String>,
 }
 
+#[inline(always)]
+fn get_chip_index<const N: usize>() -> usize {
+    // Block sizes are 8, 16, 32, ... corresponding to indices 0, 1, 2, ...
+    // index = log2(N / 8) = log2(N) - 3
+    assert!(
+        N.is_power_of_two() && N >= 8,
+        "Invalid block size {} for split operation",
+        N
+    );
+    // N.trailing_zeros() gives log2(N)
+    let index = N.trailing_zeros().checked_sub(3).unwrap();
+    index as usize
+}
+
 impl AccessAdapterInventory {
     pub fn new(
         range_checker: SharedVariableRangeCheckerChip,
@@ -295,5 +368,83 @@ impl AccessAdapterInventory {
         } else {
             None
         }
+    }
+
+    /// Executes a split operation for the given block size `N`.
+    /// `N` refers to the size of the block *before* splitting.
+    ///
+    /// # Panics
+    /// Panics if `N` is invalid (not 8, 16, or 32, or not a power of two)
+    /// or if the corresponding chip is not available (due to `max_access_adapter_n`).
+    pub fn execute_split<const N: usize, F: PrimeField32>(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[u8],
+        timestamp: u32,
+        row_slice: &mut [F],
+    ) {
+        let index = get_chip_index::<N>();
+        let chip = self
+            .chips
+            .get_mut(index)
+            .unwrap_or_else(|| panic!("AccessAdapterChip for block size {} not found", N));
+        chip.execute_split(address, values, timestamp, row_slice);
+    }
+
+    /// Executes a merge operation for the given block size `N`.
+    /// `N` refers to the size of the block *after* merging.
+    ///
+    /// # Panics
+    /// Panics if `N` is invalid (not 8, 16, or 32, or not a power of two)
+    /// or if the corresponding chip is not available (due to `max_access_adapter_n`).
+    pub fn execute_merge<const N: usize, F: PrimeField32>(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[u8],
+        block_timestamps: &[u32],
+        timestamp: u32,
+        row_slice: &mut [F],
+    ) {
+        let index = get_chip_index::<N>();
+        let chip = self
+            .chips
+            .get_mut(index)
+            .unwrap_or_else(|| panic!("AccessAdapterChip for block size {} not found", N));
+        chip.execute_merge(address, values, block_timestamps, timestamp, row_slice);
+    }
+
+    /// Fills the trace row for a split/merge operation related to the given block size `N`.
+    /// `N` refers to the size of the larger block involved in the operation.
+    ///
+    /// # Panics
+    /// Panics if `N` is invalid (not 8, 16, or 32, or not a power of two)
+    /// or if the corresponding chip is not available (due to `max_access_adapter_n`).
+    pub fn fill_trace_row<const N: usize, F: PrimeField32>(&mut self, row_slice: &mut [F]) {
+        let index = get_chip_index::<N>();
+        let chip = self
+            .chips
+            .get_mut(index)
+            .unwrap_or_else(|| panic!("AccessAdapterChip for block size {} not found", N));
+        // Assuming PrimeField32 and TraceRow are in scope
+        chip.fill_trace_row::<F>(row_slice);
+    }
+}
+
+pub struct AdapterInventoryTraceCursor<'a, F: PrimeField32> {
+    cursors: Vec<Cursor<&'a mut [F]>>,
+}
+
+impl<'a, F: PrimeField32> AdapterInventoryTraceCursor<'a, F> {
+    pub fn new(traces: Vec<&'a mut [F]>) -> Self {
+        let cursors = traces.into_iter().map(Cursor::new).collect();
+        Self { cursors }
+    }
+
+    pub fn get_row_slice<const N: usize, const NUM_ALIGNS: usize>(&mut self) -> &mut [F] {
+        let index = get_chip_index::<N>();
+        let begin = self.cursors[index].position() as usize;
+        let end = begin + size_of::<AccessAdapterCols<u8, N, NUM_ALIGNS>>();
+        self.cursors[index].set_position(end as u64);
+        &mut self.cursors[index].get_mut()[begin..end]
     }
 }

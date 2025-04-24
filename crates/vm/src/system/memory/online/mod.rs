@@ -1,15 +1,16 @@
 use std::fmt::Debug;
 
-use access_adapter::AccessAdapterInventory;
+use access_adapter::{AccessAdapterInventory, AdapterInventoryTraceCursor};
 use getset::Getters;
 use itertools::{izip, zip_eq};
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use super::{
     offline_checker::MemoryBus,
     paged_vec::{AddressMap, PAGE_SIZE},
-    Address, PagedVec,
+    Address, MemoryAddress, PagedVec,
 };
 use crate::{
     arch::MemoryConfig,
@@ -86,6 +87,11 @@ pub enum MemoryLogEntry<T> {
 pub struct AccessMetadata {
     pub timestamp: u32,
     pub block_size: u32,
+}
+
+impl AccessMetadata {
+    /// A marker indicating that the element is a part of a larger block which starts earlier.
+    const OCCUPIED: u32 = u32::MAX;
 }
 
 /// Online memory that stores additional information for trace generation purposes.
@@ -179,6 +185,76 @@ impl TracingMemory {
         );
     }
 
+    /// Returns the timestamp of the previous access to `[pointer:BLOCK_SIZE]_{address_space}`.
+    /// If we need to split/merge/initialize something for this, we first do all the necessary actions.
+    /// In the end of this process, we have this segment intact in our `meta`.
+    ///
+    /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
+    fn prev_access_time<
+        F: PrimeField32,
+        const NUM_ALIGNS: usize,
+        const BLOCK_SIZE: usize,
+        const ALIGN: usize,
+    >(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        values: &[u8],
+        traces: &mut AdapterInventoryTraceCursor<F>,
+    ) -> u32 {
+        let pv = &mut self.meta[address_space as usize];
+        let mut i = pointer as usize / ALIGN;
+        let end = i + BLOCK_SIZE / ALIGN;
+
+        let mut prev_ts = INITIAL_TIMESTAMP;
+        let mut block_timestamps = [INITIAL_TIMESTAMP; NUM_ALIGNS];
+        let need_to_merge = loop {
+            if i >= end {
+                break true;
+            }
+            let mut current_metadata = pv.get::<AccessMetadata>(i * size_of::<AccessMetadata>());
+            if current_metadata.block_size == BLOCK_SIZE as u32 && i + BLOCK_SIZE == end {
+                // We do not have to do anything
+                prev_ts = current_metadata.timestamp;
+                break false;
+            } else if current_metadata.block_size == 0 {
+                // Initialize
+                unimplemented!()
+            } else {
+                prev_ts = prev_ts.max(current_metadata.timestamp);
+                while current_metadata.block_size == AccessMetadata::OCCUPIED {
+                    i -= 1;
+                    current_metadata = pv.get::<AccessMetadata>(i * size_of::<AccessMetadata>());
+                }
+                block_timestamps[i.saturating_sub(pointer as usize / ALIGN)
+                    ..(i + (current_metadata.block_size as usize).min(end)
+                        - (pointer as usize) / ALIGN)]
+                    .fill(current_metadata.timestamp);
+                // Split
+                self.access_adapter_inventory
+                    .execute_split::<BLOCK_SIZE, _>(
+                        MemoryAddress::new(address_space, i as u32),
+                        values,
+                        self.timestamp,
+                        traces.get_row_slice::<BLOCK_SIZE, NUM_ALIGNS>(),
+                    );
+                i += current_metadata.block_size as usize;
+            }
+        };
+        if need_to_merge {
+            // merge
+            self.access_adapter_inventory
+                .execute_merge::<BLOCK_SIZE, _>(
+                    MemoryAddress::new(address_space, pointer),
+                    values,
+                    &block_timestamps,
+                    *block_timestamps.iter().max().unwrap(),
+                    traces.get_row_slice::<BLOCK_SIZE, NUM_ALIGNS>(),
+                );
+        }
+        prev_ts
+    }
+
     /// Atomic read operation which increments the timestamp by 1.
     /// Returns `(t_prev, [pointer:BLOCK_SIZE]_{address_space})` where `t_prev` is the
     /// timestamp of the last memory access.
@@ -215,17 +291,12 @@ impl TracingMemory {
         // TODO: address space should be checked elsewhere
         let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
         // The new
-        let AccessMetadata {
-            timestamp: t_prev,
-            mut block_size,
-        } = meta.replace(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
-        // TODO: do we need to handle uninitialized memory?
-        if block_size == 0 {
-            block_size = BLOCK_SIZE as u32;
-        }
-        if (block_size as usize) != BLOCK_SIZE {
-            todo!("split and merge stuff")
-        };
+        let t_prev = self.prev_access_time::<_, NUM_ALIGNS, BLOCK_SIZE, ALIGN>(
+            address_space,
+            pointer,
+            &values,
+            &mut traces,
+        );
 
         (t_prev, values)
     }
