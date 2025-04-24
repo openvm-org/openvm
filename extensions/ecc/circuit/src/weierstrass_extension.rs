@@ -68,21 +68,15 @@ pub struct WeierstrassExtension {
 }
 
 impl WeierstrassExtension {
-    pub fn generate_sw_init(&self) -> Option<String> {
-        if self.supported_curves.is_empty() {
-            None
-        } else {
-            let supported_curves = self
-                .supported_curves
-                .iter()
-                .map(|curve_config| curve_config.struct_name.to_string())
-                .collect::<Vec<String>>()
-                .join(", ");
+    pub fn generate_sw_init(&self) -> String {
+        let supported_curves = self
+            .supported_curves
+            .iter()
+            .map(|curve_config| curve_config.struct_name.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
 
-            Some(format!(
-                r#"openvm_ecc_guest::sw_macros::sw_init! {{ {supported_curves} }}"#,
-            ))
-        }
+        format!(r#"openvm_ecc_guest::sw_macros::sw_init! {{ {supported_curves} }}"#)
     }
 }
 

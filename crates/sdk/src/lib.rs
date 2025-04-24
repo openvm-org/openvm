@@ -5,7 +5,6 @@ use alloy_sol_types::sol;
 use commit::commit_app_exe;
 use config::{AggregationTreeConfig, AppConfig};
 use eyre::Result;
-use init::generate_init_file;
 use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
@@ -13,8 +12,8 @@ use openvm_build::{
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, verify_segments,
-        ContinuationVmProof, ExecutionError, VerifiedExecutionPayload, VmConfig, VmExecutor,
-        VmVerificationError,
+        ContinuationVmProof, ExecutionError, InitFileGenerator, VerifiedExecutionPayload, VmConfig,
+        VmExecutor, VmVerificationError,
     },
     system::{
         memory::{tree::public_values::extract_public_values, CHUNK},
@@ -53,7 +52,6 @@ use crate::{prover::EvmHalo2Prover, types::EvmProof};
 pub mod codec;
 pub mod commit;
 pub mod config;
-pub mod init;
 pub mod keygen;
 pub mod prover;
 
@@ -127,13 +125,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         target_filter: &Option<TargetFilter>,
         init_file_name: Option<&str>, // If None, we use "openvm-init.rs"
     ) -> Result<Elf> {
-        generate_init_file(
-            pkg_dir.as_ref(),
-            &vm_config.modular,
-            &vm_config.fp2,
-            &vm_config.ecc,
-            init_file_name,
-        )?;
+        vm_config.write_to_init_file(pkg_dir.as_ref(), init_file_name)?;
         let pkg = get_package(pkg_dir.as_ref());
         let target_dir = match build_guest_package(&pkg, &guest_opts, None, target_filter) {
             Ok(target_dir) => target_dir,

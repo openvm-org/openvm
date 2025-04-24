@@ -12,7 +12,7 @@ use openvm_algebra_circuit::{
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_circuit::{
-    arch::{SystemConfig, VmExecutor},
+    arch::{InitFileGenerator, SystemConfig, VmExecutor},
     derive::VmConfig,
     utils::air_test,
 };
@@ -114,6 +114,16 @@ impl Rv32ModularFp2Int256Config {
             fp2: Fp2Extension::new(fp2_moduli),
             int256: Default::default(),
         }
+    }
+}
+
+impl InitFileGenerator for Rv32ModularFp2Int256Config {
+    fn generate_init_file_contents(&self) -> Option<String> {
+        Some(format!(
+            "{}\n{}\n",
+            self.modular.generate_moduli_init(),
+            self.fp2.generate_complex_init(&self.modular)
+        ))
     }
 }
 

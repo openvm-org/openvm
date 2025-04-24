@@ -1,5 +1,5 @@
 use num_bigint::BigUint;
-use openvm_circuit::arch::SystemConfig;
+use openvm_circuit::arch::{InitFileGenerator, SystemConfig};
 use openvm_circuit_derive::VmConfig;
 use openvm_rv32im_circuit::*;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -19,6 +19,12 @@ pub struct Rv32ModularConfig {
     pub io: Rv32Io,
     #[extension]
     pub modular: ModularExtension,
+}
+
+impl InitFileGenerator for Rv32ModularConfig {
+    fn generate_init_file_contents(&self) -> Option<String> {
+        Some(self.modular.generate_moduli_init())
+    }
 }
 
 impl Rv32ModularConfig {
@@ -63,5 +69,15 @@ impl Rv32ModularWithFp2Config {
             modular: ModularExtension::new(moduli),
             fp2: Fp2Extension::new(moduli_with_names),
         }
+    }
+}
+
+impl InitFileGenerator for Rv32ModularWithFp2Config {
+    fn generate_init_file_contents(&self) -> Option<String> {
+        Some(format!(
+            "{}\n{}\n",
+            self.modular.generate_moduli_init(),
+            self.fp2.generate_complex_init(&self.modular)
+        ))
     }
 }

@@ -1,5 +1,5 @@
 use openvm_algebra_circuit::*;
-use openvm_circuit::arch::SystemConfig;
+use openvm_circuit::arch::{InitFileGenerator, SystemConfig};
 use openvm_circuit_derive::VmConfig;
 use openvm_ecc_circuit::*;
 use openvm_rv32im_circuit::*;
@@ -55,3 +55,6 @@ impl Rv32PairingConfig {
         }
     }
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for Rv32PairingConfig {}

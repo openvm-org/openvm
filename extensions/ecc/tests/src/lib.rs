@@ -23,20 +23,10 @@ mod tests {
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{
-        build_example_program_at_path_with_features, get_programs_dir, InitConfig,
+        build_example_program_at_path_with_features, get_programs_dir, NoInitFile,
     };
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     type F = BabyBear;
-
-    pub fn rv32weierstrass_config_to_init_config(
-        config: &Rv32WeierstrassConfig,
-    ) -> Option<InitConfig> {
-        Some(InitConfig {
-            modular_config: Some(config.modular.clone()),
-            fp2_config: None,
-            ecc_config: Some(config.weierstrass.clone()),
-        })
-    }
 
     #[test]
     fn test_ec() -> Result<()> {
@@ -45,7 +35,7 @@ mod tests {
             get_programs_dir!(),
             "ec",
             ["k256"],
-            rv32weierstrass_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -67,7 +57,7 @@ mod tests {
             get_programs_dir!(),
             "ec_nonzero_a",
             ["p256"],
-            rv32weierstrass_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -90,7 +80,7 @@ mod tests {
             get_programs_dir!(),
             "ec_two_curves",
             ["k256", "p256"],
-            rv32weierstrass_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -138,7 +128,7 @@ mod tests {
             get_programs_dir!(),
             "decompress",
             ["k256"],
-            rv32weierstrass_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -203,7 +193,7 @@ mod tests {
             get_programs_dir!(),
             "decompress_invalid_hint",
             ["k256", test_type],
-            rv32weierstrass_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -291,11 +281,7 @@ mod tests {
             get_programs_dir!(),
             "ecdsa",
             ["k256"],
-            Some(InitConfig {
-                modular_config: config.modular.clone(),
-                fp2_config: None,
-                ecc_config: config.ecc.clone(),
-            }),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -318,7 +304,7 @@ mod tests {
             get_programs_dir!(),
             "invalid_setup",
             ["k256", "p256"],
-            None, // don't use build script since we are testing invalid setup
+            &NoInitFile, // don't use build script since we are testing invalid setup
         )
         .unwrap();
         let openvm_exe = VmExe::from_elf(

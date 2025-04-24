@@ -1,32 +1,6 @@
 #![allow(non_snake_case)]
 
 #[cfg(test)]
-// Common code for both bn254 and bls12-381 tests
-mod common {
-    use openvm_ecc_circuit::Rv32WeierstrassConfig;
-    use openvm_pairing_circuit::Rv32PairingConfig;
-    use openvm_toolchain_tests::InitConfig;
-
-    pub fn rv32pairing_config_to_init_config(config: &Rv32PairingConfig) -> Option<InitConfig> {
-        Some(InitConfig {
-            modular_config: Some(config.modular.clone()),
-            fp2_config: Some(config.fp2.clone()),
-            ecc_config: Some(config.weierstrass.clone()),
-        })
-    }
-
-    pub fn rv32weierstrass_config_to_init_config(
-        config: &Rv32WeierstrassConfig,
-    ) -> Option<InitConfig> {
-        Some(InitConfig {
-            modular_config: Some(config.modular.clone()),
-            fp2_config: None,
-            ecc_config: Some(config.weierstrass.clone()),
-        })
-    }
-}
-
-#[cfg(test)]
 mod bn254 {
     use std::iter;
 
@@ -62,8 +36,6 @@ mod bn254 {
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand::SeedableRng;
 
-    use super::common::rv32pairing_config_to_init_config;
-
     type F = BabyBear;
 
     pub fn get_testing_config() -> Rv32PairingConfig {
@@ -92,7 +64,7 @@ mod bn254 {
             get_programs_dir!(),
             "fp12_mul",
             ["bn254"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -128,7 +100,7 @@ mod bn254 {
             get_programs_dir!(),
             "pairing_line",
             ["bn254"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -186,7 +158,7 @@ mod bn254 {
             get_programs_dir!(),
             "pairing_miller_step",
             ["bn254"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -235,7 +207,7 @@ mod bn254 {
             get_programs_dir!(),
             "pairing_miller_loop",
             ["bn254"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -288,7 +260,7 @@ mod bn254 {
             get_programs_dir!(),
             "pairing_check",
             ["bn254"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -345,7 +317,7 @@ mod bn254 {
             get_programs_dir!(),
             "pairing_check_fallback",
             ["bn254"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -402,7 +374,7 @@ mod bn254 {
             get_programs_dir!(),
             "bn_final_exp_hint",
             ["bn254"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -489,8 +461,6 @@ mod bls12_381 {
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand::SeedableRng;
 
-    use super::common::{rv32pairing_config_to_init_config, rv32weierstrass_config_to_init_config};
-
     type F = BabyBear;
 
     pub fn get_testing_config() -> Rv32PairingConfig {
@@ -526,7 +496,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "bls_ec",
             ["bls12_381"],
-            rv32weierstrass_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -548,7 +518,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "fp12_mul",
             ["bls12_381"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -584,7 +554,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "pairing_line",
             ["bls12_381"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -643,7 +613,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "pairing_miller_step",
             ["bls12_381"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -692,7 +662,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "pairing_miller_loop",
             ["bls12_381"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -751,7 +721,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "pairing_check",
             ["bls12_381"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -808,7 +778,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "pairing_check_fallback",
             ["bls12_381"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -864,7 +834,7 @@ mod bls12_381 {
             get_programs_dir!(),
             "bls_final_exp_hint",
             ["bls12_381"],
-            rv32pairing_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,

@@ -33,35 +33,29 @@ pub struct Fp2Extension {
 }
 
 impl Fp2Extension {
-    pub fn generate_complex_init(&self, modular_config: &ModularExtension) -> Option<String> {
-        if modular_config.supported_modulus.is_empty() {
-            None
-        } else {
-            fn get_index_of_modulus(modulus: &BigUint, modular_config: &ModularExtension) -> usize {
-                modular_config
-                    .supported_modulus
-                    .iter()
-                    .position(|m| m == modulus)
-                    .expect("Modulus used in Fp2Extension not found in ModularExtension")
-            }
-
-            let supported_moduli = self
+    pub fn generate_complex_init(&self, modular_config: &ModularExtension) -> String {
+        fn get_index_of_modulus(modulus: &BigUint, modular_config: &ModularExtension) -> usize {
+            modular_config
                 .supported_modulus
                 .iter()
-                .map(|(name, modulus)| {
-                    format!(
-                        "{} {{ mod_idx = {} }}",
-                        name,
-                        get_index_of_modulus(modulus, modular_config)
-                    )
-                })
-                .collect::<Vec<String>>()
-                .join(", ");
-
-            Some(format!(
-                r#"openvm_algebra_guest::complex_macros::complex_init! {{ {supported_moduli} }}"#,
-            ))
+                .position(|m| m == modulus)
+                .expect("Modulus used in Fp2Extension not found in ModularExtension")
         }
+
+        let supported_moduli = self
+            .supported_modulus
+            .iter()
+            .map(|(name, modulus)| {
+                format!(
+                    "{} {{ mod_idx = {} }}",
+                    name,
+                    get_index_of_modulus(modulus, modular_config)
+                )
+            })
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        format!(r#"openvm_algebra_guest::complex_macros::complex_init! {{ {supported_moduli} }}"#,)
     }
 }
 

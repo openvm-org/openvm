@@ -15,39 +15,17 @@ mod tests {
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
-    use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir, InitConfig};
+    use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir, NoInitFile};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
     type F = BabyBear;
-
-    fn modular_config_to_init_config(config: &Rv32ModularConfig) -> Option<InitConfig> {
-        Some(InitConfig {
-            modular_config: Some(config.modular.clone()),
-            fp2_config: None,
-            ecc_config: None,
-        })
-    }
-
-    fn modular_with_fp2_config_to_init_config(
-        config: &Rv32ModularWithFp2Config,
-    ) -> Option<InitConfig> {
-        Some(InitConfig {
-            modular_config: Some(config.modular.clone()),
-            fp2_config: Some(config.fp2.clone()),
-            ecc_config: None,
-        })
-    }
 
     #[test]
     fn test_moduli_setup() -> Result<()> {
         let moduli = ["4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787", "1000000000000000003", "2305843009213693951"]
             .map(|s| BigUint::from_str(s).unwrap());
         let config = Rv32ModularConfig::new(moduli.to_vec());
-        let elf = build_example_program_at_path(
-            get_programs_dir!(),
-            "moduli_setup",
-            modular_config_to_init_config(&config),
-        )?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "moduli_setup", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -64,11 +42,7 @@ mod tests {
     #[test]
     fn test_modular() -> Result<()> {
         let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
-        let elf = build_example_program_at_path(
-            get_programs_dir!(),
-            "little",
-            modular_config_to_init_config(&config),
-        )?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "little", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -93,11 +67,8 @@ mod tests {
                 BigUint::from_str("1000000007").unwrap(),
             ),
         ]);
-        let elf = build_example_program_at_path(
-            get_programs_dir!(),
-            "complex-two-modulos",
-            modular_with_fp2_config_to_init_config(&config),
-        )?;
+        let elf =
+            build_example_program_at_path(get_programs_dir!(), "complex-two-modulos", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -132,7 +103,7 @@ mod tests {
         let elf = build_example_program_at_path(
             get_programs_dir!(),
             "complex-redundant-modulus",
-            modular_with_fp2_config_to_init_config(&config),
+            &config,
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -153,11 +124,7 @@ mod tests {
             "Complex".to_string(),
             SECP256K1_CONFIG.modulus.clone(),
         )]);
-        let elf = build_example_program_at_path(
-            get_programs_dir!(),
-            "complex-secp256k1",
-            modular_with_fp2_config_to_init_config(&config),
-        )?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "complex-secp256k1", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -183,7 +150,7 @@ mod tests {
             "invalid-setup",
             // We don't want init.rs to be generated for this test because we are testing an
             // invalid moduli_init! call
-            None,
+            &NoInitFile,
         )
         .unwrap();
         let openvm_exe = VmExe::from_elf(
