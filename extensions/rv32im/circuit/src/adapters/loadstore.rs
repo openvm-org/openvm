@@ -449,7 +449,8 @@ where
                 //     memory.unsafe_read_cell::<u8>(e, F::from_canonical_usize(ptr_val as usize + i))
                 // })
                 // TODO(ayush): this probably doesn't need to be traced
-                // memory.read(e.as_canonical_u32(), ptr_val);
+                //              i.e. read without changing memory state
+                // memory.read(e.as_canonical_u32(), ptr_val) ;
                 tracing_read_reg(
                     memory,
                     ptr_val,
@@ -459,6 +460,7 @@ where
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                 // array::from_fn(|i| memory.unsafe_read_cell::<u8>(d, a + F::from_canonical_usize(i)))
                 // TODO(ayush): this probably doesn't need to be traced
+                //              i.e. read without changing memory state
                 // memory.read(d.as_canonical_u32(), a.as_canonical_u32())
                 tracing_read_reg(
                     memory,
@@ -557,6 +559,7 @@ where
                 }
             };
         } else {
+            // TODO(ayush): should this be here?
             memory.increment_timestamp();
         };
     }
