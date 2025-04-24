@@ -186,8 +186,8 @@ impl TracingMemory {
     }
 
     /// Returns the timestamp of the previous access to `[pointer:BLOCK_SIZE]_{address_space}`.
-    /// If we need to split/merge/initialize something for this, we first do all the necessary actions.
-    /// In the end of this process, we have this segment intact in our `meta`.
+    /// If we need to split/merge/initialize something for this, we first do all the necessary
+    /// actions. In the end of this process, we have this segment intact in our `meta`.
     ///
     /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
     fn prev_access_time<

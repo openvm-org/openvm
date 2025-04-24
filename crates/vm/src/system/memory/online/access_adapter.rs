@@ -72,7 +72,8 @@ impl<const LEN: usize, const NUM_BLOCKS: usize, AB: InteractionBuilder> Air<AB>
 {
     fn eval(&self, builder: &mut AB) {
         // We want to:
-        // 1. Interact over the memory bus: send/receive the smaller blocks and receive/send the large one.
+        // 1. Interact over the memory bus: send/receive the smaller blocks and receive/send the
+        //    large one.
         // 2. Verify timestamp consistency:
         //   - if we split, then the block timestamps must be equal to `timestamp`.
         //   - if we merge, then `timestamp` must be at least each of the block timestamps.
@@ -204,8 +205,9 @@ impl GenericAccessAdapterChip {
     }
 
     /// Dispatches the fill_trace_row call to the appropriate concrete chip.
-    /// Assumes the concrete chip has a method `fill_trace_row<F>(row: &mut TraceRow<F>, address_space: u32, pointer: u32)`.
-    /// Also assumes `TraceRow<F>` is the correct type as used by the caller (`AccessAdapterInventory`).
+    /// Assumes the concrete chip has a method `fill_trace_row<F>(row: &mut TraceRow<F>,
+    /// address_space: u32, pointer: u32)`. Also assumes `TraceRow<F>` is the correct type as
+    /// used by the caller (`AccessAdapterInventory`).
     fn fill_trace_row<F: PrimeField32>(&mut self, row_slice: &mut [F]) {
         match self {
             GenericAccessAdapterChip::N8(chip) => chip.fill_trace_row::<F>(row_slice),
@@ -293,7 +295,8 @@ impl<const LEN: usize, const NUM_BLOCKS: usize> AccessAdapterChip<LEN, NUM_BLOCK
         if row.dir == F::ONE {
             row.block_timestamps.fill(row.timestamp);
         }
-        // [AG] TODO: if we only want to do this for merges, we need to fix the `eval` method of the AIR.
+        // [AG] TODO: if we only want to do this for merges, we need to fix the `eval` method of the
+        // AIR.
         for (block_ts, lt_aux) in row.block_timestamps.iter().zip(row.lt_aux.iter_mut()) {
             let mut result = F::ZERO;
             self.air.lt_air.generate_subrow(
