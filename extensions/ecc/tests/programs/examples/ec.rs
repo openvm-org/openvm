@@ -11,7 +11,7 @@ use openvm_ecc_guest::{
     Group,
 };
 
-init!("openvm-init-ec.rs");
+init!("openvm_init_ec.rs");
 
 openvm::entry!(main);
 

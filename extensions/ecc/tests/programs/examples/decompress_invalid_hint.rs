@@ -74,7 +74,7 @@ openvm_ecc_sw_macros::sw_declare! {
     },
 }
 
-init!("openvm-init-decompress_invalid_hint.rs");
+init!("openvm_init_decompress_invalid_hint.rs");
 
 trait NonQr<P: WeierstrassPoint> {
     fn get_non_qr() -> &'static P::Coordinate;

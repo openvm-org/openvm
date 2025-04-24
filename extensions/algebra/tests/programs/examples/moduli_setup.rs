@@ -15,7 +15,7 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
-init!("openvm-init-moduli_setup.rs");
+init!("openvm_init_moduli_setup.rs");
 
 pub fn main() {
     setup_all_moduli();

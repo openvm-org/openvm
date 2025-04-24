@@ -73,7 +73,7 @@ pub use exp_bytes::*;
 #[macro_export]
 macro_rules! init {
     () => {
-        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/openvm-init.rs"));
+        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/openvm_init.rs"));
     };
     ($name:expr) => {
         include!(concat!(env!("CARGO_MANIFEST_DIR"), concat!("/", $name)));

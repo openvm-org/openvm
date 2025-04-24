@@ -9,7 +9,7 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" }
 }
 
-init!("openvm-init-little.rs");
+init!("openvm_init_little.rs");
 
 pub fn main() {
     setup_all_moduli();

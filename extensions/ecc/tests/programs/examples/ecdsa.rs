@@ -15,7 +15,7 @@ use openvm_ecc_guest::{
 use openvm_keccak256_guest::keccak256;
 openvm::entry!(main);
 
-init!("openvm-init-ecdsa.rs");
+init!("openvm_init_ecdsa.rs");
 
 // Ref: https://docs.rs/k256/latest/k256/ecdsa/index.html
 pub fn main() {

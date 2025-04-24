@@ -12,7 +12,7 @@ use openvm_ecc_guest::{
 
 openvm::entry!(main);
 
-init!("openvm-init-ec_nonzero_a.rs");
+init!("openvm_init_ec_nonzero_a.rs");
 
 pub fn main() {
     setup_all_moduli();

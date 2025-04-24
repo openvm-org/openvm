@@ -68,7 +68,7 @@ mod tests {
             ),
         ]);
         let elf =
-            build_example_program_at_path(get_programs_dir!(), "complex-two-modulos", &config)?;
+            build_example_program_at_path(get_programs_dir!(), "complex_two_moduli", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -102,7 +102,7 @@ mod tests {
         };
         let elf = build_example_program_at_path(
             get_programs_dir!(),
-            "complex-redundant-modulus",
+            "complex_redundant_modulus",
             &config,
         )?;
         let openvm_exe = VmExe::from_elf(
@@ -124,7 +124,7 @@ mod tests {
             "Complex".to_string(),
             SECP256K1_CONFIG.modulus.clone(),
         )]);
-        let elf = build_example_program_at_path(get_programs_dir!(), "complex-secp256k1", &config)?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "complex_secp256k1", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -147,7 +147,7 @@ mod tests {
         ]);
         let elf = build_example_program_at_path(
             get_programs_dir!(),
-            "invalid-setup",
+            "invalid_setup",
             // We don't want init.rs to be generated for this test because we are testing an
             // invalid moduli_init! call
             &NoInitFile,

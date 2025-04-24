@@ -12,7 +12,7 @@ use openvm_ecc_guest::{
     Group,
 };
 
-init!("openvm-init-ec_two_curves.rs");
+init!("openvm_init_ec_two_curves.rs");
 
 openvm::entry!(main);
 

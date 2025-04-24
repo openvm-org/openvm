@@ -13,7 +13,7 @@ openvm_algebra_complex_macros::complex_declare! {
     Complex { mod_type = Secp256k1Coord }
 }
 
-init!("openvm-init-complex-secp256k1.rs");
+init!("openvm_init_complex_secp256k1.rs");
 
 pub fn main() {
     setup_all_moduli();

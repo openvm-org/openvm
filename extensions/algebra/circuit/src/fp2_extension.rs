@@ -55,7 +55,7 @@ impl Fp2Extension {
             .collect::<Vec<String>>()
             .join(", ");
 
-        format!(r#"openvm_algebra_guest::complex_macros::complex_init! {{ {supported_moduli} }}"#,)
+        format!(r#"openvm_algebra_guest::complex_macros::complex_init! {{ {supported_moduli} }}"#)
     }
 }
 
