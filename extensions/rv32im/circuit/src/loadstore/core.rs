@@ -328,15 +328,7 @@ where
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        let Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            g,
-            f: enabled,
-            ..
-        } = instruction;
+        let Instruction { opcode, .. } = instruction;
 
         // Get the local opcode for this instruction
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));

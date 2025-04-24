@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
 };
 
 use openvm_circuit::{
@@ -246,24 +245,25 @@ where
 }
 
 pub struct ShiftStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    phantom: PhantomData<A>,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
+        adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
         offset: usize,
     ) -> Self {
         assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
         Self {
+            adapter,
             offset,
             bitwise_lookup_chip,
             range_checker_chip,
-            phantom: PhantomData,
         }
     }
 }
@@ -299,7 +299,7 @@ where
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
 
         let (output, limb_shift, bit_shift) =
             run_shift::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
@@ -313,7 +313,8 @@ where
         core_row.bit_shift_marker[0] = F::from_canonical_usize(bit_shift);
         core_row.limb_shift_marker[0] = F::from_canonical_usize(limb_shift);
 
-        A::write(state.memory, instruction, adapter_row, &output);
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -323,7 +324,8 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        A::fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
+        self.adapter
+            .fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
 
         let core_row: &mut ShiftCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
@@ -402,11 +404,11 @@ where
 
         let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (rs1, rs2) = A::read(&mut state.memory, instruction);
+        let (rs1, rs2) = self.adapter.read(&mut state.memory, instruction);
 
         let (rd, _, _) = run_shift::<NUM_LIMBS, LIMB_BITS>(shift_opcode, &rs1, &rs2);
 
-        A::write(&mut state.memory, instruction, &rd);
+        self.adapter.write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

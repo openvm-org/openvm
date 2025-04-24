@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
 };
 
 use openvm_circuit::{
@@ -158,17 +157,17 @@ pub struct BranchEqualCoreRecord<T, const NUM_LIMBS: usize> {
 
 #[derive(Debug)]
 pub struct BranchEqualStep<A, const NUM_LIMBS: usize> {
+    adapter: A,
     pub offset: usize,
     pub pc_step: u32,
-    phantom: PhantomData<A>,
 }
 
 impl<A, const NUM_LIMBS: usize> BranchEqualStep<A, NUM_LIMBS> {
-    pub fn new(offset: usize, pc_step: u32) -> Self {
+    pub fn new(adapter: A, offset: usize, pc_step: u32) -> Self {
         Self {
+            adapter,
             offset,
             pc_step,
-            phantom: PhantomData,
         }
     }
 }
@@ -203,7 +202,7 @@ where
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
 
         let (cmp_result, diff_idx, diff_inv_val) = run_eq(branch_eq_opcode, &rs1, &rs2);
 
@@ -229,7 +228,7 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        A::fill_trace_row(mem_helper, (), adapter_row);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
     }
 }
 
@@ -255,7 +254,7 @@ where
 
         let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (rs1, rs2) = A::read(&mut state.memory, instruction);
+        let (rs1, rs2) = self.adapter.read(&mut state.memory, instruction);
 
         // TODO(ayush): probably don't need the other values
         let (cmp_result, _, _) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &rs1, &rs2);

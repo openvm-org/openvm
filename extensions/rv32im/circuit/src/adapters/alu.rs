@@ -180,6 +180,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
 
     #[inline(always)]
     fn read(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
@@ -206,6 +207,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
 
     #[inline(always)]
     fn write(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
@@ -227,6 +229,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
 
     #[inline(always)]
     fn fill_trace_row(
+        &self,
         mem_helper: &MemoryAuxColsFactory<F>,
         bitwise_lookup_chip: &BitwiseOperationLookupChip<LIMB_BITS>,
         adapter_row: &mut [F],
@@ -260,7 +263,7 @@ where
     type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
-    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { b, c, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -284,7 +287,7 @@ where
         (rs1, rs2)
     }
 
-    fn write(memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
+    fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
         let Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);

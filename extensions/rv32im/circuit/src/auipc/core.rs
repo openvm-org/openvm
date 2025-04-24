@@ -1,7 +1,6 @@
 use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
 };
 
 use openvm_circuit::{
@@ -201,15 +200,18 @@ pub struct Rv32AuipcCoreRecord<F> {
 }
 
 pub struct Rv32AuipcStep<A> {
+    adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    phantom: PhantomData<A>,
 }
 
 impl<A> Rv32AuipcStep<A> {
-    pub fn new(bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>) -> Self {
+    pub fn new(
+        adapter: A,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    ) -> Self {
         Self {
+            adapter,
             bitwise_lookup_chip,
-            phantom: PhantomData,
         }
     }
 }
@@ -255,7 +257,8 @@ where
         // We decompose during fill_trace_row later:
         core_row.imm_limbs[0] = *imm;
 
-        A::write(state.memory, instruction, adapter_row, &rd);
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &rd);
 
         // TODO(ayush): add increment_pc function to vmstate
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -266,7 +269,7 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        A::fill_trace_row(mem_helper, (), adapter_row);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
 
         let core_row: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
 
@@ -321,7 +324,7 @@ where
         let imm = imm.as_canonical_u32();
         let rd = run_auipc(local_opcode, state.pc, imm);
 
-        A::write(&mut state.memory, instruction, &rd);
+        self.adapter.write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

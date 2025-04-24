@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
 };
 
 use openvm_circuit::{
@@ -131,15 +130,19 @@ pub struct MultiplicationCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
 
 #[derive(Debug)]
 pub struct MultiplicationStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     pub offset: usize,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
-    phantom: PhantomData<A>,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
 {
-    pub fn new(range_tuple_chip: SharedRangeTupleCheckerChip<2>, offset: usize) -> Self {
+    pub fn new(
+        adapter: A,
+        range_tuple_chip: SharedRangeTupleCheckerChip<2>,
+        offset: usize,
+    ) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
         // < NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1 bytes
         // (with LIMB_BITS bits).
@@ -155,9 +158,9 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         );
 
         Self {
+            adapter,
             offset,
             range_tuple_chip,
-            phantom: PhantomData,
         }
     }
 }
@@ -196,7 +199,7 @@ where
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
 
         let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
 
@@ -213,7 +216,8 @@ where
 
         // TODO(ayush): avoid this conversion
         let a = a.map(|x| x as u8);
-        A::write(state.memory, instruction, adapter_row, &a);
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &a);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -223,7 +227,7 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        A::fill_trace_row(mem_helper, (), adapter_row);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
     }
 }
 
@@ -254,11 +258,11 @@ where
             MulOpcode::MUL
         );
 
-        let (rs1, rs2) = A::read(&mut state.memory, instruction);
+        let (rs1, rs2) = self.adapter.read(&mut state.memory, instruction);
 
         let (rd, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
 
-        A::write(&mut state.memory, instruction, &rd);
+        self.adapter.write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

@@ -144,6 +144,7 @@ where
 
     #[inline(always)]
     fn read(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
@@ -171,6 +172,7 @@ where
 
     #[inline(always)]
     fn write(
+        &self,
         _memory: &mut TracingMemory,
         _instruction: &Instruction<F>,
         _adapter_row: &mut [F],
@@ -180,6 +182,7 @@ where
 
     #[inline(always)]
     fn fill_trace_row(
+        &self,
         mem_helper: &MemoryAuxColsFactory<F>,
         _trace_ctx: Self::TraceContext<'_>,
         adapter_row: &mut [F],
@@ -204,7 +207,7 @@ where
     type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
     type WriteData = ();
 
-    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { a, b, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -218,5 +221,5 @@ where
         (rs1, rs2)
     }
 
-    fn write(_memory: &mut Mem, _instruction: &Instruction<F>, _data: &Self::WriteData) {}
+    fn write(&self, _memory: &mut Mem, _instruction: &Instruction<F>, _data: &Self::WriteData) {}
 }

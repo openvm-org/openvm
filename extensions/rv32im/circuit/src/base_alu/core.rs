@@ -2,7 +2,6 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     iter::zip,
-    marker::PhantomData,
 };
 
 use openvm_circuit::{
@@ -175,20 +174,21 @@ where
 }
 
 pub struct BaseAluStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-    phantom: PhantomData<A>,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluStep<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
+        adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
     ) -> Self {
         Self {
+            adapter,
             offset,
             bitwise_lookup_chip,
-            phantom: PhantomData,
         }
     }
 }
@@ -224,7 +224,7 @@ where
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
 
         let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
         // TODO(ayush): remove
@@ -240,7 +240,8 @@ where
         core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
         core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
 
-        A::write(state.memory, instruction, adapter_row, &rd);
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &rd);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -250,7 +251,8 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        A::fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
+        self.adapter
+            .fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
 
         let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
@@ -290,9 +292,9 @@ where
 
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (rs1, rs2) = A::read(&mut state.memory, instruction);
+        let (rs1, rs2) = self.adapter.read(&mut state.memory, instruction);
         let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
-        A::write(&mut state.memory, instruction, &rd);
+        self.adapter.write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

@@ -218,6 +218,7 @@ where
 
     #[inline(always)]
     fn read(
+        &self,
         _memory: &mut TracingMemory,
         _instruction: &Instruction<F>,
         _adapter_row: &mut [F],
@@ -226,6 +227,7 @@ where
 
     #[inline(always)]
     fn write(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
@@ -247,6 +249,7 @@ where
 
     #[inline(always)]
     fn fill_trace_row(
+        &self,
         mem_helper: &MemoryAuxColsFactory<F>,
         _trace_ctx: Self::TraceContext<'_>,
         adapter_row: &mut [F],
@@ -267,9 +270,9 @@ where
     type ReadData = ();
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
-    fn read(_memory: &mut Mem, _instruction: &Instruction<F>) -> Self::ReadData {}
+    fn read(&self, _memory: &mut Mem, _instruction: &Instruction<F>) -> Self::ReadData {}
 
-    fn write(memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
+    fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
         let Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -280,7 +283,9 @@ where
 
 /// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
 #[derive(derive_new::new)]
-pub struct Rv32CondRdWriteAdapterStep;
+pub struct Rv32CondRdWriteAdapterStep {
+    inner: Rv32RdWriteAdapterStep,
+}
 
 impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32CondRdWriteAdapterStep
 where
@@ -301,15 +306,22 @@ where
 
     #[inline(always)]
     fn read(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
-        <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::read(memory, instruction, adapter_row)
+        <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::read(
+            &self.inner,
+            memory,
+            instruction,
+            adapter_row,
+        )
     }
 
     #[inline(always)]
     fn write(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
@@ -322,6 +334,7 @@ where
 
             adapter_row_ref.needs_write = F::ONE;
             <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::write(
+                &self.inner,
                 memory,
                 instruction,
                 adapter_row,
@@ -335,6 +348,7 @@ where
 
     #[inline(always)]
     fn fill_trace_row(
+        &self,
         mem_helper: &MemoryAuxColsFactory<F>,
         trace_ctx: Self::TraceContext<'_>,
         adapter_row: &mut [F],
@@ -343,6 +357,7 @@ where
 
         if adapter_row_ref.needs_write.is_one() {
             <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::fill_trace_row(
+                &self.inner,
                 mem_helper,
                 trace_ctx,
                 adapter_row,
@@ -359,15 +374,24 @@ where
     type ReadData = ();
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
-    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
-        <Rv32RdWriteAdapterStep as AdapterExecutorE1<Mem, F>>::read(memory, instruction)
+    fn read(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+        <Rv32RdWriteAdapterStep as AdapterExecutorE1<Mem, F>>::read(
+            &self.inner,
+            memory,
+            instruction,
+        )
     }
 
-    fn write(memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
+    fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
         let Instruction { f: enabled, .. } = instruction;
 
         if *enabled != F::ZERO {
-            <Rv32RdWriteAdapterStep as AdapterExecutorE1<Mem, F>>::write(memory, instruction, rd)
+            <Rv32RdWriteAdapterStep as AdapterExecutorE1<Mem, F>>::write(
+                &self.inner,
+                memory,
+                instruction,
+                rd,
+            )
         }
     }
 }

@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
 };
 
 use openvm_circuit::{
@@ -190,20 +189,21 @@ pub struct LessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 }
 
 pub struct LessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-    phantom: PhantomData<A>,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanStep<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
+        adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
     ) -> Self {
         Self {
+            adapter,
             offset,
             bitwise_lookup_chip,
-            phantom: PhantomData,
         }
     }
 }
@@ -241,7 +241,7 @@ where
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
 
         let (cmp_result, _, _, _) = run_less_than::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
 
@@ -254,7 +254,8 @@ where
         let mut output = [0u8; NUM_LIMBS];
         output[0] = cmp_result as u8;
 
-        A::write(state.memory, instruction, adapter_row, &output);
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -264,7 +265,8 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        A::fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
+        self.adapter
+            .fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
 
         let core_row: &mut LessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
@@ -358,7 +360,7 @@ where
 
         let less_than_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (rs1, rs2) = A::read(&mut state.memory, instruction);
+        let (rs1, rs2) = self.adapter.read(&mut state.memory, instruction);
 
         // Run the comparison
         let (cmp_result, _, _, _) =
@@ -366,7 +368,7 @@ where
         let mut rd = [0u8; NUM_LIMBS];
         rd[0] = cmp_result as u8;
 
-        A::write(&mut state.memory, instruction, &rd);
+        self.adapter.write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

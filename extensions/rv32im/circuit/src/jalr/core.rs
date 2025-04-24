@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
 };
 
 use openvm_circuit::{
@@ -190,21 +189,22 @@ where
 }
 
 pub struct Rv32JalrStep<A> {
+    adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    phantom: PhantomData<A>,
 }
 
 impl<A> Rv32JalrStep<A> {
     pub fn new(
+        adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 16);
         Self {
+            adapter,
             bitwise_lookup_chip,
             range_checker_chip,
-            phantom: PhantomData,
         }
     }
 }
@@ -243,7 +243,7 @@ where
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let rs1 = A::read(state.memory, instruction, adapter_row);
+        let rs1 = self.adapter.read(state.memory, instruction, adapter_row);
         // TODO(ayush): avoid this conversion
         let rs1_val = compose(rs1.map(F::from_canonical_u8));
 
@@ -272,7 +272,7 @@ where
         core_row.imm_sign = g;
         core_row.is_valid = F::ONE;
 
-        A::write(
+        self.adapter.write(
             state.memory,
             instruction,
             adapter_row,
@@ -288,7 +288,7 @@ where
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         let core_row: &mut Rv32JalrCoreCols<F> = core_row.borrow_mut();
 
-        A::fill_trace_row(mem_helper, (), adapter_row);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
 
         // TODO(ayush): avoid conversions
         self.bitwise_lookup_chip.request_range(
@@ -332,7 +332,7 @@ where
         let local_opcode =
             Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(Rv32JalrOpcode::CLASS_OFFSET));
 
-        let rs1 = A::read(&mut state.memory, instruction);
+        let rs1 = self.adapter.read(&mut state.memory, instruction);
         let rs1 = u32::from_le_bytes(rs1);
 
         let imm = c.as_canonical_u32();
@@ -343,7 +343,7 @@ where
         let (to_pc, rd) = run_jalr(local_opcode, state.pc, imm_extended, rs1);
         let rd = rd.map(|x| x as u8);
 
-        A::write(&mut state.memory, instruction, &rd);
+        self.adapter.write(&mut state.memory, instruction, &rd);
 
         state.pc = to_pc;
 

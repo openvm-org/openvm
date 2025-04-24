@@ -1,7 +1,4 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
@@ -160,15 +157,18 @@ pub struct Rv32JalLuiCoreRecord<F: Field> {
 }
 
 pub struct Rv32JalLuiStep<A> {
+    adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    phantom: PhantomData<A>,
 }
 
 impl<A> Rv32JalLuiStep<A> {
-    pub fn new(bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>) -> Self {
+    pub fn new(
+        adapter: A,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    ) -> Self {
         Self {
+            adapter,
             bitwise_lookup_chip,
-            phantom: PhantomData,
         }
     }
 }
@@ -230,7 +230,8 @@ where
         core_row.is_jal = F::from_bool(local_opcode == JAL);
         core_row.is_lui = F::from_bool(local_opcode == LUI);
 
-        A::write(state.memory, instruction, adapter_row, &rd_data);
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &rd_data);
 
         *state.pc = to_pc;
 
@@ -241,7 +242,7 @@ where
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
 
-        A::fill_trace_row(mem_helper, (), adapter_row);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
 
         let rd_data = core_row.rd_data.map(|x| x.as_canonical_u32());
         for pair in rd_data.chunks_exact(2) {
@@ -279,7 +280,7 @@ where
 
         let (to_pc, rd) = run_jal_lui(local_opcode, state.pc, signed_imm);
 
-        A::write(&mut state.memory, instruction, &rd);
+        self.adapter.write(&mut state.memory, instruction, &rd);
 
         state.pc = to_pc;
 

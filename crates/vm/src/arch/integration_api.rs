@@ -392,12 +392,14 @@ pub trait AdapterTraceStep<F, CTX> {
     fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]);
 
     fn read(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData;
 
     fn write(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
@@ -407,6 +409,7 @@ pub trait AdapterTraceStep<F, CTX> {
     // Note[jpw]: should we reuse TraceSubRowGenerator trait instead?
     /// Post-execution filling of rest of adapter row.
     fn fill_trace_row(
+        &self,
         mem_helper: &MemoryAuxColsFactory<F>,
         ctx: Self::TraceContext<'_>,
         adapter_row: &mut [F],
@@ -421,9 +424,9 @@ where
     type ReadData;
     type WriteData;
 
-    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData;
+    fn read(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData;
 
-    fn write(memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData);
+    fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData);
 }
 
 // TODO: Rename core/step to operator

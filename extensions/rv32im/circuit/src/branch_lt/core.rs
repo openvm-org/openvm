@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
 };
 
 use openvm_circuit::{
@@ -213,22 +212,23 @@ pub struct BranchLessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
 }
 
 pub struct BranchLessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-    phantom: PhantomData<A>,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
 {
     pub fn new(
+        adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
     ) -> Self {
         Self {
+            adapter,
             offset,
             bitwise_lookup_chip,
-            phantom: PhantomData,
         }
     }
 }
@@ -267,7 +267,7 @@ where
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
 
         let (cmp_result, diff_idx, a_sign, b_sign) =
             run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &rs1, &rs2);
@@ -360,7 +360,7 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        A::fill_trace_row(mem_helper, (), adapter_row);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
     }
 }
 
@@ -386,7 +386,7 @@ where
 
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (rs1, rs2) = A::read(&mut state.memory, instruction);
+        let (rs1, rs2) = self.adapter.read(&mut state.memory, instruction);
 
         // TODO(ayush): probably don't need the other values
         let (cmp_result, _, _, _) = run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &rs1, &rs2);

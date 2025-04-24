@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
 };
 
 use openvm_circuit::{
@@ -208,13 +207,14 @@ pub struct MulHCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 pub struct MulHStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
-    phantom: PhantomData<A>,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHStep<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
+        adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         range_tuple_chip: SharedRangeTupleCheckerChip<2>,
     ) -> Self {
@@ -233,9 +233,9 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHStep<A, NUM_LIMBS, L
         );
 
         Self {
+            adapter,
             bitwise_lookup_chip,
             range_tuple_chip,
-            phantom: PhantomData,
         }
     }
 }
@@ -274,7 +274,7 @@ where
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (rs1, rs2) = A::read(state.memory, instruction, adapter_row);
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
 
         let b = rs1.map(u32::from);
         let c = rs2.map(u32::from);
@@ -309,7 +309,8 @@ where
 
         // TODO(ayush): avoid this conversion
         let a = a.map(|x| x as u8);
-        A::write(state.memory, instruction, adapter_row, &a);
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &a);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -319,7 +320,7 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        A::fill_trace_row(mem_helper, (), adapter_row);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
     }
 }
 
@@ -345,14 +346,14 @@ where
 
         let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
-        let (rs1, rs2) = A::read(&mut state.memory, instruction);
+        let (rs1, rs2) = self.adapter.read(&mut state.memory, instruction);
         let rs1 = rs1.map(u32::from);
         let rs2 = rs2.map(u32::from);
 
         let (rd, _, _, _, _) = run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &rs1, &rs2);
         let rd = rd.map(|x| x as u8);
 
-        A::write(&mut state.memory, instruction, &rd);
+        self.adapter.write(&mut state.memory, instruction, &rd);
 
         state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
