@@ -2,17 +2,17 @@ use std::{path::PathBuf, sync::Arc};
 
 use clap::Parser;
 use eyre::Result;
+#[cfg(feature = "evm-prove")]
+use openvm_sdk::fs::write_evm_proof_to_file;
 use openvm_sdk::{
     commit::AppExecutionCommit,
-    config::SdkVmConfig,
-    fs::{encode_to_file, read_app_pk_from_file, read_exe_from_file, write_app_proof_to_file},
+    config::{AggregationTreeConfig, SdkVmConfig},
+    fs::{
+        encode_to_file, read_agg_pk_from_file, read_app_pk_from_file, read_exe_from_file,
+        write_app_proof_to_file,
+    },
     keygen::AppProvingKey,
     NonRootCommittedExe, Sdk, StdIn,
-};
-#[cfg(feature = "evm-prove")]
-use openvm_sdk::{
-    config::AggregationTreeConfig,
-    fs::{read_agg_pk_from_file, write_evm_proof_to_file},
 };
 
 use crate::{
