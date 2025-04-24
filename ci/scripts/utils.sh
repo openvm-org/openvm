@@ -48,9 +48,10 @@ add_metadata() {
         echo "<details>" >> $result_path
         echo "<summary>Flamegraphs</summary>" >> $result_path
         echo "" >> $result_path
-        flamegraph_files=$(s5cmd ls ${S3_FLAMEGRAPHS_PATH}/${CURRENT_SHA}/*.svg | awk '{print $4}' | xargs -n1 basename)
+        benchmark_name=$(basename "$result_path" | cut -d'-' -f1)
+        flamegraph_files=$(s5cmd ls ${S3_FLAMEGRAPHS_PATH}/${benchmark_name}-${CURRENT_SHA}/*.svg | awk '{print $4}' | xargs -n1 basename)
         for file in $flamegraph_files; do
-            flamegraph_url=https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${CURRENT_SHA}/${file}
+            flamegraph_url=https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${benchmark_name}-${CURRENT_SHA}/${file}
             echo "[![]($flamegraph_url)]($flamegraph_url)" >> $result_path
         done
         echo "" >> $result_path
