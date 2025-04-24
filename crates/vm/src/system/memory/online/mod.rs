@@ -1,10 +1,13 @@
 use std::fmt::Debug;
 
+use access_adapter::AccessAdapterInventory;
 use getset::Getters;
 use itertools::{izip, zip_eq};
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use serde::{Deserialize, Serialize};
 
 use super::{
+    offline_checker::MemoryBus,
     paged_vec::{AddressMap, PAGE_SIZE},
     Address, PagedVec,
 };
@@ -12,6 +15,8 @@ use crate::{
     arch::MemoryConfig,
     system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId},
 };
+
+pub(crate) mod access_adapter;
 
 /// API for guest memory conforming to OpenVM ISA
 pub trait GuestMemory {
@@ -98,12 +103,16 @@ pub struct TracingMemory {
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub(super) min_block_size: Vec<u32>,
-    // TODO: access adapter
+    pub(super) access_adapter_inventory: AccessAdapterInventory,
 }
 
 impl TracingMemory {
     // TODO: per-address space memory capacity specification
-    pub fn new(mem_config: &MemoryConfig) -> Self {
+    pub fn new(
+        mem_config: &MemoryConfig,
+        range_checker: SharedVariableRangeCheckerChip,
+        memory_bus: MemoryBus,
+    ) -> Self {
         assert_eq!(mem_config.as_offset, 1);
         let num_cells = 1usize << mem_config.pointer_max_bits; // max cells per address space
         let num_addr_sp = 1 + (1 << mem_config.as_height);
@@ -127,33 +136,34 @@ impl TracingMemory {
             meta,
             min_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
+            access_adapter_inventory: AccessAdapterInventory::new(
+                range_checker,
+                memory_bus,
+                mem_config.clk_max_bits,
+                mem_config.max_access_adapter_n,
+            ),
         }
     }
 
-    /// Instantiates a new `Memory` data structure from an image.
-    pub fn from_image(image: MemoryImage, access_capacity: usize) -> Self {
-        let mut meta = vec![PagedVec::new(0); image.as_offset as usize];
-        let mut min_block_size = vec![1; meta.len()];
+    /// Loads memory image into `TracingMemory`.
+    pub fn with_image(mut self, image: MemoryImage, _access_capacity: usize) -> Self {
+        self.meta = vec![PagedVec::new(0); image.as_offset as usize];
+        self.min_block_size = vec![1; self.meta.len()];
         // TMP: hardcoding for now
-        min_block_size[1] = 4;
-        min_block_size[2] = 4;
+        self.min_block_size[1] = 4;
+        self.min_block_size[2] = 4;
         for (paged_vec, cell_size, &min_block_size) in
-            izip!(&image.paged_vecs, &image.cell_size, &min_block_size)
+            izip!(&image.paged_vecs, &image.cell_size, &self.min_block_size)
         {
             let num_cells = paged_vec.bytes_capacity() / cell_size;
-            meta.push(PagedVec::new(
+            self.meta.push(PagedVec::new(
                 num_cells
                     .checked_mul(size_of::<AccessMetadata>())
                     .unwrap()
                     .div_ceil(PAGE_SIZE * min_block_size as usize),
             ));
         }
-        Self {
-            data: image,
-            meta,
-            min_block_size,
-            timestamp: INITIAL_TIMESTAMP + 1,
-        }
+        self
     }
 
     #[inline(always)]
