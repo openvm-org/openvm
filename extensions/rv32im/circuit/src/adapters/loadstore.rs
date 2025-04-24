@@ -423,8 +423,8 @@ where
         let ptr_val = ptr_val - shift_amount;
         let read_data = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                // TODO(ayush): this should be tracing_read_mem. what should be rs1_ptr here?
                 // memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_u32(ptr_val))
-                // TODO(ayush): this should be tracing_read_mem. check other columns
                 tracing_read_reg(
                     memory,
                     ptr_val,
@@ -432,8 +432,8 @@ where
                 )
             }
             STOREW | STOREH | STOREB => {
-                // memory.read(d.as_canonical_u32(), a.as_canonical_u32())
                 // TODO(ayush): what should be rs1_ptr here?
+                // memory.read(d.as_canonical_u32(), a.as_canonical_u32())
                 tracing_read_reg(
                     memory,
                     a.as_canonical_u32(),
@@ -445,11 +445,11 @@ where
         // We need to keep values of some cells to keep them unchanged when writing to those cells
         let prev_data = match local_opcode {
             STOREW | STOREH | STOREB => {
+                // TODO(ayush): this probably doesn't need to be traced
+                //              i.e. read without changing memory state
                 // array::from_fn(|i| {
                 //     memory.unsafe_read_cell::<u8>(e, F::from_canonical_usize(ptr_val as usize + i))
                 // })
-                // TODO(ayush): this probably doesn't need to be traced
-                //              i.e. read without changing memory state
                 // memory.read(e.as_canonical_u32(), ptr_val) ;
                 tracing_read_reg(
                     memory,
@@ -458,9 +458,9 @@ where
                 )
             }
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                // array::from_fn(|i| memory.unsafe_read_cell::<u8>(d, a + F::from_canonical_usize(i)))
                 // TODO(ayush): this probably doesn't need to be traced
                 //              i.e. read without changing memory state
+                // array::from_fn(|i| memory.unsafe_read_cell::<u8>(d, a + F::from_canonical_usize(i)))
                 // memory.read(d.as_canonical_u32(), a.as_canonical_u32())
                 tracing_read_reg(
                     memory,
@@ -535,6 +535,8 @@ where
                 STOREW | STOREH | STOREB => {
                     let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
                     // TODO(ayush): write_aux is not complete. previous data is in the core columns
+                    //              how to access that? guess it should be done in core?
+                    //              also, this is writing to memory not registers
                     // memory.write(
                     //     e,
                     //     F::from_canonical_u32(ptr & 0xfffffffc),
@@ -549,6 +551,7 @@ where
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                     // TODO(ayush): write_aux is not complete. previous data is in the core columns
+                    //              how to access that? guess it should be done in core?
                     // memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]))
                     tracing_write_reg(
                         memory,
@@ -559,7 +562,7 @@ where
                 }
             };
         } else {
-            // TODO(ayush): should this be here?
+            // TODO(ayush): should this be here? why is it needed?
             memory.increment_timestamp();
         };
     }
