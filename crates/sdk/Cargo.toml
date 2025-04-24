@@ -55,6 +55,7 @@ snark-verifier-sdk.workspace = true
 tempfile.workspace = true
 hex.workspace = true
 forge-fmt.workspace = true
+sys-info = "0.9"
 
 [features]
 default = ["parallel", "jemalloc", "evm-verify"]

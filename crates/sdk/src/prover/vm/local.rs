@@ -99,11 +99,22 @@ where
                 exe.clone(),
                 input.clone(),
                 |seg_idx, mut seg| {
+                    let mem = sys_info::mem_info().unwrap();
+                    println!(
+                        "seg_idx={seg_idx},before prove,mem_total={},mem_free={},mem_avail={}",
+                        mem.total, mem.free, mem.avail
+                    );
                     final_memory = mem::take(&mut seg.final_memory);
                     let proof_input = info_span!("trace_gen", segment = seg_idx)
                         .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())))?;
-                    info_span!("prove_segment", segment = seg_idx)
-                        .in_scope(|| Ok(vm.engine.prove(&self.pk.vm_pk, proof_input)))
+                    let proof = info_span!("prove_segment", segment = seg_idx)
+                        .in_scope(|| Ok(vm.engine.prove(&self.pk.vm_pk, proof_input)));
+                    let mem = sys_info::mem_info().unwrap();
+                    println!(
+                        "seg_idx={seg_idx},after prove,mem_total={},mem_free={},mem_avail={}",
+                        mem.total, mem.free, mem.avail
+                    );
+                    proof
                 },
                 GenerationError::Execution,
             ) {
@@ -132,6 +143,12 @@ where
             self.pk.vm_config.system().num_public_values,
             &vm_poseidon2_hasher(),
             final_memory.as_ref().unwrap(),
+        );
+        drop(final_memory);
+        let mem = sys_info::mem_info().unwrap();
+        println!(
+            "after app prove,mem_total={},mem_free={},mem_avail={}",
+            mem.total, mem.free, mem.avail
         );
         ContinuationVmProof {
             per_segment,
