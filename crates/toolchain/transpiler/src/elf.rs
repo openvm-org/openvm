@@ -132,7 +132,8 @@ impl Elf {
                     }
                 }
 
-                let guest_symbols_path = std::env::var("GUEST_SYMBOLS_PATH")?;
+                let guest_symbols_path = std::env::var("GUEST_SYMBOLS_PATH")
+                    .map_err(|e| eyre::eyre!("{e}: GUEST_SYMBOLS_PATH"))?;
                 let mut guest_symbols_file =
                     std::fs::File::create(&guest_symbols_path).map_err(|e| {
                         eyre::eyre!(

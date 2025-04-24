@@ -106,6 +106,7 @@ on:
 
 env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
+  S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
   FEATURE_FLAGS: "bench-metrics,parallel,nightly-features"
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
@@ -228,16 +229,25 @@ jobs:
 
           s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${METRIC_NAME}-${current_sha}.json
 
-      # - name: Install inferno-flamegraph
-      #   run: cargo install inferno
+      - name: Install inferno-flamegraph
+        if: ${{ contains(env.FEATURE_FLAGS, 'profiling') }}
+        run: cargo install inferno
 
-      # - name: Generate flamegraphs
-      #   run: |
-      #     if [[ -f $METRIC_PATH ]]; then
-      #       python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
-      #       s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
-      #       echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
-      #     fi
+      - name: Generate flamegraphs
+        if: ${{ contains(env.FEATURE_FLAGS, 'profiling') }}
+        run: |
+          if [[ -f $METRIC_PATH ]]; then
+            GUEST_SYMBOLS_PATH="${METRIC_PATH%.json}.syms"
+            if [[ -f $GUEST_SYMBOLS_PATH ]]; then
+              echo "Generating flamegraphs with guest symbols"
+              python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH --guest-symbols $GUEST_SYMBOLS_PATH
+            else
+              echo "No guest symbols found, generating flamegraphs without symbols"
+              python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
+            fi
+            s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.S3_FLAMEGRAPHS_PATH }}/${METRIC_NAME}-${current_sha}/"
+            echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
+          fi
 
       ##########################################################################
       # Update s3 for latest main metrics upon a push event                    #
