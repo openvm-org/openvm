@@ -23,8 +23,6 @@ openvm_ecc_guest::sw_macros::sw_init! {
 
 // ANCHOR: main
 pub fn main() {
-    setup_all_moduli();
-    setup_all_curves();
     let x1 = Secp256k1Coord::from_u32(1);
     let y1 = Secp256k1Coord::from_le_bytes(&hex!(
         "EEA7767E580D75BC6FDD7F58D2A84C2614FB22586068DB63B346C6E60AF21842"
