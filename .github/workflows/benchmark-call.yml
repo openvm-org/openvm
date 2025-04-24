@@ -237,7 +237,14 @@ jobs:
         if: ${{ contains(env.FEATURE_FLAGS, 'profiling') }}
         run: |
           if [[ -f $METRIC_PATH ]]; then
-            python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH --guest-symbols ${METRIC_PATH%.json}.syms
+            GUEST_SYMBOLS_PATH="${METRIC_PATH%.json}.syms"
+            if [[ -f $GUEST_SYMBOLS_PATH ]]; then
+              echo "Generating flamegraphs with guest symbols"
+              python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH --guest-symbols $GUEST_SYMBOLS_PATH
+            else
+              echo "Generating flamegraphs without guest symbols"
+              python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
+            fi
             s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.S3_FLAMEGRAPHS_PATH }}/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
