@@ -66,7 +66,7 @@ pub struct LoadSignExtendCoreRecord<F, const NUM_CELLS: usize> {
     pub most_sig_bit: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct LoadSignExtendCoreAir<const NUM_CELLS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
 }
@@ -211,7 +211,7 @@ where
             CTX,
             ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u32),
             WriteData = [u8; NUM_CELLS],
-            TraceContext<'a> = (),
+            TraceContext<'a> = &'a SharedVariableRangeCheckerChip,
         >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -234,6 +234,8 @@ where
         );
 
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        A::start(*state.pc, state.memory, adapter_row);
 
         let ((prev_data, read_data), shift_amount) =
             self.adapter.read(state.memory, instruction, adapter_row);
@@ -291,7 +293,8 @@ where
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         let _core_row: &mut LoadSignExtendCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
 
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+        self.adapter
+            .fill_trace_row(mem_helper, &self.range_checker_chip, adapter_row);
     }
 }
 

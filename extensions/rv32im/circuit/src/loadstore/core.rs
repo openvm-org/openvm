@@ -10,6 +10,7 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
@@ -77,7 +78,7 @@ pub struct LoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub write_data: [F; NUM_CELLS],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
 }
@@ -253,15 +254,23 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct LoadStoreStep<A, const NUM_CELLS: usize> {
     adapter: A,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub offset: usize,
 }
 
 impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
-    pub fn new(adapter: A, offset: usize) -> Self {
-        Self { adapter, offset }
+    pub fn new(
+        adapter: A,
+        range_checker_chip: SharedVariableRangeCheckerChip,
+        offset: usize,
+    ) -> Self {
+        Self {
+            adapter,
+            range_checker_chip,
+            offset,
+        }
     }
 }
 
@@ -274,7 +283,7 @@ where
             CTX,
             ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u32),
             WriteData = [u8; NUM_CELLS],
-            TraceContext<'a> = (),
+            TraceContext<'a> = &'a SharedVariableRangeCheckerChip,
         >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -348,7 +357,8 @@ where
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         let _core_row: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
 
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+        self.adapter
+            .fill_trace_row(mem_helper, &self.range_checker_chip, adapter_row);
     }
 }
 

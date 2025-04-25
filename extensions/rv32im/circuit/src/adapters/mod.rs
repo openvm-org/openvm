@@ -76,6 +76,7 @@ pub fn timed_write(
     ptr: u32,
     val: &[u8; RV32_REGISTER_NUM_LIMBS],
 ) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
+    // TODO(ayush): should this allow hint address space
     debug_assert!(address_space == RV32_REGISTER_AS || address_space == RV32_MEMORY_AS);
 
     // SAFETY:
@@ -83,7 +84,7 @@ pub fn timed_write(
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
     unsafe {
         memory.write::<u8, RV32_REGISTER_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS>(
-            RV32_REGISTER_AS,
+            address_space,
             ptr,
             val,
         )
@@ -103,6 +104,7 @@ pub fn tracing_read<F>(
 where
     F: PrimeField32,
 {
+    // TODO(ayush): should this allow hint address space
     let (t_prev, data) = timed_read(memory, address_space, ptr);
     aux_cols.set_prev(F::from_canonical_u32(t_prev));
     data

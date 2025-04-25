@@ -36,7 +36,7 @@ pub struct MultiplicationCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
     pub is_valid: T,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct MultiplicationCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: RangeTupleCheckerBus<2>,
     pub offset: usize,

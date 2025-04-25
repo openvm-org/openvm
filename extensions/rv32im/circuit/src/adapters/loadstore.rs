@@ -336,20 +336,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
 /// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
 pub struct Rv32LoadStoreAdapterStep {
     pointer_max_bits: usize,
-    // TODO(ayush): move to trace generation context
-    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl Rv32LoadStoreAdapterStep {
-    pub fn new(
-        pointer_max_bits: usize,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-    ) -> Self {
-        assert!(range_checker_chip.range_max_bits() >= 15);
-        Self {
-            pointer_max_bits,
-            range_checker_chip,
-        }
+    pub fn new(pointer_max_bits: usize) -> Self {
+        Self { pointer_max_bits }
     }
 }
 
@@ -363,7 +354,7 @@ where
         u32,
     );
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-    type TraceContext<'a> = ();
+    type TraceContext<'a> = &'a SharedVariableRangeCheckerChip;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]) {
@@ -503,7 +494,7 @@ where
             self.pointer_max_bits
         );
 
-        let mem_ptr_limbs: [u32; RV32_REGISTER_NUM_LIMBS] =
+        let mem_ptr_limbs: [u32; 2] =
             array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
 
         if enabled != F::ZERO {
@@ -512,11 +503,13 @@ where
             match local_opcode {
                 STOREW | STOREH | STOREB => {
                     let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-                    adapter_row.rd_rs2_ptr = F::from_canonical_u32(ptr & 0xfffffffc);
+                    let ptr = ptr & 0xfffffffc;
+
+                    adapter_row.rd_rs2_ptr = F::from_canonical_u32(ptr);
                     tracing_write_with_base_aux(
                         memory,
                         e.as_canonical_u32(),
-                        ptr & 0xfffffffc,
+                        ptr,
                         data,
                         &mut adapter_row.write_base_aux,
                     );
@@ -541,9 +534,12 @@ where
     fn fill_trace_row(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
-        _trace_ctx: Self::TraceContext<'_>,
+        range_checker_chip: &SharedVariableRangeCheckerChip,
         adapter_row: &mut [F],
     ) {
+        // TODO(ayush): should this be here?
+        assert!(range_checker_chip.range_max_bits() >= 15);
+
         let adapter_row: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
 
         let rs1 = adapter_row.rs1_data.map(|x| x.as_canonical_u32() as u8);
@@ -556,11 +552,11 @@ where
         let ptr_val = rs1_val.wrapping_add(imm_extended);
         let shift_amount = ptr_val % 4;
 
-        self.range_checker_chip.add_count(
+        range_checker_chip.add_count(
             (adapter_row.mem_ptr_limbs[0].as_canonical_u32() - shift_amount) / 4,
             RV32_CELL_BITS * 2 - 2,
         );
-        self.range_checker_chip.add_count(
+        range_checker_chip.add_count(
             adapter_row.mem_ptr_limbs[1].as_canonical_u32(),
             self.pointer_max_bits - RV32_CELL_BITS * 2,
         );
@@ -650,7 +646,7 @@ where
 
     fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData) {
         // TODO(ayush): remove duplication with read
-        let Instruction {
+        let &Instruction {
             opcode,
             a,
             b,
@@ -690,14 +686,14 @@ where
         let mem_ptr_limbs: [u32; 2] =
             array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
 
-        if *enabled != F::ZERO {
+        if enabled != F::ZERO {
             match local_opcode {
                 STOREW | STOREH | STOREB => {
                     let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-                    unsafe { memory.write(e.as_canonical_u32(), ptr & 0xfffffffc, &data) };
+                    unsafe { memory.write(e.as_canonical_u32(), ptr & 0xfffffffc, data) };
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
-                    memory.write(d.as_canonical_u32(), a.as_canonical_u32(), &data);
+                    memory.write(d.as_canonical_u32(), a.as_canonical_u32(), data);
                 },
             }
         }

@@ -187,14 +187,12 @@ where
         let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
 
         adapter_row.rs1_ptr = b;
-        let rs1 = tracing_read(
+        tracing_read(
             memory,
             d.as_canonical_u32(),
             b.as_canonical_u32(),
             &mut adapter_row.rs1_aux_cols,
-        );
-
-        rs1
+        )
     }
 
     #[inline(always)]
@@ -224,6 +222,8 @@ where
                 data,
                 &mut adapter_row.rd_aux_cols,
             );
+        } else {
+            memory.increment_timestamp();
         }
     }
 

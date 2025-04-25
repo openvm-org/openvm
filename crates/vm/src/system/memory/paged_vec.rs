@@ -252,7 +252,7 @@ impl<const PAGE_SIZE: usize> Default for AddressMap<PAGE_SIZE> {
 impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     pub fn new(as_offset: u32, as_cnt: usize, mem_size: usize) -> Self {
         // TMP: hardcoding for now
-        let mut cell_size = vec![1, 1];
+        let mut cell_size = vec![1, 1, 1];
         cell_size.resize(as_cnt, 4);
         let paged_vecs = cell_size
             .iter()

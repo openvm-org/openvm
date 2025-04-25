@@ -111,6 +111,7 @@ impl TracingMemory {
         // TMP: hardcoding for now
         min_block_size[1] = 4;
         min_block_size[2] = 4;
+        min_block_size[3] = 4;
         let meta = min_block_size
             .iter()
             .map(|&min_block_size| {
@@ -137,6 +138,7 @@ impl TracingMemory {
         // TMP: hardcoding for now
         min_block_size[1] = 4;
         min_block_size[2] = 4;
+        min_block_size[3] = 4;
         for (paged_vec, cell_size, &min_block_size) in
             izip!(&image.paged_vecs, &image.cell_size, &min_block_size)
         {

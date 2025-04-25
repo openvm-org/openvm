@@ -314,7 +314,6 @@ where
             }
         });
 
-        // TODO(ayush): avoid conversions
         self.bitwise_lookup_chip
             .request_range(rd_data[0].as_canonical_u32(), rd_data[1].as_canonical_u32());
 

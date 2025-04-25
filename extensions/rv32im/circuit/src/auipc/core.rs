@@ -287,6 +287,7 @@ where
         core_row.imm_limbs = from_fn(|i| F::from_canonical_u8(imm_limbs[i]));
         // only the middle 2 limbs:
         core_row.pc_limbs = from_fn(|i| F::from_canonical_u8(pc_limbs[i + 1]));
+
         // range checks:
         let rd_data = core_row.rd_data.map(|x| x.as_canonical_u32());
         for pair in rd_data.chunks_exact(2) {
@@ -298,6 +299,7 @@ where
             .request_range(imm_limbs[0] as u32, imm_limbs[1] as u32);
         self.bitwise_lookup_chip
             .request_range(imm_limbs[2] as u32, pc_limbs[1] as u32);
+
         let msl_shift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - PC_BITS;
         self.bitwise_lookup_chip
             .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);

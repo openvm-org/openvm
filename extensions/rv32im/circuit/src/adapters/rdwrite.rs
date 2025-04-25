@@ -280,7 +280,7 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), &rd) };
+        unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), rd) };
     }
 }
 

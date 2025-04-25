@@ -61,6 +61,7 @@ fn set_and_execute(
 
     tester.write(1, b, rs1);
 
+    let initial_pc = initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS)));
     tester.execute_with_pc(
         chip,
         &Instruction::from_usize(
@@ -75,9 +76,8 @@ fn set_and_execute(
                 imm_sign as usize,
             ],
         ),
-        initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
+        initial_pc,
     );
-    let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
     let final_pc = tester.execution.last_to_pc().as_canonical_u32();
 
     let rs1 = compose(rs1);
@@ -116,7 +116,7 @@ fn rand_jalr_test() {
 
     let mut chip = Rv32JalrChip::<F>::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
 
-    let num_tests: usize = 6;
+    let num_tests: usize = 100;
     for _ in 0..num_tests {
         set_and_execute(
             &mut tester,
