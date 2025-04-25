@@ -151,17 +151,15 @@ pub fn main() {
     #[allow(unused_variables)]
     let io = read_vec();
 
+    setup_0();
+    setup_all_complex_extensions();
     #[cfg(feature = "bn254")]
     {
-        bn254::setup_0();
-        bn254::setup_all_complex_extensions();
         bn254::test_miller_step(&io[..32 * 12]);
         bn254::test_miller_double_and_add_step(&io[32 * 12..]);
     }
     #[cfg(feature = "bls12_381")]
     {
-        bls12_381::setup_0();
-        bls12_381::setup_all_complex_extensions();
         bls12_381::test_miller_step(&io[..48 * 12]);
         bls12_381::test_miller_double_and_add_step(&io[48 * 12..]);
     }

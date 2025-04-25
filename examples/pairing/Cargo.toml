@@ -10,8 +10,8 @@ members = []
 
 openvm = { path = "../../crates/toolchain/openvm", features = ["std"] }
 openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
-openvm-algebra-moduli-macros = { path = "../../extensions/moduli-macros" }
-openvm-algebra-complex-macros = { path = "../../extensions/complex-macros" }
+openvm-algebra-moduli-macros = { path = "../../extensions/algebra/moduli-macros" }
+openvm-algebra-complex-macros = { path = "../../extensions/algebra/complex-macros" }
 openvm-ecc-guest = { path = "../../extensions/ecc/guest" }
 openvm-pairing-guest = { path = "../../extensions/pairing/guest", features = [
     "bls12_381",

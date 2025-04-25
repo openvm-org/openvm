@@ -154,7 +154,7 @@ For each extension's inventory generation, the `VmInventoryBuilder` is provided 
 
 ## Build hooks
 Some of our extensions need to generate some code at build-time depending on the VM config (for example, the Algebra extension needs to call `moduli_init!` with the appropriate moduli).
-To accomodate this, we support build hooks in both `cargo openvm` and the SDK.
+To accommodate this, we support build hooks in both `cargo openvm` and the SDK.
 To make use of this functionality, implement the `InitFileGenerator` trait.
 The `String` returned by the `generate_init_file_contents` must be valid Rust code.
 It will be written to a `openvm_init.rs` file in the package's manifest directory, and then (unhygenically) included in the guest code in place of the `openvm::init!` macro.

@@ -10,7 +10,7 @@ members = []
 openvm = { path = "../../crates/toolchain/openvm", features = ["std"] }
 openvm-platform = { path = "../../crates/toolchain/platform" }
 openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
-openvm-algebra-complex-macros = { path = "../../extensions/complex-macros" }
+openvm-algebra-complex-macros = { path = "../../extensions/algebra/complex-macros" }
 
 serde = { version = "1.0.216" }
 num-bigint = { version = "0.4.6", features = ["serde"] }
