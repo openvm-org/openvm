@@ -145,15 +145,9 @@ pub fn setup_2() {
         // send the setup instruction designed for the chip number 2
     }
 }
-pub fn setup_all_moduli() {
-    setup_0();
-    setup_1();
-    setup_2();
-    // setup functions for all the other moduli provided in the `moduli_init!` function
-}
 ```
 
-The setup operation (e.g., `setup_2`) consists of reading the value `OPENVM_SERIALIZED_MODULUS_2` from memory and constraining that the read value is equal to the modulus the chip has been configured with. For each used modulus, its corresponding setup instruction **must** be called before all other operations -- this currently must be checked by inspecting the program code; it is not enforced by the virtual machine.
+The setup operation (e.g., `setup_2`) consists of reading the value `OPENVM_SERIALIZED_MODULUS_2` from memory and constraining that the read value is equal to the modulus the chip has been configured with. For each used modulus, its corresponding setup instruction is automatically called on first use of any of its intrinsics.
 
 5. It follows from the above that the `moduli_declare!` invocations may be in multiple places in various compilation units, but all the `declare!`d moduli must be specified at least once in `moduli_init!` so that there will be no linker errors due to missing function implementations. Correspondingly, the `moduli_init!` macro should only be called once in the entire program (in the guest crate as the topmost compilation unit). Finally, the order of the moduli in `moduli_init!` has nothing to do with the `moduli_declare!` invocations, but it **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of numbers in `ModularExtension::supported_modulus`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file).
 

@@ -54,13 +54,10 @@ sw_init! {
 */
 ```
 
-3. **Setup**: Similar to the moduli and complex extensions, runtime setup instructions ensure that the correct curve parameters are being used, guaranteeing secure operation.
-
 **Summary**:
 
 - `sw_declare!`: Declares elliptic curve structures.
 - `init!`: Initializes them once, linking them to the underlying moduli.
-- `setup_sw_<i>()`/`setup_all_curves()`: Secures runtime correctness.
 
 To use elliptic curve operations on a struct defined with `sw_declare!`, it is expected that the struct for the curve's coordinate field was defined using `moduli_declare!`. In particular, the coordinate field needs to be initialized and set up as described in the [algebra extension](./algebra.md) chapter.
 
