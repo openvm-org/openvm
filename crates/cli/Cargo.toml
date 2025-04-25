@@ -23,6 +23,7 @@ openvm-native-recursion = { workspace = true }
 openvm-sdk = { workspace = true }
 openvm-stark-sdk.workspace = true
 openvm-stark-backend.workspace = true
+openvm-circuit = { workspace = true }
 
 aws-sdk-s3 = "1.78"
 aws-config = "1.5"

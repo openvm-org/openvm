@@ -410,7 +410,13 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
 
     let sdk = Sdk::new();
     let elf = sdk
-        .build(Default::default(), pkg_dir, &Default::default())
+        .build(
+            Default::default(),
+            &vm_config,
+            pkg_dir,
+            &Default::default(),
+            None,
+        )
         .unwrap();
     let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
 
@@ -464,11 +470,37 @@ fn test_sdk_guest_build_and_transpile() {
         ;
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest");
+
+    let vm_config = SdkVmConfig::builder()
+        .system(SdkSystemConfig {
+            config: SystemConfig::default()
+                .with_max_segment_len(200)
+                .with_continuations()
+                .with_public_values(NUM_PUB_VALUES),
+        })
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .native(Default::default())
+        .build();
+
     let one = sdk
-        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .build(
+            guest_opts.clone(),
+            &vm_config,
+            &pkg_dir,
+            &Default::default(),
+            None,
+        )
         .unwrap();
     let two = sdk
-        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .build(
+            guest_opts.clone(),
+            &vm_config,
+            &pkg_dir,
+            &Default::default(),
+            None,
+        )
         .unwrap();
     assert_eq!(one.instructions, two.instructions);
     assert_eq!(one.instructions, two.instructions);
@@ -485,7 +517,6 @@ fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     let sdk = Sdk::new();
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest");
-    let elf = sdk.build(Default::default(), pkg_dir, &Default::default())?;
 
     let vm_config = SdkVmConfig::builder()
         .system(SdkSystemConfig {
@@ -499,6 +530,13 @@ fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
         .io(Default::default())
         .native(Default::default())
         .build();
+    let elf = sdk.build(
+        Default::default(),
+        &vm_config,
+        pkg_dir,
+        &Default::default(),
+        None,
+    )?;
     assert!(vm_config.system.config.continuation_enabled);
     let exe = sdk.transpile(elf, vm_config.transpiler())?;
     let fri_params = FriParameters::standard_fast();

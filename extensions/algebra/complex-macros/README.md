@@ -10,17 +10,21 @@ The workflow of this macro is very similar to the [`openvm-algebra-moduli-macros
 openvm_algebra_moduli_macros::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" }
 }
-openvm_algebra_moduli_macros::moduli_init!(
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
-);
 
 openvm_algebra_complex_macros::complex_declare! {
     Complex { mod_type = Secp256k1Coord }
 }
 
+openvm::init!();
+/* The init! macro will expand to:
+openvm_algebra_moduli_macros::moduli_init!(
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+);
+
 openvm_algebra_complex_macros::complex_init! {
     Complex { mod_idx = 0 },
 }
+*/
 
 pub fn main() {
     setup_all_moduli();
@@ -100,3 +104,7 @@ complex_init! {
 ```
 
 The reason is that, for example, the function `complex_add_extern_func_Bn254Fp2` remains unimplemented, but we implement `complex_add_extern_func_Fp2` instead.
+
+5. `cargo openvm build` will automatically generate a call to `complex_init!` based on `openvm.toml`.
+Note that `openvm.toml` must list the supported moduli as pairs `(name, modulus)` where `name` is the name of the struct created by `complex_declare!` as a string (in the example at the top of this document, its `"Complex"`).
+The SDK also supports this feature.

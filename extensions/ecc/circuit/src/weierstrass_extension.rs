@@ -13,8 +13,8 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_guest::{
-    k256::{SECP256K1_MODULUS, SECP256K1_ORDER},
-    p256::{CURVE_A as P256_A, CURVE_B as P256_B, P256_MODULUS, P256_ORDER},
+    k256::{SECP256K1_ECC_STRUCT_NAME, SECP256K1_MODULUS, SECP256K1_ORDER},
+    p256::{CURVE_A as P256_A, CURVE_B as P256_B, P256_ECC_STRUCT_NAME, P256_MODULUS, P256_ORDER},
 };
 use openvm_ecc_transpiler::{EccPhantom, Rv32WeierstrassOpcode};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
@@ -30,6 +30,8 @@ use super::{EcAddNeChip, EcDoubleChip};
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct CurveConfig {
+    /// The name of the curve struct as defined by moduli_declare.
+    pub struct_name: String,
     /// The coordinate modulus of the curve.
     #[serde_as(as = "DisplayFromStr")]
     pub modulus: BigUint,
@@ -45,6 +47,7 @@ pub struct CurveConfig {
 }
 
 pub static SECP256K1_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
+    struct_name: SECP256K1_ECC_STRUCT_NAME.to_string(),
     modulus: SECP256K1_MODULUS.clone(),
     scalar: SECP256K1_ORDER.clone(),
     a: BigUint::zero(),
@@ -52,6 +55,7 @@ pub static SECP256K1_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
 });
 
 pub static P256_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
+    struct_name: P256_ECC_STRUCT_NAME.to_string(),
     modulus: P256_MODULUS.clone(),
     scalar: P256_ORDER.clone(),
     a: BigUint::from_bytes_le(P256_A.as_le_bytes()),
@@ -61,6 +65,19 @@ pub static P256_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct WeierstrassExtension {
     pub supported_curves: Vec<CurveConfig>,
+}
+
+impl WeierstrassExtension {
+    pub fn generate_sw_init(&self) -> String {
+        let supported_curves = self
+            .supported_curves
+            .iter()
+            .map(|curve_config| curve_config.struct_name.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        format!("openvm_ecc_guest::sw_macros::sw_init! {{ {supported_curves} }}")
+    }
 }
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]

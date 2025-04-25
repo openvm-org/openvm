@@ -14,10 +14,7 @@ use openvm_pairing_guest::{
 
 openvm::entry!(main);
 
-openvm_algebra_moduli_macros::moduli_init! {
-    "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
-    "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
-}
+openvm::init!("openvm_init_bls_final_exp_hint_bls12_381.rs");
 
 pub fn main() {
     #[allow(clippy::type_complexity)]

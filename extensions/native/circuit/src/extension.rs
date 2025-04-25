@@ -6,8 +6,8 @@ use loadstore_native_adapter::NativeLoadStoreAdapterChip;
 use native_vectorized_adapter::NativeVectorizedAdapterChip;
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, MemoryConfig, SystemConfig, SystemPort, VmExtension, VmInventory,
-        VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, InitFileGenerator, MemoryConfig, SystemConfig, SystemPort, VmExtension,
+        VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -59,6 +59,9 @@ impl NativeConfig {
         }
     }
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for NativeConfig {}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
@@ -433,3 +436,6 @@ impl Default for Rv32WithKernelsConfig {
         }
     }
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for Rv32WithKernelsConfig {}
