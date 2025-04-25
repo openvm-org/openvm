@@ -54,7 +54,6 @@ use core::{
 pub use field::Field;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint::BigUint;
-pub use once_cell;
 pub use openvm_algebra_complex_macros as complex_macros;
 pub use openvm_algebra_moduli_macros as moduli_macros;
 #[cfg(target_os = "zkvm")]

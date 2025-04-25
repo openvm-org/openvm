@@ -36,7 +36,7 @@ impl ModularExtension {
     // Generates a call to the moduli_init! macro with moduli in the correct order
     pub fn generate_moduli_init(&self) -> String {
         let supported_moduli = self
-            .supported_modulus
+            .supported_moduli
             .iter()
             .map(|modulus| format!("\"{}\"", modulus))
             .collect::<Vec<String>>()

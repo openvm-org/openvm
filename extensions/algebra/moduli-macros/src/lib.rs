@@ -1041,9 +1041,50 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             }
         });
 
+        let hint_non_qr_extern_func = syn::Ident::new(
+            &format!("hint_non_qr_extern_func_{}", modulus_hex),
+            span.into(),
+        );
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
-            extern "C" fn #setup_extern_func() {
+            extern "C" fn #hint_non_qr_extern_func() {
+                openvm::platform::custom_insn_r!(
+                    opcode = ::openvm_algebra_guest::OPCODE,
+                    funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                    funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::HintNonQr as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    rd = Const "x0",
+                    rs1 = Const "x0",
+                    rs2 = Const "x0"
+                );
+            }
+
+
+        });
+
+        // This function will be defined regardless of whether the modulus is prime or not.
+        // But it will be called only if the modulus is prime (i.e. moduli_declare has implemented
+        // the Field trait).
+        let hint_sqrt_extern_func = syn::Ident::new(
+            &format!("hint_sqrt_extern_func_{}", modulus_hex),
+            span.into(),
+        );
+        externs.push(quote::quote_spanned! { span.into() =>
+            #[no_mangle]
+            extern "C" fn #hint_sqrt_extern_func(rs1: usize) {
+                openvm::platform::custom_insn_r!(
+                    opcode = ::openvm_algebra_guest::OPCODE,
+                    funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                    funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::HintSqrt as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    rd = Const "x0",
+                    rs1 = In rs1,
+                    rs2 = Const "x0"
+                );
+            }
+        });
+
+        externs.push(quote::quote_spanned! { span.into() =>
+            #[no_mangle]
+            extern "C" fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
                 {
                     let mut ptr = 0;
