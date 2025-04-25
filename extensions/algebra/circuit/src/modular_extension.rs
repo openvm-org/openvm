@@ -231,19 +231,18 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
             } else {
                 panic!("Modulus too large");
             }
-
-            let non_qr_hint_sub_ex = phantom::NonQrHintSubEx::new(self.supported_moduli.clone());
-            builder.add_phantom_sub_executor(
-                non_qr_hint_sub_ex.clone(),
-                PhantomDiscriminant(ModularPhantom::HintNonQr as u16),
-            )?;
-
-            let sqrt_hint_sub_ex = phantom::SqrtHintSubEx::new(non_qr_hint_sub_ex);
-            builder.add_phantom_sub_executor(
-                sqrt_hint_sub_ex,
-                PhantomDiscriminant(ModularPhantom::HintSqrt as u16),
-            )?;
         }
+        let non_qr_hint_sub_ex = phantom::NonQrHintSubEx::new(self.supported_moduli.clone());
+        builder.add_phantom_sub_executor(
+            non_qr_hint_sub_ex.clone(),
+            PhantomDiscriminant(ModularPhantom::HintNonQr as u16),
+        )?;
+
+        let sqrt_hint_sub_ex = phantom::SqrtHintSubEx::new(non_qr_hint_sub_ex);
+        builder.add_phantom_sub_executor(
+            sqrt_hint_sub_ex,
+            PhantomDiscriminant(ModularPhantom::HintSqrt as u16),
+        )?;
 
         Ok(inventory)
     }
