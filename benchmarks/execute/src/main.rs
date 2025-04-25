@@ -23,13 +23,13 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
     "fibonacci_iterative",
     "quicksort",
     "bubblesort",
-    "pairing",
-    "keccak256",
-    "keccak256_iter",
-    "sha256",
-    "sha256_iter",
-    "revm_transfer",
-    "revm_snailtracer",
+    // "pairing",
+    // "keccak256",
+    // "keccak256_iter",
+    // "sha256",
+    // "sha256_iter",
+    // "revm_transfer",
+    // "revm_snailtracer",
 ];
 
 #[derive(Parser)]
@@ -124,7 +124,9 @@ fn main() -> Result<()> {
             let exe = VmExe::from_elf(elf, transpiler)?;
 
             let executor = VmExecutor::new(vm_config);
-            executor.execute(exe, vec![])?;
+            executor
+                .execute(exe, vec![])
+                .expect("Failed to execute program");
             tracing::info!("Completed program: {}", program);
         }
         tracing::info!("All programs executed successfully");

@@ -44,6 +44,14 @@ where
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     );
 
+    /// Called after program termination
+    fn on_terminate(
+        &mut self,
+        vm_state: &VmExecutionState<Self::Mem, Self::Ctx>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        exit_code: u32,
+    );
+
     /// Execute a single instruction
     // TODO(ayush): change instruction to Instruction<u32> / PInstruction
     fn execute_instruction(
@@ -129,6 +137,18 @@ where
             .connector_chip_mut()
             .end(ExecutionState::new(vm_state.pc, timestamp), None);
         self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
+    }
+
+    fn on_terminate(
+        &mut self,
+        vm_state: &VmExecutionState<Self::Mem, Self::Ctx>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        exit_code: u32,
+    ) {
+        let timestamp = chip_complex.memory_controller().timestamp();
+        chip_complex
+            .connector_chip_mut()
+            .end(ExecutionState::new(vm_state.pc, timestamp), Some(exit_code));
     }
 
     /// Execute a single instruction

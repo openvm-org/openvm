@@ -25,7 +25,7 @@ use strum::IntoEnumIterator;
 use crate::{adapters::*, *};
 
 // TODO(ayush): this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1024;
+const MAX_INS_CAPACITY: usize = 1 << 22;
 
 /// Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
@@ -423,10 +423,10 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
-        // inventory.add_executor(
-        //     auipc_chip,
-        //     Rv32AuipcOpcode::iter().map(|x| x.global_opcode()),
-        // )?;
+        inventory.add_executor(
+            auipc_chip,
+            Rv32AuipcOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
         builder.add_phantom_sub_executor(

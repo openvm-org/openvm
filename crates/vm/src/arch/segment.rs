@@ -175,14 +175,21 @@ where
         self.control
             .on_segment_start(vm_state, &mut self.chip_complex);
 
-        while !vm_state.terminated && !self.should_stop(vm_state) {
+        loop {
             // Fetch, decode and execute single instruction
-            self.execute_instruction(vm_state, &mut prev_backtrace)?;
-        }
+            let terminated_exit_code = self.execute_instruction(vm_state, &mut prev_backtrace)?;
 
-        // Call the post-execution hook
-        self.control
-            .on_segment_end(vm_state, &mut self.chip_complex);
+            if let Some(exit_code) = terminated_exit_code {
+                self.control
+                    .on_terminate(vm_state, &mut self.chip_complex, exit_code);
+                break;
+            }
+            if self.should_stop(vm_state) {
+                self.control
+                    .on_segment_end(vm_state, &mut self.chip_complex);
+                break;
+            }
+        }
 
         Ok(())
     }
@@ -193,7 +200,7 @@ where
         &mut self,
         vm_state: &mut VmExecutionState<Mem, Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<Option<u32>, ExecutionError> {
         let pc = vm_state.pc;
         let timestamp = self.chip_complex.memory_controller().timestamp();
 
@@ -221,7 +228,7 @@ where
                 Some(c.as_canonical_u32()),
             );
             vm_state.terminated = true;
-            return Ok(());
+            return Ok(Some(c.as_canonical_u32()));
         }
 
         // Handle phantom instructions
@@ -265,7 +272,7 @@ where
             self.update_instruction_metrics(pc, opcode, dsl_instr);
         }
 
-        Ok(())
+        Ok(None)
     }
 
     /// Returns bool of whether to switch to next segment or not.
