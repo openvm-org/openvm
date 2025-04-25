@@ -14,10 +14,7 @@ use openvm_pairing_guest::{
 
 openvm::entry!(main);
 
-openvm_algebra_moduli_macros::moduli_init! {
-    "21888242871839275222246405745257275088696311157297823662689037894645226208583",
-    "21888242871839275222246405745257275088548364400416034343698204186575808495617",
-}
+openvm::init!("openvm_init_bn_final_exp_hint_bn254.rs");
 
 pub fn main() {
     #[allow(clippy::type_complexity)]

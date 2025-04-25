@@ -20,6 +20,8 @@ sw_declare! {
     Secp256k1Point { mod_type = Secp256k1Coord, b = CURVE_B },
 }
 
+openvm::init!();
+/* The init! macro will expand to:
 openvm_algebra_guest::moduli_macros::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
@@ -28,6 +30,7 @@ openvm_algebra_guest::moduli_macros::moduli_init! {
 openvm_ecc_guest::sw_macros::sw_init! {
     Secp256k1Point,
 }
+*/
 
 pub fn main() {
     setup_all_moduli();
@@ -114,3 +117,7 @@ sw_init! {
 ```
 
 The reason is that, for example, the function `sw_add_extern_func_Secp256k1Point` remains unimplemented, but we implement `sw_add_extern_func_Sw`.
+
+6. `cargo openvm build` will automatically generate a call to `sw_init!` based on `openvm.toml`.
+Note that `openvm.toml` must contain the name of each struct created by `sw_declare!` as a string (in the example at the top of this document, its `"Secp256k1"`).
+The SDK also supports this feature.

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fs::File, io::Write, path::Path, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::system::memory::MemoryTraceHeights;
@@ -24,7 +24,9 @@ pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<F> {
     Poseidon2Config::default()
 }
 
-pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {
+pub trait VmConfig<F: PrimeField32>:
+    Clone + Serialize + DeserializeOwned + InitFileGenerator
+{
     type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
     type Periphery: AnyEnum + ChipUsageGetter;
 
@@ -35,6 +37,35 @@ pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {
     fn create_chip_complex(
         &self,
     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError>;
+}
+
+pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
+pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
+
+/// Trait for generating a init.rs file that contains a call to moduli_init!,
+/// complex_init!, sw_init! with the supported moduli and curves.
+/// Should be implemented by all VM config structs.
+pub trait InitFileGenerator {
+    // Default implementation is no init file.
+    fn generate_init_file_contents(&self) -> Option<String> {
+        None
+    }
+
+    // Do not override this method's default implementation.
+    // This method is called by cargo openvm and the SDK before building the guest package.
+    fn write_to_init_file(
+        &self,
+        manifest_dir: &Path,
+        init_file_name: Option<&str>,
+    ) -> eyre::Result<()> {
+        if let Some(contents) = self.generate_init_file_contents() {
+            let dest_path = Path::new(manifest_dir)
+                .join(init_file_name.unwrap_or(OPENVM_DEFAULT_INIT_FILE_NAME));
+            let mut f = File::create(&dest_path)?;
+            write!(f, "{}", contents)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, new, Copy)]
@@ -222,3 +253,6 @@ impl<F: PrimeField32> VmConfig<F> for SystemConfig {
         Ok(complex)
     }
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for SystemConfig {}

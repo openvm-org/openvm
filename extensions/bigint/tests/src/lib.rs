@@ -16,7 +16,9 @@ mod tests {
 
     #[test]
     fn test_matrix_power() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "matrix-power-unsigned")?;
+        let config = Int256Rv32Config::default();
+        let elf =
+            build_example_program_at_path(get_programs_dir!(), "matrix-power-unsigned", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -25,14 +27,15 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Int256TranspilerExtension),
         )?;
-        let config = Int256Rv32Config::default();
         air_test(config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_matrix_power_signed() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "matrix-power-signed")?;
+        let config = Int256Rv32Config::default();
+        let elf =
+            build_example_program_at_path(get_programs_dir!(), "matrix-power-signed", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -41,7 +44,6 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Int256TranspilerExtension),
         )?;
-        let config = Int256Rv32Config::default();
         air_test(config, openvm_exe);
         Ok(())
     }
