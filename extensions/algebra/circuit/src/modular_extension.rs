@@ -40,7 +40,7 @@ impl ModularExtension {
             .collect::<Vec<String>>()
             .join(", ");
 
-        format!(r#"openvm_algebra_guest::moduli_macros::moduli_init! {{ {supported_moduli} }}"#,)
+        format!("openvm_algebra_guest::moduli_macros::moduli_init! {{ {supported_moduli} }}",)
     }
 }
 
