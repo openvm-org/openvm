@@ -7,19 +7,10 @@ edition = "2021"
 members = []
 
 [dependencies]
-# TODO: switch back after PR is merged
-#openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
-    #"std",
-#], branch = "develop" }
-#openvm-platform = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
-#openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
-#openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git", branch = "develop" }
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
-   "std",
-], branch = "feat/build-script-for-init" }
-openvm-platform = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/build-script-for-init" }
-openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/build-script-for-init" }
-openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/build-script-for-init" }
+openvm = { path = "../../crates/toolchain/openvm", features = ["std"] }
+openvm-platform = { path = "../../crates/toolchain/platform" }
+openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
+openvm-algebra-complex-macros = { path = "../../extensions/complex-macros" }
 
 serde = { version = "1.0.216" }
 num-bigint = { version = "0.4.6", features = ["serde"] }
