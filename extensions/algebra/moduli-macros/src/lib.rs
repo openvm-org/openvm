@@ -1081,10 +1081,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             }
         });
 
-        setup_all_moduli.push(quote::quote_spanned! { span.into() =>
-            #setup_function();
-        });
-
         setups.push(quote::quote_spanned! { span.into() =>
             #[allow(non_snake_case)]
             #[no_mangle]
