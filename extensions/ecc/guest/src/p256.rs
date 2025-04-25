@@ -41,6 +41,10 @@ openvm_ecc_sw_macros::sw_declare! {
     P256Point { mod_type = P256Coord, a = CURVE_A, b = CURVE_B },
 }
 
+#[cfg(not(target_os = "zkvm"))]
+// Used in WeierstrassExtension config
+pub const P256_ECC_STRUCT_NAME: &str = "P256Point";
+
 impl Field for P256Coord {
     const ZERO: Self = <Self as IntMod>::ZERO;
     const ONE: Self = <Self as IntMod>::ONE;

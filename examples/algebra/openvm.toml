@@ -5,4 +5,4 @@
 supported_modulus = ["998244353","1000000007"]
 
 [app_vm_config.fp2]
-supported_modulus = ["998244353","1000000007"]
+supported_modulus = [["Complex1", "998244353"], ["Complex2", "1000000007"]]

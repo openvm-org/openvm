@@ -8,17 +8,12 @@ openvm::entry!(main);
 openvm_algebra_moduli_macros::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" }
 }
-openvm_algebra_moduli_macros::moduli_init!(
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
-);
 
 openvm_algebra_complex_macros::complex_declare! {
     Complex { mod_type = Secp256k1Coord }
 }
 
-openvm_algebra_complex_macros::complex_init! {
-    Complex { mod_idx = 0},
-}
+openvm::init!("openvm_init_complex_secp256k1.rs");
 
 pub fn main() {
     setup_all_moduli();

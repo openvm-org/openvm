@@ -60,6 +60,10 @@ sw_declare! {
     Bls12_381G1Affine { mod_type = Bls12_381Fp, b = CURVE_B },
 }
 
+#[cfg(not(target_os = "zkvm"))]
+// Used in WeierstrassExtension config
+pub const BLS12_381_ECC_STRUCT_NAME: &str = "Bls12_381G1Affine";
+
 pub type Fp = Bls12_381Fp;
 pub type Scalar = Bls12_381Scalar;
 /// Affine point representation of `Fp` points of BLS12-381.

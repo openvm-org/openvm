@@ -1,7 +1,8 @@
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        InitFileGenerator, SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder,
+        VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -34,6 +35,9 @@ pub struct Rv32IConfig {
     pub io: Rv32Io,
 }
 
+// Default implementation uses no init file
+impl InitFileGenerator for Rv32IConfig {}
+
 /// Config for a VM with base extension, IO extension, and multiplication extension
 #[derive(Clone, Debug, Default, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32ImConfig {
@@ -42,6 +46,9 @@ pub struct Rv32ImConfig {
     #[extension]
     pub mul: Rv32M,
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for Rv32ImConfig {}
 
 impl Default for Rv32IConfig {
     fn default() -> Self {

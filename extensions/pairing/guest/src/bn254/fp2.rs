@@ -6,6 +6,10 @@ use openvm_algebra_guest::{field::FieldExtension, Field, IntMod};
 
 use super::Fp;
 
+#[cfg(not(target_os = "zkvm"))]
+// Used in Fp2Extension config
+pub const BN254_COMPLEX_STRUCT_NAME: &str = "Bn254Fp2";
+
 // The struct name needs to be globally unique for linking purposes.
 // The mod_type is a path used only in the struct definition.
 complex_declare! {
