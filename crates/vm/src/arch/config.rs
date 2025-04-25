@@ -46,11 +46,13 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 /// complex_init!, sw_init! with the supported moduli and curves.
 /// Should be implemented by all VM config structs.
 pub trait InitFileGenerator {
-    // default implementation is no init file
+    // Default implementation is no init file.
     fn generate_init_file_contents(&self) -> Option<String> {
         None
     }
 
+    // Do not override this method's default implementation.
+    // This method is called by cargo openvm and the SDK before building the guest package.
     fn write_to_init_file(
         &self,
         manifest_dir: &Path,
