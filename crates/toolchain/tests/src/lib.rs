@@ -45,7 +45,7 @@ pub fn build_example_program(
 
 pub fn build_example_program_with_features<S: AsRef<str>>(
     example_name: &str,
-    features: impl IntoIterator<Item = S>,
+    features: impl IntoIterator<Item = S> + Clone,
     init_config: &impl InitFileGenerator,
 ) -> Result<Elf> {
     let manifest_dir = get_programs_dir!();
@@ -63,20 +63,29 @@ pub fn build_example_program_at_path(
 pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
     manifest_dir: PathBuf,
     example_name: &str,
-    features: impl IntoIterator<Item = S>,
+    features: impl IntoIterator<Item = S> + Clone,
     init_config: &impl InitFileGenerator,
 ) -> Result<Elf> {
     let pkg = get_package(&manifest_dir);
     let target_dir = tempdir()?;
     // Build guest with default features
     let guest_opts = GuestOptions::default()
-        .with_features(features)
+        .with_features(features.clone())
         .with_target_dir(target_dir.path());
+    let features = features
+        .into_iter()
+        .map(|x| x.as_ref().to_string())
+        .collect::<Vec<_>>();
+    let features_str = if !features.is_empty() {
+        format!("_{}", features.join("_"))
+    } else {
+        "".to_string()
+    };
     init_config.write_to_init_file(
         &manifest_dir,
         Some(&format!(
-            "{}_{}.rs",
-            OPENVM_DEFAULT_INIT_FILE_BASENAME, example_name
+            "{}_{}{}.rs",
+            OPENVM_DEFAULT_INIT_FILE_BASENAME, example_name, features_str
         )),
     )?;
     if let Err(Some(code)) = build_guest_package(

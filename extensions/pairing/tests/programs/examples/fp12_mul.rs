@@ -7,13 +7,13 @@ use openvm_algebra_guest::{field::FieldExtension, IntMod};
 
 openvm::entry!(main);
 
-openvm::init!("openvm_init_fp12_mul.rs");
-
 #[cfg(feature = "bn254")]
 mod bn254 {
     use openvm_pairing_guest::bn254::{Fp, Fp12};
 
     use super::*;
+
+    openvm::init!("openvm_init_fp12_mul_bn254.rs");
 
     pub fn test_fp12_mul(io: &[u8]) {
         setup_0();
@@ -44,6 +44,8 @@ mod bls12_381 {
     use openvm_pairing_guest::bls12_381::{Fp, Fp12};
 
     use super::*;
+
+    openvm::init!("openvm_init_fp12_mul_bls12_381.rs");
 
     pub fn test_fp12_mul(io: &[u8]) {
         setup_0();

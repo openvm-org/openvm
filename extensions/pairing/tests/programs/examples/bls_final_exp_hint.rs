@@ -14,7 +14,7 @@ use openvm_pairing_guest::{
 
 openvm::entry!(main);
 
-openvm::init!("openvm_init_bls_final_exp_hint.rs");
+openvm::init!("openvm_init_bls_final_exp_hint_bls12_381.rs");
 
 pub fn main() {
     #[allow(clippy::type_complexity)]

@@ -9,14 +9,14 @@ use openvm_pairing_guest::pairing::MillerStep;
 
 openvm::entry!(main);
 
-openvm::init!("openvm_init_pairing_miller_step.rs");
-
 #[cfg(feature = "bn254")]
 mod bn254 {
     use openvm_algebra_guest::field::FieldExtension;
     use openvm_pairing_guest::bn254::{Bn254, Fp, Fp2};
 
     use super::*;
+
+    openvm::init!("openvm_init_pairing_miller_step_bn254.rs");
 
     pub fn test_miller_step(io: &[u8]) {
         assert_eq!(io.len(), 32 * 12);
@@ -88,6 +88,8 @@ mod bls12_381 {
 
     use super::*;
 
+    openvm::init!("openvm_init_pairing_miller_step_bls12_381.rs");
+
     pub fn test_miller_step(io: &[u8]) {
         assert_eq!(io.len(), 48 * 12);
         let s = &io[..48 * 4];
@@ -151,15 +153,17 @@ pub fn main() {
     #[allow(unused_variables)]
     let io = read_vec();
 
-    setup_0();
-    setup_all_complex_extensions();
     #[cfg(feature = "bn254")]
     {
+        bn254::setup_0();
+        bn254::setup_all_complex_extensions();
         bn254::test_miller_step(&io[..32 * 12]);
         bn254::test_miller_double_and_add_step(&io[32 * 12..]);
     }
     #[cfg(feature = "bls12_381")]
     {
+        bls12_381::setup_0();
+        bls12_381::setup_all_complex_extensions();
         bls12_381::test_miller_step(&io[..48 * 12]);
         bls12_381::test_miller_double_and_add_step(&io[48 * 12..]);
     }

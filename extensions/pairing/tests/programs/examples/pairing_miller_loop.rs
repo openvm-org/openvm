@@ -11,13 +11,13 @@ use openvm_pairing_guest::pairing::MultiMillerLoop;
 
 openvm::entry!(main);
 
-openvm::init!("openvm_init_pairing_miller_loop.rs");
-
 #[cfg(feature = "bn254")]
 mod bn254 {
     use openvm_pairing_guest::bn254::{Bn254, Fp, Fp2};
 
     use super::*;
+
+    openvm::init!("openvm_init_pairing_miller_loop_bn254.rs");
 
     pub fn test_miller_loop(io: &[u8]) {
         setup_0();
@@ -52,6 +52,8 @@ mod bls12_381 {
     use openvm_pairing_guest::bls12_381::{Bls12_381, Fp, Fp2};
 
     use super::*;
+
+    openvm::init!("openvm_init_pairing_miller_loop_bls12_381.rs");
 
     pub fn test_miller_loop(io: &[u8]) {
         setup_0();

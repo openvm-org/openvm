@@ -16,8 +16,6 @@ use openvm_pairing_guest::pairing::{
 
 openvm::entry!(main);
 
-openvm::init!("openvm_init_pairing_check_fallback.rs");
-
 #[cfg(feature = "bn254")]
 mod bn254 {
     use alloc::format;
@@ -25,6 +23,8 @@ mod bn254 {
     use openvm_pairing_guest::bn254::{Bn254, Fp, Fp12, Fp2};
 
     use super::*;
+
+    openvm::init!("openvm_init_pairing_check_fallback_bn254.rs");
 
     // Wrapper so that we can override `pairing_check_hint`
     struct Bn254Wrapper(Bn254);
@@ -130,6 +130,8 @@ mod bls12_381 {
     use openvm_pairing_guest::bls12_381::{Bls12_381, Fp, Fp12, Fp2};
 
     use super::*;
+
+    openvm::init!("openvm_init_pairing_check_fallback_bls12_381.rs");
 
     // Wrapper so that we can override `pairing_check_hint`
     struct Bls12_381Wrapper(Bls12_381);

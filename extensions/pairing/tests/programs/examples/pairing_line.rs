@@ -8,13 +8,13 @@ use openvm_pairing_guest::pairing::{EvaluatedLine, LineMulDType, LineMulMType};
 
 openvm::entry!(main);
 
-openvm::init!("openvm_init_pairing_line.rs");
-
 #[cfg(feature = "bn254")]
 mod bn254 {
     use openvm_pairing_guest::bn254::{Bn254, Fp, Fp12, Fp2};
 
     use super::*;
+
+    openvm::init!("openvm_init_pairing_line_bn254.rs");
 
     pub fn test_mul_013_by_013(io: &[u8]) {
         assert_eq!(io.len(), 32 * 18);
@@ -75,6 +75,8 @@ mod bls12_381 {
 
     use super::*;
 
+    openvm::init!("openvm_init_pairing_line_bls12_381.rs");
+
     pub fn test_mul_023_by_023(io: &[u8]) {
         assert_eq!(io.len(), 48 * 18);
         let l0 = &io[..48 * 4];
@@ -132,15 +134,17 @@ pub fn main() {
     #[allow(unused_variables)]
     let io = read_vec();
 
-    setup_0();
-    setup_all_complex_extensions();
     #[cfg(feature = "bn254")]
     {
+        bn254::setup_0();
+        bn254::setup_all_complex_extensions();
         bn254::test_mul_013_by_013(&io[..32 * 18]);
         bn254::test_mul_by_01234(&io[32 * 18..32 * 52]);
     }
     #[cfg(feature = "bls12_381")]
     {
+        bls12_381::setup_0();
+        bls12_381::setup_all_complex_extensions();
         bls12_381::test_mul_023_by_023(&io[..48 * 18]);
         bls12_381::test_mul_by_02345(&io[48 * 18..48 * 52]);
     }
