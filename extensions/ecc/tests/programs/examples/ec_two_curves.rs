@@ -4,7 +4,6 @@
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
-    init,
     k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
     msm,
     p256::{P256Coord, P256Point},
@@ -12,7 +11,7 @@ use openvm_ecc_guest::{
     Group,
 };
 
-init!("openvm_init_ec_two_curves.rs");
+openvm::init!("openvm_init_ec_two_curves.rs");
 
 openvm::entry!(main);
 

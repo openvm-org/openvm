@@ -4,14 +4,13 @@
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
-    init,
     k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
     msm,
     weierstrass::WeierstrassPoint,
     Group,
 };
 
-init!("openvm_init_ec.rs");
+openvm::init!("openvm_init_ec.rs");
 
 openvm::entry!(main);
 

@@ -4,7 +4,6 @@
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
-    init,
     p256::{P256Coord, P256Point},
     weierstrass::WeierstrassPoint,
     CyclicGroup, Group,
@@ -12,7 +11,7 @@ use openvm_ecc_guest::{
 
 openvm::entry!(main);
 
-init!("openvm_init_ec_nonzero_a.rs");
+openvm::init!("openvm_init_ec_nonzero_a.rs");
 
 pub fn main() {
     setup_all_moduli();

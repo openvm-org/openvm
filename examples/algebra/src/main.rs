@@ -1,4 +1,4 @@
-use openvm_algebra_guest::{init, moduli_macros::*, IntMod};
+use openvm_algebra_guest::{moduli_macros::*, IntMod};
 
 // This macro will create two structs, `Mod1` and `Mod2`,
 // one for arithmetic modulo 998244353, and the other for arithmetic modulo 1000000007.
@@ -15,7 +15,7 @@ openvm_algebra_complex_macros::complex_declare! {
     Complex2 { mod_type = Mod2 },
 }
 
-init!();
+openvm::init!();
 /* The init! macro will expand to the following (excluding comments):
 // This macro will initialize the moduli.
 // Now, `Mod1` is the "zeroth" modular struct, and `Mod2` is the "first" one.

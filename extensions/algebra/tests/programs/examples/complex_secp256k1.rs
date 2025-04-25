@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm_algebra_guest::{field::ComplexConjugate, init, DivAssignUnsafe, DivUnsafe, IntMod};
+use openvm_algebra_guest::{field::ComplexConjugate, DivAssignUnsafe, DivUnsafe, IntMod};
 
 openvm::entry!(main);
 
@@ -13,7 +13,7 @@ openvm_algebra_complex_macros::complex_declare! {
     Complex { mod_type = Secp256k1Coord }
 }
 
-init!("openvm_init_complex_secp256k1.rs");
+openvm::init!("openvm_init_complex_secp256k1.rs");
 
 pub fn main() {
     setup_all_moduli();

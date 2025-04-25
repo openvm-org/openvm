@@ -15,7 +15,7 @@ openvm_algebra_complex_macros::complex_declare! {
     Complex { mod_type = Secp256k1Coord }
 }
 
-openvm_algebra_guest::init!();
+openvm::init!();
 /* The init! macro will expand to:
 openvm_algebra_moduli_macros::moduli_init!(
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"

@@ -8,7 +8,6 @@ use hex_literal::hex;
 use openvm::io::read_vec;
 use openvm_ecc_guest::{
     algebra::{Field, IntMod},
-    init,
     k256::{Secp256k1Coord, Secp256k1Point},
     weierstrass::{DecompressionHint, FromCompressed, WeierstrassPoint},
     Group,
@@ -74,7 +73,7 @@ openvm_ecc_sw_macros::sw_declare! {
     },
 }
 
-init!("openvm_init_decompress_invalid_hint.rs");
+openvm::init!("openvm_init_decompress_invalid_hint.rs");
 
 trait NonQr<P: WeierstrassPoint> {
     fn get_non_qr() -> &'static P::Coordinate;

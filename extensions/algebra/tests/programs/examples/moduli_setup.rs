@@ -3,7 +3,7 @@
 
 extern crate alloc;
 
-use openvm_algebra_guest::{init, IntMod};
+use openvm_algebra_guest::IntMod;
 
 openvm::entry!(main);
 openvm_algebra_moduli_macros::moduli_declare! {
@@ -15,7 +15,7 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
-init!("openvm_init_moduli_setup.rs");
+openvm::init!("openvm_init_moduli_setup.rs");
 
 pub fn main() {
     setup_all_moduli();

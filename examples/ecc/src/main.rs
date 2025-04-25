@@ -8,7 +8,7 @@ use openvm_ecc_guest::{
 // ANCHOR_END: imports
 
 // ANCHOR: init
-openvm_ecc_guest::init!();
+openvm::init!();
 /* The init! macro will expand to the following
 openvm_algebra_guest::moduli_macros::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",

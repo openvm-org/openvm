@@ -14,7 +14,7 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
-openvm_algebra_guest::init!();
+openvm::init!();
 /* The init! macro will expand to:
 openvm_algebra_moduli_macros::moduli_init! {
     "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
@@ -159,7 +159,7 @@ The setup operation (e.g., `setup_2`) consists of reading the value `OPENVM_SERI
 
 6. For convenience, running `cargo openvm build` will automatically generate an appropriate call to `moduli_declare!` based on the order of the moduli in `openvm.toml`. 
 More specifically, `cargo openvm build` will read `openvm.toml`, then generate a file named `openvm_init.rs` in the project's manifest directory (where `Cargo.toml` is located) containing a call to `moduli_declare!`.
-Then, you must call `openvm_algebra_guest::init!();` in your code, and this will insert the contents of `openvm_init.rs` file into your code in place of the `init!` macro.
+Then, you must call `openvm::init!();` in your code, and this will insert the contents of `openvm_init.rs` file into your code in place of the `init!` macro.
 You may specify an alternate name for the init file using the `--init-file-name` option of `cargo openvm build`.
 To include the generated file in your code, pass its name into the `init!` macro (for ex. `init!("my_init_file.rs")`).
 The custom filename will be interpreted as relative to the manifest directory.

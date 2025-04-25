@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm_algebra_guest::{init, IntMod};
+use openvm_algebra_guest::IntMod;
 
 openvm::entry!(main);
 
@@ -15,7 +15,7 @@ openvm_algebra_complex_macros::complex_declare! {
     Complex2 { mod_type = Mod2 },
 }
 
-init!("openvm_init_complex_two_moduli.rs");
+openvm::init!("openvm_init_complex_two_moduli.rs");
 
 pub fn main() {
     setup_all_moduli();

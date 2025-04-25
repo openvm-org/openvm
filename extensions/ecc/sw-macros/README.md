@@ -20,7 +20,7 @@ sw_declare! {
     Secp256k1Point { mod_type = Secp256k1Coord, b = CURVE_B },
 }
 
-openvm_ecc_guest::init!();
+openvm::init!();
 /* The init! macro will expand to:
 openvm_algebra_guest::moduli_macros::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",

@@ -69,17 +69,6 @@ mod halo2curves;
 mod exp_bytes;
 pub use exp_bytes::*;
 
-// Includes the init.rs file generated at build time
-#[macro_export]
-macro_rules! init {
-    () => {
-        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/openvm_init.rs"));
-    };
-    ($name:expr) => {
-        include!(concat!(env!("CARGO_MANIFEST_DIR"), concat!("/", $name)));
-    };
-}
-
 /// Division operation that is undefined behavior when the denominator is not invertible.
 pub trait DivUnsafe<Rhs = Self>: Sized {
     /// Output type of `div_unsafe`.
