@@ -17,7 +17,7 @@ pub struct GuestOptions {
     /// Target directory
     pub target_dir: Option<PathBuf>,
     /// Custom options to pass as args to `cargo build`.
-    pub(crate) options: Vec<String>,
+    pub options: Vec<String>,
 }
 
 impl GuestOptions {
