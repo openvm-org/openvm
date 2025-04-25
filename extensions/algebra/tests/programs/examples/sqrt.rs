@@ -14,13 +14,9 @@ openvm_algebra_moduli_macros::moduli_declare! {
     }
 }
 
-openvm_algebra_moduli_macros::moduli_init!(
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
-);
+openvm::init!();
 
 pub fn main() {
-    setup_all_moduli();
-
     let a = Secp256k1Coord::from_u32(4);
     let sqrt = a.sqrt();
     assert_eq!(sqrt, Some(Secp256k1Coord::from_u32(2)));
