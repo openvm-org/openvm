@@ -107,19 +107,20 @@ fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
 
-    let adapter_air = Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
-    let core_air = DivRemCoreAir::new(bitwise_bus, range_tuple_bus, DivRemOpcode::CLASS_OFFSET);
-    let air = VmAirWrapper::new(adapter_air, core_air);
-
-    let adapter_step = Rv32MultAdapterStep::new();
-    let step = DivRemStep::new(
-        adapter_step,
-        bitwise_chip.clone(),
-        range_tuple_checker.clone(),
-        DivRemOpcode::CLASS_OFFSET,
+    let mut chip = Rv32DivRemChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            DivRemCoreAir::new(bitwise_bus, range_tuple_bus, DivRemOpcode::CLASS_OFFSET),
+        ),
+        DivRemStep::new(
+            Rv32MultAdapterStep::new(),
+            bitwise_chip.clone(),
+            range_tuple_checker.clone(),
+            DivRemOpcode::CLASS_OFFSET,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-
-    let mut chip = Rv32DivRemChip::<F>::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
 
     for _ in 0..num_ops {
         let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);

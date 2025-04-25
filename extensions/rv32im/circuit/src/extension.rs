@@ -1,7 +1,8 @@
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, SystemConfig, SystemPort, VmAirWrapper, VmExtension, VmInventory,
+        VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -22,6 +23,9 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
+
+// TODO(ayush): this should be decided after e2 execution
+const MAX_INS_CAPACITY: usize = 1024;
 
 /// Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
@@ -212,130 +216,213 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             chip
         };
 
-        // let base_alu_chip = Rv32BaseAluChip::new(
-        //     Rv32BaseAluAdapterChip::new(
-        //         execution_bus,
-        //         program_bus,
-        //         memory_bridge,
-        //         bitwise_lu_chip.clone(),
-        //     ),
-        //     BaseAluCoreChip::new(bitwise_lu_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(
-        //     base_alu_chip,
-        //     BaseAluOpcode::iter().map(|x| x.global_opcode()),
-        // )?;
+        let base_alu_chip = Rv32BaseAluChip::new(
+            VmAirWrapper::new(
+                Rv32BaseAluAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                ),
+                BaseAluCoreAir::new(bitwise_lu_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
+            ),
+            Rv32BaseAluStep::new(
+                Rv32BaseAluAdapterStep::new(),
+                bitwise_lu_chip.clone(),
+                BaseAluOpcode::CLASS_OFFSET,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(
+            base_alu_chip,
+            BaseAluOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
-        // let lt_chip = Rv32LessThanChip::new(
-        //     Rv32BaseAluAdapterChip::new(
-        //         execution_bus,
-        //         program_bus,
-        //         memory_bridge,
-        //         bitwise_lu_chip.clone(),
-        //     ),
-        //     LessThanCoreChip::new(bitwise_lu_chip.clone(), LessThanOpcode::CLASS_OFFSET),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(lt_chip, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
+        let lt_chip = Rv32LessThanChip::new(
+            VmAirWrapper::new(
+                Rv32BaseAluAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                ),
+                LessThanCoreAir::new(bitwise_lu_chip.bus(), LessThanOpcode::CLASS_OFFSET),
+            ),
+            LessThanStep::new(
+                Rv32BaseAluAdapterStep::new(),
+                bitwise_lu_chip.clone(),
+                LessThanOpcode::CLASS_OFFSET,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(lt_chip, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
-        // let shift_chip = Rv32ShiftChip::new(
-        //     Rv32BaseAluAdapterChip::new(
-        //         execution_bus,
-        //         program_bus,
-        //         memory_bridge,
-        //         bitwise_lu_chip.clone(),
-        //     ),
-        //     ShiftCoreChip::new(
-        //         bitwise_lu_chip.clone(),
-        //         range_checker.clone(),
-        //         ShiftOpcode::CLASS_OFFSET,
-        //     ),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(shift_chip, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
+        let shift_chip = Rv32ShiftChip::new(
+            VmAirWrapper::new(
+                Rv32BaseAluAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                ),
+                ShiftCoreAir::new(
+                    bitwise_lu_chip.bus(),
+                    range_checker.bus(),
+                    ShiftOpcode::CLASS_OFFSET,
+                ),
+            ),
+            ShiftStep::new(
+                Rv32BaseAluAdapterStep::new(),
+                bitwise_lu_chip.clone(),
+                range_checker.clone(),
+                ShiftOpcode::CLASS_OFFSET,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(shift_chip, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
 
-        // let load_store_chip = Rv32LoadStoreChip::new(
-        //     Rv32LoadStoreAdapterChip::new(
-        //         execution_bus,
-        //         program_bus,
-        //         memory_bridge,
-        //         pointer_max_bits,
-        //         range_checker.clone(),
-        //     ),
-        //     LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(
-        //     load_store_chip,
-        //     Rv32LoadStoreOpcode::iter()
-        //         .take(Rv32LoadStoreOpcode::STOREB as usize + 1)
-        //         .map(|x| x.global_opcode()),
-        // )?;
+        let load_store_chip = Rv32LoadStoreChip::new(
+            VmAirWrapper::new(
+                Rv32LoadStoreAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    range_checker.bus(),
+                    pointer_max_bits,
+                ),
+                LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
+            ),
+            LoadStoreStep::new(
+                Rv32LoadStoreAdapterStep::new(pointer_max_bits),
+                range_checker.clone(),
+                Rv32LoadStoreOpcode::CLASS_OFFSET,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(
+            load_store_chip,
+            Rv32LoadStoreOpcode::iter()
+                .take(Rv32LoadStoreOpcode::STOREB as usize + 1)
+                .map(|x| x.global_opcode()),
+        )?;
 
-        // let load_sign_extend_chip = Rv32LoadSignExtendChip::new(
-        //     Rv32LoadStoreAdapterChip::new(
-        //         execution_bus,
-        //         program_bus,
-        //         memory_bridge,
-        //         pointer_max_bits,
-        //         range_checker.clone(),
-        //     ),
-        //     LoadSignExtendCoreChip::new(range_checker.clone()),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(
-        //     load_sign_extend_chip,
-        //     [Rv32LoadStoreOpcode::LOADB, Rv32LoadStoreOpcode::LOADH].map(|x| x.global_opcode()),
-        // )?;
+        let load_sign_extend_chip = Rv32LoadSignExtendChip::new(
+            VmAirWrapper::new(
+                Rv32LoadStoreAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    range_checker.bus(),
+                    pointer_max_bits,
+                ),
+                LoadSignExtendCoreAir::new(range_checker.bus()),
+            ),
+            LoadSignExtendStep::new(
+                Rv32LoadStoreAdapterStep::new(pointer_max_bits),
+                range_checker.clone(),
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(
+            load_sign_extend_chip,
+            [Rv32LoadStoreOpcode::LOADB, Rv32LoadStoreOpcode::LOADH].map(|x| x.global_opcode()),
+        )?;
 
-        // let beq_chip = Rv32BranchEqualChip::new(
-        //     Rv32BranchAdapterChip::new(execution_bus, program_bus, memory_bridge),
-        //     BranchEqualCoreChip::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(
-        //     beq_chip,
-        //     BranchEqualOpcode::iter().map(|x| x.global_opcode()),
-        // )?;
+        let beq_chip = Rv32BranchEqualChip::new(
+            VmAirWrapper::new(
+                Rv32BranchAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                ),
+                BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+            ),
+            BranchEqualStep::new(
+                Rv32BranchAdapterStep::new(),
+                BranchEqualOpcode::CLASS_OFFSET,
+                DEFAULT_PC_STEP,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(
+            beq_chip,
+            BranchEqualOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
-        // let blt_chip = Rv32BranchLessThanChip::new(
-        //     Rv32BranchAdapterChip::new(execution_bus, program_bus, memory_bridge),
-        //     BranchLessThanCoreChip::new(
-        //         bitwise_lu_chip.clone(),
-        //         BranchLessThanOpcode::CLASS_OFFSET,
-        //     ),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(
-        //     blt_chip,
-        //     BranchLessThanOpcode::iter().map(|x| x.global_opcode()),
-        // )?;
+        let blt_chip = Rv32BranchLessThanChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32BranchAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                ),
+                BranchLessThanCoreAir::new(
+                    bitwise_lu_chip.bus(),
+                    BranchLessThanOpcode::CLASS_OFFSET,
+                ),
+            ),
+            BranchLessThanStep::new(
+                Rv32BranchAdapterStep::new(),
+                bitwise_lu_chip.clone(),
+                BranchLessThanOpcode::CLASS_OFFSET,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(
+            blt_chip,
+            BranchLessThanOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
-        // TODO
-        // let jal_lui_chip = Rv32JalLuiChip::new(
-        //     Rv32CondRdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
-        //     Rv32JalLuiCoreChip::new(bitwise_lu_chip.clone()),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(
-        //     jal_lui_chip,
-        //     Rv32JalLuiOpcode::iter().map(|x| x.global_opcode()),
-        // )?;
+        let jal_lui_chip = Rv32JalLuiChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                )),
+                Rv32JalLuiCoreAir::new(bitwise_lu_chip.bus()),
+            ),
+            Rv32JalLuiStep::new(
+                Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep::new()),
+                bitwise_lu_chip.clone(),
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(
+            jal_lui_chip,
+            Rv32JalLuiOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
-        // let jalr_chip = Rv32JalrChip::new(
-        //     Rv32JalrAdapterChip::new(execution_bus, program_bus, memory_bridge),
-        //     Rv32JalrCoreChip::new(bitwise_lu_chip.clone(), range_checker.clone()),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(jalr_chip, Rv32JalrOpcode::iter().map(|x| x.global_opcode()))?;
+        let jalr_chip = Rv32JalrChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32JalrAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                ),
+                Rv32JalrCoreAir::new(bitwise_lu_chip.bus(), range_checker.bus()),
+            ),
+            Rv32JalrStep::new(
+                Rv32JalrAdapterStep::new(),
+                bitwise_lu_chip.clone(),
+                range_checker.clone(),
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(jalr_chip, Rv32JalrOpcode::iter().map(|x| x.global_opcode()))?;
 
-        // TODO
-        // let auipc_chip = Rv32AuipcChip::new(
-        //     Rv32RdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
-        //     Rv32AuipcCoreChip::new(bitwise_lu_chip.clone()),
-        //     offline_memory.clone(),
-        // );
+        let auipc_chip = Rv32AuipcChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32RdWriteAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                ),
+                Rv32AuipcCoreAir::new(bitwise_lu_chip.bus()),
+            ),
+            Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_lu_chip.clone()),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
         // inventory.add_executor(
         //     auipc_chip,
         //     Rv32AuipcOpcode::iter().map(|x| x.global_opcode()),
@@ -403,33 +490,68 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
             chip
         };
 
-        // let mul_chip = Rv32MultiplicationChip::new(
-        //     Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
-        //     MultiplicationCoreChip::new(range_tuple_checker.clone(), MulOpcode::CLASS_OFFSET),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(mul_chip, MulOpcode::iter().map(|x| x.global_opcode()))?;
+        let mul_chip = Rv32MultiplicationChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32MultAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                ),
+                // TODO(ayush): bus should return value not reference
+                MultiplicationCoreAir::new(*range_tuple_checker.bus(), MulOpcode::CLASS_OFFSET),
+            ),
+            MultiplicationStep::new(
+                Rv32MultAdapterStep::new(),
+                range_tuple_checker.clone(),
+                MulOpcode::CLASS_OFFSET,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(mul_chip, MulOpcode::iter().map(|x| x.global_opcode()))?;
 
-        // let mul_h_chip = Rv32MulHChip::new(
-        //     Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
-        //     MulHCoreChip::new(bitwise_lu_chip.clone(), range_tuple_checker.clone()),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(mul_h_chip, MulHOpcode::iter().map(|x| x.global_opcode()))?;
+        let mul_h_chip = Rv32MulHChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32MultAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                ),
+                MulHCoreAir::new(bitwise_lu_chip.bus(), *range_tuple_checker.bus()),
+            ),
+            MulHStep::new(
+                Rv32MultAdapterStep::new(),
+                bitwise_lu_chip.clone(),
+                range_tuple_checker.clone(),
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(mul_h_chip, MulHOpcode::iter().map(|x| x.global_opcode()))?;
 
-        // let div_rem_chip = Rv32DivRemChip::new(
-        //     Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
-        //     DivRemCoreChip::new(
-        //         bitwise_lu_chip.clone(),
-        //         range_tuple_checker.clone(),
-        //         DivRemOpcode::CLASS_OFFSET,
-        //     ),
-        //     offline_memory.clone(),
-        // );
-        // inventory.add_executor(
-        //     div_rem_chip,
-        //     DivRemOpcode::iter().map(|x| x.global_opcode()),
-        // )?;
+        let div_rem_chip = Rv32DivRemChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32MultAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                ),
+                DivRemCoreAir::new(
+                    bitwise_lu_chip.bus(),
+                    *range_tuple_checker.bus(),
+                    DivRemOpcode::CLASS_OFFSET,
+                ),
+            ),
+            DivRemStep::new(
+                Rv32MultAdapterStep::new(),
+                bitwise_lu_chip.clone(),
+                range_tuple_checker.clone(),
+                DivRemOpcode::CLASS_OFFSET,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(
+            div_rem_chip,
+            DivRemOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
         Ok(inventory)
     }

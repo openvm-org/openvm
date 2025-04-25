@@ -129,20 +129,23 @@ fn rand_load_sign_extend_test() {
 
     let range_checker_chip = tester.memory_controller().range_checker.clone();
 
-    let adapter_air = Rv32LoadStoreAdapterAir::new(
-        tester.memory_bridge(),
-        tester.execution_bridge(),
-        range_checker_chip.bus(),
-        tester.address_bits(),
+    let mut chip = Rv32LoadSignExtendChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32LoadStoreAdapterAir::new(
+                tester.memory_bridge(),
+                tester.execution_bridge(),
+                range_checker_chip.bus(),
+                tester.address_bits(),
+            ),
+            LoadSignExtendCoreAir::new(range_checker_chip.bus()),
+        ),
+        LoadSignExtendStep::new(
+            Rv32LoadStoreAdapterStep::new(tester.address_bits()),
+            range_checker_chip,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-    let core_air = LoadSignExtendCoreAir::new(range_checker_chip.bus());
-    let air = VmAirWrapper::new(adapter_air, core_air);
-
-    let adapter_step = Rv32LoadStoreAdapterStep::new(tester.address_bits());
-    let step = LoadSignExtendStep::new(adapter_step, range_checker_chip);
-
-    let mut chip =
-        Rv32LoadSignExtendChip::<F>::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
 
     let num_tests: usize = 1;
     for _ in 0..num_tests {
@@ -196,22 +199,25 @@ fn run_negative_loadstore_test(
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().range_checker.clone();
 
-    let adapter_air = Rv32LoadStoreAdapterAir::new(
-        tester.memory_bridge(),
-        tester.execution_bridge(),
-        range_checker_chip.bus(),
-        tester.address_bits(),
+    let mut chip = Rv32LoadSignExtendChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32LoadStoreAdapterAir::new(
+                tester.memory_bridge(),
+                tester.execution_bridge(),
+                range_checker_chip.bus(),
+                tester.address_bits(),
+            ),
+            LoadSignExtendCoreAir::new(range_checker_chip.bus()),
+        ),
+        LoadSignExtendStep::new(
+            Rv32LoadStoreAdapterStep::new(tester.address_bits()),
+            range_checker_chip,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-    let core_air = LoadSignExtendCoreAir::new(range_checker_chip.bus());
-    let air = VmAirWrapper::new(adapter_air, core_air);
 
-    let adapter_step = Rv32LoadStoreAdapterStep::new(tester.address_bits());
-    let step = LoadSignExtendStep::new(adapter_step, range_checker_chip);
-
-    let mut chip =
-        Rv32LoadSignExtendChip::<F>::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
-
-    let adapter_width = BaseAir::<F>::width(&adapter_air);
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
 
     set_and_execute(
         &mut tester,
@@ -309,20 +315,23 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().range_checker.clone();
 
-    let adapter_air = Rv32LoadStoreAdapterAir::new(
-        tester.memory_bridge(),
-        tester.execution_bridge(),
-        range_checker_chip.bus(),
-        tester.address_bits(),
+    let mut chip = Rv32LoadSignExtendChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32LoadStoreAdapterAir::new(
+                tester.memory_bridge(),
+                tester.execution_bridge(),
+                range_checker_chip.bus(),
+                tester.address_bits(),
+            ),
+            LoadSignExtendCoreAir::new(range_checker_chip.bus()),
+        ),
+        LoadSignExtendStep::new(
+            Rv32LoadStoreAdapterStep::new(tester.address_bits()),
+            range_checker_chip,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-    let core_air = LoadSignExtendCoreAir::new(range_checker_chip.bus());
-    let air = VmAirWrapper::new(adapter_air, core_air);
-
-    let adapter_step = Rv32LoadStoreAdapterStep::new(tester.address_bits());
-    let step = LoadSignExtendStep::new(adapter_step, range_checker_chip);
-
-    let mut chip =
-        Rv32LoadSignExtendChip::<F>::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {

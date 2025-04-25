@@ -92,18 +92,19 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
 
-    let adapter_air = Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
-    let core_air = MulHCoreAir::new(bitwise_bus, range_tuple_bus);
-    let air = VmAirWrapper::new(adapter_air, core_air);
-
-    let adapter_step = Rv32MultAdapterStep::new();
-    let step = MulHStep::new(
-        adapter_step,
-        bitwise_chip.clone(),
-        range_tuple_checker.clone(),
+    let mut chip = Rv32MulHChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            MulHCoreAir::new(bitwise_bus, range_tuple_bus),
+        ),
+        MulHStep::new(
+            Rv32MultAdapterStep::new(),
+            bitwise_chip.clone(),
+            range_tuple_checker.clone(),
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-
-    let mut chip = Rv32MulHChip::<F>::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
 
     for _ in 0..num_ops {
         let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);

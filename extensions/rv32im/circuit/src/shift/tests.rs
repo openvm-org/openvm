@@ -48,27 +48,28 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let adapter_air = Rv32BaseAluAdapterAir::new(
-        tester.execution_bridge(),
-        tester.memory_bridge(),
-        bitwise_bus,
+    let chip = Rv32ShiftChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32BaseAluAdapterAir::new(
+                tester.execution_bridge(),
+                tester.memory_bridge(),
+                bitwise_bus,
+            ),
+            ShiftCoreAir::new(
+                bitwise_bus,
+                tester.range_checker().bus(),
+                ShiftOpcode::CLASS_OFFSET,
+            ),
+        ),
+        ShiftStep::new(
+            Rv32BaseAluAdapterStep::new(),
+            bitwise_chip.clone(),
+            tester.range_checker().clone(),
+            ShiftOpcode::CLASS_OFFSET,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-    let core_air = ShiftCoreAir::new(
-        bitwise_bus,
-        tester.range_checker().bus(),
-        ShiftOpcode::CLASS_OFFSET,
-    );
-    let air = VmAirWrapper::new(adapter_air, core_air);
-
-    let adapter_step = Rv32BaseAluAdapterStep::new();
-    let step = ShiftStep::new(
-        adapter_step,
-        bitwise_chip.clone(),
-        tester.range_checker().clone(),
-        ShiftOpcode::CLASS_OFFSET,
-    );
-
-    let mut chip = Rv32ShiftChip::<F>::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
 
     (chip, bitwise_chip)
 }

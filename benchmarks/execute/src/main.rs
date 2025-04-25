@@ -1,3 +1,4 @@
+// TODO(ayush): avoid cargo-openvm and openvm-sdk imports
 use cargo_openvm::{default::DEFAULT_APP_CONFIG_PATH, util::read_config_toml_or_default};
 use clap::{Parser, ValueEnum};
 use eyre::Result;

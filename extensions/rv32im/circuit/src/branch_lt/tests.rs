@@ -95,19 +95,19 @@ fn run_rv32_branch_lt_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
 
-    let adapter_air = Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
-    let core_air = BranchLessThanCoreAir::new(bitwise_bus, BranchLessThanOpcode::CLASS_OFFSET);
-    let air = VmAirWrapper::new(adapter_air, core_air);
-
-    let adapter_step = Rv32BranchAdapterStep::new();
-    let step = BranchLessThanStep::new(
-        adapter_step,
-        bitwise_chip.clone(),
-        BranchLessThanOpcode::CLASS_OFFSET,
+    let mut chip = Rv32BranchLessThanChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            BranchLessThanCoreAir::new(bitwise_bus, BranchLessThanOpcode::CLASS_OFFSET),
+        ),
+        BranchLessThanStep::new(
+            Rv32BranchAdapterStep::new(),
+            bitwise_chip.clone(),
+            BranchLessThanOpcode::CLASS_OFFSET,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-
-    let mut chip =
-        Rv32BranchLessThanChip::<F>::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
 
     for _ in 0..num_ops {
         // TODO(ayush): directly generate u8

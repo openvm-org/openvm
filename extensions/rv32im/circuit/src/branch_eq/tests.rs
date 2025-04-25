@@ -89,19 +89,19 @@ fn run_rv32_branch_eq_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
 
-    let adapter_air = Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
-    let core_air = BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP);
-    let air = VmAirWrapper::new(adapter_air, core_air);
-
-    let adapter_step = Rv32BranchAdapterStep::new();
-    let step = BranchEqualStep::new(
-        adapter_step,
-        BranchEqualOpcode::CLASS_OFFSET,
-        DEFAULT_PC_STEP,
+    let mut chip = Rv32BranchEqualChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+        ),
+        BranchEqualStep::new(
+            Rv32BranchAdapterStep::new(),
+            BranchEqualOpcode::CLASS_OFFSET,
+            DEFAULT_PC_STEP,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-
-    let mut chip =
-        Rv32BranchEqualChip::<F>::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
 
     for _ in 0..num_ops {
         let a = array::from_fn(|_| rng.gen_range(0..u8::MAX));

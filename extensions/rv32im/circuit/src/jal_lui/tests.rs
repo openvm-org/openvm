@@ -45,17 +45,21 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let adapter_air = Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(
-        tester.memory_bridge(),
-        tester.execution_bridge(),
-    ));
-    let core_air = Rv32JalLuiCoreAir::new(bitwise_bus);
-    let air = VmAirWrapper::new(adapter_air, core_air);
-
-    let adapter_step = Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep::new());
-    let step = Rv32JalLuiStep::new(adapter_step, bitwise_chip.clone());
-
-    let chip = Rv32JalLuiChip::<F>::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
+    let chip = Rv32JalLuiChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(
+                tester.memory_bridge(),
+                tester.execution_bridge(),
+            )),
+            Rv32JalLuiCoreAir::new(bitwise_bus),
+        ),
+        Rv32JalLuiStep::new(
+            Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep::new()),
+            bitwise_chip.clone(),
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    );
     (chip, bitwise_chip)
 }
 

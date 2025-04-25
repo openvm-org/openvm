@@ -49,22 +49,24 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let adapter_air = Rv32BaseAluAdapterAir::new(
-        tester.execution_bridge(),
-        tester.memory_bridge(),
-        bitwise_bus,
+    let chip = Rv32LessThanChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32BaseAluAdapterAir::new(
+                tester.execution_bridge(),
+                tester.memory_bridge(),
+                bitwise_bus,
+            ),
+            LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET),
+        ),
+        LessThanStep::new(
+            Rv32BaseAluAdapterStep::new(),
+            bitwise_chip.clone(),
+            LessThanOpcode::CLASS_OFFSET,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-    let core_air = LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET);
-    let air = VmAirWrapper::new(adapter_air, core_air);
 
-    let adapter_step = Rv32BaseAluAdapterStep::new();
-    let step = LessThanStep::new(
-        adapter_step,
-        bitwise_chip.clone(),
-        LessThanOpcode::CLASS_OFFSET,
-    );
-
-    let chip = Rv32LessThanChip::<F>::new(air, step, MAX_INS_CAPACITY, tester.memory_helper());
     (chip, bitwise_chip)
 }
 //////////////////////////////////////////////////////////////////////////////////////
