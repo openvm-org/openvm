@@ -20,5 +20,5 @@ pub fn main() {
     // this should cause a debug assertion to fail
     let x = Mod1::from_u32(1);
     let y = Mod1::from_u32(1);
-    let z = x + y;
+    let _z = x + y;
 }

@@ -22,5 +22,5 @@ openvm::entry!(main);
 pub fn main() {
     // this should cause a debug assertion to fail
     let p1 = Secp256k1Point::GENERATOR;
-    let p2 = &p1 + &p1;
+    let _p2 = &p1 + &p1;
 }
