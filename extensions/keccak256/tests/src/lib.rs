@@ -16,7 +16,8 @@ mod tests {
 
     #[test]
     fn test_keccak256() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "keccak")?;
+        let config = Keccak256Rv32Config::default();
+        let elf = build_example_program_at_path(get_programs_dir!(), "keccak", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -25,7 +26,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        air_test(Keccak256Rv32Config::default(), openvm_exe);
+        air_test(config, openvm_exe);
         Ok(())
     }
 }

@@ -162,3 +162,14 @@ fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
     openvm_platform::rust_rt::terminate::<1>();
     unreachable!()
 }
+
+// Includes the openvm_init.rs file generated at build time
+#[macro_export]
+macro_rules! init {
+    () => {
+        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/openvm_init.rs"));
+    };
+    ($name:expr) => {
+        include!(concat!(env!("CARGO_MANIFEST_DIR"), concat!("/", $name)));
+    };
+}

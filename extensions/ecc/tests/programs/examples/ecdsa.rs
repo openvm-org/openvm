@@ -15,13 +15,7 @@ use openvm_ecc_guest::{
 use openvm_keccak256_guest::keccak256;
 openvm::entry!(main);
 
-openvm_algebra_moduli_macros::moduli_init! {
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
-}
-openvm_ecc_sw_macros::sw_init! {
-    Secp256k1Point,
-}
+openvm::init!("openvm_init_ecdsa.rs");
 
 // Ref: https://docs.rs/k256/latest/k256/ecdsa/index.html
 pub fn main() {

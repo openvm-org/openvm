@@ -9,6 +9,9 @@ use openvm_circuit::arch::{instructions::exe::VmExe, SystemConfig};
 use openvm_ecc_circuit::{WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG};
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
+use openvm_pairing_guest::{
+    bls12_381::BLS12_381_COMPLEX_STRUCT_NAME, bn254::BN254_COMPLEX_STRUCT_NAME,
+};
 use openvm_sdk::{
     commit::commit_app_exe, config::SdkVmConfig, prover::EvmHalo2Prover,
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
@@ -46,8 +49,14 @@ fn main() -> Result<()> {
             BigUint::from(7u32),
         ]))
         .fp2(Fp2Extension::new(vec![
-            bn_config.modulus.clone(),
-            bls_config.modulus.clone(),
+            (
+                BN254_COMPLEX_STRUCT_NAME.to_string(),
+                bn_config.modulus.clone(),
+            ),
+            (
+                BLS12_381_COMPLEX_STRUCT_NAME.to_string(),
+                bls_config.modulus.clone(),
+            ),
         ]))
         .ecc(WeierstrassExtension::new(vec![
             SECP256K1_CONFIG.clone(),

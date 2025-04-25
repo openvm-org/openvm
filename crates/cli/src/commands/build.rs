@@ -10,6 +10,7 @@ use eyre::Result;
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
+use openvm_circuit::arch::{InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME};
 use openvm_sdk::{
     commit::{commit_app_exe, committed_exe_as_bn254},
     fs::write_exe_to_file,
@@ -97,6 +98,9 @@ pub struct BuildArgs {
 
     #[arg(long, default_value = "false", help = "use --offline in cargo build")]
     pub offline: bool,
+
+    #[arg(long, default_value = OPENVM_DEFAULT_INIT_FILE_NAME, help = "Name of the init file")]
+    pub init_file_name: String,
 }
 
 #[derive(Clone, Default, clap::Args)]
@@ -136,6 +140,11 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         guest_options.options = vec!["--offline".to_string()];
     }
 
+    let app_config = read_config_toml_or_default(&build_args.config)?;
+    app_config
+        .app_vm_config
+        .write_to_init_file(&build_args.manifest_dir, Some(&build_args.init_file_name))?;
+
     let pkg = get_package(&build_args.manifest_dir);
     // We support builds of libraries with 0 or >1 executables.
     let elf_path = match build_guest_package(&pkg, &guest_options, None, &target_filter) {
@@ -154,7 +163,6 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         let elf_path = elf_path?;
         println!("[openvm] Transpiling the package...");
         let output_path = &build_args.exe_output;
-        let app_config = read_config_toml_or_default(&build_args.config)?;
         let transpiler = app_config.app_vm_config.transpiler();
 
         let data = read(elf_path.clone())?;
@@ -224,6 +232,7 @@ mod tests {
             profile: "dev".to_string(),
             target_dir: Some(target_dir.to_path_buf()),
             offline: false,
+            init_file_name: OPENVM_DEFAULT_INIT_FILE_NAME.to_string(),
         };
         build(&build_args)?;
         assert!(

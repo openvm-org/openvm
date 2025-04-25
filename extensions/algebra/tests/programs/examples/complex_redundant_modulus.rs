@@ -11,17 +11,12 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Mod3 { modulus = "1000000009" },
     Mod4 { modulus = "987898789" },
 }
-openvm_algebra_moduli_macros::moduli_init! {
-    "998244353", "1000000007", "1000000009", "987898789"
-}
 
 openvm_algebra_complex_macros::complex_declare! {
     Complex2 { mod_type = Mod3 },
 }
 
-openvm_algebra_complex_macros::complex_init! {
-    Complex2 { mod_idx = 2 },
-}
+openvm::init!("openvm_init_complex_redundant_modulus.rs");
 
 pub fn main() {
     setup_all_moduli();
