@@ -27,6 +27,7 @@ use crate::{
 };
 
 const IMM_BITS: usize = 16;
+const MAX_INS_CAPACITY: usize = 128;
 
 type F = BabyBear;
 

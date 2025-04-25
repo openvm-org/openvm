@@ -30,6 +30,8 @@ use crate::{
     test_utils::rv32_rand_write_register_or_imm,
 };
 
+const MAX_INS_CAPACITY: usize = 128;
+
 type F = BabyBear;
 
 //////////////////////////////////////////////////////////////////////////////////////

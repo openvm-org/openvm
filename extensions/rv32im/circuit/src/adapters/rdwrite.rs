@@ -333,19 +333,20 @@ where
         let Instruction { f: enabled, .. } = instruction;
 
         if *enabled != F::ZERO {
-            let adapter_row_ref: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+            let (inner_row, needs_write) = unsafe {
+                adapter_row.split_at_mut_unchecked(size_of::<Rv32RdWriteAdapterCols<u8>>())
+            };
 
-            adapter_row_ref.needs_write = F::ONE;
+            needs_write[0] = F::ONE;
             <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::write(
                 &self.inner,
                 memory,
                 instruction,
-                adapter_row,
+                inner_row,
                 data,
             );
-            // TODO(ayush): do i need this?
-            // } else {
-            //     memory.increment_timestamp();
+        } else {
+            memory.increment_timestamp();
         }
     }
 
@@ -359,11 +360,15 @@ where
         let adapter_row_ref: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
 
         if adapter_row_ref.needs_write.is_one() {
+            let (inner_row, _) = unsafe {
+                adapter_row.split_at_mut_unchecked(size_of::<Rv32RdWriteAdapterCols<u8>>())
+            };
+
             <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::fill_trace_row(
                 &self.inner,
                 mem_helper,
                 trace_ctx,
-                adapter_row,
+                inner_row,
             )
         }
     }

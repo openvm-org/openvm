@@ -42,7 +42,7 @@ pub struct Rv32JalLuiCoreCols<T> {
     pub is_lui: T,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, derive_new::new)]
 pub struct Rv32JalLuiCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }

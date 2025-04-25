@@ -202,7 +202,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         );
 
         let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
-            adapter_row.rs2_as == e;
+            adapter_row.rs2_as = e;
             adapter_row.rs2 = c;
 
             tracing_read(
@@ -212,7 +212,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
                 &mut adapter_row.reads_aux[1],
             )
         } else {
-            adapter_row.rs2_as == e;
+            adapter_row.rs2_as = e;
 
             tracing_read_imm(memory, c.as_canonical_u32(), &mut adapter_row.rs2)
         };

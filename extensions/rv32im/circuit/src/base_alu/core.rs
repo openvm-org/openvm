@@ -46,7 +46,7 @@ pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode_and_flag: T,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct BaseAluCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: BitwiseOperationLookupBus,
     pub offset: usize,
@@ -227,13 +227,11 @@ where
         let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
 
         let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
-        // TODO(ayush): remove
-        println!("{local_opcode:?} {rs1:?}, {rs2:?}: {rd:?}");
 
         let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.a = rs1.map(F::from_canonical_u8);
-        core_row.b = rs2.map(F::from_canonical_u8);
-        core_row.c = rd.map(F::from_canonical_u8);
+        core_row.a = rd.map(F::from_canonical_u8);
+        core_row.b = rs1.map(F::from_canonical_u8);
+        core_row.c = rs2.map(F::from_canonical_u8);
         core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
         core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
         core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);

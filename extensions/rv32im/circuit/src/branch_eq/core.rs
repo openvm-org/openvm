@@ -44,7 +44,7 @@ pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
     pub diff_inv_marker: [T; NUM_LIMBS],
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {
     offset: usize,
     pc_step: u32,
@@ -194,7 +194,7 @@ where
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {
-        let Instruction { opcode, c: imm, .. } = instruction;
+        let &Instruction { opcode, c: imm, .. } = instruction;
 
         let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
@@ -210,14 +210,14 @@ where
         core_row.a = rs1.map(F::from_canonical_u8);
         core_row.b = rs2.map(F::from_canonical_u8);
         core_row.cmp_result = F::from_bool(cmp_result);
-        core_row.imm = *imm;
+        core_row.imm = imm;
         core_row.opcode_beq_flag = F::from_bool(branch_eq_opcode == BranchEqualOpcode::BEQ);
         core_row.opcode_bne_flag = F::from_bool(branch_eq_opcode == BranchEqualOpcode::BNE);
         core_row.diff_inv_marker =
             array::from_fn(|i| if i == diff_idx { diff_inv_val } else { F::ZERO });
 
         if cmp_result {
-            *state.pc = state.pc.wrapping_add(imm.as_canonical_u32());
+            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
         } else {
             *state.pc = state.pc.wrapping_add(self.pc_step);
         }
@@ -250,7 +250,7 @@ where
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        let Instruction { opcode, c: imm, .. } = instruction;
+        let &Instruction { opcode, c: imm, .. } = instruction;
 
         let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
@@ -260,7 +260,9 @@ where
         let (cmp_result, _, _) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &rs1, &rs2);
 
         if cmp_result {
-            state.pc = state.pc.wrapping_add(imm.as_canonical_u32());
+            // TODO(ayush): verify this is fine
+            // state.pc = state.pc.wrapping_add(imm.as_canonical_u32());
+            state.pc = (F::from_canonical_u32(state.pc) + imm).as_canonical_u32();
         } else {
             state.pc = state.pc.wrapping_add(self.pc_step);
         }

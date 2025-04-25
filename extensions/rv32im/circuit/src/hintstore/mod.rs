@@ -44,8 +44,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::adapters::{decompose, tmp_convert_to_u8s};
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]

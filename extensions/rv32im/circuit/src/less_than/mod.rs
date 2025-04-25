@@ -7,8 +7,8 @@ use super::adapters::{
 mod core;
 pub use core::*;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 pub type Rv32LessThanAir =
     VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;

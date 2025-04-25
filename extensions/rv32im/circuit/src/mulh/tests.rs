@@ -36,6 +36,8 @@ use crate::{
     mulh::{MulHCoreCols, MulHStep, Rv32MulHChip},
 };
 
+const MAX_INS_CAPACITY: usize = 128;
+
 type F = BabyBear;
 
 //////////////////////////////////////////////////////////////////////////////////////

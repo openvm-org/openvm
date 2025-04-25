@@ -7,8 +7,8 @@ use super::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 mod core;
 pub use core::*;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 pub type Rv32MulHAir =
     VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;

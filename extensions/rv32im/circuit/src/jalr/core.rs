@@ -64,7 +64,7 @@ pub struct Rv32JalrCoreRecord<F> {
     pub imm_sign: F,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct Rv32JalrCoreAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
@@ -286,22 +286,42 @@ where
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
         let core_row: &mut Rv32JalrCoreCols<F> = core_row.borrow_mut();
 
         self.adapter.fill_trace_row(mem_helper, (), adapter_row);
 
+        // TODO(ayush): this shouldn't be here since it is generic on A
+        let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
+
+        // composed is the composition of 3 most significant limbs of rd
+        let composed = core_row
+            .rd_data
+            .iter()
+            .enumerate()
+            .fold(F::ZERO, |acc, (i, &val)| {
+                acc + val * F::from_canonical_u32(1 << ((i + 1) * RV32_CELL_BITS))
+            });
+
+        let least_sig_limb =
+            adapter_row.from_state.pc + F::from_canonical_u32(DEFAULT_PC_STEP) - composed;
+
+        let rd_data: [F; RV32_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
+            if i == 0 {
+                least_sig_limb
+            } else {
+                core_row.rd_data[i - 1]
+            }
+        });
+
         // TODO(ayush): avoid conversions
-        self.bitwise_lookup_chip.request_range(
-            core_row.rd_data[0].as_canonical_u32(),
-            core_row.rd_data[1].as_canonical_u32(),
-        );
+        self.bitwise_lookup_chip
+            .request_range(rd_data[0].as_canonical_u32(), rd_data[1].as_canonical_u32());
 
         self.range_checker_chip
-            .add_count(core_row.rd_data[2].as_canonical_u32(), RV32_CELL_BITS);
-        self.range_checker_chip.add_count(
-            core_row.rd_data[3].as_canonical_u32(),
-            PC_BITS - RV32_CELL_BITS * 3,
-        );
+            .add_count(rd_data[2].as_canonical_u32(), RV32_CELL_BITS);
+        self.range_checker_chip
+            .add_count(rd_data[3].as_canonical_u32(), PC_BITS - RV32_CELL_BITS * 3);
 
         self.range_checker_chip
             .add_count(core_row.to_pc_limbs[0].as_canonical_u32(), 15);

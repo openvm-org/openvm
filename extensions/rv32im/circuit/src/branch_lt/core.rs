@@ -60,7 +60,7 @@ pub struct BranchLessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
     pub diff_val: T,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct BranchLessThanCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: BitwiseOperationLookupBus,
     offset: usize,
@@ -259,7 +259,7 @@ where
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {
-        let Instruction { opcode, c: imm, .. } = instruction;
+        let &Instruction { opcode, c: imm, .. } = instruction;
 
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
@@ -330,7 +330,7 @@ where
         core_row.b = rs2.map(F::from_canonical_u8);
         core_row.cmp_result = F::from_bool(cmp_result);
         core_row.cmp_lt = F::from_bool(cmp_lt);
-        core_row.imm = *imm;
+        core_row.imm = imm;
         core_row.a_msb_f = a_msb_f;
         core_row.b_msb_f = b_msb_f;
         core_row.diff_marker = array::from_fn(|i| F::from_bool(i == diff_idx));
@@ -341,7 +341,7 @@ where
         core_row.opcode_bgeu_flag = F::from_bool(blt_opcode == BranchLessThanOpcode::BGEU);
 
         if cmp_result {
-            *state.pc = state.pc.wrapping_add(imm.as_canonical_u32());
+            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
         } else {
             *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         }
@@ -382,7 +382,7 @@ where
         state: &mut VmExecutionState<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        let Instruction { opcode, c: imm, .. } = instruction;
+        let &Instruction { opcode, c: imm, .. } = instruction;
 
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
@@ -392,7 +392,7 @@ where
         let (cmp_result, _, _, _) = run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &rs1, &rs2);
 
         if cmp_result {
-            state.pc = state.pc.wrapping_add(imm.as_canonical_u32());
+            state.pc = (F::from_canonical_u32(state.pc) + imm).as_canonical_u32();
         } else {
             state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         }
