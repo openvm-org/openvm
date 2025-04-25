@@ -168,7 +168,8 @@ mod tests {
 
     #[test]
     fn test_sqrt() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "sqrt")?;
+        let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
+        let elf = build_example_program_at_path(get_programs_dir!(), "sqrt", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -177,7 +178,6 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
         air_test(config, openvm_exe);
         Ok(())
     }

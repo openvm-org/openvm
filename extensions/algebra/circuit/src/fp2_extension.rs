@@ -36,7 +36,7 @@ impl Fp2Extension {
     pub fn generate_complex_init(&self, modular_config: &ModularExtension) -> String {
         fn get_index_of_modulus(modulus: &BigUint, modular_config: &ModularExtension) -> usize {
             modular_config
-                .supported_modulus
+                .supported_moduli
                 .iter()
                 .position(|m| m == modulus)
                 .expect("Modulus used in Fp2Extension not found in ModularExtension")
