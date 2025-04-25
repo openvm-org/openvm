@@ -54,7 +54,6 @@ snark-verifier = { workspace = true }
 snark-verifier-sdk.workspace = true
 tempfile.workspace = true
 hex.workspace = true
-num-bigint = { workspace = true }
 forge-fmt.workspace = true
 
 [features]
