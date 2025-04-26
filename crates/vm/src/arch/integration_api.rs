@@ -289,24 +289,24 @@ where
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
         let mut pc = from_state.pc;
-        let state = VmStateMut {
-            pc: &mut pc,
-            memory: &mut memory.memory,
-            ctx: &mut (),
-        };
-        let start_idx = self.buffer_idx;
-        self.buffer_idx += self.width;
-        if self.buffer_idx > self.trace_buffer.len() {
-            return Err(ExecutionError::TraceBufferOutOfBounds {
-                requested: self.buffer_idx,
-                capacity: self.trace_buffer.len(),
-            });
-        }
-        // SAFETY: bound checked above
-        let row_slice = unsafe {
-            self.trace_buffer
-                .get_unchecked_mut(start_idx..self.buffer_idx)
-        };
+        // let state = VmStateMut {
+        //     pc: &mut pc,
+        //     memory: &mut memory.memory,
+        //     ctx: &mut (),
+        // };
+        // let start_idx = self.buffer_idx;
+        // self.buffer_idx += self.width;
+        // if self.buffer_idx > self.trace_buffer.len() {
+        //     return Err(ExecutionError::TraceBufferOutOfBounds {
+        //         requested: self.buffer_idx,
+        //         capacity: self.trace_buffer.len(),
+        //     });
+        // }
+        // // SAFETY: bound checked above
+        // let row_slice = unsafe {
+        //     self.trace_buffer
+        //         .get_unchecked_mut(start_idx..self.buffer_idx)
+        // };
         // self.step.execute(state, instruction, row_slice)?;
 
         // TODO(ayush): this is temporary. fix
