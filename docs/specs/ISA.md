@@ -171,6 +171,9 @@ structures during runtime execution:
 - `hint_space`: a vector of vectors of field elements used to store hints during runtime execution
   via [phantom sub-instructions](#phantom-sub-instructions) such as `NativeHintLoad`. The outer `hint_space` vector is append-only, but
   each internal `hint_space[hint_id]` vector may be mutated, including deletions, by the host.
+- `kv_store`: a read-only key-value store for hints. Executors(e.g. `Rv32HintLoadByKey`) can read data from `kv_store` 
+  at runtime. `kv_store` is designed for general purposes so both key and value are byte arrays. Encoding of key/value
+  are decided by each executor. Users need to use the corresponding encoding when adding data to `kv_store`.
 
 These data structures are **not** part of the guest state, and their state depends on host behavior that cannot be determined by the guest.
 
@@ -204,7 +207,7 @@ which must satisfy the following conditions:
 - The execution has full read/write access to the data memory, except address space `0` must be read-only.
 - User public outputs can be set at any index in `[0, num_public_values)`. If continuations are disabled, a public
   value cannot be overwritten with a different value once it is set.
-- Input stream can only be popped from the front as a queue. Appends are not allowed.
+- Input stream can only be popped from the front as a queue.
 - Full read/write access to the hint stream.
 - Hint spaces can be read from at any index. Hint spaces may be mutated only by append.
 - The program counter is set to a new `to_pc` at the end of the instruction execution.
@@ -426,12 +429,12 @@ with user input-output.
 
 The RV32IM extension defines the following phantom sub-instructions.
 
-| Name           | Discriminant | Operands | Description                                                                                                                                                                                              |
-| -------------- | ------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rv32HintInput  | 0x20         | `_`      | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[(hint.len() as u32).to_le_bytes()), hint].concat()`.                                       |
-| Rv32PrintStr   | 0x21         | `a,b,_`  | Peeks at `[r32{0}(a)..r32{0}(a) + r32{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state. |
-| Rv32HintRandom | 0x22         | `a,_,_`  | Resets the hint stream to `4 * r32{0}(a)` random bytes. The source of randomness is the host operating system (`rand::rngs::OsRng`). Its result is not constrained in any way.                           |
-
+| Name              | Discriminant | Operands | Description                                                                                                                                                                                                  |
+|-------------------| ------------ | -------- |--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Rv32HintInput     | 0x20         | `_`      | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[(hint.len() as u32).to_le_bytes()), hint].concat()`.                                           |
+| Rv32PrintStr      | 0x21         | `a,b,_`  | Peeks at `[r32{0}(a)..r32{0}(a) + r32{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state.     |
+| Rv32HintRandom    | 0x22         | `a,_,_`  | Resets the hint stream to `4 * r32{0}(a)` random bytes. The source of randomness is the host operating system (`rand::rngs::OsRng`). Its result is not constrained in any way.                               |
+| Rv32HintLoadByKey | 0x23         | `a,b,_`  | Look up the value by key `[r32{0}{a}:r32{0}{b}]_2` and prepend the value into `input_stream`. Users should use `openvm-rv32im-guest::hint_load_by_key_encode` to encode the value when constructing inputs. |
 ### Native Extension
 
 The native extension operates over native field elements and has instructions tailored for STARK proof recursion. It
