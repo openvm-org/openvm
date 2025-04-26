@@ -2,7 +2,7 @@
 use clap::{Parser, ValueEnum};
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_circuit::arch::{instructions::exe::VmExe, SystemConfig, VmExecutor};
+use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -16,7 +16,7 @@ enum BuildProfile {
     Release,
 }
 
-const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
+// const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
     "fibonacci_recursive",

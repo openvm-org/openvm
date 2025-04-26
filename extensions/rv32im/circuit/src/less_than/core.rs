@@ -6,8 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
-        VmStateMut,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -353,14 +352,14 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
         let less_than_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (rs1, rs2) = self.adapter.read(&mut state.memory, instruction);
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction);
 
         // Run the comparison
         let (cmp_result, _, _, _) =
@@ -368,9 +367,9 @@ where
         let mut rd = [0u8; NUM_LIMBS];
         rd[0] = cmp_result as u8;
 
-        self.adapter.write(&mut state.memory, instruction, &rd);
+        self.adapter.write(state.memory, instruction, &rd);
 
-        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }

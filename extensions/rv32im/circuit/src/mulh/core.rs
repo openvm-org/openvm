@@ -6,8 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
-        VmStateMut,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -339,23 +338,23 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
         let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
-        let (rs1, rs2) = self.adapter.read(&mut state.memory, instruction);
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction);
         let rs1 = rs1.map(u32::from);
         let rs2 = rs2.map(u32::from);
 
         let (rd, _, _, _, _) = run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &rs1, &rs2);
         let rd = rd.map(|x| x as u8);
 
-        self.adapter.write(&mut state.memory, instruction, &rd);
+        self.adapter.write(state.memory, instruction, &rd);
 
-        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }

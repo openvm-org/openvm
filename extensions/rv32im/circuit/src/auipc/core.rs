@@ -6,8 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
-        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
-        VmStateMut,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -315,7 +314,7 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         let Instruction { opcode, c: imm, .. } = instruction;
@@ -324,11 +323,11 @@ where
             Rv32AuipcOpcode::from_usize(opcode.local_opcode_idx(Rv32AuipcOpcode::CLASS_OFFSET));
 
         let imm = imm.as_canonical_u32();
-        let rd = run_auipc(local_opcode, state.pc, imm);
+        let rd = run_auipc(local_opcode, *state.pc, imm);
 
-        self.adapter.write(&mut state.memory, instruction, &rd);
+        self.adapter.write(state.memory, instruction, &rd);
 
-        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }

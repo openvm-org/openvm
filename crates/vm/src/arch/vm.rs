@@ -25,10 +25,7 @@ use super::{
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, segment::TracegenVmSegmentExecutor,
-        TracegenVmExecutionState,
-    },
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, segment::TracegenVmSegmentExecutor},
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
@@ -240,15 +237,9 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
-            from_state.pc,
-            segment.chip_complex.memory_controller(),
-        );
-        metrics_span("execute_time_ms", || {
-            segment.execute_from_state(&mut vm_state)
-        })?;
+        let state = metrics_span("execute_time_ms", || segment.execute_from_pc(from_state.pc))?;
 
-        if vm_state.terminated {
+        if state.is_terminated {
             return Ok(VmExecutorOneSegmentResult {
                 segment,
                 next_state: None,
@@ -260,7 +251,7 @@ where
             "multiple segments require to enable continuations"
         );
         assert_eq!(
-            vm_state.pc,
+            state.pc,
             segment.chip_complex.connector_chip().boundary_states[1]
                 .unwrap()
                 .pc
@@ -275,7 +266,7 @@ where
             next_state: Some(VmExecutorNextSegmentState {
                 memory: final_memory,
                 input: streams,
-                pc: vm_state.pc,
+                pc: state.pc,
                 #[cfg(feature = "bench-metrics")]
                 metrics,
             }),
@@ -486,13 +477,7 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
-            exe.pc_start,
-            segment.chip_complex.memory_controller(),
-        );
-        metrics_span("execute_time_ms", || {
-            segment.execute_from_state(&mut vm_state)
-        })?;
+        metrics_span("execute_time_ms", || segment.execute_from_pc(exe.pc_start))?;
         Ok(segment)
     }
 }

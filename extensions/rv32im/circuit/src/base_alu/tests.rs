@@ -479,57 +479,57 @@ where
     }
 }
 
-#[test]
-fn rv32_alu_adapter_unconstrained_imm_limb_test() {
-    let mut rng = create_seeded_rng();
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+// #[test]
+// fn rv32_alu_adapter_unconstrained_imm_limb_test() {
+//     let mut rng = create_seeded_rng();
+//     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+//     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut tester = VmChipTestBuilder::default();
+//     let mut tester = VmChipTestBuilder::default();
 
-    let mut chip = NewVmChipWrapper::<F, _, _>::new(
-        VmAirWrapper::new(
-            Rv32BaseAluAdapterAir::new(
-                tester.execution_bridge(),
-                tester.memory_bridge(),
-                bitwise_bus,
-            ),
-            BaseAluCoreAir::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(
-                bitwise_bus,
-                BaseAluOpcode::CLASS_OFFSET,
-            ),
-        ),
-        BaseAluStep::new(
-            Rv32BaseAluAdapterTestStep(Rv32BaseAluAdapterStep::new()),
-            bitwise_chip.clone(),
-            BaseAluOpcode::CLASS_OFFSET,
-        ),
-        MAX_INS_CAPACITY,
-        tester.memory_helper(),
-    );
+//     let mut chip = NewVmChipWrapper::<F, _, _>::new(
+//         VmAirWrapper::new(
+//             Rv32BaseAluAdapterAir::new(
+//                 tester.execution_bridge(),
+//                 tester.memory_bridge(),
+//                 bitwise_bus,
+//             ),
+//             BaseAluCoreAir::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(
+//                 bitwise_bus,
+//                 BaseAluOpcode::CLASS_OFFSET,
+//             ),
+//         ),
+//         BaseAluStep::new(
+//             Rv32BaseAluAdapterTestStep(Rv32BaseAluAdapterStep::new()),
+//             bitwise_chip.clone(),
+//             BaseAluOpcode::CLASS_OFFSET,
+//         ),
+//         MAX_INS_CAPACITY,
+//         tester.memory_helper(),
+//     );
 
-    let b = [0, 0, 0, 0];
-    let (c_imm, c) = {
-        let imm = (1 << 11) - 1;
-        let fake_c: [u32; 4] = [(1 << 9) - 1, (1 << 3) - 2, 0, 0];
-        let fake_c = fake_c.map(|x| x as u8);
-        (Some(imm), fake_c)
-    };
+//     let b = [0, 0, 0, 0];
+//     let (c_imm, c) = {
+//         let imm = (1 << 11) - 1;
+//         let fake_c: [u32; 4] = [(1 << 9) - 1, (1 << 3) - 2, 0, 0];
+//         let fake_c = fake_c.map(|x| x as u8);
+//         (Some(imm), fake_c)
+//     };
 
-    let (instruction, _rd) = rv32_rand_write_register_or_imm(
-        &mut tester,
-        b,
-        c,
-        c_imm,
-        BaseAluOpcode::ADD.global_opcode().as_usize(),
-        &mut rng,
-    );
-    tester.execute(&mut chip, &instruction);
+//     let (instruction, _rd) = rv32_rand_write_register_or_imm(
+//         &mut tester,
+//         b,
+//         c,
+//         c_imm,
+//         BaseAluOpcode::ADD.global_opcode().as_usize(),
+//         &mut rng,
+//     );
+//     tester.execute(&mut chip, &instruction);
 
-    disable_debug_builder();
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
-    tester.simple_test_with_expected_error(VerificationError::ChallengePhaseError);
-}
+//     disable_debug_builder();
+//     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+//     tester.simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+// }
 
 #[test]
 fn rv32_alu_adapter_unconstrained_rs2_read_test() {

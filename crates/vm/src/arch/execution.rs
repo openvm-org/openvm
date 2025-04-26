@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{Streams, VmExecutionState};
+use super::Streams;
 use crate::system::{
     memory::{
         online::{GuestMemory, TracingMemory},
@@ -79,6 +79,7 @@ pub enum ExecutionError {
 /// Global VM state accessible during instruction execution.
 /// The state is generic in guest memory `MEM` and additional host state `CTX`.
 /// The host state is execution context specific.
+#[derive(derive_new::new)]
 pub struct VmStateMut<'a, MEM, CTX> {
     pub pc: &'a mut u32,
     pub memory: &'a mut MEM,
@@ -118,7 +119,7 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>;
 }

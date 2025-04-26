@@ -3,8 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
-        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
-        VmStateMut,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -264,7 +263,7 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         let Instruction { opcode, c: imm, .. } = instruction;
@@ -272,17 +271,24 @@ where
         let local_opcode =
             Rv32JalLuiOpcode::from_usize(opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET));
 
-        let imm = imm.as_canonical_u32();
+        let imm_f = imm.as_canonical_u32();
         let signed_imm = match local_opcode {
-            JAL => (imm + (1 << (RV_J_TYPE_IMM_BITS - 1))) as i32 - (1 << (RV_J_TYPE_IMM_BITS - 1)),
-            LUI => imm as i32,
+            JAL => {
+                if imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)) {
+                    imm_f as i32
+                } else {
+                    let neg_imm_f = F::ORDER_U32 - imm_f;
+                    debug_assert!(neg_imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)));
+                    -(neg_imm_f as i32)
+                }
+            }
+            LUI => imm_f as i32,
         };
+        let (to_pc, rd) = run_jal_lui(local_opcode, *state.pc, signed_imm);
 
-        let (to_pc, rd) = run_jal_lui(local_opcode, state.pc, signed_imm);
+        self.adapter.write(state.memory, instruction, &rd);
 
-        self.adapter.write(&mut state.memory, instruction, &rd);
-
-        state.pc = to_pc;
+        *state.pc = to_pc;
 
         Ok(())
     }

@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, SingleTraceStep,
-        StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
+        StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -313,7 +313,7 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
@@ -322,7 +322,7 @@ where
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        let ((_, read_data), shift_amount) = self.adapter.read(&mut state.memory, instruction);
+        let ((_, read_data), shift_amount) = self.adapter.read(state.memory, instruction);
         let read_data = read_data.map(F::from_canonical_u8);
 
         // TODO(ayush): clean this up for e1
@@ -334,10 +334,9 @@ where
         );
         let write_data = write_data.map(|x| x.as_canonical_u32() as u8);
 
-        self.adapter
-            .write(&mut state.memory, instruction, &write_data);
+        self.adapter.write(state.memory, instruction, &write_data);
 
-        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }

@@ -22,12 +22,12 @@ use openvm_stark_backend::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
-    ExecutionError, ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmExecutionState,
-    VmStateMut,
+    ExecutionError, ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut,
 };
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},
-    MemoryAuxColsFactory, MemoryController, OfflineMemory, SharedMemoryHelper,
+    AddressMap, MemoryAuxColsFactory, MemoryController, OfflineMemory, SharedMemoryHelper,
+    PAGE_SIZE,
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -279,7 +279,8 @@ where
 impl<F, AIR, STEP> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP>
 where
     F: PrimeField32,
-    STEP: SingleTraceStep<F, ()>, // TODO: CTX?
+    STEP: SingleTraceStep<F, ()> // TODO: CTX?
+        + StepExecutorE1<AddressMap<PAGE_SIZE>, (), F>, // TODO(ayush): remove hardcode
 {
     fn execute(
         &mut self,
@@ -306,7 +307,16 @@ where
             self.trace_buffer
                 .get_unchecked_mut(start_idx..self.buffer_idx)
         };
-        self.step.execute(state, instruction, row_slice)?;
+        // self.step.execute(state, instruction, row_slice)?;
+
+        // TODO(ayush): this is temporary. fix
+        let state = VmStateMut {
+            pc: &mut pc,
+            memory: &mut memory.memory.data,
+            ctx: &mut (),
+        };
+        self.step.execute_e1(state, instruction)?;
+
         Ok(ExecutionState {
             pc,
             timestamp: memory.memory.timestamp,
@@ -436,7 +446,7 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>;
 }
@@ -503,7 +513,7 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         self.core.execute_e1(state, instruction)
@@ -518,7 +528,7 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         self.step.execute_e1(state, instruction)

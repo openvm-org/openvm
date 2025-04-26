@@ -6,8 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, SignedImmInstruction,
-        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
-        VmStateMut,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -343,7 +342,7 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         let Instruction { opcode, c, g, .. } = instruction;
@@ -351,7 +350,7 @@ where
         let local_opcode =
             Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(Rv32JalrOpcode::CLASS_OFFSET));
 
-        let rs1 = self.adapter.read(&mut state.memory, instruction);
+        let rs1 = self.adapter.read(state.memory, instruction);
         let rs1 = u32::from_le_bytes(rs1);
 
         let imm = c.as_canonical_u32();
@@ -359,12 +358,12 @@ where
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         // TODO(ayush): should this be [u8; 4]?
-        let (to_pc, rd) = run_jalr(local_opcode, state.pc, imm_extended, rs1);
+        let (to_pc, rd) = run_jalr(local_opcode, *state.pc, imm_extended, rs1);
         let rd = rd.map(|x| x as u8);
 
-        self.adapter.write(&mut state.memory, instruction, &rd);
+        self.adapter.write(state.memory, instruction, &rd);
 
-        state.pc = to_pc;
+        *state.pc = to_pc;
 
         Ok(())
     }

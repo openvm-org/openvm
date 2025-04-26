@@ -291,14 +291,17 @@ where
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
             unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
 
-        let rs2 = if e.as_canonical_u32() == RV32_IMM_AS {
-            let imm = c.as_canonical_u32();
-            debug_assert_eq!(imm >> 24, 0);
-            imm.to_le_bytes()
-        } else {
+        let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
             let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
                 unsafe { memory.read(e.as_canonical_u32(), c.as_canonical_u32()) };
             rs2
+        } else {
+            let imm = c.as_canonical_u32();
+            debug_assert_eq!(imm >> 24, 0);
+            // TODO(ayush): why this?
+            let mut imm_le = imm.to_le_bytes();
+            imm_le[3] = imm_le[2];
+            imm_le
         };
 
         (rs1, rs2)

@@ -6,8 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
-        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmExecutionState,
-        VmStateMut,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -379,22 +378,22 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (rs1, rs2) = self.adapter.read(&mut state.memory, instruction);
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction);
 
         // TODO(ayush): probably don't need the other values
         let (cmp_result, _, _, _) = run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &rs1, &rs2);
 
         if cmp_result {
-            state.pc = (F::from_canonical_u32(state.pc) + imm).as_canonical_u32();
+            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
         } else {
-            state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+            *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         }
 
         Ok(())
