@@ -15,7 +15,7 @@ use openvm_stark_backend::{
 use program::Program;
 
 use super::{
-    execution_control::{ExecutionControl, TracegenExecutionControl},
+    execution_control::{E1ExecutionControl, ExecutionControl, TracegenExecutionControl},
     ExecutionError, GenerationError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
     VmConfig, VmStateMut,
 };
@@ -23,7 +23,10 @@ use super::{
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
-    system::memory::{online::GuestMemory, paged_vec::PAGE_SIZE, AddressMap, MemoryImage},
+    system::{
+        connector::DEFAULT_SUSPEND_EXIT_CODE,
+        memory::{online::GuestMemory, paged_vec::PAGE_SIZE, AddressMap, MemoryImage},
+    },
 };
 
 pub struct VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
@@ -46,6 +49,9 @@ where
     pub metrics: VmMetrics,
 }
 
+pub type E1VmSegmentExecutor<F, VC> =
+    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, (), E1ExecutionControl>;
+
 // pub struct TracegenCtx;
 pub type TracegenCtx = ();
 pub type TracegenVmStateMut<'a> = VmStateMut<'a, AddressMap<PAGE_SIZE>, TracegenCtx>;
@@ -56,6 +62,7 @@ pub type TracegenVmSegmentExecutor<F, VC> =
 #[derive(derive_new::new)]
 pub struct ExecutionSegmentState {
     pub pc: u32,
+    pub exit_code: u32,
     pub is_terminated: bool,
 }
 
@@ -121,17 +128,20 @@ where
         // Call the pre-execution hook
         self.control.on_segment_start(pc, &mut self.chip_complex);
 
-        let mut state = ExecutionSegmentState::new(pc, false);
+        let mut state = ExecutionSegmentState::new(pc, 0, false);
         loop {
             // Fetch, decode and execute single instruction
             let terminated_exit_code = self.execute_instruction(&mut state, &mut prev_backtrace)?;
 
             if let Some(exit_code) = terminated_exit_code {
+                state.is_terminated = true;
+                state.exit_code = exit_code;
                 self.control
                     .on_terminate(state.pc, &mut self.chip_complex, exit_code);
                 break;
             }
             if self.should_stop() {
+                state.exit_code = DEFAULT_SUSPEND_EXIT_CODE;
                 self.control
                     .on_segment_end(state.pc, &mut self.chip_complex);
                 break;
@@ -160,11 +170,6 @@ where
 
         // Handle termination instruction
         if opcode == SystemOpcode::TERMINATE.global_opcode() {
-            self.chip_complex.connector_chip_mut().end(
-                ExecutionState::new(pc, timestamp),
-                Some(c.as_canonical_u32()),
-            );
-            state.is_terminated = true;
             return Ok(Some(c.as_canonical_u32()));
         }
 

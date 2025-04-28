@@ -575,9 +575,8 @@ where
     }
 }
 
-impl<Mem, F> AdapterExecutorE1<Mem, F> for Rv32LoadStoreAdapterStep
+impl<F> AdapterExecutorE1<F> for Rv32LoadStoreAdapterStep
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     // TODO(ayush): directly use u32
@@ -587,7 +586,10 @@ where
     );
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
-    fn read(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    where
+        Mem: GuestMemory,
+    {
         let Instruction {
             opcode,
             a,
@@ -644,7 +646,10 @@ where
         ((prev_data, read_data), shift_amount)
     }
 
-    fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData) {
+    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
+    where
+        Mem: GuestMemory,
+    {
         // TODO(ayush): remove duplication with read
         let &Instruction {
             opcode,

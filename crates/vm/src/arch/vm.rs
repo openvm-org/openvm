@@ -19,13 +19,16 @@ use thiserror::Error;
 use tracing::info_span;
 
 use super::{
-    ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
-    PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+    ExecutionError, InsExecutorE1, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID,
+    MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, segment::TracegenVmSegmentExecutor},
+    arch::{
+        hasher::poseidon2::vm_poseidon2_hasher, segment::TracegenVmSegmentExecutor,
+        E1VmSegmentExecutor,
+    },
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
@@ -301,6 +304,80 @@ where
         Ok(final_memory)
     }
 
+    pub fn execute_e1(
+        &self,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
+    ) -> Result<(), ExecutionError>
+    where
+        VC::Executor: InsExecutorE1<F>,
+    {
+        let mem_config = self.config.system().memory_config;
+        let exe = exe.into();
+        let memory = AddressMap::from_sparse(
+            mem_config.as_offset,
+            1 << mem_config.as_height,
+            1 << mem_config.pointer_max_bits,
+            exe.init_memory.clone(),
+        );
+
+        let pc = exe.pc_start;
+        let mut state = VmExecutorNextSegmentState::new(memory, input, pc);
+        let mut segment_idx = 0;
+
+        loop {
+            let _span = info_span!("execute_segment", segment = segment_idx).entered();
+
+            let mut segment = E1VmSegmentExecutor::new(
+                &self.config,
+                exe.program.clone(),
+                state.input,
+                Some(state.memory),
+                self.trace_height_constraints.clone(),
+                exe.fn_bounds.clone(),
+            );
+            #[cfg(feature = "bench-metrics")]
+            {
+                segment.metrics = state.metrics;
+            }
+
+            let exec_state = metrics_span("execute_time_ms", || segment.execute_from_pc(state.pc))?;
+
+            if exec_state.is_terminated {
+                // Check exit code for the final segment
+                if exec_state.exit_code != ExitCode::Success as u32 {
+                    return Err(ExecutionError::FailedWithExitCode(exec_state.exit_code));
+                }
+                tracing::debug!("Execution completed in {} segments", segment_idx + 1);
+                #[cfg(feature = "bench-metrics")]
+                metrics::counter!("num_segments").absolute((segment_idx + 1) as u64);
+                return Ok(());
+            }
+
+            assert!(
+                self.continuation_enabled(),
+                "multiple segments require to enable continuations"
+            );
+
+            let final_memory = mem::take(&mut segment.control.final_memory)
+                .expect("final memory should be set in continuations segment");
+            let streams = segment.chip_complex.take_streams();
+
+            #[cfg(feature = "bench-metrics")]
+            let metrics = segment.metrics.partial_take();
+
+            state = VmExecutorNextSegmentState {
+                memory: final_memory,
+                input: streams,
+                pc: exec_state.pc,
+                #[cfg(feature = "bench-metrics")]
+                metrics,
+            };
+
+            segment_idx += 1;
+        }
+    }
+
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
         exe: impl Into<VmExe<F>>,
@@ -432,7 +509,7 @@ where
         let air_heights = segment.chip_complex.current_trace_heights();
         let vm_heights = segment.chip_complex.get_internal_trace_heights();
         let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {
-            pv_chip.core.get_custom_public_values()
+            pv_chip.step.get_custom_public_values()
         } else {
             vec![]
         };

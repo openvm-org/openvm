@@ -271,9 +271,8 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     }
 }
 
-impl<Mem, F, const LIMB_BITS: usize> AdapterExecutorE1<Mem, F> for Rv32BaseAluAdapterStep<LIMB_BITS>
+impl<F, const LIMB_BITS: usize> AdapterExecutorE1<F> for Rv32BaseAluAdapterStep<LIMB_BITS>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     // TODO(ayush): directly use u32
@@ -281,7 +280,10 @@ where
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     #[inline(always)]
-    fn read(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    where
+        Mem: GuestMemory,
+    {
         let Instruction { b, c, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -309,7 +311,10 @@ where
     }
 
     #[inline(always)]
-    fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
+    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData)
+    where
+        Mem: GuestMemory,
+    {
         let Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);

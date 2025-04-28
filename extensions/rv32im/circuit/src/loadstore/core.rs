@@ -362,24 +362,24 @@ where
     }
 }
 
-impl<Mem, Ctx, F, A, const NUM_CELLS: usize> StepExecutorE1<Mem, Ctx, F>
-    for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for LoadStoreStep<A, NUM_CELLS>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterExecutorE1<
-            Mem,
             F,
             ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u32),
             WriteData = [u8; NUM_CELLS],
         >,
 {
-    fn execute_e1(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
         state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
         let Instruction { opcode, .. } = instruction;
 
         // Get the local opcode for this instruction

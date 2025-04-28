@@ -202,9 +202,8 @@ where
     }
 }
 
-impl<Mem, F> AdapterExecutorE1<Mem, F> for Rv32BranchAdapterStep
+impl<F> AdapterExecutorE1<F> for Rv32BranchAdapterStep
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     // TODO(ayush): directly use u32
@@ -212,7 +211,10 @@ where
     type WriteData = ();
 
     #[inline(always)]
-    fn read(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    where
+        Mem: GuestMemory,
+    {
         let Instruction { a, b, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -227,5 +229,9 @@ where
     }
 
     #[inline(always)]
-    fn write(&self, _memory: &mut Mem, _instruction: &Instruction<F>, _data: &Self::WriteData) {}
+    fn write<Mem>(&self, _memory: &mut Mem, _instruction: &Instruction<F>, _data: &Self::WriteData)
+    where
+        Mem: GuestMemory,
+    {
+    }
 }

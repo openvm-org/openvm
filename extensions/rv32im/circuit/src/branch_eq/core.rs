@@ -231,24 +231,20 @@ where
     }
 }
 
-impl<Mem, Ctx, F, A, const NUM_LIMBS: usize> StepExecutorE1<Mem, Ctx, F>
-    for BranchEqualStep<A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> StepExecutorE1<F> for BranchEqualStep<A, NUM_LIMBS>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterExecutorE1<
-            Mem,
-            F,
-            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
-            WriteData = (),
-        >,
+        + for<'a> AdapterExecutorE1<F, ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]), WriteData = ()>,
 {
-    fn execute_e1(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
         state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));

@@ -280,7 +280,7 @@ impl<F, AIR, STEP> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP>
 where
     F: PrimeField32,
     STEP: SingleTraceStep<F, ()> // TODO: CTX?
-        + StepExecutorE1<AddressMap<PAGE_SIZE>, (), F>, // TODO(ayush): remove hardcode
+        + StepExecutorE1<F>,
 {
     fn execute(
         &mut self,
@@ -426,29 +426,31 @@ pub trait AdapterTraceStep<F, CTX> {
     );
 }
 
-pub trait AdapterExecutorE1<Mem, F>
+pub trait AdapterExecutorE1<F>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     type ReadData;
     type WriteData;
 
-    fn read(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData;
+    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    where
+        Mem: GuestMemory;
 
-    fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData);
+    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
+    where
+        Mem: GuestMemory;
 }
 
 // TODO: Rename core/step to operator
-pub trait StepExecutorE1<Mem, Ctx, F>
-where
-    Mem: GuestMemory,
-{
-    fn execute_e1(
+pub trait StepExecutorE1<F> {
+    fn execute_e1<Mem, Ctx>(
         &mut self,
         state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>;
+    ) -> Result<()>
+    where
+        Mem: GuestMemory;
 }
 
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {
@@ -504,33 +506,37 @@ where
 }
 
 // // TODO(ayush): delete
-impl<Mem, Ctx, F, A, M> InsExecutorE1<Mem, Ctx, F> for VmChipWrapper<F, A, M>
+impl<F, A, M> InsExecutorE1<F> for VmChipWrapper<F, A, M>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
     A: VmAdapterChip<F> + Send + Sync,
-    M: VmCoreChip<F, A::Interface> + StepExecutorE1<Mem, Ctx, F> + Send + Sync,
+    M: VmCoreChip<F, A::Interface> + StepExecutorE1<F> + Send + Sync,
 {
-    fn execute_e1(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
         state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
         self.core.execute_e1(state, instruction)
     }
 }
 
-impl<Mem, Ctx, F, A, S> InsExecutorE1<Mem, Ctx, F> for NewVmChipWrapper<F, A, S>
+impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
-    S: StepExecutorE1<Mem, Ctx, F>,
+    S: StepExecutorE1<F>,
 {
-    fn execute_e1(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
         state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
         self.step.execute_e1(state, instruction)
     }
 }

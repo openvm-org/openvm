@@ -125,7 +125,7 @@ fn main() -> Result<()> {
 
             let executor = VmExecutor::new(vm_config);
             executor
-                .execute(exe, vec![])
+                .execute_e1(exe, vec![])
                 .expect("Failed to execute program");
             tracing::info!("Completed program: {}", program);
         }

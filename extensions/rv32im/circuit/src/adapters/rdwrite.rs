@@ -265,17 +265,25 @@ where
     }
 }
 
-impl<Mem, F> AdapterExecutorE1<Mem, F> for Rv32RdWriteAdapterStep
+impl<F> AdapterExecutorE1<F> for Rv32RdWriteAdapterStep
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     type ReadData = ();
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
-    fn read(&self, _memory: &mut Mem, _instruction: &Instruction<F>) -> Self::ReadData {}
+    #[inline(always)]
+    fn read<Mem>(&self, _memory: &mut Mem, _instruction: &Instruction<F>) -> Self::ReadData
+    where
+        Mem: GuestMemory,
+    {
+    }
 
-    fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
+    #[inline(always)]
+    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData)
+    where
+        Mem: GuestMemory,
+    {
         let Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -374,29 +382,30 @@ where
     }
 }
 
-impl<Mem, F> AdapterExecutorE1<Mem, F> for Rv32CondRdWriteAdapterStep
+impl<F> AdapterExecutorE1<F> for Rv32CondRdWriteAdapterStep
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     type ReadData = ();
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     #[inline(always)]
-    fn read(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
-        <Rv32RdWriteAdapterStep as AdapterExecutorE1<Mem, F>>::read(
-            &self.inner,
-            memory,
-            instruction,
-        )
+    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    where
+        Mem: GuestMemory,
+    {
+        <Rv32RdWriteAdapterStep as AdapterExecutorE1<F>>::read(&self.inner, memory, instruction)
     }
 
     #[inline(always)]
-    fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
+    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData)
+    where
+        Mem: GuestMemory,
+    {
         let Instruction { f: enabled, .. } = instruction;
 
         if *enabled != F::ZERO {
-            <Rv32RdWriteAdapterStep as AdapterExecutorE1<Mem, F>>::write(
+            <Rv32RdWriteAdapterStep as AdapterExecutorE1<F>>::write(
                 &self.inner,
                 memory,
                 instruction,

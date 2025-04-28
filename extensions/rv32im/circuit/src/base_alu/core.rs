@@ -267,24 +267,25 @@ where
     }
 }
 
-impl<Mem, Ctx, F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<Mem, Ctx, F>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
     for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterExecutorE1<
-            Mem,
             F,
             ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
             WriteData = [u8; NUM_LIMBS],
         >,
 {
-    fn execute_e1(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
         state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));

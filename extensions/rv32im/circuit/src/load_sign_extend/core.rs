@@ -298,24 +298,25 @@ where
     }
 }
 
-impl<Mem, Ctx, F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> StepExecutorE1<Mem, Ctx, F>
+impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
     for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterExecutorE1<
-            Mem,
             F,
             ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u32),
             WriteData = [u8; NUM_CELLS],
         >,
 {
-    fn execute_e1(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
         state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(

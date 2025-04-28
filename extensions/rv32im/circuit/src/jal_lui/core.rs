@@ -254,18 +254,20 @@ where
     }
 }
 
-impl<Mem, Ctx, F, A> StepExecutorE1<Mem, Ctx, F> for Rv32JalLuiStep<A>
+impl<F, A> StepExecutorE1<F> for Rv32JalLuiStep<A>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterExecutorE1<Mem, F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
+        + for<'a> AdapterExecutorE1<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
-    fn execute_e1(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
         state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
         let Instruction { opcode, c: imm, .. } = instruction;
 
         let local_opcode =
