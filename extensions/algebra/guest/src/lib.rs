@@ -63,8 +63,6 @@ pub use openvm_rv32im_guest;
 pub use serde_big_array::BigArray;
 use strum_macros::FromRepr;
 
-/// Field traits
-pub mod field;
 /// Implementation of this library's traits on halo2curves types.
 /// Used for testing and also VM runtime execution.
 /// These should **only** be importable on a host machine.
@@ -73,6 +71,8 @@ mod halo2curves;
 
 /// Exponentiation by bytes
 mod exp_bytes;
+/// Field traits
+pub mod field;
 pub use exp_bytes::*;
 pub use once_cell;
 
