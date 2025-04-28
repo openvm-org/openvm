@@ -3,7 +3,9 @@ use std::io::{self, Cursor, Read, Result, Write};
 use openvm_circuit::{
     arch::ContinuationVmProof, system::memory::tree::public_values::UserPublicValuesProof,
 };
-use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+use openvm_continuations::verifier::{
+    internal::types::E2eStarkProof, root::types::RootVmVerifierInput,
+};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::{InnerBatchOpening, InnerFriProof, InnerQueryProof};
 use openvm_stark_backend::{
@@ -17,7 +19,6 @@ use openvm_stark_backend::{
 use p3_fri::CommitPhaseProofStep;
 
 use super::{F, SC};
-use crate::types::E2eStarkProof; // BabyBearPoseidon2Config
 
 type Challenge = BinomialExtensionField<F, 4>;
 
@@ -60,7 +61,7 @@ impl Encode for ContinuationVmProof<SC> {
     }
 }
 
-impl Encode for E2eStarkProof {
+impl Encode for E2eStarkProof<SC> {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
         self.proof.encode(writer)?;
         encode_slice(&self.user_public_values, writer)
@@ -331,7 +332,7 @@ impl Decode for ContinuationVmProof<SC> {
     }
 }
 
-impl Decode for E2eStarkProof {
+impl Decode for E2eStarkProof<SC> {
     fn decode<R: Read>(reader: &mut R) -> Result<Self> {
         let proof = Proof::decode(reader)?;
         let user_public_values = decode_vec(reader)?;

@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use openvm_circuit::arch::ContinuationVmProof;
 use openvm_continuations::verifier::{
-    internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
+    internal::types::{E2eStarkProof, InternalVmVerifierInput},
+    leaf::types::LeafVmVerifierInput,
     root::types::RootVmVerifierInput,
 };
 use openvm_native_circuit::NativeConfig;
@@ -18,7 +19,6 @@ use crate::{
         vm::{local::VmLocalProver, SingleSegmentVmProver},
         RootVerifierLocalProver,
     },
-    types::E2eStarkProof,
     NonRootCommittedExe, RootSC, F, SC,
 };
 
@@ -104,7 +104,7 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
         &self,
         leaf_proofs: Vec<Proof<SC>>,
         public_values: Vec<F>,
-    ) -> E2eStarkProof {
+    ) -> E2eStarkProof<SC> {
         let mut internal_node_idx = -1;
         let mut internal_node_height = 0;
         let mut proofs = leaf_proofs;
@@ -147,7 +147,10 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
     }
 
     /// Wrap the e2e stark proof until its heights meet the requirements of the root verifier.
-    pub fn wrap_e2e_stark_proof(&self, e2e_stark_proof: E2eStarkProof) -> RootVmVerifierInput<SC> {
+    pub fn wrap_e2e_stark_proof(
+        &self,
+        e2e_stark_proof: E2eStarkProof<SC>,
+    ) -> RootVmVerifierInput<SC> {
         let internal_commit = self
             .internal_prover
             .committed_exe
@@ -211,7 +214,7 @@ pub fn wrap_e2e_stark_proof<E: StarkFriEngine<SC>>(
     root_prover: &RootVerifierLocalProver,
     internal_commit: [F; DIGEST_SIZE],
     max_internal_wrapper_layers: usize,
-    e2e_stark_proof: E2eStarkProof,
+    e2e_stark_proof: E2eStarkProof<SC>,
 ) -> RootVmVerifierInput<SC> {
     let E2eStarkProof {
         mut proof,

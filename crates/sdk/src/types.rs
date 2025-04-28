@@ -1,9 +1,7 @@
 use std::iter::{once, repeat};
 
 use itertools::Itertools;
-use openvm_continuations::{F, SC};
 use openvm_native_recursion::halo2::{wrapper::EvmVerifierByteCode, Fr, RawEvmProof};
-use openvm_stark_backend::proof::Proof;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use thiserror::Error;
@@ -49,12 +47,6 @@ pub struct EvmProof {
     pub user_public_values: Vec<u8>,
     /// The concatenation of `accumulator` and `proof`.
     pub proof_data: ProofData,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct E2eStarkProof {
-    pub proof: Proof<SC>,
-    pub user_public_values: Vec<F>,
 }
 
 #[derive(Debug, Error)]

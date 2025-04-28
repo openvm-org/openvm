@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::VmConfig;
-use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+use openvm_continuations::verifier::{
+    internal::types::E2eStarkProof, root::types::RootVmVerifierInput,
+};
 use openvm_stark_backend::{proof::Proof, Chip};
 use openvm_stark_sdk::engine::StarkFriEngine;
 
@@ -9,7 +11,6 @@ use crate::{
     config::AggregationTreeConfig,
     keygen::{AggStarkProvingKey, AppProvingKey},
     prover::{agg::AggStarkProver, app::AppProver},
-    types::E2eStarkProof,
     NonRootCommittedExe, RootSC, StdIn, F, SC,
 };
 
@@ -70,7 +71,7 @@ impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
         self.agg_prover.generate_root_verifier_input(app_proof)
     }
 
-    pub fn generate_e2e_stark_proof(&self, input: StdIn) -> E2eStarkProof
+    pub fn generate_e2e_stark_proof(&self, input: StdIn) -> E2eStarkProof<SC>
     where
         VC: VmConfig<F>,
         VC::Executor: Chip<SC>,
