@@ -5,6 +5,10 @@ mod bn254 {
     use std::iter;
 
     use eyre::Result;
+    use halo2curves_axiom::{
+        bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
+        ff::Field,
+    };
     use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::{
@@ -14,10 +18,6 @@ mod bn254 {
     use openvm_ecc_circuit::WeierstrassExtension;
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
-        halo2curves::{
-            bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
-            ff::Field,
-        },
         AffinePoint,
     };
     use openvm_instructions::exe::VmExe;
@@ -425,6 +425,10 @@ mod bn254 {
 #[cfg(test)]
 mod bls12_381 {
     use eyre::Result;
+    use halo2curves_axiom::{
+        bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
+        ff::Field,
+    };
     use num_bigint::BigUint;
     use num_traits::{self, FromPrimitive};
     use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
@@ -436,10 +440,6 @@ mod bls12_381 {
     use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
-        halo2curves::{
-            bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
-            ff::Field,
-        },
         AffinePoint,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
