@@ -382,6 +382,7 @@ where
     type ReadData = ();
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
+    #[inline(always)]
     fn read(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
         <Rv32RdWriteAdapterStep as AdapterExecutorE1<Mem, F>>::read(
             &self.inner,
@@ -390,6 +391,7 @@ where
         )
     }
 
+    #[inline(always)]
     fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
         let Instruction { f: enabled, .. } = instruction;
 

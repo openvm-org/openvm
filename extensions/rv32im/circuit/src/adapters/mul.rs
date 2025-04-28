@@ -244,6 +244,7 @@ where
     type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
+    #[inline(always)]
     fn read(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { b, c, d, .. } = instruction;
 
@@ -257,6 +258,7 @@ where
         (rs1, rs2)
     }
 
+    #[inline(always)]
     fn write(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData) {
         let Instruction { a, d, .. } = *instruction;
 
