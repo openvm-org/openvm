@@ -36,3 +36,6 @@ metrics.json
 
 # openvm generated files
 crates/cli/openvm/
+
+# samply profile
+profile.json.gz
