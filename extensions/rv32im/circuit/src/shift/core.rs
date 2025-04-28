@@ -417,6 +417,7 @@ where
 }
 
 // Returns (result, limb_shift, bit_shift)
+#[inline(always)]
 pub(super) fn run_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: ShiftOpcode,
     x: &[u8; NUM_LIMBS],
@@ -429,6 +430,7 @@ pub(super) fn run_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     }
 }
 
+#[inline(always)]
 fn run_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
@@ -449,6 +451,7 @@ fn run_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (result, limb_shift, bit_shift)
 }
 
+#[inline(always)]
 fn run_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
@@ -477,6 +480,7 @@ fn run_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (result, limb_shift, bit_shift)
 }
 
+#[inline(always)]
 fn get_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(y: &[u8]) -> (usize, usize) {
     debug_assert!(NUM_LIMBS * LIMB_BITS <= (1 << LIMB_BITS));
     // We assume `NUM_LIMBS * LIMB_BITS <= 2^LIMB_BITS` so the shift is defined

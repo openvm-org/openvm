@@ -300,6 +300,7 @@ where
     }
 }
 
+#[inline(always)]
 pub(super) fn run_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: BaseAluOpcode,
     x: &[u8; NUM_LIMBS],
@@ -315,6 +316,7 @@ pub(super) fn run_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     }
 }
 
+#[inline(always)]
 fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
@@ -331,6 +333,7 @@ fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     z
 }
 
+#[inline(always)]
 fn run_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
@@ -350,14 +353,17 @@ fn run_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     z
 }
 
+#[inline(always)]
 fn run_xor<const NUM_LIMBS: usize>(x: &[u8; NUM_LIMBS], y: &[u8; NUM_LIMBS]) -> [u8; NUM_LIMBS] {
     array::from_fn(|i| x[i] ^ y[i])
 }
 
+#[inline(always)]
 fn run_or<const NUM_LIMBS: usize>(x: &[u8; NUM_LIMBS], y: &[u8; NUM_LIMBS]) -> [u8; NUM_LIMBS] {
     array::from_fn(|i| x[i] | y[i])
 }
 
+#[inline(always)]
 fn run_and<const NUM_LIMBS: usize>(x: &[u8; NUM_LIMBS], y: &[u8; NUM_LIMBS]) -> [u8; NUM_LIMBS] {
     array::from_fn(|i| x[i] & y[i])
 }

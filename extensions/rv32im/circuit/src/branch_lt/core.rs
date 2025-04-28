@@ -398,6 +398,7 @@ where
 }
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)
+#[inline(always)]
 pub(super) fn run_cmp<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     local_opcode: BranchLessThanOpcode,
     x: &[u8; NUM_LIMBS],

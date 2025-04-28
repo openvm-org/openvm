@@ -605,6 +605,7 @@ where
 
 // Returns (quotient, remainder, x_sign, y_sign, q_sign, case) where case = 0 for normal, 1
 // for zero divisor, and 2 for signed overflow
+#[inline(always)]
 pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     signed: bool,
     x: &[u32; NUM_LIMBS],
@@ -681,6 +682,7 @@ pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (q, r, x_sign, y_sign, q_sign, DivRemCoreSpecialCase::None)
 }
 
+#[inline(always)]
 pub(super) fn run_sltu_diff_idx<const NUM_LIMBS: usize>(
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
@@ -697,6 +699,7 @@ pub(super) fn run_sltu_diff_idx<const NUM_LIMBS: usize>(
 }
 
 // returns carries of d * q + r
+#[inline(always)]
 pub(super) fn run_mul_carries<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     signed: bool,
     d: &[u32; NUM_LIMBS],
@@ -737,6 +740,7 @@ pub(super) fn run_mul_carries<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     carry
 }
 
+#[inline(always)]
 fn limbs_to_biguint<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32; NUM_LIMBS],
 ) -> BigUint {
@@ -749,6 +753,7 @@ fn limbs_to_biguint<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     res
 }
 
+#[inline(always)]
 fn biguint_to_limbs<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &BigUint,
 ) -> [u32; NUM_LIMBS] {
@@ -764,6 +769,7 @@ fn biguint_to_limbs<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     res
 }
 
+#[inline(always)]
 fn negate<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u32; NUM_LIMBS],
 ) -> [u32; NUM_LIMBS] {

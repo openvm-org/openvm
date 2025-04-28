@@ -267,6 +267,7 @@ where
 }
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
+#[inline(always)]
 pub(super) fn run_eq<F, const NUM_LIMBS: usize>(
     local_opcode: BranchEqualOpcode,
     x: &[u8; NUM_LIMBS],

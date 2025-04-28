@@ -482,6 +482,7 @@ where
 //     }
 // }
 
+#[inline(always)]
 pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
     opcode: Rv32LoadStoreOpcode,
     read_data: [F; NUM_CELLS],

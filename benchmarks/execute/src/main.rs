@@ -1,4 +1,3 @@
-// TODO(ayush): avoid cargo-openvm
 use clap::{Parser, ValueEnum};
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};

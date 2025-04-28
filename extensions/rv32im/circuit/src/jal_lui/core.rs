@@ -379,6 +379,7 @@ where
 // }
 
 // returns (to_pc, rd_data)
+#[inline(always)]
 pub(super) fn run_jal_lui(
     opcode: Rv32JalLuiOpcode,
     pc: u32,
@@ -399,6 +400,7 @@ pub(super) fn run_jal_lui(
     }
 }
 
+// TODO(ayush): move from here
 #[test]
 fn test_additional_bits() {
     let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);

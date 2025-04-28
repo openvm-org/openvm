@@ -337,6 +337,7 @@ where
 
 // returns rd_data
 // TODO(ayush): remove _opcode
+#[inline(always)]
 pub(super) fn run_auipc(
     _opcode: Rv32AuipcOpcode,
     pc: u32,

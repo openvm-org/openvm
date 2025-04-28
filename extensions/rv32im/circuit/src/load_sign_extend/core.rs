@@ -428,6 +428,7 @@ where
 // }
 
 // TODO(ayush): remove _prev_data
+#[inline(always)]
 pub(super) fn run_write_data_sign_extend<
     F: PrimeField32,
     const NUM_CELLS: usize,
