@@ -25,6 +25,7 @@ const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2025-02-14";
 const BUILD_LOCKED_ENV: &str = "OPENVM_BUILD_LOCKED";
 const SKIP_BUILD_ENV: &str = "OPENVM_SKIP_BUILD";
 const GUEST_LOGFILE_ENV: &str = "OPENVM_GUEST_LOGFILE";
+const ALLOWED_CARGO_ENVS: &[&str] = &["CARGO_HOME"];
 
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
 /// within the provided `manifest_dir`.
@@ -157,7 +158,9 @@ pub fn guest_methods<S: AsRef<str>>(
 /// removed.
 fn sanitized_cmd(tool: &str) -> Command {
     let mut cmd = Command::new(tool);
-    for (key, _val) in env::vars().filter(|x| x.0.starts_with("CARGO")) {
+    for (key, _val) in env::vars()
+        .filter(|x| x.0.starts_with("CARGO") && !ALLOWED_CARGO_ENVS.contains(&x.0.as_str()))
+    {
         cmd.env_remove(key);
     }
     cmd.env_remove("RUSTUP_TOOLCHAIN");
