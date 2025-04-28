@@ -45,7 +45,7 @@ pub fn reduce_32<C: Config>(builder: &mut Builder<C>, vals: &[Felt<C::F>]) -> Va
     for val in vals.iter() {
         let val = builder.cast_felt_to_var(*val);
         builder.assign(&result, result + val * power);
-        power *= C::N::from_canonical_usize(1usize << 32);
+        power *= C::N::from_canonical_u64(1u64 << 32);
     }
     result
 }
