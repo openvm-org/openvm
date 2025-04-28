@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn test_decompress() -> Result<()> {
-        use openvm_ecc_guest::halo2curves::{group::Curve, secp256k1::Secp256k1Affine};
+        use halo2curves_axiom::{group::Curve, secp256k1::Secp256k1Affine};
 
         let config =
             Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(),
@@ -162,7 +162,7 @@ mod tests {
     }
 
     fn test_decompress_invalid_specific_test(test_type: &str) -> Result<()> {
-        use openvm_ecc_guest::halo2curves::{group::Curve, secp256k1::Secp256k1Affine};
+        use halo2curves_axiom::{group::Curve, secp256k1::Secp256k1Affine};
 
         let config =
             Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(),

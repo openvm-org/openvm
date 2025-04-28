@@ -4319,6 +4319,7 @@ name = "openvm-ecc-integration-tests"
 version = "1.1.2"
 dependencies = [
  "eyre",
+ "halo2curves-axiom",
  "hex-literal",
  "num-bigint 0.4.6",
  "openvm-algebra-circuit",
@@ -4623,6 +4624,7 @@ name = "openvm-pairing-integration-tests"
 version = "1.1.2"
 dependencies = [
  "eyre",
+ "halo2curves-axiom",
  "num-bigint 0.4.6",
  "num-traits",
  "openvm",
