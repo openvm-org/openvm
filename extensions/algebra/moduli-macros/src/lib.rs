@@ -34,7 +34,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let struct_name = item.name.to_string();
         let struct_name = syn::Ident::new(&struct_name, span.into());
         let mut modulus: Option<String> = None;
-        let mut prime: Option<bool> = None;
+        let mut impl_field: Option<bool> = None;
         for param in item.params {
             match param.name.to_string().as_str() {
                 "modulus" => {
@@ -53,17 +53,17 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         .into();
                     }
                 }
-                "prime" => {
+                "impl_field" => {
                     if let syn::Expr::Lit(syn::ExprLit {
                         lit: syn::Lit::Bool(value),
                         ..
                     }) = param.value
                     {
-                        prime = Some(value.value());
+                        impl_field = Some(value.value());
                     } else {
                         return syn::Error::new_spanned(
                             param.value,
-                            "Expected a boolean literal for macro argument `prime`",
+                            "Expected a boolean literal for macro argument `impl_field`",
                         )
                         .to_compile_error()
                         .into();
@@ -84,7 +84,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let mut limbs = modulus_bytes.len();
         let mut block_size = 32;
 
-        let prime = prime.unwrap_or(false);
+        let impl_field = impl_field.unwrap_or(false);
 
         if limbs <= 32 {
             limbs = 32;
@@ -758,7 +758,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
         output.push(result);
 
-        if prime {
+        if impl_field {
             // implement Field and Sqrt traits for prime moduli
             let field_and_sqrt_impl = TokenStream::from(quote::quote_spanned! { span.into() =>
                 impl ::openvm_algebra_guest::Field for #struct_name {
@@ -1060,9 +1060,8 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             }
         });
 
-        // This function will be defined regardless of whether the modulus is prime or not.
-        // But it will be called only if the modulus is prime (i.e. moduli_declare has implemented
-        // the Field trait).
+        // This function will be defined regardless of whether impl_field is true or false,
+        // but it will be called only if the impl_field is true.
         let hint_sqrt_extern_func = syn::Ident::new(
             &format!("hint_sqrt_extern_func_{}", modulus_hex),
             span.into(),
