@@ -20,14 +20,13 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
+use super::Rv32JalrCoreAir;
 use crate::{
     adapters::{
         compose, Rv32JalrAdapterAir, Rv32JalrAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv32JalrChip, Rv32JalrCoreCols, Rv32JalrStep},
 };
-
-use super::Rv32JalrCoreAir;
 
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;

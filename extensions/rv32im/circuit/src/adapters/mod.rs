@@ -93,7 +93,8 @@ pub fn memory_write<Mem>(
 }
 
 /// Atomic read operation which increments the timestamp by 1.
-/// Returns `(t_prev, [ptr:4]_{address_space})` where `t_prev` is the timestamp of the last memory access.
+/// Returns `(t_prev, [ptr:4]_{address_space})` where `t_prev` is the timestamp of the last memory
+/// access.
 #[inline(always)]
 pub fn timed_read(
     memory: &mut TracingMemory,
@@ -166,7 +167,8 @@ pub fn tracing_write<F>(
     address_space: u32,
     ptr: u32,
     val: &[u8; RV32_REGISTER_NUM_LIMBS],
-    aux_cols: &mut MemoryWriteAuxCols<F, RV32_REGISTER_NUM_LIMBS>, /* TODO[jpw]: switch to raw u8
+    aux_cols: &mut MemoryWriteAuxCols<F, RV32_REGISTER_NUM_LIMBS>, /* TODO[jpw]: switch to raw
+                                                                    * u8
                                                                     * buffer */
 ) where
     F: PrimeField32,

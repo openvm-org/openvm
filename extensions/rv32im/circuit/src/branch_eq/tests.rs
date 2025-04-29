@@ -276,7 +276,8 @@ fn rv32_bne_rand_test() {
 
 // #[test]
 // fn execute_pc_increment_sanity_test() {
-//     let core = BranchEqualStep::<RV32_REGISTER_NUM_LIMBS>::new(BranchEqualOpcode::CLASS_OFFSET, 4);
+//     let core = BranchEqualStep::<RV32_REGISTER_NUM_LIMBS>::new(BranchEqualOpcode::CLASS_OFFSET,
+// 4);
 
 //     let mut instruction = Instruction::<F> {
 //         opcode: BranchEqualOpcode::BEQ.global_opcode(),

@@ -22,9 +22,8 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{memory_read, tracing_read};
-
 use super::RV32_REGISTER_NUM_LIMBS;
+use crate::adapters::{memory_read, tracing_read};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
