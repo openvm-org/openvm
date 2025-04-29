@@ -52,23 +52,30 @@ pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
     })
 }
 
-pub fn read<Mem>(memory: &mut Mem, address_space: u32, ptr: u32) -> [u8; RV32_REGISTER_NUM_LIMBS]
+#[inline(always)]
+pub fn memory_read<Mem>(memory: &Mem, address_space: u32, ptr: u32) -> [u8; RV32_REGISTER_NUM_LIMBS]
 where
     Mem: GuestMemory,
 {
-    debug_assert!(address_space == RV32_REGISTER_AS || address_space == RV32_MEMORY_AS);
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS,
+    );
 
+    // TODO(ayush): PUBLIC_VALUES_AS safety?
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
     unsafe { memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
 }
 
-pub fn write<Mem>(
+#[inline(always)]
+pub fn memory_write<Mem>(
     memory: &mut Mem,
     address_space: u32,
     ptr: u32,
-    data: [u8; RV32_REGISTER_NUM_LIMBS],
+    data: &[u8; RV32_REGISTER_NUM_LIMBS],
 ) where
     Mem: GuestMemory,
 {
@@ -78,10 +85,11 @@ pub fn write<Mem>(
             || address_space == PUBLIC_VALUES_AS
     );
 
+    // TODO(ayush): PUBLIC_VALUES_AS safety?
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    unsafe { memory.write::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, &data) }
+    unsafe { memory.write::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
 }
 
 /// Atomic read operation which increments the timestamp by 1.

@@ -35,7 +35,9 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
-use crate::adapters::{tracing_read, tracing_write_with_base_aux, RV32_CELL_BITS};
+use crate::adapters::{
+    memory_read, memory_write, tracing_read, tracing_write_with_base_aux, RV32_CELL_BITS,
+};
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
 /// of the instruction type, specifically whether it is a load or store
@@ -403,14 +405,10 @@ where
 
         // We need to keep values of some cells to keep them unchanged when writing to those cells
         let prev_data = match local_opcode {
-            STOREW | STOREH | STOREB => unsafe {
-                memory.data().read(e.as_canonical_u32(), ptr_val)
-            },
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
-                memory
-                    .data()
-                    .read(d.as_canonical_u32(), a.as_canonical_u32())
-            },
+            STOREW | STOREH | STOREB => memory_read(memory.data(), e.as_canonical_u32(), ptr_val),
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                memory_read(memory.data(), d.as_canonical_u32(), a.as_canonical_u32())
+            }
         };
 
         adapter_row
@@ -581,7 +579,7 @@ where
         );
 
         let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+            memory_read(memory, d.as_canonical_u32(), b.as_canonical_u32());
         let rs1_val = u32::from_le_bytes(rs1_bytes);
 
         let imm = c.as_canonical_u32();
@@ -599,20 +597,18 @@ where
         let ptr_val = ptr_val - shift_amount; // aligned ptr
 
         let read_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
-                memory.read(e.as_canonical_u32(), ptr_val)
-            },
-            STOREW | STOREH | STOREB => unsafe {
-                memory.read(RV32_REGISTER_AS, a.as_canonical_u32())
-            },
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                memory_read(memory, e.as_canonical_u32(), ptr_val)
+            }
+            STOREW | STOREH | STOREB => memory_read(memory, RV32_REGISTER_AS, a.as_canonical_u32()),
         };
 
         // For stores, we need the previous memory content to preserve unchanged bytes
         let prev_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
-            STOREW | STOREH | STOREB => unsafe { memory.read(e.as_canonical_u32(), ptr_val) },
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
-                memory.read(RV32_REGISTER_AS, a.as_canonical_u32())
-            },
+            STOREW | STOREH | STOREB => memory_read(memory, e.as_canonical_u32(), ptr_val),
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                memory_read(memory, RV32_REGISTER_AS, a.as_canonical_u32())
+            }
         };
 
         ((prev_data, read_data), shift_amount)
@@ -643,7 +639,7 @@ where
         );
 
         let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(RV32_REGISTER_AS, b.as_canonical_u32()) };
+            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
         let rs1_val = u32::from_le_bytes(rs1_bytes);
 
         let imm = c.as_canonical_u32();
@@ -667,11 +663,11 @@ where
             match local_opcode {
                 STOREW | STOREH | STOREB => {
                     let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-                    unsafe { memory.write(e.as_canonical_u32(), ptr & 0xfffffffc, data) };
+                    memory_write(memory, e.as_canonical_u32(), ptr & 0xfffffffc, data);
                 }
-                LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
-                    memory.write(RV32_REGISTER_AS, a.as_canonical_u32(), data);
-                },
+                LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                    memory_write(memory, RV32_REGISTER_AS, a.as_canonical_u32(), data);
+                }
             }
         }
     }

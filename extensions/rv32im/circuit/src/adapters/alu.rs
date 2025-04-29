@@ -27,6 +27,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
+use crate::adapters::{memory_read, memory_write};
+
 use super::{
     tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
@@ -292,11 +294,11 @@ where
         );
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(RV32_REGISTER_AS, b.as_canonical_u32()) };
+            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
 
         let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
             let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-                unsafe { memory.read(RV32_REGISTER_AS, c.as_canonical_u32()) };
+                memory_read(memory, RV32_REGISTER_AS, c.as_canonical_u32());
             rs2
         } else {
             let imm = c.as_canonical_u32();
@@ -318,6 +320,6 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), rd) };
+        memory_write(memory, d.as_canonical_u32(), a.as_canonical_u32(), rd);
     }
 }

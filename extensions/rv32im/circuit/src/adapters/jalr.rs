@@ -23,7 +23,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{tracing_read, tracing_write};
+use crate::adapters::{memory_read, memory_write, tracing_read, tracing_write};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 
@@ -252,7 +252,7 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(RV32_REGISTER_AS, b.as_canonical_u32()) };
+            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
 
         rs1
     }
@@ -269,9 +269,7 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         if *enabled != F::ZERO {
-            unsafe {
-                memory.write(RV32_REGISTER_AS, a.as_canonical_u32(), data);
-            }
+            memory_write(memory, RV32_REGISTER_AS, a.as_canonical_u32(), data);
         }
     }
 }

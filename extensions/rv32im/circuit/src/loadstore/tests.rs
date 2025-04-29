@@ -167,7 +167,7 @@ fn rand_loadstore_test() {
         tester.memory_helper(),
     );
 
-    let num_tests: usize = 1;
+    let num_tests: usize = 100;
     for _ in 0..num_tests {
         set_and_execute(
             &mut tester,

@@ -23,7 +23,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use super::{tracing_write, RV32_REGISTER_NUM_LIMBS};
-use crate::adapters::tracing_read;
+use crate::adapters::{memory_read, memory_write, tracing_read};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -237,9 +237,9 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(RV32_REGISTER_AS, b.as_canonical_u32()) };
+            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
         let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(RV32_REGISTER_AS, c.as_canonical_u32()) };
+            memory_read(memory, RV32_REGISTER_AS, c.as_canonical_u32());
 
         (rs1, rs2)
     }
@@ -253,6 +253,6 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        unsafe { memory.write(RV32_REGISTER_AS, a.as_canonical_u32(), rd) };
+        memory_write(memory, RV32_REGISTER_AS, a.as_canonical_u32(), rd);
     }
 }
