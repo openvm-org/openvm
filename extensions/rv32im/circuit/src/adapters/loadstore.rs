@@ -351,7 +351,7 @@ where
         adapter_row.rs1_ptr = b;
         let rs1 = tracing_read(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             b.as_canonical_u32(),
             &mut adapter_row.rs1_aux_cols,
         );
@@ -381,7 +381,7 @@ where
             ),
             STOREW | STOREH | STOREB => tracing_read(
                 memory,
-                d.as_canonical_u32(),
+                RV32_REGISTER_AS,
                 a.as_canonical_u32(),
                 &mut adapter_row.read_data_aux,
             ),
@@ -459,7 +459,6 @@ where
                     let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
                     let ptr = ptr & 0xfffffffc;
 
-                    adapter_row.rd_rs2_ptr = F::from_canonical_u32(ptr);
                     tracing_write_with_base_aux(
                         memory,
                         e.as_canonical_u32(),
@@ -469,7 +468,6 @@ where
                     );
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                    adapter_row.rd_rs2_ptr = a;
                     tracing_write_with_base_aux(
                         memory,
                         RV32_REGISTER_AS,
@@ -479,6 +477,7 @@ where
                     );
                 }
             };
+            adapter_row.rd_rs2_ptr = a;
         } else {
             memory.increment_timestamp();
         };

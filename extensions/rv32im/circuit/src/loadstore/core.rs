@@ -356,8 +356,7 @@ where
     }
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        let _core_row: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
+        let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         self.adapter
             .fill_trace_row(mem_helper, &self.range_checker_chip, adapter_row);
