@@ -8,7 +8,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols},
         online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory, RecordId,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -25,21 +25,6 @@ use serde::{Deserialize, Serialize};
 use crate::adapters::tracing_read;
 
 use super::RV32_REGISTER_NUM_LIMBS;
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Rv32BranchReadRecord {
-    /// Read register value from address space d = 1
-    pub rs1: RecordId,
-    /// Read register value from address space e = 1
-    pub rs2: RecordId,
-}
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Rv32BranchWriteRecord {
-    pub from_state: ExecutionState<u32>,
-}
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

@@ -145,7 +145,7 @@ impl TracingMemory {
             let num_cells = paged_vec.bytes_capacity() / cell_size;
 
             // TMP: hardcoding for now
-            if i <= 3 {
+            if i < 3 {
                 min_block_size.push(4);
             } else {
                 min_block_size.push(1);

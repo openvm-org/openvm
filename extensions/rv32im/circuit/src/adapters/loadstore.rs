@@ -12,7 +12,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory, RecordId,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -86,34 +86,6 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
     );
     type Writes = [[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1];
     type ProcessedInstruction = LoadStoreInstruction<AB::Expr>;
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct Rv32LoadStoreReadRecord<F: Field> {
-    pub rs1_record: RecordId,
-    /// This will be a read from a register in case of Stores and a read from RISC-V memory in case
-    /// of Loads.
-    pub read: RecordId,
-    pub rs1_ptr: F,
-    pub imm: F,
-    pub imm_sign: F,
-    pub mem_as: F,
-    pub mem_ptr_limbs: [u32; 2],
-    pub shift_amount: u32,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct Rv32LoadStoreWriteRecord<F: Field> {
-    /// This will be a write to a register in case of Load and a write to RISC-V memory in case of
-    /// Stores. For better struct packing, `RecordId(usize::MAX)` is used to indicate that
-    /// there is no write.
-    pub write_id: RecordId,
-    pub from_state: ExecutionState<u32>,
-    pub rd_rs2_ptr: F,
 }
 
 #[repr(C)]

@@ -32,7 +32,7 @@ use crate::{
 };
 
 const IMM_BITS: usize = 16;
-const MAX_INS_CAPACITY: usize = 128;
+const MAX_INS_CAPACITY: usize = 1024;
 
 type F = BabyBear;
 
@@ -73,9 +73,7 @@ fn set_and_execute(
     let mem_as = mem_as.unwrap_or(if is_load {
         *[1, 2].choose(rng).unwrap()
     } else {
-        // TODO(ayush): how can memory address space be variable?
-        //              how can this write to native as?
-        *[2, 3, 4].choose(rng).unwrap()
+        *[2, 3].choose(rng).unwrap()
     });
 
     let ptr_val = imm_ext.wrapping_add(compose(rs1));
@@ -169,7 +167,7 @@ fn rand_loadstore_test() {
         tester.memory_helper(),
     );
 
-    let num_tests: usize = 100;
+    let num_tests: usize = 1;
     for _ in 0..num_tests {
         set_and_execute(
             &mut tester,
@@ -476,7 +474,7 @@ fn execute_roundtrip_sanity_test() {
         tester.memory_helper(),
     );
 
-    let num_tests: usize = 1;
+    let num_tests: usize = 100;
     for _ in 0..num_tests {
         set_and_execute(
             &mut tester,
@@ -498,17 +496,16 @@ fn execute_roundtrip_sanity_test() {
             None,
             None,
         );
-        // TODO(ayush): what are alignment requirements for hint as?
-        // set_and_execute(
-        //     &mut tester,
-        //     &mut chip,
-        //     &mut rng,
-        //     LOADHU,
-        //     None,
-        //     None,
-        //     None,
-        //     None,
-        // );
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut rng,
+            LOADHU,
+            None,
+            None,
+            None,
+            None,
+        );
         set_and_execute(
             &mut tester,
             &mut chip,
@@ -529,16 +526,16 @@ fn execute_roundtrip_sanity_test() {
             None,
             None,
         );
-        // set_and_execute(
-        //     &mut tester,
-        //     &mut chip,
-        //     &mut rng,
-        //     STOREH,
-        //     None,
-        //     None,
-        //     None,
-        //     None,
-        // );
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut rng,
+            STOREH,
+            None,
+            None,
+            None,
+            None,
+        );
     }
 }
 

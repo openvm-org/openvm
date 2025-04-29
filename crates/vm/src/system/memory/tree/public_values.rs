@@ -11,6 +11,7 @@ use crate::{
     },
 };
 
+pub const PUBLIC_VALUES_AS: u32 = 3;
 pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = 2;
 
 /// Merkle proof for user public values in the memory state.

@@ -2,7 +2,8 @@ use std::ops::Mul;
 
 use openvm_circuit::system::memory::{
     offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
-    online::TracingMemory,
+    online::{GuestMemory, TracingMemory},
+    tree::public_values::PUBLIC_VALUES_AS,
     MemoryController, RecordId,
 };
 use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
@@ -51,6 +52,38 @@ pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
     })
 }
 
+pub fn read<Mem>(memory: &mut Mem, address_space: u32, ptr: u32) -> [u8; RV32_REGISTER_NUM_LIMBS]
+where
+    Mem: GuestMemory,
+{
+    debug_assert!(address_space == RV32_REGISTER_AS || address_space == RV32_MEMORY_AS);
+
+    // SAFETY:
+    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
+    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    unsafe { memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
+}
+
+pub fn write<Mem>(
+    memory: &mut Mem,
+    address_space: u32,
+    ptr: u32,
+    data: [u8; RV32_REGISTER_NUM_LIMBS],
+) where
+    Mem: GuestMemory,
+{
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
+
+    // SAFETY:
+    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
+    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    unsafe { memory.write::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, &data) }
+}
+
 /// Atomic read operation which increments the timestamp by 1.
 /// Returns `(t_prev, [ptr:4]_{address_space})` where `t_prev` is the timestamp of the last memory access.
 #[inline(always)]
@@ -62,7 +95,7 @@ pub fn timed_read(
     debug_assert!(address_space == RV32_REGISTER_AS || address_space == RV32_MEMORY_AS);
 
     // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_ASwill always have cell type `u8` and
+    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
     unsafe {
         memory.read::<u8, RV32_REGISTER_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS>(address_space, ptr)
@@ -77,7 +110,11 @@ pub fn timed_write(
     val: &[u8; RV32_REGISTER_NUM_LIMBS],
 ) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
     // TODO(ayush): should this allow hint address space
-    debug_assert!(address_space == RV32_REGISTER_AS || address_space == RV32_MEMORY_AS);
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
 
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_ASwill always have cell type `u8` and

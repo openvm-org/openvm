@@ -8,7 +8,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory, RecordId,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::utils::not;
@@ -26,19 +26,6 @@ use serde::{Deserialize, Serialize};
 use crate::adapters::{tracing_read, tracing_write};
 
 use super::RV32_REGISTER_NUM_LIMBS;
-
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Rv32JalrReadRecord {
-    pub rs1: RecordId,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Rv32JalrWriteRecord {
-    pub from_state: ExecutionState<u32>,
-    pub rd_id: Option<RecordId>,
-}
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
