@@ -6,7 +6,10 @@ Procedural macros for use in guest program to generate modular arithmetic struct
 
 ```rust
 openvm_algebra_moduli_macros::moduli_declare! {
-    Bls12381 { modulus = "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787" },
+    Bls12381 {
+        modulus = "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787", 
+        impl_field = true
+    },
     Mod1e18 { modulus = "1000000000000000003" },
 }
 
@@ -28,7 +31,10 @@ openvm_algebra_moduli_macros::moduli_init! {
 
 The crate provides two macros: `moduli_declare!` and `moduli_init!`. The signatures are:
 
-- `moduli_declare!` receives comma-separated list of moduli classes descriptions. Each description looks like `ModulusName { modulus = "modulus_value" }`. Here `ModulusName` is the name of the struct, and `modulus_value` is the modulus value in decimal or hex format.
+- `moduli_declare!` receives comma-separated list of moduli classes descriptions. Each description looks like `ModulusName { modulus = "modulus_value", impl_field = <boolean_value> }`. Here `ModulusName` is the name of the struct, and `modulus_value` is the modulus value in decimal or hex format.
+    - The `impl_field` argument indicates whether or not the `Field` and `Sqrt` traits should be automatically implemented on the resulting struct.
+    It should only be set to `true` if the modulus is prime.
+    If unspecified, it defaults to `false`.
 
 - `moduli_init!` receives comma-separated list of modulus values in decimal or hex format.
 
