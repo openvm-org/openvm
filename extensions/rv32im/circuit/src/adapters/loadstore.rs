@@ -62,22 +62,6 @@ pub struct LoadStoreInstruction<T> {
     pub store_shift_amount: T,
 }
 
-/// The LoadStoreAdapter separates Runtime and Air AdapterInterfaces.
-/// This is necessary because `prev_data` should be owned by the core chip and sent to the adapter,
-/// and it must have an AB::Var type in AIR as to satisfy the memory_bridge interface.
-/// This is achieved by having different types for reads and writes in Air AdapterInterface.
-/// This method ensures that there are no modifications to the global interfaces.
-///
-/// Here 2 reads represent read_data and prev_data,
-/// The second element of the tuple in Reads is the shift amount needed to be passed to the core
-/// chip Getting the intermediate pointer is completely internal to the adapter and shouldn't be a
-/// part of the AdapterInterface
-pub struct Rv32LoadStoreAdapterRuntimeInterface<T>(PhantomData<T>);
-impl<T> VmAdapterInterface<T> for Rv32LoadStoreAdapterRuntimeInterface<T> {
-    type Reads = ([[T; RV32_REGISTER_NUM_LIMBS]; 2], T);
-    type Writes = [[T; RV32_REGISTER_NUM_LIMBS]; 1];
-    type ProcessedInstruction = ();
-}
 pub struct Rv32LoadStoreAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
 
 /// Using AB::Var for prev_data and AB::Expr for read_data
