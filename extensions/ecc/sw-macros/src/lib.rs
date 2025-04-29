@@ -545,7 +545,6 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             extern "C" fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
                 {
-                    openvm::io::println("setup function called");
                     use super::#item;
                     // p1 is (x1, y1), and x1 must be the modulus.
                     // y1 can be anything for SetupEcAdd, but must equal `a` for SetupEcDouble
