@@ -144,7 +144,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<F> for #name #ty_generics #where_clause {
                     fn execute_e1<Mem, Ctx>(
                         &mut self,
-                        state: ::openvm_circuit::arch::execution::VmStateMut<Mem, Ctx>,
+                        state: ::openvm_circuit::arch::VmStateMut<Mem, Ctx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
@@ -192,7 +192,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
                     fn execute_e1<Mem, Ctx>(
                         &mut self,
-                        state: ::openvm_circuit::arch::execution::VmStateMut<Mem, Ctx>,
+                        state: ::openvm_circuit::arch::VmStateMut<Mem, Ctx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where

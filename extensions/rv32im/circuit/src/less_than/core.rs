@@ -171,22 +171,6 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound = "T: Serialize + DeserializeOwned")]
-pub struct LessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    #[serde(with = "BigArray")]
-    pub b: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub c: [T; NUM_LIMBS],
-    pub cmp_result: T,
-    pub b_msb_f: T,
-    pub c_msb_f: T,
-    pub diff_val: T,
-    pub diff_idx: usize,
-    pub opcode: LessThanOpcode,
-}
-
 pub struct LessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     offset: usize,

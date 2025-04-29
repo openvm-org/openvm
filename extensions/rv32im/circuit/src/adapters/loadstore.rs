@@ -12,7 +12,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory, RecordId,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -35,7 +35,9 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
-use crate::adapters::{tracing_read, tracing_write_with_base_aux, RV32_CELL_BITS};
+use crate::adapters::{
+    memory_read, memory_write, tracing_read, tracing_write_with_base_aux, RV32_CELL_BITS,
+};
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
 /// of the instruction type, specifically whether it is a load or store
@@ -60,22 +62,6 @@ pub struct LoadStoreInstruction<T> {
     pub store_shift_amount: T,
 }
 
-/// The LoadStoreAdapter separates Runtime and Air AdapterInterfaces.
-/// This is necessary because `prev_data` should be owned by the core chip and sent to the adapter,
-/// and it must have an AB::Var type in AIR as to satisfy the memory_bridge interface.
-/// This is achieved by having different types for reads and writes in Air AdapterInterface.
-/// This method ensures that there are no modifications to the global interfaces.
-///
-/// Here 2 reads represent read_data and prev_data,
-/// The second element of the tuple in Reads is the shift amount needed to be passed to the core
-/// chip Getting the intermediate pointer is completely internal to the adapter and shouldn't be a
-/// part of the AdapterInterface
-pub struct Rv32LoadStoreAdapterRuntimeInterface<T>(PhantomData<T>);
-impl<T> VmAdapterInterface<T> for Rv32LoadStoreAdapterRuntimeInterface<T> {
-    type Reads = ([[T; RV32_REGISTER_NUM_LIMBS]; 2], T);
-    type Writes = [[T; RV32_REGISTER_NUM_LIMBS]; 1];
-    type ProcessedInstruction = ();
-}
 pub struct Rv32LoadStoreAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
 
 /// Using AB::Var for prev_data and AB::Expr for read_data
@@ -86,34 +72,6 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
     );
     type Writes = [[AB::Expr; RV32_REGISTER_NUM_LIMBS]; 1];
     type ProcessedInstruction = LoadStoreInstruction<AB::Expr>;
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct Rv32LoadStoreReadRecord<F: Field> {
-    pub rs1_record: RecordId,
-    /// This will be a read from a register in case of Stores and a read from RISC-V memory in case
-    /// of Loads.
-    pub read: RecordId,
-    pub rs1_ptr: F,
-    pub imm: F,
-    pub imm_sign: F,
-    pub mem_as: F,
-    pub mem_ptr_limbs: [u32; 2],
-    pub shift_amount: u32,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct Rv32LoadStoreWriteRecord<F: Field> {
-    /// This will be a write to a register in case of Load and a write to RISC-V memory in case of
-    /// Stores. For better struct packing, `RecordId(usize::MAX)` is used to indicate that
-    /// there is no write.
-    pub write_id: RecordId,
-    pub from_state: ExecutionState<u32>,
-    pub rd_rs2_ptr: F,
 }
 
 #[repr(C)]
@@ -393,7 +351,7 @@ where
         adapter_row.rs1_ptr = b;
         let rs1 = tracing_read(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             b.as_canonical_u32(),
             &mut adapter_row.rs1_aux_cols,
         );
@@ -423,7 +381,7 @@ where
             ),
             STOREW | STOREH | STOREB => tracing_read(
                 memory,
-                d.as_canonical_u32(),
+                RV32_REGISTER_AS,
                 a.as_canonical_u32(),
                 &mut adapter_row.read_data_aux,
             ),
@@ -431,14 +389,10 @@ where
 
         // We need to keep values of some cells to keep them unchanged when writing to those cells
         let prev_data = match local_opcode {
-            STOREW | STOREH | STOREB => unsafe {
-                memory.data().read(e.as_canonical_u32(), ptr_val)
-            },
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
-                memory
-                    .data()
-                    .read(d.as_canonical_u32(), a.as_canonical_u32())
-            },
+            STOREW | STOREH | STOREB => memory_read(memory.data(), e.as_canonical_u32(), ptr_val),
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                memory_read(memory.data(), d.as_canonical_u32(), a.as_canonical_u32())
+            }
         };
 
         adapter_row
@@ -505,7 +459,6 @@ where
                     let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
                     let ptr = ptr & 0xfffffffc;
 
-                    adapter_row.rd_rs2_ptr = F::from_canonical_u32(ptr);
                     tracing_write_with_base_aux(
                         memory,
                         e.as_canonical_u32(),
@@ -515,16 +468,16 @@ where
                     );
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                    adapter_row.rd_rs2_ptr = a;
                     tracing_write_with_base_aux(
                         memory,
-                        d.as_canonical_u32(),
+                        RV32_REGISTER_AS,
                         a.as_canonical_u32(),
                         data,
                         &mut adapter_row.write_base_aux,
                     );
                 }
             };
+            adapter_row.rd_rs2_ptr = a;
         } else {
             memory.increment_timestamp();
         };
@@ -609,7 +562,7 @@ where
         );
 
         let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+            memory_read(memory, d.as_canonical_u32(), b.as_canonical_u32());
         let rs1_val = u32::from_le_bytes(rs1_bytes);
 
         let imm = c.as_canonical_u32();
@@ -627,20 +580,18 @@ where
         let ptr_val = ptr_val - shift_amount; // aligned ptr
 
         let read_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
-                memory.read(e.as_canonical_u32(), ptr_val)
-            },
-            STOREW | STOREH | STOREB => unsafe {
-                memory.read(d.as_canonical_u32(), a.as_canonical_u32())
-            },
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                memory_read(memory, e.as_canonical_u32(), ptr_val)
+            }
+            STOREW | STOREH | STOREB => memory_read(memory, RV32_REGISTER_AS, a.as_canonical_u32()),
         };
 
         // For stores, we need the previous memory content to preserve unchanged bytes
         let prev_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
-            STOREW | STOREH | STOREB => unsafe { memory.read(e.as_canonical_u32(), ptr_val) },
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
-                memory.read(d.as_canonical_u32(), a.as_canonical_u32())
-            },
+            STOREW | STOREH | STOREB => memory_read(memory, e.as_canonical_u32(), ptr_val),
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                memory_read(memory, RV32_REGISTER_AS, a.as_canonical_u32())
+            }
         };
 
         ((prev_data, read_data), shift_amount)
@@ -671,7 +622,7 @@ where
         );
 
         let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
         let rs1_val = u32::from_le_bytes(rs1_bytes);
 
         let imm = c.as_canonical_u32();
@@ -695,11 +646,11 @@ where
             match local_opcode {
                 STOREW | STOREH | STOREB => {
                     let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-                    unsafe { memory.write(e.as_canonical_u32(), ptr & 0xfffffffc, data) };
+                    memory_write(memory, e.as_canonical_u32(), ptr & 0xfffffffc, data);
                 }
-                LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
-                    memory.write(d.as_canonical_u32(), a.as_canonical_u32(), data);
-                },
+                LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                    memory_write(memory, RV32_REGISTER_AS, a.as_canonical_u32(), data);
+                }
             }
         }
     }

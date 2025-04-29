@@ -273,8 +273,8 @@ where
 //         for (i, x) in read_record.reads.iter().enumerate() {
 //             let read = memory.record_by_id(x.0);
 
-//             row_slice.reads_aux[i].address = MemoryAddress::new(read.address_space, read.pointer);
-//             aux_cols_factory
+//             row_slice.reads_aux[i].address = MemoryAddress::new(read.address_space,
+// read.pointer);             aux_cols_factory
 //                 .generate_read_or_immediate_aux(read, &mut row_slice.reads_aux[i].read_aux);
 //         }
 //     }

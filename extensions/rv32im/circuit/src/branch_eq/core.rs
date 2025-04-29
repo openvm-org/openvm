@@ -140,20 +140,6 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BranchEqualCoreRecord<T, const NUM_LIMBS: usize> {
-    #[serde(with = "BigArray")]
-    pub a: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub b: [T; NUM_LIMBS],
-    pub cmp_result: T,
-    pub imm: T,
-    pub diff_inv_val: T,
-    pub diff_idx: usize,
-    pub opcode: BranchEqualOpcode,
-}
-
 #[derive(Debug)]
 pub struct BranchEqualStep<A, const NUM_LIMBS: usize> {
     adapter: A,

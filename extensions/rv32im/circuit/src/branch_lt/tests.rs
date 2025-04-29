@@ -221,7 +221,8 @@ fn rv32_bgeu_rand_test() {
 //     let trace_width = chip.trace_width();
 //     let adapter_width = BaseAir::<F>::width(chip.adapter.air());
 //     let ge_opcode = opcode == BranchLessThanOpcode::BGE || opcode == BranchLessThanOpcode::BGEU;
-//     let (_, _, a_sign, b_sign) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &a, &b);
+//     let (_, _, a_sign, b_sign) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &a,
+// &b);
 
 //     if prank_vals != BranchLessThanPrankValues::default() {
 //         debug_assert!(prank_vals.diff_val.is_some());

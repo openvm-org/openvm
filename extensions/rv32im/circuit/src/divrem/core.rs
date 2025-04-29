@@ -348,35 +348,6 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound = "T: Serialize + DeserializeOwned")]
-pub struct DivRemCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    #[serde(with = "BigArray")]
-    pub b: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub c: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub q: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub r: [T; NUM_LIMBS],
-    pub zero_divisor: T,
-    pub r_zero: T,
-    pub b_sign: T,
-    pub c_sign: T,
-    pub q_sign: T,
-    pub sign_xor: T,
-    pub c_sum_inv: T,
-    pub r_sum_inv: T,
-    #[serde(with = "BigArray")]
-    pub r_prime: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub r_inv: [T; NUM_LIMBS],
-    pub lt_diff_val: T,
-    pub lt_diff_idx: usize,
-    pub opcode: DivRemOpcode,
-}
-
 #[derive(Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub(super) enum DivRemCoreSpecialCase {

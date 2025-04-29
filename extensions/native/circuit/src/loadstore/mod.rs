@@ -6,11 +6,10 @@ mod tests;
 mod core;
 pub use core::*;
 
-use crate::adapters::loadstore_native_adapter::NativeLoadStoreAdapterStep;
-
 use super::adapters::loadstore_native_adapter::{
     NativeLoadStoreAdapterAir, NativeLoadStoreAdapterChip,
 };
+use crate::adapters::loadstore_native_adapter::NativeLoadStoreAdapterStep;
 
 pub type NativeLoadStoreAir<const NUM_CELLS: usize> =
     VmAirWrapper<NativeLoadStoreAdapterAir<NUM_CELLS>, NativeLoadStoreCoreAir<NUM_CELLS>>;

@@ -190,14 +190,6 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Rv32AuipcCoreRecord<F> {
-    pub imm_limbs: [F; RV32_REGISTER_NUM_LIMBS - 1],
-    pub pc_limbs: [F; RV32_REGISTER_NUM_LIMBS - 2],
-    pub rd_data: [F; RV32_REGISTER_NUM_LIMBS],
-}
-
 pub struct Rv32AuipcStep<A> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -299,9 +291,8 @@ where
         self.bitwise_lookup_chip
             .request_range(imm_limbs[2] as u32, pc_limbs[1] as u32);
 
-        let msl_shift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - PC_BITS;
         self.bitwise_lookup_chip
-            .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
+            .request_range(pc_limbs[2] as u32, pc_limbs[3] as u32);
     }
 }
 

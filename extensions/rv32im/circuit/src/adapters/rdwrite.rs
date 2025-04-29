@@ -8,7 +8,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{MemoryBridge, MemoryWriteAuxCols},
         online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory, RecordId,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::utils::not;
@@ -23,16 +23,8 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::tracing_write;
-
 use super::RV32_REGISTER_NUM_LIMBS;
-
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Rv32RdWriteWriteRecord {
-    pub from_state: ExecutionState<u32>,
-    pub rd_id: Option<RecordId>,
-}
+use crate::adapters::{memory_write, tracing_write};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -243,7 +235,7 @@ where
         adapter_row.rd_ptr = a;
         tracing_write(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             a.as_canonical_u32(),
             data,
             &mut adapter_row.rd_aux_cols,
@@ -288,7 +280,7 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), rd) };
+        memory_write(memory, RV32_REGISTER_AS, a.as_canonical_u32(), rd);
     }
 }
 

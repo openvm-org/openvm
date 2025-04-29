@@ -580,8 +580,8 @@ where
         //         std::array::from_fn(|_| streams.hint_stream.pop_front().unwrap());
         //     // let (write, _) = memory.write(
         //     //     e,
-        //     //     F::from_canonical_u32(mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index)),
-        //     //     &tmp_convert_to_u8s(data),
+        //     //     F::from_canonical_u32(mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 *
+        // word_index)),     //     &tmp_convert_to_u8s(data),
         //     // );
         //     // record.hints.push((data, write));
         // }

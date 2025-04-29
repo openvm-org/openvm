@@ -15,7 +15,8 @@ pub mod loadstore_native_adapter;
 pub mod native_vectorized_adapter;
 
 /// Atomic read operation which increments the timestamp by 1.
-/// Returns `(t_prev, [ptr:BLOCK_SIZE]_4)` where `t_prev` is the timestamp of the last memory access.
+/// Returns `(t_prev, [ptr:BLOCK_SIZE]_4)` where `t_prev` is the timestamp of the last memory
+/// access.
 #[inline(always)]
 pub fn timed_read<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory,

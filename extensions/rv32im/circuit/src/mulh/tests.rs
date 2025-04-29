@@ -186,7 +186,8 @@ fn rv32_mulhu_rand_test() {
 
 //     let trace_width = chip.trace_width();
 //     let adapter_width = BaseAir::<F>::width(chip.adapter.air());
-//     let (_, _, carry, _, _) = run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
+//     let (_, _, carry, _, _) = run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b,
+// &c);
 
 //     range_tuple_chip.clear();
 //     for i in 0..RV32_REGISTER_NUM_LIMBS {

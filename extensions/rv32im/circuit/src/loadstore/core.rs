@@ -305,6 +305,8 @@ where
 
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
+        A::start(*state.pc, state.memory, adapter_row);
+
         let ((prev_data, read_data), shift) =
             self.adapter.read(state.memory, instruction, adapter_row);
         let prev_data = prev_data.map(F::from_canonical_u8);
@@ -354,8 +356,7 @@ where
     }
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        let _core_row: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
+        let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         self.adapter
             .fill_trace_row(mem_helper, &self.range_checker_chip, adapter_row);
@@ -400,87 +401,6 @@ where
         Ok(())
     }
 }
-
-// impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
-//     for LoadStoreCoreChip<NUM_CELLS>
-// where
-//     I::Reads: Into<([[F; NUM_CELLS]; 2], F)>,
-//     I::Writes: From<[[F; NUM_CELLS]; 1]>,
-// {
-//     type Record = LoadStoreCoreRecord<F, NUM_CELLS>;
-//     type Air = LoadStoreCoreAir<NUM_CELLS>;
-
-//     #[allow(clippy::type_complexity)]
-//     fn execute_instruction(
-//         &self,
-//         instruction: &Instruction<F>,
-//         _from_pc: u32,
-//         reads: I::Reads,
-//     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-//         let local_opcode =
-//             Rv32LoadStoreOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
-
-//         let (reads, shift_amount) = reads.into();
-//         let shift = shift_amount.as_canonical_u32();
-//         let prev_data = reads[0];
-//         let read_data = reads[1];
-//         let write_data = run_write_data(local_opcode, read_data, prev_data, shift);
-//         let output = AdapterRuntimeContext::without_pc([write_data]);
-
-//         Ok((
-//             output,
-//             LoadStoreCoreRecord {
-//                 opcode: local_opcode,
-//                 shift,
-//                 prev_data,
-//                 read_data,
-//                 write_data,
-//             },
-//         ))
-//     }
-
-//     fn get_opcode_name(&self, opcode: usize) -> String {
-//         format!(
-//             "{:?}",
-//             Rv32LoadStoreOpcode::from_usize(opcode - self.air.offset)
-//         )
-//     }
-
-//     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-//         let core_cols: &mut LoadStoreCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
-//         let opcode = record.opcode;
-//         let flags = &mut core_cols.flags;
-//         *flags = [F::ZERO; 4];
-//         match (opcode, record.shift) {
-//             (LOADW, 0) => flags[0] = F::TWO,
-//             (LOADHU, 0) => flags[1] = F::TWO,
-//             (LOADHU, 2) => flags[2] = F::TWO,
-//             (LOADBU, 0) => flags[3] = F::TWO,
-
-//             (LOADBU, 1) => flags[0] = F::ONE,
-//             (LOADBU, 2) => flags[1] = F::ONE,
-//             (LOADBU, 3) => flags[2] = F::ONE,
-//             (STOREW, 0) => flags[3] = F::ONE,
-
-//             (STOREH, 0) => (flags[0], flags[1]) = (F::ONE, F::ONE),
-//             (STOREH, 2) => (flags[0], flags[2]) = (F::ONE, F::ONE),
-//             (STOREB, 0) => (flags[0], flags[3]) = (F::ONE, F::ONE),
-//             (STOREB, 1) => (flags[1], flags[2]) = (F::ONE, F::ONE),
-//             (STOREB, 2) => (flags[1], flags[3]) = (F::ONE, F::ONE),
-//             (STOREB, 3) => (flags[2], flags[3]) = (F::ONE, F::ONE),
-//             _ => unreachable!(),
-//         };
-//         core_cols.prev_data = record.prev_data;
-//         core_cols.read_data = record.read_data;
-//         core_cols.is_valid = F::ONE;
-//         core_cols.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
-//         core_cols.write_data = record.write_data;
-//     }
-
-//     fn air(&self) -> &Self::Air {
-//         &self.air
-//     }
-// }
 
 #[inline(always)]
 pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(

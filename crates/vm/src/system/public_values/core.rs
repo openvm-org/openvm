@@ -236,8 +236,8 @@ where
     }
 }
 
-// /// ATTENTION: If a specific public value is not provided, a default 0 will be used when generating
-// /// the proof but in the perspective of constraints, it could be any value.
+// /// ATTENTION: If a specific public value is not provided, a default 0 will be used when
+// generating /// the proof but in the perspective of constraints, it could be any value.
 // pub struct PublicValuesCoreChip<F> {
 //     air: PublicValuesCoreAir,
 //     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
@@ -245,10 +245,10 @@ where
 // }
 
 // impl<F: PrimeField32> PublicValuesCoreChip<F> {
-//     /// **Note:** `max_degree` is the maximum degree of the constraint polynomials to represent the
-//     /// flags. If you want the overall AIR's constraint degree to be `<= max_constraint_degree`,
-//     /// then typically you should set `max_degree` to `max_constraint_degree - 1`.
-//     pub fn new(num_custom_pvs: usize, max_degree: u32) -> Self {
+//     /// **Note:** `max_degree` is the maximum degree of the constraint polynomials to represent
+// the     /// flags. If you want the overall AIR's constraint degree to be `<=
+// max_constraint_degree`,     /// then typically you should set `max_degree` to
+// `max_constraint_degree - 1`.     pub fn new(num_custom_pvs: usize, max_degree: u32) -> Self {
 //         Self {
 //             air: PublicValuesCoreAir::new(num_custom_pvs, max_degree),
 //             custom_pvs: Mutex::new(vec![None; num_custom_pvs]),

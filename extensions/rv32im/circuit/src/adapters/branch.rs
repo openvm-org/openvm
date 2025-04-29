@@ -8,7 +8,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols},
         online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory, RecordId,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -22,24 +22,8 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::tracing_read;
-
 use super::RV32_REGISTER_NUM_LIMBS;
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Rv32BranchReadRecord {
-    /// Read register value from address space d = 1
-    pub rs1: RecordId,
-    /// Read register value from address space e = 1
-    pub rs2: RecordId,
-}
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Rv32BranchWriteRecord {
-    pub from_state: ExecutionState<u32>,
-}
+use crate::adapters::{memory_read, tracing_read};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -159,14 +143,14 @@ where
         adapter_row.rs1_ptr = a;
         let rs1 = tracing_read(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             a.as_canonical_u32(),
             &mut adapter_row.reads_aux[0],
         );
         adapter_row.rs2_ptr = b;
         let rs2 = tracing_read(
             memory,
-            e.as_canonical_u32(),
+            RV32_REGISTER_AS,
             b.as_canonical_u32(),
             &mut adapter_row.reads_aux[1],
         );
@@ -221,9 +205,9 @@ where
         debug_assert_eq!(e.as_canonical_u32(), RV32_REGISTER_AS);
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(d.as_canonical_u32(), a.as_canonical_u32()) };
+            memory_read(memory, RV32_REGISTER_AS, a.as_canonical_u32());
         let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(e.as_canonical_u32(), b.as_canonical_u32()) };
+            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
 
         (rs1, rs2)
     }

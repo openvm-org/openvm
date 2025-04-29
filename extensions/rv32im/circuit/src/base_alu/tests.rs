@@ -5,9 +5,12 @@ use openvm_circuit::{
         testing::{
             test_adapter::TestAdapterAir, TestAdapterChip, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
         },
-        AdapterTraceStep, NewVmChipWrapper, VmAirWrapper, VmChipWrapper,
+        AdapterExecutorE1, AdapterTraceStep, NewVmChipWrapper, VmAirWrapper, VmChipWrapper,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
     utils::generate_long_number,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -475,6 +478,68 @@ where
             mem_helper,
             bitwise_lookup_chip,
             adapter_row,
+        );
+    }
+}
+
+impl<F> AdapterExecutorE1<F> for Rv32BaseAluAdapterTestStep
+where
+    F: PrimeField32,
+{
+    type ReadData = <Rv32BaseAluAdapterStep<RV32_CELL_BITS> as AdapterExecutorE1<F>>::ReadData;
+    type WriteData = <Rv32BaseAluAdapterStep<RV32_CELL_BITS> as AdapterExecutorE1<F>>::WriteData;
+
+    #[inline(always)]
+    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    where
+        Mem: GuestMemory,
+    {
+        let &Instruction { b, c, d, e, .. } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert!(
+            e.as_canonical_u32() == RV32_REGISTER_AS || e.as_canonical_u32() == RV32_IMM_AS
+        );
+
+        let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+
+        let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
+            let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
+                unsafe { memory.read(e.as_canonical_u32(), c.as_canonical_u32()) };
+            rs2
+        } else {
+            // Here we use values that can overflow
+            let imm = c.as_canonical_u32();
+
+            debug_assert_eq!(imm >> 24, 0);
+
+            let mask1 = (1 << 9) - 1; // Allowing overflow
+            let mask2 = (1 << 3) - 2; // Allowing overflow
+
+            let mut imm_le = [
+                (imm & mask1) as u8,
+                ((imm >> 8) & mask2) as u8,
+                (imm >> 16) as u8,
+                (imm >> 16) as u8,
+            ];
+            imm_le[3] = imm_le[2];
+            imm_le
+        };
+
+        (rs1, rs2)
+    }
+
+    #[inline(always)]
+    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
+    where
+        Mem: GuestMemory,
+    {
+        <Rv32BaseAluAdapterStep<RV32_CELL_BITS> as AdapterExecutorE1<F>>::write(
+            &self.0,
+            memory,
+            instruction,
+            data,
         );
     }
 }

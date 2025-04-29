@@ -8,7 +8,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory, RecordId,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -23,23 +23,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use super::{tracing_write, RV32_REGISTER_NUM_LIMBS};
-use crate::adapters::tracing_read;
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Rv32MultReadRecord {
-    /// Reads from operand registers
-    pub rs1: RecordId,
-    pub rs2: RecordId,
-}
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Rv32MultWriteRecord {
-    pub from_state: ExecutionState<u32>,
-    /// Write to destination register
-    pub rd_id: RecordId,
-}
+use crate::adapters::{memory_read, memory_write, tracing_read};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -175,14 +159,14 @@ where
         adapter_row.rs1_ptr = b;
         let rs1 = tracing_read(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             b.as_canonical_u32(),
             &mut adapter_row.reads_aux[0],
         );
         adapter_row.rs2_ptr = c;
         let rs2 = tracing_read(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             c.as_canonical_u32(),
             &mut adapter_row.reads_aux[1],
         );
@@ -207,7 +191,7 @@ where
         adapter_row.rd_ptr = a;
         tracing_write(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             a.as_canonical_u32(),
             data,
             &mut adapter_row.writes_aux,
@@ -253,9 +237,9 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
         let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(d.as_canonical_u32(), c.as_canonical_u32()) };
+            memory_read(memory, RV32_REGISTER_AS, c.as_canonical_u32());
 
         (rs1, rs2)
     }
@@ -269,6 +253,6 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), rd) };
+        memory_write(memory, RV32_REGISTER_AS, a.as_canonical_u32(), rd);
     }
 }

@@ -30,6 +30,7 @@ use openvm_stark_backend::{
 use super::{
     tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
+use crate::adapters::{memory_read, memory_write};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -196,7 +197,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         adapter_row.rs1_ptr = b;
         let rs1 = tracing_read(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             b.as_canonical_u32(),
             &mut adapter_row.reads_aux[0],
         );
@@ -207,7 +208,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
 
             tracing_read(
                 memory,
-                e.as_canonical_u32(),
+                RV32_REGISTER_AS,
                 c.as_canonical_u32(),
                 &mut adapter_row.reads_aux[1],
             )
@@ -237,7 +238,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         adapter_row.rd_ptr = a;
         tracing_write(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             a.as_canonical_u32(),
             data,
             &mut adapter_row.writes_aux,
@@ -292,16 +293,15 @@ where
         );
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
 
         let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
             let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-                unsafe { memory.read(e.as_canonical_u32(), c.as_canonical_u32()) };
+                memory_read(memory, RV32_REGISTER_AS, c.as_canonical_u32());
             rs2
         } else {
             let imm = c.as_canonical_u32();
             debug_assert_eq!(imm >> 24, 0);
-            // TODO(ayush): why this?
             let mut imm_le = imm.to_le_bytes();
             imm_le[3] = imm_le[2];
             imm_le
@@ -319,6 +319,6 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), rd) };
+        memory_write(memory, d.as_canonical_u32(), a.as_canonical_u32(), rd);
     }
 }

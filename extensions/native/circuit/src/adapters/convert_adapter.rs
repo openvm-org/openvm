@@ -235,7 +235,8 @@ where
 //     type ReadRecord = VectorReadRecord<1, READ_SIZE>;
 //     type WriteRecord = VectorWriteRecord<WRITE_SIZE>;
 //     type Air = ConvertAdapterAir<READ_SIZE, WRITE_SIZE>;
-//     type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, 1, 1, READ_SIZE, WRITE_SIZE>;
+//     type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, 1, 1, READ_SIZE,
+// WRITE_SIZE>;
 
 //     fn preprocess(
 //         &mut self,
@@ -283,7 +284,8 @@ where
 //         memory: &OfflineMemory<F>,
 //     ) {
 //         let aux_cols_factory = memory.aux_cols_factory();
-//         let row_slice: &mut ConvertAdapterCols<_, READ_SIZE, WRITE_SIZE> = row_slice.borrow_mut();
+//         let row_slice: &mut ConvertAdapterCols<_, READ_SIZE, WRITE_SIZE> =
+// row_slice.borrow_mut();
 
 //         let read = memory.record_by_id(read_record.reads[0]);
 //         let write = memory.record_by_id(write_record.writes[0]);

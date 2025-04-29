@@ -40,7 +40,7 @@ impl<F: PrimeField32> MemoryTester<F> {
         let controller = &mut self.controller;
         let t = controller.memory.timestamp();
         // TODO: hack
-        let (t_prev, data) = if addr_space <= 2 {
+        let (t_prev, data) = if addr_space <= 3 {
             let (t_prev, data) = unsafe {
                 controller
                     .memory
@@ -73,7 +73,7 @@ impl<F: PrimeField32> MemoryTester<F> {
         let controller = &mut self.controller;
         let t = controller.memory.timestamp();
         // TODO: hack
-        let (t_prev, data_prev) = if addr_space <= 2 {
+        let (t_prev, data_prev) = if addr_space <= 3 {
             let (t_prev, data_prev) = unsafe {
                 controller.memory.write::<u8, N, 4>(
                     addr_space as u32,

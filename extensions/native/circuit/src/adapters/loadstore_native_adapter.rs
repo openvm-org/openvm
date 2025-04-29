@@ -358,7 +358,8 @@ where
 //             e,
 //             ..
 //         } = *instruction;
-//         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+//         let local_opcode =
+// NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
 //         let read_as = d;
 //         let read_ptr = c;

@@ -27,12 +27,11 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
+use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
     arch::{AdapterExecutorE1, AdapterTraceStep},
     system::memory::{online::GuestMemory, OfflineMemory, RecordId},
 };
-
-use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 
 #[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]

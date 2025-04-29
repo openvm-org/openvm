@@ -2,7 +2,8 @@ use std::ops::Mul;
 
 use openvm_circuit::system::memory::{
     offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
-    online::TracingMemory,
+    online::{GuestMemory, TracingMemory},
+    tree::public_values::PUBLIC_VALUES_AS,
     MemoryController, RecordId,
 };
 use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
@@ -51,18 +52,63 @@ pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
     })
 }
 
+#[inline(always)]
+pub fn memory_read<Mem>(memory: &Mem, address_space: u32, ptr: u32) -> [u8; RV32_REGISTER_NUM_LIMBS]
+where
+    Mem: GuestMemory,
+{
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS,
+    );
+
+    // TODO(ayush): PUBLIC_VALUES_AS safety?
+    // SAFETY:
+    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
+    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    unsafe { memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
+}
+
+#[inline(always)]
+pub fn memory_write<Mem>(
+    memory: &mut Mem,
+    address_space: u32,
+    ptr: u32,
+    data: &[u8; RV32_REGISTER_NUM_LIMBS],
+) where
+    Mem: GuestMemory,
+{
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
+
+    // TODO(ayush): PUBLIC_VALUES_AS safety?
+    // SAFETY:
+    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
+    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    unsafe { memory.write::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
+}
+
 /// Atomic read operation which increments the timestamp by 1.
-/// Returns `(t_prev, [ptr:4]_{address_space})` where `t_prev` is the timestamp of the last memory access.
+/// Returns `(t_prev, [ptr:4]_{address_space})` where `t_prev` is the timestamp of the last memory
+/// access.
 #[inline(always)]
 pub fn timed_read(
     memory: &mut TracingMemory,
     address_space: u32,
     ptr: u32,
 ) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
-    debug_assert!(address_space == RV32_REGISTER_AS || address_space == RV32_MEMORY_AS);
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
 
     // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_ASwill always have cell type `u8` and
+    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
     unsafe {
         memory.read::<u8, RV32_REGISTER_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS>(address_space, ptr)
@@ -76,8 +122,12 @@ pub fn timed_write(
     ptr: u32,
     val: &[u8; RV32_REGISTER_NUM_LIMBS],
 ) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
-    // TODO(ayush): should this allow hint address space
-    debug_assert!(address_space == RV32_REGISTER_AS || address_space == RV32_MEMORY_AS);
+    // TODO(ayush): should this allow public values address space
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
 
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_ASwill always have cell type `u8` and
@@ -104,7 +154,6 @@ pub fn tracing_read<F>(
 where
     F: PrimeField32,
 {
-    // TODO(ayush): should this allow hint address space
     let (t_prev, data) = timed_read(memory, address_space, ptr);
     aux_cols.set_prev(F::from_canonical_u32(t_prev));
     data
@@ -118,7 +167,8 @@ pub fn tracing_write<F>(
     address_space: u32,
     ptr: u32,
     val: &[u8; RV32_REGISTER_NUM_LIMBS],
-    aux_cols: &mut MemoryWriteAuxCols<F, RV32_REGISTER_NUM_LIMBS>, /* TODO[jpw]: switch to raw u8
+    aux_cols: &mut MemoryWriteAuxCols<F, RV32_REGISTER_NUM_LIMBS>, /* TODO[jpw]: switch to raw
+                                                                    * u8
                                                                     * buffer */
 ) where
     F: PrimeField32,
