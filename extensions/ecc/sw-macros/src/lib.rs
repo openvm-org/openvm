@@ -89,8 +89,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(sw_double_extern_func);
         create_extern_func!(hint_decompress_extern_func);
         create_extern_func!(hint_non_qr_extern_func);
-
-        let setup_function = syn::Ident::new(&format!("setup_sw_{}", struct_name), span.into());
+        create_extern_func!(setup_sw_extern_func);
 
         let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
 
@@ -100,7 +99,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn #sw_double_extern_func(rd: usize, rs1: usize);
                 fn #hint_decompress_extern_func(rs1: usize, rs2: usize);
                 fn #hint_non_qr_extern_func();
-                fn #setup_function();
+                fn #setup_sw_extern_func();
             }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -218,7 +217,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn assert_is_setup() {
                     static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
-                        unsafe { #setup_function(); }
+                        unsafe { #setup_sw_extern_func(); }
                         true
                     });
                 }
@@ -461,7 +460,6 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
     let SwDefine { items } = parse_macro_input!(input as SwDefine);
 
     let mut externs = Vec::new();
-    let mut setups = Vec::new();
 
     let span = proc_macro::Span::call_site();
 
@@ -484,6 +482,9 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             &format!("hint_non_qr_extern_func_{}", str_path),
             span.into(),
         );
+        let setup_sw_extern_func =
+            syn::Ident::new(&format!("setup_sw_extern_func_{}", str_path), span.into());
+
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
@@ -536,13 +537,9 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                     rs2 = Const "x0"
                 );
             }
-        });
 
-        let setup_function = syn::Ident::new(&format!("setup_sw_{}", str_path), span.into());
-        setups.push(quote::quote_spanned! { span.into() =>
-            #[allow(non_snake_case)]
             #[no_mangle]
-            extern "C" fn #setup_function() {
+            extern "C" fn #setup_sw_extern_func() {
                 #[cfg(target_os = "zkvm")]
                 {
                     use super::#item;
@@ -583,12 +580,12 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
     }
 
     TokenStream::from(quote::quote_spanned! { span.into() =>
+        #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_2 {
             use ::openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
 
             #(#externs)*
-            #(#setups)*
         }
     })
 }

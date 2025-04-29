@@ -71,6 +71,7 @@ extern "C" {
 2. Again, `sw_init!` macro implements these extern functions and defines the setup functions for the sw struct.
 
 ```rust
+#[allow(non_snake_case)]
 #[cfg(target_os = "zkvm")]
 mod openvm_intrinsics_ffi_2 {
     use :openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
@@ -80,12 +81,13 @@ mod openvm_intrinsics_ffi_2 {
         // ...
     }
     // other externs
-}
-#[allow(non_snake_case)]
-pub fn setup_sw_Secp256k1Point() {
-    #[cfg(target_os = "zkvm")]
-    {
-        // ...
+
+    #[no_mangle]
+    extern "C" fn setup_sw_extern_func_Secp256k1Point() {
+        #[cfg(target_os = "zkvm")]
+        {
+            // ...
+        }
     }
 }
 ```
