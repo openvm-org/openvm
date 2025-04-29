@@ -92,7 +92,7 @@ mod openvm_intrinsics_ffi_2 {
 }
 ```
 
-3. Again, the `setup` function for every curve is automatically called on first use of any of the curve's intrinsics.
+3. Again, if using the Rust bindings, then the `setup` function for every curve is automatically called on first use of any of the curve's intrinsics.
 
 4. The order of the items in `sw_init!` **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of `CurveConfig`s in `WeierstrassExtension::supported_curves`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file).
 
