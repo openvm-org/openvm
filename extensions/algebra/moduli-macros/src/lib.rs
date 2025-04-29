@@ -98,6 +98,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(mul_extern_func);
         create_extern_func!(div_extern_func);
         create_extern_func!(is_eq_extern_func);
+        create_extern_func!(moduli_setup_extern_func);
 
         let block_size = proc_macro::Literal::usize_unsuffixed(block_size);
         let block_size = syn::Lit::new(block_size.to_string().parse::<_>().unwrap());
@@ -126,6 +127,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 fn #mul_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #div_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #is_eq_extern_func(rs1: usize, rs2: usize) -> bool;
+                fn #moduli_setup_extern_func();
             }
 
             impl #struct_name {
@@ -152,6 +154,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #add_extern_func(
                                 self as *mut Self as usize,
@@ -173,6 +176,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #sub_extern_func(
                                 self as *mut Self as usize,
@@ -193,6 +197,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #mul_extern_func(
                                 self as *mut Self as usize,
@@ -213,6 +218,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #div_extern_func(
                                 self as *mut Self as usize,
@@ -237,6 +243,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #add_extern_func(
                                 dst_ptr as usize,
@@ -261,6 +268,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #sub_extern_func(
                                 dst_ptr as usize,
@@ -285,6 +293,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #mul_extern_func(
                                 dst_ptr as usize,
@@ -305,6 +314,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #div_extern_func(
@@ -325,10 +335,20 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #is_eq_extern_func(self as *const #struct_name as usize, other as *const #struct_name as usize)
                         }
                     }
+                }
+
+                // Helper function to call the setup instruction on first use
+                fn assert_is_setup() {
+                    static is_setup: ::openvm_algebra_guest::once_cell::race::OnceBool = ::openvm_algebra_guest::once_cell::race::OnceBool::new();
+                    is_setup.get_or_init(|| {
+                        unsafe { #moduli_setup_extern_func(); }
+                        true
+                    });
                 }
             }
 
@@ -733,9 +753,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
     let ModuliDefine { items } = parse_macro_input!(input as ModuliDefine);
 
     let mut externs = Vec::new();
-    let mut setups = Vec::new();
     let mut openvm_section = Vec::new();
-    let mut setup_all_moduli = Vec::new();
 
     // List of all modular limbs in one (that is, with a compile-time known size) array.
     let mut two_modular_limbs_flattened_list = Vec::<u8>::new();
@@ -794,7 +812,10 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             span.into(),
         );
         let serialized_len = serialized_modulus.len();
-        let setup_function = syn::Ident::new(&format!("setup_{}", mod_idx), span.into());
+        let setup_extern_func = syn::Ident::new(
+            &format!("moduli_setup_extern_func_{}", modulus_hex),
+            span.into(),
+        );
 
         openvm_section.push(quote::quote_spanned! { span.into() =>
             #[cfg(target_os = "zkvm")]
@@ -848,23 +869,19 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             }
         });
 
-        setup_all_moduli.push(quote::quote_spanned! { span.into() =>
-            #setup_function();
-        });
-
-        setups.push(quote::quote_spanned! { span.into() =>
-            #[allow(non_snake_case)]
-            pub fn #setup_function() {
+        externs.push(quote::quote_spanned! { span.into() =>
+            #[no_mangle]
+            extern "C" fn #setup_extern_func() {
                 #[cfg(target_os = "zkvm")]
                 {
                     let mut ptr = 0;
-                    assert_eq!(#serialized_name[ptr], 1);
+                    assert_eq!(super::#serialized_name[ptr], 1);
                     ptr += 1;
-                    assert_eq!(#serialized_name[ptr], #mod_idx as u8);
+                    assert_eq!(super::#serialized_name[ptr], #mod_idx as u8);
                     ptr += 1;
-                    assert_eq!(#serialized_name[ptr..ptr+4].iter().rev().fold(0, |acc, &x| acc * 256 + x as usize), #limbs);
+                    assert_eq!(super::#serialized_name[ptr..ptr+4].iter().rev().fold(0, |acc, &x| acc * 256 + x as usize), #limbs);
                     ptr += 4;
-                    let remaining = &#serialized_name[ptr..];
+                    let remaining = &super::#serialized_name[ptr..];
 
                     // To avoid importing #struct_name, we create a placeholder struct with the same size and alignment.
                     #[repr(C, align(#block_size))]
@@ -917,6 +934,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
     let cnt_limbs_list_len = limb_list_borders.len();
     TokenStream::from(quote::quote_spanned! { span.into() =>
         #(#openvm_section)*
+        #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi {
             #(#externs)*
@@ -925,10 +943,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         pub mod openvm_intrinsics_meta_do_not_type_this_by_yourself {
             pub const two_modular_limbs_list: [u8; #total_limbs_cnt] = [#(#two_modular_limbs_flattened_list),*];
             pub const limb_list_borders: [usize; #cnt_limbs_list_len] = [#(#limb_list_borders),*];
-        }
-        #(#setups)*
-        pub fn setup_all_moduli() {
-            #(#setup_all_moduli)*
         }
     })
 }

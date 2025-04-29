@@ -19,8 +19,6 @@ openvm_algebra_complex_macros::complex_declare! {
 openvm::init!("openvm_init_complex_redundant_modulus.rs");
 
 pub fn main() {
-    setup_all_moduli();
-    setup_all_complex_extensions();
     let b = Complex2::new(Mod3::ZERO, Mod3::from_u32(1000000008));
     assert_eq!(b.clone() * &b * &b * &b * &b, b);
 }

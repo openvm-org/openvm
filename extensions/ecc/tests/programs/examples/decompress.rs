@@ -77,11 +77,6 @@ openvm::init!("openvm_init_decompress.rs");
 
 // test decompression under an honest host
 pub fn main() {
-    setup_0();
-    setup_2();
-    setup_4();
-    setup_all_curves();
-
     let bytes = read_vec();
     let x = Secp256k1Coord::from_le_bytes(&bytes[..32]);
     let y = Secp256k1Coord::from_le_bytes(&bytes[32..64]);

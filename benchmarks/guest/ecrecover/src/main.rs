@@ -24,9 +24,6 @@ openvm_ecc_guest::sw_macros::sw_init! {
 }
 
 pub fn main() {
-    setup_all_moduli();
-    setup_all_curves();
-
     let expected_address = read_vec();
     for _ in 0..5 {
         let input = read_vec();

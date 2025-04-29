@@ -68,6 +68,7 @@ mod halo2curves;
 /// Exponentiation by bytes
 mod exp_bytes;
 pub use exp_bytes::*;
+pub use once_cell;
 
 /// Division operation that is undefined behavior when the denominator is not invertible.
 pub trait DivUnsafe<Rhs = Self>: Sized {
