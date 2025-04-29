@@ -505,8 +505,8 @@ impl<F: PrimeField32> MemoryController<F> {
         // }
     }
 
-    // /// Low-level API to replay a single memory access log entry and populate the [OfflineMemory],
-    // /// [MemoryInterface], and `AccessAdapterInventory`.
+    // /// Low-level API to replay a single memory access log entry and populate the
+    // [OfflineMemory], /// [MemoryInterface], and `AccessAdapterInventory`.
     // pub fn replay_access(
     //     entry: MemoryLogEntry<F>,
     //     offline_memory: &mut OfflineMemory<F>,
@@ -566,7 +566,8 @@ impl<F: PrimeField32> MemoryController<F> {
             } => {
                 todo!()
                 // let hasher = hasher.unwrap();
-                // let final_partition = offline_memory.finalize::<CHUNK>(&mut self.access_adapters);
+                // let final_partition = offline_memory.finalize::<CHUNK>(&mut
+                // self.access_adapters);
 
                 // boundary_chip.finalize(initial_memory, &final_partition, hasher);
                 // let final_memory_values = final_partition
@@ -778,8 +779,8 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
     // }
 
     // // TODO: revisit deleting this
-    // pub fn generate_base_aux(&self, record: &MemoryRecord<F>, buffer: &mut MemoryBaseAuxCols<F>) {
-    //     buffer.prev_timestamp = F::from_canonical_u32(record.prev_timestamp);
+    // pub fn generate_base_aux(&self, record: &MemoryRecord<F>, buffer: &mut MemoryBaseAuxCols<F>)
+    // {     buffer.prev_timestamp = F::from_canonical_u32(record.prev_timestamp);
     //     self.generate_timestamp_lt(
     //         record.prev_timestamp,
     //         record.timestamp,

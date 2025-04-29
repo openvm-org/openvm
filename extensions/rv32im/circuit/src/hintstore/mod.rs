@@ -471,8 +471,8 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         //         );
         //     }
 
-        //     let cols: &mut Rv32HintStoreCols<F> = slice[used_u32s..used_u32s + width].borrow_mut();
-        //     cols.from_state.timestamp =
+        //     let cols: &mut Rv32HintStoreCols<F> = slice[used_u32s..used_u32s +
+        // width].borrow_mut();     cols.from_state.timestamp =
         //         F::from_canonical_u32(record.from_state.timestamp + (3 * i as u32));
         //     cols.data = data;
         //     aux_cols_factory.generate_write_aux(memory.record_by_id(write), &mut cols.write_aux);
