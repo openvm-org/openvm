@@ -19,9 +19,6 @@ openvm::init!("openvm_init_ecdsa.rs");
 
 // Ref: https://docs.rs/k256/latest/k256/ecdsa/index.html
 pub fn main() {
-    setup_all_moduli();
-    setup_all_curves();
-
     let msg = b"example message";
 
     let signature = hex!(

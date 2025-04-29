@@ -16,8 +16,6 @@ openvm_algebra_complex_macros::complex_declare! {
 openvm::init!("openvm_init_complex_secp256k1.rs");
 
 pub fn main() {
-    setup_all_moduli();
-    setup_all_complex_extensions();
     let mut a = Complex::new(
         Secp256k1Coord::from_repr(core::array::from_fn(|_| 10)),
         Secp256k1Coord::from_repr(core::array::from_fn(|_| 21)),

@@ -89,6 +89,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(sw_double_extern_func);
         create_extern_func!(hint_decompress_extern_func);
         create_extern_func!(hint_non_qr_extern_func);
+        create_extern_func!(sw_setup_extern_func);
 
         let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
 
@@ -98,6 +99,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn #sw_double_extern_func(rd: usize, rs1: usize);
                 fn #hint_decompress_extern_func(rs1: usize, rs2: usize);
                 fn #hint_non_qr_extern_func();
+                fn #sw_setup_extern_func();
             }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -129,6 +131,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #sw_add_ne_extern_func(
@@ -154,6 +157,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #sw_add_ne_extern_func(
                                 self as *mut #struct_name as usize,
@@ -179,6 +183,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #sw_double_extern_func(
@@ -198,6 +203,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::assert_is_setup();
                         unsafe {
                             #sw_double_extern_func(
                                 self as *mut #struct_name as usize,
@@ -207,6 +213,14 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                 }
 
+                // Helper function to call the setup instruction on first use
+                fn assert_is_setup() {
+                    static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
+                    is_setup.get_or_init(|| {
+                        unsafe { #sw_setup_extern_func(); }
+                        true
+                    });
+                }
             }
 
             impl ::openvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
@@ -446,8 +460,6 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
     let SwDefine { items } = parse_macro_input!(input as SwDefine);
 
     let mut externs = Vec::new();
-    let mut setups = Vec::new();
-    let mut setup_all_curves = Vec::new();
 
     let span = proc_macro::Span::call_site();
 
@@ -470,6 +482,9 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             &format!("hint_non_qr_extern_func_{}", str_path),
             span.into(),
         );
+        let setup_extern_func =
+            syn::Ident::new(&format!("sw_setup_extern_func_{}", str_path), span.into());
+
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
@@ -522,14 +537,12 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                     rs2 = Const "x0"
                 );
             }
-        });
 
-        let setup_function = syn::Ident::new(&format!("setup_sw_{}", str_path), span.into());
-        setups.push(quote::quote_spanned! { span.into() =>
-            #[allow(non_snake_case)]
-            pub fn #setup_function() {
+            #[no_mangle]
+            extern "C" fn #setup_extern_func() {
                 #[cfg(target_os = "zkvm")]
                 {
+                    use super::#item;
                     // p1 is (x1, y1), and x1 must be the modulus.
                     // y1 can be anything for SetupEcAdd, but must equal `a` for SetupEcDouble
                     let modulus_bytes = <<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
@@ -564,22 +577,15 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                 }
             }
         });
-
-        setup_all_curves.push(quote::quote_spanned! { span.into() =>
-            #setup_function();
-        });
     }
 
     TokenStream::from(quote::quote_spanned! { span.into() =>
+        #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_2 {
             use ::openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
 
             #(#externs)*
-        }
-        #(#setups)*
-        pub fn setup_all_curves() {
-            #(#setup_all_curves)*
         }
     })
 }

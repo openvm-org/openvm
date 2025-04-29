@@ -48,10 +48,8 @@ openvm_algebra_guest::complex_macros::complex_init! {
 }
 
 pub fn main() {
-    // Setup will materialize every chip
-    setup_all_moduli();
-    setup_all_complex_extensions();
-    setup_all_curves();
+    // TODO: Since we don't explicitly call setup functions anymore, we should rewrite this test
+    // to use every declared modulus and curve to ensure that every chip is materialized.
 
     let [one, six] = [1, 6].map(Seven::from_u32);
     assert_eq!(one + six, Seven::ZERO);

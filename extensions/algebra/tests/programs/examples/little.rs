@@ -12,7 +12,6 @@ openvm_algebra_moduli_macros::moduli_declare! {
 openvm::init!("openvm_init_little.rs");
 
 pub fn main() {
-    setup_all_moduli();
     let mut pow = Secp256k1Coord::MODULUS;
     pow[0] -= 2;
 

@@ -31,10 +31,6 @@ openvm_algebra_complex_macros::complex_init! {
 */
 
 pub fn main() {
-    // Since we only use an arithmetic operation with `Mod1` and not `Mod2`,
-    // we only need to call `setup_0()` here.
-    setup_0();
-    setup_all_complex_extensions();
     let a = Complex1::new(Mod1::ZERO, Mod1::from_u32(0x3b8) * Mod1::from_u32(0x100000)); // a = -i in the corresponding field
     let b = Complex2::new(Mod2::ZERO, Mod2::from_u32(1000000006)); // b = -i in the corresponding field
     assert_eq!(a.clone() * &a * &a * &a * &a, a); // a^5 = a

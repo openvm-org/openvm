@@ -12,6 +12,7 @@ openvm-algebra-moduli-macros = { workspace = true }
 openvm-algebra-complex-macros = { workspace = true }
 serde-big-array.workspace = true
 strum_macros.workspace = true
+once_cell = { workspace = true, features = ["race", "alloc"] }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint.workspace = true
