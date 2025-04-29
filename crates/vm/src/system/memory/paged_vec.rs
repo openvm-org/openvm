@@ -303,7 +303,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
         debug_assert_ne!(addr_space, 0);
         // TODO: fix this
         unsafe {
-            if addr_space <= 2 {
+            if addr_space <= 3 {
                 F::from_canonical_u8(self.get::<u8>((addr_space, ptr)))
             } else {
                 self.get::<F>((addr_space, ptr))
