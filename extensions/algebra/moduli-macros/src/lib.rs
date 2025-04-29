@@ -98,13 +98,12 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(mul_extern_func);
         create_extern_func!(div_extern_func);
         create_extern_func!(is_eq_extern_func);
+        create_extern_func!(moduli_setup_extern_func);
 
         let block_size = proc_macro::Literal::usize_unsuffixed(block_size);
         let block_size = syn::Lit::new(block_size.to_string().parse::<_>().unwrap());
 
         let module_name = format_ident!("algebra_impl_{}", mod_idx);
-
-        let setup_function = syn::Ident::new(&format!("setup_{}", modulus_hex), span.into());
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             /// An element of the ring of integers modulo a positive integer.
@@ -128,7 +127,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 fn #mul_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #div_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #is_eq_extern_func(rs1: usize, rs2: usize) -> bool;
-                fn #setup_function();
+                fn #moduli_setup_extern_func();
             }
 
             impl #struct_name {
@@ -347,7 +346,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 fn assert_is_setup() {
                     static is_setup: ::openvm_algebra_guest::once_cell::race::OnceBool = ::openvm_algebra_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
-                        unsafe { #setup_function(); }
+                        unsafe { #moduli_setup_extern_func(); }
                         true
                     });
                 }
@@ -754,7 +753,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
     let ModuliDefine { items } = parse_macro_input!(input as ModuliDefine);
 
     let mut externs = Vec::new();
-    let mut setups = Vec::new();
     let mut openvm_section = Vec::new();
 
     // List of all modular limbs in one (that is, with a compile-time known size) array.
@@ -814,7 +812,10 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             span.into(),
         );
         let serialized_len = serialized_modulus.len();
-        let setup_function = syn::Ident::new(&format!("setup_{}", modulus_hex), span.into());
+        let setup_extern_func = syn::Ident::new(
+            &format!("moduli_setup_extern_func_{}", modulus_hex),
+            span.into(),
+        );
 
         openvm_section.push(quote::quote_spanned! { span.into() =>
             #[cfg(target_os = "zkvm")]
@@ -868,10 +869,9 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             }
         });
 
-        setups.push(quote::quote_spanned! { span.into() =>
-            #[allow(non_snake_case)]
+        externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
-            extern "C" fn #setup_function() {
+            extern "C" fn #setup_extern_func() {
                 #[cfg(target_os = "zkvm")]
                 {
                     let mut ptr = 0;
@@ -934,10 +934,10 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
     let cnt_limbs_list_len = limb_list_borders.len();
     TokenStream::from(quote::quote_spanned! { span.into() =>
         #(#openvm_section)*
+        #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi {
             #(#externs)*
-            #(#setups)*
         }
         #[allow(non_snake_case, non_upper_case_globals)]
         pub mod openvm_intrinsics_meta_do_not_type_this_by_yourself {
